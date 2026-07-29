@@ -39,14 +39,30 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private weak var homeScreen: NSScreen?
 
     // MARK: Geometry
-    private let collapsedWidth: CGFloat = 266
     private let pad: CGFloat = 12
     private let rowGap: CGFloat = 6
     private let margin: CGFloat = 24
+    /// Space kept clear on the title row for the hover-revealed ✕.
+    private let closeReserve: CGFloat = 26
+
+    private let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    private let hintFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+
+    /// Every label the title can show. Width is taken from the widest so the
+    /// bubble keeps a stable size across state changes.
+    private static let titleCandidates = [
+        "💬 Agent on stand-by",
+        "🎙️ Agent listening...",
+        "⏸ Agent paused",
+    ]
+
+    private func measure(_ s: String, font: NSFont) -> CGFloat {
+        (s as NSString).size(withAttributes: [.font: font]).width
+    }
 
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
     /// push-to-talk, the second no longer exists.
-    private static let hints = "⌃⌥P  plus one shot"
+    private static let hints = "⌃⌥P  +1 📸"
 
     private var screenWidth: CGFloat {
         (panel.screen ?? NSScreen.main)?.frame.width.rounded() ?? 1440
@@ -54,7 +70,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     override init() {
         panel = BubblePanel(
-            contentRect: NSRect(x: 0, y: 0, width: collapsedWidth, height: 64),
+            // Placeholder — `layoutContent()` sizes the panel to its content
+            // before it is ever shown.
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 64),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -104,11 +122,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         root.addSubview(blur)
         root.blur = blur
 
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = titleFont
         titleLabel.textColor = .labelColor
         root.addSubview(titleLabel)
 
-        hintLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        hintLabel.font = hintFont
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.stringValue = Self.hints
         root.addSubview(hintLabel)
@@ -168,9 +186,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Manual layout in one pass: build the visible rows top-down with their
     /// heights, size the window to their total, then place them.
     private func layoutContent() {
-        // Only a selection widens the bubble to half the screen — that preview
-        // needs the room.
-        let width = selection != nil ? max(collapsedWidth, screenWidth / 2) : collapsedWidth
+        // Hug the content. The title is measured against every state label, not
+        // just the current one, so the bubble does not twitch wider and narrower
+        // as the listening dots animate or the state changes.
+        let titleWidth = Self.titleCandidates
+            .map { measure($0, font: titleFont) }
+            .max() ?? 0
+        let hintWidth = measure(hintLabel.stringValue, font: hintFont)
+        let natural = ceil(max(titleWidth + closeReserve, hintWidth)) + pad * 2
+
+        // Only a selection widens it to half the screen — that preview needs the
+        // room. Flashes may push it out temporarily, but never past half.
+        let width = selection != nil
+            ? max(natural, screenWidth / 2)
+            : min(natural, screenWidth / 2)
         let innerWidth = width - pad * 2
 
         var rows: [(view: NSView, height: CGFloat)] = []

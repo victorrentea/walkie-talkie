@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌃⌥P — one more shot for the dictation in progress.
     private func plusOneShot() {
         guard !paused else { return }
-        DispatchQueue.main.async { [weak self] in self?.bubble.flashTitle("📸 Plus One Shot") }
+        DispatchQueue.main.async { [weak self] in self?.bubble.flashTitle("+1 📸") }
 
         guard let path = ScreenCapture.grab(announce: true) else {
             DispatchQueue.main.async { [weak self] in self?.bubble.flash("⚠️ screenshot failed") }
