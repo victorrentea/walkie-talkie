@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.paused.toggle()
             self.bubble.setPaused(self.paused)
         }
+        bubble.onEndSession = { [weak self] in self?.endSession() }
 
         ScreenCapture.willCapture = { [weak self] in self?.bubble.hideForCapture() }
         ScreenCapture.didCapture  = { [weak self] in self?.bubble.showAfterCapture() }
@@ -132,6 +133,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !shots.isEmpty else { return }
         Log.info("no transcript within \(Int(orphanTimeout))s — releasing \(shots.count) shot(s) on their own")
         send(kind: "screenshot", paths: shots)
+    }
+
+    /// The ✕ ends the session. Announce it through the outbox before quitting so
+    /// the watching Claude learns the bubble is gone from the queue itself — it
+    /// is blocked on that file, not on the process, and would otherwise sit
+    /// waiting for messages that can no longer come.
+    private func endSession() {
+        Log.info("session ended from the ✕ button")
+        // Bypass `send`: this must go out even when paused, and it carries no
+        // stashed selection.
+        Outbox.send(kind: "session_end")
+        // Give the append (serialised on Outbox's queue) time to land.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            NSApp.terminate(nil)
+        }
     }
 
     // MARK: - Actions

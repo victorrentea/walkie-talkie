@@ -21,6 +21,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let selectionLabel = NSTextField(labelWithString: "")
     private let textView = NSTextView()
     private let scrollView = NSScrollView()
+    private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
 
     /// Restored when the editor closes, so typing in the bubble doesn't steal
     /// Victor's place in whatever app he was actually working in.
@@ -28,12 +29,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     var onSubmit: ((String) -> Void)?
     var onTogglePause: (() -> Void)?
+    var onEndSession: (() -> Void)?
 
     private(set) var selection: String?
     private var paused = false
     private var editing = false
     private var listening = false
+    private var hovering = false
     private var pendingSingleClick: DispatchWorkItem?
+    private var followTimer: Timer?
+    private var dotTimer: Timer?
+    private var shineTimer: Timer?
+    private var dotPhase = 0
+    private weak var homeScreen: NSScreen?
+    private let margin: CGFloat = 24
 
     /// Mouse 5 is deliberately absent: it is Wispr's own push-to-talk, which
     /// Victor already has in his fingers — the legend is for the bindings this
@@ -41,7 +50,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private static let hints = "⌃⌥P shot · ⌃⌥S select · 2×click type"
 
     // MARK: Geometry
-    private let collapsedWidth: CGFloat = 380
+    private let collapsedWidth: CGFloat = 266    // 380 × 0.7
     private let pad: CGFloat = 12
     private let rowGap: CGFloat = 6
     private let minEditorHeight: CGFloat = 24
@@ -65,6 +74,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         configureViews()
         layoutContent()
         positionInitially()
+        startFollowingMouse()
         panel.orderFrontRegardless()
     }
 
@@ -86,6 +96,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     private func configureViews() {
+        // The shine sweeps as a sublayer of the root layer, so the root needs to
+        // be layer-backed and clip to the same rounded rect as the blur.
+        root.wantsLayer = true
+        root.layer?.cornerRadius = 14
+        root.layer?.masksToBounds = true
+
         let blur = NSVisualEffectView()
         blur.material = .hudWindow
         blur.blendingMode = .behindWindow
@@ -128,17 +144,48 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         scrollView.isHidden = true
         root.addSubview(scrollView)
 
+        closeButton.isHidden = true          // revealed on hover, like a notification
+        closeButton.onClick = { [weak self] in self?.onEndSession?() }
+        root.addSubview(closeButton)
+
         refreshTitle()
     }
 
-    private func positionInitially() {
-        guard let screen = NSScreen.main else { return }
-        // Bottom-left: the quietest corner of Victor's screen, and where the
-        // Addons banners already live, so his eye knows to look there.
+    /// Park the bubble at the top-left of `screen`.
+    private func moveToTopLeft(of screen: NSScreen) {
+        let area = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(
-            x: screen.visibleFrame.minX + 24,
-            y: screen.visibleFrame.minY + 24
+            x: area.minX + margin,
+            y: area.maxY - panel.frame.height - margin
         ))
+        homeScreen = screen
+    }
+
+    private func positionInitially() {
+        guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
+        moveToTopLeft(of: screen)
+    }
+
+    /// Follow the cursor across displays: Victor works on whichever screen he is
+    /// pointing at, and a bubble stranded on the other monitor is a bubble he
+    /// cannot see. Only the *screen* follows — a bubble dragged somewhere on the
+    /// current screen stays put until the cursor leaves for another one.
+    private func startFollowingMouse() {
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            // Never teleport out from under him mid-interaction.
+            guard !self.editing, NSEvent.pressedMouseButtons == 0 else { return }
+            guard let screen = Self.screenUnderMouse() else { return }
+            guard screen !== self.homeScreen else { return }
+            self.moveToTopLeft(of: screen)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        followTimer = timer
+    }
+
+    private static func screenUnderMouse() -> NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
     }
 
     // MARK: - Layout
@@ -185,9 +232,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
 
-        // Anchor the BOTTOM edge: the bubble lives in the bottom-left corner, so
-        // it has to grow upward — growing downward would walk it off-screen.
-        panel.setFrame(NSRect(x: panel.frame.minX, y: panel.frame.minY, width: width, height: height),
+        // Anchor the TOP edge: the bubble sits in the top-left corner, so it
+        // grows downward into empty screen rather than up under the menu bar.
+        let oldTop = panel.frame.maxY
+        panel.setFrame(NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height),
                        display: true)
         root.frame = NSRect(origin: .zero, size: NSSize(width: width, height: height))
         root.blur?.frame = root.bounds
@@ -199,6 +247,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             row.view.frame.origin = NSPoint(x: pad, y: y)
             y -= rowGap
         }
+
+        // Top-right corner, straddling the edge slightly like a notification's.
+        closeButton.frame.origin = NSPoint(x: width - closeButton.frame.width - 6,
+                                           y: height - closeButton.frame.height - 6)
         root.needsDisplay = true
     }
 
@@ -216,15 +268,98 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     private func refreshTitle() {
-        if paused {
-            titleLabel.stringValue = "⏸ Claude Bubble — paused"
-        } else if listening {
-            titleLabel.stringValue = "🎙️ Wispr dictează… ascult"
-        } else {
-            titleLabel.stringValue = "💬 Claude Bubble"
-        }
+        applyTitleText()
         titleLabel.textColor = (paused || !listening) ? .secondaryLabelColor : .labelColor
         refreshOpacity()
+    }
+
+    /// Just the string — kept separate from `refreshTitle` because the dot
+    /// animation ticks several times a second and must not restart the opacity
+    /// fade on every frame.
+    private func applyTitleText() {
+        if paused {
+            titleLabel.stringValue = "⏸ Agent paused"
+        } else if listening {
+            titleLabel.stringValue = "🎙️ Agent listening" + String(repeating: ".", count: dotPhase + 1)
+        } else {
+            titleLabel.stringValue = "💬 Agent on stand-by"
+        }
+    }
+
+    /// Cycle the trailing dots 1→2→3→1 while Wispr is listening, so the bubble
+    /// visibly *lives* — a frozen "listening" label is indistinguishable from a
+    /// hung app, and the whole point is reassurance that speech is being caught.
+    private func startDots() {
+        stopDots()
+        dotPhase = 0
+        applyTitleText()
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.dotPhase = (self.dotPhase + 1) % 3
+            self.applyTitleText()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        dotTimer = timer
+    }
+
+    private func stopDots() {
+        dotTimer?.invalidate()
+        dotTimer = nil
+    }
+
+    // MARK: - Glass shine
+
+    /// Every 5s while listening, a narrow tilted highlight sweeps across the
+    /// bubble like glare across glass. Deliberately slow and rare: it is a sign
+    /// of life in Victor's peripheral vision while he is talking to a screen,
+    /// not something to look at.
+    private func startShine() {
+        stopShine()
+        playShine()
+        let timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.playShine()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        shineTimer = timer
+    }
+
+    private func stopShine() {
+        shineTimer?.invalidate()
+        shineTimer = nil
+    }
+
+    private func playShine() {
+        guard let host = root.layer else { return }
+        let w = root.bounds.width
+        let h = root.bounds.height
+        guard w > 0, h > 0 else { return }
+
+        let bandWidth: CGFloat = 70
+        let band = CAGradientLayer()
+        // Taller than the bubble so the tilt never exposes a cut-off corner.
+        band.frame = CGRect(x: 0, y: -h, width: bandWidth, height: h * 3)
+        band.colors = [
+            NSColor.white.withAlphaComponent(0.0).cgColor,
+            NSColor.white.withAlphaComponent(0.22).cgColor,
+            NSColor.white.withAlphaComponent(0.0).cgColor,
+        ]
+        band.locations = [0, 0.5, 1]
+        band.startPoint = CGPoint(x: 0, y: 0.5)
+        band.endPoint = CGPoint(x: 1, y: 0.5)
+        band.transform = CATransform3DMakeRotation(.pi / 9, 0, 0, 1)   // ~20° tilt
+        // Added last => on top of the blur and the labels.
+        host.addSublayer(band)
+
+        let sweep = CABasicAnimation(keyPath: "position.x")
+        sweep.fromValue = -bandWidth
+        sweep.toValue = w + bandWidth
+        sweep.duration = 0.85
+        sweep.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        sweep.fillMode = .forwards
+        sweep.isRemovedOnCompletion = false
+        band.add(sweep, forKey: "sweep")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) { band.removeFromSuperlayer() }
     }
 
     /// Translucent while idle so it sits quietly over Victor's work; fully
@@ -232,9 +367,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// to be sure it is actually capturing. Paused fades further still.
     private func refreshOpacity() {
         let target: CGFloat
-        if paused          { target = 0.30 }
-        else if listening || editing { target = 1.00 }
-        else               { target = 0.45 }
+        // Hovering counts as "he is looking at it" — reading the stashed
+        // selection or aiming for a double-click both need it legible.
+        if paused                                { target = 0.30 }
+        else if listening || editing || hovering { target = 1.00 }
+        else                                     { target = 0.45 }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
@@ -259,7 +396,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     func setListening(_ value: Bool) {
         guard listening != value else { return }
         listening = value
+        if value { startDots(); startShine() } else { stopDots(); stopShine() }
         refreshTitle()
+    }
+
+    fileprivate func setHovering(_ value: Bool) {
+        guard hovering != value else { return }
+        hovering = value
+        closeButton.isHidden = !value
+        refreshOpacity()
     }
 
     /// Flash a transient status in place of the hint line.
@@ -369,6 +514,50 @@ final class BubblePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+// MARK: - Close button
+
+/// The round ✕ in the top-right, in the style of a macOS notification: hidden
+/// until the pointer is over the bubble, then a grey disc with a dark cross.
+/// Ends the whole bubble session.
+final class CloseButton: NSView {
+    var onClick: (() -> Void)?
+    private var hot = false
+
+    override var isFlipped: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let disc = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
+        (hot ? NSColor.systemRed : NSColor.secondaryLabelColor).withAlphaComponent(hot ? 0.95 : 0.75).setFill()
+        disc.fill()
+
+        let inset = bounds.width * 0.32
+        let cross = NSBezierPath()
+        cross.move(to: NSPoint(x: inset, y: inset))
+        cross.line(to: NSPoint(x: bounds.width - inset, y: bounds.height - inset))
+        cross.move(to: NSPoint(x: inset, y: bounds.height - inset))
+        cross.line(to: NSPoint(x: bounds.width - inset, y: inset))
+        cross.lineWidth = 1.6
+        cross.lineCapStyle = .round
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        cross.stroke()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent)  { hot = false; needsDisplay = true }
+
+    // Swallow the whole click so it never reaches BubbleView's pause/edit handling.
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
 // MARK: - Content view (drag + click)
 
 final class BubbleView: NSView {
@@ -404,4 +593,19 @@ final class BubbleView: NSView {
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .openHand)
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        // .activeAlways: the bubble belongs to an accessory app that is almost
+        // never frontmost, so .activeInActiveApp would never fire.
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) { owner?.setHovering(true) }
+    override func mouseExited(with event: NSEvent)  { owner?.setHovering(false) }
 }
