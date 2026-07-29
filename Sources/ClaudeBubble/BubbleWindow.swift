@@ -32,6 +32,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private(set) var selection: String?
     private var paused = false
     private var editing = false
+    private var pendingSingleClick: DispatchWorkItem?
+
+    /// Mouse 5 is deliberately absent: it is Wispr's own push-to-talk, which
+    /// Victor already has in his fingers — the legend is for the bindings this
+    /// tool adds.
+    private static let hints = "⌃⌥P shot · ⌃⌥S select · 2×click type"
 
     // MARK: Geometry
     private let collapsedWidth: CGFloat = 380
@@ -95,7 +101,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
         hintLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         hintLabel.textColor = .secondaryLabelColor
-        hintLabel.stringValue = "⌃⌥P shot · ⌃⌥S select · Mouse5 dictate · 2×click type"
+        hintLabel.stringValue = Self.hints
         root.addSubview(hintLabel)
 
         selectionLabel.font = .systemFont(ofSize: 11)
@@ -230,7 +236,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// Flash a transient status in place of the hint line.
     func flash(_ message: String, duration: TimeInterval = 2.0) {
-        let restore = "⌃⌥P shot · ⌃⌥S select · Mouse5 dictate · 2×click type"
+        let restore = Self.hints
         hintLabel.stringValue = message
         hintLabel.textColor = .labelColor
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
@@ -272,12 +278,26 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     // MARK: - Hit handling (called from BubbleView)
 
+    /// macOS delivers a `clickCount == 1` mouseUp *before* the `== 2` one, so
+    /// acting on a single click immediately would toggle pause on the way into
+    /// every double-click — and then silently drop whatever was typed. The
+    /// single-click action is therefore deferred by one double-click interval
+    /// and cancelled if the second click arrives.
     fileprivate func handleClick(count: Int) {
         if count >= 2 {
+            pendingSingleClick?.cancel()
+            pendingSingleClick = nil
             beginEditing()
-        } else if !editing {
-            onTogglePause?()
+            return
         }
+        guard !editing else { return }
+        pendingSingleClick?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingSingleClick = nil
+            self?.onTogglePause?()
+        }
+        pendingSingleClick = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
     }
 
     fileprivate func moveBy(dx: CGFloat, dy: CGFloat) {

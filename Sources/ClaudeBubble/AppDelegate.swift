@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var paused = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before anything grabs the event tap or starts polling Wispr.
+        SingleInstance.enforce()
         Outbox.prepare()
         bubble = BubbleWindow()
 
