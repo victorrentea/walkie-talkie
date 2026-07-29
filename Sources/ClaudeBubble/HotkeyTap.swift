@@ -7,24 +7,22 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return tap.handle(type: type, event: event)
 }
 
-/// Global shortcuts for the bubble.
+/// The bubble's single global shortcut.
 ///
-/// Chosen to not collide with anything Victor Addons already claims (it owns
-/// ⌃P, ⌃⇧P, ⌃W, ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) or with Wispr's
-/// own ⌘⌥V "paste last transcript":
+/// ⌃⌥P — "plus one shot": screenshot the display under the cursor and add it to
+/// the dictation in progress (or send it on its own if none is).
 ///
-///   ⌃⌥P  screenshot the display under the cursor → send to Claude
-///   ⌃⌥S  stash the current screen selection as the prefix for the next message
-///   Mouse 5  (Wispr push-to-talk) — observed, never swallowed: snapshots the
-///            selection at the instant dictation starts
+/// Chosen to not collide with anything Victor Addons claims (⌃P, ⌃⇧P, ⌃W, ⌃⌥C,
+/// ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) or with Wispr's own ⌘⌥V.
+///
+/// Mouse 5 (Wispr push-to-talk) is still observed — never swallowed — but only
+/// as a hint; the authoritative dictation signal is `DictationMonitor`.
 final class HotkeyTap {
 
     var onScreenshot: (() -> Void)?
-    var onStashSelection: (() -> Void)?
     var onDictationStarted: (() -> Void)?
 
     private let VK_P: CGKeyCode = 0x23
-    private let VK_S: CGKeyCode = 0x01
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
 
     private var tapPort: CFMachPort?
@@ -85,10 +83,6 @@ final class HotkeyTap {
 
         if keyCode == VK_P {
             DispatchQueue.global().async { [weak self] in self?.onScreenshot?() }
-            return nil   // swallow
-        }
-        if keyCode == VK_S {
-            DispatchQueue.global().async { [weak self] in self?.onStashSelection?() }
             return nil   // swallow
         }
         return Unmanaged.passUnretained(event)

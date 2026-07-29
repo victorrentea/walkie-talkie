@@ -20,7 +20,15 @@ he spoke.
 Current strings live in `BubbleWindow.swift`:
 - `Self.hints` — the shortcut legend
 - `applyTitleText()` — `Agent on stand-by` / `Agent listening…` / `Agent paused`
-- `flash(_:)` call sites in `AppDelegate.swift`
+- `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
+
+## Scope: dictation helper only
+
+There is **no text entry** and **no selection shortcut**. Both existed and were
+deliberately removed — everything except ⌃⌥P now happens by itself when Wispr
+starts listening. Do not reintroduce a typing affordance without being asked:
+the panel's `canBecomeKey` is false precisely so the bubble can never steal the
+caret from the app Victor is working in.
 
 ## Title states
 
@@ -29,6 +37,7 @@ Current strings live in `BubbleWindow.swift`:
 | idle | `💬 Agent on stand-by` |
 | Wispr recording | `🎙️ Agent listening` + dots cycling 1→2→3→1 every 0.45s |
 | paused (single click) | `⏸ Agent paused` |
+| ⌃⌥P pressed | `📸 Plus One Shot` for 1.6s, then back to the state title |
 
 The dots are load-bearing: a frozen "listening" label is indistinguishable from a
 hung app, and the entire point of the state is reassurance that speech is being

@@ -2,24 +2,17 @@ import AppKit
 
 /// Screenshots the display under the cursor into `~/.claude-bubble/shots`.
 ///
-/// The bubble hides itself for the duration of the grab: `screencapture` is a
-/// separate process taking a fresh frame of the display, so the only reliable
-/// way to keep the overlay out of the picture is to not be on screen when the
-/// shutter fires (`sharingType = .none` is also set on the panel as a second
-/// line of defence).
+/// The bubble does **not** need hiding: `sharingType = .none` on the panel
+/// already excludes it from every capture — verified with a shot taken by a
+/// separate process while the bubble was on screen and unhidden. That matters
+/// for the automatic capture at dictation start, which fires on every single
+/// dictation and must not blink the overlay each time.
+///
+/// `announce` drives the red vignette: deliberate ⌃⌥P shots confirm themselves,
+/// the automatic context capture stays silent.
 enum ScreenCapture {
 
-    static var willCapture: (() -> Void)?
-    static var didCapture: (() -> Void)?
-
-    static func grab() -> String? {
-        DispatchQueue.main.sync { willCapture?() }
-        // Let the compositor land the hide before the shutter.
-        Thread.sleep(forTimeInterval: 0.12)
-        defer {
-            DispatchQueue.main.async { didCapture?() }
-        }
-
+    static func grab(announce: Bool) -> String? {
         let display = activeDisplayNumber()
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
@@ -43,12 +36,38 @@ enum ScreenCapture {
         // Confirm it visually — the shutter is silent (`-x`) and the shot may be
         // held back for a dictation, so without this there is no sign anything
         // happened.
-        DispatchQueue.main.async {
-            if let screen = CaptureFlash.screenUnderCursor() {
-                CaptureFlash.flash(on: screen)
+        if announce {
+            DispatchQueue.main.async {
+                if let screen = CaptureFlash.screenUnderCursor() {
+                    CaptureFlash.flash(on: screen)
+                }
             }
         }
+        prune()
         return file.path
+    }
+
+    /// One screenshot per dictation adds up fast — Victor dictates all day, and
+    /// each retina JPG is a megabyte or two. Keep the most recent `keepNewest`
+    /// and drop the rest, so the folder can't quietly eat the disk.
+    private static let keepNewest = 300
+
+    private static func prune() {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: Outbox.shotsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let jpgs = files.filter { $0.pathExtension.lowercased() == "jpg" }
+        guard jpgs.count > keepNewest else { return }
+        let sorted = jpgs.sorted { lhs, rhs in
+            let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return l > r
+        }
+        for stale in sorted.dropFirst(keepNewest) {
+            try? FileManager.default.removeItem(at: stale)
+        }
     }
 
     /// 1-indexed display number as `screencapture -D` expects, for the screen

@@ -30,10 +30,14 @@ enum Outbox {
     /// dictation started (nil when there was none); `paths` any screenshots that
     /// belong to this message — always an array, because shots taken while
     /// dictating are delivered together with that dictation.
+    /// `screen` is the automatic capture of the display Victor was looking at
+    /// when he started talking — offered as context to consult if the words need
+    /// it, as opposed to `paths`, which are shots he deliberately took.
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
                      paths: [String] = [],
+                     screen: String? = nil,
                      app: String? = nil) {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
@@ -42,6 +46,7 @@ enum Outbox {
         if let text = text, !text.isEmpty { obj["text"] = text }
         if let selection = selection, !selection.isEmpty { obj["selection"] = selection }
         if !paths.isEmpty { obj["paths"] = paths }
+        if let screen = screen { obj["screen"] = screen }
         if let app = app, !app.isEmpty { obj["app"] = app }
 
         queue.async {
