@@ -43,6 +43,14 @@ The dots are load-bearing: a frozen "listening" label is indistinguishable from 
 hung app, and the entire point of the state is reassurance that speech is being
 captured. Same reason for the glass-shine sweep every 5s while listening.
 
+## The sent prompt
+
+After a message goes out, the bubble shows what the agent actually received —
+selection included — opaque, up to half the screen wide, tall enough to fit it
+all. It is a receipt, not something to read at leisure: **capped at 5s**, and a
+click dismisses it early. That click does *not* toggle pause; while the bubble is
+large and covering his work, "make it go away" is what clicking it means.
+
 ## Dark mode
 
 The bubble must look right in **both** appearances, and it follows the system

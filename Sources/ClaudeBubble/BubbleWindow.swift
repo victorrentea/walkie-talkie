@@ -440,16 +440,23 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
         promptTimer?.invalidate()
         let words = trimmed.split(whereSeparator: { $0.isWhitespace }).count
-        let duration = min(max(2.0, Double(words) / 3.0), 25.0)
+        let duration = min(max(2.0, Double(words) / 3.0), 5.0)
         let timer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
-            self.sentPrompt = nil
-            self.promptTimer = nil
-            self.layoutContent()
-            self.refreshOpacity()
+            self?.dismissSentPrompt()
         }
         RunLoop.main.add(timer, forMode: .common)
         promptTimer = timer
+    }
+
+    /// Collapse back to the small bubble. Called by the timer, and by a click —
+    /// 5s is the cap, not a promise that he wants to wait it out.
+    private func dismissSentPrompt() {
+        guard sentPrompt != nil else { return }
+        promptTimer?.invalidate()
+        promptTimer = nil
+        sentPrompt = nil
+        layoutContent()
+        refreshOpacity()
     }
 
     /// Transient status in place of the hint line.
@@ -479,7 +486,16 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     // MARK: - Hit handling (called from BubbleView)
 
     /// No double-click to disambiguate any more, so a click acts immediately.
+    ///
+    /// While the sent prompt is up, the click dismisses it instead of toggling
+    /// pause: the bubble is then large and sitting over Victor's work, so
+    /// "get out of the way" is the obvious meaning of clicking it — and pausing
+    /// the relay by accident is exactly the mistake he would not notice.
     fileprivate func handleClick() {
+        if sentPrompt != nil {
+            dismissSentPrompt()
+            return
+        }
         onTogglePause?()
     }
 
