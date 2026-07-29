@@ -43,6 +43,21 @@ The dots are load-bearing: a frozen "listening" label is indistinguishable from 
 hung app, and the entire point of the state is reassurance that speech is being
 captured. Same reason for the glass-shine sweep every 5s while listening.
 
+## Dark mode
+
+The bubble must look right in **both** appearances, and it follows the system
+automatically — nothing pins an appearance. That holds only as long as every
+colour is either a dynamic system colour (`labelColor`, `secondaryLabelColor`,
+`textBackgroundColor`, `systemRed`) or a translucent white/black overlay that
+works on any backdrop. The blur is `NSVisualEffectView(.hudWindow)`, which
+adapts on its own.
+
+**Do not hardcode a literal colour for anything that sits on a variable
+backdrop.** The ✕ was drawn with a hardcoded white cross: fine on light mode's
+dark disc, nearly invisible against dark mode's light one. Custom-drawn views
+resolve dynamic colours against `effectiveAppearance` inside `draw(_:)`, so
+using them is enough — no appearance observers needed.
+
 ## Opacity states
 
 | state | alpha |

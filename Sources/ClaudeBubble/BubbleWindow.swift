@@ -46,7 +46,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let closeReserve: CGFloat = 26
 
     private let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
-    private let hintFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+    private let hintFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)   // 10 × 1.3
 
     /// Every label the title can show. Width is taken from the widest so the
     /// bubble keeps a stable size across state changes.
@@ -62,7 +62,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
     /// push-to-talk, the second no longer exists.
-    private static let hints = "⌃⌥P  +1 📸"
+    private static let hints = "⌃⌥P  📸"
 
     private var screenWidth: CGFloat {
         (panel.screen ?? NSScreen.main)?.frame.width.rounded() ?? 1440
@@ -216,8 +216,8 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             selectionLabel.isHidden = true
         }
 
-        hintLabel.frame.size = NSSize(width: innerWidth, height: 13)
-        rows.append((hintLabel, 13))
+        hintLabel.frame.size = NSSize(width: innerWidth, height: 17)
+        rows.append((hintLabel, 17))
 
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
@@ -399,6 +399,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         guard hovering != value else { return }
         hovering = value
         closeButton.isHidden = !value
+        if value {
+            // A hidden view gets no mouse events, so its tracking area is stale
+            // by the time it is revealed — without this the ✕ never lights up.
+            closeButton.updateTrackingAreas()
+            closeButton.needsDisplay = true
+        }
         refreshOpacity()
     }
 
@@ -435,8 +441,18 @@ final class CloseButton: NSView {
     override var isFlipped: Bool { false }
 
     override func draw(_ dirtyRect: NSRect) {
+        // Dynamic system colours, resolved against `effectiveAppearance` at draw
+        // time, so the button reads correctly in both light and dark mode:
+        //   disc  = secondaryLabelColor — dark grey on light, light grey on dark
+        //   cross = textBackgroundColor — the inverse of that in both modes
+        // A hardcoded white cross looked fine on light mode's dark disc and
+        // vanished against dark mode's light one.
         let disc = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
-        (hot ? NSColor.systemRed : NSColor.secondaryLabelColor).withAlphaComponent(hot ? 0.95 : 0.75).setFill()
+        if hot {
+            NSColor.systemRed.withAlphaComponent(0.90).setFill()
+        } else {
+            NSColor.secondaryLabelColor.withAlphaComponent(0.45).setFill()
+        }
         disc.fill()
 
         let inset = bounds.width * 0.32
@@ -447,7 +463,8 @@ final class CloseButton: NSView {
         cross.line(to: NSPoint(x: bounds.width - inset, y: inset))
         cross.lineWidth = 1.6
         cross.lineCapStyle = .round
-        NSColor.white.withAlphaComponent(0.95).setStroke()
+        // On the red hover disc, white always wins in either appearance.
+        (hot ? NSColor.white : NSColor.textBackgroundColor).withAlphaComponent(0.95).setStroke()
         cross.stroke()
     }
 
