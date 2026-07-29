@@ -64,7 +64,7 @@ using them is enough — no appearance observers needed.
 |---|---|
 | paused | 0.30 |
 | listening / editing / hovered | 1.00 |
-| idle | 0.45 |
+| idle | 0.54 |
 
 Translucent by default so it sits quietly over whatever Victor is doing; opaque
 the moment it matters (he is dictating, typing, or looking straight at it).

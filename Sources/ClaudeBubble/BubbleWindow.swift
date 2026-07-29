@@ -324,7 +324,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let target: CGFloat
         if paused                                       { target = 0.30 }
         else if listening || hovering || sentPrompt != nil { target = 1.00 }
-        else                                            { target = 0.45 }
+        else                                            { target = 0.54 }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
