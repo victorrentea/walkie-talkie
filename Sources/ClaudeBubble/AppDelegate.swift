@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bubble: BubbleWindow!
     private let hotkeys = HotkeyTap()
     private let wispr = WisprWatcher()
+    private let dictation = DictationMonitor()
 
     /// Screen text captured either explicitly (⌃⌥S) or at the moment dictation
     /// started (Mouse 5). Consumed by — and cleared after — the next message, so
@@ -56,6 +57,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wispr.onTranscript = { [weak self] text, app in
             self?.send(kind: "dictation", text: text, app: app)
         }
+
+        // CoreAudio is the authoritative "Wispr is listening" signal — it also
+        // catches dictations started by Wispr's own hotkey or UI button, which
+        // Mouse 5 alone would miss.
+        dictation.onChange = { [weak self] recording in
+            guard let self = self else { return }
+            DispatchQueue.main.async { self.bubble.setListening(recording) }
+            guard recording, !self.paused else { return }
+            self.stateLock.lock()
+            self.dictationInFlight = true
+            self.stateLock.unlock()
+            self.armOrphanFlush()
+            self.stashSelection(explicit: false)
+        }
+        dictation.start()
 
         // Report the permission explicitly. `tapCreate` returning non-nil is not
         // proof on its own — without the Accessibility grant the tap can exist

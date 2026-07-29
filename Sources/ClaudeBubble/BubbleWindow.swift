@@ -32,6 +32,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private(set) var selection: String?
     private var paused = false
     private var editing = false
+    private var listening = false
     private var pendingSingleClick: DispatchWorkItem?
 
     /// Mouse 5 is deliberately absent: it is Wispr's own push-to-talk, which
@@ -132,11 +133,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private func positionInitially() {
         guard let screen = NSScreen.main else { return }
-        let f = panel.frame
-        // Top-right, clear of the menu bar — out of the way of a maximised editor.
+        // Bottom-left: the quietest corner of Victor's screen, and where the
+        // Addons banners already live, so his eye knows to look there.
         panel.setFrameOrigin(NSPoint(
-            x: screen.visibleFrame.maxX - f.width - 24,
-            y: screen.visibleFrame.maxY - f.height - 12
+            x: screen.visibleFrame.minX + 24,
+            y: screen.visibleFrame.minY + 24
         ))
     }
 
@@ -147,11 +148,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// height sum and the placement loop driven by the *same* list is what stops
     /// the two drifting apart as rows appear and disappear.
     private func layoutContent() {
-        // With a selection to show (or while typing) the bubble widens to half
-        // the screen — enough for a meaningful one-line preview of what will be
-        // prefixed to the next message.
-        let wantsWide = editing || selection != nil
-        let width = wantsWide ? max(collapsedWidth, screenWidth / 2) : collapsedWidth
+        // Only a selection widens the bubble to half the screen — that preview
+        // needs the room. Typing does not: a half-screen box for a one-line
+        // message is mostly empty space, so the editor keeps the narrow width
+        // and grows downward instead.
+        let width = selection != nil ? max(collapsedWidth, screenWidth / 2) : collapsedWidth
         let innerWidth = width - pad * 2
 
         // Top-down order: title, selection preview, editor, hints.
@@ -184,9 +185,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
 
-        // Anchor the top edge: the bubble grows downward as text is typed.
-        let oldTop = panel.frame.maxY
-        panel.setFrame(NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height),
+        // Anchor the BOTTOM edge: the bubble lives in the bottom-left corner, so
+        // it has to grow upward — growing downward would walk it off-screen.
+        panel.setFrame(NSRect(x: panel.frame.minX, y: panel.frame.minY, width: width, height: height),
                        display: true)
         root.frame = NSRect(origin: .zero, size: NSSize(width: width, height: height))
         root.blur?.frame = root.bounds
@@ -215,8 +216,29 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     private func refreshTitle() {
-        titleLabel.stringValue = paused ? "⏸ Claude Bubble — paused" : "💬 Claude Bubble"
-        titleLabel.textColor = paused ? .secondaryLabelColor : .labelColor
+        if paused {
+            titleLabel.stringValue = "⏸ Claude Bubble — paused"
+        } else if listening {
+            titleLabel.stringValue = "🎙️ Wispr dictează… ascult"
+        } else {
+            titleLabel.stringValue = "💬 Claude Bubble"
+        }
+        titleLabel.textColor = (paused || !listening) ? .secondaryLabelColor : .labelColor
+        refreshOpacity()
+    }
+
+    /// Translucent while idle so it sits quietly over Victor's work; fully
+    /// opaque the moment Wispr starts listening, because that is when he needs
+    /// to be sure it is actually capturing. Paused fades further still.
+    private func refreshOpacity() {
+        let target: CGFloat
+        if paused          { target = 0.30 }
+        else if listening || editing { target = 1.00 }
+        else               { target = 0.45 }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            panel.animator().alphaValue = target
+        }
     }
 
     // MARK: - Public API (main thread)
@@ -231,7 +253,13 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     func setPaused(_ value: Bool) {
         paused = value
         refreshTitle()
-        root.alphaValue = value ? 0.55 : 1.0
+    }
+
+    /// Wispr started / stopped listening.
+    func setListening(_ value: Bool) {
+        guard listening != value else { return }
+        listening = value
+        refreshTitle()
     }
 
     /// Flash a transient status in place of the hint line.
@@ -257,6 +285,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         previousApp = NSWorkspace.shared.frontmostApplication
         textView.string = ""
         layoutContent()
+        refreshOpacity()
         // An accessory app must activate to receive keystrokes.
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -270,6 +299,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         textView.string = ""
         panel.resignKey()
         layoutContent()
+        refreshOpacity()
         // Hand focus back to whatever Victor was actually working in.
         previousApp?.activate()
         previousApp = nil

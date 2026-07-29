@@ -40,6 +40,14 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
+        // Confirm it visually — the shutter is silent (`-x`) and the shot may be
+        // held back for a dictation, so without this there is no sign anything
+        // happened.
+        DispatchQueue.main.async {
+            if let screen = CaptureFlash.screenUnderCursor() {
+                CaptureFlash.flash(on: screen)
+            }
+        }
         return file.path
     }
 
