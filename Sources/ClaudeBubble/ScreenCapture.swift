@@ -8,8 +8,10 @@ import AppKit
 /// for the automatic capture at dictation start, which fires on every single
 /// dictation and must not blink the overlay each time.
 ///
-/// `announce` drives the red vignette: deliberate ⌃⌥P shots confirm themselves,
-/// the automatic context capture stays silent.
+/// `announce` drives the red vignette. Both callers pass true: a frame of the
+/// screen leaves the machine either way, so both deserve the same visible
+/// receipt — a silent automatic capture is the one nobody can audit. The guard
+/// in `captureContext` keeps it to one flash per dictation, not one per trigger.
 enum ScreenCapture {
 
     static func grab(announce: Bool) -> String? {

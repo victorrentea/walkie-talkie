@@ -40,6 +40,8 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private var promptTimer: Timer?
     /// Temporary title override (e.g. "+1 📸"); nil = show the state title.
     private var titleOverride: String?
+    /// Transient status occupying the subtitle row; nil = no flash in progress.
+    private var flashMessage: String?
     private weak var homeScreen: NSScreen?
 
     // MARK: Geometry
@@ -56,9 +58,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Every label the title can show. Width is taken from the widest so the
     /// bubble keeps a stable size across state changes.
     private static let titleCandidates = [
-        "💬 Agent on stand-by",
-        "🎙️ Agent listening...",
-        "⏸ Agent paused",
+        "⏸️ Agent: Stand by",
+        "🎙️ Agent: Listening...",
+        "⏹️ Agent: Paused",
     ]
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
@@ -78,6 +80,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
     /// push-to-talk, the second no longer exists.
     private static let hints = "⌃⌥P 📸"
+
+    /// The subtitle row. A flash outranks everything; otherwise the ⌃⌥P legend
+    /// shows **only while dictating**, which is the only moment the shortcut can
+    /// do anything. At rest the bubble is nothing but its title.
+    ///
+    /// Flashes must survive the idle case: the Accessibility warning fires at
+    /// launch, long before any dictation, and would be invisible if this row
+    /// only ever appeared while listening.
+    /// Paused is excluded on purpose: Wispr keeps reporting that it is listening
+    /// while forwarding is off, but ⌃⌥P is refused in that state, so advertising
+    /// it would be a lie.
+    private var hintText: String? {
+        flashMessage ?? (listening && !paused ? Self.hints : nil)
+    }
 
     private var screenWidth: CGFloat {
         (panel.screen ?? NSScreen.main)?.frame.width.rounded() ?? 1440
@@ -143,7 +159,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
         hintLabel.font = hintFont
         hintLabel.textColor = .secondaryLabelColor
-        hintLabel.stringValue = Self.hints
+        hintLabel.isHidden = true            // summoned by layoutContent when there is something to say
         root.addSubview(hintLabel)
 
         selectionLabel.font = .systemFont(ofSize: 11)
@@ -213,7 +229,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let titleWidth = Self.titleCandidates
             .map { measure($0, font: titleFont) }
             .max() ?? 0
-        let hintWidth = measure(hintLabel.stringValue, font: hintFont)
+        // Always reserve the legend's width even while the row is hidden, so the
+        // bubble does not jump sideways the moment dictation starts — only its
+        // height changes, by exactly that one row.
+        let hintWidth = max(measure(Self.hints, font: hintFont),
+                            flashMessage.map { measure($0, font: hintFont) } ?? 0)
         let natural = ceil(max(titleWidth + closeReserve, hintWidth)) + pad * 2
 
         // A selection preview or a sent prompt takes the full half-screen: both
@@ -252,8 +272,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             promptLabel.isHidden = true
         }
 
-        hintLabel.frame.size = NSSize(width: innerWidth, height: 17)
-        rows.append((hintLabel, 17))
+        if let hint = hintText {
+            hintLabel.stringValue = hint
+            hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor : .labelColor
+            hintLabel.frame.size = NSSize(width: innerWidth, height: 17)
+            hintLabel.isHidden = false
+            rows.append((hintLabel, 17))
+        } else {
+            hintLabel.isHidden = true
+        }
 
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
@@ -299,11 +326,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         if let override = titleOverride {
             titleLabel.stringValue = override
         } else if paused {
-            titleLabel.stringValue = "⏸ Agent paused"
+            // Stand-by already wears ⏸️, so paused takes the harder stop glyph:
+            // the two states differ by one word otherwise, and they are read at a
+            // glance from across the room.
+            titleLabel.stringValue = "⏹️ Agent: Paused"
         } else if listening {
-            titleLabel.stringValue = "🎙️ Agent listening" + String(repeating: ".", count: dotPhase + 1)
+            titleLabel.stringValue = "🎙️ Agent: Listening" + String(repeating: ".", count: dotPhase + 1)
         } else {
-            titleLabel.stringValue = "💬 Agent on stand-by"
+            titleLabel.stringValue = "⏸️ Agent: Stand by"
         }
     }
 
@@ -410,6 +440,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     func setPaused(_ value: Bool) {
         paused = value
         refreshTitle()
+        layoutContent()          // pausing mid-dictation retracts the ⌃⌥P row
     }
 
     /// Wispr started / stopped listening.
@@ -418,6 +449,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         listening = value
         if value { startDots(); startShine() } else { stopDots(); stopShine() }
         refreshTitle()
+        layoutContent()          // the ⌃⌥P row lives and dies with this state
     }
 
     /// Show the prompt that was just relayed to the agent, whole, so Victor can
@@ -459,14 +491,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         refreshOpacity()
     }
 
-    /// Transient status in place of the hint line.
+    /// Transient status in the subtitle row — which it also *summons*, since at
+    /// rest that row is not on screen at all.
     func flash(_ message: String, duration: TimeInterval = 2.0) {
-        hintLabel.stringValue = message
-        hintLabel.textColor = .labelColor
+        flashMessage = message
+        layoutContent()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            guard let self = self, self.hintLabel.stringValue == message else { return }
-            self.hintLabel.stringValue = Self.hints
-            self.hintLabel.textColor = .secondaryLabelColor
+            guard let self = self, self.flashMessage == message else { return }
+            self.flashMessage = nil
+            self.layoutContent()
         }
     }
 

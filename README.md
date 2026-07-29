@@ -85,7 +85,18 @@ and re-signing with the app still reporting `accessibility trusted=true`.
 - **Accessibility** — required, for the event tap and the AX selection read.
   Logged explicitly at startup (`accessibility trusted=… eventTap=…`), because a
   tap can exist and silently receive nothing.
-- **Screen Recording** — required for ⌃⌥P.
+- **Screen Recording** — required for ⌃⌥P and for the automatic context capture.
+
+## Every capture shows a red vignette
+
+Both grabs announce themselves the same way — a red border fading inward, then
+out: the deliberate ⌃⌥P shot *and* the automatic one taken when dictation
+starts. A frame of the screen leaves the machine either way, and the silent one
+is precisely the one nobody could audit. The dictation capture is guarded so it
+fires once per dictation, not once per trigger.
+
+Red, not yellow: yellow is `victor-macos-addons` saying it captured something,
+red is this bubble saying it went to Claude.
 
 ## Screenshots never contain the bubble
 

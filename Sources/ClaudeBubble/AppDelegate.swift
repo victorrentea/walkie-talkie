@@ -103,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stashSelection()
 
         guard !alreadyOpen else { return }
-        guard let path = ScreenCapture.grab(announce: false) else { return }
+        guard let path = ScreenCapture.grab(announce: true) else { return }
         stateLock.lock()
         pendingScreen = path
         stateLock.unlock()

@@ -19,7 +19,7 @@ he spoke.
 
 Current strings live in `BubbleWindow.swift`:
 - `Self.hints` — the shortcut legend
-- `applyTitleText()` — `Agent on stand-by` / `Agent listening…` / `Agent paused`
+- `applyTitleText()` — `Agent: Stand by` / `Agent: Listening…` / `Agent: Paused`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 
 ## Scope: dictation helper only
@@ -34,14 +34,32 @@ caret from the app Victor is working in.
 
 | state | label |
 |---|---|
-| idle | `💬 Agent on stand-by` |
-| Wispr recording | `🎙️ Agent listening` + dots cycling 1→2→3→1 every 0.45s |
-| paused (single click) | `⏸ Agent paused` |
+| idle | `⏸️ Agent: Stand by` |
+| Wispr recording | `🎙️ Agent: Listening` + dots cycling 1→2→3→1 every 0.45s |
+| paused (single click) | `⏹️ Agent: Paused` |
 | ⌃⌥P pressed | `📸 Plus One Shot` for 1.6s, then back to the state title |
 
 The dots are load-bearing: a frozen "listening" label is indistinguishable from a
 hung app, and the entire point of the state is reassurance that speech is being
 captured. Same reason for the glass-shine sweep every 5s while listening.
+
+Idle wears ⏸️ and paused wears ⏹️ — one glyph apart, because the words alone are
+too close to tell apart from across a room. Opacity separates them further (0.54
+vs 0.30).
+
+## The subtitle row
+
+Only one row ever sits under the title, and **at rest there is none** — idle, the
+bubble is nothing but `⏸️ Agent: Stand by`. It appears for:
+
+- the `⌃⌥P 📸` legend, **while dictating and not paused** — the only window in
+  which that shortcut does anything;
+- any `flash(_:)` message, in any state. This is why flashes outrank the legend:
+  the Accessibility warning fires at launch, long before a dictation, and would
+  otherwise be invisible.
+
+`layoutContent()` reserves the legend's width even while the row is hidden, so
+starting to dictate grows the bubble downwards by one row and never sideways.
 
 ## The sent prompt
 
