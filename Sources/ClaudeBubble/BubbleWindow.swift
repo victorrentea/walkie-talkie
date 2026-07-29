@@ -20,6 +20,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
+    private let promptLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
 
     var onTogglePause: (() -> Void)?
@@ -34,7 +35,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private var dotTimer: Timer?
     private var shineTimer: Timer?
     private var dotPhase = 0
-    /// Temporary title override (e.g. "Plus One Shot"); nil = show the state title.
+    /// The prompt just relayed to the agent, shown whole for a few seconds.
+    private var sentPrompt: String?
+    private var promptTimer: Timer?
+    /// Temporary title override (e.g. "+1 📸"); nil = show the state title.
     private var titleOverride: String?
     private weak var homeScreen: NSScreen?
 
@@ -46,6 +50,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let closeReserve: CGFloat = 26
 
     private let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    private let promptFont = NSFont.systemFont(ofSize: 12)
     private let hintFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)   // 10 × 1.3
 
     /// Every label the title can show. Width is taken from the widest so the
@@ -58,6 +63,16 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    /// Height of `s` wrapped into `width`.
+    private func measureWrapped(_ s: String, font: NSFont, width: CGFloat) -> CGFloat {
+        let rect = (s as NSString).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]
+        )
+        return ceil(rect.height) + 2
     }
 
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
@@ -139,6 +154,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         selectionLabel.isHidden = true
         root.addSubview(selectionLabel)
 
+        promptLabel.font = promptFont
+        promptLabel.textColor = .labelColor
+        promptLabel.isHidden = true
+        promptLabel.maximumNumberOfLines = 0        // wrap freely; the height follows
+        root.addSubview(promptLabel)
+
         closeButton.isHidden = true          // revealed on hover, like a notification
         closeButton.onClick = { [weak self] in self?.onEndSession?() }
         root.addSubview(closeButton)
@@ -195,9 +216,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let hintWidth = measure(hintLabel.stringValue, font: hintFont)
         let natural = ceil(max(titleWidth + closeReserve, hintWidth)) + pad * 2
 
-        // Only a selection widens it to half the screen — that preview needs the
-        // room. Flashes may push it out temporarily, but never past half.
-        let width = selection != nil
+        // A selection preview or a sent prompt takes the full half-screen: both
+        // exist to be read, and a prompt in particular has to be shown whole.
+        let width = (selection != nil || sentPrompt != nil)
             ? max(natural, screenWidth / 2)
             : min(natural, screenWidth / 2)
         let innerWidth = width - pad * 2
@@ -214,6 +235,21 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             rows.append((selectionLabel, 15))
         } else {
             selectionLabel.isHidden = true
+        }
+
+        if let prompt = sentPrompt {
+            // Vertically: whatever it takes to show the prompt whole, bounded
+            // only by the screen so a very long dictation can't grow a bubble
+            // taller than the display.
+            let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800) - margin * 2 - 80
+            promptLabel.stringValue = prompt
+            promptLabel.preferredMaxLayoutWidth = innerWidth
+            let h = min(measureWrapped(prompt, font: promptFont, width: innerWidth), maxHeight)
+            promptLabel.frame.size = NSSize(width: innerWidth, height: h)
+            promptLabel.isHidden = false
+            rows.append((promptLabel, h))
+        } else {
+            promptLabel.isHidden = true
         }
 
         hintLabel.frame.size = NSSize(width: innerWidth, height: 17)
@@ -286,9 +322,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// opaque the moment Wispr starts listening or he looks straight at it.
     private func refreshOpacity() {
         let target: CGFloat
-        if paused                    { target = 0.30 }
-        else if listening || hovering { target = 1.00 }
-        else                         { target = 0.45 }
+        if paused                                       { target = 0.30 }
+        else if listening || hovering || sentPrompt != nil { target = 1.00 }
+        else                                            { target = 0.45 }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
@@ -382,6 +418,38 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         listening = value
         if value { startDots(); startShine() } else { stopDots(); stopShine() }
         refreshTitle()
+    }
+
+    /// Show the prompt that was just relayed to the agent, whole, so Victor can
+    /// see exactly what Wispr heard before the agent acts on it — a
+    /// mis-transcription is much cheaper to catch here than three tool calls
+    /// later.
+    ///
+    /// On screen for at least 2s, scaled by length so a long dictation is
+    /// actually readable (~3 words/second), capped so it can never park itself
+    /// over his work indefinitely.
+    func showSentPrompt(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        sentPrompt = trimmed
+        // The selection is already part of what is displayed here, so drop the
+        // separate preview row rather than showing it twice.
+        selection = nil
+        layoutContent()
+        refreshOpacity()
+
+        promptTimer?.invalidate()
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace }).count
+        let duration = min(max(2.0, Double(words) / 3.0), 25.0)
+        let timer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            self.sentPrompt = nil
+            self.promptTimer = nil
+            self.layoutContent()
+            self.refreshOpacity()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        promptTimer = timer
     }
 
     /// Transient status in place of the hint line.

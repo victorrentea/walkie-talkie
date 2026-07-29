@@ -176,6 +176,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         send(kind: "screenshot", paths: [path])
     }
 
+    /// What to render in the bubble as "this is what the agent got". Returns nil
+    /// for messages with no words in them (a bare screenshot), which fall back
+    /// to the one-line flash.
+    private static func promptPreview(text: String?, selection: String?, shots: Int) -> String? {
+        var parts: [String] = []
+        if let selection = selection, !selection.isEmpty { parts.append("↪ " + selection) }
+        if let text = text, !text.isEmpty { parts.append(text) }
+        guard !parts.isEmpty else { return nil }
+        if shots > 0 { parts.append("📸 ×\(shots)") }
+        return parts.joined(separator: "\n")
+    }
+
     /// The ✕ ends the session. Announce it through the outbox before quitting so
     /// the watching Claude learns the bubble is gone from the queue itself — it
     /// is blocked on that file, not on the process, and would otherwise sit
@@ -211,10 +223,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Outbox.send(kind: kind, text: text, selection: selection,
                     paths: attached, screen: screen, app: app)
+
+        // Show what actually went out — selection included, since that is part
+        // of the prompt the agent receives, not a separate thing.
+        let shown = Self.promptPreview(text: text, selection: selection, shots: attached.count)
         DispatchQueue.main.async { [weak self] in
-            self?.bubble.clearSelection()
-            if kind == "dictation" {
-                self?.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+            guard let self = self else { return }
+            self.bubble.clearSelection()
+            if let shown = shown {
+                self.bubble.showSentPrompt(shown)
+            } else if kind == "dictation" {
+                self.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
             }
         }
     }
