@@ -27,11 +27,13 @@ enum Outbox {
 
     /// `kind` is one of `dictation` / `typed` / `screenshot` / `selection`.
     /// `text` carries the message; `selection` the screen text stashed before
-    /// dictation started (nil when there was none).
+    /// dictation started (nil when there was none); `paths` any screenshots that
+    /// belong to this message — always an array, because shots taken while
+    /// dictating are delivered together with that dictation.
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
-                     path: String? = nil,
+                     paths: [String] = [],
                      app: String? = nil) {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
@@ -39,7 +41,7 @@ enum Outbox {
         ]
         if let text = text, !text.isEmpty { obj["text"] = text }
         if let selection = selection, !selection.isEmpty { obj["selection"] = selection }
-        if let path = path { obj["path"] = path }
+        if !paths.isEmpty { obj["paths"] = paths }
         if let app = app, !app.isEmpty { obj["app"] = app }
 
         queue.async {

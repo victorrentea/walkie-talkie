@@ -10,7 +10,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// started (Mouse 5). Consumed by — and cleared after — the next message, so
     /// "select a label, dictate about it" sends both together exactly once.
     private var pendingSelection: String?
-    private let selectionLock = NSLock()
+
+    /// Screenshots taken *while a dictation is in flight*. Victor shoots what he
+    /// is talking about mid-sentence, so those images belong to that dictation,
+    /// not to messages of their own — however many he takes. Drained into the
+    /// dictation when its transcript lands.
+    private var pendingShots: [String] = []
+    private var dictationInFlight = false
+    private var orphanFlush: DispatchWorkItem?
+
+    /// Guards `pendingSelection`, `pendingShots` and `dictationInFlight`, all of
+    /// which are touched from the event-tap thread, the Wispr poll queue and the
+    /// screenshot worker.
+    private let stateLock = NSLock()
+
+    /// A dictation that never arrives (Mouse 5 pressed but nothing said, or
+    /// Wispr discarded it) must not strand the shots. After this long with no
+    /// transcript they are released as a message of their own.
+    private let orphanTimeout: TimeInterval = 120
 
     private var paused = false
 
@@ -34,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkeys.onScreenshot = { [weak self] in self?.captureScreenshot() }
         hotkeys.onStashSelection = { [weak self] in self?.stashSelection(explicit: true) }
-        hotkeys.onDictationStarted = { [weak self] in self?.stashSelection(explicit: false) }
+        hotkeys.onDictationStarted = { [weak self] in self?.dictationStarted() }
 
         wispr.onTranscript = { [weak self] text, app in
             self?.send(kind: "dictation", text: text, app: app)
@@ -62,6 +79,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("ready — outbox at \(Outbox.outboxURL.path)")
     }
 
+    // MARK: - Dictation window
+
+    /// Mouse 5 = Wispr push-to-talk. Opens the window during which screenshots
+    /// attach to the coming transcript, and snapshots the current selection.
+    ///
+    /// Fires on both the start and the stop press, which is harmless: re-reading
+    /// the selection yields the same text and re-arming the orphan timer only
+    /// extends the window.
+    private func dictationStarted() {
+        guard !paused else { return }
+        stateLock.lock()
+        dictationInFlight = true
+        stateLock.unlock()
+        armOrphanFlush()
+        stashSelection(explicit: false)
+    }
+
+    private func armOrphanFlush() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.orphanFlush?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.flushOrphanedShots() }
+            self.orphanFlush = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + self.orphanTimeout, execute: work)
+        }
+    }
+
+    /// No transcript came. Release whatever was shot so it is never silently lost.
+    private func flushOrphanedShots() {
+        stateLock.lock()
+        let shots = pendingShots
+        pendingShots = []
+        dictationInFlight = false
+        stateLock.unlock()
+        guard !shots.isEmpty else { return }
+        Log.info("no transcript within \(Int(orphanTimeout))s — releasing \(shots.count) shot(s) on their own")
+        send(kind: "screenshot", paths: shots)
+    }
+
     // MARK: - Actions
 
     /// Snapshot the current on-screen selection.
@@ -79,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
-        selectionLock.lock(); pendingSelection = text; selectionLock.unlock()
+        stateLock.lock(); pendingSelection = text; stateLock.unlock()
         DispatchQueue.main.async { [weak self] in self?.bubble.setSelection(text) }
     }
 
@@ -89,27 +145,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in self?.bubble.flash("⚠️ screenshot failed") }
             return
         }
-        send(kind: "screenshot", path: path)
+
+        stateLock.lock()
+        let attaching = dictationInFlight
+        if attaching { pendingShots.append(path) }
+        let count = pendingShots.count
+        stateLock.unlock()
+
+        if attaching {
+            // Held back deliberately — it travels with the dictation.
+            armOrphanFlush()
+            Log.info("📸 attached to in-flight dictation (\(count) so far)")
+            DispatchQueue.main.async { [weak self] in
+                self?.bubble.flash("📸 \(count) attached to dictation")
+            }
+            return
+        }
+
+        send(kind: "screenshot", paths: [path])
         DispatchQueue.main.async { [weak self] in
             self?.bubble.flash("📸 sent \((path as NSString).lastPathComponent)")
         }
     }
 
-    private func send(kind: String, text: String? = nil, path: String? = nil, app: String? = nil) {
+    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {
         guard !paused else {
             Log.info("paused — dropped \(kind)")
             return
         }
-        selectionLock.lock()
+        stateLock.lock()
         let selection = pendingSelection
         pendingSelection = nil
-        selectionLock.unlock()
+        // A dictation closes the window and takes the shots with it.
+        var attached = paths
+        if kind == "dictation" {
+            attached += pendingShots
+            pendingShots = []
+            dictationInFlight = false
+        }
+        stateLock.unlock()
 
-        Outbox.send(kind: kind, text: text, selection: selection, path: path, app: app)
+        if kind == "dictation" {
+            DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
+        }
+
+        Outbox.send(kind: kind, text: text, selection: selection, paths: attached, app: app)
         DispatchQueue.main.async { [weak self] in
             self?.bubble.clearSelection()
-            if kind == "dictation" { self?.bubble.flash("🎙️ sent") }
-            if kind == "typed" { self?.bubble.flash("⌨️ sent") }
+            switch kind {
+            case "dictation":
+                self?.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+            case "typed": self?.bubble.flash("⌨️ sent")
+            default: break
+            }
         }
     }
 }
