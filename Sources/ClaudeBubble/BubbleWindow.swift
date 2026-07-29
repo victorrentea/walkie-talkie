@@ -62,7 +62,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
     /// push-to-talk, the second no longer exists.
-    private static let hints = "⌃⌥P  📸"
+    private static let hints = "⌃⌥P 📸"
 
     private var screenWidth: CGFloat {
         (panel.screen ?? NSScreen.main)?.frame.width.rounded() ?? 1440
