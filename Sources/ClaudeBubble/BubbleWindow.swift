@@ -244,6 +244,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// the first pixel of movement can never be caught, and with the ✕ living on
     /// it that would mean no way to end a session at rest.
     private var engaged = false
+    /// He has the mouse down *on the bubble* — the only gesture that may move it
+    /// by hand, and the only one tracking must yield to.
+    private var draggingSelf = false
     /// He is typing, so macOS has hidden the pointer and the chip has nothing
     /// left to be anchored to.
     private var typing = false
@@ -291,7 +294,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             refreshOpacity()
         }
 
-        guard NSEvent.pressedMouseButtons == 0 else { return }   // he may be dragging it
+        // Only a drag *of the bubble* suspends tracking. Testing
+        // `pressedMouseButtons` instead meant any drag anywhere froze the chip —
+        // he'd select a paragraph or drag a file and the label would sit where
+        // the gesture started, which is the one moment it looks broken.
+        guard !draggingSelf else { return }
         guard let screen = Self.screenUnderMouse() else { return }
 
         // In the panel states only the *screen* follows: Victor works on whichever
@@ -845,7 +852,13 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         onTogglePause?()
     }
 
+    /// Dragging is a panel gesture. The chip is pinned to the cursor, so hauling
+    /// it around would only mean fighting the thing that puts it back.
+    fileprivate func beginDrag() { draggingSelf = !anchored }
+    fileprivate func endDrag() { draggingSelf = false }
+
     fileprivate func moveBy(dx: CGFloat, dy: CGFloat) {
+        guard draggingSelf else { return }
         let origin = panel.frame.origin
         panel.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y + dy))
     }
@@ -997,6 +1010,7 @@ final class BubbleView: NSView {
     override func mouseDown(with event: NSEvent) {
         dragOrigin = NSEvent.mouseLocation
         dragged = false
+        owner?.beginDrag()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1009,7 +1023,7 @@ final class BubbleView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragOrigin = nil }
+        defer { dragOrigin = nil; owner?.endDrag() }
         guard !dragged else { return }     // a drag is not a click
         owner?.handleClick()
     }
