@@ -19,7 +19,7 @@ he spoke.
 
 Current strings live in `BubbleWindow.swift`:
 - `Self.hints` — the shortcut legend
-- `applyTitleText()` — `Agent: Stand by` / `Agent: Listening…` / `Agent: Paused`
+- `applyTitleText()` — `<label>: Stand by` / `: Listening…` / `: Paused`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 
 ## Scope: dictation helper only
@@ -32,11 +32,19 @@ caret from the app Victor is working in.
 
 ## Title states
 
+Titles are `<emoji> <label>: <state>`, where the label is `folder@branch` of the
+directory the bubble was launched in — the same thing Claude Code's status line
+shows, e.g. `ai@master`. It said "Agent" until two bubbles could exist at once;
+with two sessions on screen, identical titles hide the only fact that matters,
+which is *which repo* is about to receive what he says. `SessionLabel` derives it
+from the working directory (inherited from the session, since `/bubble` launches
+`start.sh` inside it), re-reads the branch every 10s, and yields to `--label`.
+
 | state | label |
 |---|---|
-| idle | `⏸️ Agent: Stand by` |
-| Wispr recording | `🎙️ Agent: Listening` + dots cycling 1→2→3→1 every 0.45s |
-| paused (single click) | `⏹️ Agent: Paused` |
+| idle | `⏸️ ai@master: Stand by` |
+| Wispr recording | `🎙️ ai@master: Listening` + dots cycling 1→2→3→1 every 0.45s |
+| paused (single click) | `⏹️ ai@master: Paused` |
 | ⌃⌥P pressed | `📸 Plus One Shot` for 1.6s, then back to the state title |
 
 The dots are load-bearing: a frozen "listening" label is indistinguishable from a
@@ -44,13 +52,13 @@ hung app, and the entire point of the state is reassurance that speech is being
 captured. Same reason for the glass-shine sweep every 5s while listening.
 
 Idle wears ⏸️ and paused wears ⏹️ — one glyph apart, because the words alone are
-too close to tell apart from across a room. Opacity separates them further (0.54
+too close to tell apart from across a room. Opacity separates them further (1.00
 vs 0.30).
 
 ## The subtitle row
 
 Only one row ever sits under the title, and **at rest there is none** — idle, the
-bubble is nothing but `⏸️ Agent: Stand by`. It appears for:
+bubble is nothing but `⏸️ ai@master: Stand by`. It appears for:
 
 - the `⌃⌥P 📸` legend, **while dictating and not paused** — the only window in
   which that shortcut does anything;
@@ -58,8 +66,17 @@ bubble is nothing but `⏸️ Agent: Stand by`. It appears for:
   the Accessibility warning fires at launch, long before a dictation, and would
   otherwise be invisible.
 
-`layoutContent()` reserves the legend's width even while the row is hidden, so
-starting to dictate grows the bubble downwards by one row and never sideways.
+## Size: minimal, per state
+
+`layoutContent()` hugs the **current** state's content — not the widest state
+there is. Standing by is what the bubble does for hours, so it must be no bigger
+than `⏸️ ai@master: Stand by` needs; it used to reserve room for the longest title
+and for the hidden `⌃⌥P` legend, which bought a bubble that never twitched at the
+cost of empty space the whole time.
+
+Resizing on a state change is therefore expected and fine. The one thing that
+must **not** resize is the dot animation, so the width is measured from
+`titleWidthProbe` — the current state's title with all three dots.
 
 ## The sent prompt
 
@@ -89,11 +106,15 @@ using them is enough — no appearance observers needed.
 | state | alpha |
 |---|---|
 | paused | 0.30 |
-| listening / editing / hovered | 1.00 |
-| idle | 0.54 |
+| everything else, idle included | 1.00 |
 
-Translucent by default so it sits quietly over whatever Victor is doing; opaque
-the moment it matters (he is dictating, typing, or looking straight at it).
+**Opaque permanently.** Idle used to fade to 0.54 on the theory that a bubble
+doing nothing should recede, but once it shrank to hug its own title there was
+nothing to recede from — and fading it made the one thing worth reading (which
+session it belongs to) harder to read.
+
+Paused keeps 0.30, because there the fade *is* the message: forwarding is off,
+and the bubble should look switched off.
 
 ## Placement
 

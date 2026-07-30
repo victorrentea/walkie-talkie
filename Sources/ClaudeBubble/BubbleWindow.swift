@@ -32,6 +32,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private var hovering = false
 
     private var followTimer: Timer?
+    private var labelTimer: Timer?
     private var dotTimer: Timer?
     private var shineTimer: Timer?
     private var dotPhase = 0
@@ -54,14 +55,6 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
     private let promptFont = NSFont.systemFont(ofSize: 12)
     private let hintFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)   // 10 × 1.3
-
-    /// Every label the title can show. Width is taken from the widest so the
-    /// bubble keeps a stable size across state changes.
-    private static let titleCandidates = [
-        "⏸️ Agent: Stand by",
-        "🎙️ Agent: Listening...",
-        "⏹️ Agent: Paused",
-    ]
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
@@ -116,6 +109,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         layoutContent()
         positionInitially()
         startFollowingMouse()
+        startWatchingBranch()
         panel.orderFrontRegardless()
     }
 
@@ -213,6 +207,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         followTimer = timer
     }
 
+    /// The title is `folder@branch`, and he switches branches mid-session — a
+    /// bubble still claiming `@master` would be quietly wrong about which branch
+    /// is receiving his dictation. Ten seconds is slow enough to be free (one
+    /// `git rev-parse`) and fast enough that he never reads a stale name.
+    private func startWatchingBranch() {
+        let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            guard let self = self, SessionLabel.refresh() else { return }
+            self.applyTitleText()
+            self.layoutContent()          // the title drives the bubble's width
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        labelTimer = timer
+    }
+
     static func screenUnderMouse() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
@@ -223,17 +231,17 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Manual layout in one pass: build the visible rows top-down with their
     /// heights, size the window to their total, then place them.
     private func layoutContent() {
-        // Hug the content. The title is measured against every state label, not
-        // just the current one, so the bubble does not twitch wider and narrower
-        // as the listening dots animate or the state changes.
-        let titleWidth = Self.titleCandidates
-            .map { measure($0, font: titleFont) }
-            .max() ?? 0
-        // Always reserve the legend's width even while the row is hidden, so the
-        // bubble does not jump sideways the moment dictation starts — only its
-        // height changes, by exactly that one row.
-        let hintWidth = max(measure(Self.hints, font: hintFont),
-                            flashMessage.map { measure($0, font: hintFont) } ?? 0)
+        // Hug the content of the *current* state, not the widest state there is:
+        // standing by is what the bubble does for hours, and it should take no
+        // more room than "⏸️ ai@master: Stand by" needs. Changing state resizes it,
+        // which is fine — the dots are what must not, and `titleWidthProbe`
+        // already measures them at full length.
+        let titleWidth = measure(titleWidthProbe, font: titleFont)
+        // The legend's width only counts while its row is actually there. It used
+        // to be reserved permanently to keep the bubble from jumping sideways when
+        // dictation starts, but that reservation is exactly the empty space that
+        // has no business being there the rest of the time.
+        let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
         let natural = ceil(max(titleWidth + closeReserve, hintWidth)) + pad * 2
 
         // A selection preview or a sent prompt takes the full half-screen: both
@@ -323,19 +331,28 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// animation ticks several times a second and must not restart the opacity
     /// fade on every frame.
     private func applyTitleText() {
-        if let override = titleOverride {
-            titleLabel.stringValue = override
-        } else if paused {
-            // Stand-by already wears ⏸️, so paused takes the harder stop glyph:
-            // the two states differ by one word otherwise, and they are read at a
-            // glance from across the room.
-            titleLabel.stringValue = "⏹️ Agent: Paused"
-        } else if listening {
-            titleLabel.stringValue = "🎙️ Agent: Listening" + String(repeating: ".", count: dotPhase + 1)
-        } else {
-            titleLabel.stringValue = "⏸️ Agent: Stand by"
-        }
+        titleLabel.stringValue = titleText(dots: dotPhase + 1)
     }
+
+    /// The title for the current state. `dots` exists only so the width probe can
+    /// ask for the widest form of the listening label while the animation asks for
+    /// the live one.
+    private func titleText(dots: Int) -> String {
+        if let override = titleOverride { return override }
+        // Stand-by already wears ⏸️, so paused takes the harder stop glyph: the
+        // two states differ by one word otherwise, and they are read at a glance
+        // from across the room.
+        if paused { return "⏹️ \(SessionLabel.value): Paused" }
+        if listening {
+            return "🎙️ \(SessionLabel.value): Listening" + String(repeating: ".", count: dots)
+        }
+        return "⏸️ \(SessionLabel.value): Stand by"
+    }
+
+    /// What the width must accommodate: the current state's title at its widest.
+    /// Three dots, always — measuring the live string would make the bubble
+    /// breathe in and out twice a second while he dictates.
+    private var titleWidthProbe: String { titleText(dots: 3) }
 
     /// Show `text` as the title for a moment, then fall back to the state title.
     func flashTitle(_ text: String, duration: TimeInterval = 1.6) {
@@ -348,13 +365,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Translucent while idle so it sits quietly over Victor's work; fully
-    /// opaque the moment Wispr starts listening or he looks straight at it.
+    /// Fully opaque in every state but one. Idle was translucent, on the theory
+    /// that a bubble doing nothing should recede — but it is now small enough to
+    /// stay out of the way on its own, and fading it only made the one thing worth
+    /// reading (which session it belongs to) harder to read.
+    ///
+    /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
+    /// the bubble looking switched off is the point.
     private func refreshOpacity() {
-        let target: CGFloat
-        if paused                                       { target = 0.30 }
-        else if listening || hovering || sentPrompt != nil { target = 1.00 }
-        else                                            { target = 0.54 }
+        let target: CGFloat = paused ? 0.30 : 1.00
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target

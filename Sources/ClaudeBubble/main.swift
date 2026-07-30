@@ -11,12 +11,16 @@ while let arg = args.next() {
             Outbox.outboxURL = Outbox.home.appendingPathComponent("outbox.jsonl")
             Outbox.shotsDir = Outbox.home.appendingPathComponent("shots")
         }
+    case "--label":
+        if let label = args.next() { SessionLabel.override(label) }
     case "--help", "-h":
         print("""
         Claude Bubble — floating input bubble that relays dictation, typed text
         and screenshots to a Claude Code session.
 
           --home <dir>   outbox + screenshot directory (default ~/.claude-bubble)
+          --label <s>    what the title calls this session (default: folder@branch
+                         of the working directory it was launched in)
 
         Messages are appended as JSON lines to <dir>/outbox.jsonl.
         """)

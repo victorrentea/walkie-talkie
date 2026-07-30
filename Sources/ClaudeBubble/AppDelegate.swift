@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let orphanTimeout: TimeInterval = 120
 
     private var paused = false
+    private var endAnnounced = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
@@ -78,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.bubble.flash("⚠️ Wispr Flow DB not found", duration: 12)
             }
         }
-        Log.info("ready — outbox at \(Outbox.outboxURL.path)")
+        Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
     }
 
     // MARK: - Dictation window
@@ -193,9 +194,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is blocked on that file, not on the process, and would otherwise sit
     /// waiting for messages that can no longer come.
     private func endSession() {
-        Log.info("session ended from the ✕ button")
-        Outbox.send(kind: "session_end")
+        announceEnd("✕ button")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
+    }
+
+    /// Every deliberate way out goes through here — the ✕, ⌘Q, a Quit sent from
+    /// Activity Monitor — and it fires at most once.
+    ///
+    /// The words travel in `text`, not just in `kind`: the agent is watching a
+    /// queue, and "user closed the bubble" reads as the instruction it is —
+    /// stop watching — where a bare `session_end` has to be interpreted.
+    private func announceEnd(_ reason: String) {
+        guard !endAnnounced else { return }
+        endAnnounced = true
+        Log.info("session ended via \(reason)")
+        Outbox.send(kind: "session_end", text: "user closed the bubble")
+    }
+
+    /// Catches the quit routes the ✕ does not: ⌘Q, and the Apple Event a newly
+    /// launched instance sends to its predecessor.
+    ///
+    /// Which is exactly why it consults the replacement marker first. Restarting
+    /// the bubble kills the old one, and reporting *that* as "user closed the
+    /// bubble" would tell the agent to stop watching at the very moment Victor
+    /// asked for a fresh session — the one failure mode worth writing code to
+    /// avoid, since it is silent and he would only notice by talking into a void.
+    func applicationWillTerminate(_ notification: Notification) {
+        guard !SingleInstance.beingReplaced() else {
+            Log.info("terminating to make way for a new instance — no session_end")
+            return
+        }
+        announceEnd("app terminate")
     }
 
     private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {

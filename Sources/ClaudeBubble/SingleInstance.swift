@@ -34,6 +34,7 @@ enum SingleInstance {
         guard !others.isEmpty else { return }
         Log.info("single-instance: terminating \(others.count) older bubble(s)")
 
+        markReplacement()
         for app in others { app.terminate() }
 
         // Give them a moment to exit cleanly, then insist.
@@ -50,5 +51,31 @@ enum SingleInstance {
             Log.info("single-instance: force-killing pid \(app.processIdentifier)")
             app.forceTerminate()
         }
+    }
+
+    // MARK: - Replacement marker
+    //
+    // The dying instance cannot tell "the user quit me" from "a newer bubble
+    // asked me to go" — both arrive as the same Quit event. So the newcomer says
+    // so out loud, in a file, just before knocking: a `session_end` emitted
+    // during a restart would tell the watching agent to stop listening exactly
+    // when Victor wanted a fresh session.
+
+    private static var markerURL: URL {
+        Outbox.home.appendingPathComponent(".replacing")
+    }
+
+    private static func markReplacement() {
+        try? FileManager.default.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
+        try? Data().write(to: markerURL)
+    }
+
+    /// True if a replacement was announced in the last few seconds. Time-boxed on
+    /// purpose: a stale marker left behind by a crash must not silence a real
+    /// close days later.
+    static func beingReplaced() -> Bool {
+        guard let modified = try? FileManager.default
+                .attributesOfItem(atPath: markerURL.path)[.modificationDate] as? Date else { return false }
+        return Date().timeIntervalSince(modified) < 10
     }
 }
