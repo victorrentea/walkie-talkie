@@ -8,13 +8,13 @@ import AppKit
 /// for the automatic capture at dictation start, which fires on every single
 /// dictation and must not blink the overlay each time.
 ///
-/// `announce` drives the red vignette. Both callers pass true: a frame of the
-/// screen leaves the machine either way, so both deserve the same visible
-/// receipt — a silent automatic capture is the one nobody can audit. The guard
-/// in `captureContext` keeps it to one flash per dictation, not one per trigger.
+/// The red vignette is **not** fired here. A frame of the screen leaves the
+/// machine on every dictation and every ⌃⌥P, so both deserve the same visible
+/// receipt — but the receipt belongs at the *start* of the gesture, not after
+/// this subprocess has been waited on. Callers announce first, then grab.
 enum ScreenCapture {
 
-    static func grab(announce: Bool) -> String? {
+    static func grab() -> String? {
         let display = activeDisplayNumber()
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
@@ -34,16 +34,6 @@ enum ScreenCapture {
         guard FileManager.default.fileExists(atPath: file.path) else {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
-        }
-        // Confirm it visually — the shutter is silent (`-x`) and the shot may be
-        // held back for a dictation, so without this there is no sign anything
-        // happened.
-        if announce {
-            DispatchQueue.main.async {
-                if let screen = CaptureFlash.screenUnderCursor() {
-                    CaptureFlash.flash(on: screen)
-                }
-            }
         }
         prune()
         return file.path

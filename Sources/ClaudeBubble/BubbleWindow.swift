@@ -22,9 +22,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let selectionLabel = NSTextField(labelWithString: "")
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+    private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 96, height: 22))
 
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
+    /// How a displayed prompt ended: `true` — release it to the agent (the hold
+    /// ran out, or he clicked the bubble away), `false` — he pressed Cancel and
+    /// it must never be written. Fires exactly once per prompt.
+    var onPromptResolved: ((Bool) -> Void)?
 
     private(set) var selection: String?
     private var paused = false
@@ -36,9 +41,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private var dotTimer: Timer?
     private var shineTimer: Timer?
     private var dotPhase = 0
-    /// The prompt just relayed to the agent, shown whole for a few seconds.
+    /// The prompt about to be relayed to the agent, shown whole while it is held
+    /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
     private var promptTimer: Timer?
+    /// When the held prompt is due to be released. Drives the Cancel countdown,
+    /// so the button says how long Victor still has rather than making him guess.
+    private var promptDeadline: Date?
+    private var countdownTimer: Timer?
     /// Temporary title override (e.g. "+1 📸"); nil = show the state title.
     private var titleOverride: String?
     /// Transient status occupying the subtitle row; nil = no flash in progress.
@@ -174,6 +184,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         closeButton.onClick = { [weak self] in self?.onEndSession?() }
         root.addSubview(closeButton)
 
+        // Not hover-revealed like the ✕: this one is on a clock, so it has to be
+        // visible and clickable the instant the prompt appears.
+        cancelButton.isHidden = true
+        cancelButton.onClick = { [weak self] in self?.resolvePrompt(send: false) }
+        root.addSubview(cancelButton)
+
         refreshTitle()
     }
 
@@ -188,23 +204,121 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         homeScreen = screen
     }
 
-    private func positionInitially() {
-        guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
-        moveToTopLeft(of: screen)
-    }
+    private func positionInitially() { reposition() }
 
-    /// Follow the cursor across displays: Victor works on whichever screen he is
-    /// pointing at, and a bubble stranded on the other monitor is a bubble he
-    /// cannot see. Only the *screen* follows — a bubble dragged somewhere on the
-    /// current screen stays put until the cursor leaves for another one.
+    /// At rest the bubble is an **anchor**, not a panel: nothing is happening, so
+    /// the only thing worth saying is *which agent this is* — 🤖 folder@branch —
+    /// and the only place worth saying it is wherever Victor is already looking,
+    /// which is wherever his cursor is. Parked in a corner it was either unseen
+    /// or pointless; here it is a label on the work in front of him.
+    ///
+    /// The moment anything happens — dictation, a prompt, a warning — it stops
+    /// trailing him and becomes the panel it is today, back in its corner.
+    ///
+    /// Paused is deliberately **not** anchored. It is the one state he enters by
+    /// hand, and the state he leaves by hand — so it becomes a panel again,
+    /// parked in its corner with its ✕ back. That is also the route to ending a
+    /// session at rest, now that the chip has no ✕ of its own: click it to pause,
+    /// then hover the panel and close it.
+    private var anchored: Bool { !listening && !paused && sentPrompt == nil && flashMessage == nil }
+
+    /// Where the chip rides relative to the pointer: below and to the right, out
+    /// of the way of the thing being pointed at.
+    private let anchorGap = NSSize(width: 10, height: 22)
+
+    /// Tracking has two states, and the second one is what keeps the ✕ reachable.
+    ///
+    /// **Engaged** — the cursor is moving, so the chip is pinned to it every
+    /// frame. Anything less (a leash, a "catch up when far enough" rule) reads as
+    /// lag, because it *is* lag: the chip visibly trails behind the pointer.
+    ///
+    /// **Settled** — the cursor has stopped, so the chip stops with it and stays
+    /// put until he goes somewhere (`wakeDistance`). That is the window in which
+    /// he can walk the pointer over to it and click: a chip that re-engages on
+    /// the first pixel of movement can never be caught, and with the ✕ living on
+    /// it that would mean no way to end a session at rest.
+    private var engaged = false
+    private var settlePoint = NSPoint.zero
+    private var lastMouse = NSPoint.zero
+    private var stillTicks = 0
+    /// ~0.25s of stillness at 60 Hz.
+    private let settleTicks = 15
+    private let wakeDistance: CGFloat = 70
+
     private func startFollowingMouse() {
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
-            guard let self = self, NSEvent.pressedMouseButtons == 0 else { return }
-            guard let screen = Self.screenUnderMouse(), screen !== self.homeScreen else { return }
-            self.moveToTopLeft(of: screen)
+        // 60 Hz: while engaged this is a window move per frame, which is what
+        // "follows the mouse" costs. Settled, it is two point comparisons.
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.followCursor()
         }
         RunLoop.main.add(timer, forMode: .common)
         followTimer = timer
+    }
+
+    private func followCursor() {
+        guard NSEvent.pressedMouseButtons == 0 else { return }   // he may be dragging it
+        guard let screen = Self.screenUnderMouse() else { return }
+
+        // In the panel states only the *screen* follows: Victor works on whichever
+        // screen he points at, and a panel stranded on the other monitor is a
+        // panel he cannot see. Where it sits on that screen is left alone, so a
+        // bubble he dragged out of the way stays out of the way.
+        guard anchored else {
+            if screen !== homeScreen { moveToTopLeft(of: screen) }
+            return
+        }
+
+        let mouse = NSEvent.mouseLocation
+        let moved = hypot(mouse.x - lastMouse.x, mouse.y - lastMouse.y)
+        lastMouse = mouse
+
+        if engaged {
+            stillTicks = moved < 1 ? stillTicks + 1 : 0
+            if stillTicks >= settleTicks {
+                engaged = false
+                settlePoint = mouse
+                return
+            }
+            moveNextTo(mouse, on: screen)
+            return
+        }
+
+        // Settled: wake on a real journey, not on the nudge that is him reaching
+        // for the chip itself.
+        if hypot(mouse.x - settlePoint.x, mouse.y - settlePoint.y) > wakeDistance || screen !== homeScreen {
+            engaged = true
+            stillTicks = 0
+            moveNextTo(mouse, on: screen)
+        }
+    }
+
+    /// Below-right of the cursor, flipped at the screen edges so it is never
+    /// half off-screen, and never exactly under the pointer.
+    private func moveNextTo(_ mouse: NSPoint, on screen: NSScreen) {
+        let area = screen.visibleFrame
+        let size = panel.frame.size
+        var x = mouse.x + anchorGap.width
+        var y = mouse.y - anchorGap.height - size.height
+        if x + size.width > area.maxX - 4 { x = mouse.x - anchorGap.width - size.width }
+        if y < area.minY + 4 { y = mouse.y + anchorGap.height }
+        panel.setFrameOrigin(NSPoint(
+            x: min(max(x, area.minX + 4), area.maxX - size.width - 4),
+            y: min(max(y, area.minY + 4), area.maxY - size.height - 4)
+        ))
+        homeScreen = screen
+    }
+
+    /// Called on every entry to and exit from a panel state, so the move happens
+    /// with the state change rather than whenever the leash next gives.
+    private func reposition() {
+        guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
+        if anchored {
+            engaged = true
+            stillTicks = 0
+            moveNextTo(NSEvent.mouseLocation, on: screen)
+        } else {
+            moveToTopLeft(of: screen)
+        }
     }
 
     /// The title is `folder@branch`, and he switches branches mid-session — a
@@ -230,7 +344,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// Manual layout in one pass: build the visible rows top-down with their
     /// heights, size the window to their total, then place them.
-    private func layoutContent() {
+    private func layoutContent(animated: Bool = false) {
         // Hug the content of the *current* state, not the widest state there is:
         // standing by is what the bubble does for hours, and it should take no
         // more room than "⏸️ ai@master: Stand by" needs. Changing state resizes it,
@@ -242,11 +356,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
-        let natural = ceil(max(titleWidth + closeReserve, hintWidth)) + pad * 2
+        // No ✕ at rest means no room kept for one: the chip is exactly its text.
+        let reserve = anchored ? 0 : closeReserve
+        let natural = ceil(max(titleWidth + reserve, hintWidth)) + pad * 2
 
-        // A selection preview or a sent prompt takes the full half-screen: both
-        // exist to be read, and a prompt in particular has to be shown whole.
-        let width = (selection != nil || sentPrompt != nil)
+        // Only a prompt earns the full half-screen. It has to be read whole, and
+        // read *fast*, because the Cancel clock is running.
+        //
+        // A selection does not. Widening the moment dictation starts throws a
+        // half-screen panel across whatever Victor is looking at for the entire
+        // time he talks — to show him text he highlighted himself a second ago.
+        // It rides along truncated in the narrow bubble instead, which is all the
+        // receipt it needs, and the bubble grows only at the end, when there is
+        // finally something he has *not* seen: what Wispr actually heard.
+        let width = sentPrompt != nil
             ? max(natural, screenWidth / 2)
             : min(natural, screenWidth / 2)
         let innerWidth = width - pad * 2
@@ -280,6 +403,16 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             promptLabel.isHidden = true
         }
 
+        // Its own row rather than an overlay in a corner: the prompt can be many
+        // lines long, and a button floating over the last one is a button that
+        // sometimes sits on top of a word.
+        if sentPrompt != nil {
+            cancelButton.isHidden = false
+            rows.append((cancelButton, cancelButton.frame.height))
+        } else {
+            cancelButton.isHidden = true
+        }
+
         if let hint = hintText {
             hintLabel.stringValue = hint
             hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor : .labelColor
@@ -296,8 +429,19 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // Anchor the TOP edge: the bubble sits in the top-left corner, so it
         // grows downward into empty screen rather than up under the menu bar.
         let oldTop = panel.frame.maxY
-        panel.setFrame(NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height),
-                       display: true)
+        let frame = NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height)
+        if animated {
+            // The jump from a one-line "Listening…" to a half-screen prompt is the
+            // biggest thing this window ever does, and done instantly it reads as
+            // a new window appearing rather than as this one unfolding.
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
         root.frame = NSRect(origin: .zero, size: NSSize(width: width, height: height))
         root.blur?.frame = root.bounds
 
@@ -308,9 +452,46 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             y -= rowGap
         }
 
+        // Bottom-right, where Victor asked for it — and where a destructive
+        // button belongs, far from the drag area his cursor arrives through.
+        if !cancelButton.isHidden {
+            cancelButton.frame.origin.x = width - pad - cancelButton.frame.width
+        }
+
         closeButton.frame.origin = NSPoint(x: width - closeButton.frame.width - 6,
                                            y: height - closeButton.frame.height - 6)
+        refreshChrome()
         root.needsDisplay = true
+    }
+
+    /// At rest there is no bubble — only the text. A blurred, rounded, shadowed
+    /// panel riding along beside the cursor all day is a window following him
+    /// around; the same words with nothing behind them are a label on his work.
+    /// The panel comes back the moment there is something to *contain*: a
+    /// dictation, a prompt, a warning.
+    private func refreshChrome() {
+        let bare = anchored
+        root.blur?.isHidden = bare
+        root.layer?.cornerRadius = bare ? 0 : 14
+        if panel.hasShadow != !bare {
+            panel.hasShadow = !bare
+            panel.invalidateShadow()
+        }
+        // With the panel gone the text sits directly on his editor, his browser,
+        // a photograph. A halo in the *inverse* colour is what keeps it legible
+        // on all of them — the same trick the ✕ uses, and the reason neither is
+        // hardcoded white. As a layer shadow, not a string attribute: the label
+        // keeps drawing itself exactly as it always has.
+        titleLabel.wantsLayer = true
+        if bare {
+            let halo = NSShadow()
+            halo.shadowColor = NSColor.textBackgroundColor.withAlphaComponent(0.9)
+            halo.shadowBlurRadius = 3
+            halo.shadowOffset = .zero
+            titleLabel.shadow = halo
+        } else {
+            titleLabel.shadow = nil
+        }
     }
 
     private func singleLine(_ text: String) -> String {
@@ -323,7 +504,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private func refreshTitle() {
         applyTitleText()
-        titleLabel.textColor = (paused || !listening) ? .secondaryLabelColor : .labelColor
+        // Full-strength label on the chip: there is no panel behind it to
+        // separate it from his work, so a secondary grey would read as smudge.
+        titleLabel.textColor = anchored ? .labelColor
+                                        : ((paused || !listening) ? .secondaryLabelColor : .labelColor)
         refreshOpacity()
     }
 
@@ -346,7 +530,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         if listening {
             return "🎙️ \(SessionLabel.value): Listening" + String(repeating: ".", count: dots)
         }
-        return "⏸️ \(SessionLabel.value): Stand by"
+        // At rest, no state word at all. "Stand by" is the one thing he can infer
+        // from the fact that nothing is happening; what he cannot infer, and what
+        // this chip exists to tell him, is which agent is sitting there waiting.
+        return "🤖 \(SessionLabel.value)"
     }
 
     /// What the width must accommodate: the current state's title at its widest.
@@ -365,15 +552,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Fully opaque in every state but one. Idle was translucent, on the theory
-    /// that a bubble doing nothing should recede — but it is now small enough to
-    /// stay out of the way on its own, and fading it only made the one thing worth
-    /// reading (which session it belongs to) harder to read.
+    /// Fully opaque whenever it has something to say. The idle chip sits at 0.80:
+    /// it now rides along near the cursor, over Victor's actual work, so it has
+    /// to read as an overlay rather than as part of the page — but not so faint
+    /// that the one thing it carries (which session it is) is hard to read.
     ///
     /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
     /// the bubble looking switched off is the point.
     private func refreshOpacity() {
-        let target: CGFloat = paused ? 0.30 : 1.00
+        let target: CGFloat = paused ? 0.30 : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
@@ -460,6 +647,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         paused = value
         refreshTitle()
         layoutContent()          // pausing mid-dictation retracts the ⌃⌥P row
+        reposition()             // …and takes it out of the cursor's wake
     }
 
     /// Wispr started / stopped listening.
@@ -469,63 +657,113 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         if value { startDots(); startShine() } else { stopDots(); stopShine() }
         refreshTitle()
         layoutContent()          // the ⌃⌥P row lives and dies with this state
+        reposition()             // …and so does trailing the cursor
     }
 
-    /// Show the prompt that was just relayed to the agent, whole, so Victor can
-    /// see exactly what Wispr heard before the agent acts on it — a
-    /// mis-transcription is much cheaper to catch here than three tool calls
-    /// later.
+    /// Show the prompt on its way to the agent, whole, so Victor can see exactly
+    /// what Wispr heard — a mis-transcription is much cheaper to catch here than
+    /// three tool calls later.
     ///
-    /// On screen for at least 2s, scaled by length so a long dictation is
-    /// actually readable (~3 words/second), capped so it can never park itself
-    /// over his work indefinitely.
-    func showSentPrompt(_ text: String) {
+    /// The prompt is **held**, not already gone: for `hold` seconds it sits here
+    /// with a Cancel button, and only then does it reach the outbox. That is what
+    /// makes the button mean something — a prompt already written cannot be
+    /// recalled, since the agent polls the queue every couple of seconds and may
+    /// have started acting on it before Victor's hand reaches the mouse.
+    ///
+    /// Returns false if there was nothing worth showing, in which case the caller
+    /// still owns the message and must release it itself.
+    @discardableResult
+    func showSentPrompt(_ text: String, hold: TimeInterval) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
+        // A prompt still on screen has not been released yet. Let it go first, so
+        // two dictations in quick succession reach the agent in the order spoken.
+        resolvePrompt(send: true)
+
         sentPrompt = trimmed
         // The selection is already part of what is displayed here, so drop the
         // separate preview row rather than showing it twice.
         selection = nil
-        layoutContent()
+        promptDeadline = Date().addingTimeInterval(hold)
+        updateCancelTitle()
+        // Park first, then unfold: repositioning after an animated resize would
+        // snap the window to its destination and eat the animation.
+        reposition()
+        layoutContent(animated: true)
         refreshOpacity()
 
         promptTimer?.invalidate()
-        let words = trimmed.split(whereSeparator: { $0.isWhitespace }).count
-        let duration = min(max(2.0, Double(words) / 3.0), 5.0)
-        let timer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-            self?.dismissSentPrompt()
+        let timer = Timer.scheduledTimer(withTimeInterval: hold, repeats: false) { [weak self] _ in
+            self?.resolvePrompt(send: true)
         }
         RunLoop.main.add(timer, forMode: .common)
         promptTimer = timer
+
+        // Four ticks a second: the number on the button should count down
+        // smoothly rather than jump, since it is the only thing telling him
+        // whether he still has time to reach for it.
+        countdownTimer?.invalidate()
+        let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.updateCancelTitle()
+        }
+        RunLoop.main.add(tick, forMode: .common)
+        countdownTimer = tick
+        return true
     }
 
-    /// Collapse back to the small bubble. Called by the timer, and by a click —
-    /// 5s is the cap, not a promise that he wants to wait it out.
-    private func dismissSentPrompt() {
+    private func updateCancelTitle() {
+        guard let deadline = promptDeadline else { return }
+        let left = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+        cancelButton.title = "✕ Cancel \(left)s"
+    }
+
+    /// The single exit from the displayed-prompt state: collapse back to the
+    /// small bubble and tell the delegate whether to release the message or bin
+    /// it. Fires once — every later call finds `sentPrompt` already nil.
+    private func resolvePrompt(send: Bool) {
         guard sentPrompt != nil else { return }
         promptTimer?.invalidate()
         promptTimer = nil
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        promptDeadline = nil
         sentPrompt = nil
         layoutContent()
+        reposition()
         refreshOpacity()
+        // Last, and with the state already cleared: the delegate may well show
+        // the next prompt from inside this call.
+        onPromptResolved?(send)
     }
+
+    /// Release anything still being held — used when the app is going away and
+    /// the choice is between sending it now and losing it.
+    func flushHeldPrompt() { resolvePrompt(send: true) }
 
     /// Transient status in the subtitle row — which it also *summons*, since at
     /// rest that row is not on screen at all.
     func flash(_ message: String, duration: TimeInterval = 2.0) {
         flashMessage = message
         layoutContent()
+        reposition()             // a warning is a panel, not a chip: back to the corner
+        refreshOpacity()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             guard let self = self, self.flashMessage == message else { return }
             self.flashMessage = nil
             self.layoutContent()
+            self.reposition()
+            self.refreshOpacity()
         }
     }
 
     fileprivate func setHovering(_ value: Bool) {
         guard hovering != value else { return }
         hovering = value
-        closeButton.isHidden = !value
+        // No ✕ while it is trailing the cursor. There it is a label, not a
+        // window: an end-session button on something that moves away as you
+        // reach for it is a button that means nothing. It comes back with the
+        // panel — during a dictation, and on the prompt.
+        closeButton.isHidden = !value || anchored
         if value {
             // A hidden view gets no mouse events, so its tracking area is stale
             // by the time it is revealed — without this the ✕ never lights up.
@@ -539,13 +777,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// No double-click to disambiguate any more, so a click acts immediately.
     ///
-    /// While the sent prompt is up, the click dismisses it instead of toggling
-    /// pause: the bubble is then large and sitting over Victor's work, so
-    /// "get out of the way" is the obvious meaning of clicking it — and pausing
-    /// the relay by accident is exactly the mistake he would not notice.
+    /// While a prompt is up, clicking the bubble body means "yes, that's right,
+    /// go" — it releases the message immediately instead of waiting out the
+    /// countdown, and gets the wide panel off his work. The one place where a
+    /// click means *no* is the Cancel button, which swallows its own clicks.
+    /// Toggling pause here would be the mistake he would never notice.
     fileprivate func handleClick() {
         if sentPrompt != nil {
-            dismissSentPrompt()
+            resolvePrompt(send: true)
             return
         }
         onTogglePause?()
@@ -618,6 +857,70 @@ final class CloseButton: NSView {
     // Swallow the whole click so it never reaches BubbleView's pause handling.
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
+// MARK: - Cancel button
+
+/// The button that stops a held prompt from ever reaching the agent.
+///
+/// Drawn rather than an `NSButton` because the bubble's panel never becomes key:
+/// standard controls in a non-activating panel look permanently disabled and
+/// swallow the first click activating the window. This one is always live.
+final class PillButton: NSView {
+    var onClick: (() -> Void)?
+    var title: String = "" {
+        didSet { guard title != oldValue else { return }; needsDisplay = true }
+    }
+    private var hot = false
+
+    override var isFlipped: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let pill = NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2)
+        // Red only under the cursor. At rest it is one more quiet control: the
+        // bubble is on screen all day and a permanently red button reads as an
+        // error rather than as an offer.
+        if hot {
+            NSColor.systemRed.withAlphaComponent(0.92).setFill()
+        } else {
+            NSColor.secondaryLabelColor.withAlphaComponent(0.22).setFill()
+        }
+        pill.fill()
+        NSColor.secondaryLabelColor.withAlphaComponent(hot ? 0.0 : 0.35).setStroke()
+        pill.lineWidth = 1
+        pill.stroke()
+
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: hot ? NSColor.white : NSColor.labelColor,
+            .paragraphStyle: style,
+        ]
+        let size = (title as NSString).size(withAttributes: attrs)
+        (title as NSString).draw(
+            in: NSRect(x: 0, y: (bounds.height - size.height) / 2, width: bounds.width, height: size.height),
+            withAttributes: attrs)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent)  { hot = false; needsDisplay = true }
+
+    // Swallow the whole click — reaching BubbleView would release the very
+    // prompt this button exists to stop.
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
 
 // MARK: - Content view (drag + click)

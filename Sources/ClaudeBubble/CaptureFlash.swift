@@ -84,6 +84,17 @@ enum CaptureFlash {
         }
     }
 
+    /// Fire the vignette now, on the screen under the cursor.
+    ///
+    /// Synchronous when already on the main thread. Callers use this *before*
+    /// their slow work (AX probe, screencapture) precisely so the panel is on
+    /// screen first; an unconditional async hop would queue the flash behind that
+    /// work and reintroduce the lag it exists to remove.
+    static func announce() {
+        let show = { if let screen = screenUnderCursor() { flash(on: screen) } }
+        if Thread.isMainThread { show() } else { DispatchQueue.main.async(execute: show) }
+    }
+
     /// The screen the cursor is on — the one that was just captured.
     static func screenUnderCursor() -> NSScreen? {
         let mouse = NSEvent.mouseLocation

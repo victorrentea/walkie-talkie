@@ -34,6 +34,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var paused = false
     private var endAnnounced = false
 
+    /// A message that is built, shown, and *not yet written*. It lives here for
+    /// the few seconds the bubble displays it, so Cancel has something to stop.
+    /// Main thread only.
+    private var held: Message?
+
+    /// Long enough to see the prompt, read it, and get a hand to the mouse —
+    /// Victor's own figure. Scaled up with length so a long dictation is still
+    /// readable, and capped so the bubble never parks over his work.
+    private static let minHold: TimeInterval = 3.0
+    private static let maxHold: TimeInterval = 5.0
+
+    /// Everything one outbox line is made of, kept together so it can be held
+    /// back, released, or dropped as a unit.
+    private struct Message {
+        let kind: String
+        let text: String?
+        let selection: String?
+        let paths: [String]
+        let screen: String?
+        let app: String?
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
         Outbox.prepare()
@@ -45,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.bubble.setPaused(self.paused)
         }
         bubble.onEndSession = { [weak self] in self?.endSession() }
+        bubble.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
         hotkeys.onScreenshot = { [weak self] in self?.plusOneShot() }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
@@ -84,9 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dictation window
 
-    /// Everything that must be true at the instant dictation starts: open the
-    /// window for attaching shots, grab the selection, and photograph the screen
-    /// being talked about.
+    /// Everything that must be true at the instant dictation starts: confirm it
+    /// on screen, open the window for attaching shots, grab the selection, and
+    /// photograph the screen being talked about.
     ///
     /// Runs on both the Mouse 5 press and the CoreAudio transition, which can
     /// fire within a few hundred ms of each other. That is deliberate and
@@ -98,17 +121,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.lock()
         let alreadyOpen = dictationInFlight
         dictationInFlight = true
+        // A new dictation is a new subject. Clear the old one before probing, so
+        // a selection stranded by a dictation that never produced a transcript
+        // cannot ride along with the next thing he says.
+        if !alreadyOpen { pendingSelection = nil }
         stateLock.unlock()
+
+        // The receipt comes FIRST — before the AX probe, before screencapture.
+        // Those take the best part of a second between them, and a flash that
+        // lands after the work is a flash that no longer means "now": it was
+        // firing long after the frame it confirms had already been taken.
+        if !alreadyOpen { CaptureFlash.announce() }
 
         armOrphanFlush()
-        stashSelection()
 
-        guard !alreadyOpen else { return }
-        guard let path = ScreenCapture.grab(announce: true) else { return }
-        stateLock.lock()
-        pendingScreen = path
-        stateLock.unlock()
-        Log.info("context screen captured: \((path as NSString).lastPathComponent)")
+        // Off the caller's thread on purpose. The clipboard probe sleeps up to
+        // 400ms and screencapture is a subprocess we wait on; left on the event
+        // tap or the main queue, that is the flash frozen mid-fade.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.stashSelection()
+
+            guard !alreadyOpen else { return }
+            guard let path = ScreenCapture.grab() else { return }
+            self.stateLock.lock()
+            self.pendingScreen = path
+            self.stateLock.unlock()
+            Log.info("context screen captured: \((path as NSString).lastPathComponent)")
+        }
     }
 
     private func armOrphanFlush() {
@@ -141,40 +181,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
+    /// What was selected when he started talking IS the subject, for the whole
+    /// dictation — so the first non-empty read wins and nothing later overwrites
+    /// it. He talks for a minute, another window jumps in front, he switches
+    /// apps to look something up, Wispr's own UI takes focus: none of that
+    /// changes what he is talking about. Later probes exist only to fill a blank
+    /// the first one left (Mouse 5 and the CoreAudio transition both call this,
+    /// a few hundred ms apart).
     private func stashSelection() {
+        stateLock.lock()
+        let alreadyHave = pendingSelection != nil
+        stateLock.unlock()
+        guard !alreadyHave else { return }
+
         let text = SelectionCapture.read()
         Log.info("selection front=\(SelectionCapture.frontmostAppName() ?? "?") → \(text.map { "\($0.count) chars" } ?? "nothing")")
-        // An empty read never clears what an earlier probe already found: Mouse 5
-        // and the CoreAudio transition both call this, and by the second one the
-        // selection may have been dismissed by Wispr's own UI.
         guard let text = text, !text.isEmpty else { return }
-        stateLock.lock(); pendingSelection = text; stateLock.unlock()
+
+        stateLock.lock()
+        let lost = pendingSelection != nil      // the other probe got there first
+        if !lost { pendingSelection = text }
+        stateLock.unlock()
+        guard !lost else { return }
         DispatchQueue.main.async { [weak self] in self?.bubble.setSelection(text) }
     }
 
     /// ⌃⌥P — one more shot for the dictation in progress.
     private func plusOneShot() {
         guard !paused else { return }
+        // Flash first, capture second — same reason as in `captureContext`: the
+        // confirmation should land on the keypress, not on the subprocess.
+        CaptureFlash.announce()
         DispatchQueue.main.async { [weak self] in self?.bubble.flashTitle("+1 📸") }
 
-        guard let path = ScreenCapture.grab(announce: true) else {
-            DispatchQueue.main.async { [weak self] in self?.bubble.flash("⚠️ screenshot failed") }
-            return
-        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            guard let path = ScreenCapture.grab() else {
+                DispatchQueue.main.async { self.bubble.flash("⚠️ screenshot failed") }
+                return
+            }
 
-        stateLock.lock()
-        let attaching = dictationInFlight
-        if attaching { pendingShots.append(path) }
-        let count = pendingShots.count
-        stateLock.unlock()
+            self.stateLock.lock()
+            let attaching = self.dictationInFlight
+            if attaching { self.pendingShots.append(path) }
+            let count = self.pendingShots.count
+            self.stateLock.unlock()
 
-        if attaching {
-            armOrphanFlush()
-            Log.info("📸 attached to in-flight dictation (\(count) so far)")
-            DispatchQueue.main.async { [weak self] in self?.bubble.flash("📸 \(count) attached") }
-            return
+            if attaching {
+                self.armOrphanFlush()
+                Log.info("📸 attached to in-flight dictation (\(count) so far)")
+                DispatchQueue.main.async { self.bubble.flash("📸 \(count) attached") }
+                return
+            }
+            self.send(kind: "screenshot", paths: [path])
         }
-        send(kind: "screenshot", paths: [path])
     }
 
     /// What to render in the bubble as "this is what the agent got". Returns nil
@@ -207,6 +267,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func announceEnd(_ reason: String) {
         guard !endAnnounced else { return }
         endAnnounced = true
+        // Anything still counting down goes out ahead of the goodbye. Quitting is
+        // not cancelling — Cancel is a button he presses on purpose — and the
+        // outbox writes serially, so it lands in the right order.
+        bubble?.flushHeldPrompt()
         Log.info("session ended via \(reason)")
         Outbox.send(kind: "session_end", text: "user closed the bubble")
     }
@@ -250,20 +314,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
         }
 
-        Outbox.send(kind: kind, text: text, selection: selection,
-                    paths: attached, screen: screen, app: app)
+        let message = Message(kind: kind, text: text, selection: selection,
+                              paths: attached, screen: screen, app: app)
 
-        // Show what actually went out — selection included, since that is part
+        // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
         let shown = Self.promptPreview(text: text, selection: selection, shots: attached.count)
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.bubble.clearSelection()
-            if let shown = shown {
-                self.bubble.showSentPrompt(shown)
-            } else if kind == "dictation" {
-                self.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+
+            // Nothing to read is nothing to cancel: a bare screenshot goes
+            // straight out, and so does the goodbye.
+            guard let shown = shown else {
+                self.commit(message)
+                if kind == "dictation" {
+                    self.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+                }
+                return
+            }
+
+            let words = shown.split(whereSeparator: { $0.isWhitespace }).count
+            let hold = min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
+            if self.bubble.showSentPrompt(shown, hold: hold) {
+                self.held = message
+            } else {
+                self.commit(message)
             }
         }
+    }
+
+    /// The only route to the outbox. Everything else builds a `Message` and
+    /// hands it here — eventually, or never.
+    private func commit(_ m: Message) {
+        Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
+                    paths: m.paths, screen: m.screen, app: m.app)
+    }
+
+    /// The countdown ran out (or he clicked the bubble away) → write it. He hit
+    /// Cancel → drop it, and say so, because a message that silently disappears
+    /// is indistinguishable from a bubble that has stopped working.
+    ///
+    /// Cancelling is cheap precisely because nothing was written: the agent polls
+    /// the outbox every couple of seconds, so a line already in the file may
+    /// already be a tool call in flight.
+    private func releaseHeld(send: Bool) {
+        guard let m = held else { return }
+        held = nil
+        guard send else {
+            Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the bubble")
+            bubble.flash("✕ cancelled", duration: 2.0)
+            return
+        }
+        commit(m)
     }
 }
