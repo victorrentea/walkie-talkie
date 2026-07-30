@@ -135,7 +135,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         // Keeps the bubble out of every screenshot — verified: a capture taken by
         // a separate process, with no hiding at all, does not contain it.
-        panel.sharingType = .none
+        // …which also makes the bubble impossible to *look at* while working on
+        // it: no screenshot can contain it, so nobody debugging its appearance
+        // can see what Victor sees. BUBBLE_CAPTURABLE=1 puts it back in captures
+        // for exactly that, and is off in every normal run.
+        panel.sharingType = ProcessInfo.processInfo.environment["BUBBLE_CAPTURABLE"] == "1"
+            ? .readOnly : .none
         panel.delegate = self
         panel.contentView = root
         root.owner = self
@@ -322,19 +327,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Below-right of the cursor, flipped at the screen edges so it is never
-    /// half off-screen, and never exactly under the pointer.
+    /// Below-right of the cursor. **Always** below-right: it used to flip and
+    /// clamp near the screen edges to stay fully visible, which meant the chip
+    /// jumped to the other side of the pointer exactly when he ran the cursor
+    /// into the right-hand edge. A label that moves relative to what it labels is
+    /// worse than a label half off-screen, so it keeps its offset and lets the
+    /// edge cut it.
     private func moveNextTo(_ mouse: NSPoint, on screen: NSScreen) {
-        let area = screen.visibleFrame
-        let size = panel.frame.size
-        var x = mouse.x + anchorGap.width
-        var y = mouse.y - anchorGap.height - size.height
-        if x + size.width > area.maxX - 4 { x = mouse.x - anchorGap.width - size.width }
-        if y < area.minY + 4 { y = mouse.y + anchorGap.height }
-        panel.setFrameOrigin(NSPoint(
-            x: min(max(x, area.minX + 4), area.maxX - size.width - 4),
-            y: min(max(y, area.minY + 4), area.maxY - size.height - 4)
-        ))
+        panel.setFrameOrigin(NSPoint(x: mouse.x + anchorGap.width,
+                                     y: mouse.y - anchorGap.height - panel.frame.height))
         homeScreen = screen
     }
 
@@ -518,6 +519,19 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // cursor happens to be over the bubble would otherwise strand a ✕ on the
         // chip, since nothing re-enters `setHovering` on the way out.
         closeButton.isHidden = bare || !hovering
+
+        // White glyphs need something to separate them from a white page. A
+        // *layer* shadow, since the string-attribute route doesn't render here.
+        titleLabel.wantsLayer = true
+        if bare {
+            let halo = NSShadow()
+            halo.shadowColor = NSColor.black.withAlphaComponent(0.9)
+            halo.shadowBlurRadius = 3
+            halo.shadowOffset = .zero
+            titleLabel.shadow = halo
+        } else {
+            titleLabel.shadow = nil
+        }
     }
 
     private func singleLine(_ text: String) -> String {
@@ -530,9 +544,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private func refreshTitle() {
         applyTitleText()
-        // Full-strength label on the chip: there is no panel behind it to
-        // separate it from his work, so a secondary grey would read as smudge.
-        titleLabel.textColor = anchored ? .labelColor
+        // White on the chip — the one place a hardcoded colour is right. Every
+        // other surface in this app sits on the bubble's own blur, which follows
+        // the system appearance; the chip sits on his terminal, his editor, a
+        // photograph. A dynamic `labelColor` resolves to black in light mode and
+        // disappears on a dark terminal, which is exactly what it did.
+        titleLabel.textColor = anchored ? .white
                                         : ((paused || !listening) ? .secondaryLabelColor : .labelColor)
         refreshOpacity()
     }
@@ -540,32 +557,13 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Just the string — kept separate from `refreshTitle` because the dot
     /// animation ticks several times a second and must not restart the opacity
     /// fade on every frame.
+    /// Plain `stringValue`, always. **Never `attributedStringValue`**: on these
+    /// `NSTextField(labelWithString:)` labels it silently draws nothing but the
+    /// emoji — the rest of the glyphs come out fully transparent. That is what
+    /// made the chip show a robot head and no session name; measured, not
+    /// guessed. Colour and halo go on the label instead (`refreshChrome`).
     private func applyTitleText() {
-        let text = titleText(dots: dotPhase + 1)
-        guard anchored else {
-            titleLabel.stringValue = text
-            return
-        }
-        // The one place in the app where a hardcoded colour is right. Everywhere
-        // else the backdrop is the bubble's own blur, which follows the system
-        // appearance; here there is no backdrop at all — the text sits on his
-        // terminal, his editor, a photograph. A dynamic `labelColor` resolves to
-        // black in light mode and vanishes on a dark terminal, which is exactly
-        // what happened. White with a dark outline is the subtitle trick, and it
-        // reads on anything.
-        titleLabel.attributedStringValue = NSAttributedString(string: text, attributes: [
-            .font: titleFont,
-            .foregroundColor: NSColor.white,
-            .strokeColor: NSColor.black.withAlphaComponent(0.85),
-            .strokeWidth: -3.5,          // negative: fill *and* stroke
-            .shadow: {
-                let s = NSShadow()
-                s.shadowColor = NSColor.black.withAlphaComponent(0.5)
-                s.shadowBlurRadius = 3
-                s.shadowOffset = NSSize(width: 0, height: -1)
-                return s
-            }(),
-        ])
+        titleLabel.stringValue = titleText(dots: dotPhase + 1)
     }
 
     /// The title for the current state. `dots` exists only so the width probe can
@@ -860,6 +858,11 @@ final class BubblePanel: NSPanel {
     // the app Victor is working in.
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    // AppKit likes to pull windows back onto the screen. The chip is pinned to
+    // the cursor, so at the right-hand edge that help is precisely wrong: it
+    // would shove the label off its anchor to keep it whole.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 // MARK: - Close button
