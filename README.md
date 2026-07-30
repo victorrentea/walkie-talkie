@@ -1,71 +1,72 @@
 # Claude Bubble
 
-A small floating macOS overlay that relays Victor's input — Wispr Flow
-dictation, typed notes, screenshots — into a running Claude Code session, so he
-can drive Claude while looking at something else entirely.
+A small macOS overlay that relays what you *say* into a running
+[Claude Code](https://claude.com/claude-code) session — dictation, the text you
+had selected, screenshots of what you were looking at — so you can drive an agent
+while looking at something else entirely: a browser, an IDE, a projector.
 
-Consumed by the `bubble` skill in [`victorrentea/ai`](https://github.com/victorrentea/ai)
-(`skills/bubble/`), which ships the built binary and arms the watcher on the
-Claude side.
+It is **one-way and non-interactive** by design. The agent gets your words; it
+cannot ask you anything back, because you are not reading the terminal.
 
-## How it talks to Claude
+<img src="docs/idle.png" width="231" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
 
-The bubble is a **one-way producer**. It appends JSON lines to
-`~/.claude-bubble/outbox.jsonl`; the skill arms a blocking `wc -l` watcher on
-that file, which wakes Claude whenever a message lands. There is no back-channel
-— Claude cannot ask Victor anything, because he isn't looking at the terminal.
+At rest it is just a label riding along near your cursor, telling you *which*
+session is listening — `folder@branch`, the same thing Claude Code's status line
+shows. It disappears while you type and comes back when you move the mouse.
+
+<img src="docs/listening.png" width="268" alt="dictating: the session name with running dots, the captured selection, and the F3 hint">
+
+When dictation starts it becomes a panel: the screen is photographed, whatever
+was selected is captured and frozen for the whole dictation, and **F3** attaches
+extra screenshots as you talk.
+
+<img src="docs/prompt.png" width="322" alt="the finished prompt with a Cancel button counting down">
+
+The finished prompt is shown whole — and **held for 4–7 seconds behind a Cancel
+button** before it is written anywhere. That delay is the feature: once a line is
+in the queue the agent may already be acting on it, so the only honest moment to
+cancel is before it is written.
+
+## How it reaches the agent
+
+The bubble appends JSON lines to `~/.claude-bubble/outbox.jsonl`. Anything that
+watches that file can consume them; there is no back-channel.
 
 ```json
-{"ts":"2026-07-29T08:12:03Z","kind":"dictation","text":"make this shorter","selection":"the paragraph he had selected","app":"Google Chrome"}
+{"ts":"2026-07-30T08:12:03Z","session":"myrepo@main","kind":"dictation",
+ "text":"extract the tax calculation out of this method",
+ "selection":"public Order placeOrder(Cart cart) {","app":"com.microsoft.VSCode"}
 ```
 
-`kind` is `dictation` | `typed` | `screenshot` | `selection`.
+`kind` is `dictation` | `screenshot` | `session_end`. Every message carries the
+`session` it belongs to, so several bubbles can share one queue without an agent
+acting on another project's words.
 
-## Input modes
+The Claude Code side is the `bubble` skill in
+[`victorrentea/ai`](https://github.com/victorrentea/ai) (`skills/bubble/`), which
+ships the built binary and watches the outbox.
+
+## Input
 
 | input | effect |
 |---|---|
-| **Mouse 5** | Wispr push-to-talk. Snapshots the on-screen selection at that instant; the finished transcript is sent with it. Observed, never swallowed — Wispr still gets the click. |
-| **⌃⌥S** | Stash the current screen selection as the prefix for the next message. |
-| **⌃⌥P** | Screenshot the display under the cursor and send it. |
-| **double-click** | Expand into a text box; ⏎ sends, ⇧⏎ newline, esc cancels. Grows as you type. |
-| **single click** | Pause / resume forwarding. |
-| **drag** | Move it. |
+| start dictating | Red flash, screen captured, selection grabbed — all automatic |
+| **F3** | One more screenshot, attached to the dictation in progress |
+| **Cancel** | Stops the displayed prompt from ever being written |
+| click | On a prompt: send it now. Otherwise: pause / resume forwarding |
+| hover | Reveals the ✕ that ends the session (panel states only) |
 
-Shortcuts avoid everything `victor-macos-addons` claims (⌃P, ⌃⇧P, ⌃W, ⌃⌥C,
-⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) and Wispr's own ⌘⌥V.
+## How dictation is captured
 
-## Capturing dictation
+[Wispr Flow](https://wisprflow.ai) pastes its transcript wherever the caret is,
+which is useless when you are dictating *about* something you are only reading.
+So the bubble reads Wispr's own local history instead:
+`~/Library/Application Support/Wispr Flow/flow.sqlite`, opened **read-only** and
+polled once a second for rows newer than a watermark taken at startup.
 
-Wispr Flow pastes its transcript wherever the caret is — which is useless when
-Victor is dictating *about* a browser he's reading. So instead of intercepting
-keystrokes, the bubble reads Wispr's own history DB:
-
-`~/Library/Application Support/Wispr Flow/flow.sqlite` → table `History`
-
-- opened **read-only** while Wispr keeps writing (the `-wal`/`-shm` siblings are
-  readable by the same user, so committed rows show up immediately)
-- polled once a second for `timestamp > watermark`, where the watermark is taken
-  at startup — launching never replays the 11k-row history
-- a dictation counts as finished at `status IN ('formatted','raw_transcript')`;
-  text is `formattedText`, falling back to `asrText`
-- served by Wispr's own `idx_history_timestamp_archived_status`, ~6 ms per poll
-
-Note `axText` / `textboxContents` are present in the schema but never populated,
-so the selection has to be captured by the bubble itself.
-
-## Capturing the selection
-
-Two strategies, in order:
-
-1. **Accessibility** — `kAXSelectedTextAttribute` on the focused element. Side
-   effect free, never touches the clipboard.
-2. **Simulated ⌘C** — for apps that don't expose selection over AX (much web
-   content). The full clipboard (every representation, not just plain text) is
-   snapshotted and restored afterwards.
-
-An empty read never clears an existing stash: pressing Mouse 5 somewhere with
-nothing selected must not discard what ⌃⌥S deliberately captured a moment ago.
+The selection is read via Accessibility (`kAXSelectedTextAttribute`), falling
+back to a simulated ⌘C for apps that don't expose it — with the full clipboard,
+every representation, snapshotted and restored around the probe.
 
 ## Build
 
@@ -73,38 +74,19 @@ nothing selected must not discard what ⌃⌥S deliberately captured a moment ag
 ./build-app.sh          # → /Applications/Claude Bubble.app, signed
 ```
 
-The `.app` wrapper is not cosmetic. macOS keys Accessibility / Screen Recording
-grants to a signing identity + bundle id; a bare SwiftPM binary is ad-hoc signed
-and gets a fresh identity on every rebuild, forcing a re-grant each time.
-Signing the bundle with the stable local identity (`Victor Addons Local Code
-Signing`) makes the permission stick across rebuilds — verified by reinstalling
-and re-signing with the app still reporting `accessibility trusted=true`.
+The `.app` wrapper is not cosmetic: macOS keys Accessibility and Screen Recording
+grants to a signing identity plus bundle id, and a bare SwiftPM binary is ad-hoc
+signed with a fresh identity on every rebuild — so you would re-grant permission
+after every change. Set `CODESIGN_IDENTITY` to your own signing identity.
 
-## Permissions
+Requires macOS, **Accessibility** (event tap + selection read) and **Screen
+Recording** (screenshots). Wispr Flow is optional — without it, screenshots still
+work and nothing else does.
 
-- **Accessibility** — required, for the event tap and the AX selection read.
-  Logged explicitly at startup (`accessibility trusted=… eventTap=…`), because a
-  tap can exist and silently receive nothing.
-- **Screen Recording** — required for ⌃⌥P and for the automatic context capture.
+## Two debug switches
 
-## Every capture shows a red vignette
-
-Both grabs announce themselves the same way — a red border fading inward, then
-out: the deliberate ⌃⌥P shot *and* the automatic one taken when dictation
-starts. A frame of the screen leaves the machine either way, and the silent one
-is precisely the one nobody could audit. The dictation capture is guarded so it
-fires once per dictation, not once per trigger.
-
-Red, not yellow: yellow is `victor-macos-addons` saying it captured something,
-red is this bubble saying it went to Claude.
-
-## Screenshots never contain the bubble
-
-Belt and braces: the panel sets `sharingType = .none` *and* hides itself for the
-duration of the grab (`screencapture` is a separate process taking a fresh frame,
-so not being on screen is the only guarantee).
-
-Display numbering for `screencapture -D` comes from `CGGetActiveDisplayList`,
-**not** the online list — online includes asleep/mirrored displays, so with a
-sleeping external monitor the index overshoots and `screencapture` rejects it
-outright ("Invalid display specified"), silently producing no file.
+- `BUBBLE_CAPTURABLE=1` — the panel normally sets `sharingType = .none` so it
+  never lands in the screenshots it takes, which also makes it impossible to
+  screenshot while working on it. This opts back in.
+- `BUBBLE_DEMO=1` — walks the UI through its states with canned content. The
+  images above were taken this way; nothing is written to the outbox.

@@ -104,6 +104,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
+
+        if ProcessInfo.processInfo.environment["BUBBLE_DEMO"] == "1" { runDemo() }
+    }
+
+    /// Walk the bubble through its states with canned content, for documentation
+    /// screenshots. Nothing here touches the outbox: `held` stays nil, so the
+    /// displayed prompt resolves into nothing.
+    private func runDemo() {
+        Log.info("demo mode — driving the UI with canned content")
+        let selection = "public Order placeOrder(Cart cart) {"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.bubble.setSelection(selection)
+            self?.bubble.setListening(true)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
+            self?.bubble.setListening(false)
+            self?.bubble.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method",
+                                        hold: 25)
+        }
     }
 
     // MARK: - Dictation window

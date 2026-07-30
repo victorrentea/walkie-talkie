@@ -7,13 +7,18 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return tap.handle(type: type, event: event)
 }
 
-/// The bubble's single global shortcut.
+/// The bubble's global shortcut for "plus one shot": screenshot the display
+/// under the cursor and add it to the dictation in progress (or send it on its
+/// own if none is).
 ///
-/// ⌃⌥P — "plus one shot": screenshot the display under the cursor and add it to
-/// the dictation in progress (or send it on its own if none is).
+/// **F3** is the one to use. A chord needs a hand on three keys, and the moment
+/// it is needed is the moment both hands are busy and a sentence is already
+/// half-spoken; a bare function key can be hit blind, mid-dictation, without
+/// looking. F3 does nothing else on Victor's machine.
 ///
-/// Chosen to not collide with anything Victor Addons claims (⌃P, ⌃⇧P, ⌃W, ⌃⌥C,
-/// ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) or with Wispr's own ⌘⌥V.
+/// ⌃⌥P still works, since it is what the muscle memory and the older notes say.
+/// It was chosen to not collide with anything Victor Addons claims (⌃P, ⌃⇧P, ⌃W,
+/// ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) or with Wispr's own ⌘⌥V.
 ///
 /// Mouse 5 (Wispr push-to-talk) is still observed — never swallowed — but only
 /// as a hint; the authoritative dictation signal is `DictationMonitor`.
@@ -23,6 +28,7 @@ final class HotkeyTap {
     var onDictationStarted: (() -> Void)?
 
     private let VK_P: CGKeyCode = 0x23
+    private let VK_F3: CGKeyCode = 0x63
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
 
     private var tapPort: CFMachPort?
@@ -78,6 +84,13 @@ final class HotkeyTap {
         let ctrl = flags.contains(.maskControl)
         let opt = flags.contains(.maskAlternate)
         let cmd = flags.contains(.maskCommand)
+
+        // F3 on its own. Swallowed like any other binding, so whatever the key is
+        // nominally wired to cannot fire behind the screenshot.
+        if keyCode == VK_F3 && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
+            DispatchQueue.global().async { [weak self] in self?.onScreenshot?() }
+            return nil
+        }
 
         guard ctrl && opt && !cmd else { return Unmanaged.passUnretained(event) }
 

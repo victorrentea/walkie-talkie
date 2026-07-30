@@ -82,7 +82,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
     /// push-to-talk, the second no longer exists.
-    private static let hints = "⌃⌥P 📸"
+    private static let hints = "F3 📸"
 
     /// The subtitle row. A flash outranks everything; otherwise the ⌃⌥P legend
     /// shows **only while dictating**, which is the only moment the shortcut can
@@ -411,8 +411,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // ceiling, not the size: a four-word dictation in a half-screen panel is
         // mostly empty space parked over his work.
         let promptWidth = sentPrompt.map { prompt in
+            // +8 of slack: measuring a line and laying it out disagree by a hair,
+            // and a hair is enough to wrap the last two words onto a line the
+            // height was not measured for — a receipt that cuts its own last words.
             (prompt.split(whereSeparator: { $0.isNewline })
-                   .map { measure(String($0), font: promptFont) }.max() ?? 0) + pad * 2
+                   .map { measure(String($0), font: promptFont) }.max() ?? 0) + pad * 2 + 8
         } ?? 0
         let width = sentPrompt != nil
             ? min(max(natural, promptWidth), screenWidth / 2)
