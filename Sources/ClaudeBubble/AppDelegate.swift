@@ -39,11 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Main thread only.
     private var held: Message?
 
-    /// Long enough to see the prompt, read it, and get a hand to the mouse —
-    /// Victor's own figure. Scaled up with length so a long dictation is still
-    /// readable, and capped so the bubble never parks over his work.
-    private static let minHold: TimeInterval = 3.0
-    private static let maxHold: TimeInterval = 5.0
+    /// Long enough to see the prompt, read it, and get a hand to the mouse.
+    /// Started at 3–5s and went to 4–7s the first time Victor tried to cancel a
+    /// real dictation and didn't make it. Scaled up with length so a long
+    /// dictation is still readable, and capped so it never parks over his work.
+    private static let minHold: TimeInterval = 4.0
+    private static let maxHold: TimeInterval = 7.0
 
     /// Everything one outbox line is made of, kept together so it can be held
     /// back, released, or dropped as a unit.

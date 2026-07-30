@@ -119,6 +119,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         layoutContent()
         positionInitially()
         startFollowingMouse()
+        startWatchingTyping()
         startWatchingBranch()
         panel.orderFrontRegardless()
     }
@@ -238,12 +239,33 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// the first pixel of movement can never be caught, and with the ✕ living on
     /// it that would mean no way to end a session at rest.
     private var engaged = false
+    /// He is typing, so macOS has hidden the pointer and the chip has nothing
+    /// left to be anchored to.
+    private var typing = false
+    private var typingMonitor: Any?
     private var settlePoint = NSPoint.zero
     private var lastMouse = NSPoint.zero
     private var stillTicks = 0
     /// ~0.25s of stillness at 60 Hz.
     private let settleTicks = 15
     private let wakeDistance: CGFloat = 70
+
+    /// macOS hides the pointer the moment he starts typing — in a terminal, in an
+    /// editor — and a chip anchored to an invisible pointer is a label sitting in
+    /// the middle of his text with nothing to explain it. There is no supported
+    /// API left to ask whether the pointer is drawn (`CGCursorIsDrawnInFramebuffer`
+    /// is gone), so the chip watches the cause instead of the effect: a keystroke
+    /// sends it away, the next mouse movement brings it back.
+    ///
+    /// A passive global monitor — it observes, never intercepts, and needs the
+    /// Accessibility grant the bubble already has for its own shortcut.
+    private func startWatchingTyping() {
+        typingMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] _ in
+            guard let self = self, !self.typing else { return }
+            self.typing = true
+            self.refreshOpacity()
+        }
+    }
 
     private func startFollowingMouse() {
         // 60 Hz: while engaged this is a window move per frame, which is what
@@ -256,6 +278,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     private func followCursor() {
+        // The first real movement of the pointer brings the chip back after
+        // typing sent it away.
+        if typing, hypot(NSEvent.mouseLocation.x - lastMouse.x,
+                         NSEvent.mouseLocation.y - lastMouse.y) > 1 {
+            typing = false
+            refreshOpacity()
+        }
+
         guard NSEvent.pressedMouseButtons == 0 else { return }   // he may be dragging it
         guard let screen = Self.screenUnderMouse() else { return }
 
@@ -369,8 +399,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // It rides along truncated in the narrow bubble instead, which is all the
         // receipt it needs, and the bubble grows only at the end, when there is
         // finally something he has *not* seen: what Wispr actually heard.
+        // …and even then it takes only what the text needs. Half the screen is the
+        // ceiling, not the size: a four-word dictation in a half-screen panel is
+        // mostly empty space parked over his work.
+        let promptWidth = sentPrompt.map { prompt in
+            (prompt.split(whereSeparator: { $0.isNewline })
+                   .map { measure(String($0), font: promptFont) }.max() ?? 0) + pad * 2
+        } ?? 0
         let width = sentPrompt != nil
-            ? max(natural, screenWidth / 2)
+            ? min(max(natural, promptWidth), screenWidth / 2)
             : min(natural, screenWidth / 2)
         let innerWidth = width - pad * 2
 
@@ -477,21 +514,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             panel.hasShadow = !bare
             panel.invalidateShadow()
         }
-        // With the panel gone the text sits directly on his editor, his browser,
-        // a photograph. A halo in the *inverse* colour is what keeps it legible
-        // on all of them — the same trick the ✕ uses, and the reason neither is
-        // hardcoded white. As a layer shadow, not a string attribute: the label
-        // keeps drawing itself exactly as it always has.
-        titleLabel.wantsLayer = true
-        if bare {
-            let halo = NSShadow()
-            halo.shadowColor = NSColor.textBackgroundColor.withAlphaComponent(0.9)
-            halo.shadowBlurRadius = 3
-            halo.shadowOffset = .zero
-            titleLabel.shadow = halo
-        } else {
-            titleLabel.shadow = nil
-        }
+        // Enforced here and not only on hover: leaving a panel state while the
+        // cursor happens to be over the bubble would otherwise strand a ✕ on the
+        // chip, since nothing re-enters `setHovering` on the way out.
+        closeButton.isHidden = bare || !hovering
     }
 
     private func singleLine(_ text: String) -> String {
@@ -515,7 +541,31 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// animation ticks several times a second and must not restart the opacity
     /// fade on every frame.
     private func applyTitleText() {
-        titleLabel.stringValue = titleText(dots: dotPhase + 1)
+        let text = titleText(dots: dotPhase + 1)
+        guard anchored else {
+            titleLabel.stringValue = text
+            return
+        }
+        // The one place in the app where a hardcoded colour is right. Everywhere
+        // else the backdrop is the bubble's own blur, which follows the system
+        // appearance; here there is no backdrop at all — the text sits on his
+        // terminal, his editor, a photograph. A dynamic `labelColor` resolves to
+        // black in light mode and vanishes on a dark terminal, which is exactly
+        // what happened. White with a dark outline is the subtitle trick, and it
+        // reads on anything.
+        titleLabel.attributedStringValue = NSAttributedString(string: text, attributes: [
+            .font: titleFont,
+            .foregroundColor: NSColor.white,
+            .strokeColor: NSColor.black.withAlphaComponent(0.85),
+            .strokeWidth: -3.5,          // negative: fill *and* stroke
+            .shadow: {
+                let s = NSShadow()
+                s.shadowColor = NSColor.black.withAlphaComponent(0.5)
+                s.shadowBlurRadius = 3
+                s.shadowOffset = NSSize(width: 0, height: -1)
+                return s
+            }(),
+        ])
     }
 
     /// The title for the current state. `dots` exists only so the width probe can
@@ -528,7 +578,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // from across the room.
         if paused { return "⏹️ \(SessionLabel.value): Paused" }
         if listening {
-            return "🎙️ \(SessionLabel.value): Listening" + String(repeating: ".", count: dots)
+            // No "Listening" word: the mic and the running dots already say it,
+            // and what he actually needs to read at that moment is which session
+            // is about to receive what he says.
+            return "🎙️ \(SessionLabel.value)" + String(repeating: ".", count: dots)
         }
         // At rest, no state word at all. "Stand by" is the one thing he can infer
         // from the fact that nothing is happening; what he cannot infer, and what
@@ -560,7 +613,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
     /// the bubble looking switched off is the point.
     private func refreshOpacity() {
-        let target: CGFloat = paused ? 0.30 : (anchored ? 0.80 : 1.00)
+        // The chip belongs to the pointer: no pointer, no chip. Panels are their
+        // own reason to be on screen and stay put.
+        let target: CGFloat = (anchored && typing) ? 0.0
+                            : paused ? 0.30
+                            : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
