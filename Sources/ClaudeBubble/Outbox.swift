@@ -42,6 +42,13 @@ enum Outbox {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
+            // Which session this belongs to — `folder@branch`, exactly what the
+            // bubble is showing on screen and what the agent sees in its own
+            // status line. One outbox is shared by whoever is watching it, and a
+            // message with no return address is a message the wrong agent can act
+            // on: this already happened once, a dictation about one project
+            // arriving in a queue nobody was reading for it.
+            "session": SessionLabel.value,
         ]
         if let text = text, !text.isEmpty { obj["text"] = text }
         if let selection = selection, !selection.isEmpty { obj["selection"] = selection }
