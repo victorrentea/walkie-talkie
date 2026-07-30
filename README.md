@@ -90,3 +90,8 @@ work and nothing else does.
   screenshot while working on it. This opts back in.
 - `BUBBLE_DEMO=1` — walks the UI through its states with canned content. The
   images above were taken this way; nothing is written to the outbox.
+
+## Licence
+
+[The Unlicense](LICENSE) — public domain. Take it, change it, ship it, sell it;
+no attribution required.
