@@ -14,13 +14,13 @@ queue. That is the whole idea, and the name — it is not tied to any one agent
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
 
-<img src="docs/idle.png" width="235" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
+<img src="docs/idle.png" width="194" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
 
 At rest it is just a label riding along near your cursor, telling you *which*
 session is listening — `folder@branch`, the same thing Claude Code's status line
 shows. It disappears while you type and comes back when you move the mouse.
 
-<img src="docs/listening.png" width="235" alt="dictating: the session name, a pulsing red dot, the shot count and the F3 hint">
+<img src="docs/listening.png" width="194" alt="dictating: the session name, a pulsing red dot, the shot count and the F3 hint">
 
 When dictation starts the chip stays where it is and grows one row: a pulsing 🔴,
 how many pictures the message is carrying, and the key that adds another
@@ -28,7 +28,7 @@ how many pictures the message is carrying, and the key that adds another
 selected is captured and frozen for the whole dictation, and **F3** attaches
 extra screenshots as you talk — the count going up is the receipt.
 
-<img src="docs/prompt.png" width="318" alt="the finished prompt with a Cancel button counting down">
+<img src="docs/prompt.png" width="302" alt="the finished prompt with a Cancel button counting down">
 
 The finished prompt is shown whole — and **held for 4–7 seconds behind a Cancel
 button** before it is written anywhere. That delay is the feature: once a line is
