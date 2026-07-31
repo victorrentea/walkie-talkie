@@ -4,6 +4,8 @@ import ApplicationServices
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var bubble: BubbleWindow!
+    private var status: StatusItem!
+    private var snapshotSignal: DispatchSourceSignal?
     private let hotkeys = HotkeyTap()
     private let wispr = WisprWatcher()
     private let dictation = DictationMonitor()
@@ -67,7 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.paused.toggle()
             self.bubble.setPaused(self.paused)
         }
-        bubble.onEndSession = { [weak self] in self?.endSession() }
+        bubble.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
+
+        status = StatusItem()
+        status.onExit = { [weak self] in self?.endSession(reason: "menu bar Exit") }
         bubble.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
         hotkeys.onScreenshot = { [weak self] in self?.plusOneShot() }
@@ -95,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.bubble.flash("⚠️ grant Accessibility to Claude Bubble", duration: 15)
             }
         }
+        startListeningForSnapshots()
+
         wispr.start()
         dictation.start()
 
@@ -108,6 +115,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["BUBBLE_DEMO"] == "1" { runDemo() }
     }
 
+    /// `kill -USR1 <pid>` writes what is on screen right now to
+    /// `<home>/snapshot.png` — the documentation screenshot the window itself
+    /// refuses to appear in, and the only way to review a layout change without
+    /// standing behind Victor.
+    ///
+    /// A `DispatchSourceSignal` on the main queue rather than a C handler: drawing
+    /// a view has to happen on the main thread, and almost nothing is legal inside
+    /// a real signal handler. `SIG_IGN` first, or the default action kills us
+    /// before the source ever sees it.
+    private func startListeningForSnapshots() {
+        signal(SIGUSR1, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+        source.setEventHandler { [weak self] in
+            let path = Outbox.home.appendingPathComponent("snapshot.png").path
+            self?.bubble.snapshot(to: path)
+        }
+        source.resume()
+        snapshotSignal = source
+    }
+
     /// Walk the bubble through its states with canned content, for documentation
     /// screenshots. Nothing here touches the outbox: `held` stays nil, so the
     /// displayed prompt resolves into nothing.
@@ -117,6 +144,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.bubble.setSelection(selection)
             self?.bubble.setListening(true)
+        }
+        // The automatic context shot, then one taken with F3 — the two ways the
+        // count moves in a real dictation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+            self?.bubble.setShotCount(1)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
+            self?.bubble.setShotCount(2)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
             self?.bubble.setListening(false)
@@ -167,8 +202,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.stateLock.lock()
             self.pendingScreen = path
             self.stateLock.unlock()
+            self.publishShotCount()
             Log.info("context screen captured: \((path as NSString).lastPathComponent)")
         }
+    }
+
+    /// Keep the bubble's `📸 ×N` honest. N is what this dictation would carry if it
+    /// were sent right now: the automatic context screen counts as the first
+    /// picture, because that is what it is — he took it by starting to talk.
+    private func publishShotCount() {
+        stateLock.lock()
+        let count = (pendingScreen != nil ? 1 : 0) + pendingShots.count
+        stateLock.unlock()
+        DispatchQueue.main.async { [weak self] in self?.bubble.setShotCount(count) }
     }
 
     private func armOrphanFlush() {
@@ -226,13 +272,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.bubble.setSelection(text) }
     }
 
-    /// ⌃⌥P — one more shot for the dictation in progress.
+    /// F3 — one more shot for the dictation in progress.
     private func plusOneShot() {
         guard !paused else { return }
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce()
-        DispatchQueue.main.async { [weak self] in self?.bubble.flashTitle("+1 📸") }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -250,7 +295,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if attaching {
                 self.armOrphanFlush()
                 Log.info("📸 attached to in-flight dictation (\(count) so far)")
-                DispatchQueue.main.async { self.bubble.flash("📸 \(count) attached") }
+                // No flash and no title override any more: both are panel states,
+                // and throwing the panel into the corner is exactly what taking a
+                // picture mid-dictation must not do. The `📸 ×N` in the recording
+                // row goes up under his cursor instead — the receipt is the number.
+                self.publishShotCount()
                 return
             }
             self.send(kind: "screenshot", paths: [path])
@@ -269,12 +318,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return parts.joined(separator: "\n")
     }
 
-    /// The ✕ ends the session. Announce it through the outbox before quitting so
-    /// the watching Claude learns the bubble is gone from the queue itself — it
-    /// is blocked on that file, not on the process, and would otherwise sit
-    /// waiting for messages that can no longer come.
-    private func endSession() {
-        announceEnd("✕ button")
+    /// The ✕ and the menu bar's Exit both end the session. Announce it through the
+    /// outbox before quitting so the watching Claude learns the bubble is gone
+    /// from the queue itself — it is blocked on that file, not on the process, and
+    /// would otherwise sit waiting for messages that can no longer come.
+    private func endSession(reason: String) {
+        announceEnd(reason)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
     }
 

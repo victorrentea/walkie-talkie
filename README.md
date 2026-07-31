@@ -8,19 +8,21 @@ while looking at something else entirely: a browser, an IDE, a projector.
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
 
-<img src="docs/idle.png" width="231" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
+<img src="docs/idle.png" width="235" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
 
 At rest it is just a label riding along near your cursor, telling you *which*
 session is listening — `folder@branch`, the same thing Claude Code's status line
 shows. It disappears while you type and comes back when you move the mouse.
 
-<img src="docs/listening.png" width="268" alt="dictating: the session name with running dots, the captured selection, and the F3 hint">
+<img src="docs/listening.png" width="235" alt="dictating: the session name, a pulsing red dot, the shot count and the F3 hint">
 
-When dictation starts it becomes a panel: the screen is photographed, whatever
-was selected is captured and frozen for the whole dictation, and **F3** attaches
-extra screenshots as you talk.
+When dictation starts the chip stays where it is and grows one row: a pulsing 🔴,
+how many pictures the message is carrying, and the key that adds another
+(`🔴 📸 ×2 F3`). Behind that row the screen is photographed, whatever was
+selected is captured and frozen for the whole dictation, and **F3** attaches
+extra screenshots as you talk — the count going up is the receipt.
 
-<img src="docs/prompt.png" width="322" alt="the finished prompt with a Cancel button counting down">
+<img src="docs/prompt.png" width="318" alt="the finished prompt with a Cancel button counting down">
 
 The finished prompt is shown whole — and **held for 4–7 seconds behind a Cancel
 button** before it is written anywhere. That delay is the feature: once a line is
@@ -55,6 +57,7 @@ ships the built binary and watches the outbox.
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |
+| menu bar 🤖 | Always there while the app runs — shows which session it is, and **Exit** |
 
 ## How dictation is captured
 
@@ -83,13 +86,17 @@ Requires macOS, **Accessibility** (event tap + selection read) and **Screen
 Recording** (screenshots). Wispr Flow is optional — without it, screenshots still
 work and nothing else does.
 
-## Two debug switches
+## Debug switches
 
-- `BUBBLE_CAPTURABLE=1` — the panel normally sets `sharingType = .none` so it
-  never lands in the screenshots it takes, which also makes it impossible to
-  screenshot while working on it. This opts back in.
-- `BUBBLE_DEMO=1` — walks the UI through its states with canned content. The
-  images above were taken this way; nothing is written to the outbox.
+- `kill -USR1 <pid>` — writes what is on screen to `~/.claude-bubble/snapshot.png`.
+  The bubble sets `sharingType = .none` so it never lands in the screenshots it
+  takes, which also makes it impossible to photograph while working on it — and
+  on macOS 15 the old opt-out below no longer buys it back. So it draws itself
+  instead: the pictures above were made this way.
+- `BUBBLE_DEMO=1` — walks the UI through its states with canned content, which is
+  what makes those pictures reproducible. Nothing is written to the outbox.
+- `BUBBLE_CAPTURABLE=1` — asks for `sharingType = .readOnly`. Kept for older
+  systems; on macOS 15 `screencapture` returns a transparent image regardless.
 
 ## Licence
 

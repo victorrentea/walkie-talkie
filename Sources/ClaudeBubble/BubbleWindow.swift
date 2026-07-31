@@ -23,6 +23,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
     private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 96, height: 22))
+    /// The recording row: a pulsing 🔴 and, beside it, how many shots this
+    /// dictation is carrying and the key that adds another.
+    private let recordRow = NSView()
+    private let recordDot = NSTextField(labelWithString: "🔴")
+    private let recordInfo = NSTextField(labelWithString: "")
 
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
@@ -38,9 +43,9 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private var followTimer: Timer?
     private var labelTimer: Timer?
-    private var dotTimer: Timer?
-    private var shineTimer: Timer?
-    private var dotPhase = 0
+    /// Shots this dictation is carrying — the automatic context capture included,
+    /// since from where Victor sits it is simply the first picture taken.
+    private var shotCount = 0
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
@@ -49,8 +54,6 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// so the button says how long Victor still has rather than making him guess.
     private var promptDeadline: Date?
     private var countdownTimer: Timer?
-    /// Temporary title override (e.g. "+1 📸"); nil = show the state title.
-    private var titleOverride: String?
     /// Transient status occupying the subtitle row; nil = no flash in progress.
     private var flashMessage: String?
     private weak var homeScreen: NSScreen?
@@ -80,22 +83,27 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         return ceil(rect.height) + 2
     }
 
-    /// Mouse 5 and ⌃⌥S are gone from the legend — the first is Wispr's own
-    /// push-to-talk, the second no longer exists.
-    private static let hints = "F3 📸"
+    /// The key that takes one more shot. It appears in the recording row rather
+    /// than in a legend of its own: while dictating it is the only key that does
+    /// anything, and it belongs next to the count it increments.
+    private static let shotKey = "F3"
 
-    /// The subtitle row. A flash outranks everything; otherwise the ⌃⌥P legend
-    /// shows **only while dictating**, which is the only moment the shortcut can
-    /// do anything. At rest the bubble is nothing but its title.
+    /// The subtitle row is now flashes only. The shortcut legend used to live here
+    /// and has moved into the recording row, where it sits beside the number it
+    /// changes instead of being a separate line of instructions.
     ///
     /// Flashes must survive the idle case: the Accessibility warning fires at
-    /// launch, long before any dictation, and would be invisible if this row
-    /// only ever appeared while listening.
-    /// Paused is excluded on purpose: Wispr keeps reporting that it is listening
-    /// while forwarding is off, but ⌃⌥P is refused in that state, so advertising
-    /// it would be a lie.
-    private var hintText: String? {
-        flashMessage ?? (listening && !paused ? Self.hints : nil)
+    /// launch, long before any dictation, and would be invisible if this row only
+    /// ever appeared while listening.
+    private var hintText: String? { flashMessage }
+
+    /// The recording row shows **only while dictating and not paused** — the one
+    /// window in which there is a recording to report and in which F3 does
+    /// anything. Wispr keeps reporting that it is listening while forwarding is
+    /// off, so advertising the key in that state would be a lie.
+    private var recordText: String? {
+        guard listening, !paused else { return nil }
+        return "📸 ×\(shotCount) \(Self.shotKey)"
     }
 
     private var screenWidth: CGFloat {
@@ -137,8 +145,15 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // a separate process, with no hiding at all, does not contain it.
         // …which also makes the bubble impossible to *look at* while working on
         // it: no screenshot can contain it, so nobody debugging its appearance
-        // can see what Victor sees. BUBBLE_CAPTURABLE=1 puts it back in captures
-        // for exactly that, and is off in every normal run.
+        // can see what Victor sees. BUBBLE_CAPTURABLE=1 asks for it back, and is
+        // off in every normal run.
+        //
+        // Measured 2026-07-31 on macOS 15: it no longer works. `.readOnly` gets a
+        // fully transparent image out of `screencapture`, whole-display or
+        // `-l <windowid>`. Until someone finds the new lever, the way to check a
+        // layout change is `CGWindowListCopyWindowInfo` — the window's bounds tell
+        // you which rows are up (16 title / 17 recording / 15 selection, 6 apart,
+        // 12 padding all round) and whether it is riding the cursor.
         panel.sharingType = ProcessInfo.processInfo.environment["BUBBLE_CAPTURABLE"] == "1"
             ? .readOnly : .none
         panel.delegate = self
@@ -171,6 +186,18 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.isHidden = true            // summoned by layoutContent when there is something to say
         root.addSubview(hintLabel)
+
+        // Two labels rather than one string, because only the dot pulses: an
+        // animation on the whole row would blink the count and the key too, and
+        // a number that fades in and out is a number he has to wait to read.
+        recordDot.font = .systemFont(ofSize: 11)
+        recordDot.wantsLayer = true
+        recordInfo.font = hintFont
+        recordInfo.textColor = .secondaryLabelColor
+        recordRow.addSubview(recordDot)
+        recordRow.addSubview(recordInfo)
+        recordRow.isHidden = true
+        root.addSubview(recordRow)
 
         selectionLabel.font = .systemFont(ofSize: 11)
         selectionLabel.textColor = .secondaryLabelColor
@@ -218,15 +245,20 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// which is wherever his cursor is. Parked in a corner it was either unseen
     /// or pointless; here it is a label on the work in front of him.
     ///
-    /// The moment anything happens — dictation, a prompt, a warning — it stops
-    /// trailing him and becomes the panel it is today, back in its corner.
+    /// A prompt or a warning still turns it into the panel, in its corner. **A
+    /// dictation no longer does.** That threw the panel across his work for the
+    /// whole time he talked — the longest stretch the big bubble was ever on
+    /// screen, and the one where it had the least to say. The recording row (🔴,
+    /// the shot count, F3) is small enough to ride along under the chip, right
+    /// where he is already looking. The panel is now kept for the one thing he
+    /// must actually read: the prompt about to be sent.
     ///
     /// Paused is deliberately **not** anchored. It is the one state he enters by
     /// hand, and the state he leaves by hand — so it becomes a panel again,
     /// parked in its corner with its ✕ back. That is also the route to ending a
     /// session at rest, now that the chip has no ✕ of its own: click it to pause,
     /// then hover the panel and close it.
-    private var anchored: Bool { !listening && !paused && sentPrompt == nil && flashMessage == nil }
+    private var anchored: Bool { !paused && sentPrompt == nil && flashMessage == nil }
 
     /// Where the chip rides relative to the pointer: below and to the right, out
     /// of the way of the thing being pointed at.
@@ -385,18 +417,18 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private func layoutContent(animated: Bool = false) {
         // Hug the content of the *current* state, not the widest state there is:
         // standing by is what the bubble does for hours, and it should take no
-        // more room than "⏸️ ai@master: Stand by" needs. Changing state resizes it,
-        // which is fine — the dots are what must not, and `titleWidthProbe`
-        // already measures them at full length.
-        let titleWidth = measure(titleWidthProbe, font: titleFont)
-        // The legend's width only counts while its row is actually there. It used
-        // to be reserved permanently to keep the bubble from jumping sideways when
+        // more room than "🤖 ai@master" needs. Changing state resizes it, which is
+        // fine.
+        let titleWidth = measure(titleText, font: titleFont)
+        // A row's width only counts while that row is actually there. It used to
+        // be reserved permanently to keep the bubble from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
+        let recordWidth = recordText.map { recordRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
-        let natural = ceil(max(titleWidth + reserve, hintWidth)) + pad * 2
+        let natural = ceil(max(titleWidth + reserve, max(hintWidth, recordWidth))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -426,6 +458,18 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
         titleLabel.frame.size = NSSize(width: innerWidth, height: 16)
         rows.append((titleLabel, 16))
+
+        // Directly under the title, ahead of the selection: while he is talking
+        // this is the row that changes, and the one he glances down at to check
+        // that the shot he just took landed.
+        if let record = recordText {
+            recordInfo.stringValue = record
+            layoutRecordRow(width: innerWidth)
+            recordRow.isHidden = false
+            rows.append((recordRow, recordRowHeight))
+        } else {
+            recordRow.isHidden = true
+        }
 
         if let selection = selection {
             selectionLabel.stringValue = "↪ " + singleLine(selection)
@@ -512,6 +556,30 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         root.needsDisplay = true
     }
 
+    // MARK: The recording row
+
+    private let recordRowHeight: CGFloat = 17
+    /// Between the dot and the text. Wide enough that the pulsing dot reads as its
+    /// own indicator rather than as punctuation in front of the count.
+    private let recordDotGap: CGFloat = 5
+
+    private var recordDotWidth: CGFloat { ceil(measure(recordDot.stringValue, font: recordDot.font!)) }
+
+    private func recordRowWidth(_ text: String) -> CGFloat {
+        recordDotWidth + recordDotGap + ceil(measure(text, font: hintFont))
+    }
+
+    private func layoutRecordRow(width: CGFloat) {
+        let dotWidth = recordDotWidth
+        recordRow.frame.size = NSSize(width: width, height: recordRowHeight)
+        // The dot sits a pixel high: the emoji's ink is smaller than its line box,
+        // and left on the baseline it hangs below the text beside it.
+        recordDot.frame = NSRect(x: 0, y: 1, width: dotWidth, height: 15)
+        recordInfo.frame = NSRect(x: dotWidth + recordDotGap, y: 0,
+                                  width: max(0, width - dotWidth - recordDotGap),
+                                  height: recordRowHeight)
+    }
+
     /// At rest there is no bubble — only the text. A blurred, rounded, shadowed
     /// panel riding along beside the cursor all day is a window following him
     /// around; the same words with nothing behind them are a label on his work.
@@ -533,15 +601,26 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // White glyphs need something to separate them from a white page. A
         // *layer* shadow, since the string-attribute route doesn't render here.
         titleLabel.wantsLayer = true
+        recordInfo.wantsLayer = true
         if bare {
-            let halo = NSShadow()
-            halo.shadowColor = NSColor.black.withAlphaComponent(0.9)
-            halo.shadowBlurRadius = 3
-            halo.shadowOffset = .zero
-            titleLabel.shadow = halo
+            titleLabel.shadow = Self.halo()
+            // Same reasoning as the title, and the recording row now spends its
+            // whole life on the chip, over his editor rather than over the blur.
+            recordInfo.shadow = Self.halo()
+            recordInfo.textColor = .white
         } else {
             titleLabel.shadow = nil
+            recordInfo.shadow = nil
+            recordInfo.textColor = .secondaryLabelColor
         }
+    }
+
+    private static func halo() -> NSShadow {
+        let halo = NSShadow()
+        halo.shadowColor = NSColor.black.withAlphaComponent(0.9)
+        halo.shadowBlurRadius = 3
+        halo.shadowOffset = .zero
+        return halo
     }
 
     private func singleLine(_ text: String) -> String {
@@ -573,45 +652,30 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// made the chip show a robot head and no session name; measured, not
     /// guessed. Colour and halo go on the label instead (`refreshChrome`).
     private func applyTitleText() {
-        titleLabel.stringValue = titleText(dots: dotPhase + 1)
+        titleLabel.stringValue = titleText
     }
 
-    /// The title for the current state. `dots` exists only so the width probe can
-    /// ask for the widest form of the listening label while the animation asks for
-    /// the live one.
-    private func titleText(dots: Int) -> String {
-        if let override = titleOverride { return override }
+    /// The title for the current state.
+    ///
+    /// Listening has no title of its own any more — no 🎙️, no running dots. The
+    /// top line stays 🤖 folder@branch through the whole dictation, because that
+    /// is the fact that does not change, and the row below it now carries both the
+    /// sign of life (the pulsing 🔴) and everything that does change.
+    private var titleText: String {
         // Stand-by already wears ⏸️, so paused takes the harder stop glyph: the
         // two states differ by one word otherwise, and they are read at a glance
         // from across the room.
         if paused { return "⏹️ \(SessionLabel.value): Paused" }
-        if listening {
-            // No "Listening" word: the mic and the running dots already say it,
-            // and what he actually needs to read at that moment is which session
-            // is about to receive what he says.
-            return "🎙️ \(SessionLabel.value)" + String(repeating: ".", count: dots)
-        }
-        // At rest, no state word at all. "Stand by" is the one thing he can infer
-        // from the fact that nothing is happening; what he cannot infer, and what
-        // this chip exists to tell him, is which agent is sitting there waiting.
+        // No state word at all. "Stand by" is the one thing he can infer from the
+        // fact that nothing is happening; what he cannot infer, and what this chip
+        // exists to tell him, is which agent is sitting there waiting.
         return "🤖 \(SessionLabel.value)"
     }
 
-    /// What the width must accommodate: the current state's title at its widest.
-    /// Three dots, always — measuring the live string would make the bubble
-    /// breathe in and out twice a second while he dictates.
-    private var titleWidthProbe: String { titleText(dots: 3) }
-
-    /// Show `text` as the title for a moment, then fall back to the state title.
-    func flashTitle(_ text: String, duration: TimeInterval = 1.6) {
-        titleOverride = text
-        applyTitleText()
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            guard let self = self, self.titleOverride == text else { return }
-            self.titleOverride = nil
-            self.applyTitleText()
-        }
-    }
+    // The title used to be borrowable for a moment (`flashTitle`, for the "+1 📸"
+    // receipt). Nothing needs it now that F3 reports itself in the recording row,
+    // and a title that can be temporarily untrue is worth removing while nothing
+    // depends on it: this line's whole job is to say which session he is talking to.
 
     /// Fully opaque whenever it has something to say. The idle chip sits at 0.80:
     /// it now rides along near the cursor, over Victor's actual work, so it has
@@ -634,70 +698,31 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     // MARK: - Animations
 
-    /// Cycle the trailing dots 1→2→3→1 while Wispr is listening, so the bubble
-    /// visibly *lives* — a frozen "listening" label is indistinguishable from a
-    /// hung app, and the whole point is reassurance that speech is being caught.
-    private func startDots() {
-        stopDots()
-        dotPhase = 0
-        applyTitleText()
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            self.dotPhase = (self.dotPhase + 1) % 3
-            self.applyTitleText()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        dotTimer = timer
+    /// The 🔴 breathes while Wispr is listening, so the bubble visibly *lives* — a
+    /// frozen recording row is indistinguishable from a hung app, and the whole
+    /// point of the state is reassurance that speech is being caught.
+    ///
+    /// This is the job the trailing dots and the glass-shine sweep used to do.
+    /// Both were built for the panel; the recording row rides on the bare chip
+    /// now, where a sweep of glare has no glass to cross, and one slow pulse in
+    /// peripheral vision says the same thing more quietly.
+    ///
+    /// Slow on purpose — 1.1s each way. Anything brisker turns a reassurance into
+    /// something blinking beside the cursor while he is trying to think.
+    private func startPulse() {
+        stopPulse()
+        guard let layer = recordDot.layer else { return }
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = 0.25
+        pulse.duration = 1.1
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(pulse, forKey: "pulse")
     }
 
-    private func stopDots() { dotTimer?.invalidate(); dotTimer = nil }
-
-    /// Every 5s while listening, a narrow tilted highlight sweeps across the
-    /// bubble like glare across glass. Deliberately slow and rare: a sign of
-    /// life in peripheral vision, not something to look at.
-    private func startShine() {
-        stopShine()
-        playShine()
-        let timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            self?.playShine()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        shineTimer = timer
-    }
-
-    private func stopShine() { shineTimer?.invalidate(); shineTimer = nil }
-
-    private func playShine() {
-        guard let host = root.layer else { return }
-        let w = root.bounds.width, h = root.bounds.height
-        guard w > 0, h > 0 else { return }
-
-        let bandWidth: CGFloat = 70
-        let band = CAGradientLayer()
-        // Taller than the bubble so the tilt never exposes a cut-off corner.
-        band.frame = CGRect(x: 0, y: -h, width: bandWidth, height: h * 3)
-        band.colors = [
-            NSColor.white.withAlphaComponent(0.0).cgColor,
-            NSColor.white.withAlphaComponent(0.22).cgColor,
-            NSColor.white.withAlphaComponent(0.0).cgColor,
-        ]
-        band.locations = [0, 0.5, 1]
-        band.startPoint = CGPoint(x: 0, y: 0.5)
-        band.endPoint = CGPoint(x: 1, y: 0.5)
-        band.transform = CATransform3DMakeRotation(.pi / 9, 0, 0, 1)   // ~20° tilt
-        host.addSublayer(band)
-
-        let sweep = CABasicAnimation(keyPath: "position.x")
-        sweep.fromValue = -bandWidth
-        sweep.toValue = w + bandWidth
-        sweep.duration = 0.85
-        sweep.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        sweep.fillMode = .forwards
-        sweep.isRemovedOnCompletion = false
-        band.add(sweep, forKey: "sweep")
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) { band.removeFromSuperlayer() }
-    }
+    private func stopPulse() { recordDot.layer?.removeAnimation(forKey: "pulse") }
 
     // MARK: - Public API (main thread)
 
@@ -711,18 +736,31 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     func setPaused(_ value: Bool) {
         paused = value
         refreshTitle()
-        layoutContent()          // pausing mid-dictation retracts the ⌃⌥P row
-        reposition()             // …and takes it out of the cursor's wake
+        layoutContent()          // pausing mid-dictation retracts the recording row
+        reposition()             // …and parks the panel back in its corner
     }
 
     /// Wispr started / stopped listening.
     func setListening(_ value: Bool) {
         guard listening != value else { return }
         listening = value
-        if value { startDots(); startShine() } else { stopDots(); stopShine() }
+        // The count belongs to one dictation. Zeroing it here rather than when the
+        // message is sent means the row never opens showing the last dictation's
+        // total for the split second before the first shot lands.
+        if value { shotCount = 0 }
         refreshTitle()
-        layoutContent()          // the ⌃⌥P row lives and dies with this state
-        reposition()             // …and so does trailing the cursor
+        layoutContent()          // the recording row lives and dies with this state
+        reposition()             // …and the chip snaps back to the cursor
+        if value { startPulse() } else { stopPulse() }
+    }
+
+    /// How many pictures this dictation is carrying, the automatic context capture
+    /// included — he took one picture by starting to talk and the rest with F3, and
+    /// a count that omitted the first would disagree with what the agent receives.
+    func setShotCount(_ count: Int) {
+        guard shotCount != count else { return }
+        shotCount = count
+        layoutContent()          // the number can widen the row
     }
 
     /// Show the prompt on its way to the agent, whole, so Victor can see exactly
@@ -836,6 +874,27 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             closeButton.needsDisplay = true
         }
         refreshOpacity()
+    }
+
+    /// Draw the bubble into a PNG — the only way left to *see* it.
+    ///
+    /// The window is excluded from every screen capture (`sharingType`), and
+    /// `BUBBLE_CAPTURABLE=1` no longer buys it back on macOS 15: `screencapture`
+    /// returns a transparent image, whole-display or `-l <windowid>`. So instead
+    /// of asking the window server for the pixels, ask the view to draw itself.
+    /// `SIGUSR1` triggers it (see `AppDelegate`), which means any state can be
+    /// photographed from a shell while it is on screen.
+    ///
+    /// What comes out is the content, not the composite: the blur behind a panel
+    /// is drawn by the window server and is simply absent here, so panel shots
+    /// land on transparency. The chip has no blur at all, so it comes out exactly
+    /// as Victor sees it — over whatever you composite it onto.
+    func snapshot(to path: String) {
+        guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return }
+        root.cacheDisplay(in: root.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        Log.info("snapshot → \(path) (\(Int(root.bounds.width))×\(Int(root.bounds.height)))")
     }
 
     // MARK: - Hit handling (called from BubbleView)
