@@ -1,6 +1,6 @@
 import Foundation
 
-/// Append-only JSONL queue read by the Claude Code side (a blocking `wc -l`
+/// Append-only JSONL queue read by the agent side (a blocking `wc -l`
 /// watcher armed by the skill). One line = one message from Victor.
 ///
 /// Appends are serialised on a private queue and written with a single
@@ -8,14 +8,14 @@ import Foundation
 /// can never read half a line.
 enum Outbox {
 
-    /// `~/.claude-bubble` unless overridden with `--home`.
+    /// `~/.wispr-relay` unless overridden with `--home`.
     static var home = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude-bubble")
+        .appendingPathComponent(".wispr-relay")
 
     static var outboxURL = home.appendingPathComponent("outbox.jsonl")
     static var shotsDir  = home.appendingPathComponent("shots")
 
-    private static let queue = DispatchQueue(label: "ro.victorrentea.claude-bubble.outbox")
+    private static let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.outbox")
 
     static func prepare() {
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
@@ -43,7 +43,7 @@ enum Outbox {
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
             // Which session this belongs to — `folder@branch`, exactly what the
-            // bubble is showing on screen and what the agent sees in its own
+            // overlay is showing on screen and what the agent sees in its own
             // status line. One outbox is shared by whoever is watching it, and a
             // message with no return address is a message the wrong agent can act
             // on: this already happened once, a dictation about one project
@@ -74,6 +74,6 @@ enum Outbox {
 }
 
 enum Log {
-    static func info(_ msg: String)  { FileHandle.standardError.write(Data("[bubble] \(msg)\n".utf8)) }
-    static func error(_ msg: String) { FileHandle.standardError.write(Data("[bubble] ⚠️ \(msg)\n".utf8)) }
+    static func info(_ msg: String)  { FileHandle.standardError.write(Data("[relay] \(msg)\n".utf8)) }
+    static func error(_ msg: String) { FileHandle.standardError.write(Data("[relay] ⚠️ \(msg)\n".utf8)) }
 }

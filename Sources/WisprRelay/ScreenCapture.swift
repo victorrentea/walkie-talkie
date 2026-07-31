@@ -1,10 +1,10 @@
 import AppKit
 
-/// Screenshots the display under the cursor into `~/.claude-bubble/shots`.
+/// Screenshots the display under the cursor into `~/.wispr-relay/shots`.
 ///
-/// The bubble does **not** need hiding: `sharingType = .none` on the panel
+/// The overlay does **not** need hiding: `sharingType = .none` on the panel
 /// already excludes it from every capture — verified with a shot taken by a
-/// separate process while the bubble was on screen and unhidden. That matters
+/// separate process while the overlay was on screen and unhidden. That matters
 /// for the automatic capture at dictation start, which fires on every single
 /// dictation and must not blink the overlay each time.
 ///

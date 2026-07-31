@@ -4,7 +4,7 @@ import QuartzCore
 /// Red vignette confirming a screenshot was taken — the same shape as Victor
 /// Addons' capture flash (gradient borders fading inward over the whole screen,
 /// then fading out), in red rather than yellow so the two are never confused:
-/// yellow means "Victor Addons captured it", red means "it went to Claude".
+/// yellow means "Victor Addons captured it", red means "it went to the agent".
 ///
 /// Click-through and above everything, so it never interrupts what he is doing.
 enum CaptureFlash {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Claude Bubble and wrap it in a signed .app.
+# Build Wispr Relay and wrap it in a signed .app.
 #
 # The .app is not cosmetic: macOS keys Accessibility / Screen Recording (TCC)
 # grants to a code-signing identity. A bare SwiftPM binary is ad-hoc signed and
@@ -9,16 +9,16 @@
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="Claude Bubble"
+APP_NAME="Wispr Relay"
 APP_DIR="/Applications/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 
-echo "Building ClaudeBubble (release)…"
+echo "Building WisprRelay (release)…"
 cd "$DIR"
 swift build -c release
 
-BIN="$DIR/.build/release/ClaudeBubble"
+BIN="$DIR/.build/release/WisprRelay"
 [ -x "$BIN" ] || { echo "❌ build produced no binary at $BIN"; exit 1; }
 
 echo "Assembling $APP_NAME.app…"
@@ -34,7 +34,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>
-    <string>ro.victorrentea.claude-bubble</string>
+    <string>ro.victorrentea.wispr-relay</string>
     <key>CFBundleName</key>
     <string>$APP_NAME</string>
     <key>CFBundlePackageType</key>
@@ -44,7 +44,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>LSUIElement</key>
     <true/>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Claude Bubble needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
+    <string>Wispr Relay needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
 </dict>
 </plist>
 PLIST

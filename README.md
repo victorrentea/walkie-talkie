@@ -1,9 +1,15 @@
-# Claude Bubble
+# Wispr Relay
 
-A small macOS overlay that relays what you *say* into a running
-[Claude Code](https://claude.com/claude-code) session — dictation, the text you
-had selected, screenshots of what you were looking at — so you can drive an agent
-while looking at something else entirely: a browser, an IDE, a projector.
+A small macOS overlay that **relays [Wispr Flow](https://wisprflow.ai) dictation
+into a running coding agent** — along with the text you had selected and
+screenshots of what you were looking at — so you can drive the agent while
+looking at something else entirely: a browser, an IDE, a projector.
+
+Wispr Flow types its transcript wherever the caret is, which is exactly wrong
+when you are talking *about* something you are only reading. Wispr Relay takes
+that same speech and sends it somewhere else: to whatever agent is watching its
+queue. That is the whole idea, and the name — it is not tied to any one agent
+(it was called Claude Bubble until it turned out to work with all of them).
 
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
@@ -31,7 +37,7 @@ cancel is before it is written.
 
 ## How it reaches the agent
 
-The bubble appends JSON lines to `~/.claude-bubble/outbox.jsonl`. Anything that
+The overlay appends JSON lines to `~/.wispr-relay/outbox.jsonl`. Anything that
 watches that file can consume them; there is no back-channel.
 
 ```json
@@ -41,12 +47,12 @@ watches that file can consume them; there is no back-channel.
 ```
 
 `kind` is `dictation` | `screenshot` | `session_end`. Every message carries the
-`session` it belongs to, so several bubbles can share one queue without an agent
+`session` it belongs to, so several overlays can share one queue without an agent
 acting on another project's words.
 
-The Claude Code side is the `bubble` skill in
-[`victorrentea/ai`](https://github.com/victorrentea/ai) (`skills/bubble/`), which
-ships the built binary and watches the outbox.
+Any agent that can tail a file will do. The Claude Code side is the `relay` skill
+in [`victorrentea/ai`](https://github.com/victorrentea/ai) (`skills/relay/`),
+which ships the built binary, installs `/relay`, and watches the outbox.
 
 ## Input
 
@@ -63,7 +69,7 @@ ships the built binary and watches the outbox.
 
 [Wispr Flow](https://wisprflow.ai) pastes its transcript wherever the caret is,
 which is useless when you are dictating *about* something you are only reading.
-So the bubble reads Wispr's own local history instead:
+So the overlay reads Wispr's own local history instead:
 `~/Library/Application Support/Wispr Flow/flow.sqlite`, opened **read-only** and
 polled once a second for rows newer than a watermark taken at startup.
 
@@ -74,7 +80,7 @@ every representation, snapshotted and restored around the probe.
 ## Build
 
 ```bash
-./build-app.sh          # → /Applications/Claude Bubble.app, signed
+./build-app.sh          # → /Applications/Wispr Relay.app, signed
 ```
 
 The `.app` wrapper is not cosmetic: macOS keys Accessibility and Screen Recording
@@ -88,14 +94,14 @@ work and nothing else does.
 
 ## Debug switches
 
-- `kill -USR1 <pid>` — writes what is on screen to `~/.claude-bubble/snapshot.png`.
-  The bubble sets `sharingType = .none` so it never lands in the screenshots it
+- `kill -USR1 <pid>` — writes what is on screen to `~/.wispr-relay/snapshot.png`.
+  The overlay sets `sharingType = .none` so it never lands in the screenshots it
   takes, which also makes it impossible to photograph while working on it — and
   on macOS 15 the old opt-out below no longer buys it back. So it draws itself
   instead: the pictures above were made this way.
-- `BUBBLE_DEMO=1` — walks the UI through its states with canned content, which is
+- `RELAY_DEMO=1` — walks the UI through its states with canned content, which is
   what makes those pictures reproducible. Nothing is written to the outbox.
-- `BUBBLE_CAPTURABLE=1` — asks for `sharingType = .readOnly`. Kept for older
+- `RELAY_CAPTURABLE=1` — asks for `sharingType = .readOnly`. Kept for older
   systems; on macOS 15 `screencapture` returns a transparent image regardless.
 
 ## Licence

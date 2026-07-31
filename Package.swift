@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeBubble",
+    name: "WisprRelay",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "ClaudeBubble"),
+        .executableTarget(name: "WisprRelay"),
     ]
 )

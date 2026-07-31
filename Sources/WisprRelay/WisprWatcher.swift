@@ -6,7 +6,7 @@ import SQLite3
 /// Why the DB and not the keyboard: Wispr pastes the transcript wherever the
 /// caret happens to be. Victor dictates *about* what he is looking at (a
 /// browser, a PDF), so there is often no caret worth pasting into — but the
-/// transcript still has to reach Claude. `flow.sqlite` is the one place the
+/// transcript still has to reach the agent. `flow.sqlite` is the one place the
 /// text always lands, regardless of focus.
 ///
 /// `~/Library/Application Support/Wispr Flow/flow.sqlite`, table `History`:
@@ -31,7 +31,7 @@ final class WisprWatcher {
 
     private var watermark: String = ""
     private var timer: DispatchSourceTimer?
-    private let queue = DispatchQueue(label: "ro.victorrentea.claude-bubble.wispr")
+    private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr")
 
     var isAvailable: Bool { FileManager.default.fileExists(atPath: dbPath) }
 

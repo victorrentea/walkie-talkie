@@ -1,6 +1,6 @@
 import AppKit
 
-/// The floating, translucent, always-on-top bubble.
+/// The floating, translucent, always-on-top overlay.
 ///
 /// It is a **dictation helper only** — there is no text entry and no selection
 /// shortcut. Everything it reports happens by itself: Wispr starts listening,
@@ -11,12 +11,12 @@ import AppKit
 ///   single click   pause / resume forwarding
 ///   hover          reveal the ✕ (ends the session) and go opaque
 ///
-/// Because it never takes keyboard focus, `canBecomeKey` stays false: the bubble
+/// Because it never takes keyboard focus, `canBecomeKey` stays false: the overlay
 /// must never steal the caret from whatever Victor is actually working in.
-final class BubbleWindow: NSObject, NSWindowDelegate {
+final class RelayWindow: NSObject, NSWindowDelegate {
 
-    private let panel: BubblePanel
-    private let root: BubbleView
+    private let panel: RelayPanel
+    private let root: RelayView
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
@@ -32,7 +32,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
     /// How a displayed prompt ended: `true` — release it to the agent (the hold
-    /// ran out, or he clicked the bubble away), `false` — he pressed Cancel and
+    /// ran out, or he clicked the overlay away), `false` — he pressed Cancel and
     /// it must never be written. Fires exactly once per prompt.
     var onPromptResolved: ((Bool) -> Void)?
 
@@ -111,7 +111,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     override init() {
-        panel = BubblePanel(
+        panel = RelayPanel(
             // Placeholder — `layoutContent()` sizes the panel to its content
             // before it is ever shown.
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 64),
@@ -119,7 +119,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        root = BubbleView(frame: panel.contentLayoutRect)
+        root = RelayView(frame: panel.contentLayoutRect)
         super.init()
 
         configurePanel()
@@ -141,11 +141,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         panel.level = .statusBar
         panel.isMovableByWindowBackground = false      // we drag manually
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        // Keeps the bubble out of every screenshot — verified: a capture taken by
+        // Keeps the overlay out of every screenshot — verified: a capture taken by
         // a separate process, with no hiding at all, does not contain it.
-        // …which also makes the bubble impossible to *look at* while working on
+        // …which also makes the overlay impossible to *look at* while working on
         // it: no screenshot can contain it, so nobody debugging its appearance
-        // can see what Victor sees. BUBBLE_CAPTURABLE=1 asks for it back, and is
+        // can see what Victor sees. RELAY_CAPTURABLE=1 asks for it back, and is
         // off in every normal run.
         //
         // Measured 2026-07-31 on macOS 15: it no longer works. `.readOnly` gets a
@@ -154,7 +154,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // layout change is `CGWindowListCopyWindowInfo` — the window's bounds tell
         // you which rows are up (16 title / 17 recording / 15 selection, 6 apart,
         // 12 padding all round) and whether it is riding the cursor.
-        panel.sharingType = ProcessInfo.processInfo.environment["BUBBLE_CAPTURABLE"] == "1"
+        panel.sharingType = ProcessInfo.processInfo.environment["RELAY_CAPTURABLE"] == "1"
             ? .readOnly : .none
         panel.delegate = self
         panel.contentView = root
@@ -239,7 +239,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     private func positionInitially() { reposition() }
 
-    /// At rest the bubble is an **anchor**, not a panel: nothing is happening, so
+    /// At rest the overlay is an **anchor**, not a panel: nothing is happening, so
     /// the only thing worth saying is *which agent this is* — 🤖 folder@branch —
     /// and the only place worth saying it is wherever Victor is already looking,
     /// which is wherever his cursor is. Parked in a corner it was either unseen
@@ -247,7 +247,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     ///
     /// A prompt or a warning still turns it into the panel, in its corner. **A
     /// dictation no longer does.** That threw the panel across his work for the
-    /// whole time he talked — the longest stretch the big bubble was ever on
+    /// whole time he talked — the longest stretch the big overlay was ever on
     /// screen, and the one where it had the least to say. The recording row (🔴,
     /// the shot count, F3) is small enough to ride along under the chip, right
     /// where he is already looking. The panel is now kept for the one thing he
@@ -276,7 +276,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// the first pixel of movement can never be caught, and with the ✕ living on
     /// it that would mean no way to end a session at rest.
     private var engaged = false
-    /// He has the mouse down *on the bubble* — the only gesture that may move it
+    /// He has the mouse down *on the overlay* — the only gesture that may move it
     /// by hand, and the only one tracking must yield to.
     private var draggingSelf = false
     /// He is typing, so macOS has hidden the pointer and the chip has nothing
@@ -298,7 +298,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// sends it away, the next mouse movement brings it back.
     ///
     /// A passive global monitor — it observes, never intercepts, and needs the
-    /// Accessibility grant the bubble already has for its own shortcut.
+    /// Accessibility grant the overlay already has for its own shortcut.
     private func startWatchingTyping() {
         typingMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] _ in
             guard let self = self, !self.typing else { return }
@@ -326,7 +326,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             refreshOpacity()
         }
 
-        // Only a drag *of the bubble* suspends tracking. Testing
+        // Only a drag *of the overlay* suspends tracking. Testing
         // `pressedMouseButtons` instead meant any drag anywhere froze the chip —
         // he'd select a paragraph or drag a file and the label would sit where
         // the gesture started, which is the one moment it looks broken.
@@ -336,7 +336,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // In the panel states only the *screen* follows: Victor works on whichever
         // screen he points at, and a panel stranded on the other monitor is a
         // panel he cannot see. Where it sits on that screen is left alone, so a
-        // bubble he dragged out of the way stays out of the way.
+        // overlay he dragged out of the way stays out of the way.
         guard anchored else {
             if screen !== homeScreen { moveToTopLeft(of: screen) }
             return
@@ -392,14 +392,14 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     /// The title is `folder@branch`, and he switches branches mid-session — a
-    /// bubble still claiming `@master` would be quietly wrong about which branch
+    /// overlay still claiming `@master` would be quietly wrong about which branch
     /// is receiving his dictation. Ten seconds is slow enough to be free (one
     /// `git rev-parse`) and fast enough that he never reads a stale name.
     private func startWatchingBranch() {
         let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             guard let self = self, SessionLabel.refresh() else { return }
             self.applyTitleText()
-            self.layoutContent()          // the title drives the bubble's width
+            self.layoutContent()          // the title drives the overlay's width
         }
         RunLoop.main.add(timer, forMode: .common)
         labelTimer = timer
@@ -416,12 +416,12 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// heights, size the window to their total, then place them.
     private func layoutContent(animated: Bool = false) {
         // Hug the content of the *current* state, not the widest state there is:
-        // standing by is what the bubble does for hours, and it should take no
+        // standing by is what the overlay does for hours, and it should take no
         // more room than "🤖 ai@master" needs. Changing state resizes it, which is
         // fine.
         let titleWidth = measure(titleText, font: titleFont)
         // A row's width only counts while that row is actually there. It used to
-        // be reserved permanently to keep the bubble from jumping sideways when
+        // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
@@ -436,8 +436,8 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         // A selection does not. Widening the moment dictation starts throws a
         // half-screen panel across whatever Victor is looking at for the entire
         // time he talks — to show him text he highlighted himself a second ago.
-        // It rides along truncated in the narrow bubble instead, which is all the
-        // receipt it needs, and the bubble grows only at the end, when there is
+        // It rides along truncated in the narrow overlay instead, which is all the
+        // receipt it needs, and the overlay grows only at the end, when there is
         // finally something he has *not* seen: what Wispr actually heard.
         // …and even then it takes only what the text needs. Half the screen is the
         // ceiling, not the size: a four-word dictation in a half-screen panel is
@@ -482,7 +482,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
         if let prompt = sentPrompt {
             // Vertically: whatever it takes to show the prompt whole, bounded
-            // only by the screen so a very long dictation can't grow a bubble
+            // only by the screen so a very long dictation can't grow an overlay
             // taller than the display.
             let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800) - margin * 2 - 80
             promptLabel.stringValue = prompt
@@ -518,7 +518,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
 
-        // Anchor the TOP edge: the bubble sits in the top-left corner, so it
+        // Anchor the TOP edge: the overlay sits in the top-left corner, so it
         // grows downward into empty screen rather than up under the menu bar.
         let oldTop = panel.frame.maxY
         let frame = NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height)
@@ -580,7 +580,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
                                   height: recordRowHeight)
     }
 
-    /// At rest there is no bubble — only the text. A blurred, rounded, shadowed
+    /// At rest there is no window — only the text. A blurred, rounded, shadowed
     /// panel riding along beside the cursor all day is a window following him
     /// around; the same words with nothing behind them are a label on his work.
     /// The panel comes back the moment there is something to *contain*: a
@@ -594,7 +594,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
             panel.invalidateShadow()
         }
         // Enforced here and not only on hover: leaving a panel state while the
-        // cursor happens to be over the bubble would otherwise strand a ✕ on the
+        // cursor happens to be over the overlay would otherwise strand a ✕ on the
         // chip, since nothing re-enters `setHovering` on the way out.
         closeButton.isHidden = bare || !hovering
 
@@ -634,7 +634,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     private func refreshTitle() {
         applyTitleText()
         // White on the chip — the one place a hardcoded colour is right. Every
-        // other surface in this app sits on the bubble's own blur, which follows
+        // other surface in this app sits on the overlay's own blur, which follows
         // the system appearance; the chip sits on his terminal, his editor, a
         // photograph. A dynamic `labelColor` resolves to black in light mode and
         // disappears on a dark terminal, which is exactly what it did.
@@ -683,7 +683,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     /// that the one thing it carries (which session it is) is hard to read.
     ///
     /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
-    /// the bubble looking switched off is the point.
+    /// the overlay looking switched off is the point.
     private func refreshOpacity() {
         // The chip belongs to the pointer: no pointer, no chip. Panels are their
         // own reason to be on screen and stay put.
@@ -698,7 +698,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
     // MARK: - Animations
 
-    /// The 🔴 breathes while Wispr is listening, so the bubble visibly *lives* — a
+    /// The 🔴 breathes while Wispr is listening, so the overlay visibly *lives* — a
     /// frozen recording row is indistinguishable from a hung app, and the whole
     /// point of the state is reassurance that speech is being caught.
     ///
@@ -821,7 +821,7 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
     }
 
     /// The single exit from the displayed-prompt state: collapse back to the
-    /// small bubble and tell the delegate whether to release the message or bin
+    /// small overlay and tell the delegate whether to release the message or bin
     /// it. Fires once — every later call finds `sentPrompt` already nil.
     private func resolvePrompt(send: Bool) {
         guard sentPrompt != nil else { return }
@@ -876,10 +876,10 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         refreshOpacity()
     }
 
-    /// Draw the bubble into a PNG — the only way left to *see* it.
+    /// Draw the overlay into a PNG — the only way left to *see* it.
     ///
     /// The window is excluded from every screen capture (`sharingType`), and
-    /// `BUBBLE_CAPTURABLE=1` no longer buys it back on macOS 15: `screencapture`
+    /// `RELAY_CAPTURABLE=1` no longer buys it back on macOS 15: `screencapture`
     /// returns a transparent image, whole-display or `-l <windowid>`. So instead
     /// of asking the window server for the pixels, ask the view to draw itself.
     /// `SIGUSR1` triggers it (see `AppDelegate`), which means any state can be
@@ -897,11 +897,11 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
         Log.info("snapshot → \(path) (\(Int(root.bounds.width))×\(Int(root.bounds.height)))")
     }
 
-    // MARK: - Hit handling (called from BubbleView)
+    // MARK: - Hit handling (called from RelayView)
 
     /// No double-click to disambiguate any more, so a click acts immediately.
     ///
-    /// While a prompt is up, clicking the bubble body means "yes, that's right,
+    /// While a prompt is up, clicking the overlay body means "yes, that's right,
     /// go" — it releases the message immediately instead of waiting out the
     /// countdown, and gets the wide panel off his work. The one place where a
     /// click means *no* is the Cancel button, which swallows its own clicks.
@@ -928,8 +928,8 @@ final class BubbleWindow: NSObject, NSWindowDelegate {
 
 // MARK: - Panel
 
-final class BubblePanel: NSPanel {
-    // The bubble has no text entry, so it must never take the caret away from
+final class RelayPanel: NSPanel {
+    // The overlay has no text entry, so it must never take the caret away from
     // the app Victor is working in.
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -943,7 +943,7 @@ final class BubblePanel: NSPanel {
 // MARK: - Close button
 
 /// The round ✕ in the top-right, in the style of a macOS notification: hidden
-/// until the pointer is over the bubble, then a grey disc with a dark cross.
+/// until the pointer is over the overlay, then a grey disc with a dark cross.
 final class CloseButton: NSView {
     var onClick: (() -> Void)?
     private var hot = false
@@ -989,7 +989,7 @@ final class CloseButton: NSView {
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent)  { hot = false; needsDisplay = true }
 
-    // Swallow the whole click so it never reaches BubbleView's pause handling.
+    // Swallow the whole click so it never reaches RelayView's pause handling.
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }
 }
@@ -998,7 +998,7 @@ final class CloseButton: NSView {
 
 /// The button that stops a held prompt from ever reaching the agent.
 ///
-/// Drawn rather than an `NSButton` because the bubble's panel never becomes key:
+/// Drawn rather than an `NSButton` because the overlay's panel never becomes key:
 /// standard controls in a non-activating panel look permanently disabled and
 /// swallow the first click activating the window. This one is always live.
 final class PillButton: NSView {
@@ -1014,7 +1014,7 @@ final class PillButton: NSView {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let pill = NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2)
         // Red only under the cursor. At rest it is one more quiet control: the
-        // bubble is on screen all day and a permanently red button reads as an
+        // overlay is on screen all day and a permanently red button reads as an
         // error rather than as an offer.
         if hot {
             NSColor.systemRed.withAlphaComponent(0.92).setFill()
@@ -1050,7 +1050,7 @@ final class PillButton: NSView {
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent)  { hot = false; needsDisplay = true }
 
-    // Swallow the whole click — reaching BubbleView would release the very
+    // Swallow the whole click — reaching RelayView would release the very
     // prompt this button exists to stop.
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }
@@ -1060,8 +1060,8 @@ final class PillButton: NSView {
 
 // MARK: - Content view (drag + click)
 
-final class BubbleView: NSView {
-    weak var owner: BubbleWindow?
+final class RelayView: NSView {
+    weak var owner: RelayWindow?
     var blur: NSVisualEffectView?
 
     private var dragOrigin: NSPoint?
@@ -1097,7 +1097,7 @@ final class BubbleView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        // .activeAlways: the bubble belongs to an accessory app that is never
+        // .activeAlways: the overlay belongs to an accessory app that is never
         // frontmost, so .activeInActiveApp would never fire.
         addTrackingArea(NSTrackingArea(rect: bounds,
                                        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],

@@ -3,7 +3,7 @@ import ApplicationServices
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private var bubble: BubbleWindow!
+    private var overlay: RelayWindow!
     private var status: StatusItem!
     private var snapshotSignal: DispatchSourceSignal?
     private let hotkeys = HotkeyTap()
@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var endAnnounced = false
 
     /// A message that is built, shown, and *not yet written*. It lives here for
-    /// the few seconds the bubble displays it, so Cancel has something to stop.
+    /// the few seconds the overlay displays it, so Cancel has something to stop.
     /// Main thread only.
     private var held: Message?
 
@@ -62,18 +62,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
         Outbox.prepare()
-        bubble = BubbleWindow()
+        overlay = RelayWindow()
 
-        bubble.onTogglePause = { [weak self] in
+        overlay.onTogglePause = { [weak self] in
             guard let self = self else { return }
             self.paused.toggle()
-            self.bubble.setPaused(self.paused)
+            self.overlay.setPaused(self.paused)
         }
-        bubble.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
+        overlay.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Exit") }
-        bubble.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
+        overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
         hotkeys.onScreenshot = { [weak self] in self?.plusOneShot() }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dictation.onChange = { [weak self] recording in
             guard let self = self else { return }
-            DispatchQueue.main.async { self.bubble.setListening(recording) }
+            DispatchQueue.main.async { self.overlay.setListening(recording) }
             guard recording else { return }
             self.captureContext()
         }
@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("accessibility trusted=\(trusted) eventTap=\(tapped)")
         if !trusted || !tapped {
             DispatchQueue.main.async { [weak self] in
-                self?.bubble.flash("⚠️ grant Accessibility to Claude Bubble", duration: 15)
+                self?.overlay.flash("⚠️ grant Accessibility to Wispr Relay", duration: 15)
             }
         }
         startListeningForSnapshots()
@@ -107,12 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !wispr.isAvailable {
             DispatchQueue.main.async { [weak self] in
-                self?.bubble.flash("⚠️ Wispr Flow DB not found", duration: 12)
+                self?.overlay.flash("⚠️ Wispr Flow DB not found", duration: 12)
             }
         }
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
 
-        if ProcessInfo.processInfo.environment["BUBBLE_DEMO"] == "1" { runDemo() }
+        if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
     }
 
     /// `kill -USR1 <pid>` writes what is on screen right now to
@@ -129,33 +129,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         source.setEventHandler { [weak self] in
             let path = Outbox.home.appendingPathComponent("snapshot.png").path
-            self?.bubble.snapshot(to: path)
+            self?.overlay.snapshot(to: path)
         }
         source.resume()
         snapshotSignal = source
     }
 
-    /// Walk the bubble through its states with canned content, for documentation
+    /// Walk the overlay through its states with canned content, for documentation
     /// screenshots. Nothing here touches the outbox: `held` stays nil, so the
     /// displayed prompt resolves into nothing.
     private func runDemo() {
         Log.info("demo mode — driving the UI with canned content")
         let selection = "public Order placeOrder(Cart cart) {"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.bubble.setSelection(selection)
-            self?.bubble.setListening(true)
+            self?.overlay.setSelection(selection)
+            self?.overlay.setListening(true)
         }
         // The automatic context shot, then one taken with F3 — the two ways the
         // count moves in a real dictation.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
-            self?.bubble.setShotCount(1)
+            self?.overlay.setShotCount(1)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
-            self?.bubble.setShotCount(2)
+            self?.overlay.setShotCount(2)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
-            self?.bubble.setListening(false)
-            self?.bubble.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method",
+            self?.overlay.setListening(false)
+            self?.overlay.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method",
                                         hold: 25)
         }
     }
@@ -207,14 +207,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Keep the bubble's `📸 ×N` honest. N is what this dictation would carry if it
+    /// Keep the overlay's `📸 ×N` honest. N is what this dictation would carry if it
     /// were sent right now: the automatic context screen counts as the first
     /// picture, because that is what it is — he took it by starting to talk.
     private func publishShotCount() {
         stateLock.lock()
         let count = (pendingScreen != nil ? 1 : 0) + pendingShots.count
         stateLock.unlock()
-        DispatchQueue.main.async { [weak self] in self?.bubble.setShotCount(count) }
+        DispatchQueue.main.async { [weak self] in self?.overlay.setShotCount(count) }
     }
 
     private func armOrphanFlush() {
@@ -239,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictationInFlight = false
         stateLock.unlock()
 
-        DispatchQueue.main.async { [weak self] in self?.bubble.clearSelection() }
+        DispatchQueue.main.async { [weak self] in self?.overlay.clearSelection() }
         guard !shots.isEmpty else { return }
         Log.info("no transcript within \(Int(orphanTimeout))s — releasing \(shots.count) shot(s) on their own")
         send(kind: "screenshot", paths: shots)
@@ -269,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !lost { pendingSelection = text }
         stateLock.unlock()
         guard !lost else { return }
-        DispatchQueue.main.async { [weak self] in self?.bubble.setSelection(text) }
+        DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text) }
     }
 
     /// F3 — one more shot for the dictation in progress.
@@ -282,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             guard let path = ScreenCapture.grab() else {
-                DispatchQueue.main.async { self.bubble.flash("⚠️ screenshot failed") }
+                DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }
 
@@ -306,7 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// What to render in the bubble as "this is what the agent got". Returns nil
+    /// What to render in the overlay as "this is what the agent got". Returns nil
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?, shots: Int) -> String? {
@@ -319,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The ✕ and the menu bar's Exit both end the session. Announce it through the
-    /// outbox before quitting so the watching Claude learns the bubble is gone
+    /// outbox before quitting so the watching agent learns the overlay is gone
     /// from the queue itself — it is blocked on that file, not on the process, and
     /// would otherwise sit waiting for messages that can no longer come.
     private func endSession(reason: String) {
@@ -331,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Activity Monitor — and it fires at most once.
     ///
     /// The words travel in `text`, not just in `kind`: the agent is watching a
-    /// queue, and "user closed the bubble" reads as the instruction it is —
+    /// queue, and "user closed the relay" reads as the instruction it is —
     /// stop watching — where a bare `session_end` has to be interpreted.
     private func announceEnd(_ reason: String) {
         guard !endAnnounced else { return }
@@ -339,17 +339,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Anything still counting down goes out ahead of the goodbye. Quitting is
         // not cancelling — Cancel is a button he presses on purpose — and the
         // outbox writes serially, so it lands in the right order.
-        bubble?.flushHeldPrompt()
+        overlay?.flushHeldPrompt()
         Log.info("session ended via \(reason)")
-        Outbox.send(kind: "session_end", text: "user closed the bubble")
+        Outbox.send(kind: "session_end", text: "user closed the relay")
     }
 
     /// Catches the quit routes the ✕ does not: ⌘Q, and the Apple Event a newly
     /// launched instance sends to its predecessor.
     ///
     /// Which is exactly why it consults the replacement marker first. Restarting
-    /// the bubble kills the old one, and reporting *that* as "user closed the
-    /// bubble" would tell the agent to stop watching at the very moment Victor
+    /// the relay kills the old one, and reporting *that* as "user closed the
+    /// overlay" would tell the agent to stop watching at the very moment Victor
     /// asked for a fresh session — the one failure mode worth writing code to
     /// avoid, since it is silent and he would only notice by talking into a void.
     func applicationWillTerminate(_ notification: Notification) {
@@ -392,21 +392,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.bubble.clearSelection()
+            self.overlay.clearSelection()
 
             // Nothing to read is nothing to cancel: a bare screenshot goes
             // straight out, and so does the goodbye.
             guard let shown = shown else {
                 self.commit(message)
                 if kind == "dictation" {
-                    self.bubble.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+                    self.overlay.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
                 }
                 return
             }
 
             let words = shown.split(whereSeparator: { $0.isWhitespace }).count
             let hold = min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
-            if self.bubble.showSentPrompt(shown, hold: hold) {
+            if self.overlay.showSentPrompt(shown, hold: hold) {
                 self.held = message
             } else {
                 self.commit(message)
@@ -421,9 +421,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     paths: m.paths, screen: m.screen, app: m.app)
     }
 
-    /// The countdown ran out (or he clicked the bubble away) → write it. He hit
+    /// The countdown ran out (or he clicked the overlay away) → write it. He hit
     /// Cancel → drop it, and say so, because a message that silently disappears
-    /// is indistinguishable from a bubble that has stopped working.
+    /// is indistinguishable from an overlay that has stopped working.
     ///
     /// Cancelling is cheap precisely because nothing was written: the agent polls
     /// the outbox every couple of seconds, so a line already in the file may
@@ -432,8 +432,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let m = held else { return }
         held = nil
         guard send else {
-            Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the bubble")
-            bubble.flash("✕ cancelled", duration: 2.0)
+            Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay")
+            overlay.flash("✕ cancelled", duration: 2.0)
             return
         }
         commit(m)

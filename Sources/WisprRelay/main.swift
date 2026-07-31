@@ -1,7 +1,7 @@
 import AppKit
 
-// `--home <dir>` relocates the outbox + screenshots (one directory per Claude
-// session when several run at once). Defaults to ~/.claude-bubble.
+// `--home <dir>` relocates the outbox + screenshots (one directory per agent
+// session when several run at once). Defaults to ~/.wispr-relay.
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
     switch arg {
@@ -15,10 +15,10 @@ while let arg = args.next() {
         if let label = args.next() { SessionLabel.override(label) }
     case "--help", "-h":
         print("""
-        Claude Bubble — floating input bubble that relays dictation, typed text
-        and screenshots to a Claude Code session.
+        Wispr Relay — floating overlay that relays what Wispr Flow hears,
+        the text you had selected, and screenshots to a waiting agent.
 
-          --home <dir>   outbox + screenshot directory (default ~/.claude-bubble)
+          --home <dir>   outbox + screenshot directory (default ~/.wispr-relay)
           --label <s>    what the title calls this session (default: folder@branch
                          of the working directory it was launched in)
 

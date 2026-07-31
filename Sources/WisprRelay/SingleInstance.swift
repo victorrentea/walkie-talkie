@@ -1,15 +1,15 @@
 import AppKit
 
-/// There is never more than one bubble on screen.
+/// There is never more than one overlay on screen.
 ///
-/// Two bubbles would be actively harmful, not just untidy: both would tap the
+/// Two overlays would be actively harmful, not just untidy: both would tap the
 /// same shortcuts, both would poll Wispr and forward the *same* dictation, and
 /// they would relay into different sessions' outboxes — so Victor could not tell
-/// which Claude was listening. The newest launch always wins, because it is the
+/// which agent was listening. The newest launch always wins, because it is the
 /// one whose session is actually watching.
 ///
 /// Enforced in the app itself rather than only in `install.sh`, so starting it
-/// by any route (skill, Spotlight, a second Claude session) still collapses to
+/// by any route (skill, Spotlight, a second agent session) still collapses to
 /// one instance.
 enum SingleInstance {
 
@@ -32,7 +32,7 @@ enum SingleInstance {
         }
 
         guard !others.isEmpty else { return }
-        Log.info("single-instance: terminating \(others.count) older bubble(s)")
+        Log.info("single-instance: terminating \(others.count) older overlay(s)")
 
         markReplacement()
         for app in others { app.terminate() }
@@ -55,7 +55,7 @@ enum SingleInstance {
 
     // MARK: - Replacement marker
     //
-    // The dying instance cannot tell "the user quit me" from "a newer bubble
+    // The dying instance cannot tell "the user quit me" from "a newer overlay
     // asked me to go" — both arrive as the same Quit event. So the newcomer says
     // so out loud, in a file, just before knocking: a `session_end` emitted
     // during a restart would tell the watching agent to stop listening exactly

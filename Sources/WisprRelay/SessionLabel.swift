@@ -1,15 +1,15 @@
 import Foundation
 
-/// What the bubble calls itself: `ai@master` — the same `folder@branch` Victor
+/// What the overlay calls itself: `ai@master` — the same `folder@branch` Victor
 /// reads in Claude Code's status line.
 ///
-/// It used to say "Agent", which is fine until a second bubble exists. With two
+/// It used to say "Agent", which is fine until a second overlay exists. With two
 /// sessions on screen, "Agent: Listening" on both is worse than no label at all:
 /// he cannot tell which repo is about to receive what he says. The status line
-/// already answers that question, so the bubble borrows its answer.
+/// already answers that question, so the overlay borrows its answer.
 ///
-/// The directory is the bubble's own working directory, inherited from whatever
-/// launched it — `/bubble` runs `start.sh` inside the session, so it is the
+/// The directory is the overlay's own working directory, inherited from whatever
+/// launched it — `/overlay` runs `start.sh` inside the session, so it is the
 /// session's directory. `--label` overrides for anything that starts it from
 /// somewhere else.
 enum SessionLabel {
@@ -24,9 +24,9 @@ enum SessionLabel {
     }
 
     /// Re-read the branch periodically: Victor switches branches mid-session, and
-    /// a bubble still claiming `@master` while he works on a feature branch is a
+    /// an overlay still claiming `@master` while he works on a feature branch is a
     /// label that lies. Returns true when it changed, so the caller can relayout
-    /// (the title drives the bubble's width).
+    /// (the title drives the overlay's width).
     @discardableResult
     static func refresh() -> Bool {
         guard !overridden else { return false }

@@ -10,7 +10,7 @@ import Foundation
 /// (`kAudioProcessPropertyIsRunningInput` on a `com.electron.wispr-flow.*`
 /// process object) — the same probe Victor Addons uses to duck music.
 ///
-/// This drives the bubble's "listening" state and the window during which
+/// This drives the overlay's "listening" state and the window during which
 /// screenshots attach to the coming transcript.
 final class DictationMonitor {
 
@@ -20,7 +20,7 @@ final class DictationMonitor {
     private static let wisprBundlePrefix = "com.electron.wispr-flow"
 
     private var timer: DispatchSourceTimer?
-    private let queue = DispatchQueue(label: "ro.victorrentea.claude-bubble.dictation")
+    private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.dictation")
     private(set) var isRecording = false
 
     func start(pollInterval: TimeInterval = 0.3) {

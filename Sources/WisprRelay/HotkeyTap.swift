@@ -7,7 +7,7 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return tap.handle(type: type, event: event)
 }
 
-/// The bubble's global shortcut for "plus one shot": screenshot the display
+/// The overlay's global shortcut for "plus one shot": screenshot the display
 /// under the cursor and add it to the dictation in progress (or send it on its
 /// own if none is).
 ///
@@ -47,7 +47,7 @@ final class HotkeyTap {
             callback: tapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            Log.error("could not create event tap — grant Accessibility permission to Claude Bubble")
+            Log.error("could not create event tap — grant Accessibility permission to Wispr Relay")
             return false
         }
         tapPort = tap
@@ -57,7 +57,7 @@ final class HotkeyTap {
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CFRunLoopRun()
         }
-        thread.name = "ClaudeBubbleEventTap"
+        thread.name = "WisprRelayEventTap"
         thread.start()
         return true
     }

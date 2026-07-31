@@ -1,6 +1,6 @@
 import AppKit
 
-/// The one fixed place the bubble can always be found.
+/// The one fixed place the overlay can always be found.
 ///
 /// The chip belongs to the pointer and hides when there is none; the panel comes
 /// and goes with what is happening. Neither is a reliable answer to "is this
@@ -9,7 +9,7 @@ import AppKit
 /// the same pixels for the whole life of the process.
 ///
 /// It carries the session label as a disabled header, for the same reason the
-/// title does: with two bubbles up, two identical 🤖 in the menu bar say nothing
+/// title does: with two overlays up, two identical 🤖 in the menu bar say nothing
 /// about which session a click is about to end.
 final class StatusItem: NSObject, NSMenuDelegate {
 
@@ -21,7 +21,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     override init() {
         super.init()
 
-        // Emoji rather than an SF Symbol: the bubble already says 🤖 in the
+        // Emoji rather than an SF Symbol: the overlay already says 🤖 in the
         // chip, and the eye pairs the two without reading either.
         item.button?.title = "🤖"
 
