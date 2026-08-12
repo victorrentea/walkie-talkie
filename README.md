@@ -63,7 +63,13 @@ which ships the built binary, installs `/relay`, and watches the outbox.
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |
-| menu bar 🤖 | Always there while the app runs — shows which session it is, and **Exit** |
+| menu bar 🤖 | Always there while the app runs — shows which session it is, plus **Pause/Resume** and **Exit** |
+
+Paused, the chip reads `⏸️ 🤖 folder@branch` at 0.30 opacity and the menu bar
+icon becomes ⏸️🤖. Wispr Flow itself keeps working exactly as before — the point
+of pausing is to dictate into a browser, a chat, a commit message without those
+words also reaching the agent. The relay just stops acting on the transcripts:
+no context capture, no screenshots, nothing written to the outbox.
 
 ## How dictation is captured
 

@@ -253,12 +253,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// where he is already looking. The panel is now kept for the one thing he
     /// must actually read: the prompt about to be sent.
     ///
-    /// Paused is deliberately **not** anchored. It is the one state he enters by
-    /// hand, and the state he leaves by hand — so it becomes a panel again,
-    /// parked in its corner with its ✕ back. That is also the route to ending a
-    /// session at rest, now that the chip has no ✕ of its own: click it to pause,
-    /// then hover the panel and close it.
-    private var anchored: Bool { !paused && sentPrompt == nil && flashMessage == nil }
+    /// **Paused is anchored too.** It used to become a panel in the corner, on the
+    /// argument that pausing was the only route to a ✕ at rest. The menu bar item
+    /// now carries both Pause/Resume and Exit, so that argument is gone — and what
+    /// is left is the fact that pause is a state he stays in for minutes at a time
+    /// while dictating into other apps. A half-screen panel parked over his work
+    /// for all of it says nothing he doesn't already know. The chip says it where
+    /// he is looking: ⏸️ in front of the robot, at 0.30.
+    private var anchored: Bool { sentPrompt == nil && flashMessage == nil }
 
     /// Where the chip rides relative to the pointer: below and to the right, out
     /// of the way of the thing being pointed at.
@@ -662,10 +664,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// is the fact that does not change, and the row below it now carries both the
     /// sign of life (the pulsing 🔴) and everything that does change.
     private var titleText: String {
-        // Stand-by already wears ⏸️, so paused takes the harder stop glyph: the
-        // two states differ by one word otherwise, and they are read at a glance
-        // from across the room.
-        if paused { return "⏹️ \(SessionLabel.value): Paused" }
+        // Paused prefixes the robot rather than replacing it: the chip's job is
+        // still to say *which agent this is*, and pause is a modifier on that, not
+        // a different thing. Reading ⏸️ ahead of 🤖 is also the same order as the
+        // menu bar item, which is the other place the state is shown. No ": Paused"
+        // word any more — the glyph plus the fade to 0.30 is the whole message, and
+        // the chip rides beside his cursor now, where every character costs room.
+        if paused { return "⏸️ 🤖 \(SessionLabel.value)" }
         // No state word at all. "Stand by" is the one thing he can infer from the
         // fact that nothing is happening; what he cannot infer, and what this chip
         // exists to tell him, is which agent is sitting there waiting.

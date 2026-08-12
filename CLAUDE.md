@@ -19,9 +19,9 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotKey` + `recordText` — the recording row (`🔴 📸 ×2 F3`)
-- `titleText` — `🤖 <label>` / `⏹️ <label>: Paused`
+- `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
-- `StatusItem.swift` — the menu bar item's `Exit`
+- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
 
 ## Scope: dictation helper only
 
@@ -30,6 +30,19 @@ deliberately removed — everything except F3 now happens by itself when Wispr
 starts listening. Do not reintroduce a typing affordance without being asked:
 the panel's `canBecomeKey` is false precisely so the overlay can never steal the
 caret from the app Victor is working in.
+
+## What pause is (and is not)
+
+Pause **does not touch Wispr Flow**. That is the whole purpose of it: Victor
+pauses so he can dictate into a browser, a chat, a commit message *normally*,
+without those words also landing in the agent's queue. Nothing in this app may
+try to stop, mute or intercept the transcription — it only stops acting on it.
+
+Concretely, `paused` bails out of three places and nowhere else: `captureContext`
+(no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
+nothing), and `send` (nothing reaches the outbox). Wispr keeps reporting that it
+is listening, which is why `recordText` also hides the recording row while
+paused — advertising F3 in a state where it does nothing would be a lie.
 
 ## Title states
 
@@ -45,7 +58,13 @@ from the working directory (inherited from the session, since `/relay` launches
 |---|---|
 | idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
-| paused (single click) | `⏹️ ai@master: Paused` |
+| paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
+
+Paused prefixes rather than replaces, and carries no state word. The chip's job
+is still to say *which agent this is*; pause is a modifier on that, not a
+different thing — and it is the same order as the menu bar item (`⏸️🤖`), which
+is the other place the state shows. The old form was `⏹️ ai@master: Paused`, from
+when paused was a panel in the corner with room for a word.
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -128,9 +147,13 @@ you reach for it means nothing. (The menu bar item is the ✕ that stays put.)
 
 **Panel (the message, and only the message)** — what the overlay has always been,
 top-left of the current screen, with the blur, the ✕ on hover, and full opacity.
-Entered by a prompt, a flash, **and by pausing** — pause is deliberately a panel
-state, because it is a route to ending a session at rest: click the chip to
-pause, hover the panel, hit the ✕.
+Entered by a prompt and by a flash. **Nothing else.**
+
+**Paused is not a panel state.** It was, on the argument that pausing was the
+only route to a ✕ at rest. The menu bar now carries Pause/Resume *and* Exit, so
+that argument is gone — and what was left was a half-screen panel parked over his
+work for the whole time he dictates into other apps, which is minutes, saying
+something he entered on purpose. It stays a chip: `⏸️ 🤖 folder@branch`, at 0.30.
 
 **Dictating is not a panel state.** It was, and that put a half-screen window
 over his work for the entire time he talked, to report a state he had just
@@ -148,7 +171,8 @@ out); everything else resizes instantly.
 ## The menu bar item
 
 `StatusItem.swift` puts a 🤖 in the menu bar for the whole life of the process,
-with the session label as a disabled header and one command: **Exit**.
+with the session label as a disabled header and two commands: **Pause/Resume**
+and **Exit**.
 
 It exists because neither shape is a dependable place to find the app. The chip
 belongs to the pointer and hides while he types; the panel comes and goes with
@@ -159,6 +183,16 @@ that is always in the same pixels.
 The label is read in `menuWillOpen`, not pushed on a timer — with two overlays up,
 two identical 🤖 say nothing about which session a click is about to end, and the
 only moment the answer has to be right is the moment he is looking at it.
+
+**Pause is here and not only on the chip** because the chip is a moving target —
+it rides the cursor and vanishes while he types — and pausing is something he
+does *on his way into another app*, i.e. precisely when he has no patience to
+chase a label around. The item is worded as the verb it performs (`Pause` while
+running, `Resume` while paused), not as a checkbox of the current state, and the
+menu bar glyph becomes `⏸️🤖` — the same order as the chip. That glyph matters:
+while he is typing the chip is hidden, so the menu bar is then the only thing on
+screen saying forwarding is off. `AppDelegate.togglePause(reason:)` is the single
+switch behind both routes, so the two can never disagree.
 
 Exit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:

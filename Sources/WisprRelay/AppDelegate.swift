@@ -33,6 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// released as a message of their own.
     private let orphanTimeout: TimeInterval = 120
 
+    /// Forwarding is off. **Wispr itself is untouched** — that is the entire point:
+    /// pause is what Victor presses when he wants to dictate into a browser, a
+    /// chat, a commit message, without the words also landing in the agent's
+    /// queue. So nothing here tries to stop or intercept the transcription; the
+    /// relay simply stops acting on it — no context capture, no screenshots, no
+    /// outbox lines (`captureContext`, `plusOneShot`, `send` all bail).
     private var paused = false
     private var endAnnounced = false
 
@@ -64,15 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Outbox.prepare()
         overlay = RelayWindow()
 
-        overlay.onTogglePause = { [weak self] in
-            guard let self = self else { return }
-            self.paused.toggle()
-            self.overlay.setPaused(self.paused)
-        }
+        overlay.onTogglePause = { [weak self] in self?.togglePause(reason: "chip click") }
         overlay.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Exit") }
+        status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
+        status.setPaused(paused)
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
         hotkeys.onScreenshot = { [weak self] in self?.plusOneShot() }
@@ -246,6 +250,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Actions
+
+    /// The single switch behind both routes into pause — a click on the chip and
+    /// the menu bar item — so the two can never disagree about the state, and so
+    /// every display of it is updated in one place.
+    ///
+    /// Main thread only, which is where both callers already are: `paused` is read
+    /// without the lock from the capture paths.
+    private func togglePause(reason: String) {
+        paused.toggle()
+        overlay.setPaused(paused)
+        status.setPaused(paused)
+        Log.info(paused ? "paused via \(reason) — dictation stays in Wispr, nothing is relayed"
+                        : "resumed via \(reason)")
+    }
 
     /// What was selected when he started talking IS the subject, for the whole
     /// dictation — so the first non-empty read wins and nothing later overwrites
