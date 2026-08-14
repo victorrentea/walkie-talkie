@@ -18,7 +18,7 @@ are unaffected, and the dictation content itself is obviously whatever language
 he spoke.
 
 Current strings live in `RelayWindow.swift`:
-- `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️back/F3`)
+- `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️/F3`)
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
@@ -86,7 +86,7 @@ While dictating and not paused, one row sits directly under the title:
 
 ```
 🤖 ai@master
-🔴 📸 ×2 🖱️back/F3
+🔴 📸 ×2 🖱️/F3
 ```
 
 That is the whole of what the overlay says during a dictation, and it is Victor's
@@ -110,6 +110,13 @@ only things that do anything while he talks, and they belong beside the number
 they change. The mouse is named first because it is the half that needs saying:
 F3 has always been there, while the back button is borrowed only for the length
 of the dictation.
+
+**The glyph alone names the mouse** — `🖱️/F3`, not `🖱️back/F3`. The word said
+*which button* exactly once, on the first dictation after it was introduced;
+after that the hand knows, and what remained was three characters of width taken
+out of a row riding over the work he is looking at. The 🖱️ still has to be
+there — that half of the pair is the one a keyboard-shaped hint would never
+suggest.
 
 ## Mouse 4 is the shutter, but only while dictating
 
@@ -284,21 +291,26 @@ remains the tool for work already under way.
 ```
 ↪ public Order placeOrder(Cart cart) {
 extract the tax calculation out of this method
-📸 ×2 0:00 · 0:38
+📸 ×2 0:38
 ```
 
 `AppDelegate.shotLine` builds it, and the stamps are **m:ss from the moment the
 dictation opened**, not wall-clock. The count on its own answers "did my shots
 land"; it does not answer the question he has a few seconds later, which is
 *which* moments he caught. In a three-minute dictation `📸 ×4` is four
-indistinguishable files, while `0:00 · 0:38 · 1:52 · 2:41` is a table of
+indistinguishable files, while `0:38 · 1:52 · 2:41` is a table of
 contents — and this panel, with the Cancel clock running, is the last instant at
 which noticing a missing one is free. Wall-clock would say nothing here: the
 shots exist only as parts of this message, and `15:22:07` does not locate a
 moment *inside* it.
 
-The first stamp is `0:00` whenever there is a context screen, because that shot
-was taken by starting to talk. The count is therefore built from `pendingScreen`
+**The context screen is counted but not stamped.** It is always at zero — he
+took it by starting to talk — so its `0:00` is the one stamp that carries no
+information, and printing it only pushed the stamps that do mean something a
+column to the right. What is listed are the moments he chose; a dictation whose
+only picture is the automatic one therefore reads `📸 ×1`, with nothing after it.
+
+The count is built from `pendingScreen`
 plus `pendingShotOffsets`, **not** from `attached` — the screen travels in its
 own outbox field, so counting `attached` would print a total one lower than the
 `📸 ×N` he just watched climb in the recording row. The `🎙️ sent + N 📸` flash

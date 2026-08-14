@@ -93,11 +93,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// would read as the Return key having broken. Naming it here means the row
     /// and the behaviour appear and disappear together.
     ///
-    /// Written tight — `🖱️back/F3`, no spaces around the slash. The row rides
-    /// under the cursor over his actual work, and the two words are a reminder,
-    /// not a sentence: every character of separator between them is width taken
-    /// from the thing he is looking at underneath.
-    private static let shotHint = "🖱️back/F3"
+    /// Written as tight as it goes — `🖱️/F3`. The word "back" went too: the mouse
+    /// glyph is the mouse, and which of its buttons is the one the hand already
+    /// knows by the second dictation. The row rides under the cursor over his
+    /// actual work, so every character it does not need is width taken from the
+    /// thing he is looking at underneath.
+    private static let shotHint = "🖱️/F3"
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it

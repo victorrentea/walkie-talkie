@@ -416,12 +416,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Relative to the dictation, never wall-clock: the shots exist only as parts
     /// of this message, and 15:22:07 says nothing about where in it he was.
+    ///
+    /// **The context shot's `0:00` is not printed.** It is the one stamp that
+    /// carries no information — the automatic capture is always at zero, by
+    /// definition — so it only pushed the stamps that do mean something one
+    /// column to the right. The count still includes it; what is listed are the
+    /// moments he chose.
     private static func shotLine(_ offsets: [TimeInterval]) -> String? {
         guard !offsets.isEmpty else { return nil }
-        let stamps = offsets.map { offset -> String in
+        let stamps = offsets.filter { $0 > 0 }.map { offset -> String in
             let s = max(0, Int(offset.rounded()))
             return String(format: "%d:%02d", s / 60, s % 60)
         }
+        guard !stamps.isEmpty else { return "📸 ×\(offsets.count)" }
         return "📸 ×\(offsets.count) " + stamps.joined(separator: " · ")
     }
 

@@ -24,7 +24,7 @@ shows. It disappears while you type and comes back when you move the mouse.
 
 When dictation starts the chip stays where it is and grows one row: a pulsing 🔴,
 how many pictures the message is carrying, and the two ways to add another
-(`🔴 📸 ×2 🖱️back/F3`). Behind that row the screen is photographed, whatever was
+(`🔴 📸 ×2 🖱️/F3`). Behind that row the screen is photographed, whatever was
 selected is captured and frozen for the whole dictation, and either the **back
 mouse button** or **F3** attaches extra screenshots as you talk — the count going
 up is the receipt.
@@ -43,7 +43,7 @@ in the queue the agent may already be acting on it, so the only honest moment to
 cancel is before it is written.
 
 Its last line is the pictures it carries and **when each was taken**, as m:ss
-from the moment you started talking (`📸 ×2 0:00 · 0:38`). The count says the
+from the moment you started talking (`📸 ×2 0:38`). The count says the
 shots landed; the times say *which* moments you caught, which is the thing you
 cannot reconstruct once the panel is gone.
 
