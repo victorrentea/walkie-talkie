@@ -14,12 +14,20 @@ import AppKit
 /// this subprocess has been waited on. Callers announce first, then grab.
 enum ScreenCapture {
 
-    static func grab() -> String? {
-        let display = activeDisplayNumber()
+    /// `cursor` is where the pointer was **at the moment of the gesture**, in
+    /// AppKit screen coordinates. It is passed in rather than read here because
+    /// this runs after a clipboard probe that sleeps up to 400ms — by then the
+    /// hand has moved on, and the whole point of recording it is to say what he
+    /// was pointing at when he pressed.
+    static func grab(cursor: NSPoint? = nil) -> String? {
+        let mouse = cursor ?? NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+        let display = activeDisplayNumber(of: screen)
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
         stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-        let file = Outbox.shotsDir.appendingPathComponent("shot-\(stamp.string(from: Date())).jpg")
+        let name = "shot-\(stamp.string(from: Date()))\(cursorTag(mouse: mouse, screen: screen)).jpg"
+        let file = Outbox.shotsDir.appendingPathComponent(name)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -37,6 +45,28 @@ enum ScreenCapture {
         }
         prune()
         return file.path
+    }
+
+    /// Where the cursor was, written into the file name as
+    /// `-cursor-34.2x71.8pct` — 34.2% across, 71.8% down, **top-left origin**,
+    /// like the image itself.
+    ///
+    /// It rides in the name and not in the outbox JSON because the name is what
+    /// the agent already has in front of it: the path is in `paths`, so the
+    /// pointer arrives with the picture, and nothing downstream has to learn a
+    /// new field to benefit from it. He points at things while he talks ("this
+    /// button", "that line") and the sentence alone cannot say which.
+    ///
+    /// **Percentages, not pixels.** The agent reads the shot through a tool that
+    /// downsamples it, so a pixel coordinate stops pointing at the right thing
+    /// the moment the picture is resized. A percentage survives any scaling.
+    private static func cursorTag(mouse: NSPoint, screen: NSScreen?) -> String {
+        guard let frame = screen?.frame, frame.width > 0, frame.height > 0 else { return "" }
+        let clamp = { (v: CGFloat) in min(max(v, 0), 100) }
+        let x = clamp((mouse.x - frame.minX) / frame.width * 100)
+        // AppKit counts y up from the bottom, images count it down from the top.
+        let y = clamp((frame.maxY - mouse.y) / frame.height * 100)
+        return String(format: "-cursor-%.1fx%.1fpct", x, y)
     }
 
     /// One screenshot per dictation adds up fast — Victor dictates all day, and
@@ -70,9 +100,8 @@ enum ScreenCapture {
     /// external monitor the online index overshoots and `screencapture` rejects
     /// it outright ("Invalid display specified. Only 1 display…") — no file, no
     /// screenshot. The count is clamped for the same reason.
-    private static func activeDisplayNumber() -> Int {
-        let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }),
+    private static func activeDisplayNumber(of screen: NSScreen?) -> Int {
+        guard let screen = screen,
               let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
         else { return 1 }
 

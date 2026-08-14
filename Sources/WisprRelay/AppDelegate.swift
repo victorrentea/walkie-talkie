@@ -23,8 +23,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Deliberate ⌃⌥P shots taken while a dictation is in flight.
     private var pendingShots: [String] = []
+    /// When each deliberate shot was taken, in seconds since this dictation
+    /// opened — parallel to `pendingShots`, written under the same lock.
+    ///
+    /// Wall-clock times would say nothing: what makes a shot findable in a
+    /// three-minute dictation is *where in the sentence* it was taken, and the
+    /// only clock that measures that starts when he starts talking.
+    private var pendingShotOffsets: [TimeInterval] = []
+    /// When the current dictation opened, i.e. the zero of those offsets.
+    private var dictationStartedAt: Date?
     private var dictationInFlight = false
     private var orphanFlush: DispatchWorkItem?
+
+    /// The context shot is promised but `screencapture` has not come back yet.
+    ///
+    /// It counts as a picture from the instant the dictation opens, because that
+    /// is when he took it — by starting to talk. Waiting for the file meant the
+    /// row appeared saying `📸 ×0` and only became `×1` the best part of a second
+    /// later, once a clipboard probe and a subprocess had both finished: a count
+    /// that reads zero while a picture is being taken is simply wrong, and it is
+    /// wrong in the one moment he looks at the row. It drops back to zero if the
+    /// capture actually fails, which is the only case where zero is the truth.
+    private var contextShotPending = false
 
     private let stateLock = NSLock()
 
@@ -41,6 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// outbox lines (`captureContext`, `plusOneShot`, `send` all bail).
     private var paused = false
     private var endAnnounced = false
+
+    /// Wispr is recording. Main thread only, and kept here rather than read back
+    /// off the overlay because it is half of what decides whether mouse 4 belongs
+    /// to the relay or to Victor's Return key (`syncShotButton`).
+    private var listening = false
 
     /// A message that is built, shown, and *not yet written*. It lives here for
     /// the few seconds the overlay displays it, so Cancel has something to stop.
@@ -79,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.setPaused(paused)
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
-        hotkeys.onScreenshot = { [weak self] in self?.plusOneShot() }
+        hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.
@@ -89,11 +114,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.send(kind: "dictation", text: text, app: app)
         }
 
+        // `captureContext` first, and only then the overlay: it books the context
+        // shot synchronously, and `setListening(true)` zeroes the count — so the
+        // other order publishes `×1` into a row that is about to reset it to zero.
         dictation.onChange = { [weak self] recording in
             guard let self = self else { return }
-            DispatchQueue.main.async { self.overlay.setListening(recording) }
-            guard recording else { return }
-            self.captureContext()
+            if recording { self.captureContext() }
+            DispatchQueue.main.async {
+                self.listening = recording
+                self.syncShotButton()
+                self.overlay.setListening(recording)
+                if recording { self.publishShotCount() }
+            }
         }
 
         let trusted = AXIsProcessTrusted()
@@ -159,7 +191,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
             self?.overlay.setListening(false)
-            self?.overlay.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method",
+            // Built by the real formatter, so a documentation shot cannot drift
+            // from what the panel actually renders.
+            let shots = Self.shotLine([0, 38]) ?? ""
+            self?.overlay.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method\n\(shots)",
                                         hold: 25)
         }
     }
@@ -177,14 +212,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func captureContext() {
         guard !paused else { return }
 
+        // Where he was pointing when he started talking. Taken here and carried
+        // down: by the time the capture actually runs, a clipboard probe and a
+        // subprocess later, the pointer has moved on.
+        let cursor = NSEvent.mouseLocation
+
         stateLock.lock()
         let alreadyOpen = dictationInFlight
         dictationInFlight = true
         // A new dictation is a new subject. Clear the old one before probing, so
         // a selection stranded by a dictation that never produced a transcript
         // cannot ride along with the next thing he says.
-        if !alreadyOpen { pendingSelection = nil }
+        if !alreadyOpen {
+            pendingSelection = nil
+            contextShotPending = true
+            // The zero of every offset in this dictation. Set here rather than on
+            // the Wispr transition because this is the moment the context shot is
+            // booked, and that shot has to come out at 0:00 exactly.
+            dictationStartedAt = Date()
+            pendingShotOffsets = []
+        }
         stateLock.unlock()
+
+        // Say `📸 ×1` now, not when the subprocess returns.
+        publishShotCount()
 
         // The receipt comes FIRST — before the AX probe, before screencapture.
         // Those take the best part of a second between them, and a flash that
@@ -202,11 +253,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.stashSelection()
 
             guard !alreadyOpen else { return }
-            guard let path = ScreenCapture.grab() else { return }
+            let path = ScreenCapture.grab(cursor: cursor)
             self.stateLock.lock()
             self.pendingScreen = path
+            self.contextShotPending = false
             self.stateLock.unlock()
+            // Either way: the promised picture is now a file, or it never will be
+            // and the count has to come back down to the truth.
             self.publishShotCount()
+            guard let path = path else { return }
             Log.info("context screen captured: \((path as NSString).lastPathComponent)")
         }
     }
@@ -216,7 +271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// picture, because that is what it is — he took it by starting to talk.
     private func publishShotCount() {
         stateLock.lock()
-        let count = (pendingScreen != nil ? 1 : 0) + pendingShots.count
+        let context = (pendingScreen != nil || contextShotPending) ? 1 : 0
+        let count = context + pendingShots.count
         stateLock.unlock()
         DispatchQueue.main.async { [weak self] in self?.overlay.setShotCount(count) }
     }
@@ -238,9 +294,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.lock()
         let shots = pendingShots
         pendingShots = []
+        pendingShotOffsets = []
+        dictationStartedAt = nil
         pendingScreen = nil
         pendingSelection = nil
         dictationInFlight = false
+        contextShotPending = false
         stateLock.unlock()
 
         DispatchQueue.main.async { [weak self] in self?.overlay.clearSelection() }
@@ -261,8 +320,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         paused.toggle()
         overlay.setPaused(paused)
         status.setPaused(paused)
+        syncShotButton()
         Log.info(paused ? "paused via \(reason) — dictation stays in Wispr, nothing is relayed"
                         : "resumed via \(reason)")
+    }
+
+    /// Mouse 4 is Victor's Return key (LinearMouse types one with it), and the
+    /// relay borrows it **only while there is a dictation to add a picture to**.
+    /// Outside that window — at rest, and the whole time forwarding is paused —
+    /// the button must go back to doing what every other app expects, so this is
+    /// called from both edges that can change the answer: Wispr starting or
+    /// stopping, and pause being toggled. Main thread only.
+    private func syncShotButton() {
+        hotkeys.dictating = listening && !paused
     }
 
     /// What was selected when he started talking IS the subject, for the whole
@@ -290,23 +360,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text) }
     }
 
-    /// F3 — one more shot for the dictation in progress.
-    private func plusOneShot() {
+    /// F3, or mouse 4 while dictating — one more shot for the dictation in
+    /// progress, with the cursor recorded so the agent can see what he was
+    /// pointing at when he pressed.
+    private func plusOneShot(cursor: NSPoint) {
         guard !paused else { return }
+        // Sampled at the gesture, like the cursor and for the same reason: by the
+        // time `screencapture` returns, a subprocess later, the moment he pressed
+        // at is a second in the past — and a second is a whole sentence.
+        let takenAt = Date()
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            guard let path = ScreenCapture.grab() else {
+            guard let path = ScreenCapture.grab(cursor: cursor) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }
 
             self.stateLock.lock()
             let attaching = self.dictationInFlight
-            if attaching { self.pendingShots.append(path) }
+            if attaching {
+                self.pendingShots.append(path)
+                self.pendingShotOffsets.append(
+                    takenAt.timeIntervalSince(self.dictationStartedAt ?? takenAt))
+            }
             let count = self.pendingShots.count
             self.stateLock.unlock()
 
@@ -324,15 +404,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The pictures line: how many are riding along, and **when each was taken**,
+    /// as m:ss from the moment he started talking.
+    ///
+    /// The count alone answers "did my shots land"; it does not answer the
+    /// question he actually has a few seconds later, which is *which* moments he
+    /// caught. In a three-minute dictation `📸 ×4` is four indistinguishable
+    /// files, while `0:00 · 0:38 · 1:52 · 2:41` is a table of contents — and this
+    /// panel, with Cancel still running, is the last instant at which noticing a
+    /// missing one is free.
+    ///
+    /// Relative to the dictation, never wall-clock: the shots exist only as parts
+    /// of this message, and 15:22:07 says nothing about where in it he was.
+    private static func shotLine(_ offsets: [TimeInterval]) -> String? {
+        guard !offsets.isEmpty else { return nil }
+        let stamps = offsets.map { offset -> String in
+            let s = max(0, Int(offset.rounded()))
+            return String(format: "%d:%02d", s / 60, s % 60)
+        }
+        return "📸 ×\(offsets.count) " + stamps.joined(separator: " · ")
+    }
+
     /// What to render in the overlay as "this is what the agent got". Returns nil
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
-    private static func promptPreview(text: String?, selection: String?, shots: Int) -> String? {
+    private static func promptPreview(text: String?, selection: String?,
+                                      shotOffsets: [TimeInterval]) -> String? {
         var parts: [String] = []
         if let selection = selection, !selection.isEmpty { parts.append("↪ " + selection) }
         if let text = text, !text.isEmpty { parts.append(text) }
         guard !parts.isEmpty else { return nil }
-        if shots > 0 { parts.append("📸 ×\(shots)") }
+        if let shots = shotLine(shotOffsets) { parts.append(shots) }
         return parts.joined(separator: "\n")
     }
 
@@ -388,12 +490,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelection = nil
         var attached = paths
         var screen: String?
+        // The context shot is the first picture and it was taken at 0:00 — he took
+        // it by starting to talk. Counting from `pendingScreen` rather than from
+        // `attached` is what keeps this total agreeing with the `📸 ×N` he watched
+        // go up while he was speaking, which does include it.
+        var offsets: [TimeInterval] = []
         if kind == "dictation" {
             attached += pendingShots
             screen = pendingScreen
+            offsets = (pendingScreen != nil ? [0] : []) + pendingShotOffsets
             pendingShots = []
+            pendingShotOffsets = []
+            dictationStartedAt = nil
             pendingScreen = nil
             dictationInFlight = false
+            contextShotPending = false
         }
         stateLock.unlock()
 
@@ -406,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
-        let shown = Self.promptPreview(text: text, selection: selection, shots: attached.count)
+        let shown = Self.promptPreview(text: text, selection: selection, shotOffsets: offsets)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -417,7 +528,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let shown = shown else {
                 self.commit(message)
                 if kind == "dictation" {
-                    self.overlay.flash(attached.isEmpty ? "🎙️ sent" : "🎙️ sent + \(attached.count) 📸")
+                    // `offsets`, not `attached`: same total the recording row was
+                    // showing a second ago, context shot included.
+                    self.overlay.flash(offsets.isEmpty ? "🎙️ sent" : "🎙️ sent + \(offsets.count) 📸")
                 }
                 return
             }

@@ -14,26 +14,38 @@ queue. That is the whole idea, and the name — it is not tied to any one agent
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
 
-<img src="docs/idle.png" width="194" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
+<img src="docs/idle.png" width="196" alt="the idle chip: a robot emoji and the session name, trailing the cursor">
 
 At rest it is just a label riding along near your cursor, telling you *which*
 session is listening — `folder@branch`, the same thing Claude Code's status line
 shows. It disappears while you type and comes back when you move the mouse.
 
-<img src="docs/listening.png" width="194" alt="dictating: the session name, a pulsing red dot, the shot count and the F3 hint">
+<img src="docs/listening.png" width="196" alt="dictating: the session name, a pulsing red dot, the shot count and the shot hint">
 
 When dictation starts the chip stays where it is and grows one row: a pulsing 🔴,
-how many pictures the message is carrying, and the key that adds another
-(`🔴 📸 ×2 F3`). Behind that row the screen is photographed, whatever was
-selected is captured and frozen for the whole dictation, and **F3** attaches
-extra screenshots as you talk — the count going up is the receipt.
+how many pictures the message is carrying, and the two ways to add another
+(`🔴 📸 ×2 🖱️back/F3`). Behind that row the screen is photographed, whatever was
+selected is captured and frozen for the whole dictation, and either the **back
+mouse button** or **F3** attaches extra screenshots as you talk — the count going
+up is the receipt.
 
-<img src="docs/prompt.png" width="302" alt="the finished prompt with a Cancel button counting down">
+The mouse button is borrowed **only while that row is up**, so a dictation never
+needs the keyboard at all; the rest of the time the button keeps doing whatever
+your mouse software says it does. Each shot records where the pointer was, in the
+file name (`shot-…-cursor-34.2x71.8pct.jpg`, percentages of the frame from the
+top-left), so pointing at something while you talk about it is enough.
+
+<img src="docs/prompt.png" width="308" alt="the finished prompt with a Cancel button counting down">
 
 The finished prompt is shown whole — and **held for 4–7 seconds behind a Cancel
 button** before it is written anywhere. That delay is the feature: once a line is
 in the queue the agent may already be acting on it, so the only honest moment to
 cancel is before it is written.
+
+Its last line is the pictures it carries and **when each was taken**, as m:ss
+from the moment you started talking (`📸 ×2 0:00 · 0:38`). The count says the
+shots landed; the times say *which* moments you caught, which is the thing you
+cannot reconstruct once the panel is gone.
 
 ## How it reaches the agent
 
@@ -51,7 +63,8 @@ watches that file can consume them; there is no back-channel.
 acting on another project's words.
 
 Any agent that can tail a file will do. The Claude Code side is the `relay` skill
-in [`victorrentea/ai`](https://github.com/victorrentea/ai) (`skills/relay/`),
+in [`victorrentea/skills-private`](https://github.com/victorrentea/skills-private)
+(`skills/relay/`),
 which ships the built binary, installs `/relay`, and watches the outbox.
 
 ## Input
@@ -59,7 +72,8 @@ which ships the built binary, installs `/relay`, and watches the outbox.
 | input | effect |
 |---|---|
 | start dictating | Red flash, screen captured, selection grabbed — all automatic |
-| **F3** | One more screenshot, attached to the dictation in progress |
+| **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
+| **F3** | The same shot, from the keyboard |
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |

@@ -18,7 +18,7 @@ are unaffected, and the dictation content itself is obviously whatever language
 he spoke.
 
 Current strings live in `RelayWindow.swift`:
-- `Self.shotKey` + `recordText` — the recording row (`🔴 📸 ×2 F3`)
+- `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️back/F3`)
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
@@ -26,8 +26,9 @@ Current strings live in `RelayWindow.swift`:
 ## Scope: dictation helper only
 
 There is **no text entry** and **no selection shortcut**. Both existed and were
-deliberately removed — everything except F3 now happens by itself when Wispr
-starts listening. Do not reintroduce a typing affordance without being asked:
+deliberately removed — everything except "one more shot" now happens by itself
+when Wispr starts listening, and that one is reachable without the keyboard at
+all (see *Mouse 4 is the shutter*). Do not reintroduce a typing affordance:
 the panel's `canBecomeKey` is false precisely so the overlay can never steal the
 caret from the app Victor is working in.
 
@@ -85,17 +86,84 @@ While dictating and not paused, one row sits directly under the title:
 
 ```
 🤖 ai@master
-🔴 📸 ×2 F3
+🔴 📸 ×2 🖱️back/F3
 ```
 
 That is the whole of what the overlay says during a dictation, and it is Victor's
-list, not a designer's: **how many pictures this message is carrying, and the key
-that adds another.** The count includes the automatic context capture — he took
+list, not a designer's: **how many pictures this message is carrying, and the two
+ways to add another.** The count includes the automatic context capture — he took
 that one by starting to talk, and a count that skipped it would disagree with
-what the agent receives. It goes up live, so pressing F3 needs no other receipt.
+what the agent receives. It goes up live, so taking a shot needs no other receipt.
 
-`F3` sits inside this row rather than in a legend of its own. It is the only key
-that does anything while he talks, and it belongs beside the number it changes.
+**The count says `×1` from the instant the row opens**, before `screencapture`
+has returned (`AppDelegate.contextShotPending`). It used to say `×0` for the best
+part of a second — a clipboard probe that sleeps up to 400ms plus a subprocess —
+and then flick to `×1`; but a picture *is* being taken in that second, so zero
+was simply wrong, and wrong in the one moment he looks at the row. It falls back
+to zero only if the capture genuinely fails, which is the only case where zero is
+the truth. `captureContext` therefore runs **before** `overlay.setListening(true)`
+in `dictation.onChange`: it books the shot synchronously, and `setListening(true)`
+zeroes the count, so the other order publishes a `×1` into a row about to reset it.
+
+The inputs sit inside this row rather than in a legend of its own. They are the
+only things that do anything while he talks, and they belong beside the number
+they change. The mouse is named first because it is the half that needs saying:
+F3 has always been there, while the back button is borrowed only for the length
+of the dictation.
+
+## Mouse 4 is the shutter, but only while dictating
+
+The back side button (`MOUSE_BUTTON_4` = 3) takes a shot, and the relay
+**swallows it** so nothing else acts on it — while Wispr is recording and
+forwarding is on, and at no other time.
+
+That button is Victor's Return key: LinearMouse
+(`~/.config/linearmouse/linearmouse.json`) maps it to a `keyPress: ["enter"]`,
+which is what he submits with all day. Borrowing it is only defensible because
+of how narrow the window is — during a dictation an Enter lands in whatever
+happens to have focus, which is never what he meant, and the point of the whole
+overlay is that he is *away from the keyboard*. Asking him to reach for F3 to
+attach a picture put the one thing he does mid-sentence back on the keyboard.
+
+Three rules keep the theft honest:
+
+- **Gated on `listening && !paused`**, pushed to the tap by
+  `AppDelegate.syncShotButton()` from both edges that can change the answer
+  (Wispr starting/stopping, pause toggling). At rest and while paused the button
+  is untouched and still types Return.
+- **Only the bare press.** LinearMouse maps ⌘+button separately to ⌘Return, so
+  any modifier passes straight through: one gesture must not quietly become two
+  different things.
+- **Both halves are swallowed** (`otherMouseDown` *and* `otherMouseUp`, which is
+  why the tap mask grew). LinearMouse sits downstream of this tap and would
+  otherwise still see an orphan release to act on.
+
+**Tap order is what makes this work, and it is not guaranteed.** Both apps use
+`.cgSessionEventTap` at `.headInsertEventTap`, where the most recently installed
+tap sees events first. LinearMouse starts at login and the relay starts per
+session, i.e. always later — so the relay wins. If LinearMouse is ever restarted
+*after* a relay, it will convert the button to Return before this tap sees it and
+the shot silently stops working; restarting the relay fixes it.
+
+## The cursor is in the file name
+
+Every shot is `shot-<timestamp>-cursor-34.2x71.8pct.jpg` — where the pointer was,
+as a percentage of the frame, **top-left origin** like the image itself
+(`ScreenCapture.cursorTag`).
+
+He points at things while he talks — "this button", "that line" — and the
+sentence alone cannot say which. The reading rides in the **name** rather than in
+a new outbox field because the name is already in front of the agent: the path
+travels in `paths`, so the pointer arrives with the picture and nothing
+downstream has to learn a new key to benefit from it.
+
+**Percentages, not pixels**, because the agent reads the shot through a tool that
+downsamples it: a pixel coordinate stops pointing at the right thing the moment
+the picture is resized.
+
+The position is sampled **at the gesture** and carried down into
+`ScreenCapture.grab(cursor:)`, never read inside it — by the time the capture
+runs, a clipboard probe and a subprocess later, the hand has moved on.
 
 The 🔴 pulses 1.0 → 0.25 and back, 1.1s each way — slow on purpose. Anything
 brisker is something blinking next to the cursor while he is trying to think.
@@ -210,6 +278,35 @@ That delay is the whole point: the agent polls the outbox every couple of
 seconds, so a line already written may already be a tool call in flight. Cancel
 can only mean something while nothing has been written. Escape in the terminal
 remains the tool for work already under way.
+
+**The last line of the prompt is the pictures, with their times:**
+
+```
+↪ public Order placeOrder(Cart cart) {
+extract the tax calculation out of this method
+📸 ×2 0:00 · 0:38
+```
+
+`AppDelegate.shotLine` builds it, and the stamps are **m:ss from the moment the
+dictation opened**, not wall-clock. The count on its own answers "did my shots
+land"; it does not answer the question he has a few seconds later, which is
+*which* moments he caught. In a three-minute dictation `📸 ×4` is four
+indistinguishable files, while `0:00 · 0:38 · 1:52 · 2:41` is a table of
+contents — and this panel, with the Cancel clock running, is the last instant at
+which noticing a missing one is free. Wall-clock would say nothing here: the
+shots exist only as parts of this message, and `15:22:07` does not locate a
+moment *inside* it.
+
+The first stamp is `0:00` whenever there is a context screen, because that shot
+was taken by starting to talk. The count is therefore built from `pendingScreen`
+plus `pendingShotOffsets`, **not** from `attached` — the screen travels in its
+own outbox field, so counting `attached` would print a total one lower than the
+`📸 ×N` he just watched climb in the recording row. The `🎙️ sent + N 📸` flash
+counts the same way, for the same reason.
+
+Offsets are sampled **at the gesture** (`plusOneShot`'s `takenAt`), like the
+cursor and for the same reason: `screencapture` returns a subprocess later, and a
+second of drift is a whole sentence.
 
 Ordering is preserved: a second dictation arriving mid-countdown releases the
 first one before displaying itself.

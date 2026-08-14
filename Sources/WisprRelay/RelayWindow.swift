@@ -83,10 +83,21 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         return ceil(rect.height) + 2
     }
 
-    /// The key that takes one more shot. It appears in the recording row rather
-    /// than in a legend of its own: while dictating it is the only key that does
-    /// anything, and it belongs next to the count it increments.
-    private static let shotKey = "F3"
+    /// The two ways to take one more shot. They appear in the recording row
+    /// rather than in a legend of its own: while dictating they are the only
+    /// inputs that do anything, and they belong next to the count they increment.
+    ///
+    /// **The mouse comes first because it is the one that needs saying.** F3 has
+    /// been there all along; the back button being borrowed mid-dictation is new,
+    /// it lasts only as long as the recording row is up, and unadvertised it
+    /// would read as the Return key having broken. Naming it here means the row
+    /// and the behaviour appear and disappear together.
+    ///
+    /// Written tight — `🖱️back/F3`, no spaces around the slash. The row rides
+    /// under the cursor over his actual work, and the two words are a reminder,
+    /// not a sentence: every character of separator between them is width taken
+    /// from the thing he is looking at underneath.
+    private static let shotHint = "🖱️back/F3"
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
@@ -98,12 +109,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private var hintText: String? { flashMessage }
 
     /// The recording row shows **only while dictating and not paused** — the one
-    /// window in which there is a recording to report and in which F3 does
-    /// anything. Wispr keeps reporting that it is listening while forwarding is
-    /// off, so advertising the key in that state would be a lie.
+    /// window in which there is a recording to report and in which F3 and the
+    /// back button do anything. Wispr keeps reporting that it is listening while
+    /// forwarding is off, so advertising them in that state would be a lie — and
+    /// for the mouse it would be worse than a lie: paused is exactly when the
+    /// button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
-        return "📸 ×\(shotCount) \(Self.shotKey)"
+        return "📸 ×\(shotCount) \(Self.shotHint)"
     }
 
     private var screenWidth: CGFloat {
