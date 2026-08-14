@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeys = HotkeyTap()
     private let wispr = WisprWatcher()
     private let dictation = DictationMonitor()
+    private let picker = ElementPicker()
 
     /// Text that happened to be selected when Wispr started listening. There is
     /// no shortcut for this any more and none is needed: if something was
@@ -30,6 +31,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// three-minute dictation is *where in the sentence* it was taken, and the
     /// only clock that measures that starts when he starts talking.
     private var pendingShotOffsets: [TimeInterval] = []
+    /// Elements ⌘-clicked in Chrome, waiting for the sentence they belong to.
+    ///
+    /// Unlike shots, these are **not** cleared when a dictation opens. Pointing
+    /// comes before talking as often as during it — he finds the three things he
+    /// wants changed, *then* says what to do with them — and a queue emptied by
+    /// the act of starting to speak would lose precisely that order. They ride
+    /// along with the next dictation whenever they were taken, and are stamped
+    /// relative to it, negative offsets included.
+    private var pendingPicks: [ElementPick] = []
+
+    /// A pick nobody ever spoke about is not context, it is litter. Ten minutes
+    /// is longer than any gap between pointing at something and saying what to do
+    /// with it, and short enough that this morning's browsing cannot ride into
+    /// this afternoon's prompt.
+    private let pickTTL: TimeInterval = 600
+
     /// When the current dictation opened, i.e. the zero of those offsets.
     private var dictationStartedAt: Date?
     private var dictationInFlight = false
@@ -88,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let paths: [String]
         let screen: String?
         let app: String?
+        let elements: [ElementPick]
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -105,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
+        picker.onPick = { [weak self] pick in self?.record(pick) }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.
@@ -140,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         wispr.start()
         dictation.start()
+        picker.start()
 
         if !wispr.isAvailable {
             DispatchQueue.main.async { [weak self] in
@@ -177,9 +197,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func runDemo() {
         Log.info("demo mode — driving the UI with canned content")
         let selection = "public Order placeOrder(Cart cart) {"
+        let opened = Date()
+        // Pointed at before he ever started talking — which is the ordinary case,
+        // and the reason the stamp comes out negative.
+        let picks = [
+            ElementPick(at: opened.addingTimeInterval(-8), path: "main.content > button.buy-button",
+                        tag: "button", text: "Add to cart"),
+            ElementPick(at: opened.addingTimeInterval(21), path: "div#cart > span.price",
+                        tag: "span", text: "100 €"),
+        ]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.overlay.setPicks(count: 1, newest: picks[0].short)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.overlay.setSelection(selection)
             self?.overlay.setListening(true)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in
+            self?.overlay.setPicks(count: 2, newest: picks[1].short)
         }
         // The automatic context shot, then one taken with F3 — the two ways the
         // count moves in a real dictation.
@@ -191,11 +226,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
             self?.overlay.setListening(false)
+            self?.overlay.setPicks(count: 0, newest: nil)
             // Built by the real formatter, so a documentation shot cannot drift
             // from what the panel actually renders.
-            let shots = Self.shotLine([0, 38]) ?? ""
-            self?.overlay.showSentPrompt("↪ \(selection)\nextract the tax calculation out of this method\n\(shots)",
-                                        hold: 25)
+            let body = Self.promptPreview(text: "extract the tax calculation out of this method",
+                                          selection: selection, shotOffsets: [0, 38],
+                                          picks: picks, since: opened) ?? ""
+            self?.overlay.showSentPrompt(body, hold: 25)
         }
     }
 
@@ -321,6 +358,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setPaused(paused)
         status.setPaused(paused)
         syncShotButton()
+        // A paused relay refuses `/ping`, and the extension reads a refusal as
+        // "no relay" — so ⌘ in Chrome goes straight back to opening links in new
+        // tabs, which is exactly what he paused in order to do.
+        picker.paused = paused
         Log.info(paused ? "paused via \(reason) — dictation stays in Wispr, nothing is relayed"
                         : "resumed via \(reason)")
     }
@@ -404,6 +445,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Picked elements
+
+    /// A ⌘-click landed in Chrome. Off the main thread — this arrives on the
+    /// listener's queue.
+    ///
+    /// There is no flash and no panel, deliberately: the outline in the page has
+    /// already turned green under his cursor, at the pixel he clicked, before this
+    /// code ran. A second receipt across the screen would be the same news, later
+    /// and further away. What this adds is the running total, in the chip.
+    private func record(_ pick: ElementPick) {
+        guard !paused else { return }
+        stateLock.lock()
+        pendingPicks.append(pick)
+        pruneStalePicks()
+        let count = pendingPicks.count
+        let last = pendingPicks.last?.short ?? ""
+        stateLock.unlock()
+        Log.info("🎯 \(count) element(s) waiting on a sentence — newest \(last)")
+        publishPicks()
+    }
+
+    /// Caller holds `stateLock`.
+    private func pruneStalePicks() {
+        let cutoff = Date().addingTimeInterval(-pickTTL)
+        pendingPicks.removeAll { $0.at < cutoff }
+    }
+
+    /// Keep the overlay's `🎯 ×N` honest, and name the newest one — the count says
+    /// the click landed, the name says *what* landed, which is the half he can
+    /// actually check against what he meant to point at.
+    private func publishPicks() {
+        stateLock.lock()
+        pruneStalePicks()
+        let count = pendingPicks.count
+        let newest = pendingPicks.last?.short
+        stateLock.unlock()
+        DispatchQueue.main.async { [weak self] in self?.overlay.setPicks(count: count, newest: newest) }
+    }
+
+    /// The elements line(s): one per thing he pointed at, in the order he pointed
+    /// at them, each with when it happened relative to the dictation.
+    ///
+    /// A selector is not a stamp on a list, it *is* the content — so unlike the
+    /// pictures, these get a line each rather than a row of times. He has to be
+    /// able to read "that is the buy button, not the price next to it" in the
+    /// seconds Cancel is still available, and a comma-separated run of CSS paths
+    /// is not readable at that speed.
+    ///
+    /// **Negative stamps are the point, not an edge case.** Pointing usually comes
+    /// *before* the sentence — he finds the thing, then says what to do with it —
+    /// so `−0:08` reads exactly as it should: you pointed at this eight seconds
+    /// before you started talking.
+    private static func pickLines(_ picks: [ElementPick], since: Date?) -> [String] {
+        let shown = picks.prefix(maxPickLines)
+        var lines = shown.map { pick -> String in
+            guard let since = since else { return "🎯 \(pick.short)" }
+            let seconds = Int(pick.at.timeIntervalSince(since).rounded())
+            let sign = seconds < 0 ? "−" : ""
+            let abs = Swift.abs(seconds)
+            return String(format: "🎯 %@%d:%02d %@", sign, abs / 60, abs % 60, pick.short)
+        }
+        if picks.count > shown.count { lines.append("🎯 +\(picks.count - shown.count) more") }
+        return lines
+    }
+
+    /// Enough to check the ones he is likely to still be holding in his head. Past
+    /// that the panel is a list he has to read instead of a prompt he has to
+    /// approve, and the countdown is running.
+    private static let maxPickLines = 3
+
     /// The pictures line: how many are riding along, and **when each was taken**,
     /// as m:ss from the moment he started talking.
     ///
@@ -436,12 +547,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?,
-                                      shotOffsets: [TimeInterval]) -> String? {
+                                      shotOffsets: [TimeInterval],
+                                      picks: [ElementPick], since: Date?) -> String? {
         var parts: [String] = []
         if let selection = selection, !selection.isEmpty { parts.append("↪ " + selection) }
         if let text = text, !text.isEmpty { parts.append(text) }
         guard !parts.isEmpty else { return nil }
         if let shots = shotLine(shotOffsets) { parts.append(shots) }
+        parts.append(contentsOf: pickLines(picks, since: since))
         return parts.joined(separator: "\n")
     }
 
@@ -502,10 +615,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `attached` is what keeps this total agreeing with the `📸 ×N` he watched
         // go up while he was speaking, which does include it.
         var offsets: [TimeInterval] = []
+        var picks: [ElementPick] = []
+        var since: Date?
         if kind == "dictation" {
             attached += pendingShots
             screen = pendingScreen
             offsets = (pendingScreen != nil ? [0] : []) + pendingShotOffsets
+            // Everything he pointed at goes with the words, whether he pointed
+            // before or during — the queue exists precisely because those two
+            // orders are equally normal. `since` is what turns the absolute
+            // stamps into "where in this sentence", negatives and all.
+            pruneStalePicks()
+            picks = pendingPicks
+            since = dictationStartedAt
+            pendingPicks = []
             pendingShots = []
             pendingShotOffsets = []
             dictationStartedAt = nil
@@ -515,16 +638,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         stateLock.unlock()
 
+        if kind == "dictation" { publishPicks() }
+
         if kind == "dictation" {
             DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
         }
 
         let message = Message(kind: kind, text: text, selection: selection,
-                              paths: attached, screen: screen, app: app)
+                              paths: attached, screen: screen, app: app, elements: picks)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
-        let shown = Self.promptPreview(text: text, selection: selection, shotOffsets: offsets)
+        let shown = Self.promptPreview(text: text, selection: selection, shotOffsets: offsets,
+                                       picks: picks, since: since)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -556,7 +682,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// hands it here — eventually, or never.
     private func commit(_ m: Message) {
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
-                    paths: m.paths, screen: m.screen, app: m.app)
+                    paths: m.paths, screen: m.screen, app: m.app,
+                    elements: m.elements.map { $0.json })
     }
 
     /// The countdown ran out (or he clicked the overlay away) → write it. He hit
@@ -571,6 +698,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         held = nil
         guard send else {
             Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay")
+            // The picked elements go back in the queue. Cancel means the sentence
+            // was wrong, not that he pointed at the wrong things — and re-taking a
+            // pick means finding the element in the page again, which is the
+            // expensive half of the gesture. (Shots are not restored: he can take
+            // another one blind, and the screen has moved on anyway.)
+            if !m.elements.isEmpty {
+                stateLock.lock()
+                pendingPicks = m.elements + pendingPicks
+                pruneStalePicks()
+                stateLock.unlock()
+                publishPicks()
+            }
             overlay.flash("✕ cancelled", duration: 2.0)
             return
         }

@@ -19,6 +19,9 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️/F3`)
+- `pickText` — the ⌘-picked row (`🎯 ×2 div#cart > span.price`); the label beside
+  the outline in `chrome-extension/inspect.js` counts too, and so does its one
+  error string (`⚠ no relay session took it`)
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
@@ -39,9 +42,11 @@ pauses so he can dictate into a browser, a chat, a commit message *normally*,
 without those words also landing in the agent's queue. Nothing in this app may
 try to stop, mute or intercept the transcription — it only stops acting on it.
 
-Concretely, `paused` bails out of three places and nowhere else: `captureContext`
+Concretely, `paused` bails out of four places and nowhere else: `captureContext`
 (no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
-nothing), and `send` (nothing reaches the outbox). Wispr keeps reporting that it
+nothing), `send` (nothing reaches the outbox), and `ElementPicker.paused` (the
+`/ping` refusal that makes ⌘ in Chrome go back to being Chrome's ⌘ — that one is
+load-bearing, since dictating into a browser is the reason he paused). Wispr keeps reporting that it
 is listening, which is why `recordText` also hides the recording row while
 paused — advertising F3 in a state where it does nothing would be a lie.
 
@@ -193,8 +198,9 @@ Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
 Row heights, for checking a layout change without seeing it: title 16, recording
-row 17, selection 15, `rowGap` 6 between them, `pad` 12 all round. So the idle
-chip is 40 tall, and dictating with a selection is 84.
+row 17, ⌘-picked row 17, selection 15, `rowGap` 6 between them, `pad` 12 all
+round. So the idle chip is 40 tall, and dictating with a selection is 84 (107
+with a pick waiting).
 
 **No screen capture can contain this window**, and `RELAY_CAPTURABLE=1` no
 longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
@@ -374,6 +380,97 @@ far behind the gesture no longer says *now*.
 
 `CaptureFlash`'s panel is `sharingType = .none`, so firing it first cannot put it
 in the shot it is confirming.
+
+## Picking elements in Chrome
+
+Hold ⌘ over a page, the element under the cursor is outlined and named; ⌘-click
+and its selector joins the next dictation. It resolves the demonstratives — "make
+*this* button blue" is not actionable, and a CSS path is the same sentence with
+the pronoun filled in.
+
+**It is a Chrome extension (`chrome-extension/`), and the relay is only a
+mailbox.** CDP is the obvious design and it is the wrong one twice over:
+
+- Since Chrome 136 `--remote-debugging-port` is refused on the default profile,
+  and `--load-extension` is ignored outright as of 151 (verified 2026-08-15:
+  the flag loads nothing, and `--disable-extensions-except` alongside it disables
+  everything). Driving Victor's *actual* browser over CDP would mean relaunching
+  it against a throwaway `--user-data-dir` — a browser without his tabs or his
+  logins, i.e. not the thing he is looking at.
+- From outside, pointing at a DOM node means mapping a screen point through the
+  window origin, the height of the browser chrome, page zoom and device pixel
+  ratio, then mapping the element's box back out to draw a rectangle round it.
+  Inside the page there is no mapping at all — `elementFromPoint` and
+  `getBoundingClientRect` are already in the coordinate system the outline is
+  drawn in, and stay right after a zoom.
+
+So `ElementPicker.swift` is an HTTP listener on loopback and nothing else. The
+inspector — outline, label, ⌘ gate, swallowed click, selector — is `inspect.js`.
+Ports are 8917–8919, first free one per relay; the extension posts to **all** of
+them, which is the same shape as the outbox, where one dictation reaches whoever
+is listening.
+
+Installing it is a manual step, once: `chrome://extensions` → Developer mode →
+Load unpacked. There is no scriptable route left in Chrome 151 (`Extensions.
+loadUnpacked` over CDP works, but only for a browser started with
+`--enable-unsafe-extension-debugging`, which his is not).
+
+### ⌘ has to be *held*
+
+400ms, alone, with any other keypress abandoning the hold (`HOLD_MS`,
+`poisoned`). Bare ⌘-click is how a link opens in a new tab and Victor uses it all
+day: an inspector that ate it would be worse than no inspector. A quick ⌘-click
+therefore still opens the tab, and only a deliberate hold arms the outline — the
+two gestures are told apart by the one thing that actually differs, which is
+time. Every ⌘ shortcut is shorter than the gate as well, so ⌘T/⌘L/⌘C never arm it.
+
+Two more gates on top: with **no relay session running** the extension never arms
+(it probes `/ping` first, so ⌘ in a browser with no agent behind it means exactly
+what Chrome says it means), and a **paused** relay answers `/ping` with 503,
+which the extension reads as no relay at all. That second one is not a detail —
+pause exists precisely so Victor can use the browser normally.
+
+Verified 2026-08-15, driving a test Chrome over CDP: plain click → page sees it;
+⌘-click under the gate → page sees it; ⌘ held past the gate → swallowed and
+picked; ⌘C first then held → page sees it; ⌘ released → page sees it.
+
+### The pick queue is not cleared when a dictation opens
+
+Unlike shots and the selection, `pendingPicks` survives `captureContext`.
+Pointing comes *before* talking at least as often as during — he finds the three
+things he wants changed, then says what to do with them — and a queue emptied by
+the act of starting to speak would lose exactly that order. They ride along with
+the next dictation whenever they were taken, and go stale after 10 minutes
+(`pickTTL`), because a pick nobody ever spoke about is litter, not context.
+
+Which is why the stamps in the prompt can be **negative**: `🎯 −0:08 …` means he
+pointed at it eight seconds before he started talking. That is the ordinary case,
+not an edge case.
+
+**Cancel puts them back.** `releaseHeld(send: false)` returns the elements to the
+queue — cancelling means the sentence was wrong, not that he pointed at the wrong
+things, and re-taking a pick means finding the element in the page again, which
+is the expensive half of the gesture. Shots are not restored: another one can be
+taken blind, and the screen has moved on anyway.
+
+### The 🎯 row shows at rest, and the 🔴 row does not
+
+That asymmetry is the row's whole reason to exist. Between the click and the
+sentence — which can be minutes — something has to say the click was taken and is
+still being held; the green flash in the page is gone the moment he lets go of ⌘.
+
+It names the newest pick rather than only counting it: `×3` says three clicks
+landed, which he already believes. What he cannot check without a name is whether
+the third one caught the button or the div wrapped around it. `ElementPick.short`
+is the **tail** of the selector for the same reason the tail is what identifies
+it — the head is the page he is already looking at.
+
+Built as a row with a separate glyph label, like the recording row. Not for an
+animation (nothing pulses here) but because `measure()` is a font metric and both
+🎯 and `×` fall back to faces the monospaced metrics know nothing about: inline,
+the underestimate was ~2 characters, and AppKit ellipsized the count away.
+`glyphRowWidth` asks the label via `sizeToFit` instead of asking the font. The
+rows above tolerate the same error only because they never truncate.
 
 ## The selection is frozen for the whole dictation
 

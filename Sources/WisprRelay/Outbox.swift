@@ -33,12 +33,16 @@ enum Outbox {
     /// `screen` is the automatic capture of the display Victor was looking at
     /// when he started talking — offered as context to consult if the words need
     /// it, as opposed to `paths`, which are shots he deliberately took.
+    /// `elements` are the DOM nodes he ⌘-clicked in Chrome while this message was
+    /// being assembled: each one is a CSS selector plus what the thing said, so
+    /// "this button" in the transcript has something to resolve to.
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
                      paths: [String] = [],
                      screen: String? = nil,
-                     app: String? = nil) {
+                     app: String? = nil,
+                     elements: [[String: Any]] = []) {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
@@ -55,6 +59,7 @@ enum Outbox {
         if !paths.isEmpty { obj["paths"] = paths }
         if let screen = screen { obj["screen"] = screen }
         if let app = app, !app.isEmpty { obj["app"] = app }
+        if !elements.isEmpty { obj["elements"] = elements }
 
         queue.async {
             // JSONSerialization (never string interpolation): dictated text and

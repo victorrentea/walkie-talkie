@@ -47,6 +47,53 @@ from the moment you started talking (`📸 ×2 0:38`). The count says the
 shots landed; the times say *which* moments you caught, which is the thing you
 cannot reconstruct once the panel is gone.
 
+## Pointing at things in a web page
+
+"Make **this** button blue and move **that** panel" is a sentence an agent cannot
+act on. Hold **⌘** over a page in Chrome and the element under the cursor is
+outlined and named, DevTools-style; **⌘-click** it and its CSS selector joins the
+message you are about to dictate — the demonstrative arrives already resolved.
+
+Picks queue up between messages, so the natural order works: find the three
+things you want changed, *then* say what to do with them. The overlay grows a
+`🎯 ×2 div#cart > span.price` row while any are waiting, and the held prompt
+lists them with when each was taken:
+
+```
+↪ public Order placeOrder(Cart cart) {
+extract the tax calculation out of this method
+📸 ×2 0:38
+🎯 −0:08 main.content > button.buy-button
+🎯 0:21 div#cart > span.price
+```
+
+The negative stamp is not an error: `−0:08` means you pointed at that one eight
+seconds *before* you started talking.
+
+**A quick ⌘-click is still a quick ⌘-click.** Opening a link in a new tab is
+load-bearing, so the inspector arms only after ⌘ has been held on its own for
+400ms — longer than any shortcut, and longer than the hand takes to click. Press
+any other key and the hold is abandoned. Pause the relay and the whole thing
+switches off, which is the point of pausing.
+
+This half is a small **Chrome extension** in [`chrome-extension/`](chrome-extension/),
+and it needs loading once:
+
+> `chrome://extensions` → **Developer mode** on → **Load unpacked** → pick the
+> `chrome-extension` folder.
+
+It is an extension rather than the DevTools protocol because since Chrome 136
+`--remote-debugging-port` is refused on the default profile — reaching *your*
+browser, with your tabs and your logins, would mean relaunching it against a
+throwaway profile. It also puts the work in the only place where no coordinate
+maths is needed: inside the page, `elementFromPoint` and `getBoundingClientRect`
+are already in the coordinate system the outline is drawn in, at any zoom.
+
+The extension talks to the overlay over loopback only (`127.0.0.1:8917-8919`,
+first free port per relay session; it posts to all of them, so several sessions
+can share one browser). Its toolbar badge shows how many relays are listening,
+and with none listening it never arms at all.
+
 ## How it reaches the agent
 
 The overlay appends JSON lines to `~/.wispr-relay/outbox.jsonl`. Anything that
@@ -57,6 +104,10 @@ watches that file can consume them; there is no back-channel.
  "text":"extract the tax calculation out of this method",
  "selection":"public Order placeOrder(Cart cart) {","app":"com.microsoft.VSCode"}
 ```
+
+Elements picked in the browser ride in an `elements` array of
+`{path, tag, text, label, href, url, title, frame}`, in the order they were
+picked, so the first demonstrative in the sentence is the first entry.
 
 `kind` is `dictation` | `screenshot` | `session_end`. Every message carries the
 `session` it belongs to, so several overlays can share one queue without an agent
@@ -74,6 +125,8 @@ which ships the built binary, installs `/relay`, and watches the outbox.
 | start dictating | Red flash, screen captured, selection grabbed — all automatic |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
+| **hold ⌘ in Chrome** | Outlines and names the element under the cursor |
+| **⌘-click in Chrome** | Adds that element's selector to the message; the page never sees the click |
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |

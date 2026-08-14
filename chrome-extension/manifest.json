@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Wispr Relay Inspector",
+  "version": "1.0",
+  "description": "Hold ⌘ to outline the element under the cursor; ⌘-click hands its selector to the agent Wispr Relay is talking to.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inspect.js"],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "background": { "service_worker": "relay.js" },
+  "action": { "default_title": "Wispr Relay Inspector" },
+  "host_permissions": ["http://127.0.0.1/*"]
+}

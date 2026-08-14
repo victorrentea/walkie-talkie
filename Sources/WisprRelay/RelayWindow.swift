@@ -28,6 +28,18 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let recordRow = NSView()
     private let recordDot = NSTextField(labelWithString: "🔴")
     private let recordInfo = NSTextField(labelWithString: "")
+    /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
+    /// to — how many, and what the newest one was.
+    ///
+    /// Two labels and a row, exactly like the recording row above it. Not for the
+    /// animation (nothing pulses here) but for the geometry: an emoji measures
+    /// narrower in the monospaced font than it draws, so inline it stole a
+    /// character's worth of width and AppKit truncated the 🎯 itself away. Giving
+    /// the glyph its own measured box also lines this row's text up with the
+    /// recording row's, which is what makes the two read as one column.
+    private let pickRow = NSView()
+    private let pickGlyph = NSTextField(labelWithString: "🎯")
+    private let pickInfo = NSTextField(labelWithString: "")
 
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
@@ -46,6 +58,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// Shots this dictation is carrying — the automatic context capture included,
     /// since from where Victor sits it is simply the first picture taken.
     private var shotCount = 0
+    /// Elements ⌘-picked in Chrome, waiting on a sentence.
+    private var pickCount = 0
+    private var pickNewest: String?
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
@@ -118,6 +133,33 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private var recordText: String? {
         guard listening, !paused else { return nil }
         return "📸 ×\(shotCount) \(Self.shotHint)"
+    }
+
+    /// The picked-elements row, and **unlike the recording row it shows at rest**.
+    ///
+    /// That asymmetry is the whole point of the row. Pointing at things comes
+    /// before talking about them at least as often as during — he finds the three
+    /// bits of the page he wants changed, *then* says what to do with them — so
+    /// between the click and the sentence there has to be something on screen
+    /// saying the click was taken and is still being held. The green flash in the
+    /// page is gone the instant he lets go of ⌘; this is what remains.
+    ///
+    /// It names the newest one rather than only counting: `×3` says three clicks
+    /// landed, which he already believes. What he cannot check without a name is
+    /// whether the third one caught the button or the div wrapped around it.
+    ///
+    /// Hidden while paused, like everything else that would be a lie there: a
+    /// paused relay refuses picks outright.
+    private var pickText: String? {
+        guard pickCount > 0, !paused else { return nil }
+        guard let newest = pickNewest, !newest.isEmpty else { return "×\(pickCount)" }
+        return "×\(pickCount) \(Self.fit(newest, 34))"
+    }
+
+    /// Keep the tail, drop the head. A selector's last steps are the element; its
+    /// first steps are the page, which he is looking at.
+    private static func fit(_ s: String, _ limit: Int) -> String {
+        s.count <= limit ? s : "…" + String(s.suffix(limit - 1))
     }
 
     private var screenWidth: CGFloat {
@@ -212,6 +254,18 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         recordRow.addSubview(recordInfo)
         recordRow.isHidden = true
         root.addSubview(recordRow)
+
+        // Monospaced, like the recording row: what it carries is a CSS selector,
+        // and a proportional font makes `div.card > span.price` read as prose.
+        pickGlyph.font = .systemFont(ofSize: 11)
+        pickInfo.font = hintFont
+        pickInfo.textColor = .secondaryLabelColor
+        pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
+        pickInfo.maximumNumberOfLines = 1
+        pickRow.addSubview(pickGlyph)
+        pickRow.addSubview(pickInfo)
+        pickRow.isHidden = true
+        root.addSubview(pickRow)
 
         selectionLabel.font = .systemFont(ofSize: 11)
         selectionLabel.textColor = .secondaryLabelColor
@@ -442,9 +496,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
         let recordWidth = recordText.map { recordRowWidth($0) } ?? 0
+        let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
-        let natural = ceil(max(titleWidth + reserve, max(hintWidth, recordWidth))) + pad * 2
+        let natural = ceil(max(titleWidth + reserve, max(hintWidth, max(recordWidth, pickWidth)))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -485,6 +540,18 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             rows.append((recordRow, recordRowHeight))
         } else {
             recordRow.isHidden = true
+        }
+
+        // Under the recording row, above the selection: it belongs with the other
+        // things this message is carrying, and unlike them it is also there
+        // between messages, which is when he needs it most.
+        if let pick = pickText {
+            pickInfo.stringValue = pick
+            layoutPickRow(width: innerWidth)
+            pickRow.isHidden = false
+            rows.append((pickRow, pickRowHeight))
+        } else {
+            pickRow.isHidden = true
         }
 
         if let selection = selection {
@@ -575,6 +642,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     // MARK: The recording row
 
     private let recordRowHeight: CGFloat = 17
+    /// Same as the recording row: the two are the same kind of fact about the
+    /// message being assembled, and a row that stood a pixel taller than its
+    /// neighbour would read as a different kind of thing.
+    private let pickRowHeight: CGFloat = 17
     /// Between the dot and the text. Wide enough that the pulsing dot reads as its
     /// own indicator rather than as punctuation in front of the count.
     private let recordDotGap: CGFloat = 5
@@ -594,6 +665,34 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         recordInfo.frame = NSRect(x: dotWidth + recordDotGap, y: 0,
                                   width: max(0, width - dotWidth - recordDotGap),
                                   height: recordRowHeight)
+    }
+
+    private var pickGlyphWidth: CGFloat { ceil(measure(pickGlyph.stringValue, font: pickGlyph.font!)) }
+
+    /// Same shape as `recordRowWidth`, so the ⌘-pick row and the recording row
+    /// can never disagree about where their text starts — but it asks the **label**
+    /// how wide the text is instead of asking the font.
+    ///
+    /// `measure` is a font metric, and this row is the one place it is not enough:
+    /// `×` is not in the monospaced face and neither is the 🎯, so both fall back
+    /// to fonts those metrics know nothing about. The result was a couple of
+    /// characters of underestimate, which is exactly enough for AppKit to
+    /// ellipsize — and since the tail is the part worth keeping, what it ate was
+    /// the count at the front. The rows above tolerate the same error only because
+    /// they do not truncate at all.
+    private func glyphRowWidth(_ text: String) -> CGFloat {
+        pickInfo.stringValue = text
+        pickInfo.sizeToFit()
+        return pickGlyphWidth + recordDotGap + ceil(pickInfo.frame.width)
+    }
+
+    private func layoutPickRow(width: CGFloat) {
+        let glyphWidth = pickGlyphWidth
+        pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
+        pickGlyph.frame = NSRect(x: 0, y: 1, width: glyphWidth, height: 15)
+        pickInfo.frame = NSRect(x: glyphWidth + recordDotGap, y: 0,
+                                width: max(0, width - glyphWidth - recordDotGap),
+                                height: pickRowHeight)
     }
 
     /// At rest there is no window — only the text. A blurred, rounded, shadowed
@@ -618,16 +717,23 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // *layer* shadow, since the string-attribute route doesn't render here.
         titleLabel.wantsLayer = true
         recordInfo.wantsLayer = true
+        pickInfo.wantsLayer = true
         if bare {
             titleLabel.shadow = Self.halo()
             // Same reasoning as the title, and the recording row now spends its
             // whole life on the chip, over his editor rather than over the blur.
             recordInfo.shadow = Self.halo()
             recordInfo.textColor = .white
+            // The picked row spends even more of its life on the chip than the
+            // recording one: it is up between messages, which is most of the day.
+            pickInfo.shadow = Self.halo()
+            pickInfo.textColor = .white
         } else {
             titleLabel.shadow = nil
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
+            pickInfo.shadow = nil
+            pickInfo.textColor = .secondaryLabelColor
         }
     }
 
@@ -780,6 +886,19 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         guard shotCount != count else { return }
         shotCount = count
         layoutContent()          // the number can widen the row
+    }
+
+    /// How many elements are ⌘-picked and waiting, and what the newest one was.
+    ///
+    /// No `reposition()` here, unlike `setListening`: a pick happens while his
+    /// hand is in Chrome, and yanking the chip back under the cursor mid-gesture
+    /// would move something in the corner of his eye for no reason. The row
+    /// simply appears where the chip already is.
+    func setPicks(count: Int, newest: String?) {
+        guard pickCount != count || pickNewest != newest else { return }
+        pickCount = count
+        pickNewest = newest
+        layoutContent()
     }
 
     /// Show the prompt on its way to the agent, whole, so Victor can see exactly
