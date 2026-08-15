@@ -95,17 +95,37 @@
     return steps.join(' > ');
   }
 
+  /// The address of the **page**, not of the frame the element happens to sit in.
+  /// Inside a same-origin iframe those differ, and it is the page that answers
+  /// "where did this come from" — the frame's own URL still travels, in `frame`.
+  /// Cross-origin, the top document is unreadable and the frame is the best true
+  /// answer there is.
+  function pageURL() {
+    try { return window.top.location.href; } catch { return location.href; }
+  }
+
+  /// The words in the element. `innerText` is empty for form controls — their
+  /// text is the `value` the user typed or chose — and empty is exactly the case
+  /// where a pick arrives as a bare selector with nothing to recognise it by.
+  function elementText(el) {
+    const rendered = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    if (rendered) return rendered.slice(0, 160);
+    if (el.localName === 'select') {
+      return (el.selectedOptions?.[0]?.text || '').trim().slice(0, 160);
+    }
+    return (typeof el.value === 'string' ? el.value : '').trim().replace(/\s+/g, ' ').slice(0, 160);
+  }
+
   /// What he would have called this thing out loud.
   function describe(el) {
-    const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
     return {
       path: cssPath(el),
       tag: el.localName,
-      text: text ? text.slice(0, 160) : '',
+      text: elementText(el),
       label: el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') ||
              el.getAttribute('placeholder') || el.getAttribute('name') || '',
       href: el.getAttribute('href') || el.getAttribute('src') || '',
-      url: location.href,
+      url: pageURL(),
       title: document.title,
       // Only when it is not the top document — otherwise it is the same as `url`
       // and says nothing.
