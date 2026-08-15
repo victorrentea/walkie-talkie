@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 /// The terminal a dictation is typed into, once Victor has pointed the relay at
 /// one — and the machinery that puts the words there.
@@ -67,6 +68,15 @@ final class TerminalBinding {
         /// in the binding it moves — which is exactly why it is worth showing:
         /// a title that is still changing is a session that is still working.
         var title: String?
+        /// Where that window sat on screen **at the instant of binding**, in
+        /// Cocoa coordinates — the starting rectangle for the flight the overlay
+        /// draws to say which window was captured.
+        ///
+        /// Deliberately not refreshed with the title: it is read once, used once,
+        /// within a frame or two of the bind, and a window frame goes stale the
+        /// moment Victor drags anything. Nothing downstream may treat it as the
+        /// current position of the target.
+        let sourceFrame: CGRect?
         let boundAt: Date
 
         /// Whether delivery to this target can be checked before it happens.
@@ -119,15 +129,18 @@ final class TerminalBinding {
         } else {
             // No scripting surface worth the name: VS Code and IntelliJ both
             // host their terminal inside a window nothing outside can address —
-            // and with it goes any way to read what that terminal is calling
-            // itself, so these targets carry no title.
+            // so the label stays the app's name and the window's own title
+            // stands in for the `folder@branch` a tty would have given.
+            let window = Self.focusedWindow(pid: app.processIdentifier)
             bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
-                           label: name, address: name, title: nil, boundAt: Date())
+                           label: name, address: name, title: window.title,
+                           sourceFrame: window.frame, boundAt: Date())
         }
 
         guard let bound = bound else { return nil }
         lock.lock(); current = bound; lock.unlock()
-        Log.info("🎯 bound to \(bound.label) (\(bound.address))")
+        let where_ = bound.sourceFrame.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" } ?? "frame unknown"
+        Log.info("📍 bound to \(bound.label) (\(bound.address)) — window at \(where_)")
         return bound
     }
 
@@ -143,16 +156,22 @@ final class TerminalBinding {
         // tmux first: the tty is the *client's*, and everything typed at it goes
         // to whichever pane happens to be active. Pinning the pane at bind time
         // is the only way the binding means what Victor pointed at.
+        // Both terminal cases live in a Terminal.app window, so the rectangle
+        // the overlay flies from is found the same way for either.
+        let frame = Self.terminalWindowFrame(tty: tty)
+
         if let pane = Self.tmuxPane(clientTTY: tty) {
             let label = Self.tmuxPaneLabel(pane) ?? fallbackName
             return Target(handle: .tmux(pane: pane, tty: tty), label: label,
-                          address: pane, title: Self.tmuxPaneTitle(pane), boundAt: Date())
+                          address: pane, title: Self.tmuxPaneTitle(pane),
+                          sourceFrame: frame, boundAt: Date())
         }
 
         let short = (tty as NSString).lastPathComponent
         let label = Self.sessionLabel(onTTY: tty) ?? fallbackName
         return Target(handle: .terminalApp(tty: tty), label: label,
-                      address: short, title: front.title, boundAt: Date())
+                      address: short, title: front.title,
+                      sourceFrame: frame, boundAt: Date())
     }
 
     /// Re-read what the bound terminal is calling itself.
@@ -168,7 +187,10 @@ final class TerminalBinding {
         switch existing.handle {
         case .terminalApp(let tty): fresh = Self.title(forTTY: tty)
         case .tmux(let pane, _): fresh = Self.tmuxPaneTitle(pane)
-        case .keystroke: return nil          // nothing to ask
+        // An IDE retitles its window as the open file changes, which is the same
+        // kind of movement an agent's terminal title has — and this one costs an
+        // AX read rather than a subprocess.
+        case .keystroke(let pid, _): fresh = Self.focusedWindow(pid: pid).title
         }
         guard fresh != existing.title else { return nil }
 
@@ -186,7 +208,7 @@ final class TerminalBinding {
         let had = current
         current = nil
         lock.unlock()
-        if let had = had { Log.info("🎯 unbound from \(had.label) (\(had.address))") }
+        if let had = had { Log.info("📍 unbound from \(had.label) (\(had.address))") }
     }
 
     // MARK: - Delivery
@@ -297,6 +319,90 @@ final class TerminalBinding {
         end tell
         """
         return clean(osascript(script))
+    }
+
+    // MARK: - Where the bound window is
+
+    /// The frame of the Terminal.app window showing this tty.
+    ///
+    /// The **window**, not the tab: a tab has no geometry of its own, and the
+    /// window is what Victor can actually recognise on screen — which is the
+    /// whole job of the rectangle drawn from it.
+    private static func terminalWindowFrame(tty: String) -> CGRect? {
+        let script = """
+        tell application "Terminal"
+            repeat with w in windows
+                try
+                    repeat with t in tabs of w
+                        if tty of t is "\(escape(tty))" then
+                            set b to bounds of w
+                            return ((item 1 of b) as string) & " " & ((item 2 of b) as string) & ¬
+                                   " " & ((item 3 of b) as string) & " " & ((item 4 of b) as string)
+                        end if
+                    end repeat
+                end try
+            end repeat
+            return ""
+        end tell
+        """
+        guard let out = osascript(script) else { return nil }
+        let n = out.split(separator: " ").compactMap { Double($0) }
+        guard n.count == 4 else { return nil }
+        // AppleScript gives {left, top, right, bottom}.
+        return cocoaRect(topLeft: CGPoint(x: n[0], y: n[1]),
+                         size: CGSize(width: n[2] - n[0], height: n[3] - n[1]))
+    }
+
+    /// The focused window of an app with no scripting surface — VS Code,
+    /// IntelliJ — read through Accessibility, which the relay already holds a
+    /// grant for.
+    ///
+    /// **The title is the closest thing to a working directory these targets
+    /// have.** A Terminal tab has a tty, and from a tty the foreground process's
+    /// cwd and its git branch follow; a terminal panel inside an IDE has
+    /// neither, and nothing outside the app can even say which of its panels
+    /// owns the caret. Guessing — picking the app's most recent child shell —
+    /// would put a confidently wrong repo on the chip, which is worse than a
+    /// vaguer true one. The window title is what the app itself says it is
+    /// showing, and for both IDEs that begins with the project.
+    private static func focusedWindow(pid: pid_t) -> (frame: CGRect?, title: String?) {
+        let app = AXUIElementCreateApplication(pid)
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let window = windowRef, CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return (nil, nil) }
+        let element = unsafeBitCast(window, to: AXUIElement.self)
+
+        var titleRef: CFTypeRef?
+        let title = AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleRef) == .success
+            ? clean(titleRef as? String) : nil
+
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success,
+              let positionValue = positionRef, let sizeValue = sizeRef,
+              CFGetTypeID(positionValue) == AXValueGetTypeID(), CFGetTypeID(sizeValue) == AXValueGetTypeID()
+        else { return (nil, title) }
+
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(unsafeBitCast(positionValue, to: AXValue.self), .cgPoint, &origin),
+              AXValueGetValue(unsafeBitCast(sizeValue, to: AXValue.self), .cgSize, &size)
+        else { return (nil, title) }
+        return (cocoaRect(topLeft: origin, size: size), title)
+    }
+
+    /// **AppleScript and Accessibility both measure y downward from the top of
+    /// the primary display; Cocoa measures it upward from that display's
+    /// bottom.** They agree only on the primary screen, which is exactly why
+    /// getting this wrong stays invisible until a second monitor is plugged in.
+    private static func cocoaRect(topLeft: CGPoint, size: CGSize) -> CGRect? {
+        guard size.width > 0, size.height > 0,
+              let primary = NSScreen.screens.first else { return nil }
+        return CGRect(x: topLeft.x,
+                      y: primary.frame.maxY - topLeft.y - size.height,
+                      width: size.width, height: size.height)
     }
 
     /// An empty or whitespace-only title is not a title, and it must not push a

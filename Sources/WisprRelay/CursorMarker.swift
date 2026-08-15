@@ -84,6 +84,32 @@ enum CursorMarker {
         try? jpeg.write(to: file)
     }
 
+    /// The same mark, rendered as a layer to put **on screen** rather than into
+    /// a file.
+    ///
+    /// It goes through `paint` like the burned-in one, so the mark Victor sees
+    /// flash on his desktop and the mark he finds in the picture a minute later
+    /// are not merely similar — they are one drawing, and cannot drift apart the
+    /// way two implementations of "a red target" always eventually do.
+    ///
+    /// `box` is in points here, not a fraction: this one is drawn over the real
+    /// screen at a real size, and nothing downstream is going to resize it.
+    static func makeLayer(box: CGFloat) -> CALayer {
+        // Room around the mark for the shadow and for the zoom-in it arrives on,
+        // which would otherwise be clipped by its own layer's bounds.
+        let side = box * 1.6
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            paint(in: ctx, at: CGPoint(x: side / 2, y: side / 2), box: box)
+            return true
+        }
+        let layer = CALayer()
+        layer.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        layer.contents = image
+        layer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        return layer
+    }
+
     private static func paint(in ctx: CGContext, at centre: CGPoint, box: CGFloat) {
         let stroke = box * strokeRatio
         let radius = box / 2 - stroke

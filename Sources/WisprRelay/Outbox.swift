@@ -13,7 +13,40 @@ enum Outbox {
         .appendingPathComponent(".wispr-relay")
 
     static var outboxURL = home.appendingPathComponent("outbox.jsonl")
-    static var shotsDir  = home.appendingPathComponent("shots")
+
+    /// **Screenshots live in Caches, not next to the outbox, and not in `/tmp`.**
+    ///
+    /// They are a staging area, never an archive: each retina JPG is a megabyte
+    /// or two, Victor dictates all day, and what any of them is *for* is over
+    /// within the turn that reads it. Caches is the one folder that emptying the
+    /// Trash, Storage Management and every cleaner tool actually reach, and macOS
+    /// may purge it under disk pressure — all of which is welcome here. `/tmp`
+    /// only clears on reboot and on a 3-day sweep, neither of which is "when the
+    /// disk is full". It is the same call `ScreenshotManager` makes in Victor
+    /// Addons, for the same reason.
+    ///
+    /// The **outbox stays where it is**: it is the log of what Victor said, the
+    /// record that outlives the session, and a log the system may delete under
+    /// pressure is not a log.
+    static let cacheRoot = FileManager.default
+        .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("ro.victorrentea.wispr-relay/shots")
+
+    /// One folder per relay session, stamped with when it started.
+    ///
+    /// Shots are named by **where in the dictation** they were taken, so two
+    /// sessions produce `shot-00:00(…)` over and over; without a folder between
+    /// them the second run would overwrite the first's pictures — including ones
+    /// an outbox line still points at. The stamp is taken once, at launch, so a
+    /// session's shots stay together however long it runs.
+    static let sessionStamp: String = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        return f.string(from: Date())
+    }()
+
+    static var shotsDir = cacheRoot.appendingPathComponent(sessionStamp)
 
     private static let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.outbox")
 

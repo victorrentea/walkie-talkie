@@ -20,18 +20,20 @@ enum ScreenCapture {
     /// this runs after a clipboard probe that sleeps up to 400ms — by then the
     /// hand has moved on, and the whole point of recording it is to say what he
     /// was pointing at when he pressed.
-    static func grab(cursor: NSPoint? = nil) -> String? {
+    ///
+    /// `offset` is **where in the dictation** this shot was taken, in seconds
+    /// from the moment Victor started talking — `0` for the automatic context
+    /// capture, which he took by starting to talk. nil for a shot with no
+    /// dictation around it (bare F3), where there is no clock for it to be an
+    /// offset into and the name falls back to a timestamp.
+    static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil) -> String? {
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
-        let stamp = DateFormatter()
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
         let spot = cursorFraction(mouse: mouse, screen: screen)
         // Provisional: the pixel reading in the final name is measured against the
         // frame `screencapture` actually produces, which does not exist yet.
-        let name = "shot-\(stamp.string(from: Date())).jpg"
-        let file = Outbox.shotsDir.appendingPathComponent(name)
+        let file = Outbox.shotsDir.appendingPathComponent("shot-\(stem(offset)).jpg")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -48,52 +50,111 @@ enum ScreenCapture {
             return nil
         }
         if let spot = spot { CursorMarker.draw(at: spot, onJPEGAt: file) }
-        let final = tagCursor(spot, on: file)
+        let final = tagCursor(spot, on: file, offset: offset)
         prune()
         return final.path
     }
 
-    /// Rename the shot to carry the pointer position **in pixels**:
-    /// `shot-<stamp>-cursor-at-1034x1466-of-3024x1890.jpg` — the cursor sat at
-    /// x=1034, y=1466 of a 3024×1890 frame, **top-left origin** like the image.
+    /// **`00:00`, `01:23` — where in the sentence.** A dictation's shots are read
+    /// as a set, and what makes one findable among them is not what o'clock it
+    /// was but *how far into what he was saying* it was taken: `📸 ×4` is four
+    /// indistinguishable files, `0:00 · 0:38 · 1:52` is a table of contents. The
+    /// prompt panel already lists them this way (`AppDelegate.shotLine`), and
+    /// this is the same reading put where the agent meets it — in the path.
+    ///
+    /// A shot with no dictation around it keeps a timestamp, because "elapsed
+    /// since the start" of nothing is not a fact.
+    ///
+    /// NB the colon is legal in a POSIX filename on APFS and everything that
+    /// handles these paths is POSIX — but **the Finder renders it as `/`**
+    /// (`shot-00/00(…)`), the old HFS separator swap, so a folder Victor opens
+    /// by hand will read slightly differently from what the agent sees.
+    private static func stem(_ offset: TimeInterval?) -> String {
+        guard let offset = offset else {
+            let stamp = DateFormatter()
+            stamp.locale = Locale(identifier: "en_US_POSIX")
+            stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+            return stamp.string(from: Date())
+        }
+        let seconds = max(0, Int(offset.rounded()))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    /// Rename the shot to its final form:
+    /// `shot-01:23(mouse-at-1034x1466px).jpg` — taken 1m23s into the dictation,
+    /// with the pointer at x=1034, y=1466 **in the pixels of this image**,
+    /// top-left origin like the image itself.
     ///
     /// It rides in the name and not in the outbox JSON because the name is what
-    /// the agent already has in front of it: the path is in `paths`, so the
-    /// pointer arrives with the picture, and nothing downstream has to learn a
-    /// new field to benefit from it. He points at things while he talks ("this
-    /// button", "that line") and the sentence alone cannot say which.
+    /// the agent already has in front of it: the path is in `paths`, so both the
+    /// moment and the pointer arrive with the picture, and nothing downstream
+    /// has to learn a new field to benefit from them. He points at things while
+    /// he talks ("this button", "that line") and the sentence alone cannot say
+    /// which.
     ///
-    /// **Pixels, and the frame they are pixels of.** The reading used to be a
-    /// percentage pair (`-cursor-34.2x71.8pct`) on the argument that the agent
-    /// reads these through a tool that downsamples them, so a bare pixel stops
-    /// pointing at the right thing the moment the picture is resized. That
-    /// argument is about the *bare* pixel, and naming the frame answers it: the
-    /// pair and its denominator scale together, so `1034x1466-of-3024x1890`
-    /// survives any resize a percentage would have survived — and it is the form
-    /// Victor can actually check against a screen he is looking at, which
-    /// `34.2%` never was.
+    /// **Pixels.** The reading was a percentage pair (`-cursor-34.2x71.8pct`)
+    /// because the agent reads these through a tool that downsamples them, so a
+    /// pixel stops pointing at the right thing once the picture is resized. It
+    /// then briefly carried its own denominator (`-of-3024x1890`) to answer
+    /// that. Victor dropped the denominator: the name is read by him as often as
+    /// by an agent, and a pair of raw pixels is the form he can check against a
+    /// screen. The consequence is real and accepted — a downsampled frame needs
+    /// its own dimensions read back before these numbers mean anything, which
+    /// anything looking at the image already has.
     ///
     /// Measured against the frame `screencapture` really produced rather than
     /// computed from the screen's backing scale: mirrored displays, HiDPI modes
-    /// and a sleeping external monitor all make that multiplication a guess, and
-    /// a guessed denominator is worse than no denominator at all.
-    ///
-    /// Renaming rather than naming up front is what buys that: the file has to
-    /// exist before it can be measured. On failure the provisional name stands —
+    /// and a sleeping external monitor all make that multiplication a guess.
+    /// Renaming rather than naming up front is what buys that — the file has to
+    /// exist before it can be measured. On failure the provisional name stands:
     /// a shot with no pointer in its name is still a shot.
-    private static func tagCursor(_ spot: CGPoint?, on file: URL) -> URL {
+    private static func tagCursor(_ spot: CGPoint?, on file: URL, offset: TimeInterval?) -> URL {
         guard let spot = spot, let size = pixelSize(of: file) else { return file }
         let x = Int((spot.x * size.width).rounded())
         let y = Int((spot.y * size.height).rounded())
-        let base = file.deletingPathExtension().lastPathComponent
-        let tagged = file.deletingLastPathComponent().appendingPathComponent(
-            "\(base)-cursor-at-\(x)x\(y)-of-\(Int(size.width))x\(Int(size.height)).jpg")
+        let tagged = unique(file.deletingLastPathComponent()
+            .appendingPathComponent("shot-\(stem(offset))(mouse-at-\(x)x\(y)px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged
         } catch {
-            Log.error("could not tag the cursor into \(base): \(error)")
+            Log.error("could not name \(tagged.lastPathComponent): \(error)")
             return file
+        }
+    }
+
+    /// A `-2`, `-3`… before the extension if that name is taken.
+    ///
+    /// The per-session folder keeps one run's shots away from another's, and the
+    /// pointer position makes two shots at the same offset differ in almost every
+    /// real case — but "almost" is doing work there: dictate twice without moving
+    /// the mouse and both context shots are `shot-00:00(mouse-at-800x900px)`.
+    /// Overwriting would destroy a picture an outbox line still points at, which
+    /// is the same trap `ScreenshotManager.uniqueURL` exists for in Victor Addons.
+    private static func unique(_ url: URL) -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else { return url }
+        let stem = url.deletingPathExtension().lastPathComponent
+        let dir = url.deletingLastPathComponent()
+        for n in 2...99 {
+            let candidate = dir.appendingPathComponent("\(stem)-\(n).jpg")
+            if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return url
+    }
+
+    /// A session folder with nothing left in it says a session happened and
+    /// tells you nothing about it. The current one is never touched: it is empty
+    /// for the whole time before the first dictation.
+    private static func dropEmptySessions() {
+        let fm = FileManager.default
+        let sessions = (try? fm.contentsOfDirectory(at: Outbox.cacheRoot,
+                                                    includingPropertiesForKeys: nil,
+                                                    options: [.skipsHiddenFiles])) ?? []
+        for session in sessions where session.lastPathComponent != Outbox.sessionStamp {
+            let contents = (try? fm.contentsOfDirectory(at: session,
+                                                        includingPropertiesForKeys: nil,
+                                                        options: [.skipsHiddenFiles])) ?? []
+            if contents.isEmpty { try? fm.removeItem(at: session) }
         }
     }
 
@@ -124,15 +185,31 @@ enum ScreenCapture {
     /// One screenshot per dictation adds up fast — Victor dictates all day, and
     /// each retina JPG is a megabyte or two. Keep the most recent `keepNewest`
     /// and drop the rest, so the folder can't quietly eat the disk.
+    ///
+    /// Being in Caches means the system may reclaim these anyway; that is a
+    /// backstop for a full disk, not a policy, and it fires far too late to be
+    /// the only thing bounding a folder that grows all day.
     private static let keepNewest = 300
 
+    /// Counted **across every session folder**, not within the current one.
+    /// A relay session can be five minutes long, so a per-folder cap would keep
+    /// 300 shots per restart and bound nothing at all. Session folders left empty
+    /// by the sweep are removed with their contents — an empty stamp is litter,
+    /// and the folders are how yesterday's shots are found until they go.
     private static func prune() {
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: Outbox.shotsDir,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-        let jpgs = files.filter { $0.pathExtension.lowercased() == "jpg" }
+        let fm = FileManager.default
+        let sessions = (try? fm.contentsOfDirectory(at: Outbox.cacheRoot,
+                                                    includingPropertiesForKeys: nil,
+                                                    options: [.skipsHiddenFiles])) ?? []
+        var jpgs: [URL] = []
+        for session in sessions {
+            let files = (try? fm.contentsOfDirectory(
+                at: session,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles])) ?? []
+            jpgs += files.filter { $0.pathExtension.lowercased() == "jpg" }
+        }
+        defer { dropEmptySessions() }
         guard jpgs.count > keepNewest else { return }
         let sorted = jpgs.sorted { lhs, rhs in
             let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast

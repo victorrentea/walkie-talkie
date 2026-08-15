@@ -140,6 +140,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
         // Enters exactly where `wispr.onTranscript` does, so what it exercises
         // is the real path and not a shortcut through it.
+        picker.onTestDictationStart = { [weak self] in
+            guard let self = self else { return }
+            self.captureContext()
+            DispatchQueue.main.async {
+                self.listening = true
+                self.syncBorrowedGestures()
+                self.overlay.setListening(true)
+                self.publishShotCount()
+            }
+        }
         picker.onTestDictation = { [weak self] text in
             self?.send(kind: "dictation", text: text, app: "test")
         }
@@ -303,7 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Those take the best part of a second between them, and a flash that
         // lands after the work is a flash that no longer means "now": it was
         // firing long after the frame it confirms had already been taken.
-        if !alreadyOpen { CaptureFlash.announce() }
+        if !alreadyOpen { CaptureFlash.announce(cursor: cursor) }
 
         armOrphanFlush()
 
@@ -315,7 +325,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.stashSelection()
 
             guard !alreadyOpen else { return }
-            let path = ScreenCapture.grab(cursor: cursor)
+            // 0:00 by definition — he took this one by starting to talk.
+            let path = ScreenCapture.grab(cursor: cursor, offset: 0)
             self.stateLock.lock()
             self.pendingScreen = path
             self.contextShotPending = false
@@ -425,12 +436,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.overlay.setBound(label: bound.label, title: bound.title, guarded: bound.isGuarded)
+            self.overlay.setBound(label: bound.label, title: bound.title)
+            // The rectangle flies from the window that was captured to the
+            // cursor, which is where the chip lives — the one thing that
+            // connects the terminal he pressed at to the label that appears next
+            // to his hand.
+            if let frame = bound.sourceFrame { BindFlight.fly(from: frame) }
             // The flash names the **address**, which the chip then drops: this is
             // the one moment the answer to "did it grab the right tab?" is worth
             // a panel, and `ttys004` is what settles it. Afterwards the chip's
             // job is to say which session, not which device file.
-            self.overlay.flash("🎯 \(bound.label) · \(bound.address)", duration: 3)
+            //
+            // It is also where the shell guard's absence is reported, now that
+            // the chip no longer distinguishes ⌨️ from 🎯: binding is the moment
+            // that fact can still change what Victor does about it.
+            let unguarded = bound.isGuarded ? "" : " — no shell guard"
+            self.overlay.flash("📍 \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
         }
         return Self.describe(bound)
     }
@@ -438,8 +459,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func unbindTerminal() {
         terminal.unbind()
         DispatchQueue.main.async { [weak self] in
-            self?.overlay.setBound(label: nil, guarded: true)
-            self?.overlay.flash("🎯 unbound — back to the outbox", duration: 3)
+            self?.overlay.setBound(label: nil)
+            self?.overlay.flash("📍 unbound — back to the outbox", duration: 3)
         }
     }
 
@@ -452,8 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self, let updated = self.terminal.refreshTitle() else { return }
             DispatchQueue.main.async {
-                self.overlay.setBound(label: updated.label, title: updated.title,
-                                      guarded: updated.isGuarded)
+                self.overlay.setBound(label: updated.label, title: updated.title)
             }
         }
     }
@@ -496,8 +516,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case .targetGone(let what):
             Log.error("⌨️ \(what) — unbound")
-            overlay.setBound(label: nil, guarded: true)
-            overlay.flash("🎯 \(what) — unbound", duration: 6)
+            overlay.setBound(label: nil)
+            overlay.flash("📍 \(what) — unbound", duration: 6)
         case .wouldRunAsShell(let shell):
             Log.error("⛔️ \(shell) is at the prompt — refused, nothing sent")
             // The one refusal in the whole app, and it is worth six seconds of
@@ -591,11 +611,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let takenAt = Date()
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
-        CaptureFlash.announce()
+        CaptureFlash.announce(cursor: cursor)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            guard let path = ScreenCapture.grab(cursor: cursor) else {
+
+            // Where in the sentence this is, read **before** the capture: the
+            // name is built from it, and a dictation that ends while
+            // `screencapture` runs would otherwise turn a 1:52 into a timestamp.
+            self.stateLock.lock()
+            let openNow = self.dictationInFlight
+            let startedAt = self.dictationStartedAt
+            self.stateLock.unlock()
+            let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
+
+            guard let path = ScreenCapture.grab(cursor: cursor, offset: offset) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }

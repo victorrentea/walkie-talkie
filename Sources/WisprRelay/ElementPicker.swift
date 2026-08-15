@@ -117,6 +117,9 @@ final class ElementPicker {
     /// changing anything.
     var describeTarget: (() -> [String: Any]?)?
 
+    /// Open a dictation the way Wispr starting to listen does.
+    var onTestDictationStart: (() -> Void)?
+
     /// A fabricated transcript, entering where a real one does.
     var onTestDictation: ((String) -> Void)?
 
@@ -260,6 +263,14 @@ final class ElementPicker {
         // this app that can type into a live session the one part nobody can
         // test at their desk. It enters at exactly the point a real transcript
         // does, so a pass here is a pass for the real thing.
+        // Open a dictation without Wispr — the other half of the pair below.
+        // Shots are named by their offset into the dictation, and there is no
+        // offset until something has started one, so without this the whole
+        // naming scheme is only exercisable by talking.
+        case ("POST", "/test/dictation/start"):
+            onTestDictationStart?()
+            respond(conn, 200, ["ok": true, "listening": true])
+
         case ("POST", "/test/dictation"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             let text = (body?["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)

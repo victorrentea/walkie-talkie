@@ -84,15 +84,106 @@ enum CaptureFlash {
         }
     }
 
-    /// Fire the vignette now, on the screen under the cursor.
+    /// Fire the vignette now, and drop a target on the spot the pointer was
+    /// standing when the shutter went.
+    ///
+    /// **The border says what was captured; the reticle says where he was
+    /// pointing while he said it.** Every shot the relay takes already carries
+    /// that reading twice — burned into the picture for Victor, and in the file
+    /// name for the agent — and both of those are things you find *afterwards*.
+    /// This is the same fact at the only moment it can still be corrected: if
+    /// the target lands somewhere he did not mean, the sentence is still being
+    /// spoken and he can point again with F3.
+    ///
+    /// It is the mark Victor Addons drops after every ⌃P, and deliberately so —
+    /// that desktop already means "here" by it, so there is nothing to learn.
+    ///
+    /// `cursor` is where the gesture happened, passed in for the same reason
+    /// `ScreenCapture.grab` takes it: this runs a clipboard probe and a
+    /// subprocess ahead of the capture, and by the time anything reads
+    /// `NSEvent.mouseLocation` again the hand has moved on.
     ///
     /// Synchronous when already on the main thread. Callers use this *before*
     /// their slow work (AX probe, screencapture) precisely so the panel is on
     /// screen first; an unconditional async hop would queue the flash behind that
     /// work and reintroduce the lag it exists to remove.
-    static func announce() {
-        let show = { if let screen = screenUnderCursor() { flash(on: screen) } }
+    static func announce(cursor: NSPoint? = nil) {
+        let point = cursor ?? NSEvent.mouseLocation
+        let show = {
+            if let screen = screen(containing: point) { flash(on: screen) }
+            markCursor(at: point)
+        }
         if Thread.isMainThread { show() } else { DispatchQueue.main.async(execute: show) }
+    }
+
+    /// The red target, on screen, at `point` in global Cocoa coordinates.
+    ///
+    /// The animation is Victor Addons' `ScreenCaptureFlash.markCursor`, values
+    /// included: it lands at **1.3× and settles to 0.9× over 0.35s**, so it reads
+    /// as a scope being brought down onto the spot rather than a badge appearing
+    /// beside one, and what stays behind is the smaller, quieter mark. It is at
+    /// **80% from the first frame** with the only fade in its last quarter — a
+    /// mark that fades *in* asks to be watched arriving, and this one has to be
+    /// already there when the eye gets to it.
+    ///
+    /// `sharingType = .none`, like the vignette: the relay photographs the
+    /// screen milliseconds after this appears, and the confirmation of a capture
+    /// must never be inside the capture it confirms.
+    static func markCursor(at point: NSPoint, duration: CFTimeInterval = 2.0) {
+        let reticle = CursorMarker.makeLayer(box: reticleBox)
+        let side = reticle.bounds.width
+        let frame = NSRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)
+
+        let panel = NSPanel(contentRect: frame,
+                            styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered,
+                            defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.sharingType = .none
+
+        let view = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        view.wantsLayer = true
+        reticle.position = CGPoint(x: side / 2, y: side / 2)
+        view.layer?.addSublayer(reticle)
+
+        panel.contentView = view
+        panel.setFrame(frame, display: true)
+        panel.orderFrontRegardless()
+        activePanels.append(panel)
+
+        reticle.transform = CATransform3DMakeScale(0.9, 0.9, 1)   // the resting size
+        let zoom = CABasicAnimation(keyPath: "transform.scale")
+        zoom.fromValue = 1.3
+        zoom.toValue = 0.9
+        zoom.duration = 0.35
+        zoom.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        reticle.add(zoom, forKey: "zoom")
+
+        let life = CAKeyframeAnimation(keyPath: "opacity")
+        life.values = [0.8, 0.8, 0.0]
+        life.keyTimes = [0.0, 0.75, 1.0]
+        life.duration = duration
+        life.fillMode = .forwards
+        life.isRemovedOnCompletion = false
+        view.layer?.add(life, forKey: "life")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            panel.orderOut(nil)
+            activePanels.removeAll { $0 === panel }
+        }
+    }
+
+    /// Roughly what the Addons reticle covers on his display — that one is
+    /// `makeSniperReticle(scale: 1.25)` over a 65pt base.
+    private static let reticleBox: CGFloat = 81
+
+    private static func screen(containing point: NSPoint) -> NSScreen? {
+        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main
     }
 
     /// The screen the cursor is on — the one that was just captured.

@@ -75,8 +75,10 @@ appears in `ps`, and guessing again every release. It fails **closed**: a target
 that cannot be interrogated counts as a shell.
 
 `.keystroke` targets cannot be guarded at all — nothing outside VS Code or
-IntelliJ can say which pane owns the caret, let alone what runs in it — which is
-the entire reason the chip marks them ⌨️ instead of 🎯.
+IntelliJ can say which pane owns the caret, let alone what runs in it. The chip
+does not distinguish them (every bound target is 📍); the bind flash says
+`— no shell guard` and `GET /target` carries `guarded`, which is where the fact
+can still change what Victor does about it.
 
 ### tmux: `display-message -c` does not refuse
 
@@ -101,10 +103,50 @@ everything with something to `Read`. `[selected: …]`, `[look at: …]`,
 said in one line — and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
+### The bind flight
+
+Binding draws a **translucent blue rectangle over the window it just captured**,
+which then shrinks and flies to the cursor over 2s, arriving under it at 5% and
+fading out (`BindFlight.swift`).
+
+⌘⌃D is pressed while looking at a terminal and answered by a chip that lives next
+to the *cursor* — two places, with nothing connecting them. A blink over the
+window would confirm the capture and leave the chip unexplained; a blink at the
+cursor would confirm the chip and never say which window. **The travel is the
+sentence**: that window is now this chip.
+
+- **Blue, and that is a three-way distinction.** Victor Addons flashes yellow for
+  "I captured this", `CaptureFlash` flashes red for "it went to the agent". A
+  bind takes no picture and sends nothing — it changes where words will go — and
+  a third meaning borrowing either colour would be read as the thing it borrowed.
+- **Outline first, fill last.** A filled rectangle over a whole terminal window
+  hides the thing it points at, and mid-workshop that window is on a projector.
+  The border carries it while the shape is big enough for a border to mean
+  something; the fill comes up as it shrinks, because at 5% there is nothing left
+  to see through and a hollow token that small is one nobody sees arrive.
+- **The first eighth is spent standing still**, at full size. Without it the
+  rectangle is already shrinking by the time the eye arrives, and the question it
+  exists to answer is asked of a shape that has stopped covering the answer.
+- **The cursor is re-read every frame**, not sampled once, so it chases a hand
+  that keeps moving instead of arriving where the hand used to be.
+- **One panel spanning every screen, with the rectangle as a layer inside it.**
+  Resizing a window 120 times puts every frame through the window server; a
+  layer's frame is a GPU update, and the flight crosses monitors, which a
+  per-screen panel could not. `sharingType = .none`, because a bind is very often
+  followed by a dictation whose first act is to photograph the screen.
+
+**The source frame is the one piece of geometry here that can be silently
+wrong.** AppleScript's `bounds` and the Accessibility API both measure y
+**downward from the top of the primary display**; Cocoa measures it upward from
+that display's bottom (`cocoaRect`). They agree only on the primary screen, so a
+mistake stays invisible until a second monitor is plugged in. Verified against a
+Terminal window set to a known `{200, 150, 1000, 700}` on a multi-monitor desk:
+`200,417 800×550` with a primary 1117 tall.
+
 ### What the chip says when bound
 
-`🤖 folder@branch` becomes `🎯 folder@branch · <the agent's own title>` (or ⌨️).
-Three deliberate changes, each earning its place:
+`🤖 folder@branch` becomes `📍 folder@branch · <the agent's own title>`. Three
+deliberate changes, each earning its place:
 
 - **The label is the bound session's, not the launch directory's.** Those were
   always meant to be the same repo and, with two sessions in one folder, never
@@ -118,9 +160,26 @@ Three deliberate changes, each earning its place:
   existing 10s branch timer — same question, two sources — and is truncated from
   the **head** (`fitHead`), the opposite of a selector, because a title puts its
   subject first.
-- **The glyph replaces 🤖 rather than decorating it.** 🤖 has always meant "this
-  overlay is writing an outbox somebody is watching", and bound that is no longer
-  what happens.
+
+  For `.keystroke` targets the title is the **AX window title** instead, which is
+  the closest thing to a working directory those have: a Terminal tab has a tty,
+  and from a tty the cwd and its branch follow, while a terminal panel inside an
+  IDE has neither and nothing outside the app can even say which panel owns the
+  caret. Guessing — the app's most recent child shell — would put a confidently
+  wrong repo on the chip, which is worse than a vaguer true one. Both IDEs put
+  the project at the front of their window title.
+- **The glyph replaces 🤖 rather than decorating it, and it is 📍 for every
+  bound target.** 🤖 has always meant "this overlay is writing an outbox somebody
+  is watching", and bound that is no longer what happens.
+
+  It was 🎯 for a guarded target and ⌨️ for an unguarded one (VS Code, IntelliJ)
+  — a real distinction, being the difference between a dictation that gets
+  refused at a shell prompt and one pasted blind. Victor replaced both with the
+  map pin: the chip answers *where do my words go*, and a pin is the mark for
+  that, where two glyphs asking to be told apart are a legend. **The distinction
+  did not disappear, it moved to where it can be acted on** — the bind flash says
+  `— no shell guard`, `GET /target` carries `guarded`, and the refusal itself
+  happens whether or not a glyph advertised that it could.
 
 ### The loopback control surface
 
@@ -210,9 +269,9 @@ from the working directory (inherited from the session, since `/relay` launches
 | idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
-| bound to a terminal | `🎯 petclinic@main · ✳ fixing the tax bug` — the 🤖 is *replaced*; see *Bound to a terminal* |
-| bound, unguardable (VS Code, IntelliJ) | `⌨️ IntelliJ IDEA` — same shape, different glyph, and the difference is whether a sentence can be handed to a shell |
-| bound **and** paused | `⏸️ 🎯 petclinic@main · …` — ⏸️ still prefixes whatever the identity is |
+| bound to a terminal | `📍 petclinic@main · ✳ fixing the tax bug` — the 🤖 is *replaced*; see *Bound to a terminal* |
+| bound to an IDE (VS Code, IntelliJ) | `📍 IntelliJ IDEA · petclinic – Order.java` — same pin; there is no tty, so the window's own title stands in for `folder@branch` |
+| bound **and** paused | `⏸️ 📍 petclinic@main · …` — ⏸️ still prefixes whatever the identity is |
 
 Paused prefixes rather than replaces, and carries no state word. The chip's job
 is still to say *which agent this is*; pause is a modifier on that, not a
@@ -313,43 +372,85 @@ session, i.e. always later — so the relay wins. If LinearMouse is ever restart
 *after* a relay, it will convert the button to Return before this tap sees it and
 the shot silently stops working; restarting the relay fixes it.
 
-## The cursor is in the file name
+## The shot's name is *when in the sentence* and *where the mouse was*
 
-Every shot is `shot-<timestamp>-cursor-at-1034x1466-of-3024x1890.jpg` — the
-pointer sat at x=1034, y=1466 of a 3024×1890 frame, **top-left origin** like the
-image itself (`ScreenCapture.tagCursor`).
+`shot-01:23(mouse-at-1034x1466px).jpg` — taken 1m23s into the dictation, pointer
+at x=1034, y=1466 in **the pixels of that image**, top-left origin like the image
+(`ScreenCapture.stem` + `tagCursor`).
 
-He points at things while he talks — "this button", "that line" — and the
-sentence alone cannot say which. The reading rides in the **name** rather than in
-a new outbox field because the name is already in front of the agent: the path
-travels in `paths`, so the pointer arrives with the picture and nothing
-downstream has to learn a new key to benefit from it.
+Both halves answer a question the sentence alone cannot. He points at things
+while he talks — "this button", "that line" — and he takes several pictures
+across a three-minute dictation, where `📸 ×4` is four indistinguishable files
+and `0:00 · 0:38 · 1:52` is a table of contents. The prompt panel already lists
+them by offset (`AppDelegate.shotLine`); the name is that same reading put where
+the agent meets it. They ride in the **name** rather than in new outbox fields
+because the name is already in front of the agent: the path travels in `paths`,
+so both facts arrive with the picture and nothing downstream learns a new key.
 
-**Pixels, and the frame they are pixels of.** It was a percentage pair
-(`-cursor-34.2x71.8pct`) until 2026-08-15, on the argument that the agent reads
-these through a tool that downsamples them, so a bare pixel stops pointing at the
-right thing the moment the picture is resized. That argument is about the *bare*
-pixel, and naming the frame answers it: the pair and its denominator scale
-together, so `1034x1466-of-3024x1890` survives any resize a percentage would
-have survived. What it buys is a reading Victor can check against a screen he is
-looking at, which `34.2%` never was — and the words `cursor at`, which say what
-the numbers are without anybody having to know the convention.
+**`00:00` is the automatic context shot**, by definition — he took it by starting
+to talk. A shot with no dictation around it (bare F3) keeps a timestamp instead:
+"elapsed since the start" of nothing is not a fact.
 
-**Measured against the file, never computed from the screen.** The denominator is
-read out of the JPEG header after `screencapture` returns (`pixelSize(of:)`, no
-decode), because multiplying the screen's frame by its backing scale is a guess:
-mirrored displays, HiDPI modes and a sleeping external monitor all break it, and
-a guessed denominator is worse than none. That is also why the shot is **named
-provisionally and renamed afterwards** — the file has to exist before it can be
-measured. A failed rename leaves the provisional name, since a shot with no
-pointer in its name is still a shot.
+**The colon is legal and the Finder lies about it.** POSIX filenames on APFS take
+`:` fine, and everything that handles these paths is POSIX — but the Finder
+renders it as `/` (`shot-00/00(…)`), the old HFS separator swap. So a folder
+Victor opens by hand reads slightly differently from what the agent sees.
 
-**Victor Addons is not the same reading, despite the similar name.** Its
+**Pixels, without a denominator.** It was a percentage pair
+(`-cursor-34.2x71.8pct`) because the agent reads these through a tool that
+downsamples them, so a pixel stops pointing at the right thing once the picture
+is resized; then briefly `-cursor-at-1034x1466-of-3024x1890`, carrying its own
+denominator to answer that. Victor dropped the denominator: the name is read by
+him as often as by an agent, and raw pixels are what he can check against a
+screen. **The consequence is real and accepted** — a downsampled frame needs its
+own dimensions read back before these numbers mean anything, which anything
+looking at the image already has. Do not reintroduce the denominator without
+asking.
+
+**Measured against the file, never computed from the screen.** The size comes out
+of the JPEG header after `screencapture` returns (`pixelSize(of:)`, no decode),
+because multiplying the screen's frame by its backing scale is a guess: mirrored
+displays, HiDPI modes and a sleeping external monitor all break it. That is why
+the shot is **named provisionally and renamed afterwards** — the file has to
+exist before it can be measured. A failed rename leaves the provisional name: a
+shot with no pointer in its name is still a shot.
+
+**Victor Addons is not the same reading, despite the similar words.** Its
 `2026-08-14_00-34-42_at1200x500.jpg` is in **global CG points** — y down from the
 primary display's top, negatives normal on a screen to its left — because it
 answers "where on the desk was the pointer". This one is in **pixels of that
 image**, because it answers "where in this picture do I look". Do not port either
 convention onto the other.
+
+## Shots live in Caches, one folder per relay session
+
+`~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session-stamp>/`, and
+**`--home` does not move them** (it still moves the outbox).
+
+They are a staging area, never an archive: each retina JPG is a megabyte or two,
+Victor dictates all day, and what any one of them is *for* is over within the
+turn that reads it. Caches is the one folder that emptying the Trash, Storage
+Management and every cleaner tool actually reach, and macOS may purge it under
+disk pressure — all welcome. `/tmp` was the other candidate and is worse for the
+stated requirement: it clears on reboot and on a 3-day sweep, neither of which is
+"when the disk is full". Same call `ScreenshotManager` makes in Victor Addons.
+
+**The outbox stays put**, in `~/.wispr-relay`. It is the log of what Victor said,
+the record that outlives the session, and a log the system may delete under
+pressure is not a log.
+
+**The per-session folder is what makes the names safe.** Shots are named by their
+offset, so every session produces `shot-00:00(…)` again; without a folder between
+them a new run would overwrite the last one's pictures, including ones an outbox
+line still points at. Within a session the pointer position separates two shots
+at the same offset in almost every real case — and `unique()` appends `-2` for
+the rest, because "dictate twice without moving the mouse" is not exotic.
+
+`prune()` counts the newest 300 **across all session folders**, not within the
+current one: a session can be five minutes long, so a per-folder cap would keep
+300 per restart and bound nothing. Emptied session folders are removed; the
+current one never is, since it is empty for the whole time before the first
+dictation.
 
 The position is sampled **at the gesture** and carried down into
 `ScreenCapture.grab(cursor:)`, never read inside it — by the time the capture
@@ -362,7 +463,32 @@ automatic context capture and the deliberate ones alike, because `grab` is the
 one path they all take. `cursorFraction` is the single reading behind both the
 name and the mark, so they cannot disagree.
 
-The name is for the agent; the mark is for **Victor**, who opens these shots too
+### …and on the screen, at the moment of the shutter
+
+The same reticle is also dropped **on the desktop** where the pointer was, for
+~2s, by `CaptureFlash.markCursor` — on the automatic capture that opens a
+dictation and on every F3 alike, since both go through `announce(cursor:)`.
+
+The vignette says *what* was captured; this says *where he was pointing while he
+said it*. The other two copies of that reading — burned into the picture, spelled
+out in the file name — are both things you find **afterwards**. This is the same
+fact at the only moment it can still be corrected: if the target lands somewhere
+he did not mean, the sentence is still being spoken and he can point again.
+
+It goes through `CursorMarker.makeLayer`, which calls the same `paint` the
+burned-in mark does, so the mark on the desktop and the mark in the picture are
+one drawing rather than two implementations of "a red target" that drift apart.
+The animation is Victor Addons' `ScreenCaptureFlash.markCursor` verbatim: lands
+at 1.3× and settles to 0.9× over 0.35s (a scope brought down onto a spot, not a
+badge appearing beside one), 80% opaque from the first frame, fading only in its
+last quarter.
+
+`sharingType = .none`, like the vignette — the relay photographs the screen
+milliseconds later and the confirmation must never be inside the capture it
+confirms. **Which also means it cannot be verified with a screenshot**: the only
+checks available are the burned-in mark (same code) and Victor's eyes.
+
+The name is for the agent; the marks are for **Victor**, who opens these shots too
 and cannot resolve a coordinate pair by eye. It is burned into the pixels rather
 than flashed on screen the way Victor Addons does it (`ScreenCaptureFlash.
 markCursor`), because by the time this runs the picture has already been taken —

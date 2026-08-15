@@ -79,14 +79,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// The terminal dictations are being typed into — `folder@branch` of the
     /// bound session, or nil while the relay is only writing the outbox.
     private var boundLabel: String?
-    /// What that terminal is calling itself right now — the agent's own title.
+    /// What that terminal is calling itself right now — the agent's own title,
+    /// or an IDE's window title where there is no tty to ask.
     private var boundTitle: String?
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
-    /// Whether that target can be checked before each delivery. Terminal.app and
-    /// tmux can; VS Code and IntelliJ cannot, and the chip has to say which,
-    /// because the difference is whether a sentence can be run as a command.
-    private var boundGuarded = true
     private weak var homeScreen: NSScreen?
 
     // MARK: Geometry
@@ -873,11 +870,15 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// sessions open in one folder, never reliably were; this is the first time
     /// the chip can say which one by knowing rather than by inheriting.
     ///
-    /// **🎯 and ⌨️ are not decoration either.** 🎯 is a target the relay can
-    /// interrogate before every delivery, so a dictation can never be handed to
-    /// a shell to execute. ⌨️ is one it cannot — VS Code, IntelliJ — where the
-    /// words are pasted blind into whatever holds the caret. That distinction
-    /// costs one glyph and is the only thing on screen that carries it.
+    /// **📍 is the one glyph, for every bound target.** It was 🎯 for a target
+    /// the relay can interrogate before it types and ⌨️ for one it cannot (VS
+    /// Code, IntelliJ), which is a real distinction — it is the difference
+    /// between a dictation that gets refused at a shell prompt and one pasted
+    /// blind. The pin replaced both because the chip answers *where do my words
+    /// go*, and a map pin is the mark for that where two glyphs asking to be
+    /// told apart are a legend. The distinction is still shown where it can be
+    /// acted on: the flash at bind, `GET /target`, and the refusal itself, which
+    /// happens whether or not a glyph advertised that it could.
     ///
     /// **The agent's own title follows the label, after a `·`.** `folder@branch`
     /// says which repo the words are going to, and with two sessions open on the
@@ -889,9 +890,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// title is the one part of this with no length anybody controls.
     private var identity: String {
         guard let bound = boundLabel else { return "🤖 \(SessionLabel.value)" }
-        let glyph = boundGuarded ? "🎯" : "⌨️"
-        guard let title = boundTitle else { return "\(glyph) \(bound)" }
-        return "\(glyph) \(bound) · \(Self.fitHead(title, 28))"
+        guard let title = boundTitle else { return "📍 \(bound)" }
+        return "📍 \(bound) · \(Self.fitHead(title, 28))"
     }
 
     /// Keep the head, drop the tail — the opposite of `fit`, and for the
@@ -968,11 +968,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     ///
     /// Relayouts because the title drives the chip's width, and a bound label is
     /// a different length from the launch-directory one it replaces.
-    func setBound(label: String?, title: String? = nil, guarded: Bool) {
-        guard boundLabel != label || boundGuarded != guarded || boundTitle != title else { return }
+    func setBound(label: String?, title: String? = nil) {
+        guard boundLabel != label || boundTitle != title else { return }
         boundLabel = label
         boundTitle = label == nil ? nil : title
-        boundGuarded = guarded
         refreshTitle()
         layoutContent()
     }

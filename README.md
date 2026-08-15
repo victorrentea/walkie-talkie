@@ -33,9 +33,15 @@ The mouse button is borrowed **only while that row is up**, so a dictation never
 needs the keyboard at all; the rest of the time the button keeps doing whatever
 your mouse software says it does. Each shot records where the pointer was —
 **a red target drawn into the picture**, and the same reading in the file name
-(`shot-…-cursor-at-1034x1466-of-3024x1890.jpg` — pixels of that frame, top-left
-origin, with the frame's own size so the reading survives a downsample) — so
-pointing at something while you talk about it is enough.
+(`shot-01:23(mouse-at-1034x1466px).jpg` — how far into the dictation it was
+taken, and where the pointer was in that image) and **a red target dropped on the
+desktop** where you were pointing, for a couple of seconds — so pointing at
+something while you talk about it is enough, and a mis-aimed shot is noticed
+while the sentence is still being said.
+
+Shots go to `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session>/`,
+which macOS reclaims under disk pressure: they are a staging area, not an
+archive.
 
 <img src="docs/prompt.png" width="308" alt="the finished prompt with a Cancel button counting down">
 
@@ -118,9 +124,10 @@ what is running on the target, and if that is a shell it sends nothing: at a
 prompt a dictation is not a message to an agent, it is a command to be executed.
 The check is on the *shell*, not on any particular agent, and it fails closed.
 
-The overlay's chip then names the session it is aimed at — `🎯 petclinic@main ·
+The overlay's chip then names the session it is aimed at — `📍 petclinic@main ·
 ✳ fixing the tax bug`, the repo plus whatever the agent is currently calling
-itself — or `⌨️` for a target it cannot check before it types.
+itself. Binding also draws a translucent blue rectangle over the window it just
+captured, which shrinks and flies to your cursor: that window is now this chip.
 
 ### The outbox
 
