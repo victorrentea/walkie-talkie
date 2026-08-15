@@ -46,6 +46,29 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let pickGlyph = NSImageView()
     private let pickInfo = NSTextField(labelWithString: "")
 
+    /// The title, in a row of its own so a glyph can sit beside it.
+    ///
+    /// It was a bare label until the relay learned to point at a terminal. The
+    /// mark for that is a **drawn** map pin (`Glyphs.mapPin`) rather than 📍,
+    /// which is `ROUND PUSHPIN` and draws as a pin stuck in at an angle — and a
+    /// drawn mark cannot go inline, because `attributedStringValue` on these
+    /// labels renders the image and turns every other glyph transparent. So the
+    /// title joins the pattern the ⌘-pick row already uses: a glyph in its own
+    /// box, a label beside it, the two lining up into a column.
+    private let titleRow = NSView()
+    private let titleGlyph = NSImageView()
+
+    /// The bound terminal's working directory, on a row of its own.
+    ///
+    /// It used to ride on the title after a `·`, which put two different kinds of
+    /// answer on one line — *what the agent is doing* and *where it is doing it* —
+    /// and made the chip as wide as the two of them together, beside the cursor,
+    /// over Victor's work. Split, each row is short and the eye picks the one it
+    /// came for.
+    private let folderRow = NSView()
+    private let folderGlyph = NSImageView()
+    private let folderInfo = NSTextField(labelWithString: "")
+
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
     /// How a displayed prompt ended: `true` — release it to the agent (the hold
@@ -82,6 +105,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// What that terminal is calling itself right now — the agent's own title,
     /// or an IDE's window title where there is no tty to ask.
     private var boundTitle: String?
+    /// The bound terminal's working directory, `petclinic@main`. nil for targets
+    /// with no tty to read one from, which is when the folder row stays away
+    /// rather than inventing an answer.
+    private var boundFolder: String?
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -264,7 +291,23 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         titleLabel.font = titleFont
         titleLabel.textColor = .labelColor
-        root.addSubview(titleLabel)
+        titleGlyph.image = Self.pinGlyph
+        titleGlyph.imageScaling = .scaleProportionallyUpOrDown
+        titleGlyph.isHidden = true          // only a bound relay has a pin
+        titleRow.addSubview(titleGlyph)
+        titleRow.addSubview(titleLabel)
+        root.addSubview(titleRow)
+
+        folderGlyph.image = Self.folderGlyphImage
+        folderGlyph.imageScaling = .scaleProportionallyUpOrDown
+        folderInfo.font = hintFont
+        folderInfo.textColor = .secondaryLabelColor
+        folderInfo.lineBreakMode = .byTruncatingMiddle
+        folderInfo.maximumNumberOfLines = 1
+        folderRow.addSubview(folderGlyph)
+        folderRow.addSubview(folderInfo)
+        folderRow.isHidden = true
+        root.addSubview(folderRow)
 
         hintLabel.font = hintFont
         hintLabel.textColor = .secondaryLabelColor
@@ -533,7 +576,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // ⌘-pick row, something longer was always beside it.
         titleLabel.stringValue = titleText
         titleLabel.sizeToFit()
-        let titleWidth = ceil(titleLabel.frame.width)
+        // The pin sits in its own box ahead of the text, so it counts too.
+        let titleWidth = ceil(titleLabel.frame.width) + (boundLabel != nil ? titleGlyphWidth + recordDotGap : 0)
+        let folderWidth = folderText.map { folderGlyphWidth + recordDotGap + ceil(measure($0, font: hintFont)) } ?? 0
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -543,7 +588,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
-        let natural = ceil(max(titleWidth + reserve, max(hintWidth, max(recordWidth, pickWidth)))) + pad * 2
+        let natural = ceil(max(titleWidth + reserve,
+                               max(folderWidth, max(hintWidth, max(recordWidth, pickWidth))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -571,8 +617,19 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         var rows: [(view: NSView, height: CGFloat)] = []
 
-        titleLabel.frame.size = NSSize(width: innerWidth, height: 16)
-        rows.append((titleLabel, 16))
+        layoutTitleRow(width: innerWidth)
+        rows.append((titleRow, 16))
+
+        // Directly under the title: it answers "where", which is the question the
+        // title's "what" leaves open, and the two are read as a pair.
+        if let folder = folderText {
+            folderInfo.stringValue = folder
+            layoutFolderRow(width: innerWidth)
+            folderRow.isHidden = false
+            rows.append((folderRow, folderRowHeight))
+        } else {
+            folderRow.isHidden = true
+        }
 
         // Directly under the title, ahead of the selection: while he is talking
         // this is the row that changes, and the one he glances down at to check
@@ -725,6 +782,18 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// A square the height of the row's text. Fixed rather than measured: an image
     /// has no font metrics to ask, and the row is laid out around whatever this
     /// says.
+    /// Both drawn once and reused: they never change, and re-rasterising a shape
+    /// on every relayout would be work done sixty times a second while the chip
+    /// follows the cursor.
+    private static let pinGlyph = Glyphs.mapPin(height: 14)
+    private static let folderGlyphImage = Glyphs.folder(height: 11)
+
+    /// The pin's box on the title row. Its drawn width is `0.696 × height`;
+    /// asked of the image rather than recomputed, so the two cannot disagree.
+    private var titleGlyphWidth: CGFloat { ceil(Self.pinGlyph.size.width) }
+    private var folderGlyphWidth: CGFloat { ceil(Self.folderGlyphImage.size.width) }
+    private let folderRowHeight: CGFloat = 15
+
     private static let pickGlyphSize: CGFloat = 13
 
     private var pickGlyphWidth: CGFloat { Self.pickGlyphSize }
@@ -744,6 +813,34 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         pickInfo.stringValue = text
         pickInfo.sizeToFit()
         return pickGlyphWidth + recordDotGap + ceil(pickInfo.frame.width)
+    }
+
+    /// The pin is vertically centred on the row rather than sat on the baseline:
+    /// it is a shape, not a letter, and lining its middle up with the text's is
+    /// what stops it reading as having slipped.
+    private func layoutTitleRow(width: CGFloat) {
+        let bound = boundLabel != nil
+        titleGlyph.isHidden = !bound
+        titleRow.frame.size = NSSize(width: width, height: 16)
+        let glyphWidth = bound ? titleGlyphWidth : 0
+        let gap = bound ? recordDotGap : 0
+        if bound {
+            let h = Self.pinGlyph.size.height
+            titleGlyph.frame = NSRect(x: 0, y: ((16 - h) / 2).rounded(),
+                                      width: glyphWidth, height: ceil(h))
+        }
+        titleLabel.frame = NSRect(x: glyphWidth + gap, y: 0,
+                                  width: max(0, width - glyphWidth - gap), height: 16)
+    }
+
+    private func layoutFolderRow(width: CGFloat) {
+        let h = Self.folderGlyphImage.size.height
+        folderRow.frame.size = NSSize(width: width, height: folderRowHeight)
+        folderGlyph.frame = NSRect(x: 0, y: ((folderRowHeight - h) / 2).rounded(),
+                                   width: folderGlyphWidth, height: ceil(h))
+        folderInfo.frame = NSRect(x: folderGlyphWidth + recordDotGap, y: 0,
+                                  width: max(0, width - folderGlyphWidth - recordDotGap),
+                                  height: folderRowHeight)
     }
 
     private func layoutPickRow(width: CGFloat) {
@@ -779,6 +876,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.wantsLayer = true
         recordInfo.wantsLayer = true
         pickInfo.wantsLayer = true
+        folderInfo.wantsLayer = true
         if bare {
             titleLabel.shadow = Self.halo()
             // Same reasoning as the title, and the recording row now spends its
@@ -789,12 +887,16 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             // recording one: it is up between messages, which is most of the day.
             pickInfo.shadow = Self.halo()
             pickInfo.textColor = .white
+            folderInfo.shadow = Self.halo()
+            folderInfo.textColor = .white
         } else {
             titleLabel.shadow = nil
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
+            folderInfo.shadow = nil
+            folderInfo.textColor = .secondaryLabelColor
         }
     }
 
@@ -889,9 +991,21 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// because it rides beside the cursor over whatever he is reading and a
     /// title is the one part of this with no length anybody controls.
     private var identity: String {
-        guard let bound = boundLabel else { return "🤖 \(SessionLabel.value)" }
-        guard let title = boundTitle else { return "📍 \(bound)" }
-        return "📍 \(bound) · \(Self.fitHead(title, 28))"
+        guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
+        // The pin is drawn beside this, not typed into it (`titleGlyph`), and the
+        // working directory has a row of its own — so what is left here is the one
+        // thing that changes: what the agent says it is doing. With no title to
+        // show, the address is the fallback, because `ttys004` at least
+        // distinguishes two sessions where a repeated folder name would not.
+        return boundTitle.map { Self.fitHead($0, 28) } ?? boundLabel ?? ""
+    }
+
+    /// The folder row's text — the bound terminal's working directory and branch.
+    /// Absent for targets with no tty to read one from (VS Code, IntelliJ), where
+    /// the row goes away rather than showing the app's name beside a folder icon.
+    private var folderText: String? {
+        guard boundLabel != nil else { return nil }
+        return boundFolder
     }
 
     /// Keep the head, drop the tail — the opposite of `fit`, and for the
@@ -968,10 +1082,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     ///
     /// Relayouts because the title drives the chip's width, and a bound label is
     /// a different length from the launch-directory one it replaces.
-    func setBound(label: String?, title: String? = nil) {
-        guard boundLabel != label || boundTitle != title else { return }
+    func setBound(label: String?, title: String? = nil, folder: String? = nil) {
+        guard boundLabel != label || boundTitle != title || boundFolder != folder else { return }
         boundLabel = label
         boundTitle = label == nil ? nil : title
+        boundFolder = label == nil ? nil : folder
         refreshTitle()
         layoutContent()
     }

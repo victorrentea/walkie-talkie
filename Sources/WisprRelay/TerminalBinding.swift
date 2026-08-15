@@ -58,6 +58,13 @@ final class TerminalBinding {
         /// sessions in one repo produce the same label and nothing else tells
         /// them apart.
         let address: String
+        /// `petclinic@main` — the working directory of whatever is running on the
+        /// bound tty, plus its git branch. **nil when there is no tty to ask**:
+        /// a terminal panel inside VS Code or IntelliJ has none, and nothing
+        /// outside those apps can even say which panel owns the caret, so there
+        /// is no honest answer rather than a guessed one. The chip shows its
+        /// folder row only when this is present.
+        let folder: String?
         /// **What the terminal is currently calling itself** — the title the
         /// agent sets and keeps updating as it works (`✳ fixing the tax bug`),
         /// read from Terminal.app's `custom title` or tmux's `pane_title`.
@@ -133,7 +140,7 @@ final class TerminalBinding {
             // stands in for the `folder@branch` a tty would have given.
             let window = Self.focusedWindow(pid: app.processIdentifier)
             bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
-                           label: name, address: name, title: window.title,
+                           label: name, address: name, folder: nil, title: window.title,
                            sourceFrame: window.frame, boundAt: Date())
         }
 
@@ -161,16 +168,16 @@ final class TerminalBinding {
         let frame = Self.terminalWindowFrame(tty: tty)
 
         if let pane = Self.tmuxPane(clientTTY: tty) {
-            let label = Self.tmuxPaneLabel(pane) ?? fallbackName
-            return Target(handle: .tmux(pane: pane, tty: tty), label: label,
-                          address: pane, title: Self.tmuxPaneTitle(pane),
+            let folder = Self.tmuxPaneLabel(pane)
+            return Target(handle: .tmux(pane: pane, tty: tty), label: folder ?? fallbackName,
+                          address: pane, folder: folder, title: Self.tmuxPaneTitle(pane),
                           sourceFrame: frame, boundAt: Date())
         }
 
         let short = (tty as NSString).lastPathComponent
-        let label = Self.sessionLabel(onTTY: tty) ?? fallbackName
-        return Target(handle: .terminalApp(tty: tty), label: label,
-                      address: short, title: front.title,
+        let folder = Self.sessionLabel(onTTY: tty)
+        return Target(handle: .terminalApp(tty: tty), label: folder ?? fallbackName,
+                      address: short, folder: folder, title: front.title,
                       sourceFrame: frame, boundAt: Date())
     }
 

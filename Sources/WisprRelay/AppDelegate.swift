@@ -436,7 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.overlay.setBound(label: bound.label, title: bound.title)
+            self.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
             // The rectangle flies from the window that was captured to the
             // cursor, which is where the chip lives — the one thing that
             // connects the terminal he pressed at to the label that appears next
@@ -451,7 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the chip no longer distinguishes ⌨️ from 🎯: binding is the moment
             // that fact can still change what Victor does about it.
             let unguarded = bound.isGuarded ? "" : " — no shell guard"
-            self.overlay.flash("📍 \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
+            self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
         }
         return Self.describe(bound)
     }
@@ -460,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         terminal.unbind()
         DispatchQueue.main.async { [weak self] in
             self?.overlay.setBound(label: nil)
-            self?.overlay.flash("📍 unbound — back to the outbox", duration: 3)
+            self?.overlay.flash("unbound — back to the outbox", duration: 3)
         }
     }
 
@@ -473,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self, let updated = self.terminal.refreshTitle() else { return }
             DispatchQueue.main.async {
-                self.overlay.setBound(label: updated.label, title: updated.title)
+                self.overlay.setBound(label: updated.label, title: updated.title, folder: updated.folder)
             }
         }
     }
@@ -481,6 +481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func describe(_ target: TerminalBinding.Target) -> [String: Any] {
         var obj: [String: Any] = ["label": target.label, "address": target.address,
                                   "guarded": target.isGuarded]
+        if let folder = target.folder { obj["folder"] = folder }
         if let title = target.title { obj["title"] = title }
         return obj
     }
@@ -517,7 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .targetGone(let what):
             Log.error("⌨️ \(what) — unbound")
             overlay.setBound(label: nil)
-            overlay.flash("📍 \(what) — unbound", duration: 6)
+            overlay.flash("⚠️ \(what) — unbound", duration: 6)
         case .wouldRunAsShell(let shell):
             Log.error("⛔️ \(shell) is at the prompt — refused, nothing sent")
             // The one refusal in the whole app, and it is worth six seconds of

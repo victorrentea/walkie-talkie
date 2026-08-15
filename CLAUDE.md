@@ -143,43 +143,63 @@ mistake stays invisible until a second monitor is plugged in. Verified against a
 Terminal window set to a known `{200, 150, 1000, 700}` on a multi-monitor desk:
 `200,417 800×550` with a primary 1117 tall.
 
-### What the chip says when bound
+### What the chip says when bound: two rows, two drawn glyphs
 
-`🤖 folder@branch` becomes `📍 folder@branch · <the agent's own title>`. Three
-deliberate changes, each earning its place:
+```
+📍 ✳ extracting the tax calculation      ← what the agent says it is doing
+📁 petclinic@test-pr                     ← where it is doing it
+```
+
+`🤖 folder@branch` becomes those two. Four deliberate decisions:
 
 - **The label is the bound session's, not the launch directory's.** Those were
   always meant to be the same repo and, with two sessions in one folder, never
   reliably were. Bound, the relay *knows* rather than inherits — read off the
   working directory of the foreground process on the tty (`lsof -d cwd`).
-- **The title is the agent's own**, from Terminal.app's `custom title` (where the
-  OSC escape lands) or tmux's `#{pane_title}`. `folder@branch` does not
-  distinguish two sessions on the same branch, which is the normal way Victor
-  works; the title does, and it is the half that keeps moving while the agent
-  works, so a chip carrying it also says the session is alive. It rides the
+- **The working directory gets a row of its own.** It rode on the title after a
+  `·` for an afternoon, which put two different kinds of answer on one line and
+  made the chip as wide as both together — beside the cursor, over Victor's work.
+  Split, each row is short and the eye takes the one it came for. The row is
+  **absent** for targets with no tty to read a directory from (VS Code,
+  IntelliJ), rather than showing an app's name beside a folder icon;
+  `Target.folder` is nil there and `folderText` returns nothing.
+- **The title row carries what the agent calls itself** — Terminal.app's
+  `custom title` (where the OSC escape lands) or tmux's `#{pane_title}`, and for
+  IDE targets the AX window title, which is the closest thing to a working
+  directory those have (both IDEs put the project first; guessing at the app's
+  child shells would put a confidently wrong repo on the chip). It rides the
   existing 10s branch timer — same question, two sources — and is truncated from
   the **head** (`fitHead`), the opposite of a selector, because a title puts its
-  subject first.
+  subject first. With no title, the row falls back to the address: `ttys004`
+  distinguishes two sessions where a repeated folder name would not.
+- **The glyphs are drawn, not typed** (`Glyphs.swift`), and both replace an
+  emoji Victor rejected by name. 📍 is `ROUND PUSHPIN` — Apple draws a pin stuck
+  in at an angle, not the teardrop marker everyone means by a pin on a map — and
+  📁 is whatever the installed font feels like. They are traced from references
+  he supplied, by proportion: the pin's head is tangent to the top with radius
+  `0.348 × height` and its sides are the **tangents** from the tip (a triangle
+  merely touching a circle shows its corners), its hole punched with `.clear` so
+  the chip's backdrop shows through rather than a white disc appearing on a dark
+  terminal; the folder is `1.25 ×` as wide as it is tall with the tab's diagonal
+  at `0.44 × width`.
 
-  For `.keystroke` targets the title is the **AX window title** instead, which is
-  the closest thing to a working directory those have: a Terminal tab has a tty,
-  and from a tty the cwd and its branch follow, while a terminal panel inside an
-  IDE has neither and nothing outside the app can even say which panel owns the
-  caret. Guessing — the app's most recent child shell — would put a confidently
-  wrong repo on the chip, which is worse than a vaguer true one. Both IDEs put
-  the project at the front of their window title.
-- **The glyph replaces 🤖 rather than decorating it, and it is 📍 for every
-  bound target.** 🤖 has always meant "this overlay is writing an outbox somebody
-  is watching", and bound that is no longer what happens.
+  **They are images in boxes of their own, and that is not a style choice.**
+  These labels are `NSTextField(labelWithString:)`, where `attributedStringValue`
+  renders the image and turns **every other glyph fully transparent** — the bug
+  that once left the chip showing a robot head and no session name. So an inline
+  drawn glyph is impossible here, and the title joins the row-with-a-glyph
+  pattern the ⌘-pick row already uses. Both images are rasterised **once**
+  (`pinGlyph`, `folderGlyphImage`): the chip relayouts as it follows the cursor,
+  and redrawing a shape sixty times a second for a picture that never changes is
+  work for nothing.
 
-  It was 🎯 for a guarded target and ⌨️ for an unguarded one (VS Code, IntelliJ)
-  — a real distinction, being the difference between a dictation that gets
-  refused at a shell prompt and one pasted blind. Victor replaced both with the
-  map pin: the chip answers *where do my words go*, and a pin is the mark for
-  that, where two glyphs asking to be told apart are a legend. **The distinction
-  did not disappear, it moved to where it can be acted on** — the bind flash says
-  `— no shell guard`, `GET /target` carries `guarded`, and the refusal itself
-  happens whether or not a glyph advertised that it could.
+**🤖 is still what unbound looks like**, and the glyph replaces it rather than
+decorating it: 🤖 has always meant "this overlay is writing an outbox somebody is
+watching", and bound that is no longer what happens.
+
+The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
+`unbound — back to the outbox` at release. They are text rows, so the only pin
+available to them is the pushpin emoji the drawn one exists to avoid.
 
 ### The loopback control surface
 
@@ -269,9 +289,9 @@ from the working directory (inherited from the session, since `/relay` launches
 | idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
-| bound to a terminal | `📍 petclinic@main · ✳ fixing the tax bug` — the 🤖 is *replaced*; see *Bound to a terminal* |
-| bound to an IDE (VS Code, IntelliJ) | `📍 IntelliJ IDEA · petclinic – Order.java` — same pin; there is no tty, so the window's own title stands in for `folder@branch` |
-| bound **and** paused | `⏸️ 📍 petclinic@main · …` — ⏸️ still prefixes whatever the identity is |
+| bound to a terminal | a drawn pin + `✳ fixing the tax bug`, and a **second row** with a drawn folder + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
+| bound to an IDE (VS Code, IntelliJ) | pin + the window's own title. **No folder row**: there is no tty, so there is no directory to read and none is invented |
+| bound **and** paused | `⏸️` still prefixes the identity, and the folder row stays |
 
 Paused prefixes rather than replaces, and carries no state word. The chip's job
 is still to say *which agent this is*; pause is a modifier on that, not a
@@ -512,10 +532,11 @@ empty space the whole time.
 Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
-Row heights, for checking a layout change without seeing it: title 16, recording
-row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between them, `pad` 12 all
-round. So the idle chip is 40 tall, and dictating with a selection is 84 (107
-with a pick waiting).
+Row heights, for checking a layout change without seeing it: title 16, folder
+row 15, recording row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between
+them, `pad` 12 all round. So the idle chip is 40 tall, 61 once bound (the folder
+row and its gap), and dictating with a selection is 84 (107 with a pick
+waiting).
 
 **No screen capture can contain this window**, and `RELAY_CAPTURABLE=1` no
 longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
