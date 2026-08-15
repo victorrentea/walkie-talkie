@@ -19,9 +19,10 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️/F3`)
-- `pickText` — the ⌘-picked row (`🎯 ×2 div#cart > span.price`); the label beside
-  the outline in `chrome-extension/inspect.js` counts too, and so does its one
-  error string (`⚠ no relay session took it`)
+- `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`🎯 hold ⌘⇧🖱️`, then
+  `🎯 ×2 div#cart > span.price`); the label beside the outline in
+  `chrome-extension/inspect.js` counts too, and so do its one error string
+  (`⚠ no relay session took it`) and the toolbar title in `relay.js`
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
@@ -44,9 +45,11 @@ try to stop, mute or intercept the transcription — it only stops acting on it.
 
 Concretely, `paused` bails out of four places and nowhere else: `captureContext`
 (no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
-nothing), `send` (nothing reaches the outbox), and `ElementPicker.paused` (the
-`/ping` refusal that makes ⌘ in Chrome go back to being Chrome's ⌘ — that one is
-load-bearing, since dictating into a browser is the reason he paused). Wispr keeps reporting that it
+nothing), `send` (nothing reaches the outbox), and `syncBorrowedGestures` — which
+hands mouse 4 back to LinearMouse *and* ⌘⇧-click back to Chrome. That last one is
+load-bearing rather than tidy: dictating into a browser is the reason he paused,
+and an inspector still eating his ⌘⇧-clicks would be the one thing pause was
+supposed to stop. Wispr keeps reporting that it
 is listening, which is why `recordText` also hides the recording row while
 paused — advertising F3 in a state where it does nothing would be a lie.
 
@@ -123,6 +126,12 @@ out of a row riding over the work he is looking at. The 🖱️ still has to be
 there — that half of the pair is the one a keyboard-shaped hint would never
 suggest.
 
+## Two gestures are borrowed, and only while dictating
+
+Mouse 4 and ⌘⇧-click in Chrome both belong to other software the rest of the time,
+and `syncBorrowedGestures()` is the single switch that takes them and gives them
+back. The two sections below are one argument applied twice.
+
 ## Mouse 4 is the shutter, but only while dictating
 
 The back side button (`MOUSE_BUTTON_4` = 3) takes a shot, and the relay
@@ -140,9 +149,11 @@ attach a picture put the one thing he does mid-sentence back on the keyboard.
 Three rules keep the theft honest:
 
 - **Gated on `listening && !paused`**, pushed to the tap by
-  `AppDelegate.syncShotButton()` from both edges that can change the answer
+  `AppDelegate.syncBorrowedGestures()` from both edges that can change the answer
   (Wispr starting/stopping, pause toggling). At rest and while paused the button
-  is untouched and still types Return.
+  is untouched and still types Return. That one method sets **both** borrowed
+  gestures — this button and ⌘⇧-click in Chrome — from a single expression, so the
+  recording row can never advertise one of them in a state where it is dead.
 - **Only the bare press.** LinearMouse maps ⌘+button separately to ⌘Return, so
   any modifier passes straight through: one gesture must not quietly become two
   different things.
@@ -198,7 +209,7 @@ Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
 Row heights, for checking a layout change without seeing it: title 16, recording
-row 17, ⌘-picked row 17, selection 15, `rowGap` 6 between them, `pad` 12 all
+row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between them, `pad` 12 all
 round. So the idle chip is 40 tall, and dictating with a selection is 84 (107
 with a pick waiting).
 
@@ -383,8 +394,8 @@ in the shot it is confirming.
 
 ## Picking elements in Chrome
 
-Hold ⌘ over a page, the element under the cursor is outlined and named; ⌘-click
-and its selector joins the next dictation. It resolves the demonstratives — "make
+Hold ⌘⇧ over a page **while dictating**, the element under the cursor is outlined
+and named; ⌘⇧-click and its selector joins that dictation. It resolves the demonstratives — "make
 *this* button blue" is not actionable, and a CSS path is the same sentence with
 the pronoun filled in.
 
@@ -405,7 +416,7 @@ mailbox.** CDP is the obvious design and it is the wrong one twice over:
   drawn in, and stay right after a zoom.
 
 So `ElementPicker.swift` is an HTTP listener on loopback and nothing else. The
-inspector — outline, label, ⌘ gate, swallowed click, selector — is `inspect.js`.
+inspector — outline, label, ⌘⇧ gate, swallowed click, selector — is `inspect.js`.
 Ports are 8917–8919, first free one per relay; the extension posts to **all** of
 them, which is the same shape as the outbox, where one dictation reaches whoever
 is listening.
@@ -415,37 +426,77 @@ Load unpacked. There is no scriptable route left in Chrome 151 (`Extensions.
 loadUnpacked` over CDP works, but only for a browser started with
 `--enable-unsafe-extension-debugging`, which his is not).
 
-### ⌘ has to be *held*
+### It lives only while the recording row does
+
+`ElementPicker.dictating` is set from the same `listening && !paused` as mouse 4,
+by the same `syncBorrowedGestures()`. Outside that window `/ping` answers 503 and
+the extension reads a refusal exactly like no relay at all, so ⌘⇧ in Chrome goes
+straight back to opening links in new tabs.
+
+It was armed around the clock for about an hour, and that is the wrong shape:
+⌘⇧-click is how a link opens in a new tab, so an inspector that can take it at any
+moment is a browser that intermittently stops opening links with nothing on
+screen to explain why. Tied to the dictation, the theft is narrow *and visible* —
+the row saying the gesture is live and the gesture itself appear and disappear
+together, which is the same bargain mouse 4 already made.
+
+The extension caches its probe for only 1s (`PROBE_TTL_MS`) because the answer
+now flips every time he starts and stops talking, rather than once a session.
+
+### The hint is the row, and the row is beside the cursor
+
+While dictating and before he has picked anything, the row reads `🎯 hold ⌘⇧🖱️`.
+After the first pick it gives way to `🎯 ×2 div#cart > span.price`, because the
+question changes: before, the only thing worth saying is *that this is possible*;
+after, he knows the gesture, and what he cannot check without a name is whether
+the click caught the button or the div wrapped around it.
+
+The word **hold** stays in it. The gesture arms only after 400ms, so `⌘⇧🖱️` alone
+would describe a click that does nothing and read as a bug the first time he
+tried it.
+
+### ⌘⇧ has to be *held*
 
 400ms, alone, with any other keypress abandoning the hold (`HOLD_MS`,
-`poisoned`). Bare ⌘-click is how a link opens in a new tab and Victor uses it all
-day: an inspector that ate it would be worse than no inspector. A quick ⌘-click
-therefore still opens the tab, and only a deliberate hold arms the outline — the
-two gestures are told apart by the one thing that actually differs, which is
-time. Every ⌘ shortcut is shorter than the gate as well, so ⌘T/⌘L/⌘C never arm it.
+`poisoned`). ⌘⇧-click opens a link in a new tab and jumps to it; a quick one still
+does, and only a deliberate hold arms the outline — the two gestures are told
+apart by the one thing that actually differs, which is time. Every ⌘⇧ shortcut is
+typed faster than the gate as well, so ⌘⇧T/⌘⇧N/⌘⇧R never arm it.
+
+**The chord, not the ⌘.** It was bare ⌘ for an hour, which was wrong: ⌘-click is
+how a link opens in a new tab, which Victor does all day, and one modifier is far
+easier to hit by accident than two. Releasing *either* half ends the gesture, and
+`poisoned` survives until the chord breaks — so ⌘C followed by reaching for ⇧
+without letting go of ⌘ stays a shortcut rather than turning into a hold
+halfway through.
 
 Two more gates on top: with **no relay session running** the extension never arms
-(it probes `/ping` first, so ⌘ in a browser with no agent behind it means exactly
-what Chrome says it means), and a **paused** relay answers `/ping` with 503,
-which the extension reads as no relay at all. That second one is not a detail —
-pause exists precisely so Victor can use the browser normally.
+(it probes `/ping` first, so the gesture in a browser with no agent behind it
+means exactly what Chrome says it means), and the same refusal covers **paused**
+and **not currently dictating**, which is now the common case.
 
 Verified 2026-08-15, driving a test Chrome over CDP: plain click → page sees it;
-⌘-click under the gate → page sees it; ⌘ held past the gate → swallowed and
-picked; ⌘C first then held → page sees it; ⌘ released → page sees it.
+chord-click under the gate → page sees it; chord held past the gate → swallowed
+and picked; ⌘C first then held → page sees it; chord released → page sees it. And
+against the relay directly: at rest `/ping` and `/pick` both answer 503 and
+nothing is recorded; with the dictation flag set, both answer 200 and the pick
+lands.
 
-### The pick queue is not cleared when a dictation opens
+### The pick queue still survives a dictation opening
 
-Unlike shots and the selection, `pendingPicks` survives `captureContext`.
-Pointing comes *before* talking at least as often as during — he finds the three
-things he wants changed, then says what to do with them — and a queue emptied by
-the act of starting to speak would lose exactly that order. They ride along with
-the next dictation whenever they were taken, and go stale after 10 minutes
-(`pickTTL`), because a pick nobody ever spoke about is litter, not context.
+Unlike shots and the selection, `pendingPicks` survives `captureContext` — not
+because picks can predate a dictation (they cannot any more; the gesture is dead
+outside one) but because **Cancel puts them back**. A cancelled prompt leaves its
+elements in the queue for the retry, and those legitimately predate the dictation
+they end up riding, which is why the stamps can still come out **negative**:
+`🎯 −0:08 …` means he pointed at it eight seconds before he started saying it
+again. In the ordinary case every stamp is positive.
 
-Which is why the stamps in the prompt can be **negative**: `🎯 −0:08 …` means he
-pointed at it eight seconds before he started talking. That is the ordinary case,
-not an edge case.
+They go stale after 10 minutes (`pickTTL`) — a queue left behind by a cancelled
+prompt he never retried is litter, not context. Nothing else clears it, so a
+dictation whose transcript never arrives keeps its picks rather than stranding
+them: `flushOrphaned` releases the *shots* on their own because a picture is
+worth looking at unaccompanied, while a bare selector is nothing to act on.
 
 **Cancel puts them back.** `releaseHeld(send: false)` returns the elements to the
 queue — cancelling means the sentence was wrong, not that he pointed at the wrong
@@ -453,17 +504,12 @@ things, and re-taking a pick means finding the element in the page again, which
 is the expensive half of the gesture. Shots are not restored: another one can be
 taken blind, and the screen has moved on anyway.
 
-### The 🎯 row shows at rest, and the 🔴 row does not
+### Why the row names the newest pick
 
-That asymmetry is the row's whole reason to exist. Between the click and the
-sentence — which can be minutes — something has to say the click was taken and is
-still being held; the green flash in the page is gone the moment he lets go of ⌘.
-
-It names the newest pick rather than only counting it: `×3` says three clicks
-landed, which he already believes. What he cannot check without a name is whether
-the third one caught the button or the div wrapped around it. `ElementPick.short`
-is the **tail** of the selector for the same reason the tail is what identifies
-it — the head is the page he is already looking at.
+`ElementPick.short` is the **tail** of the selector, for the same reason the tail
+is what identifies it: the head is the page he is already looking at. The green
+flash in the page is gone the moment he lets go of the chord, so this row remains
+of the receipt for the rest of the sentence.
 
 Built as a row with a separate glyph label, like the recording row. Not for an
 animation (nothing pulses here) but because `measure()` is a font metric and both

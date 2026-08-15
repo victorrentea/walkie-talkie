@@ -11,13 +11,15 @@
 const PORTS = [8917, 8918, 8919];
 
 // How long a probe may take before we call it dead. Generous enough for a
-// loopback round trip on a busy machine, short enough that the ⌘ hold does not
+// loopback round trip on a busy machine, short enough that the ⌘⇧ hold does not
 // visibly wait on it.
 const PROBE_TIMEOUT_MS = 400;
 
-// A probe is asked for on every ⌘ hold, which is often. The answer changes only
-// when a relay session starts or ends, so it is worth a few seconds of memory.
-const PROBE_TTL_MS = 3000;
+// A probe is asked for on every ⌘⇧ hold, which is often, so the answer is worth
+// remembering — but only briefly. It now flips every time Victor starts or stops
+// talking, not once a session, and a stale "live" is an arming that swallows a
+// ⌘⇧-click Chrome should have opened in a new tab.
+const PROBE_TTL_MS = 1000;
 
 let cached = { at: 0, ports: [], sessions: [] };
 
@@ -50,8 +52,8 @@ async function probe() {
   chrome.action.setBadgeBackgroundColor({ color: '#ff453a' });
   chrome.action.setTitle({
     title: cached.sessions.length
-      ? `Wispr Relay Inspector — ⌘-hold to pick, feeding ${cached.sessions.join(', ')}`
-      : 'Wispr Relay Inspector — no relay session running',
+      ? `Wispr Relay Inspector — ⌘⇧-hold to pick, feeding ${cached.sessions.join(', ')}`
+      : 'Wispr Relay Inspector — no relay session dictating',
   });
   return cached;
 }
@@ -66,7 +68,7 @@ async function deliver(pick) {
   const results = await Promise.all(ports.map((p) => ask(p, '/pick', init)));
   const accepted = results.filter(Boolean);
   // A relay that died between the probe and the click invalidates the cache, so
-  // the next ⌘ hold finds out rather than arming into a void.
+  // the next ⌘⇧ hold finds out rather than arming into a void.
   if (accepted.length !== ports.length) cached.at = 0;
   return { count: accepted.length, sessions: accepted.map((a) => a.session).filter(Boolean) };
 }

@@ -33,18 +33,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingShotOffsets: [TimeInterval] = []
     /// Elements ⌘-clicked in Chrome, waiting for the sentence they belong to.
     ///
-    /// Unlike shots, these are **not** cleared when a dictation opens. Pointing
-    /// comes before talking as often as during it — he finds the three things he
-    /// wants changed, *then* says what to do with them — and a queue emptied by
-    /// the act of starting to speak would lose precisely that order. They ride
-    /// along with the next dictation whenever they were taken, and are stamped
-    /// relative to it, negative offsets included.
+    /// Taken **during** the dictation, like the deliberate shots — ⌘ in Chrome is
+    /// the relay's only while the recording row is up (`syncBorrowedGestures`), so
+    /// a pick is always something he did mid-sentence, while pointing at what he
+    /// was in the middle of saying.
+    ///
+    /// Unlike shots they are still **not** cleared when a dictation opens, because
+    /// Cancel puts them back: a cancelled prompt leaves the picks in the queue for
+    /// the next attempt, and those legitimately predate the dictation they end up
+    /// riding — which is why the stamps can still come out negative.
     private var pendingPicks: [ElementPick] = []
 
-    /// A pick nobody ever spoke about is not context, it is litter. Ten minutes
-    /// is longer than any gap between pointing at something and saying what to do
-    /// with it, and short enough that this morning's browsing cannot ride into
-    /// this afternoon's prompt.
+    /// A pick nobody ever spoke about is not context, it is litter — a queue left
+    /// behind by a cancelled prompt he never retried. Ten minutes is longer than
+    /// any gap between cancelling and saying it again, and short enough that this
+    /// morning's browsing cannot ride into this afternoon's prompt.
     private let pickTTL: TimeInterval = 600
 
     /// When the current dictation opened, i.e. the zero of those offsets.
@@ -80,8 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var endAnnounced = false
 
     /// Wispr is recording. Main thread only, and kept here rather than read back
-    /// off the overlay because it is half of what decides whether mouse 4 belongs
-    /// to the relay or to Victor's Return key (`syncShotButton`).
+    /// off the overlay because it is half of what decides whether mouse 4 and
+    /// ⌘-click belong to the relay or to the software they were borrowed from
+    /// (`syncBorrowedGestures`).
     private var listening = false
 
     /// A message that is built, shown, and *not yet written*. It lives here for
@@ -141,9 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if recording { self.captureContext() }
             DispatchQueue.main.async {
                 self.listening = recording
-                self.syncShotButton()
+                self.syncBorrowedGestures()
                 self.overlay.setListening(recording)
-                if recording { self.publishShotCount() }
+                if recording {
+                    self.publishShotCount()
+                    // Normally zero, but a cancelled prompt hands its picks back —
+                    // and the row must open showing what the queue actually holds,
+                    // not the hint for an empty one.
+                    self.publishPicks()
+                }
             }
         }
 
@@ -198,20 +208,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("demo mode — driving the UI with canned content")
         let selection = "public Order placeOrder(Cart cart) {"
         let opened = Date()
-        // Pointed at before he ever started talking — which is the ordinary case,
-        // and the reason the stamp comes out negative.
         let picks = [
-            ElementPick(at: opened.addingTimeInterval(-8), path: "main.content > button.buy-button",
+            ElementPick(at: opened.addingTimeInterval(12), path: "main.content > button.buy-button",
                         tag: "button", text: "Add to cart"),
             ElementPick(at: opened.addingTimeInterval(21), path: "div#cart > span.price",
                         tag: "span", text: "100 €"),
         ]
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.overlay.setPicks(count: 1, newest: picks[0].short)
-        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.overlay.setSelection(selection)
             self?.overlay.setListening(true)
+        }
+        // Empty first, so the hint gets its moment — that is the state he is in
+        // for the first seconds of every dictation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) { [weak self] in
+            self?.overlay.setPicks(count: 1, newest: picks[0].short)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in
             self?.overlay.setPicks(count: 2, newest: picks[1].short)
@@ -357,23 +367,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         paused.toggle()
         overlay.setPaused(paused)
         status.setPaused(paused)
-        syncShotButton()
-        // A paused relay refuses `/ping`, and the extension reads a refusal as
-        // "no relay" — so ⌘ in Chrome goes straight back to opening links in new
-        // tabs, which is exactly what he paused in order to do.
-        picker.paused = paused
+        syncBorrowedGestures()
         Log.info(paused ? "paused via \(reason) — dictation stays in Wispr, nothing is relayed"
                         : "resumed via \(reason)")
     }
 
-    /// Mouse 4 is Victor's Return key (LinearMouse types one with it), and the
-    /// relay borrows it **only while there is a dictation to add a picture to**.
-    /// Outside that window — at rest, and the whole time forwarding is paused —
-    /// the button must go back to doing what every other app expects, so this is
-    /// called from both edges that can change the answer: Wispr starting or
-    /// stopping, and pause being toggled. Main thread only.
-    private func syncShotButton() {
-        hotkeys.dictating = listening && !paused
+    /// The two gestures the relay **borrows from other software**, handed over and
+    /// handed back together.
+    ///
+    /// Mouse 4 is Victor's Return key (LinearMouse types one with it) and ⌘-click
+    /// is how a link opens in a new tab; the relay takes both **only while there is
+    /// a dictation for them to add to**. Outside that window — at rest, and the
+    /// whole time forwarding is paused — they must go back to doing what every
+    /// other app expects, so this is called from both edges that can change the
+    /// answer: Wispr starting or stopping, and pause being toggled.
+    ///
+    /// One switch for both, so the recording row can never be on screen advertising
+    /// a gesture that is no longer live, or off while one still is. Main thread only.
+    private func syncBorrowedGestures() {
+        let live = listening && !paused
+        hotkeys.dictating = live
+        picker.dictating = live
     }
 
     /// What was selected when he started talking IS the subject, for the whole
@@ -449,6 +463,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A ⌘-click landed in Chrome. Off the main thread — this arrives on the
     /// listener's queue.
+    ///
+    /// Only reachable while dictating: the endpoint refuses everything else
+    /// (`ElementPicker.dictating`), so by the time one gets here it is a thing he
+    /// pointed at in the middle of a sentence. The `paused` check is the same
+    /// belt-and-braces the other capture paths carry — pause is flipped on the
+    /// main thread and this runs on another.
     ///
     /// There is no flash and no panel, deliberately: the outline in the page has
     /// already turned green under his cursor, at the pixel he clicked, before this

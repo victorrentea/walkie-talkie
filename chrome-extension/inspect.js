@@ -1,7 +1,7 @@
 // The inspector, in the page.
 //
-// Hold ⌘ and the element under the cursor is outlined and named; ⌘-click and its
-// selector goes to the relay, which hands it to the agent with the next thing
+// Hold ⌘⇧ and the element under the cursor is outlined and named; ⌘⇧-click and
+// its selector goes to the relay, which hands it to the agent with the next thing
 // Victor says. "Make *this* button blue" becomes a sentence with the pronoun
 // already resolved.
 //
@@ -18,13 +18,17 @@
   if (window.__wisprRelayInspector) return;
   window.__wisprRelayInspector = true;
 
-  // ⌘ has to be *held*, not merely down.
+  // The chord has to be *held*, not merely pressed.
   //
-  // Bare ⌘-click is load-bearing in a browser — it is how a link opens in a new
-  // tab — and an inspector that ate it would be worse than no inspector. So a
-  // quick ⌘-click stays a ⌘-click, and only a deliberate hold arms the outline.
-  // Every ⌘ shortcut (⌘T, ⌘L, ⌘C, ⌘⇥) is shorter than this, and pressing any
-  // other key cancels the hold outright.
+  // ⌘⇧ rather than bare ⌘ because bare ⌘-click is how a link opens in a new tab,
+  // which Victor does all day: an inspector that ate it would be worse than no
+  // inspector. ⌘⇧-click is the same thing plus "and switch to it", i.e. the same
+  // family but far rarer, and two modifiers are much harder to hit by accident
+  // than one.
+  //
+  // The hold survives on top of that as the second gate: a quick ⌘⇧-click stays a
+  // ⌘⇧-click, every ⌘⇧ shortcut (⌘⇧T, ⌘⇧N, ⌘⇧R, ⌘⇧[) is typed faster than this,
+  // and any other key cancels the hold outright.
   const HOLD_MS = 400;
 
   // Beyond this the selector stops being read and starts being scrolled past.
@@ -35,7 +39,11 @@
   // resting on one is a selector that stops resolving.
   const GENERATED = /^(css|sc|jsx|emotion|svelte|ng|_|v-)[-_]?[a-z0-9]{4,}$/i;
 
-  let metaDownAt = 0;       // when ⌘ went down; 0 = it is up
+  const CHORD = ['Meta', 'Shift'];
+  const down = { Meta: false, Shift: false };
+  const complete = () => down.Meta && down.Shift;
+
+  let heldSince = 0;        // when the chord last became complete; 0 = it is not
   let poisoned = false;     // another key joined it — this is a shortcut, not a hold
   let armed = false;
   let armTimer = 0;
@@ -107,7 +115,7 @@
 
   // --------------------------------------------------------------------- ui
 
-  /// Built lazily and inside a closed shadow root: a page that never sees ⌘ held
+  /// Built lazily and inside a closed shadow root: a page that never sees ⌘⇧ held
   /// never gets a node from us, and one that does cannot style what it gets.
   function buildUI() {
     const host = document.createElement('div');
@@ -195,15 +203,25 @@
 
   // ------------------------------------------------------------------ state
 
-  async function tryArm() {
-    if (armed || !metaDownAt || poisoned) return;
+  /// The chord just became complete — start the clock, unless a stray key has
+  /// already told us this is a shortcut being typed.
+  function beginHold() {
+    if (heldSince || poisoned) return;
+    heldSince = Date.now();
+    clearTimeout(armTimer);
+    armTimer = setTimeout(tryArm, HOLD_MS);
+  }
 
-    // With no relay session running, ⌘ in Chrome must go back to meaning exactly
-    // what Chrome says it means. The inspector is not a browser feature; it is
-    // one half of a conversation, and the other half has to be there.
+  async function tryArm() {
+    if (armed || !heldSince || poisoned) return;
+
+    // With nobody dictating, ⌘⇧ in Chrome must go back to meaning exactly what
+    // Chrome says it means. The relay refuses the probe outside a dictation, so
+    // the window in which the gesture is borrowed is the window in which the
+    // overlay is on screen saying so.
     let live = false;
     try { live = (await chrome.runtime.sendMessage({ type: 'probe' }))?.live === true; } catch { live = false; }
-    if (!live || !metaDownAt || poisoned) return;
+    if (!live || !heldSince || poisoned) return;
 
     armed = true;
     if (!ui) ui = buildUI();
@@ -211,10 +229,14 @@
     hover(mouse.x, mouse.y);
   }
 
+  /// The chord broke, or focus left. `poisoned` clears here and nowhere else, so
+  /// a ⌘C followed by reaching for ⇧ *without letting go of ⌘* stays a shortcut
+  /// rather than turning into a hold halfway through.
   function disarm() {
     clearTimeout(armTimer);
-    metaDownAt = 0;
+    heldSince = 0;
     poisoned = false;
+    down.Meta = down.Shift = false;
     current = null;
     if (!armed) return;
     armed = false;
@@ -258,23 +280,23 @@
   // ----------------------------------------------------------------- events
 
   addEventListener('keydown', (e) => {
-    if (e.key === 'Meta') {
-      if (metaDownAt) return;                 // macOS repeats the modifier; the first one is the hold
-      metaDownAt = Date.now();
-      poisoned = false;
-      armTimer = setTimeout(tryArm, HOLD_MS);
+    if (CHORD.includes(e.key)) {
+      down[e.key] = true;
+      if (complete()) beginHold();            // either order of ⌘ and ⇧ gets here
       return;
     }
-    // Any other key with ⌘ down makes this a shortcut, and a shortcut is never a
-    // hold. Escape gets out of an arm that is already up.
-    if (metaDownAt || armed) {
+    // Any other key with a modifier down makes this a shortcut, and a shortcut is
+    // never a hold. Escape gets out of an arm that is already up.
+    if (down.Meta || down.Shift || armed) {
       poisoned = true;
       clearTimeout(armTimer);
+      heldSince = 0;
       if (armed) { armed = false; ui?.cursor.remove(); hide(); }
     }
   }, true);
 
-  addEventListener('keyup', (e) => { if (e.key === 'Meta') disarm(); }, true);
+  // Releasing **either** half ends it: the gesture is the pair, not the ⌘.
+  addEventListener('keyup', (e) => { if (CHORD.includes(e.key)) disarm(); }, true);
 
   // ⌘⇥ away, or focus leaving for the address bar: the keyup never arrives, and
   // an outline left behind is an outline that outlives the key holding it up.
@@ -289,19 +311,20 @@
 
     // The second way in, and the one that matters inside an iframe: keystrokes go
     // to the focused frame only, so a frame the cursor is over but which has
-    // never had focus would otherwise never see ⌘ go down.
-    if (e.metaKey) {
-      if (!metaDownAt) { metaDownAt = Date.now(); poisoned = false; armTimer = setTimeout(tryArm, HOLD_MS); }
-    } else if (metaDownAt) {
+    // never had focus would otherwise never see the chord go down.
+    if (e.metaKey && e.shiftKey) {
+      down.Meta = down.Shift = true;
+      beginHold();
+    } else if (heldSince) {
       disarm();
     }
   }, true);
 
   addEventListener('scroll', () => { if (armed && current) paint(current); }, true);
 
-  // While armed the page gets none of it. ⌘-click would open a new tab, ⌘-drag
-  // would start a selection, and the point of the gesture is that it does
-  // neither — it only says *this one*.
+  // While armed the page gets none of it. ⌘⇧-click would open a new tab and jump
+  // to it, ⇧-drag would extend a selection, and the point of the gesture is that
+  // it does neither — it only says *this one*.
   for (const type of ['mousedown', 'mouseup', 'click', 'auxclick', 'dblclick', 'contextmenu']) {
     addEventListener(type, (e) => {
       if (!armed) return;

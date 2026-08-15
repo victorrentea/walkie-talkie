@@ -101,21 +101,26 @@ final class ElementPicker {
     /// A pick just arrived. Called on the listener queue, never the main thread.
     var onPick: ((ElementPick) -> Void)?
 
-    /// Forwarding is off, so this relay takes nothing.
+    /// **Wispr is recording and forwarding is on** — the only window in which ⌘ in
+    /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
+    /// the extension reads a refusal exactly like no relay at all, so ⌘ goes
+    /// straight back to being Chrome's ⌘.
     ///
-    /// A paused relay answers `/ping` with a refusal, and the extension treats a
-    /// refusal exactly like no relay at all: ⌘ in Chrome goes straight back to
-    /// being Chrome's ⌘. That is what pause has always meant here — Victor pauses
-    /// precisely in order to use the browser normally, and an inspector still
-    /// eating his ⌘-clicks would be the one thing pause was supposed to stop.
+    /// Gated on the dictation for the same reason mouse 4 is (`HotkeyTap.dictating`)
+    /// and not one of its own: ⌘-click opens a link in a new tab and Victor uses it
+    /// all day. Borrowing a gesture that load-bearing is only defensible while the
+    /// window is narrow and *visible* — the recording row is on screen saying the
+    /// gesture is live, and both appear and disappear together. A picker armed
+    /// around the clock would be a browser that intermittently stopped opening
+    /// links, with nothing on screen to explain why.
     ///
     /// Written from the main thread, read on the listener queue, hence the lock —
     /// the same shape as `HotkeyTap.dictating`, and for the same reason.
-    var paused: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return pausedFlag }
-        set { stateLock.lock(); pausedFlag = newValue; stateLock.unlock() }
+    var dictating: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return dictatingFlag }
+        set { stateLock.lock(); dictatingFlag = newValue; stateLock.unlock() }
     }
-    private var pausedFlag = false
+    private var dictatingFlag = false
     private let stateLock = NSLock()
 
     /// Tried in order. Several relays can be up at once (one per agent session),
@@ -199,11 +204,11 @@ final class ElementPicker {
         // The extension asks this before it arms: with no relay running, ⌘ in
         // Chrome must go back to meaning exactly what Chrome says it means.
         case ("GET", "/ping"):
-            guard !paused else { return respond(conn, 503, ["ok": false, "paused": true]) }
+            guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }
             respond(conn, 200, ["ok": true, "session": SessionLabel.value])
 
         case ("POST", "/pick"):
-            guard !paused else { return respond(conn, 503, ["ok": false, "paused": true]) }
+            guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }
             guard let body = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
                   let pick = ElementPick(json: body) else {
                 return respond(conn, 400, ["ok": false, "error": "expected a JSON object with a non-empty `path`"])

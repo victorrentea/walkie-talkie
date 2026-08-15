@@ -135,23 +135,37 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         return "📸 ×\(shotCount) \(Self.shotHint)"
     }
 
-    /// The picked-elements row, and **unlike the recording row it shows at rest**.
+    /// The gesture that picks an element out of the page — shown **only while
+    /// dictating**, exactly like `shotHint`, because that is the only window in
+    /// which ⌘⇧ in Chrome belongs to the relay at all.
     ///
-    /// That asymmetry is the whole point of the row. Pointing at things comes
-    /// before talking about them at least as often as during — he finds the three
-    /// bits of the page he wants changed, *then* says what to do with them — so
-    /// between the click and the sentence there has to be something on screen
-    /// saying the click was taken and is still being held. The green flash in the
-    /// page is gone the instant he lets go of ⌘; this is what remains.
+    /// It has to be advertised for the same reason the borrowed mouse button does:
+    /// ⌘⇧-click opens a link in a new tab and jumps to it, and a browser that
+    /// silently stopped doing that would read as broken. The hint and the
+    /// behaviour appear and disappear together, and the row rides beside the
+    /// cursor — which is where his eyes already are while he points at things.
     ///
-    /// It names the newest one rather than only counting: `×3` says three clicks
-    /// landed, which he already believes. What he cannot check without a name is
-    /// whether the third one caught the button or the div wrapped around it.
+    /// The word `hold` is in it and stays in it: the gesture arms only after the
+    /// chord has been down 400ms on its own, so a hint reading `⌘⇧🖱️` would
+    /// describe a click that does nothing and look like a bug the first time he
+    /// tried it.
+    private static let pickHint = "hold ⌘⇧🖱️"
+
+    /// The picked-elements row: the gesture until he has used it, the newest thing
+    /// he picked once he has.
     ///
-    /// Hidden while paused, like everything else that would be a lie there: a
-    /// paused relay refuses picks outright.
+    /// The hint gives way to the name because after the first pick the question
+    /// changes. Before it, the only thing worth saying is *that you can do this*;
+    /// after it, he knows the gesture and what he cannot check without a name is
+    /// whether the click caught the button or the div wrapped around it. A count
+    /// alone (`×3`) only tells him something he already believes.
+    ///
+    /// Gated on `listening` like the recording row above it, and hidden while
+    /// paused for the same reason: with ⌘⇧ handed back to Chrome, a row saying
+    /// otherwise is a lie about which gestures are live.
     private var pickText: String? {
-        guard pickCount > 0, !paused else { return nil }
+        guard listening, !paused else { return nil }
+        guard pickCount > 0 else { return Self.pickHint }
         guard let newest = pickNewest, !newest.isEmpty else { return "×\(pickCount)" }
         return "×\(pickCount) \(Self.fit(newest, 34))"
     }
@@ -489,7 +503,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // standing by is what the overlay does for hours, and it should take no
         // more room than "🤖 ai@master" needs. Changing state resizes it, which is
         // fine.
-        let titleWidth = measure(titleText, font: titleFont)
+        // Asked of the label, not of the font — the 🤖 draws wider than the
+        // semibold metrics say, so `measure` clipped the last character of the
+        // session name whenever the title was the widest row. It only became
+        // visible once a state existed where it *was* the widest: before the
+        // ⌘-pick row, something longer was always beside it.
+        titleLabel.stringValue = titleText
+        titleLabel.sizeToFit()
+        let titleWidth = ceil(titleLabel.frame.width)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
