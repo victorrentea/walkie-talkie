@@ -132,7 +132,16 @@ sentence**: that window is now this chip.
 - **One panel spanning every screen, with the rectangle as a layer inside it.**
   Resizing a window 120 times puts every frame through the window server; a
   layer's frame is a GPU update, and the flight crosses monitors, which a
-  per-screen panel could not. `sharingType = .none`, because a bind is very often
+  per-screen panel could not.
+
+  **It must be a `RelayPanel`, not an `NSPanel`** — this is the whole reason the
+  effect once appeared on only one screen. AppKit's `constrainFrameRect` pulls a
+  window back onto a display and below the menu bar, so a panel asked to span a
+  desk whose screens sit above and to the left of the primary was quietly clamped
+  to a fraction of it. `RelayPanel` already overrides that away (it had to, so the
+  chip could sit at a screen edge) and the plain panel never inherited the fix.
+  Verified by reading the panel's real bounds out of `CGWindowListCopyWindowInfo`
+  during a bind: `-1920,-1080 5568×2197`, which is the whole four-screen desk. `sharingType = .none`, because a bind is very often
   followed by a dictation whose first act is to photograph the screen.
 
 **The source frame is the one piece of geometry here that can be silently
@@ -152,10 +161,28 @@ Terminal window set to a known `{200, 150, 1000, 700}` on a multi-monitor desk:
 
 `🤖 folder@branch` becomes those two. Four deliberate decisions:
 
-- **The label is the bound session's, not the launch directory's.** Those were
-  always meant to be the same repo and, with two sessions in one folder, never
-  reliably were. Bound, the relay *knows* rather than inherits — read off the
-  working directory of the foreground process on the tty (`lsof -d cwd`).
+- **The label is the bound session's, not the launch directory's — and those are
+  two different things.** Claude Code keeps a *session* directory that moves when
+  Victor moves, and a *process* directory that never leaves where it was
+  launched. `lsof -d cwd` gives the second: measured on a live session working in
+  `wispr-relay`, it still answered `~/workspace`, which is also why the branch was
+  missing (`~/workspace` is not a repo).
+
+  So the session directory is **published rather than inferred**. Victor's status
+  line already receives it from Claude Code and writes it to
+  `~/.claude/cwd/<ttysNNN>`; `publishedDirectory(forTTY:)` reads it, and the
+  process directory stays as the fallback for a terminal running something else.
+
+  **The tty is the key because it is the only handle both sides hold.**
+  `TERM_SESSION_ID` was the obvious cheaper choice and is unusable: macOS shows a
+  process's environment only to its own descendants, so the relay — launched
+  separately by ⌘⌃D — reads nothing back (measured: 2926 bytes of environment for
+  a process in the caller's ancestry, 4 for an unrelated terminal's). The status
+  line publishes under its **parent's** tty, since Claude Code spawns it with no
+  controlling terminal of its own but keeps one itself.
+
+  A stale entry is harmless: tty numbers are reused by the next tab, so the read
+  checks the directory still exists before believing it.
 - **The working directory gets a row of its own.** It rode on the title after a
   `·` for an afternoon, which put two different kinds of answer on one line and
   made the chip as wide as both together — beside the cursor, over Victor's work.

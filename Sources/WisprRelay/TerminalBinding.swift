@@ -594,12 +594,42 @@ final class TerminalBinding {
         return shells.contains(command) || shells.contains(command.replacingOccurrences(of: "-", with: ""))
     }
 
-    /// `folder@branch` for whatever Claude Code is running on this tty, taken
-    /// from its working directory — the same answer `SessionLabel` derives for
-    /// the relay's own, and the reason the chip can finally name the session it
-    /// is about to talk to rather than the one it was launched from.
+    /// `folder@branch` for whatever Claude Code is running on this tty — the
+    /// directory it is **working in**, which is not the same thing as the
+    /// directory its process is in.
+    ///
+    /// **Claude Code keeps two.** The process is launched somewhere and stays
+    /// there forever; the *session* moves, and that move is what its status line
+    /// shows and what Victor means by "which folder". Measured on a live session
+    /// working in `wispr-relay`: `lsof -d cwd` on the pid still answered
+    /// `~/workspace`, which is also why the branch went missing — `~/workspace`
+    /// is not a repo, so there was nothing to put after the `@`.
+    ///
+    /// Neither is the agent's own shell any help: it has **no controlling
+    /// terminal** (so `ps -t` cannot see it) and it is spawned per command, so
+    /// most of the time — including the moment ⌘⌃D is pressed — it does not
+    /// exist at all.
+    ///
+    /// So the session directory is *published* rather than inferred, and keyed by
+    /// **the tty** — the one handle both sides hold. Victor's status line already
+    /// receives the directory from Claude Code and now writes it to
+    /// `~/.claude/cwd/<ttysNNN>` (under its *parent's* tty: Claude Code spawns it
+    /// without a controlling terminal of its own, but keeps one itself).
+    ///
+    /// `TERM_SESSION_ID` looked like the better key — free, already in the
+    /// environment — and is not usable: macOS shows a process's environment only
+    /// to its own descendants, so an app launched separately reads nothing back
+    /// (measured: 2926 bytes of environment for a process in the caller's
+    /// ancestry, 4 for an unrelated terminal's).
+    ///
+    /// The process directory remains the fallback. It is right whenever the
+    /// session never moved, and it is all there is for a terminal running
+    /// something other than Claude Code — or one whose status line is somebody
+    /// else's.
     private static func sessionLabel(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
+        if let published = publishedDirectory(forTTY: device) { return label(forDirectory: published) }
+
         guard let out = run("/bin/ps", ["-t", device, "-o", "pid=,stat="]) else { return nil }
         for line in out.components(separatedBy: "\n") {
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
@@ -608,6 +638,27 @@ final class TerminalBinding {
             return label(forDirectory: dir)
         }
         return nil
+    }
+
+    /// The session directory last published for this tty, if any.
+    ///
+    /// Checked defensively at every step: the file is written by a shell script
+    /// on a schedule of its own, so a missing directory, a stale entry from a tab
+    /// that has since closed, or a path that no longer exists all mean the same
+    /// thing here — fall back to the process. The **existence check is what makes
+    /// a stale file harmless**, since a tty number is reused by the next tab to
+    /// open.
+    private static func publishedDirectory(forTTY device: String) -> String? {
+        guard device.hasPrefix("ttys"), !device.contains("/") else { return nil }
+        let file = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/cwd").appendingPathComponent(device)
+        guard let dir = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let trimmed = dir.trimmingCharacters(in: .whitespacesAndNewlines)
+        var isDirectory: ObjCBool = false
+        guard !trimmed.isEmpty,
+              FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return nil }
+        return trimmed
     }
 
     /// `lsof -p <pid> -a -d cwd` is the only way to read another process's

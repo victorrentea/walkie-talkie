@@ -68,9 +68,16 @@ enum BindFlight {
         let canvas = NSScreen.screens.reduce(CGRect.null) { $0.union($1.frame) }
         guard !canvas.isNull else { return }
 
-        let host = NSPanel(contentRect: canvas,
-                           styleMask: [.borderless, .nonactivatingPanel],
-                           backing: .buffered, defer: false)
+        // **`RelayPanel`, not `NSPanel`** — and that is the whole reason this
+        // only ever appeared on one screen. AppKit's `constrainFrameRect` pulls
+        // a window back onto a display and below the menu bar, so a panel asked
+        // to span a desk whose screens sit above and to the left of the primary
+        // was quietly clamped to a fraction of it. `RelayPanel` already overrides
+        // that away — it had to, so the chip could sit at the screen edge — and
+        // the plain panel here never inherited the fix.
+        let host = RelayPanel(contentRect: canvas,
+                              styleMask: [.borderless, .nonactivatingPanel],
+                              backing: .buffered, defer: false)
         host.isOpaque = false
         host.backgroundColor = .clear
         host.hasShadow = false
