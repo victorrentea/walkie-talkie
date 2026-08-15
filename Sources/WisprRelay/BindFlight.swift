@@ -26,11 +26,32 @@ import QuartzCore
 /// big enough for a border to mean anything, and the fill comes up as it
 /// shrinks: at 5% there is nothing left to see through, and a hollow token that
 /// small is a token nobody sees arrive.
+///
+/// **One panel per screen, and that is not an optimisation — it is the only
+/// thing that works.** This was written as a single panel spanning the union of
+/// every display, which is the obvious shape for something that has to cross
+/// them. It played on exactly one screen. Two rounds of diagnosis went past the
+/// real cause: `constrainFrameRect` genuinely was clamping the frame (fixed by
+/// using `RelayPanel`, which overrides it), and after that the geometry was
+/// provably right — the panel measured `-1920,0 5568×2197` and the layer landed
+/// at exactly the source window — and it *still* drew on one screen only.
+///
+/// The reason is `com.apple.spaces spans-displays`, which is unset on Victor's
+/// Mac and unset by default on macOS: **each display has its own Space, so the
+/// window server gives a window to one display and no window spans two.**
+/// `canJoinAllSpaces` does not buy it back — that is about Spaces on a display,
+/// not about spanning displays. So the rectangle is one layer per screen, all
+/// showing the same global rectangle in their own coordinates, which is exactly
+/// the shape `CaptureFlash` already had for the same reason.
 enum BindFlight {
 
     /// 2s, as asked. Long enough to follow with the eye across a desk, short
     /// enough that it is gone before it becomes something in the way.
-    private static let duration: CFTimeInterval = 2.0
+    ///
+    /// Not private: the bind flash is sized to it, so the panel in the corner
+    /// clears at the exact moment the rectangle lands and the chip takes over.
+    /// A second number would drift from this one.
+    static let duration: CFTimeInterval = 2.0
 
     /// The first eighth is spent standing still at full size. Without it the
     /// rectangle is already shrinking by the time the eye arrives, and the one
@@ -45,8 +66,22 @@ enum BindFlight {
     /// what makes it *end* rather than blink out mid-flight.
     private static let fadeFraction = 0.2
 
-    private static var panel: NSPanel?
-    private static var shape: CALayer?
+    /// One per display, each drawing the same rectangle in its own coordinates.
+    private struct Pane {
+        let panel: NSPanel
+        let shape: CALayer
+        /// The screen's frame, kept rather than re-read: `NSScreen` objects are
+        /// replaced when the display configuration changes, and a flight that
+        /// outlived a monitor being unplugged would otherwise ask a stale object
+        /// for its origin.
+        let frame: CGRect
+    }
+
+    private static var panes: [Pane] = []
+    /// Fired when the rectangle has finished arriving — **never on cancel**,
+    /// which is what a replacing bind does, and whose old answer must not land
+    /// on top of the new one.
+    private static var onLanded: (() -> Void)?
     private static var timer: Timer?
     private static var startedAt: CFTimeInterval = 0
     private static var origin: CGRect = .zero
@@ -57,60 +92,58 @@ enum BindFlight {
     ///
     /// Main thread only. A second bind cancels the first: two rectangles in
     /// flight would be two answers to a question with one.
-    static func fly(from source: CGRect) {
+    /// `landed` runs the instant the rectangle reaches the cursor. That is when
+    /// the chip's label appears, so the two read as one gesture: the rectangle
+    /// does not merely end near the pointer, it *becomes* the thing now sitting
+    /// there.
+    static func fly(from source: CGRect, landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
 
-        // One panel spanning every screen, with the rectangle as a layer inside
-        // it. The alternative — resizing a window 120 times — puts every frame
-        // through the window server; a layer's frame is a GPU update, and the
-        // flight crosses monitors, which a per-screen panel could not.
-        let canvas = NSScreen.screens.reduce(CGRect.null) { $0.union($1.frame) }
-        guard !canvas.isNull else { return }
+        panes = NSScreen.screens.map { screen in
+            // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` pulls a
+            // window back onto a display and below the menu bar, and `RelayPanel`
+            // overrides that away. It matters even at exactly one screen's size —
+            // a screen above the primary starts above the menu bar.
+            let panel = RelayPanel(contentRect: screen.frame,
+                                   styleMask: [.borderless, .nonactivatingPanel],
+                                   backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            // A bind is very often followed by a dictation, whose first act is to
+            // photograph the screen. This must never be in that picture.
+            //
+            panel.sharingType = .none
 
-        // **`RelayPanel`, not `NSPanel`** — and that is the whole reason this
-        // only ever appeared on one screen. AppKit's `constrainFrameRect` pulls
-        // a window back onto a display and below the menu bar, so a panel asked
-        // to span a desk whose screens sit above and to the left of the primary
-        // was quietly clamped to a fraction of it. `RelayPanel` already overrides
-        // that away — it had to, so the chip could sit at the screen edge — and
-        // the plain panel here never inherited the fix.
-        let host = RelayPanel(contentRect: canvas,
-                              styleMask: [.borderless, .nonactivatingPanel],
-                              backing: .buffered, defer: false)
-        host.isOpaque = false
-        host.backgroundColor = .clear
-        host.hasShadow = false
-        host.ignoresMouseEvents = true
-        host.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
-        host.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        // A bind is very often followed by a dictation, whose first act is to
-        // photograph the screen. This must never be in that picture.
-        host.sharingType = .none
+            let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            view.wantsLayer = true
 
-        let view = NSView(frame: NSRect(origin: .zero, size: canvas.size))
-        view.wantsLayer = true
+            let rect = CALayer()
+            rect.borderColor = NSColor.systemBlue.withAlphaComponent(0.95).cgColor
+            rect.backgroundColor = NSColor.systemBlue.withAlphaComponent(0).cgColor
+            rect.borderWidth = 4
+            rect.cornerRadius = 10
+            view.layer?.addSublayer(rect)
 
-        let rect = CALayer()
-        rect.borderColor = NSColor.systemBlue.withAlphaComponent(0.95).cgColor
-        rect.backgroundColor = NSColor.systemBlue.withAlphaComponent(0).cgColor
-        rect.borderWidth = 4
-        rect.cornerRadius = 10
-        view.layer?.addSublayer(rect)
+            panel.contentView = view
+            panel.setFrame(screen.frame, display: true)
+            panel.orderFrontRegardless()
+            return Pane(panel: panel, shape: rect, frame: screen.frame)
+        }
+        guard !panes.isEmpty else { return }
 
-        host.contentView = view
-        host.setFrame(canvas, display: true)
-        host.orderFrontRegardless()
-
-        panel = host
-        shape = rect
         origin = source
+        onLanded = landed
         startedAt = CACurrentMediaTime()
 
         place(at: 0)
         let tick = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
             let elapsed = CACurrentMediaTime() - startedAt
-            guard elapsed < duration else { return cancel() }
+            guard elapsed < duration else { return land() }
             place(at: elapsed / duration)
         }
         RunLoop.main.add(tick, forMode: .common)
@@ -119,7 +152,7 @@ enum BindFlight {
 
     /// One frame. `t` is 0…1 across the whole 2s, hold included.
     private static func place(at t: CFTimeInterval) {
-        guard let panel = panel, let shape = shape else { return }
+        guard !panes.isEmpty else { return }
 
         // The hold is subtracted here rather than by delaying the timer, so the
         // rectangle is on screen from the first frame — standing still is a
@@ -134,25 +167,37 @@ enum BindFlight {
         let centre = CGPoint(x: from.x + (to.x - from.x) * eased,
                              y: from.y + (to.y - from.y) * eased)
         let size = CGSize(width: origin.width * scale, height: origin.height * scale)
-
-        // Panel coordinates: the canvas may start left of or below zero on a
-        // multi-monitor desk, and the layer lives inside it.
-        let frame = CGRect(x: centre.x - size.width / 2 - panel.frame.minX,
-                           y: centre.y - size.height / 2 - panel.frame.minY,
-                           width: size.width, height: size.height)
+        // The rectangle in global screen coordinates, computed once and then
+        // expressed in each screen's own — so every display draws the same shape
+        // and it crosses their edges continuously rather than jumping.
+        let global = CGRect(x: centre.x - size.width / 2, y: centre.y - size.height / 2,
+                            width: size.width, height: size.height)
 
         let fade = t > 1 - fadeFraction ? CGFloat((1 - t) / fadeFraction) : 1
+        let fill = NSColor.systemBlue.withAlphaComponent(0.45 * eased).cgColor
+        let border = max(1.5, 4 * (0.35 + 0.65 * scale))
+        let radius = min(10, min(size.width, size.height) / 4)
 
         // Implicit animations off: every frame is already the animation, and
         // Core Animation interpolating between them lags the cursor by a beat.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shape.frame = frame
-        // The fill arrives as the border stops being able to carry it.
-        shape.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.45 * eased).cgColor
-        shape.borderWidth = max(1.5, 4 * (0.35 + 0.65 * scale))
-        shape.cornerRadius = min(10, min(size.width, size.height) / 4)
-        shape.opacity = Float(fade)
+        for pane in panes {
+            // A screen the rectangle has left is not asked to composite it. The
+            // window would clip it anyway; this skips the work rather than the
+            // pixels.
+            guard pane.frame.intersects(global) else {
+                pane.shape.isHidden = true
+                continue
+            }
+            pane.shape.isHidden = false
+            pane.shape.frame = global.offsetBy(dx: -pane.frame.minX, dy: -pane.frame.minY)
+            // The fill arrives as the border stops being able to carry it.
+            pane.shape.backgroundColor = fill
+            pane.shape.borderWidth = border
+            pane.shape.cornerRadius = radius
+            pane.shape.opacity = Float(fade)
+        }
         CATransaction.commit()
     }
 
@@ -163,11 +208,18 @@ enum BindFlight {
         return CGFloat(t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2)
     }
 
+    /// The flight ran its course: tear it down, *then* hand over.
+    private static func land() {
+        let completion = onLanded
+        cancel()
+        completion?()
+    }
+
     static func cancel() {
         timer?.invalidate()
         timer = nil
-        panel?.orderOut(nil)
-        panel = nil
-        shape = nil
+        for pane in panes { pane.panel.orderOut(nil) }
+        panes = []
+        onLanded = nil
     }
 }

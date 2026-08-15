@@ -436,12 +436,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
-            // The rectangle flies from the window that was captured to the
-            // cursor, which is where the chip lives — the one thing that
-            // connects the terminal he pressed at to the label that appears next
-            // to his hand.
-            if let frame = bound.sourceFrame { BindFlight.fly(from: frame) }
             // The flash names the **address**, which the chip then drops: this is
             // the one moment the answer to "did it grab the right tab?" is worth
             // a panel, and `ttys004` is what settles it. Afterwards the chip's
@@ -451,7 +445,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the chip no longer distinguishes ⌨️ from 🎯: binding is the moment
             // that fact can still change what Victor does about it.
             let unguarded = bound.isGuarded ? "" : " — no shell guard"
-            self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
+
+            // **The rectangle hands over to the chip.** It flies from the window
+            // that was captured to the cursor, and the label appears there the
+            // instant it arrives — so the two are one gesture rather than two
+            // announcements, and the shape that lands *becomes* the thing now
+            // sitting under his hand.
+            //
+            // The flash is sized to the flight for the same reason: a flash is a
+            // panel, and a panel is not the chip, so an overlay still showing one
+            // in the corner has nowhere to put a label beside the pointer. Ending
+            // them together is what leaves the cursor free at the exact moment
+            // the rectangle gets there.
+            //
+            // With no window to fly from — nothing resolved a frame — there is no
+            // arrival to wait for and the chip is set at once.
+            guard let frame = bound.sourceFrame else {
+                self.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
+                self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
+                return
+            }
+            self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)",
+                               duration: BindFlight.duration)
+            BindFlight.fly(from: frame) { [weak self] in
+                self?.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
+            }
         }
         return Self.describe(bound)
     }

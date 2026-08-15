@@ -123,6 +123,7 @@ final class ElementPicker {
     /// A fabricated transcript, entering where a real one does.
     var onTestDictation: ((String) -> Void)?
 
+
     /// **Wispr is recording and forwarding is on** — the only window in which ⌘ in
     /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
     /// the extension reads a refusal exactly like no relay at all, so ⌘ goes

@@ -129,20 +129,36 @@ sentence**: that window is now this chip.
   exists to answer is asked of a shape that has stopped covering the answer.
 - **The cursor is re-read every frame**, not sampled once, so it chases a hand
   that keeps moving instead of arriving where the hand used to be.
-- **One panel spanning every screen, with the rectangle as a layer inside it.**
-  Resizing a window 120 times puts every frame through the window server; a
-  layer's frame is a GPU update, and the flight crosses monitors, which a
-  per-screen panel could not.
+- **One panel per screen, and that is the only thing that works.** It was written
+  as a single panel spanning the union of every display — the obvious shape for
+  something that must cross them — and it played on exactly one screen. Two
+  rounds of diagnosis went past the real cause. `constrainFrameRect` genuinely
+  *was* clamping the frame (AppKit pulls windows back onto a display and below
+  the menu bar; `RelayPanel` overrides that away and the plain `NSPanel` here had
+  never inherited the fix) — and with that fixed the geometry was provably right,
+  the panel measuring `-1920,0 5568×2197` and the layer landing exactly on the
+  source window, and it *still* drew on one screen.
 
-  **It must be a `RelayPanel`, not an `NSPanel`** — this is the whole reason the
-  effect once appeared on only one screen. AppKit's `constrainFrameRect` pulls a
-  window back onto a display and below the menu bar, so a panel asked to span a
-  desk whose screens sit above and to the left of the primary was quietly clamped
-  to a fraction of it. `RelayPanel` already overrides that away (it had to, so the
-  chip could sit at a screen edge) and the plain panel never inherited the fix.
-  Verified by reading the panel's real bounds out of `CGWindowListCopyWindowInfo`
-  during a bind: `-1920,-1080 5568×2197`, which is the whole four-screen desk. `sharingType = .none`, because a bind is very often
-  followed by a dictation whose first act is to photograph the screen.
+  The cause is `com.apple.spaces spans-displays`, unset on Victor's Mac and unset
+  by default on macOS: **each display has its own Space, so the window server
+  gives a window to one display and no window spans two.** `canJoinAllSpaces`
+  does not buy it back — that is Spaces *on* a display, not spanning displays.
+  Hence one panel per screen, each drawing the same global rectangle in its own
+  coordinates, which is the shape `CaptureFlash` already had for the same reason.
+
+  Verified by burst-capturing a non-primary display through a whole flight:
+  strong-blue pixels go 178 → 3070 the frame the rectangle arrives.
+- **The rectangle hands over to the chip.** The label appears beside the cursor
+  the instant the rectangle gets there (`BindFlight.fly(from:landed:)`), so the
+  two are one gesture rather than two announcements: the shape that lands
+  *becomes* the thing now sitting under his hand. The bind flash is sized to
+  `BindFlight.duration` for the same reason — a flash is a *panel*, and a panel
+  is not the chip, so an overlay still showing one in the corner has nowhere to
+  put a label beside the pointer. Ending them together is what leaves the cursor
+  free at the exact moment of arrival.
+
+  `landed` never fires on cancel, which is what a replacing bind does: the old
+  answer must not land on top of the new one.
 
 **The source frame is the one piece of geometry here that can be silently
 wrong.** AppleScript's `bounds` and the Accessibility API both measure y
