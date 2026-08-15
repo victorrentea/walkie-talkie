@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 
 /// Screenshots the display under the cursor into `~/.wispr-relay/shots`.
 ///
@@ -26,7 +27,10 @@ enum ScreenCapture {
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
         stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-        let name = "shot-\(stamp.string(from: Date()))\(cursorTag(mouse: mouse, screen: screen)).jpg"
+        let spot = cursorFraction(mouse: mouse, screen: screen)
+        // Provisional: the pixel reading in the final name is measured against the
+        // frame `screencapture` actually produces, which does not exist yet.
+        let name = "shot-\(stamp.string(from: Date())).jpg"
         let file = Outbox.shotsDir.appendingPathComponent(name)
 
         let process = Process()
@@ -43,13 +47,15 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
+        if let spot = spot { CursorMarker.draw(at: spot, onJPEGAt: file) }
+        let final = tagCursor(spot, on: file)
         prune()
-        return file.path
+        return final.path
     }
 
-    /// Where the cursor was, written into the file name as
-    /// `-cursor-34.2x71.8pct` — 34.2% across, 71.8% down, **top-left origin**,
-    /// like the image itself.
+    /// Rename the shot to carry the pointer position **in pixels**:
+    /// `shot-<stamp>-cursor-at-1034x1466-of-3024x1890.jpg` — the cursor sat at
+    /// x=1034, y=1466 of a 3024×1890 frame, **top-left origin** like the image.
     ///
     /// It rides in the name and not in the outbox JSON because the name is what
     /// the agent already has in front of it: the path is in `paths`, so the
@@ -57,16 +63,62 @@ enum ScreenCapture {
     /// new field to benefit from it. He points at things while he talks ("this
     /// button", "that line") and the sentence alone cannot say which.
     ///
-    /// **Percentages, not pixels.** The agent reads the shot through a tool that
-    /// downsamples it, so a pixel coordinate stops pointing at the right thing
-    /// the moment the picture is resized. A percentage survives any scaling.
-    private static func cursorTag(mouse: NSPoint, screen: NSScreen?) -> String {
-        guard let frame = screen?.frame, frame.width > 0, frame.height > 0 else { return "" }
-        let clamp = { (v: CGFloat) in min(max(v, 0), 100) }
-        let x = clamp((mouse.x - frame.minX) / frame.width * 100)
+    /// **Pixels, and the frame they are pixels of.** The reading used to be a
+    /// percentage pair (`-cursor-34.2x71.8pct`) on the argument that the agent
+    /// reads these through a tool that downsamples them, so a bare pixel stops
+    /// pointing at the right thing the moment the picture is resized. That
+    /// argument is about the *bare* pixel, and naming the frame answers it: the
+    /// pair and its denominator scale together, so `1034x1466-of-3024x1890`
+    /// survives any resize a percentage would have survived — and it is the form
+    /// Victor can actually check against a screen he is looking at, which
+    /// `34.2%` never was.
+    ///
+    /// Measured against the frame `screencapture` really produced rather than
+    /// computed from the screen's backing scale: mirrored displays, HiDPI modes
+    /// and a sleeping external monitor all make that multiplication a guess, and
+    /// a guessed denominator is worse than no denominator at all.
+    ///
+    /// Renaming rather than naming up front is what buys that: the file has to
+    /// exist before it can be measured. On failure the provisional name stands —
+    /// a shot with no pointer in its name is still a shot.
+    private static func tagCursor(_ spot: CGPoint?, on file: URL) -> URL {
+        guard let spot = spot, let size = pixelSize(of: file) else { return file }
+        let x = Int((spot.x * size.width).rounded())
+        let y = Int((spot.y * size.height).rounded())
+        let base = file.deletingPathExtension().lastPathComponent
+        let tagged = file.deletingLastPathComponent().appendingPathComponent(
+            "\(base)-cursor-at-\(x)x\(y)-of-\(Int(size.width))x\(Int(size.height)).jpg")
+        do {
+            try FileManager.default.moveItem(at: file, to: tagged)
+            return tagged
+        } catch {
+            Log.error("could not tag the cursor into \(base): \(error)")
+            return file
+        }
+    }
+
+    /// The frame's real size in pixels, read from the JPEG header — no decode,
+    /// so this costs nothing next to the capture it follows.
+    private static func pixelSize(of file: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? CGFloat,
+              let height = props[kCGImagePropertyPixelHeight] as? CGFloat,
+              width > 0, height > 0
+        else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    /// Where the pointer sat, as a fraction of the frame in **image** coordinates:
+    /// 0…1 across, 0…1 down from the top. The same reading feeds the file name and
+    /// the marker painted into the picture, so the two can never disagree about
+    /// what he was pointing at.
+    private static func cursorFraction(mouse: NSPoint, screen: NSScreen?) -> CGPoint? {
+        guard let frame = screen?.frame, frame.width > 0, frame.height > 0 else { return nil }
+        let clamp = { (v: CGFloat) in min(max(v, 0), 1) }
         // AppKit counts y up from the bottom, images count it down from the top.
-        let y = clamp((frame.maxY - mouse.y) / frame.height * 100)
-        return String(format: "-cursor-%.1fx%.1fpct", x, y)
+        return CGPoint(x: clamp((mouse.x - frame.minX) / frame.width),
+                       y: clamp((frame.maxY - mouse.y) / frame.height))
     }
 
     /// One screenshot per dictation adds up fast — Victor dictates all day, and

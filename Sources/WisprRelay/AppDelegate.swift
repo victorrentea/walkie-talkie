@@ -11,6 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictation = DictationMonitor()
     private let picker = ElementPicker()
 
+    /// The terminal dictations are typed into, when Victor has pointed the relay
+    /// at one. Unbound, everything below behaves exactly as it did before this
+    /// existed — the outbox is still written, and the skill's watcher still
+    /// reads it.
+    private let terminal = TerminalBinding()
+
     /// Text that happened to be selected when Wispr started listening. There is
     /// no shortcut for this any more and none is needed: if something was
     /// selected, it is simply picked up — Victor dictates *about* what he has
@@ -125,9 +131,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
         status.setPaused(paused)
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
+        overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
         picker.onPick = { [weak self] pick in self?.record(pick) }
+        picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
+        picker.onUnbind = { [weak self] in self?.unbindTerminal() }
+        picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
+        // Enters exactly where `wispr.onTranscript` does, so what it exercises
+        // is the real path and not a shortcut through it.
+        picker.onTestDictation = { [weak self] text in
+            self?.send(kind: "dictation", text: text, app: "test")
+        }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.
@@ -388,6 +403,156 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let live = listening && !paused
         hotkeys.dictating = live
         picker.dictating = live
+    }
+
+    // MARK: - The bound terminal
+
+    /// ⌘⌃D, arriving over loopback from Victor Addons: point the relay at the
+    /// terminal in front and type every later dictation straight into it.
+    ///
+    /// **Runs on the listener queue** — `TerminalBinding.bind` spends a couple
+    /// of `osascript` and `ps` subprocesses working out what it is looking at,
+    /// and the main thread is drawing an overlay that follows the cursor at
+    /// 60 Hz. Only the one main-thread question — which app is in front — is
+    /// asked there, and it is asked first, before any of that work has had the
+    /// chance to move the focus it is about to read.
+    private func bindFrontmostTerminal() -> [String: Any]? {
+        var front: NSRunningApplication?
+        DispatchQueue.main.sync { front = NSWorkspace.shared.frontmostApplication }
+        guard let front = front, let bound = terminal.bind(app: front) else {
+            DispatchQueue.main.async { [weak self] in self?.overlay.flash("⚠️ nothing bindable in front", duration: 3) }
+            return nil
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.overlay.setBound(label: bound.label, title: bound.title, guarded: bound.isGuarded)
+            // The flash names the **address**, which the chip then drops: this is
+            // the one moment the answer to "did it grab the right tab?" is worth
+            // a panel, and `ttys004` is what settles it. Afterwards the chip's
+            // job is to say which session, not which device file.
+            self.overlay.flash("🎯 \(bound.label) · \(bound.address)", duration: 3)
+        }
+        return Self.describe(bound)
+    }
+
+    private func unbindTerminal() {
+        terminal.unbind()
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.setBound(label: nil, guarded: true)
+            self?.overlay.flash("🎯 unbound — back to the outbox", duration: 3)
+        }
+    }
+
+    /// The bound terminal has been renamed by whatever is running in it. Called
+    /// off the overlay's 10s tick — and doing the work on a background queue,
+    /// because reading the title is an `osascript` round trip and the caller is
+    /// the main thread in the middle of a timer.
+    private func refreshBoundTitle() {
+        guard terminal.target != nil else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self, let updated = self.terminal.refreshTitle() else { return }
+            DispatchQueue.main.async {
+                self.overlay.setBound(label: updated.label, title: updated.title,
+                                      guarded: updated.isGuarded)
+            }
+        }
+    }
+
+    private static func describe(_ target: TerminalBinding.Target) -> [String: Any] {
+        var obj: [String: Any] = ["label": target.label, "address": target.address,
+                                  "guarded": target.isGuarded]
+        if let title = target.title { obj["title"] = title }
+        return obj
+    }
+
+    /// Type a message into the bound terminal, if there is one.
+    ///
+    /// Off the main thread for the same reason binding is: this is subprocesses
+    /// all the way down. It is fire-and-forget — the outbox line has already
+    /// been written by the time this runs, so a failure here costs the delivery
+    /// and nothing else, and the flash is how Victor learns which.
+    private func deliverToTerminal(_ m: Message) {
+        guard terminal.target != nil else { return }
+        let line = Self.terminalLine(m)
+        guard !line.isEmpty else { return }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let outcome = self.terminal.deliver(line)
+            DispatchQueue.main.async { self.report(outcome) }
+        }
+    }
+
+    /// **Silent on success.** A dictation that landed announces itself in the
+    /// terminal it landed in, which is a whole window of evidence; a flash
+    /// saying the same thing would be a panel thrown across Victor's work to
+    /// repeat what the target already shows. Every other outcome is a message
+    /// that goes nowhere unless this says so.
+    private func report(_ outcome: TerminalBinding.Outcome) {
+        switch outcome {
+        case .delivered:
+            Log.info("⌨️ delivered to the bound terminal")
+        case .noTarget:
+            break
+        case .targetGone(let what):
+            Log.error("⌨️ \(what) — unbound")
+            overlay.setBound(label: nil, guarded: true)
+            overlay.flash("🎯 \(what) — unbound", duration: 6)
+        case .wouldRunAsShell(let shell):
+            Log.error("⛔️ \(shell) is at the prompt — refused, nothing sent")
+            // The one refusal in the whole app, and it is worth six seconds of
+            // panel: what was stopped is a sentence about to be run as a
+            // command. The binding is deliberately *kept* — he pressed Escape
+            // or the agent exited, and starting it again is all this needs.
+            overlay.flash("⛔️ \(shell) is at the prompt — not sent", duration: 6)
+        case .failed(let why):
+            Log.error("⌨️ delivery failed: \(why)")
+            overlay.flash("⚠️ \(why)", duration: 5)
+        }
+    }
+
+    /// One line, carrying everything the outbox JSON carries.
+    ///
+    /// **One line because the delivery ends with a Return**, so an embedded
+    /// newline is not a paragraph break — it is an early submit that sends half
+    /// the sentence and leaves the rest to arrive as a prompt of its own.
+    ///
+    /// The shots travel as **paths, not as a `📸 ×2` count**: the panel's
+    /// preview is written for Victor, who took the pictures and needs only to
+    /// be told they landed, while this is written for an agent, which can do
+    /// nothing with a number and everything with something to `Read`. That is
+    /// the same split the outbox already makes, said in one line instead of in
+    /// keys — and it is what replaces the skill, which is no longer there to
+    /// explain what a field called `screen` is for.
+    private static func terminalLine(_ m: Message) -> String {
+        var parts: [String] = []
+        if let text = m.text, !text.isEmpty { parts.append(text) }
+        if let selection = m.selection, !selection.isEmpty {
+            parts.append("[selected: \(clampForTerminal(selection))]")
+        }
+        // `look at` and `context` stay separate, exactly as `paths` and `screen`
+        // do: one is what he deliberately photographed and wants opened, the
+        // other is the frame that happened to be on screen when he started
+        // talking. Collapsing them would have every dictation drag a megabyte of
+        // desktop into a context window nobody asked to spend.
+        if !m.paths.isEmpty { parts.append("[look at: \(m.paths.joined(separator: " "))]") }
+        if let screen = m.screen { parts.append("[context: \(screen)]") }
+        if !m.elements.isEmpty {
+            let named = m.elements.map { pick -> String in
+                guard let text = pick.text, !text.isEmpty else { return pick.path }
+                return "\(pick.path) (\(clampForTerminal(text, 60)))"
+            }
+            parts.append("[pointed at: \(named.joined(separator: " · "))]")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// The full text is in the outbox either way. What rides into the terminal
+    /// is a prompt somebody has to be able to read back, and a selection can be
+    /// an entire file.
+    private static func clampForTerminal(_ s: String, _ limit: Int = 400) -> String {
+        let flat = s.components(separatedBy: .newlines).joined(separator: " ")
+        return flat.count <= limit ? flat : String(flat.prefix(limit)) + "…"
     }
 
     /// What was selected when he started talking IS the subject, for the whole
@@ -698,12 +863,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The only route to the outbox. Everything else builds a `Message` and
-    /// hands it here — eventually, or never.
+    /// The only route to the outbox — and therefore the only place the bound
+    /// terminal has to be taught about. Everything else builds a `Message` and
+    /// hands it here, eventually or never; Cancel is still the thing that means
+    /// neither happens.
+    ///
+    /// **The outbox is written whether or not a terminal is bound**, and that is
+    /// deliberate. It is the log of what Victor said — the record that outlives
+    /// the session, the thing to read when a delivery went somewhere surprising
+    /// — and a binding is a second destination, not a replacement for the first.
+    /// It also means an agent watching the queue the old way keeps working while
+    /// the same words are being typed at another one.
+    ///
+    /// `session_end` is the exception: it is addressed to a watcher, and there
+    /// is nothing for a terminal to do with "the user closed the relay".
     private func commit(_ m: Message) {
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     paths: m.paths, screen: m.screen, app: m.app,
                     elements: m.elements.map { $0.json })
+        guard m.kind != "session_end" else { return }
+        deliverToTerminal(m)
     }
 
     /// The countdown ran out (or he clicked the overlay away) → write it. He hit

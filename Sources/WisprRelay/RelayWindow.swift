@@ -31,14 +31,19 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
-    /// Two labels and a row, exactly like the recording row above it. Not for the
-    /// animation (nothing pulses here) but for the geometry: an emoji measures
-    /// narrower in the monospaced font than it draws, so inline it stole a
-    /// character's worth of width and AppKit truncated the 🎯 itself away. Giving
-    /// the glyph its own measured box also lines this row's text up with the
-    /// recording row's, which is what makes the two read as one column.
+    /// A glyph and a label in a row, exactly like the recording row above it. Not
+    /// for the animation (nothing pulses here) but for the geometry: a glyph
+    /// measures narrower in the monospaced font than it draws, so inline it stole
+    /// a character's worth of width and AppKit truncated it away. Giving the glyph
+    /// its own box also lines this row's text up with the recording row's, which
+    /// is what makes the two read as one column.
+    ///
+    /// The glyph is **Chrome's own icon**: the gesture exists in Chrome and
+    /// nowhere else, so the browser it works in is the one thing the row can say
+    /// without words. The 🎯 it replaced said "aim at something", which is what
+    /// the words beside it already say.
     private let pickRow = NSView()
-    private let pickGlyph = NSTextField(labelWithString: "🎯")
+    private let pickGlyph = NSImageView()
     private let pickInfo = NSTextField(labelWithString: "")
 
     var onTogglePause: (() -> Void)?
@@ -71,6 +76,17 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private var countdownTimer: Timer?
     /// Transient status occupying the subtitle row; nil = no flash in progress.
     private var flashMessage: String?
+    /// The terminal dictations are being typed into — `folder@branch` of the
+    /// bound session, or nil while the relay is only writing the outbox.
+    private var boundLabel: String?
+    /// What that terminal is calling itself right now — the agent's own title.
+    private var boundTitle: String?
+    /// Re-read the bound terminal's title; the branch timer's other half.
+    var onRefreshBound: (() -> Void)?
+    /// Whether that target can be checked before each delivery. Terminal.app and
+    /// tmux can; VS Code and IntelliJ cannot, and the chip has to say which,
+    /// because the difference is whether a sentence can be run as a command.
+    private var boundGuarded = true
     private weak var homeScreen: NSScreen?
 
     // MARK: Geometry
@@ -145,11 +161,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// behaviour appear and disappear together, and the row rides beside the
     /// cursor — which is where his eyes already are while he points at things.
     ///
-    /// The word `hold` is in it and stays in it: the gesture arms only after the
-    /// chord has been down 400ms on its own, so a hint reading `⌘⇧🖱️` would
-    /// describe a click that does nothing and look like a bug the first time he
-    /// tried it.
-    private static let pickHint = "hold ⌘⇧🖱️"
+    /// It names **what the gesture does**, not how the keys are held. `hold` was
+    /// there to explain the 400ms arming delay, but a hint whose first word is a
+    /// mechanic describes the input and leaves the outcome unsaid — and the
+    /// outcome is the only half worth a row beside the cursor. The chord and the
+    /// mouse still follow it, so the delay is still discoverable by trying it.
+    private static let pickHint = "select element ⌘⇧🖱️"
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
     /// he picked once he has.
@@ -271,7 +288,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         // Monospaced, like the recording row: what it carries is a CSS selector,
         // and a proportional font makes `div.card > span.price` read as prose.
-        pickGlyph.font = .systemFont(ofSize: 11)
+        pickGlyph.image = Self.browserIcon
+        pickGlyph.imageScaling = .scaleProportionallyUpOrDown
         pickInfo.font = hintFont
         pickInfo.textColor = .secondaryLabelColor
         pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
@@ -481,7 +499,15 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// `git rev-parse`) and fast enough that he never reads a stale name.
     private func startWatchingBranch() {
         let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            guard let self = self, SessionLabel.refresh() else { return }
+            guard let self = self else { return }
+            // The bound terminal's title rides this tick rather than one of its
+            // own: both are the same question — "is the name on the chip still
+            // true?" — asked of two different sources, and an agent renaming its
+            // window is exactly as slow-moving as Victor switching branches.
+            // It is asked unconditionally, ahead of the early return: a title
+            // that changed while the branch did not is the common case.
+            self.onRefreshBound?()
+            guard SessionLabel.refresh() else { return }
             self.applyTitleText()
             self.layoutContent()          // the title drives the overlay's width
         }
@@ -688,15 +714,31 @@ final class RelayWindow: NSObject, NSWindowDelegate {
                                   height: recordRowHeight)
     }
 
-    private var pickGlyphWidth: CGFloat { ceil(measure(pickGlyph.stringValue, font: pickGlyph.font!)) }
+    /// Chrome's icon as the system has it, looked up by bundle id so it is found
+    /// wherever the app was installed and stays right when Google restyles it.
+    /// Nothing is shipped alongside the binary, and no version of the logo is
+    /// frozen into this repo.
+    private static let browserIcon: NSImage = {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") else {
+            return NSImage(named: NSImage.networkName) ?? NSImage()
+        }
+        return NSWorkspace.shared.icon(forFile: app.path)
+    }()
+
+    /// A square the height of the row's text. Fixed rather than measured: an image
+    /// has no font metrics to ask, and the row is laid out around whatever this
+    /// says.
+    private static let pickGlyphSize: CGFloat = 13
+
+    private var pickGlyphWidth: CGFloat { Self.pickGlyphSize }
 
     /// Same shape as `recordRowWidth`, so the ⌘-pick row and the recording row
     /// can never disagree about where their text starts — but it asks the **label**
     /// how wide the text is instead of asking the font.
     ///
     /// `measure` is a font metric, and this row is the one place it is not enough:
-    /// `×` is not in the monospaced face and neither is the 🎯, so both fall back
-    /// to fonts those metrics know nothing about. The result was a couple of
+    /// `×` is not in the monospaced face, so it falls back to a font those metrics
+    /// know nothing about. The result was a couple of
     /// characters of underestimate, which is exactly enough for AppKit to
     /// ellipsize — and since the tail is the part worth keeping, what it ate was
     /// the count at the front. The rows above tolerate the same error only because
@@ -710,7 +752,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private func layoutPickRow(width: CGFloat) {
         let glyphWidth = pickGlyphWidth
         pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
-        pickGlyph.frame = NSRect(x: 0, y: 1, width: glyphWidth, height: 15)
+        pickGlyph.frame = NSRect(x: 0, y: ((pickRowHeight - glyphWidth) / 2).rounded(),
+                                 width: glyphWidth, height: glyphWidth)
         pickInfo.frame = NSRect(x: glyphWidth + recordDotGap, y: 0,
                                 width: max(0, width - glyphWidth - recordDotGap),
                                 height: pickRowHeight)
@@ -811,11 +854,53 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // menu bar item, which is the other place the state is shown. No ": Paused"
         // word any more — the glyph plus the fade to 0.30 is the whole message, and
         // the chip rides beside his cursor now, where every character costs room.
-        if paused { return "⏸️ 🤖 \(SessionLabel.value)" }
+        if paused { return "⏸️ \(identity)" }
         // No state word at all. "Stand by" is the one thing he can infer from the
         // fact that nothing is happening; what he cannot infer, and what this chip
         // exists to tell him, is which agent is sitting there waiting.
-        return "🤖 \(SessionLabel.value)"
+        return identity
+    }
+
+    /// Which agent this is — and, once the relay is bound to a terminal, *where
+    /// the words actually go*.
+    ///
+    /// **Bound replaces the robot rather than decorating it**, because 🤖 has
+    /// always meant one specific thing here: this overlay is writing an outbox
+    /// that some agent is watching. Bound, that is no longer what happens — the
+    /// sentence is typed into a named terminal — and the label changes with it,
+    /// from the directory the overlay was *launched* in to the session it is
+    /// *pointed* at. Those were always meant to be the same repo and, with two
+    /// sessions open in one folder, never reliably were; this is the first time
+    /// the chip can say which one by knowing rather than by inheriting.
+    ///
+    /// **🎯 and ⌨️ are not decoration either.** 🎯 is a target the relay can
+    /// interrogate before every delivery, so a dictation can never be handed to
+    /// a shell to execute. ⌨️ is one it cannot — VS Code, IntelliJ — where the
+    /// words are pasted blind into whatever holds the caret. That distinction
+    /// costs one glyph and is the only thing on screen that carries it.
+    ///
+    /// **The agent's own title follows the label, after a `·`.** `folder@branch`
+    /// says which repo the words are going to, and with two sessions open on the
+    /// same branch — which is the normal way Victor works — that is not an
+    /// answer at all. The title an agent writes for itself is the one thing that
+    /// tells them apart, and it is the half that keeps moving while it works, so
+    /// a chip carrying it also says the session is alive. Truncated hard,
+    /// because it rides beside the cursor over whatever he is reading and a
+    /// title is the one part of this with no length anybody controls.
+    private var identity: String {
+        guard let bound = boundLabel else { return "🤖 \(SessionLabel.value)" }
+        let glyph = boundGuarded ? "🎯" : "⌨️"
+        guard let title = boundTitle else { return "\(glyph) \(bound)" }
+        return "\(glyph) \(bound) · \(Self.fitHead(title, 28))"
+    }
+
+    /// Keep the head, drop the tail — the opposite of `fit`, and for the
+    /// opposite reason. A selector's last steps are the element while its first
+    /// steps are the page he is already looking at; a title an agent writes puts
+    /// the subject first and the detail after it, so the identifying half is the
+    /// one at the front.
+    private static func fitHead(_ s: String, _ limit: Int) -> String {
+        s.count <= limit ? s : String(s.prefix(limit - 1)) + "…"
     }
 
     // The title used to be borrowable for a moment (`flashTitle`, for the "+1 📸"
@@ -878,6 +963,19 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     }
 
     func clearSelection() { setSelection(nil) }
+
+    /// The relay has been pointed at a terminal, or has lost the one it had.
+    ///
+    /// Relayouts because the title drives the chip's width, and a bound label is
+    /// a different length from the launch-directory one it replaces.
+    func setBound(label: String?, title: String? = nil, guarded: Bool) {
+        guard boundLabel != label || boundGuarded != guarded || boundTitle != title else { return }
+        boundLabel = label
+        boundTitle = label == nil ? nil : title
+        boundGuarded = guarded
+        refreshTitle()
+        layoutContent()
+    }
 
     func setPaused(_ value: Bool) {
         paused = value

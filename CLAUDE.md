@@ -19,13 +19,148 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️/F3`)
-- `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`🎯 hold ⌘⇧🖱️`, then
-  `🎯 ×2 div#cart > span.price`); the label beside the outline in
+- `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
+  `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
+
+## Bound to a terminal: the second destination
+
+Since 2026-08-15 the relay can be **pointed at a terminal**, and every dictation
+from then on is typed into that session and submitted — no `/relay`, no skill, no
+`Monitor` armed on the outbox, no label filter to get right. `⌘⌃D` (owned by
+Victor Addons, see below) `POST`s `/bind` and the relay grabs whatever terminal
+is in front.
+
+**The outbox is still written, always.** A binding is a second destination, not a
+replacement: `AppDelegate.commit` writes the JSONL line and *then* delivers, so
+the log survives, an agent watching the queue the old way keeps working, and
+`session_end` — which is addressed to a watcher and means nothing to a terminal —
+is the one kind that is not delivered.
+
+### The handle is never a window
+
+`TerminalBinding.Handle` has three cases and all three are things the terminal
+can be asked to re-resolve, because a window reference is stale by the second
+dictation (tabs get dragged between windows, Spaces move, order changes):
+
+| case | address | how it delivers | guarded? |
+|---|---|---|---|
+| `.terminalApp` | the **tty** | `do script … in <tab with that tty>` | yes |
+| `.tmux` | the **`%pane`** | `send-keys -l` then `Enter` | yes |
+| `.keystroke` | the **pid** | clipboard → activate → ⌘V → Return → focus back | **no** |
+
+The first two **do not touch focus at all** — verified against a raw-mode reader,
+which is the shape a TUI actually has, with the target window behind others. Only
+`.keystroke` has to bring the app forward, for ~200ms, and it puts the focus and
+the clipboard back afterwards. It exists because VS Code and IntelliJ host their
+terminal inside a window nothing outside the app can address.
+
+### The shell guard is the load-bearing part
+
+Before **every** delivery, not once at bind: if the foreground process group on
+the target is a shell, nothing is sent. Victor hits Escape or the agent exits and
+the tab goes back to being a prompt with the binding still pointing at it — and
+at a prompt a dictation is not typed at an agent, it is **run**. "Șterge tot ce e
+în folderul de build" said out loud is a real `rm`.
+
+It is a **shell** test, not an "is this Claude Code" test, deliberately. What
+makes a delivery dangerous is precisely and only that a shell is reading the
+line; `claude`, `node`, an editor, a REPL all merely receive text on stdin, which
+is the intended behaviour. Naming the agent would also mean guessing how it
+appears in `ps`, and guessing again every release. It fails **closed**: a target
+that cannot be interrogated counts as a shell.
+
+`.keystroke` targets cannot be guarded at all — nothing outside VS Code or
+IntelliJ can say which pane owns the caret, let alone what runs in it — which is
+the entire reason the chip marks them ⌨️ instead of 🎯.
+
+### tmux: `display-message -c` does not refuse
+
+Handed a tty attached to nothing, `tmux display-message -c <tty>` silently falls
+back to tmux's own current client and answers with **that** pane. So a plain
+Terminal tab bound to whichever pane a detached background session happened to
+have focused — which is exactly what happened the first time this ran on a Mac
+with `claude-rc` alive. `tmuxPane` therefore checks `list-clients` first. A wrong
+pane is the worst failure available here: indistinguishable from a correct bind
+until a sentence lands in somebody else's window.
+
+### One line, always
+
+Whatever carries the text ends with a Return, so an embedded newline is not
+formatting — it is an early submit that sends half the sentence and leaves the
+rest to arrive as a prompt of its own. `AppDelegate.terminalLine` flattens
+everything into one line and the shots travel as **paths, not a `📸 ×2` count**:
+the panel's preview is written for Victor, who needs only to know they landed,
+while this is written for an agent, which can do nothing with a number and
+everything with something to `Read`. `[selected: …]`, `[look at: …]`,
+`[context: …]`, `[pointed at: …]` are the same split the outbox makes in keys,
+said in one line — and they are what replaces the skill, which is no longer there
+to explain what a field called `screen` is for.
+
+### What the chip says when bound
+
+`🤖 folder@branch` becomes `🎯 folder@branch · <the agent's own title>` (or ⌨️).
+Three deliberate changes, each earning its place:
+
+- **The label is the bound session's, not the launch directory's.** Those were
+  always meant to be the same repo and, with two sessions in one folder, never
+  reliably were. Bound, the relay *knows* rather than inherits — read off the
+  working directory of the foreground process on the tty (`lsof -d cwd`).
+- **The title is the agent's own**, from Terminal.app's `custom title` (where the
+  OSC escape lands) or tmux's `#{pane_title}`. `folder@branch` does not
+  distinguish two sessions on the same branch, which is the normal way Victor
+  works; the title does, and it is the half that keeps moving while the agent
+  works, so a chip carrying it also says the session is alive. It rides the
+  existing 10s branch timer — same question, two sources — and is truncated from
+  the **head** (`fitHead`), the opposite of a selector, because a title puts its
+  subject first.
+- **The glyph replaces 🤖 rather than decorating it.** 🤖 has always meant "this
+  overlay is writing an outbox somebody is watching", and bound that is no longer
+  what happens.
+
+### The loopback control surface
+
+`ElementPicker` is no longer only Chrome's mailbox — it is the relay's loopback
+control surface, on the same 8917–8919. A second listener would need a second
+port scheme for a caller to guess between, and buys nothing.
+
+| route | what it does |
+|---|---|
+| `POST /bind` | bind the frontmost terminal; 409 if there is nothing bindable |
+| `POST /unbind` | back to outbox-only |
+| `GET /target` | the current binding, read-only |
+| `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
+
+`/bind`, `/unbind` and `/target` are **not gated on `dictating`**, unlike `/ping`
+and `/pick`: pointing the relay at a terminal is something Victor does at rest,
+and a bind that only worked mid-sentence would be one he could never make.
+
+`/test/dictation` exists because everything downstream of Wispr — the held
+prompt, the countdown, the outbox line, the delivery — was otherwise reachable
+only by talking into a microphone, which made the one part of this app that types
+into a live session the one part nobody could test at a desk.
+
+### ⌘⌃D lives in Victor Addons
+
+`WisprRelayBinder.swift`, there, not here. The relay is started per session and
+is down most of the time; Addons is a login item and is always up, so a binding
+key that needed the relay running first would need the trip into a terminal the
+whole feature exists to remove. A cold press therefore **launches the relay**
+(`open -g`, and the `-g` is load-bearing: the relay decides what to bind by
+asking which app is frontmost, so a launch that brought anything forward would
+spoil the very bind it enables), waits for the listener, then binds.
+
+It is also the **only** owner of that key. The relay has its own event tap, and
+two taps claiming ⌘⌃D would both fire on one press. NB it shadows the system-wide
+⌘⌃D "look up in dictionary".
+
+Binding takes the **first port that answers**, not all of them the way the Chrome
+extension does: pointing every relay on the machine at one terminal would mean
+every dictation arriving there two or three times.
 
 ## Scope: dictation helper only
 
@@ -35,6 +170,13 @@ when Wispr starts listening, and that one is reachable without the keyboard at
 all (see *Mouse 4 is the shutter*). Do not reintroduce a typing affordance:
 the panel's `canBecomeKey` is false precisely so the overlay can never steal the
 caret from the app Victor is working in.
+
+**The terminal binding does not contradict this**, though it looks like it might.
+This rule is about the overlay's own surface — there is nothing to type *into*,
+and the panel never takes the caret. Delivering a dictation into a bound terminal
+is the opposite gesture: it puts words somewhere else without the overlay ever
+becoming key. `.keystroke` targets are the one place focus moves at all, and it
+moves to the target and straight back.
 
 ## What pause is (and is not)
 
@@ -68,6 +210,9 @@ from the working directory (inherited from the session, since `/relay` launches
 | idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
+| bound to a terminal | `🎯 petclinic@main · ✳ fixing the tax bug` — the 🤖 is *replaced*; see *Bound to a terminal* |
+| bound, unguardable (VS Code, IntelliJ) | `⌨️ IntelliJ IDEA` — same shape, different glyph, and the difference is whether a sentence can be handed to a shell |
+| bound **and** paused | `⏸️ 🎯 petclinic@main · …` — ⏸️ still prefixes whatever the identity is |
 
 Paused prefixes rather than replaces, and carries no state word. The chip's job
 is still to say *which agent this is*; pause is a modifier on that, not a
@@ -170,9 +315,9 @@ the shot silently stops working; restarting the relay fixes it.
 
 ## The cursor is in the file name
 
-Every shot is `shot-<timestamp>-cursor-34.2x71.8pct.jpg` — where the pointer was,
-as a percentage of the frame, **top-left origin** like the image itself
-(`ScreenCapture.cursorTag`).
+Every shot is `shot-<timestamp>-cursor-at-1034x1466-of-3024x1890.jpg` — the
+pointer sat at x=1034, y=1466 of a 3024×1890 frame, **top-left origin** like the
+image itself (`ScreenCapture.tagCursor`).
 
 He points at things while he talks — "this button", "that line" — and the
 sentence alone cannot say which. The reading rides in the **name** rather than in
@@ -180,13 +325,65 @@ a new outbox field because the name is already in front of the agent: the path
 travels in `paths`, so the pointer arrives with the picture and nothing
 downstream has to learn a new key to benefit from it.
 
-**Percentages, not pixels**, because the agent reads the shot through a tool that
-downsamples it: a pixel coordinate stops pointing at the right thing the moment
-the picture is resized.
+**Pixels, and the frame they are pixels of.** It was a percentage pair
+(`-cursor-34.2x71.8pct`) until 2026-08-15, on the argument that the agent reads
+these through a tool that downsamples them, so a bare pixel stops pointing at the
+right thing the moment the picture is resized. That argument is about the *bare*
+pixel, and naming the frame answers it: the pair and its denominator scale
+together, so `1034x1466-of-3024x1890` survives any resize a percentage would
+have survived. What it buys is a reading Victor can check against a screen he is
+looking at, which `34.2%` never was — and the words `cursor at`, which say what
+the numbers are without anybody having to know the convention.
+
+**Measured against the file, never computed from the screen.** The denominator is
+read out of the JPEG header after `screencapture` returns (`pixelSize(of:)`, no
+decode), because multiplying the screen's frame by its backing scale is a guess:
+mirrored displays, HiDPI modes and a sleeping external monitor all break it, and
+a guessed denominator is worse than none. That is also why the shot is **named
+provisionally and renamed afterwards** — the file has to exist before it can be
+measured. A failed rename leaves the provisional name, since a shot with no
+pointer in its name is still a shot.
+
+**Victor Addons is not the same reading, despite the similar name.** Its
+`2026-08-14_00-34-42_at1200x500.jpg` is in **global CG points** — y down from the
+primary display's top, negatives normal on a screen to its left — because it
+answers "where on the desk was the pointer". This one is in **pixels of that
+image**, because it answers "where in this picture do I look". Do not port either
+convention onto the other.
 
 The position is sampled **at the gesture** and carried down into
 `ScreenCapture.grab(cursor:)`, never read inside it — by the time the capture
 runs, a clipboard probe and a subprocess later, the hand has moved on.
+
+### …and in the picture
+
+`CursorMarker` paints a red target at that same spot, into every shot — the
+automatic context capture and the deliberate ones alike, because `grab` is the
+one path they all take. `cursorFraction` is the single reading behind both the
+name and the mark, so they cannot disagree.
+
+The name is for the agent; the mark is for **Victor**, who opens these shots too
+and cannot resolve a coordinate pair by eye. It is burned into the pixels rather
+than flashed on screen the way Victor Addons does it (`ScreenCaptureFlash.
+markCursor`), because by the time this runs the picture has already been taken —
+an on-screen panel would mark the desktop and leave the file unmarked.
+
+**The look is Victor Addons' `EmojiAnimator.makeSniperReticle`**, ported by its
+ratios: ring, four arms with an empty centre, centre dot, `systemRed`, and a
+symmetric black shadow instead of a white outline (a white outline only solves
+the light-background half). Reusing it is the point — it is already the mark that
+desktop draws to say *here*, so there is nothing new to learn.
+
+Sized as a **fraction of the shorter side** (`boxFraction`), never in pixels.
+That rule survived the name going to pixels and is unrelated to it: the *mark*
+has to stay the same visual size whatever the display's resolution, while the
+*name* has to name a spot. One is a size, the other is a position.
+
+Re-encoded at `compressionFactor: 1.0`. This is a second JPEG pass over a frame
+`screencapture` already encoded, and these shots carry small text somebody has to
+read — at 0.9 the same frame came back a tenth of the size, which is the code
+going soft, not a saving. The whole pass costs ~100ms and runs on the same
+background queue the capture already runs on.
 
 The 🔴 pulses 1.0 → 0.25 and back, 1.1s each way — slow on purpose. Anything
 brisker is something blinking next to the cursor while he is trying to think.
@@ -445,15 +642,26 @@ now flips every time he starts and stops talking, rather than once a session.
 
 ### The hint is the row, and the row is beside the cursor
 
-While dictating and before he has picked anything, the row reads `🎯 hold ⌘⇧🖱️`.
-After the first pick it gives way to `🎯 ×2 div#cart > span.price`, because the
-question changes: before, the only thing worth saying is *that this is possible*;
-after, he knows the gesture, and what he cannot check without a name is whether
-the click caught the button or the div wrapped around it.
+While dictating and before he has picked anything, the row reads `select element
+⌘⇧🖱️`. After the first pick it gives way to `×2 div#cart > span.price`, because
+the question changes: before, the only thing worth saying is *that this is
+possible*; after, he knows the gesture, and what he cannot check without a name is
+whether the click caught the button or the div wrapped around it.
 
-The word **hold** stays in it. The gesture arms only after 400ms, so `⌘⇧🖱️` alone
-would describe a click that does nothing and read as a bug the first time he
-tried it.
+**The row leads with the outcome, not the mechanic.** It read `hold ⌘⇧🖱️` for a
+while, on the argument that the gesture arms only after 400ms and a bare `⌘⇧🖱️`
+would describe a click that does nothing. But a hint whose first word is *hold*
+spends the only words it has on how to press the keys and never says what
+pressing them is for; `select element` says the thing that is not guessable, and
+the delay stays discoverable by trying it once.
+
+**The glyph is Chrome's own icon**, `NSWorkspace.icon(forFile:)` on whatever
+`com.google.Chrome` resolves to — looked up, never shipped, so no version of the
+logo is frozen into the repo and a restyle arrives on its own. `pickGlyph` is
+therefore an `NSImageView` and not a label, and `pickGlyphWidth` is the constant
+`pickGlyphSize` rather than a font measurement: an image has no metrics to ask.
+It replaced a 🎯, which said "aim at something" — which is what the words beside
+it already say — where the browser the gesture only works in was said nowhere.
 
 ### ⌘⇧ has to be *held*
 
@@ -503,6 +711,28 @@ queue — cancelling means the sentence was wrong, not that he pointed at the wr
 things, and re-taking a pick means finding the element in the page again, which
 is the expensive half of the gesture. Shots are not restored: another one can be
 taken blind, and the screen has moved on anyway.
+
+### What a pick carries: the page, and what the thing said
+
+Each entry of the outbox's `elements` is `{path, tag, text, label, href, url,
+title, frame}` — built in `describe()` (`inspect.js`), re-read and clamped by
+`ElementPick(json:)`, emitted by `ElementPick.json`. Nothing in that chain may
+rename or drop a key: the `relay` skill documents them by name, and an agent
+reading an old key it no longer gets is worse than an agent with fewer keys.
+
+Two of them do the work Victor asked them to do, and both were wrong in a case
+that is easy to hit:
+
+- **`url` is the page, not the frame.** It was `location.href`, which inside an
+  iframe is the iframe's address — and `frame` already carried that, so the page
+  he was actually on appeared nowhere. `pageURL()` reads `window.top.location.href`
+  and falls back to `location.href` when the top document is cross-origin and
+  unreadable, which is the best true answer available there.
+- **`text` falls back to `value`.** `innerText` is empty for `<input>`,
+  `<textarea>` and `<select>`, which is exactly the case where a pick arrives as a
+  bare selector with nothing in it to recognise. `elementText()` takes the
+  rendered text when there is any, the selected option's label for a `<select>`,
+  and the control's `value` otherwise.
 
 ### Why the row names the newest pick
 

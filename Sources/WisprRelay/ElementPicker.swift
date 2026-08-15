@@ -101,6 +101,25 @@ final class ElementPicker {
     /// A pick just arrived. Called on the listener queue, never the main thread.
     var onPick: ((ElementPick) -> Void)?
 
+    /// Point the relay at the terminal that is in front **right now**, and
+    /// describe what it landed on. Called on the listener queue.
+    ///
+    /// This is the one endpoint that is not about Chrome, and it is here rather
+    /// than behind a listener of its own because there is nothing to gain from a
+    /// second one: a port scheme already exists, several relays already share it
+    /// by taking the first free one, and a second scheme would mean a second set
+    /// of ports for a caller to guess between. What this class actually is, and
+    /// has been since the second endpoint, is the relay's loopback control
+    /// surface; the picker is its first tenant, not its purpose.
+    var onBind: (() -> [String: Any]?)?
+    var onUnbind: (() -> Void)?
+    /// The current binding, for `GET /target` — so a caller can ask without
+    /// changing anything.
+    var describeTarget: (() -> [String: Any]?)?
+
+    /// A fabricated transcript, entering where a real one does.
+    var onTestDictation: ((String) -> Void)?
+
     /// **Wispr is recording and forwarding is on** — the only window in which ⌘ in
     /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
     /// the extension reads a refusal exactly like no relay at all, so ⌘ goes
@@ -217,6 +236,45 @@ final class ElementPicker {
             onPick?(pick)
             respond(conn, 200, ["ok": true, "session": SessionLabel.value])
 
+        // Bind / unbind / inspect the terminal a dictation gets typed into.
+        //
+        // **Not gated on `dictating`**, unlike everything above it: pointing the
+        // relay at a terminal is something Victor does at rest, on his way into
+        // a session, and a bind that only worked mid-sentence would be a bind he
+        // could never make.
+        case ("POST", "/bind"):
+            guard let described = onBind?() else {
+                return respond(conn, 409, ["ok": false, "error": "nothing bindable is in front"])
+            }
+            respond(conn, 200, ["ok": true].merging(described) { _, new in new })
+
+        case ("POST", "/unbind"):
+            onUnbind?()
+            respond(conn, 200, ["ok": true, "bound": false])
+
+        // Put a sentence through the whole dictation path without speaking one.
+        //
+        // Everything downstream of Wispr — the held prompt, the countdown, the
+        // outbox line, the delivery into the bound terminal — is otherwise only
+        // reachable by talking into a microphone, which makes the one part of
+        // this app that can type into a live session the one part nobody can
+        // test at their desk. It enters at exactly the point a real transcript
+        // does, so a pass here is a pass for the real thing.
+        case ("POST", "/test/dictation"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let text = (body?["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let text = text, !text.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"text\": \"…\"}"])
+            }
+            onTestDictation?(text)
+            respond(conn, 200, ["ok": true, "text": text])
+
+        case ("GET", "/target"):
+            guard let described = describeTarget?() else {
+                return respond(conn, 200, ["ok": true, "bound": false, "session": SessionLabel.value])
+            }
+            respond(conn, 200, ["ok": true, "bound": true].merging(described) { _, new in new })
+
         // Chrome preflights the POST because the page's origin is not ours.
         case ("OPTIONS", _):
             respond(conn, 204, nil)
@@ -249,6 +307,7 @@ final class ElementPicker {
         case 200: return "OK"
         case 204: return "No Content"
         case 400: return "Bad Request"
+        case 409: return "Conflict"
         case 503: return "Service Unavailable"
         default:  return "Not Found"
         }

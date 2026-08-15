@@ -31,9 +31,11 @@ up is the receipt.
 
 The mouse button is borrowed **only while that row is up**, so a dictation never
 needs the keyboard at all; the rest of the time the button keeps doing whatever
-your mouse software says it does. Each shot records where the pointer was, in the
-file name (`shot-…-cursor-34.2x71.8pct.jpg`, percentages of the frame from the
-top-left), so pointing at something while you talk about it is enough.
+your mouse software says it does. Each shot records where the pointer was —
+**a red target drawn into the picture**, and the same reading in the file name
+(`shot-…-cursor-at-1034x1466-of-3024x1890.jpg` — pixels of that frame, top-left
+origin, with the frame's own size so the reading survives a downsample) — so
+pointing at something while you talk about it is enough.
 
 <img src="docs/prompt.png" width="308" alt="the finished prompt with a Cancel button counting down">
 
@@ -56,8 +58,9 @@ message you are about to dictate — the demonstrative arrives already resolved.
 
 **It is live only while you are dictating** — the same window in which the back
 mouse button is borrowed, and for the same reason. The chip grows a third row
-saying so, right beside the cursor: `🎯 hold ⌘⇧🖱️` before you have picked
-anything, then `🎯 ×2 div#cart > span.price` once you have. The held prompt lists
+saying so, right beside the cursor, behind Chrome's own icon: `select element
+⌘⇧🖱️` before you have picked anything, then `×2 div#cart > span.price` once you
+have. The held prompt lists
 them with when each was taken:
 
 ```
@@ -95,8 +98,34 @@ the extension never arms at all — its toolbar badge is how you tell.
 
 ## How it reaches the agent
 
-The overlay appends JSON lines to `~/.wispr-relay/outbox.jsonl`. Anything that
-watches that file can consume them; there is no back-channel.
+Two ways, and they are not alternatives — the second is layered on the first.
+
+### Typed straight into a terminal
+
+Press **⌘⌃D** while looking at a terminal and the relay is pointed at it: every
+dictation from then on is typed into that session and submitted, wherever your
+cursor happens to be when you speak. No command to run in the terminal first,
+nothing to arm, nothing watching a file.
+
+A Terminal.app tab is addressed by its **tty** and a tmux pane by its **`%id`**,
+so the delivery finds the target even when the window is behind others or on
+another Space — and it never takes focus. Anything else (VS Code's integrated
+terminal, IntelliJ's) is driven with a paste and a Return, which does move the
+focus for a moment and puts it back.
+
+**It refuses to type at a shell prompt.** Before every delivery the relay checks
+what is running on the target, and if that is a shell it sends nothing: at a
+prompt a dictation is not a message to an agent, it is a command to be executed.
+The check is on the *shell*, not on any particular agent, and it fails closed.
+
+The overlay's chip then names the session it is aimed at — `🎯 petclinic@main ·
+✳ fixing the tax bug`, the repo plus whatever the agent is currently calling
+itself — or `⌨️` for a target it cannot check before it types.
+
+### The outbox
+
+Bound or not, the overlay appends JSON lines to `~/.wispr-relay/outbox.jsonl`.
+Anything that watches that file can consume them; there is no back-channel.
 
 ```json
 {"ts":"2026-07-30T08:12:03Z","session":"myrepo@main","kind":"dictation",
@@ -106,7 +135,10 @@ watches that file can consume them; there is no back-channel.
 
 Elements picked in the browser ride in an `elements` array of
 `{path, tag, text, label, href, url, title, frame}`, in the order they were
-picked, so the first demonstrative in the sentence is the first entry.
+picked, so the first demonstrative in the sentence is the first entry. `url` is
+the page's address (the top document's, even when the element sits in an iframe —
+the frame's own URL travels in `frame`), and `text` is what the element says: its
+rendered text, or the `value` of a form control, which has none.
 
 `kind` is `dictation` | `screenshot` | `session_end`. Every message carries the
 `session` it belongs to, so several overlays can share one queue without an agent
@@ -117,6 +149,18 @@ in [`victorrentea/skills-private`](https://github.com/victorrentea/skills-privat
 (`skills/relay/`),
 which ships the built binary, installs `/relay`, and watches the outbox.
 
+### Loopback control
+
+The relay listens on the first free port of **8917–8919** (several can run at
+once, each taking one):
+
+| route | |
+|---|---|
+| `POST /bind` | point it at the frontmost terminal |
+| `POST /unbind` | back to outbox-only |
+| `GET /target` | what it is currently aimed at |
+| `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
+
 ## Input
 
 | input | effect |
@@ -125,7 +169,7 @@ which ships the built binary, installs `/relay`, and watches the outbox.
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
-| **⌘⇧-click in Chrome** | Adds that element's selector to the message; the page never sees the click |
+| **⌘⇧-click in Chrome** | Adds that element's selector, page URL and text to the message; the page never sees the click |
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |
