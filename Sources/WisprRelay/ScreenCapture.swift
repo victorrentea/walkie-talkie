@@ -49,7 +49,16 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
-        if let spot = spot { CursorMarker.draw(at: spot, onJPEGAt: file) }
+        // **Nothing is drawn into the picture.** The reticle used to be burned in
+        // here; it is now flashed on the desktop at the instant of the shutter
+        // (`CaptureFlash.markCursor`) and nowhere else. A frame handed to an
+        // agent should be what was on the screen — a red target painted over it
+        // covers whatever it is pointing at, which is precisely the thing being
+        // asked about, and reads as part of the UI to anything looking at the
+        // image. The position still travels, in the file name.
+        //
+        // It also drops a second JPEG pass over a frame `screencapture` already
+        // encoded: ~100ms and a file that came back *larger* at quality 1.0.
         let final = tagCursor(spot, on: file, offset: offset)
         prune()
         return final.path

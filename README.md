@@ -32,12 +32,14 @@ up is the receipt.
 The mouse button is borrowed **only while that row is up**, so a dictation never
 needs the keyboard at all; the rest of the time the button keeps doing whatever
 your mouse software says it does. Each shot records where the pointer was —
-**a red target drawn into the picture**, and the same reading in the file name
-(`shot-01:23(mouse-at-1034x1466px).jpg` — how far into the dictation it was
-taken, and where the pointer was in that image) and **a red target dropped on the
-desktop** where you were pointing, for a couple of seconds — so pointing at
-something while you talk about it is enough, and a mis-aimed shot is noticed
+in the file name (`shot-01:23(mouse-at-1034x1466px).jpg`: how far into the
+dictation it was taken, and where the pointer was in that image) and as **a red
+target dropped on the desktop** for a couple of seconds. So pointing at something
+while you talk about it is enough, and a shot aimed at the wrong thing is noticed
 while the sentence is still being said.
+
+Nothing is drawn *into* the picture: a mark painted over a frame covers the thing
+it points at, and an agent reading the image cannot tell it from the UI.
 
 Shots go to `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session>/`,
 which macOS reclaims under disk pressure: they are a staging area, not an

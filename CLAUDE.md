@@ -456,28 +456,30 @@ The position is sampled **at the gesture** and carried down into
 `ScreenCapture.grab(cursor:)`, never read inside it — by the time the capture
 runs, a clipboard probe and a subprocess later, the hand has moved on.
 
-### …and in the picture
+### The cursor mark is on the screen, never in the picture
 
-`CursorMarker` paints a red target at that same spot, into every shot — the
-automatic context capture and the deliberate ones alike, because `grab` is the
-one path they all take. `cursorFraction` is the single reading behind both the
-name and the mark, so they cannot disagree.
+`CaptureFlash.markCursor` drops the red target on the desktop where the pointer
+was, for ~2s — on the automatic capture that opens a dictation and on every F3
+alike, since both go through `announce(cursor:)`. **`CursorMarker` no longer
+touches the file.**
 
-### …and on the screen, at the moment of the shutter
+It used to be burned into the saved JPEG, on the argument that the file name
+carried the reading for the agent while Victor — who opens these shots himself —
+cannot resolve a coordinate pair by eye. Two things were wrong with that. A mark
+painted into a frame **covers the thing it is pointing at**, which is precisely
+the thing being asked about; and an agent reading the image has no way to know
+the red circle is not part of the UI it is being asked to look at. A frame handed
+to an agent should be what was on the screen.
 
-The same reticle is also dropped **on the desktop** where the pointer was, for
-~2s, by `CaptureFlash.markCursor` — on the automatic capture that opens a
-dictation and on every F3 alike, since both go through `announce(cursor:)`.
+The screen flash answers the same need at a better moment. The vignette says
+*what* was captured, this says *where he was pointing while he said it* — and
+unlike a mark in a file, which is something you find afterwards, it lands while
+the sentence is still being spoken, so a shot aimed at the wrong thing can be
+retaken with F3 on the spot.
 
-The vignette says *what* was captured; this says *where he was pointing while he
-said it*. The other two copies of that reading — burned into the picture, spelled
-out in the file name — are both things you find **afterwards**. This is the same
-fact at the only moment it can still be corrected: if the target lands somewhere
-he did not mean, the sentence is still being spoken and he can point again.
+Dropping the burn-in also dropped a second JPEG pass over a frame `screencapture`
+had already encoded: ~100ms, and at quality 1.0 the file came back *larger*.
 
-It goes through `CursorMarker.makeLayer`, which calls the same `paint` the
-burned-in mark does, so the mark on the desktop and the mark in the picture are
-one drawing rather than two implementations of "a red target" that drift apart.
 The animation is Victor Addons' `ScreenCaptureFlash.markCursor` verbatim: lands
 at 1.3× and settles to 0.9× over 0.35s (a scope brought down onto a spot, not a
 badge appearing beside one), 80% opaque from the first frame, fading only in its
@@ -485,31 +487,10 @@ last quarter.
 
 `sharingType = .none`, like the vignette — the relay photographs the screen
 milliseconds later and the confirmation must never be inside the capture it
-confirms. **Which also means it cannot be verified with a screenshot**: the only
-checks available are the burned-in mark (same code) and Victor's eyes.
-
-The name is for the agent; the marks are for **Victor**, who opens these shots too
-and cannot resolve a coordinate pair by eye. It is burned into the pixels rather
-than flashed on screen the way Victor Addons does it (`ScreenCaptureFlash.
-markCursor`), because by the time this runs the picture has already been taken —
-an on-screen panel would mark the desktop and leave the file unmarked.
-
-**The look is Victor Addons' `EmojiAnimator.makeSniperReticle`**, ported by its
-ratios: ring, four arms with an empty centre, centre dot, `systemRed`, and a
-symmetric black shadow instead of a white outline (a white outline only solves
-the light-background half). Reusing it is the point — it is already the mark that
-desktop draws to say *here*, so there is nothing new to learn.
-
-Sized as a **fraction of the shorter side** (`boxFraction`), never in pixels.
-That rule survived the name going to pixels and is unrelated to it: the *mark*
-has to stay the same visual size whatever the display's resolution, while the
-*name* has to name a spot. One is a size, the other is a position.
-
-Re-encoded at `compressionFactor: 1.0`. This is a second JPEG pass over a frame
-`screencapture` already encoded, and these shots carry small text somebody has to
-read — at 0.9 the same frame came back a tenth of the size, which is the code
-going soft, not a saving. The whole pass costs ~100ms and runs on the same
-background queue the capture already runs on.
+confirms. **Which also means it cannot be verified with a screenshot**; the only
+checks available are the drawing itself and Victor's eyes. That the *file* is
+clean is checkable, and was: zero `systemRed` pixels in a 312×312 box around the
+recorded position, against 949 in the same crop of a shot from before the change.
 
 The 🔴 pulses 1.0 → 0.25 and back, 1.1s each way — slow on purpose. Anything
 brisker is something blinking next to the cursor while he is trying to think.

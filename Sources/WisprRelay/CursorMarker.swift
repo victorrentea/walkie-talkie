@@ -1,13 +1,17 @@
 import AppKit
 
-/// Paints a red target into a saved screenshot at the spot the pointer was
-/// standing when the shutter went.
+/// The red target that says "the pointer was here when the shutter went".
 ///
-/// The reading was already in the file *name* (`-cursor-34.2x71.8pct`), which is
-/// what the agent reads. This is the same fact for the human in the loop: Victor
-/// looks at these shots too, and a percentage pair is not something anyone
-/// resolves by eye. Both come from the one `cursorFraction`, so the name and the
-/// mark can never point at different pixels.
+/// **It is drawn on the screen and never into the picture.** It used to be
+/// burned into the saved JPEG, on the argument that the file name carried the
+/// reading for the agent while Victor — who opens these shots himself — cannot
+/// resolve a coordinate pair by eye. What that missed is that a mark painted
+/// into a frame *covers the thing it is pointing at*, which is exactly the thing
+/// being asked about, and that an agent reading the image has no way to know the
+/// red circle is not part of the UI. The screen flash answers the same need at a
+/// better moment (`CaptureFlash.markCursor`, at the instant of capture, while
+/// the sentence is still being spoken and a mis-aimed shot can still be
+/// retaken), and the position still travels in the file name.
 ///
 /// **The look is Victor Addons'**, deliberately: `EmojiAnimator.makeSniperReticle`
 /// is already what that desktop draws to say "here", and it is drawn on screen
@@ -16,19 +20,7 @@ import AppKit
 /// centre, a centre dot — `systemRed`, over a symmetric black shadow rather than
 /// a white outline, which is what makes it survive a light page and a dark
 /// terminal alike.
-///
-/// Burned into the pixels, not drawn on screen like the Addons one: the shot has
-/// already been taken by the time this runs, and a panel raised afterwards would
-/// mark the screen for the human but leave the picture unmarked for the agent.
 enum CursorMarker {
-
-    /// The reticle's box as a fraction of the picture's shorter side.
-    ///
-    /// Proportional and not a pixel size, for the same reason the file name is a
-    /// percentage: the agent reads these through a tool that downsamples them,
-    /// and a mark measured in pixels becomes a smudge the moment the image is
-    /// resized. This is roughly what the Addons reticle covers on his display.
-    private static let boxFraction: CGFloat = 0.07
 
     /// Ratios lifted from `makeSniperReticle`, where they are expressed against a
     /// `65 * scale` box.
@@ -37,63 +29,12 @@ enum CursorMarker {
     private static let dotRatio: CGFloat = 2.0 / 65
     private static let shadowRatio: CGFloat = 1.5 / 65
 
-    /// `spot` is 0…1 across and 0…1 **down from the top**, like the image.
-    static func draw(at spot: CGPoint, onJPEGAt file: URL) {
-        guard let data = try? Data(contentsOf: file),
-              let source = NSBitmapImageRep(data: data) else {
-            Log.error("cursor marker: \(file.lastPathComponent) would not decode")
-            return
-        }
-        let width = source.pixelsWide
-        let height = source.pixelsHigh
-        guard width > 0, height > 0 else { return }
-
-        // A fresh RGBA canvas rather than drawing into the loaded rep: a JPEG
-        // decodes to three samples with no alpha, which is not a shape AppKit
-        // will hand out a graphics context for.
-        guard let canvas = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: width,
-            pixelsHigh: height,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ), let context = NSGraphicsContext(bitmapImageRep: canvas) else { return }
-
-        let frame = NSRect(x: 0, y: 0, width: width, height: height)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        context.shouldAntialias = true
-        source.draw(in: frame)
-        // The context counts y up from the bottom; `spot` counts it down.
-        paint(in: context.cgContext,
-              at: CGPoint(x: spot.x * CGFloat(width), y: (1 - spot.y) * CGFloat(height)),
-              box: CGFloat(min(width, height)) * boxFraction)
-        NSGraphicsContext.restoreGraphicsState()
-
-        canvas.size = frame.size
-        // Maximum quality on the way back out. This is a *second* JPEG pass over
-        // a picture `screencapture` already encoded, and what these shots carry is
-        // small text the agent has to read — at 0.9 the same frame came back a
-        // tenth of the size, which is not a saving, it is the code going soft.
-        guard let jpeg = canvas.representation(using: .jpeg, properties: [.compressionFactor: 1.0]) else { return }
-        try? jpeg.write(to: file)
-    }
-
-    /// The same mark, rendered as a layer to put **on screen** rather than into
-    /// a file.
+    /// The mark, as a layer to hand to a panel.
     ///
-    /// It goes through `paint` like the burned-in one, so the mark Victor sees
-    /// flash on his desktop and the mark he finds in the picture a minute later
-    /// are not merely similar — they are one drawing, and cannot drift apart the
-    /// way two implementations of "a red target" always eventually do.
-    ///
-    /// `box` is in points here, not a fraction: this one is drawn over the real
-    /// screen at a real size, and nothing downstream is going to resize it.
+    /// `box` is in points, not a fraction of anything: this is drawn over the
+    /// real screen at a real size, and nothing downstream resizes it. (The
+    /// burned-in version measured itself against the picture's shorter side,
+    /// because that one *was* going to be downsampled.)
     static func makeLayer(box: CGFloat) -> CALayer {
         // Room around the mark for the shadow and for the zoom-in it arrives on,
         // which would otherwise be clipped by its own layer's bounds.
