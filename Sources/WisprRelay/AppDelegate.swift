@@ -430,9 +430,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func bindFrontmostTerminal() -> [String: Any]? {
         var front: NSRunningApplication?
         DispatchQueue.main.sync { front = NSWorkspace.shared.frontmostApplication }
+        // Read before binding: `bind` replaces the target, and what decides
+        // between "point somewhere new" and "stop" is what it *was*.
+        let previous = terminal.target?.handle
         guard let front = front, let bound = terminal.bind(app: front) else {
             DispatchQueue.main.async { [weak self] in self?.overlay.flash("⚠️ nothing bindable in front", duration: 3) }
             return nil
+        }
+
+        // **⌘⌃D on the target it is already pointed at ends the session.**
+        //
+        // The key had no off. Starting the relay is a keystroke and stopping it
+        // was a trip to the menu bar — and the menu bar is a moving target when
+        // the reason you are stopping is that you are already elsewhere. Making
+        // the same key the off switch also makes it reachable without aiming:
+        // whatever app is in front, two quick presses bind it and then stop,
+        // because the second press finds the first one's target.
+        //
+        // Compared by **handle**, not by app: two tabs of Terminal are two ttys,
+        // so pressing in a different tab re-points rather than stops. That is the
+        // more useful reading of "again" — the thing bound is a session, not an
+        // application.
+        //
+        // It quits rather than unbinding, because ⌘⌃D is what *starts* the relay
+        // and a gesture whose off switch left a process running would not be the
+        // opposite of the gesture that made one. `endSession` is the same route
+        // the ✕ takes, so the outbox still gets its `session_end` and any agent
+        // watching the queue learns the overlay is gone rather than waiting on it.
+        if let previous = previous, previous == bound.handle {
+            DispatchQueue.main.async { [weak self] in
+                BindFlight.cancel()
+                self?.endSession(reason: "⌘⌃D on the bound target")
+            }
+            return ["stopped": true, "label": bound.label, "address": bound.address]
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

@@ -244,6 +244,31 @@ The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
 `unbound — back to the outbox` at release. They are text rows, so the only pin
 available to them is the pushpin emoji the drawn one exists to avoid.
 
+### ⌘⌃D again on the same target stops the relay
+
+The key had no off. Starting the relay is a keystroke and stopping it was a trip
+to the menu bar — and the menu bar is a moving target precisely when the reason
+to stop is that Victor is already somewhere else. So a bind that resolves to the
+target **already bound** ends the session instead of re-pointing at it, which
+also makes the off switch reachable without aiming: whatever app is in front, two
+quick presses bind it and then stop.
+
+- **Compared by handle, not by app.** Two tabs of Terminal are two ttys, so
+  pressing in a different tab re-points rather than stops. What is bound is a
+  session, not an application.
+- **It quits rather than unbinding.** ⌘⌃D is what *starts* the relay, and an off
+  switch that left the process running would not be the opposite of the gesture
+  that made one. It goes through the same `endSession` the ✕ takes, so the outbox
+  still gets its `session_end` and an agent watching the queue learns the overlay
+  is gone rather than waiting on it.
+- **Autorepeat is swallowed** in Victor Addons' tap. With two presses meaning
+  "stop", a key held a moment too long would otherwise bind and immediately end
+  the session it had just started — the one input mistake this gesture cannot
+  afford.
+
+Verified across all three cases: bind, re-point to a second tab (relay survives),
+press again on that tab (relay gone, `session_end` written).
+
 ### The loopback control surface
 
 `ElementPicker` is no longer only Chrome's mailbox — it is the relay's loopback
