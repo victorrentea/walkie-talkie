@@ -123,6 +123,13 @@ enum Outbox {
                      selections: [[String: String]] = [],
                      paths: [String] = [],
                      screen: String? = nil,
+                     /// File name → what was in front when that frame was taken,
+                     /// `Chrome — Gmail – Inbox` / `IntelliJ IDEA — OwnerController.java`.
+                     /// Keyed by the **base name** rather than the full path: the
+                     /// folder is already in `paths` and `screen`, and repeating
+                     /// it as a JSON key would double the longest string in the
+                     /// line to say nothing new.
+                     sources: [String: String] = [:],
                      app: String? = nil,
                      elements: [[String: Any]] = []) {
         var obj: [String: Any] = [
@@ -141,6 +148,7 @@ enum Outbox {
         if !selections.isEmpty { obj["selections"] = selections }
         if !paths.isEmpty { obj["paths"] = paths }
         if let screen = screen { obj["screen"] = screen }
+        if !sources.isEmpty { obj["sources"] = sources }
         if let app = app, !app.isEmpty { obj["app"] = app }
         if !elements.isEmpty { obj["elements"] = elements }
 

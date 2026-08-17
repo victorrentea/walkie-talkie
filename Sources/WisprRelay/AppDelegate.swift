@@ -47,6 +47,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Deliberate ⌃⌥P shots taken while a dictation is in flight.
     private var pendingShots: [String] = []
+
+    /// What was in front when each picture was taken — `Chrome — Gmail – Inbox`,
+    /// `IntelliJ IDEA — OwnerController.java` — keyed by the path of the frame it
+    /// belongs to.
+    ///
+    /// **A dictionary and not a fourth parallel array.** `pendingShots` and
+    /// `pendingShotOffsets` already run alongside each other under one lock, and
+    /// the automatic context screen lives in a field of its own rather than in
+    /// either of them; a third list would have to be kept in step with two
+    /// different things at once. Keyed by path, the source travels with the
+    /// picture no matter which of those two routes the picture took.
+    private var shotSources: [String: String] = [:]
     /// When each deliberate shot was taken, in seconds since this dictation
     /// opened — parallel to `pendingShots`, written under the same lock.
     ///
@@ -135,6 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var extraSelections: [(at: TimeInterval, text: String)] = []
         let paths: [String]
         let screen: String?
+        /// Path → what was in front when that frame was taken. Covers both
+        /// `paths` and `screen`, which is the reason it is keyed rather than
+        /// ordered.
+        var sources: [String: String] = [:]
         let app: String?
         let elements: [ElementPick]
     }
@@ -309,6 +325,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // down: by the time the capture actually runs, a clipboard probe and a
         // subprocess later, the pointer has moved on.
         let cursor = NSEvent.mouseLocation
+        // And what he was looking at, for the same reason and at the same
+        // instant. This is the frame he means by "uite ce e aici" — reading the
+        // title after the subprocess would name whatever he switched to while
+        // still talking about this.
+        let source = WindowContext.describe()
 
         stateLock.lock()
         let alreadyOpen = dictationInFlight
@@ -351,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let path = ScreenCapture.grab(cursor: cursor, offset: 0)
             self.stateLock.lock()
             self.pendingScreen = path
+            if let path = path, let source = source { self.shotSources[path] = source }
             self.contextShotPending = false
             self.stateLock.unlock()
             // Either way: the promised picture is now a file, or it never will be
@@ -394,6 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingScreen = nil
         pendingSelection = nil
         pendingExtraSelections = []
+        shotSources = [:]
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -636,7 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen))
+        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
         if !m.elements.isEmpty {
             let named = m.elements.map { pick -> String in
                 guard let text = pick.text, !text.isEmpty else { return pick.path }
@@ -676,23 +699,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// having and is **not** where the tokens are: measured, the addressing is a
     /// rounding error beside the pixels, which is why this method is short and
     /// `handoverWidth` has an essay over it.
-    private static func shotsClause(paths: [String], screen: String?) -> [String] {
-        let shots = paths.map { ScreenCapture.handover(for: $0) }
-        let context = screen.map { ScreenCapture.handover(for: $0) }
-        guard let anchor = shots.first ?? context else { return [] }
-        let dir = (anchor as NSString).deletingLastPathComponent
-        let name = { (p: String) in (p as NSString).lastPathComponent }
+    private static func shotsClause(paths: [String], screen: String?,
+                                    sources: [String: String] = [:]) -> [String] {
+        guard paths.first != nil || screen != nil else { return [] }
+        let dir = ((paths.first ?? screen!) as NSString).deletingLastPathComponent
+
+        /// `shot-00:18(…).jpg = IntelliJ IDEA — OwnerController.java`
+        ///
+        /// **The title goes here and not into the file name**, which is where
+        /// the offset and the pointer already live. Those two are short,
+        /// machine-generated readings that survive being made into a filename.
+        /// A window title is arbitrary text — it carries `/`, quotes, colons and
+        /// eighty characters of headline — so putting it in a name means
+        /// sanitising away exactly the characters that identify the page, and
+        /// leaves Victor, who reads these names himself, with something he
+        /// cannot read. The evals settled the cost question: the addressing is a
+        /// rounding error beside the pixels, so the line has room.
+        func described(_ original: String) -> String {
+            let handed = ((ScreenCapture.handover(for: original)) as NSString).lastPathComponent
+            guard let source = sources[original] else { return handed }
+            return "\(handed) = \(source)"
+        }
 
         // Nothing but the automatic frame — 168 of the 180 dictations in the
         // outbox look like this. It gets one short clause and no ceremony.
-        guard !shots.isEmpty else {
-            return ["[screen when I started talking, open only if the words need it: \(anchor)]"]
+        if paths.isEmpty, let screen = screen {
+            return ["[screen when I started talking, open only if the words need it: "
+                    + "\(dir)/\(described(screen))]"]
         }
 
-        var clause = "[in \(dir)/ — the shots I took, oldest first: "
-            + shots.map(name).joined(separator: " ")
-        if let context = context {
-            clause += "; \(name(context)) is the screen when I started talking, open only if needed"
+        var clause = "[in \(dir)/ — the shots I took, oldest first, each named by what was in front of me: "
+            + paths.map(described).joined(separator: "; ")
+        if let screen = screen {
+            clause += ". \(described(screen)) is the screen when I started talking, open only if needed"
         }
         clause += ". Each is 1000px wide; drop the -small for the full-resolution original]"
         return [clause]
@@ -791,6 +830,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
         let takenAt = Date()
+        // Sampled here with the moment and the cursor, not in the background
+        // block below: this is the window he pressed the shutter *at*.
+        let source = WindowContext.describe()
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce(cursor: cursor)
@@ -821,6 +863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             self.stateLock.lock()
             let attaching = self.dictationInFlight
+            if let source = source { self.shotSources[path] = source }
             if attaching {
                 self.pendingShots.append(path)
                 self.pendingShotOffsets.append(
@@ -1030,6 +1073,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelection = nil
         let extraSelections = pendingExtraSelections
         pendingExtraSelections = []
+        let sources = shotSources
+        shotSources = [:]
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
@@ -1068,7 +1113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
-                              paths: attached, screen: screen, app: app, elements: picks)
+                              paths: attached, screen: screen, sources: sources,
+                              app: app, elements: picks)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -1121,8 +1167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     selections: m.extraSelections.map {
                         ["at": Self.stamp($0.at), "text": $0.text]
                     },
-                    paths: m.paths, screen: m.screen, app: m.app,
-                    elements: m.elements.map { $0.json })
+                    paths: m.paths, screen: m.screen,
+                    sources: m.sources.reduce(into: [String: String]()) { out, pair in
+                        out[(pair.key as NSString).lastPathComponent] = pair.value
+                    },
+                    app: m.app, elements: m.elements.map { $0.json })
         guard m.kind != "session_end" else { return }
         deliverToTerminal(m)
     }

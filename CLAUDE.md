@@ -558,6 +558,59 @@ counting both would silently halve a cap expressed in pictures.
 where in the sentence the shot was taken and where the pointer was; the line
 says the list is oldest first. That was enough for 7-item alignment at 0.95.
 
+## Every frame says which window it came from
+
+`WindowContext.describe()` reads the **frontmost app and its focused window
+title** at the instant of each capture, and the delivered line names it beside
+the file:
+
+```
+[in <dir>/ — the shots I took, oldest first, each named by what was in front of me:
+ shot-00:18(…)-small.jpg = IntelliJ IDEA — OwnerController.java;
+ shot-00:31(…)-small.jpg = Google Chrome — Gmail – Inbox (24,277)]
+```
+
+A screenshot arrives as a rectangle of pixels with **no provenance**: that this
+is a browser, that the browser is on Gmail, that the editor behind it has
+`OwnerController.java` open — all of it has to be re-derived by looking, and all
+of it is already written down by the app itself. One Accessibility call replaces
+several hundred tokens of looking, and answers the question the pixels answer
+worst: two frames of the same IDE at the same zoom are near-identical to the eye
+and are two different files.
+
+**The three cases are one mechanism**, which is why there is only one: Chrome
+puts the page title in its window title, both IDEs put the project and the open
+file in theirs, and a terminal puts whatever the shell or the agent last set —
+the same `custom title` the chip already reads when bound.
+
+- **Sampled at the gesture**, never inside the capture. Same rule as the cursor
+  and the offset, same reason: `screencapture` is a subprocess we wait on, and a
+  title read after it returns names the window he *ended up* in front of while
+  still talking about the one he photographed.
+- **It goes in the line and in the outbox, not in the file name** — which is
+  where the offset and the pointer live, and deliberately not where this lives.
+  Those two are short machine-generated readings that survive being made into a
+  filename. A window title is arbitrary text carrying `/`, quotes, colons and
+  eighty characters of headline: sanitising it into a name strips exactly the
+  characters that identify the page, and leaves Victor — who reads these names
+  himself — with something he cannot read. The evals settled the cost side: the
+  addressing is a rounding error beside the pixels, so the line has room.
+- **Truncated from the head** at 80 characters (`fitHead`'s reasoning, applied
+  again): a title puts its subject first.
+- In the outbox it is `sources`, keyed by **base name** rather than full path —
+  the folder is already in `paths` and `screen`, and repeating it as a JSON key
+  would double the longest string in the line to say nothing new.
+- `AXUIElementCreateApplication` + `kAXFocusedWindowAttribute` is the same read
+  `TerminalBinding.focusedWindow` makes. **Duplicated on purpose**: that one is
+  about binding — it resolves a target and answers with a frame to fly a
+  rectangle from — and folding a screenshot's provenance into it would tie two
+  unrelated features to one signature.
+
+`NSWorkspace.frontmostApplication` is a main-thread question and every caller is
+an event tap, a CoreAudio callback or an HTTP listener, so the hop is a
+`main.sync` — guarded by `Thread.isMainThread`, because a deadlock in the
+shutter path is not a bug anyone would enjoy finding later.
+
 ## The shutter also takes the selection
 
 F3, or mouse 4 while dictating, records **what is highlighted at that moment**, stamped with the
