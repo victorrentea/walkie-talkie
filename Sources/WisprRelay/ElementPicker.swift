@@ -134,6 +134,23 @@ final class ElementPicker {
     /// session happens to be running now.
     var onTestCorpus: ((String, String?) -> Void)?
 
+    /// Switch the transcription engine, and read which one is in use.
+    ///
+    /// The menu is the way Victor sets this; a route is how it gets **tested**,
+    /// and how a script can set it. Choosing an engine can take ten seconds and
+    /// can fail, neither of which a menu click reports anywhere a test can read.
+    var onPickEngine: ((String) -> Void)?
+    var describeEngine: (() -> [String: Any])?
+
+    /// Replay a Wispr row through the whole transcript path — engine choice,
+    /// audio fetch, local decode, confidence gate, fallback, delivery.
+    ///
+    /// `/test/dictation` enters *below* all of that, with a fabricated string and
+    /// no recording behind it, so it can say nothing about which recogniser is in
+    /// use. This enters where `wispr.onTranscript` does, which is the only place
+    /// the engine switch means anything.
+    var onTestTranscript: ((String) -> Void)?
+
 
     /// **Wispr is recording and forwarding is on** — the only window in which ⌘ in
     /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
@@ -301,6 +318,30 @@ final class ElementPicker {
             let origin = (body?["origin"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             onTestCorpus?(id, (origin?.isEmpty == false) ? origin : nil)
             respond(conn, 200, ["ok": true, "id": id, "corpus": VoiceCorpus.root.path])
+
+        case ("POST", "/engine"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let name = (body?["engine"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let name = name, ["wispr", "whisper"].contains(name) else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"engine\": \"wispr\"|\"whisper\"}"])
+            }
+            onPickEngine?(name)
+            // 202, not 200: bringing the local model up takes ten seconds and can
+            // fail, so this says the switch was *asked for*. `GET /engine` is
+            // where a caller finds out whether it happened.
+            respond(conn, 202, ["ok": true, "requested": name])
+
+        case ("GET", "/engine"):
+            respond(conn, 200, ["ok": true].merging(describeEngine?() ?? [:]) { _, new in new })
+
+        case ("POST", "/test/transcript"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let id = (body?["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let id = id, !id.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"id\": \"<transcriptEntityId>\"}"])
+            }
+            onTestTranscript?(id)
+            respond(conn, 202, ["ok": true, "id": id])
 
         case ("GET", "/target"):
             guard let described = describeTarget?() else {

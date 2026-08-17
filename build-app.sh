@@ -26,6 +26,12 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS"
 cp "$BIN" "$MACOS/$APP_NAME"
 
+# The local-Whisper engine shells out to this. It goes in Resources so an
+# installed app is self-contained; LocalWhisper.helperPath looks here first and
+# falls back to <repo>/helpers for a `swift build` run, so both work unswitched.
+mkdir -p "$CONTENTS/Resources"
+cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

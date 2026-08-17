@@ -18,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// rather than recorded again.
     private let corpus = VoiceCorpus()
 
+    /// The local recogniser, when Victor has chosen it. Idle and costing nothing
+    /// until then — the weights are 1.5 GB resident, and the ordinary case is a
+    /// relay running all day on Wispr.
+    private let whisper = LocalWhisper()
+
     /// The terminal dictations are typed into, when Victor has pointed the relay
     /// at one. Unbound, everything below behaves exactly as it did before this
     /// existed — the outbox is still written, and the skill's watcher still
@@ -173,6 +178,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Exit") }
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
+        status.onPickEngine = { [weak self] engine in self?.pickEngine(engine) }
+
+        // The setting outlives the process, so a relay that starts up already set
+        // to Local Whisper brings the model up **now** rather than on the first
+        // dictation. Otherwise the choice would silently cost ten seconds at the
+        // worst possible moment — mid-sentence, with an agent waiting — and the
+        // fallback would quietly hand that dictation to Wispr, which is exactly
+        // the confusion this feature must not create.
+        if TranscriptionEngine.current == .whisper { pickEngine(.whisper) }
         status.setPaused(paused)
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
@@ -198,6 +212,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.send(kind: "dictation", text: text, app: "test")
         }
         picker.onTestCorpus = { [weak self] id, origin in self?.corpus.capture(id: id, origin: origin) }
+        picker.onPickEngine = { [weak self] name in
+            guard let engine = TranscriptionEngine(rawValue: name) else { return }
+            DispatchQueue.main.async { self?.pickEngine(engine) }
+        }
+        picker.describeEngine = { [weak self] in
+            ["engine": TranscriptionEngine.current.rawValue,
+             "ready": TranscriptionEngine.current == .wispr || (self?.whisper.ready ?? false)]
+        }
+        // Enters where `wispr.onTranscript` does, so it exercises the engine
+        // switch itself rather than the delivery below it.
+        picker.onTestTranscript = { [weak self] id in
+            guard let self = self else { return }
+            guard let row = FlowDB.transcriptRow(forID: id) else {
+                Log.error("test/transcript: no such row \(id)")
+                return
+            }
+            self.corpus.capture(id: id, origin: "backfill")
+            switch TranscriptionEngine.current {
+            case .wispr:   self.send(kind: "dictation", text: row.text, app: row.app)
+            case .whisper: self.sendLocallyTranscribed(id: id, fallback: row.text, app: row.app)
+            }
+        }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.
@@ -210,9 +246,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // of those — it is a file on Victor's disk either way, and a sample
         // dropped because he happened to be dictating into a browser is a sample
         // that cannot be taken again.
+        //
+        // **The corpus is collected under both engines**, and that is the point:
+        // it is Wispr's audio either way, so the samples keep accumulating while
+        // the local model is on trial, and switching back and forth does not
+        // punch holes in the record.
         wispr.onTranscript = { [weak self] text, app, id in
-            self?.corpus.capture(id: id)
-            self?.send(kind: "dictation", text: text, app: app)
+            guard let self = self else { return }
+            self.corpus.capture(id: id)
+            switch TranscriptionEngine.current {
+            case .wispr:
+                self.send(kind: "dictation", text: text, app: app)
+            case .whisper:
+                self.sendLocallyTranscribed(id: id, fallback: text, app: app)
+            }
         }
 
         // `captureContext` first, and only then the overlay: it books the context
@@ -258,6 +305,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
+    }
+
+    /// Transcribe Wispr's recording with the local model and send **that**.
+    ///
+    /// `fallback` is Wispr's own reading of the same audio, and it is what goes
+    /// out whenever the local path cannot answer — the model not up, the helper
+    /// dead, the audio not in the row yet, or a transcript the model itself is
+    /// not confident in. **A dictation is never dropped for the sake of a
+    /// setting**: Victor said something, an agent is waiting, and "the
+    /// experimental engine had a bad minute" is not a reason for his words to
+    /// vanish. Every fallback says so in the log and in a flash, because an
+    /// engine silently not being used is the one way this feature could mislead
+    /// the very evaluation it exists for.
+    ///
+    /// The confidence floor is the measured one (`LocalWhisper.confidenceFloor`):
+    /// over 442 real dictations, a gate at −0.6 caught 7 of the 11 semantically
+    /// broken outputs and falsely rejected none of 40 good ones. Those 11 are
+    /// not mildly wrong — they are fluent inventions ("Nu uitați să vă abonați
+    /// la revedere!" for a sentence about an invoice), which is the one failure
+    /// an agent cannot defend itself against, since nothing about the text looks
+    /// wrong. Almost all of them are clips under five seconds.
+    private func sendLocallyTranscribed(id: String, fallback: String, app: String?) {
+        func useWispr(_ why: String) {
+            Log.error("local whisper → falling back to Wispr: \(why)")
+            DispatchQueue.main.async { [weak self] in
+                self?.overlay.flash("🤖 Wispr — \(why)", duration: 4)
+            }
+            send(kind: "dictation", text: fallback, app: app)
+        }
+
+        guard whisper.ready else { return useWispr("local model not ready") }
+        guard let audio = FlowDB.audio(forID: id) else { return useWispr("no audio on the row") }
+
+        // Written under the session's shots folder rather than beside the
+        // corpus: this copy exists only to hand the helper a path, the corpus
+        // keeps its own, and Caches is where things whose purpose expires within
+        // the turn belong.
+        let tmp = Outbox.shotsDir.appendingPathComponent("asr-\(id.prefix(8)).wav")
+        do { try audio.write(to: tmp) } catch { return useWispr("could not stage the audio") }
+
+        whisper.transcribe(wav: tmp.path) { [weak self] result in
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            guard let self = self else { return }
+            guard let r = result, !r.text.isEmpty else { return useWispr("the model returned nothing") }
+            guard r.avgLogprob >= LocalWhisper.confidenceFloor else {
+                return useWispr(String(format: "low confidence %.2f", r.avgLogprob))
+            }
+            Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
+                            r.language ?? "?", r.avgLogprob, r.text.count))
+            self.send(kind: "dictation", text: r.text, app: app)
+        }
+    }
+
+    /// Bring the local model up or let it go, and only then move the tick.
+    ///
+    /// The order matters in both directions. Choosing Local Whisper starts a
+    /// process that takes ten seconds to load 1.5 GB of weights and can fail
+    /// outright — for a missing `mlx_whisper`, most likely — so the setting is
+    /// only written once the model has actually answered, and a failure leaves
+    /// Victor on Wispr with a banner saying why rather than on an engine that
+    /// does not exist. Choosing Wispr stops the helper, because the weights are
+    /// resident and a relay left running all day must not hold them for an
+    /// engine nobody selected.
+    private func pickEngine(_ engine: TranscriptionEngine) {
+        guard engine != TranscriptionEngine.current || (engine == .whisper && !whisper.ready) else { return }
+
+        guard engine == .whisper else {
+            whisper.stop()
+            TranscriptionEngine.current = .wispr
+            status.setEngine(.wispr)
+            overlay.flash("🎙️ transcription: Wispr Flow", duration: 3)
+            Log.info("engine → wispr")
+            return
+        }
+
+        status.setEngineLoading(true)
+        overlay.flash("🎙️ loading the local model…", duration: 12)
+        whisper.start { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.status.setEngineLoading(false)
+                if let error = error {
+                    TranscriptionEngine.current = .wispr
+                    self.status.setEngine(.wispr)
+                    self.overlay.flash("⚠️ local Whisper unavailable — \(error)", duration: 12)
+                    Log.error("engine → whisper failed: \(error)")
+                    return
+                }
+                TranscriptionEngine.current = .whisper
+                self.status.setEngine(.whisper)
+                self.overlay.flash("🎙️ transcription: local Whisper", duration: 3)
+                Log.info("engine → whisper")
+            }
+        }
     }
 
     /// `kill -USR1 <pid>` writes what is on screen right now to

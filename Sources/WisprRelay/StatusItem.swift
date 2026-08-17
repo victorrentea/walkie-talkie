@@ -20,10 +20,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     var onExit: (() -> Void)?
     var onTogglePause: (() -> Void)?
+    /// Picked from the Transcription submenu. `AppDelegate` owns what happens
+    /// next — bringing the model up or letting it go — and calls `setEngine`
+    /// back, so the tick never claims something that has not happened.
+    var onPickEngine: ((TranscriptionEngine) -> Void)?
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
+    private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
 
     override init() {
         super.init()
@@ -45,6 +50,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
         pause.target = self
         menu.addItem(pause)
 
+        // A submenu, and two ticked items rather than one "Use local Whisper"
+        // checkbox. The choice is between two named recognisers, and a checkbox
+        // would name only one of them — leaving the other as "not that", which
+        // is exactly the thing worth being explicit about while the local one is
+        // still being evaluated. Tucked behind a submenu because it is set once
+        // and then left alone, unlike Pause, which is the item he reaches for
+        // many times a session and which must stay one click away.
+        let engineItem = NSMenuItem(title: "Transcription", action: nil, keyEquivalent: "")
+        let engineMenu = NSMenu()
+        for engine in [TranscriptionEngine.wispr, .whisper] {
+            let mi = NSMenuItem(title: engine.label, action: #selector(engineClicked(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = engine.rawValue
+            engineMenu.addItem(mi)
+            engineItems[engine] = mi
+        }
+        engineItem.submenu = engineMenu
+        menu.addItem(engineItem)
+        setEngine(TranscriptionEngine.current)
+
+        menu.addItem(.separator())
+
         // No ⌘Q key equivalent: the app never becomes key, so the hint would
         // advertise a shortcut that does nothing outside the open menu.
         let exit = NSMenuItem(title: "Exit", action: #selector(exitClicked), keyEquivalent: "")
@@ -52,6 +79,23 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(exit)
 
         item.menu = menu
+    }
+
+    /// The tick follows the engine that is actually in use, which is why
+    /// `AppDelegate` calls this rather than the click handler doing it: choosing
+    /// Local Whisper starts a model that takes ten seconds to load and can fail
+    /// outright, and a tick that moved on the click would say the switch had
+    /// happened while the weights were still loading — or after it had failed.
+    func setEngine(_ engine: TranscriptionEngine) {
+        for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
+    }
+
+    /// Shown beside the name while the model is coming up, so a menu opened
+    /// during those ten seconds explains the wait instead of looking stuck.
+    func setEngineLoading(_ loading: Bool) {
+        engineItems[.whisper]?.title = loading
+            ? "\(TranscriptionEngine.whisper.label) — loading…"
+            : TranscriptionEngine.whisper.label
     }
 
     /// Kept in step with the app's state by `AppDelegate`, not read on demand: the
@@ -82,5 +126,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func pauseClicked() {
         onTogglePause?()
+    }
+
+    @objc private func engineClicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let engine = TranscriptionEngine(rawValue: raw) else { return }
+        onPickEngine?(engine)
     }
 }

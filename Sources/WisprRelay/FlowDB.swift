@@ -35,6 +35,40 @@ enum FlowDB {
         return db
     }
 
+    /// The recording behind one row, as the complete 16 kHz mono WAV Wispr
+    /// stored — the same bytes Wispr's own recogniser scored.
+    ///
+    /// Used by the local-Whisper engine, which is why it is here and not private
+    /// to `VoiceCorpus`: the corpus wants the audio *and* the metadata in order
+    /// to file a sample, while transcription wants only the audio and wants it
+    /// as fast as the row can be found.
+    static func audio(forID id: String) -> Data? {
+        guard let db = openReadOnly() else { return nil }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT audio FROM History WHERE transcriptEntityId = ?",
+                                 -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let data = blob(stmt, 0), data.count > 44 else { return nil }
+        return data
+    }
+
+    /// Wispr's own reading of one row, the way the watcher would have delivered
+    /// it — same `COALESCE`, so a replay is the transcript that really was sent.
+    static func transcriptRow(forID id: String) -> (text: String, app: String?)? {
+        guard let db = openReadOnly() else { return nil }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        let sql = "SELECT COALESCE(NULLIF(formattedText,''), asrText), app FROM History WHERE transcriptEntityId = ?"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW, let t = text(stmt, 0), !t.isEmpty else { return nil }
+        return (t, text(stmt, 1))
+    }
+
     static func text(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
         guard let cstr = sqlite3_column_text(stmt, index) else { return nil }
         return String(cString: cstr)

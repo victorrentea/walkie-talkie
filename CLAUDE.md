@@ -918,6 +918,85 @@ not itself contain.
   with `mode=ro` is load-bearing (see `WisprWatcher`) and was not worth
   remembering correctly in two places.
 
+## Choosing the recogniser: Wispr Flow or a local Whisper
+
+The menu bar's **Transcription** submenu switches which recogniser's words reach
+the agent, and the choice is kept in `UserDefaults` so it survives a relay
+restart and a logout. `Transcriber.swift` holds both the setting and the engine;
+`POST /engine {"engine": …}` and `GET /engine` are the same switch on the
+loopback surface.
+
+**Wispr still records in both modes, and this is not independence from it.** The
+local engine transcribes `History.audio` — the complete 16 kHz WAV Wispr already
+stored, the same bytes Wispr's own recogniser scored. That is what keeps this a
+switch rather than a rewrite: no microphone code, no new TCC grant, no second
+capture that could drift from the first, and a genuinely like-for-like
+comparison in live use. Wispr still decides when a dictation starts and ends and
+still has to be installed. Dropping it entirely means owning the microphone and
+a push-to-talk key, and this is the step that answers whether that work is worth
+doing — by putting the local model on the real job instead of on a benchmark.
+
+- **A daemon, not a subprocess per dictation, and that is measured.** Importing
+  `mlx_whisper` costs 7.4s and the first transcription another 2.8s for the
+  weights, against 1.3s once warm. Shelling out each time would put ten seconds
+  between the end of a sentence and the agent seeing it. `helpers/whisper_helper.py`
+  starts once, warms up on a second of silence, and answers one JSON line per
+  request at ~0.1× the audio's duration.
+- **Started only when selected, and stopped when deselected.** The weights are
+  1.5 GB resident and the ordinary case is a relay running all day on Wispr. A
+  relay that starts up *already* set to Whisper loads the model at launch rather
+  than on the first dictation — otherwise the choice would silently cost ten
+  seconds mid-sentence and the fallback would hand that dictation to Wispr,
+  which is the one confusion this feature must not create.
+- **The tick follows the engine actually in use.** Choosing Local Whisper starts
+  something that takes ten seconds and can fail outright (no `mlx_whisper`, most
+  likely), so the setting is written only once the model has answered; a failure
+  leaves Victor on Wispr with a banner saying why. This is why `AppDelegate`
+  calls `setEngine` back rather than the click handler moving the tick itself,
+  and why `POST /engine` answers **202** rather than 200.
+- **A dictation is never dropped for the sake of a setting.** Model not up,
+  helper dead, no audio on the row, low confidence — every one of those falls
+  back to Wispr's own text, because Victor said something and an agent is
+  waiting. Each fallback is logged *and* flashed: an engine silently not being
+  used would corrupt the very evaluation this exists for.
+- **The confidence floor is −0.6 and is measured, not chosen.** Over 442 real
+  dictations, a gate on the worst segment's `avg_logprob` at −0.6 caught 7 of
+  the 11 semantically broken outputs and falsely rejected **0 of 40** good ones;
+  `no_speech_prob` caught none of them. Those 11 are not mildly wrong, they are
+  fluent inventions — `Nu uitați să vă abonați la revedere!` for a sentence
+  about an invoice — which is the one failure an agent cannot defend against,
+  because nothing about the text looks wrong. Nearly all are clips under 5s.
+- **The corpus is collected under both engines**, deliberately: it is Wispr's
+  audio either way, so samples keep accumulating while the local model is on
+  trial and switching back and forth does not punch holes in the record.
+- `POST /test/transcript {"id": …}` replays a real Wispr row through this whole
+  path. `/test/dictation` enters *below* it with a fabricated string and no
+  recording behind it, so it can say nothing about which recogniser is in use.
+
+### What the local model is actually worth, measured
+
+442 dictations, 163 minutes, `mlx-community/whisper-large-v3-turbo`, scored
+against Wispr as the reference — a **disagreement** rate, not an error rate,
+since there is no ground truth here (see the `editedText` note above).
+
+| | all | ro | en |
+|---|---|---|---|
+| semantic similarity | 0.918 | 0.908 | 0.948 |
+| rare-word recall | 87.1% | 84.2% | 94.9% |
+| WER | 19.4% | 21.1% | 12.8% |
+
+86.0% of transcripts land semantically equivalent (>0.85), 11.5% degraded, 2.5%
+broken. **The broken ones are almost all short**: 13.6% of clips under 5s
+against ~1% of everything longer. Median speed 0.105× realtime.
+
+Two things that sound true and are not: the Romanian errors are **not** mostly
+morphology — content-WER with words stemmed to five characters and stopwords
+dropped is 21.8%, i.e. unchanged, so they are wrong words rather than wrong
+endings. And plain WER badly understates the model, because the transcript is
+going to an agent and not into a document: casing, punctuation and verb endings
+cost WER and cost the agent nothing, while a mangled identifier costs the agent
+everything and is what rare-word recall is there to measure.
+
 ## Size: minimal, per state
 
 `layoutContent()` hugs the **current** state's content — not the widest state

@@ -170,6 +170,9 @@ once, each taking one):
 | `GET /target` | what it is currently aimed at |
 | `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
 | `POST /test/corpus` | `{"id":"<transcriptEntityId>"}` — collect the voice-corpus sample for a Wispr row that already exists |
+| `POST /engine` | `{"engine":"wispr"\|"whisper"}` — pick the recogniser (202: bringing the local model up takes ~10s and can fail) |
+| `GET /engine` | which recogniser is in use, and whether it is ready |
+| `POST /test/transcript` | `{"id":"<transcriptEntityId>"}` — replay a real row through the whole transcript path |
 
 ## Input
 
@@ -202,6 +205,26 @@ polled once a second for rows newer than a watermark taken at startup.
 The selection is read via Accessibility (`kAXSelectedTextAttribute`), falling
 back to a simulated ⌘C for apps that don't expose it — with the full clipboard,
 every representation, snapshotted and restored around the probe.
+
+### Wispr Flow, or a local Whisper
+
+The menu bar's **Transcription** submenu switches which recogniser's words reach
+the agent, and the choice survives a restart. Wispr still records in both modes:
+the local engine transcribes `History.audio`, the same 16 kHz WAV Wispr already
+stored, so there is no microphone code and no second capture that could drift
+from the first — and the comparison is like-for-like. It needs `mlx_whisper`
+(`pip install mlx-whisper`); the model is `mlx-community/whisper-large-v3-turbo`,
+overridable with `RELAY_WHISPER_MODEL`.
+
+Whenever the local engine cannot answer — not loaded, no audio, or a transcript
+it is not confident in — Wispr's own text goes out instead, and the fallback is
+flashed and logged. A dictation is never dropped because of a setting.
+
+Measured over 442 real dictations (163 min): 86% of local transcripts are
+semantically equivalent to Wispr's, 2.5% are broken, and the broken ones are
+overwhelmingly clips under five seconds, where Whisper hallucinates fluent
+nonsense. A gate on decoder confidence catches most of those, which is what the
+fallback is wired to.
 
 ### The voice corpus
 
