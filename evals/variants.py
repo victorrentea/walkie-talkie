@@ -165,23 +165,36 @@ def _materialise(fx, workdir, tag, width, crop):
 
 
 def _compact_line(fx, files, drop_context, crops=False):
-    """One directory, then the frames by name, oldest first.
+    """A clause per thing, mirroring `AppDelegate.shotsClause`.
 
-    The names already carry the reading — `shot-00:18(mouse-at-1034x1466px).jpg`
-    is when in the sentence and where the pointer was — so saying the folder
-    once and listing bare names loses nothing and drops ~90 characters per
-    picture. What the paths cannot say is that the list is chronological and
-    that the first one is the frame nobody asked for, so the line says both."""
+    The folder is said once and the frames are listed by bare name, oldest
+    first. The names already carry the reading — `shot-00:18(mouse-at-1034x1466px).jpg`
+    is when in the sentence and where the pointer was — so this loses nothing
+    and drops ~90 characters per picture. What the paths cannot say is that the
+    list is chronological and that the first one is the frame nobody asked for,
+    so the line says both.
+
+    **The context frame gets a bracket of its own** rather than riding on the
+    end of the shots sentence. The shipped line names the window each frame came
+    from, window titles are arbitrary text, and one that ends in a full stop
+    turned the separator between the last shot and the context frame into part
+    of a title. Brackets are the one delimiter a title cannot forge.
+
+    The fixtures here predate the window titles and carry none, so this renders
+    the shape without them; the wording otherwise tracks what ships.
+    """
     d = os.path.dirname(files[0])
     ctx, shots = files[0], files[1:]
     line = fx["text"]
     names = [os.path.basename(p) for p in shots]
-    if drop_context:
-        line += " [shots in %s/, oldest first, one per thing I pointed at: %s]" % (
-            d, " ".join(names))
-    else:
-        line += " [shots in %s/, oldest first: %s — plus %s, the frame that was on screen when I started talking; open it only if the words need it]" % (
-            d, " ".join(names), os.path.basename(ctx))
+    note = "Each is 1000px wide; drop the -small for the full-resolution original."
+    if not shots:
+        return line + " [the screen when I started talking, open only if the words need it: %s/%s]" % (
+            d, os.path.basename(ctx))
+    line += " [the shots I took, in %s/, oldest first: %s. %s]" % (d, " ".join(names), note)
+    if not drop_context:
+        line += " [and %s is the screen when I started talking, open it only if the words need it]" % (
+            os.path.basename(ctx))
     if crops:
         line += " [each *-zoom.jpg beside a shot is that shot cropped to what the mouse was on, at full resolution]"
     return line

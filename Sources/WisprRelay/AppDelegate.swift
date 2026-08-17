@@ -721,20 +721,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "\(handed) = \(source)"
         }
 
+        // **A clause each, rather than one sentence with the context tacked on.**
+        // Written as one, it came out `… = Google Chrome — Netflix. shot-00:00(…)
+        // is the screen when I started talking` — and a window title can itself
+        // end in a full stop, so the separator between the last shot and the
+        // context frame stopped being a separator. Titles are arbitrary text;
+        // the brackets are the only delimiter here that they cannot forge.
+        let note = "Each is 1000px wide; drop the -small for the full-resolution original."
+
         // Nothing but the automatic frame — 168 of the 180 dictations in the
-        // outbox look like this. It gets one short clause and no ceremony.
-        if paths.isEmpty, let screen = screen {
-            return ["[screen when I started talking, open only if the words need it: "
-                    + "\(dir)/\(described(screen))]"]
+        // outbox look like this. One short clause and no ceremony.
+        guard !paths.isEmpty else {
+            guard let screen = screen else { return [] }
+            return ["[the screen when I started talking, open only if the words need it: "
+                    + "\(dir)/\(described(screen)). \(note)]"]
         }
 
-        var clause = "[in \(dir)/ — the shots I took, oldest first, each named by what was in front of me: "
-            + paths.map(described).joined(separator: "; ")
+        var clauses = ["[the shots I took, in \(dir)/, oldest first, each named by what was in front of me: "
+                       + paths.map(described).joined(separator: "; ") + ". \(note)]"]
         if let screen = screen {
-            clause += ". \(described(screen)) is the screen when I started talking, open only if needed"
+            clauses.append("[and \(described(screen)) is the screen when I started talking, "
+                           + "open it only if the words need it]")
         }
-        clause += ". Each is 1000px wide; drop the -small for the full-resolution original]"
-        return [clause]
+        return clauses
     }
 
     /// The full text is in the outbox either way. What rides into the terminal

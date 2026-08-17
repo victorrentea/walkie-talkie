@@ -37,11 +37,37 @@ enum WindowContext {
         guard let title = focusedWindowTitle(pid: app.processIdentifier), !title.isEmpty else {
             return name
         }
+        let trimmed = withoutAppName(title, app: name)
         // Titles run long — a Chrome tab carries the whole headline, an IDE the
         // whole path. Truncated from the **head**, like the bound terminal's
         // title and unlike a CSS selector: a title puts its subject first.
-        let clamped = title.count <= titleLimit ? title : String(title.prefix(titleLimit)) + "…"
+        let clamped = trimmed.count <= titleLimit ? trimmed : String(trimmed.prefix(titleLimit)) + "…"
         return "\(name) — \(clamped)"
+    }
+
+    /// Drop the app's own name where the window title repeats it.
+    ///
+    /// Chrome titles its window `Netflix - Google Chrome – Victor (Vic)`, so the
+    /// unedited reading comes out
+    /// `Google Chrome — Netflix - Google Chrome – Victor (Vic)`: the app is
+    /// named twice and the profile is named once, and the only word an agent
+    /// needed was *Netflix*. Cutting from the app's name takes the profile with
+    /// it, which is the right call — which Chrome profile a tab was open in has
+    /// never been the subject of a sentence Victor dictated.
+    ///
+    /// Matched on the separator too (` - ` / ` – `, hyphen and en dash, since
+    /// Chrome uses both in one title) rather than on a bare substring: a page
+    /// genuinely *about* Google Chrome should keep its headline.
+    private static func withoutAppName(_ title: String, app: String) -> String {
+        for separator in [" - ", " – ", " — "] {
+            guard let cut = title.range(of: separator + app) else { continue }
+            let head = String(title[title.startIndex..<cut.lowerBound])
+                .trimmingCharacters(in: .whitespaces)
+            // A title that is *only* the app name keeps it — `Preview — Preview`
+            // is silly, but an empty right-hand side is worse.
+            if !head.isEmpty { return head }
+        }
+        return title
     }
 
     private static let titleLimit = 80
