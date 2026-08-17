@@ -129,7 +129,10 @@ final class ElementPicker {
     /// fabricated transcript has no recording behind it. The corpus is keyed by
     /// Wispr's own row id, so the only way to exercise it without talking is to
     /// hand it one — which also makes back-filling a missed sample a one-liner.
-    var onTestCorpus: ((String) -> Void)?
+    /// `(id, origin)` — `origin` becomes the sample's `session` in the manifest,
+    /// so a back-fill of rows dictated days ago is not stamped with whatever
+    /// session happens to be running now.
+    var onTestCorpus: ((String, String?) -> Void)?
 
 
     /// **Wispr is recording and forwarding is on** — the only window in which ⌘ in
@@ -295,7 +298,8 @@ final class ElementPicker {
             guard let id = id, !id.isEmpty else {
                 return respond(conn, 400, ["ok": false, "error": "expected {\"id\": \"<transcriptEntityId>\"}"])
             }
-            onTestCorpus?(id)
+            let origin = (body?["origin"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            onTestCorpus?(id, (origin?.isEmpty == false) ? origin : nil)
             respond(conn, 200, ["ok": true, "id": id, "corpus": VoiceCorpus.root.path])
 
         case ("GET", "/target"):

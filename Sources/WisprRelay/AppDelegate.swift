@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestDictation = { [weak self] text in
             self?.send(kind: "dictation", text: text, app: "test")
         }
-        picker.onTestCorpus = { [weak self] id in self?.corpus.capture(id: id) }
+        picker.onTestCorpus = { [weak self] id, origin in self?.corpus.capture(id: id, origin: origin) }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.

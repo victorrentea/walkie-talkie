@@ -855,10 +855,53 @@ Every day the relay runs without this is a day of paired data that is gone.
   **retries at 0/1.5/4s** because Wispr writes the text and the audio in its own
   order and the watcher can win that race. A row that still has no audio after
   that is logged and skipped — a corpus entry with no recording is not a sample.
-- **`POST /test/corpus {"id": "…"}`** collects a sample for a row that already
-  exists. `/test/dictation` cannot reach this code, because a fabricated
-  transcript has no recording behind it — and this is the same argument that
-  route was added for. It also back-fills a missed sample in one line.
+- **`POST /test/corpus {"id": "…", "origin": "…"}`** collects a sample for a row
+  that already exists. `/test/dictation` cannot reach this code, because a
+  fabricated transcript has no recording behind it — and this is the same
+  argument that route was added for.
+
+  **It is also how the corpus was back-filled**, on 2026-08-17, the day it was
+  written: 478 rows still had their audio, so driving every id through this
+  route filled the corpus with **2.75 h over 3–15 August** (305 MB, 339 ro /
+  132 en) instead of waiting a fortnight for it. Driving the route rather than
+  writing the files from a script is the point — the app stays the only writer
+  of that format, so a back-fill cannot drift from what live capture produces.
+
+  `origin` is what makes that honest. It replaces the manifest's `session`,
+  which for live capture is the relay session that heard the dictation and is
+  the truth. A back-filled row was dictated days ago from a session long gone;
+  stamping it with whatever session happens to be running now would not be a
+  useless field but a **wrong** one, and this corpus is meant to be read months
+  from now. Back-filled samples say `"session": "backfill"`.
+
+### `editedText` is not ground truth — do not use it as one
+
+It looks like exactly what an evaluation wants: 105 rows have both audio and an
+`editedText`, which reads like "the transcript after Victor corrected it". It is
+not. Wispr fills it by **observing the target app after the paste**
+(`contentObservationEndReason` is the giveaway), so it records what happened to
+the text downstream, not what was wrong with the recognition.
+
+Measured before believing it: of 104 such rows, **56 are identical** to
+`formattedText` once whitespace is normalised, and the 48 that differ are
+overwhelmingly of this shape:
+
+```
+formatted: Arată-mi ce viziți ai, șters!
+edited   : arată-mi ce viziți ai, șters
+formatted: It is degrading for the human being to prove manually…
+edited   : "it is degrading for the human being to prove manually…"
+```
+
+A lowercased initial because it was pasted mid-sentence, a stripped full stop,
+added quotation marks. Scoring a recogniser against that measures where Victor
+pasted, not what the microphone heard.
+
+**There is no ground truth in this DB.** Every number the corpus can produce
+today is a *disagreement rate* between two recognisers, not an error rate — and
+when they disagree, either one may be the correct side. Real ground truth needs
+transcripts corrected by hand, which is what the corpus makes possible and does
+not itself contain.
 - `FlowDB.swift` now holds the read-only opener both readers share. The URI form
   with `mode=ro` is load-bearing (see `WisprWatcher`) and was not worth
   remembering correctly in two places.

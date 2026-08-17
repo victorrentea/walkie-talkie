@@ -78,13 +78,20 @@ final class VoiceCorpus {
     /// Called with the id the watcher just delivered a transcript for. Returns
     /// immediately: the blob is megabytes, and nothing about collecting it may
     /// delay getting the words to the agent.
-    func capture(id: String) {
-        queue.async { [weak self] in self?.attempt(id: id, step: 0) }
+    ///
+    /// `origin` overrides what lands in the manifest's `session`. Live capture
+    /// leaves it nil and the sample is stamped with the relay session that heard
+    /// it, which is the truth. A **back-fill** reaches back to rows dictated days
+    /// ago, from sessions long gone — stamping those with whatever session
+    /// happens to be running now would not be a useless field, it would be a
+    /// wrong one, and the corpus is meant to be read months from now.
+    func capture(id: String, origin: String? = nil) {
+        queue.async { [weak self] in self?.attempt(id: id, origin: origin, step: 0) }
     }
 
     // MARK: - Fetch
 
-    private func attempt(id: String, step: Int) {
+    private func attempt(id: String, origin: String?, step: Int) {
         guard step < Self.retryDelays.count else {
             Log.info("corpus: no audio for \(id.prefix(8)) — sample skipped")
             return
@@ -92,10 +99,10 @@ final class VoiceCorpus {
         if Self.retryDelays[step] > 0 { Thread.sleep(forTimeInterval: Self.retryDelays[step]) }
 
         guard let row = readRow(id: id) else {
-            attempt(id: id, step: step + 1)
+            attempt(id: id, origin: origin, step: step + 1)
             return
         }
-        write(row)
+        write(row, origin: origin)
     }
 
     private struct Row {
@@ -146,7 +153,7 @@ final class VoiceCorpus {
 
     // MARK: - Write
 
-    private func write(_ row: Row) {
+    private func write(_ row: Row, origin: String?) {
         let when = Self.parse(row.timestamp) ?? Date()
         let short = String(row.id.prefix(8))
         let dir = Self.root.appendingPathComponent(Self.dayFormatter.string(from: when))
@@ -174,13 +181,13 @@ final class VoiceCorpus {
             return
         }
 
-        appendManifest(row, when: when, wav: wav, txt: txt)
+        appendManifest(row, when: when, wav: wav, txt: txt, origin: origin)
         Log.info("corpus: \(stem) — \(row.audio.count / 1024) KB, \(String(format: "%.1f", row.duration ?? 0))s")
     }
 
     /// One JSON object per line, paths **relative to the corpus root** so the
     /// whole folder can be moved or copied to another machine and still read.
-    private func appendManifest(_ row: Row, when: Date, wav: URL, txt: URL) {
+    private func appendManifest(_ row: Row, when: Date, wav: URL, txt: URL, origin: String?) {
         var obj: [String: Any] = [
             "id": row.id,
             "ts": ISO8601DateFormatter().string(from: when),
@@ -193,7 +200,7 @@ final class VoiceCorpus {
             // recogniser heard before the post-processing.
             "text": row.formatted,
             "asr": row.asr,
-            "session": SessionLabel.value,
+            "session": origin ?? SessionLabel.value,
         ]
         if let v = row.duration { obj["duration"] = v }
         if let v = row.words { obj["words"] = v }
