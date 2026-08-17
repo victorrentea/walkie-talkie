@@ -656,9 +656,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the same split the outbox already makes, said in one line instead of in
     /// keys — and it is what replaces the skill, which is no longer there to
     /// explain what a field called `screen` is for.
+    /// **The agent is told the words were spoken, not typed**, and that is the
+    /// one clause here written to change how the text is *read* rather than to
+    /// add something to read.
+    ///
+    /// A transcript arrives looking exactly like something Victor typed, so a
+    /// mis-heard word reads as a word he chose. Measured on his own corpus, a
+    /// local recogniser turned `Wispr Relay` into `risparerile ei` — and an agent
+    /// that does not know the input came through a microphone has no reason to
+    /// try sounding that out, while one that does resolves it immediately. The
+    /// same failure exists with Wispr, which is merely rarer, not absent.
+    ///
+    /// It rides every dictation, so it is one short clause and not a paragraph:
+    /// the fact that it was spoken is what the agent cannot infer, and what to do
+    /// about it follows from that fact for any capable reader.
+    ///
+    /// Only `dictation` gets it. A screenshot or a typed message was not spoken,
+    /// and a hint that invites phonetic guessing at text nobody dictated is an
+    /// invitation to misread it.
+    private static let dictatedHint =
+        "[dictated aloud — if a word makes no sense, it was mis-heard: try what it sounds like]"
+
     private static func terminalLine(_ m: Message) -> String {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
+        if m.kind == "dictation", let text = m.text, !text.isEmpty {
+            parts.append(dictatedHint)
+        }
         if let selection = m.selection, !selection.isEmpty {
             parts.append("[selected: \(clampForTerminal(selection))]")
         }

@@ -162,6 +162,18 @@ everything with something to `Read`. `[selected: …]`, `[look at: …]`,
 said in one line — and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
+**And `[dictated aloud — …]`, which is the one clause that changes how the rest
+is read rather than adding something to read.** A transcript arrives looking
+exactly like something Victor typed, so a mis-heard word reads as a word he
+chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` into
+`risparerile ei`; an agent that does not know the input came through a
+microphone has no reason to sound that out, and one that does resolves it at
+once. The same failure exists with Wispr — rarer, not absent. It rides every
+dictation, so it stays one short clause: *that it was spoken* is the part the
+agent cannot infer, and what to do about it follows for any capable reader.
+`dictation` only — inviting phonetic guessing at a screenshot's caption or a
+typed message would be inviting it to misread them.
+
 ### The bind flight
 
 Binding draws a **translucent blue rectangle over the window it just captured**,
