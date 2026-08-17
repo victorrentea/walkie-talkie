@@ -60,8 +60,89 @@ enum ScreenCapture {
         // It also drops a second JPEG pass over a frame `screencapture` already
         // encoded: ~100ms and a file that came back *larger* at quality 1.0.
         let final = tagCursor(spot, on: file, offset: offset)
+        writeHandoverCopy(of: final)
         prune()
         return final.path
+    }
+
+    /// The width of the copy the **agent** is given. Victor still gets the retina
+    /// frame; this is the one that travels.
+    ///
+    /// Measured, not guessed. A read of an image costs about `width × height / 750`
+    /// tokens after the tool has fitted it to 2000px on the long edge, so a
+    /// 3456×2234 desktop arrives as 2000×1293 and costs ~3450 tokens **whatever
+    /// the JPEG weighs** — compressing the file harder buys nothing at all. The
+    /// same desktop at 1000px wide costs ~860.
+    ///
+    /// Whether that fourfold saving takes any of the answer with it is the one
+    /// question that had to be answered by running it rather than by arguing, and
+    /// `evals/` is where that happened: 31 runs of a real agent over two real
+    /// dictations off the outbox, one of them seven frames of Gmail where every
+    /// frame has to be matched to its clause, the other three frames where the
+    /// question is what the mouse was sitting on. At 1000px the agent returned
+    /// **byte-identical answers** to the retina runs, down to quoting
+    /// `⇒in browser/sql LIMIT OFFSET` off a code editor. Accuracy 0.96 against
+    /// 0.98, inside the noise of the runs; the frames actually opened cost 6027
+    /// tokens instead of 24129.
+    ///
+    /// Two things that sound like improvements were measured and are **not**
+    /// here, both of which cost accuracy:
+    ///
+    /// - **A native-resolution crop around the pointer**, offered beside the
+    ///   small frame, scored 0.87 — it is not that the crop is unreadable, it is
+    ///   that two pictures per shot make the *sequence* harder to keep straight,
+    ///   and one run duly returned the first two shots swapped. Sequence is the
+    ///   thing these messages are made of.
+    /// - **Dropping the automatic context frame** scored 0.93, and the reason is
+    ///   worth keeping: it is not a spare. Victor starts talking about the thing
+    ///   already on his screen, so the context frame is routinely *picture one*
+    ///   of the enumeration — in the Gmail dictation it is the first of the seven
+    ///   senders. It is offered cheaply, not withheld.
+    private static let handoverWidth = 1000
+
+    /// Write `<name>-small.jpg` beside the frame, downscaled.
+    ///
+    /// **The retina frame stays.** It is what Victor opens when he wants to see
+    /// what he photographed, on a display that has the pixels for it, and a
+    /// staging folder that had thrown the original away would be answering a
+    /// token bill by degrading his own copy. The small one is ~170 KB against
+    /// ~1.8 MB, so keeping both costs a tenth of what one frame already costs.
+    ///
+    /// ImageIO's thumbnail path, not a decode-and-re-encode: it scales during
+    /// the JPEG decode, which is why this can sit in the capture path at all —
+    /// the burned-in cursor mark was removed from here partly for costing ~100ms
+    /// of exactly that kind of second pass.
+    @discardableResult
+    private static func writeHandoverCopy(of file: URL) -> URL? {
+        let dst = file.deletingLastPathComponent().appendingPathComponent(
+            file.deletingPathExtension().lastPathComponent + "-small.jpg")
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: handoverWidth,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
+              let dest = CGImageDestinationCreateWithURL(dst as CFURL, "public.jpeg" as CFString, 1, nil)
+        else {
+            Log.error("could not downscale \(file.lastPathComponent)")
+            return nil
+        }
+        CGImageDestinationAddImage(dest, thumb, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return dst
+    }
+
+    /// The small copy for a frame, if one was written. Callers hand this to an
+    /// agent and the original to Victor.
+    ///
+    /// Falls back to the frame itself rather than to nothing: a downscale that
+    /// failed must cost tokens, never a picture.
+    static func handover(for path: String) -> String {
+        let url = URL(fileURLWithPath: path)
+        let small = url.deletingLastPathComponent().appendingPathComponent(
+            url.deletingPathExtension().lastPathComponent + "-small.jpg")
+        return FileManager.default.fileExists(atPath: small.path) ? small.path : path
     }
 
     /// **`00:00`, `01:23` — where in the sentence.** A dictation's shots are read
@@ -216,7 +297,14 @@ enum ScreenCapture {
                 at: session,
                 includingPropertiesForKeys: [.contentModificationDateKey],
                 options: [.skipsHiddenFiles])) ?? []
-            jpgs += files.filter { $0.pathExtension.lowercased() == "jpg" }
+            // **Frames, not files.** Every shot is now two of them — the retina
+            // capture and the small copy handed to the agent — and counting both
+            // would silently halve a cap that is expressed in pictures. The
+            // sibling is dropped together with the frame it belongs to, below.
+            jpgs += files.filter {
+                $0.pathExtension.lowercased() == "jpg"
+                    && !$0.deletingPathExtension().lastPathComponent.hasSuffix("-small")
+            }
         }
         defer { dropEmptySessions() }
         guard jpgs.count > keepNewest else { return }
@@ -227,6 +315,9 @@ enum ScreenCapture {
         }
         for stale in sorted.dropFirst(keepNewest) {
             try? FileManager.default.removeItem(at: stale)
+            let small = stale.deletingLastPathComponent().appendingPathComponent(
+                stale.deletingPathExtension().lastPathComponent + "-small.jpg")
+            try? FileManager.default.removeItem(at: small)
         }
     }
 

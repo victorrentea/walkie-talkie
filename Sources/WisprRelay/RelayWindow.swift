@@ -77,6 +77,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     var onPromptResolved: ((Bool) -> Void)?
 
     private(set) var selection: String?
+
+    /// How many highlights the dictation is carrying, frozen one included. Zero
+    /// when there is no selection row at all.
+    private var selectionCount = 0
     private var paused = false
     private var listening = false
     private var hovering = false
@@ -656,7 +660,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         }
 
         if let selection = selection {
-            selectionLabel.stringValue = "↪ " + singleLine(selection)
+            selectionLabel.stringValue = (selectionCount > 1 ? "↪ ×\(selectionCount) " : "↪ ") + singleLine(selection)
             selectionLabel.frame.size = NSSize(width: innerWidth, height: 15)
             selectionLabel.isHidden = false
             rows.append((selectionLabel, 15))
@@ -1071,12 +1075,20 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
     // MARK: - Public API (main thread)
 
-    func setSelection(_ text: String?) {
+    /// `count` is how many highlights this dictation is now carrying, the frozen
+    /// one included. The row shows the **newest** and prefixes `×N` once there
+    /// is more than one — the same reading `📸 ×N` and `🎯 ×N` already use, and
+    /// for the same reason: what he can check at a glance is *that* the last
+    /// gesture landed, and the running total is what says none of the earlier
+    /// ones fell out. The row stays one line; a stack of them would push the
+    /// chip over the work it is riding on.
+    func setSelection(_ text: String?, count: Int = 1) {
         selection = (text?.isEmpty == false) ? text : nil
+        selectionCount = selection == nil ? 0 : max(1, count)
         layoutContent()
     }
 
-    func clearSelection() { setSelection(nil) }
+    func clearSelection() { setSelection(nil, count: 0) }
 
     /// The relay has been pointed at a terminal, or has lost the one it had.
     ///

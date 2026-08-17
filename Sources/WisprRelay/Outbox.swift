@@ -56,6 +56,46 @@ enum Outbox {
         if !FileManager.default.fileExists(atPath: outboxURL.path) {
             FileManager.default.createFile(atPath: outboxURL.path, contents: Data())
         }
+        retireLegacyShots()
+    }
+
+    /// Shots used to live in `~/.wispr-relay/shots`, and moving them to Caches
+    /// left the old pile behind with **nothing that would ever clean it**.
+    ///
+    /// `ScreenCapture.prune` walks `cacheRoot` and only `cacheRoot`, so the cap
+    /// of 300 has never applied there; Storage Management and every cleaner tool
+    /// reach Caches and not a dotfolder in `$HOME`; and nothing writes there any
+    /// more, so it cannot even shrink by being overwritten. Measured before this
+    /// was written: **382 MB in 209 retina JPGs**, going back to the first day
+    /// the relay ran, sitting where no amount of tidying would find them.
+    ///
+    /// **To the Trash, not to `rm`.** Old outbox lines still name these files,
+    /// and a picture Victor might still want to open is not something to delete
+    /// out from under him on a launch he did not ask a question with. The Trash
+    /// is also literally the answer he asked for — they go when he empties it —
+    /// and it is the one destination that needs no new habit.
+    ///
+    /// One-shot by nature: nothing recreates the folder, so the second launch
+    /// finds nothing to do.
+    private static func retireLegacyShots() {
+        let legacy = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".wispr-relay/shots")
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: legacy.path, isDirectory: &isDir),
+              isDir.boolValue else { return }
+
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: legacy, includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles])) ?? []
+        let bytes = files.reduce(0) { sum, url in
+            sum + ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        do {
+            try FileManager.default.trashItem(at: legacy, resultingItemURL: nil)
+            Log.info("retired the pre-Caches shot folder to the Trash — \(files.count) file(s), \(bytes / 1_048_576) MB")
+        } catch {
+            Log.error("could not retire \(legacy.path): \(error)")
+        }
     }
 
     /// `kind` is one of `dictation` / `typed` / `screenshot` / `selection`.
@@ -69,9 +109,18 @@ enum Outbox {
     /// `elements` are the DOM nodes he ⌘-clicked in Chrome while this message was
     /// being assembled: each one is a CSS selector plus what the thing said, so
     /// "this button" in the transcript has something to resolve to.
+    /// `selections` are highlights he made **later in the same dictation**, each
+    /// `{at, text}` with `at` as `m:ss` from the moment he started talking.
+    ///
+    /// `selection` above is untouched and still carries the first one, so
+    /// nothing that reads this queue today has to learn a key to keep working —
+    /// which matters, because the `relay` skill documents these fields by name.
+    /// A reader that wants the whole sequence takes `selections`; one that wants
+    /// the subject takes `selection`, exactly as before.
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
+                     selections: [[String: String]] = [],
                      paths: [String] = [],
                      screen: String? = nil,
                      app: String? = nil,
@@ -89,6 +138,7 @@ enum Outbox {
         ]
         if let text = text, !text.isEmpty { obj["text"] = text }
         if let selection = selection, !selection.isEmpty { obj["selection"] = selection }
+        if !selections.isEmpty { obj["selections"] = selections }
         if !paths.isEmpty { obj["paths"] = paths }
         if let screen = screen { obj["screen"] = screen }
         if let app = app, !app.isEmpty { obj["app"] = app }

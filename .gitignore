@@ -1,2 +1,5 @@
 .build/
 .DS_Store
+evals/work/
+evals/*.log
+__pycache__/

@@ -23,6 +23,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// highlighted, so the selection is the subject of the sentence.
     private var pendingSelection: String?
 
+    /// Text he highlighted **later in the same dictation**, each stamped with
+    /// where in the sentence he was when he took the shot that carried it.
+    ///
+    /// `pendingSelection` above is still frozen at the first non-empty read and
+    /// still means what it always meant: the subject he started talking about.
+    /// This is the other thing that happens in a long dictation — he keeps
+    /// talking, highlights a second line, presses the shutter, highlights a
+    /// third. Overwriting the frozen one with each of those would lose the
+    /// subject; ignoring them loses everything he pointed at after the first
+    /// sentence. So they accumulate beside it, in order, with their offsets.
+    ///
+    /// Only the shutter fills this (`plusOneShot`), which is what keeps it
+    /// honest: a selection lands here because he deliberately took a picture
+    /// while it was highlighted, not because the caret happened to be somewhere
+    /// when a timer fired.
+    private var pendingExtraSelections: [(at: TimeInterval, text: String)] = []
+
     /// The screen Victor was looking at when he started talking, captured
     /// automatically. Offered as context ("look if you need to"), unlike the
     /// deliberate ⌃⌥P shots which are things he wants seen.
@@ -112,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let kind: String
         let text: String?
         let selection: String?
+        /// Highlighted later in the same dictation, each with its offset. Empty
+        /// in the ordinary case, which is why `selection` above stays exactly
+        /// what it was rather than becoming element zero of a list.
+        var extraSelections: [(at: TimeInterval, text: String)] = []
         let paths: [String]
         let screen: String?
         let app: String?
@@ -297,6 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cannot ride along with the next thing he says.
         if !alreadyOpen {
             pendingSelection = nil
+            pendingExtraSelections = []
             contextShotPending = true
             // The zero of every offset in this dictation. Set here rather than on
             // the Wispr transition because this is the moment the context shot is
@@ -371,6 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictationStartedAt = nil
         pendingScreen = nil
         pendingSelection = nil
+        pendingExtraSelections = []
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -599,13 +622,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let selection = m.selection, !selection.isEmpty {
             parts.append("[selected: \(clampForTerminal(selection))]")
         }
+        // **Stamped, because that is the only thing that distinguishes them.**
+        // A bare second `[selected: …]` beside the first is two highlights with
+        // no way to tell which came from where in the sentence — and the reason
+        // to record them at all is that he said something different while each
+        // one was on screen. `0:31` is what lets "the one I mentioned after the
+        // tax bit" resolve to a string.
+        for extra in m.extraSelections {
+            parts.append("[selected \(stamp(extra.at)): \(clampForTerminal(extra.text))]")
+        }
         // `look at` and `context` stay separate, exactly as `paths` and `screen`
         // do: one is what he deliberately photographed and wants opened, the
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        if !m.paths.isEmpty { parts.append("[look at: \(m.paths.joined(separator: " "))]") }
-        if let screen = m.screen { parts.append("[context: \(screen)]") }
+        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen))
         if !m.elements.isEmpty {
             let named = m.elements.map { pick -> String in
                 guard let text = pick.text, !text.isEmpty else { return pick.path }
@@ -614,6 +645,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             parts.append("[pointed at: \(named.joined(separator: " · "))]")
         }
         return parts.joined(separator: " ")
+    }
+
+    /// How the pictures are handed over: the folder once, then the frames by
+    /// name, oldest first.
+    ///
+    /// **The small copies travel, not the retina frames.** `ScreenCapture.handover`
+    /// picks the 1000px sibling, which the evals in `evals/` measured as costing
+    /// a quarter of the tokens for the same answers. The originals are named in
+    /// the clause too, because "I can't read that" has to have an answer that is
+    /// not "take the picture again".
+    ///
+    /// **The order is stated, because nothing else states it.** Every one of
+    /// these messages is a sequence — he says "ăsta … și ăsta … și ăsta" and
+    /// presses the shutter between clauses — and until now the only thing
+    /// carrying that was the order of paths inside `[look at:]`, which is an
+    /// ordering something has to *guess* is meaningful rather than incidental.
+    /// The frames are named by their offset into the sentence (`shot-00:38…`),
+    /// so once the list is known to be chronological the names locate each one
+    /// inside what he was saying.
+    ///
+    /// **The context frame is offered, not withheld, and is not called a spare.**
+    /// Dropping it scored worse in the evals for a reason worth remembering: he
+    /// starts talking about what is already on his screen, so it is routinely
+    /// picture *one* of the enumeration rather than a fallback nobody needs.
+    /// What it gets is a hint that it can be skipped — a "Test, test, test"
+    /// dictation had the agent open a megabyte of desktop for nothing.
+    ///
+    /// Factoring the directory out saves ~90 characters a frame. That is worth
+    /// having and is **not** where the tokens are: measured, the addressing is a
+    /// rounding error beside the pixels, which is why this method is short and
+    /// `handoverWidth` has an essay over it.
+    private static func shotsClause(paths: [String], screen: String?) -> [String] {
+        let shots = paths.map { ScreenCapture.handover(for: $0) }
+        let context = screen.map { ScreenCapture.handover(for: $0) }
+        guard let anchor = shots.first ?? context else { return [] }
+        let dir = (anchor as NSString).deletingLastPathComponent
+        let name = { (p: String) in (p as NSString).lastPathComponent }
+
+        // Nothing but the automatic frame — 168 of the 180 dictations in the
+        // outbox look like this. It gets one short clause and no ceremony.
+        guard !shots.isEmpty else {
+            return ["[screen when I started talking, open only if the words need it: \(anchor)]"]
+        }
+
+        var clause = "[in \(dir)/ — the shots I took, oldest first: "
+            + shots.map(name).joined(separator: " ")
+        if let context = context {
+            clause += "; \(name(context)) is the screen when I started talking, open only if needed"
+        }
+        clause += ". Each is 1000px wide; drop the -small for the full-resolution original]"
+        return [clause]
     }
 
     /// The full text is in the outbox either way. What rides into the terminal
@@ -649,6 +731,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text) }
     }
 
+    /// The shutter's other half: whatever is highlighted **at this moment**,
+    /// filed under where in the sentence he is.
+    ///
+    /// He points at things by highlighting them as much as by photographing
+    /// them, and until now only the first of those survived — the selection was
+    /// frozen at the start of the dictation and every later highlight was
+    /// dropped. Now the same press that says "look at this" also records what
+    /// "this" was selected as, which is the half a picture cannot carry: a
+    /// screenshot shows a line of code, the selection *is* the line of code, in
+    /// characters something can grep for.
+    ///
+    /// **Three things are skipped, and each of them would be noise:**
+    /// nothing highlighted at all; the same text the frozen selection already
+    /// holds (he never let go of it, which is the common case and says nothing
+    /// new); and the same text as the previous extra, for shots taken in quick
+    /// succession over one highlight.
+    ///
+    /// Accessibility only (`readQuiet`) — the clipboard fallback posts a ⌘C into
+    /// whatever app is under his hand, and doing that on every shutter press is
+    /// a bill the gesture never agreed to pay.
+    private func stashExtraSelection(at offset: TimeInterval) {
+        guard let text = SelectionCapture.readQuiet(), !text.isEmpty else { return }
+
+        stateLock.lock()
+        let isFrozen = pendingSelection == text
+        let isRepeat = pendingExtraSelections.last?.text == text
+        let novel = !isFrozen && !isRepeat
+        // A dictation that opened with nothing highlighted has an empty frozen
+        // slot, and the first thing he highlights mid-sentence belongs *there* —
+        // it is the subject, arriving late. Only once that slot is taken does a
+        // highlight become an extra.
+        let fillsTheBlank = novel && pendingSelection == nil
+        if fillsTheBlank {
+            pendingSelection = text
+        } else if novel {
+            pendingExtraSelections.append((at: offset, text: text))
+        }
+        let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
+        stateLock.unlock()
+
+        guard novel else { return }
+        Log.info("↪ selection at \(Self.stamp(offset)) — \(text.count) chars (\(total) in this dictation)")
+        DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text, count: total) }
+    }
+
+    /// `m:ss`, the one clock this app measures anything in.
+    private static func stamp(_ offset: TimeInterval) -> String {
+        let s = max(0, Int(offset.rounded()))
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
     /// F3, or mouse 4 while dictating — one more shot for the dictation in
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
@@ -673,6 +806,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let startedAt = self.dictationStartedAt
             self.stateLock.unlock()
             let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
+
+            // **Before `screencapture`, for the same reason the cursor is.** The
+            // shutter is pressed at a moment, and by the time a subprocess has
+            // run and returned, the caret and the highlight it sat in have both
+            // moved on. A selection read after the picture would be a selection
+            // from after the picture.
+            if let offset = offset { self.stashExtraSelection(at: offset) }
 
             guard let path = ScreenCapture.grab(cursor: cursor, offset: offset) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
@@ -779,6 +919,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// approve, and the countdown is running.
     private static let maxPickLines = 3
 
+    /// Same bargain as `maxPickLines`, and the same countdown behind it: past
+    /// two or three the panel is a document rather than a prompt to approve.
+    private static let maxExtraSelectionLines = 3
+
     /// The pictures line: how many are riding along, and **when each was taken**,
     /// as m:ss from the moment he started talking.
     ///
@@ -811,12 +955,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?,
+                                      extraSelections: [(at: TimeInterval, text: String)] = [],
                                       shotOffsets: [TimeInterval],
                                       picks: [ElementPick], since: Date?) -> String? {
         var parts: [String] = []
         if let selection = selection, !selection.isEmpty { parts.append("↪ " + selection) }
         if let text = text, !text.isEmpty { parts.append(text) }
         guard !parts.isEmpty else { return nil }
+        // Stamped, and after the words rather than before them: the frozen
+        // selection is what he was talking *about* and belongs at the top, while
+        // these are things he reached for part-way through and read back in the
+        // order he reached for them. Cancel is still running while he reads this,
+        // which is the only moment noticing a wrong highlight is free.
+        for extra in extraSelections.prefix(maxExtraSelectionLines) {
+            parts.append("↪ \(stamp(extra.at)) " + extra.text)
+        }
+        if extraSelections.count > maxExtraSelectionLines {
+            parts.append("↪ +\(extraSelections.count - maxExtraSelectionLines) more")
+        }
         if let shots = shotLine(shotOffsets) { parts.append(shots) }
         parts.append(contentsOf: pickLines(picks, since: since))
         return parts.joined(separator: "\n")
@@ -872,6 +1028,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.lock()
         let selection = pendingSelection
         pendingSelection = nil
+        let extraSelections = pendingExtraSelections
+        pendingExtraSelections = []
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
@@ -909,11 +1067,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let message = Message(kind: kind, text: text, selection: selection,
+                              extraSelections: extraSelections,
                               paths: attached, screen: screen, app: app, elements: picks)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
-        let shown = Self.promptPreview(text: text, selection: selection, shotOffsets: offsets,
+        let shown = Self.promptPreview(text: text, selection: selection,
+                                       extraSelections: extraSelections, shotOffsets: offsets,
                                        picks: picks, since: since)
 
         DispatchQueue.main.async { [weak self] in
@@ -958,6 +1118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is nothing for a terminal to do with "the user closed the relay".
     private func commit(_ m: Message) {
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
+                    selections: m.extraSelections.map {
+                        ["at": Self.stamp($0.at), "text": $0.text]
+                    },
                     paths: m.paths, screen: m.screen, app: m.app,
                     elements: m.elements.map { $0.json })
         guard m.kind != "session_end" else { return }

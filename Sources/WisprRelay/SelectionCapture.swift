@@ -18,6 +18,21 @@ enum SelectionCapture {
         return readViaClipboardProbe()
     }
 
+    /// Accessibility only — **no ⌘C is injected**, and nothing is waited on.
+    ///
+    /// This is what the shutter uses. `read()` fires once per dictation, at the
+    /// moment Victor starts talking, and paying a synthetic ⌘C plus up to 400ms
+    /// of polling for it is a bargain there. A shot is different: he takes
+    /// several across one sentence, at moments he chooses, into whatever app is
+    /// under his hand — and a keystroke posted into that app on every press is
+    /// a side effect the gesture never promised. The failure mode is also the
+    /// right one: no AX selection reads as "he did not highlight anything new",
+    /// which is true far more often than not.
+    static func readQuiet() -> String? {
+        guard let ax = readViaAccessibility(), !ax.isEmpty else { return nil }
+        return ax
+    }
+
     static func frontmostAppName() -> String? {
         NSWorkspace.shared.frontmostApplication?.localizedName
     }

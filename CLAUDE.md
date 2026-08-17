@@ -510,6 +510,84 @@ answers "where on the desk was the pointer". This one is in **pixels of that
 image**, because it answers "where in this picture do I look". Do not port either
 convention onto the other.
 
+## The agent gets a 1000px copy, Victor keeps the retina frame
+
+Every capture writes two files: `shot-00:38(mouse-at-1034x1466px).jpg` as
+`screencapture` produced it, and `…-small.jpg` beside it at 1000px wide. The
+**small one is what travels** (`ScreenCapture.handover`, used by
+`AppDelegate.shotsClause`); the original is what he opens himself.
+
+An image costs `width × height / 750` tokens once the reading tool has fitted it
+to 2000px on the long edge, so a 3456×2234 desktop always lands at ~3450 tokens
+**whatever the JPEG weighs** — compressing harder buys exactly nothing. At
+1000px the same desktop is ~860.
+
+**That this is free was measured, not assumed** (`evals/`, 39 runs of a real
+agent over two real dictations replayed off the outbox). Pooled over the
+seven-frame Gmail dictation where every frame has to be opened: accuracy 0.95
+either way, 29,349 tokens against 48,350, cost $0.38 against $0.56. On the
+"what was I pointing at" fixture the small frames produced **byte-identical
+answers**, quoting `⇒in browser/sql LIMIT OFFSET` off a code editor.
+
+Written through ImageIO's thumbnail path, which scales during the JPEG decode —
+this sits in the capture path, and the burned-in cursor mark was removed from
+there partly for costing ~100ms of exactly the decode-and-re-encode this avoids.
+`prune()` counts **frames, not files**, and drops the sibling with its frame;
+counting both would silently halve a cap expressed in pictures.
+
+### Three things that sound like improvements and are not
+
+- **Compacting the line saves nothing.** Factoring the directory out of seven
+  paths (~90 characters a frame) measured *inside the noise* — 50,320 tokens
+  against 48,350, i.e. slightly worse. The compact form was kept anyway for what
+  it **says**, not what it saves: that the list is chronological and that the
+  context frame may be skipped. Do not go looking for tokens in the wording
+  again; they are in the pixels.
+- **Dropping the automatic context frame costs accuracy** (0.93 against 0.95).
+  It is not a spare. He starts talking about what is *already on his screen*, so
+  it is routinely **picture one of the enumeration** — in the Gmail dictation it
+  is the first of the seven senders. It is offered cheaply with a hint that it
+  can be skipped, never withheld.
+- **A native-resolution crop at the pointer, offered beside the small frame,
+  scored 0.87** — worse than the small frame alone. Not because the crop is
+  unreadable: because two pictures per shot make the **sequence** harder to
+  hold, and one run came back with the first two shots swapped. Sequence is what
+  these messages are made of.
+
+**Order, not timestamps.** Nothing needed wall-clock times. The name carries
+where in the sentence the shot was taken and where the pointer was; the line
+says the list is oldest first. That was enough for 7-item alignment at 0.95.
+
+## The shutter also takes the selection
+
+F3, or mouse 4 while dictating, records **what is highlighted at that moment**, stamped with the
+offset it was taken at, beside the picture (`stashExtraSelection`). A screenshot
+shows a line of code; the selection *is* the line of code, in characters
+something can grep for, and until now only the first one of a dictation survived.
+
+`pendingSelection` is **unchanged** and still means what it always meant — the
+subject, frozen at the first non-empty read, never overwritten. The extras
+accumulate beside it in `pendingExtraSelections`, and three cases are skipped
+because each would be noise: nothing highlighted; the same text the frozen slot
+already holds (he never let go of it — the common case); the same text as the
+previous extra. The one exception is a dictation that opened with **nothing**
+highlighted: the first thing he highlights mid-sentence fills the frozen slot
+instead, because that is the subject arriving late.
+
+**Accessibility only** (`SelectionCapture.readQuiet`), never the clipboard
+fallback. `read()` posts a synthetic ⌘C and polls the pasteboard for up to
+400ms; paying that once per dictation is a bargain, paying it on every shutter
+press into whatever app is under his hand is a side effect the gesture never
+promised. No AX selection reads as "he did not highlight anything new", which is
+true far more often than not.
+
+It rides the outbox as **`selections`** — `[{at: "0:31", text: …}]` — while
+`selection` keeps carrying the first one, so nothing reading the queue has to
+learn a key to keep working. In the terminal line they are stamped
+(`[selected 0:31: …]`), because a second bare `[selected: …]` beside the first
+is two highlights with no way to tell which came from where in the sentence.
+The chip shows the newest with `↪ ×N`, the same idiom as `📸 ×N` and `🎯 ×N`.
+
 ## Shots live in Caches, one folder per relay session
 
 `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session-stamp>/`, and
@@ -526,6 +604,16 @@ stated requirement: it clears on reboot and on a 3-day sweep, neither of which i
 **The outbox stays put**, in `~/.wispr-relay`. It is the log of what Victor said,
 the record that outlives the session, and a log the system may delete under
 pressure is not a log.
+
+**The pre-Caches pile is retired to the Trash on launch** (`Outbox.retireLegacyShots`).
+Moving shots to Caches left `~/.wispr-relay/shots` behind with nothing that would
+ever clean it: `prune()` walks `cacheRoot` and only `cacheRoot`, so the cap of
+300 never applied there, and no cleaner tool reaches a dotfolder in `$HOME`.
+Measured when this was written: **382 MB in 209 retina JPGs**, going back to the
+first day the relay ran. It goes to the **Trash and not to `rm`** — old outbox
+lines still name those files, and the Trash is literally the answer to "somewhere
+I can clean easily": they go when he empties it. One-shot by nature, since
+nothing recreates the folder.
 
 **The per-session folder is what makes the names safe.** Shots are named by their
 offset, so every session produces `shot-00:00(…)` again; without a folder between
