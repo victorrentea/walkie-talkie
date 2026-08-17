@@ -11,6 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictation = DictationMonitor()
     private let picker = ElementPicker()
 
+    /// Keeps every dictation's **recording** beside Wispr's reading of it, so a
+    /// local ASR model can one day be measured against Wispr on Victor's own
+    /// voice. It transcribes nothing and changes nothing about what the agent
+    /// receives — see `VoiceCorpus`, including why Wispr's audio is copied
+    /// rather than recorded again.
+    private let corpus = VoiceCorpus()
+
     /// The terminal dictations are typed into, when Victor has pointed the relay
     /// at one. Unbound, everything below behaves exactly as it did before this
     /// existed — the outbox is still written, and the skill's watcher still
@@ -190,12 +197,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestDictation = { [weak self] text in
             self?.send(kind: "dictation", text: text, app: "test")
         }
+        picker.onTestCorpus = { [weak self] id in self?.corpus.capture(id: id) }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
         // it fires a beat before CoreAudio reports the stream, which makes the
         // selection snapshot land closer to the moment Victor pressed.
         hotkeys.onDictationStarted = { [weak self] in self?.captureContext() }
 
-        wispr.onTranscript = { [weak self] text, app in
+        // Two independent things happen to a finished dictation, and the corpus
+        // is deliberately the one that does **not** go through `send`: `send`
+        // bails while paused, is subject to Cancel, and is where a message
+        // becomes something an agent acts on. Collecting the recording is none
+        // of those — it is a file on Victor's disk either way, and a sample
+        // dropped because he happened to be dictating into a browser is a sample
+        // that cannot be taken again.
+        wispr.onTranscript = { [weak self] text, app, id in
+            self?.corpus.capture(id: id)
             self?.send(kind: "dictation", text: text, app: app)
         }
 
@@ -239,6 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
+        Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
     }

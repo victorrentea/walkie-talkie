@@ -169,6 +169,7 @@ once, each taking one):
 | `POST /unbind` | back to outbox-only |
 | `GET /target` | what it is currently aimed at |
 | `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
+| `POST /test/corpus` | `{"id":"<transcriptEntityId>"}` — collect the voice-corpus sample for a Wispr row that already exists |
 
 ## Input
 
@@ -201,6 +202,37 @@ polled once a second for rows newer than a watermark taken at startup.
 The selection is read via Accessibility (`kAXSelectedTextAttribute`), falling
 back to a simulated ⌘C for apps that don't expose it — with the full clipboard,
 every representation, snapshotted and restored around the probe.
+
+### The voice corpus
+
+While the relay runs, every dictation also leaves the **recording** beside the
+transcript, in `~/.wispr-relay/voice-corpus/`:
+
+```
+2026-08-17/14-30-22-a1b2c3d4.wav    16 kHz mono — Wispr's own audio, copied
+2026-08-17/14-30-22-a1b2c3d4.txt    what Wispr made of it
+corpus.jsonl                        one line per sample, with metadata
+```
+
+This is groundwork for one future decision — whether a **local ASR model** could
+replace Wispr Flow — and it collects paired data now because it cannot be
+collected later: Wispr keeps each recording for roughly a fortnight and then
+drops it, leaving the text alone.
+
+The audio is Wispr's own `History.audio` blob, which is already a complete
+16 kHz mono 16-bit `.wav`; the relay copies bytes and never opens the
+microphone. That is what makes the eventual comparison like-for-like — both
+models score the same signal.
+
+The `.txt` holds Wispr's *formatted* text and nothing else, so it can be diffed
+directly against another model's output. The manifest carries the raw `asr`
+string beside it, which is the fairer reference: the formatted text has been
+through Wispr's LLM post-processing, and charging a plain recogniser for
+punctuation and casing would flatter the wrong side.
+
+Nothing prunes this folder — it is meant to accumulate, at roughly 35 MB a day
+of speech. Delete it if you don't want it; the relay recreates only what arrives
+after that.
 
 ## Build
 

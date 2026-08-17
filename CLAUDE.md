@@ -788,6 +788,81 @@ Only the dot animates; the count must stay readable at every instant.
 `flash(_:)` message summons it in any state, because the Accessibility warning
 fires at launch, long before a dictation.
 
+## The voice corpus: audio kept beside the transcript, forever
+
+**`~/.wispr-relay/voice-corpus/`** — `VoiceCorpus.swift`. Every dictation the
+watcher sees while the relay is up leaves three things behind:
+
+```
+voice-corpus/2026-08-17/14-30-22-a1b2c3d4.wav   ← what Victor said
+voice-corpus/2026-08-17/14-30-22-a1b2c3d4.txt   ← what Wispr made of it
+voice-corpus/corpus.jsonl                        ← one line per sample
+```
+
+It exists to make one future decision measurable: **replacing Wispr Flow with a
+local model.** The relay transcribes nothing today and is not being taught to.
+What it cannot do later is go back and collect the samples — Wispr keeps the
+audio for a while and then drops it (measured 2026-08-17: **495 rows still had
+audio out of 11,999**, roughly the last fortnight; the rest are text forever).
+Every day the relay runs without this is a day of paired data that is gone.
+
+- **The audio is Wispr's own bytes, not a second recording.** `History.audio` is
+  a complete `.wav` — RIFF header and all, 16 kHz mono 16-bit PCM. Verified by
+  writing a blob straight out and reading it back: `afinfo` says
+  `1 ch, 16000 Hz, Int16`, 23.384s against the row's `duration` of 23.4, and the
+  written file is byte-identical to the blob. Beyond being free, it is the only
+  way the eventual comparison is *like-for-like*: a parallel recording made by
+  this app would be a different signal from the one Wispr scored — other device,
+  other gain, other start and end — and a benchmark where the two models heard
+  different audio measures nothing. **Do not add a microphone to this app.**
+- **It is not in Caches, and that is the opposite of the shots' argument.** A
+  screenshot's purpose expires within the turn that reads it, so a folder the
+  system may purge is right for it. A corpus is worthless unless it accumulates.
+  It sits beside the outbox, for the outbox's reason, and `--home` moves it the
+  way it moves the outbox and unlike the shots.
+- **Day folders**, because he dictates 40–90 times a day and a flat folder stops
+  being listable inside a week. Budget from the same measurement: ~35 MB/day of
+  WAV, so **~1 GB a month**. It is meant to grow and nothing prunes it. If that
+  ever bites, `afconvert` to FLAC halves it losslessly and is already on the Mac
+  — but do not compress lossily, which would put a second codec between Victor's
+  voice and the model being judged.
+- **The `.txt` is the formatted text and the manifest carries `asr` beside it**,
+  and that split is the point of having a manifest. `formattedText` has been
+  through Wispr's LLM post-processing — punctuation, casing, the user dictionary
+  — so scoring a local Whisper against it charges the model for work an ASR does
+  not do. `asr` is the apples-to-apples reference; the formatted text is the bar
+  the *product* has to clear. The two already differ on the first sample
+  collected (a trailing full stop). The `.txt` holds the transcript **and
+  nothing else**, ending in a newline: it is meant to be diffed against another
+  model's output, and metadata mixed in would have to be stripped by everything
+  that reads it.
+- **Everything the watcher sees, paused included.** Pause is documented as
+  bailing out of exactly four places and this is deliberately not a fifth: it
+  stops the relay *acting* on a dictation, and collecting the recording is not
+  acting on it — nothing is sent anywhere, the file is on his own disk either
+  way. Narrowing it to unpaused would throw away the minutes he spends dictating
+  into a browser, which are some of his longest and least technical, i.e.
+  precisely the coverage a corpus of agent prompts otherwise lacks. `capture` is
+  therefore called from `wispr.onTranscript` beside `send`, never through it.
+- **Keyed by Wispr's own `transcriptEntityId`**, which is what makes two relays
+  safe. Both watch the same DB and both are handed the same id; the second finds
+  the `.wav` already there and stops, so the sample is written once. The id also
+  survives into the file name (first 8 chars) and the manifest, so a sample can
+  always be traced back to the row it came from.
+- **The blob is fetched off the poll path.** `WisprWatcher.onTranscript` carries
+  the id and not the audio: the blob is megabytes, and the poll is how the words
+  reach the agent. `VoiceCorpus` re-reads the row on its own utility queue, and
+  **retries at 0/1.5/4s** because Wispr writes the text and the audio in its own
+  order and the watcher can win that race. A row that still has no audio after
+  that is logged and skipped — a corpus entry with no recording is not a sample.
+- **`POST /test/corpus {"id": "…"}`** collects a sample for a row that already
+  exists. `/test/dictation` cannot reach this code, because a fabricated
+  transcript has no recording behind it — and this is the same argument that
+  route was added for. It also back-fills a missed sample in one line.
+- `FlowDB.swift` now holds the read-only opener both readers share. The URI form
+  with `mode=ro` is load-bearing (see `WisprWatcher`) and was not worth
+  remembering correctly in two places.
+
 ## Size: minimal, per state
 
 `layoutContent()` hugs the **current** state's content — not the widest state

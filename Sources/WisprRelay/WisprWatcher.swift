@@ -24,16 +24,19 @@ import SQLite3
 final class WisprWatcher {
 
     /// Called on a background queue for each newly completed dictation.
-    var onTranscript: ((_ text: String, _ app: String?) -> Void)?
-
-    private let dbPath = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Wispr Flow/flow.sqlite").path
+    ///
+    /// `id` is Wispr's own `transcriptEntityId`, and it is here so `VoiceCorpus`
+    /// can go back for the **recording** of this dictation. The blob is
+    /// megabytes and this poll is the path the words reach the agent by, so it
+    /// is deliberately not selected here — the id is the handle, the fetch
+    /// happens elsewhere and later.
+    var onTranscript: ((_ text: String, _ app: String?, _ id: String) -> Void)?
 
     private var watermark: String = ""
     private var timer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr")
 
-    var isAvailable: Bool { FileManager.default.fileExists(atPath: dbPath) }
+    var isAvailable: Bool { FlowDB.isAvailable }
 
     func start(pollInterval: TimeInterval = 1.0) {
         guard isAvailable else {
@@ -57,11 +60,11 @@ final class WisprWatcher {
     // MARK: - Polling
 
     private func poll() {
-        guard let db = openReadOnly() else { return }
+        guard let db = FlowDB.openReadOnly() else { return }
         defer { sqlite3_close(db) }
 
         let sql = """
-            SELECT timestamp, COALESCE(NULLIF(formattedText,''), asrText), app
+            SELECT timestamp, COALESCE(NULLIF(formattedText,''), asrText), app, transcriptEntityId
             FROM History
             WHERE timestamp > ? AND status IN ('formatted','raw_transcript')
             ORDER BY timestamp ASC
@@ -72,40 +75,23 @@ final class WisprWatcher {
         sqlite3_bind_text(stmt, 1, watermark, -1, SQLITE_TRANSIENT)
 
         while sqlite3_step(stmt) == SQLITE_ROW {
-            guard let ts = column(stmt, 0) else { continue }
+            guard let ts = FlowDB.text(stmt, 0) else { continue }
             watermark = ts
-            guard let text = column(stmt, 1)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            guard let text = FlowDB.text(stmt, 1)?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !text.isEmpty else { continue }
-            let app = column(stmt, 2)
-            onTranscript?(text, app)
+            let app = FlowDB.text(stmt, 2)
+            guard let id = FlowDB.text(stmt, 3) else { continue }
+            onTranscript?(text, app, id)
         }
     }
 
     private func latestTimestamp() -> String? {
-        guard let db = openReadOnly() else { return nil }
+        guard let db = FlowDB.openReadOnly() else { return nil }
         defer { sqlite3_close(db) }
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT MAX(timestamp) FROM History", -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
-        return sqlite3_step(stmt) == SQLITE_ROW ? column(stmt, 0) : nil
-    }
-
-    private func openReadOnly() -> OpaquePointer? {
-        var db: OpaquePointer?
-        // URI form so `mode=ro` applies; SQLITE_OPEN_READONLY alone would still
-        // want to create/extend the -shm file on some volumes.
-        let uri = "file://\(dbPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? dbPath)?mode=ro"
-        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else {
-            if let db = db { sqlite3_close(db) }
-            return nil
-        }
-        sqlite3_busy_timeout(db, 200)
-        return db
-    }
-
-    private func column(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
-        guard let cstr = sqlite3_column_text(stmt, index) else { return nil }
-        return String(cString: cstr)
+        return sqlite3_step(stmt) == SQLITE_ROW ? FlowDB.text(stmt, 0) : nil
     }
 
     private static func nowUTC() -> String {
@@ -116,5 +102,3 @@ final class WisprWatcher {
         return f.string(from: Date())
     }
 }
-
-private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
