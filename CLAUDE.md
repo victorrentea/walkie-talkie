@@ -41,6 +41,65 @@ the log survives, an agent watching the queue the old way keeps working, and
 `session_end` — which is addressed to a watcher and means nothing to a terminal —
 is the one kind that is not delivered.
 
+### IDE terminals go through the editor's own extension
+
+`⌘⌃D` on VS Code or IntelliJ no longer pastes. The relay finds a loopback
+listener published by Victor's own extensions — `victor-vsc`'s
+`relay-terminal.js` and the `live-coding` plugin's `RelayTerminalService` — under
+`~/.wispr-relay/ide/`, asks it which terminal is selected, and hands it every
+later line (`IDEBridge.swift`). The extension calls `sendText` /
+`sendCommandToExecute` on **that** widget.
+
+**Why, measured.** The old `.keystroke` path addressed the *application* and
+delivered with clipboard → activate → ⌘V → Return, and ⌘V goes wherever the
+caret is. Four deliveries on a bound IntelliJ, one variable:
+
+| caret at delivery | where it landed |
+|---|---|
+| the bound terminal | correct |
+| another app entirely | correct — the app is activated, the caret never moved |
+| the **editor** | **into the source file**, plus a Return |
+| a second terminal tab | the wrong terminal |
+
+and the relay logged `delivered` for all four, because "⌘V was sent" is all it
+could observe. On 2026-08-15 that put a dictation into
+`OwnerRestController.java`; the backend hot-compiled it and the endpoint
+answered 500 until somebody read the file. All four now land in the bound tab,
+re-verified on both editors with `Editor.java` byte-identical afterwards.
+
+**This is the Chrome extension's argument run again** — from outside a window
+you cannot address what is inside it; from inside, the API is right there — with
+the direction reversed. Chrome *reports* picks, so the relay listens; here the
+relay *pushes*, so the editor listens.
+
+- **The focused window is what disambiguates.** Two VS Code windows are two
+  extension hosts and two listeners. `/ping` answers `focused`, and the relay
+  takes the one that says yes; with a single candidate it is believed without
+  the flag, since ⌘⌃D can land a beat before the answer settles. Matching on the
+  process tree was the alternative and is worse: it identifies the
+  *application*, which is exactly the granularity that was never the problem.
+- **A per-run secret gates it**, unlike the Chrome endpoint. That one hands over
+  a CSS selector; this one types a line into a shell and presses Return.
+- **VS Code targets are now guarded.** `/bind` returns the shell's pid, the
+  relay resolves a tty from it and runs the same `foregroundIsShell` test it
+  runs on a Terminal.app tab — verified refusing `rm -rf build` with zsh at the
+  prompt. **IntelliJ's are not yet**: the reworked terminal does not hand back a
+  process through `ttyConnector`, so `shellPID` comes back nil there.
+- **No pid means unguarded, not refused.** Fail-closed is right for a tty target;
+  here it would trade an announced weakness for a feature that does nothing,
+  since every IDE target was unguarded before this existed. `isGuarded` is false
+  and the bind flash says `— no shell guard`.
+- **`.keystroke` survives as the fallback** for a known editor with no extension
+  answering, and is logged as such.
+
+### Only terminals get bound
+
+`bind` used to send **every** non-Terminal app down the paste path — there was
+no whitelist at all — so ⌘⌃D pressed while looking at Chrome bound Chrome and
+typed the next dictation into whatever field held the caret. Proven, with the
+screen locked, by binding `loginwindow`. Anything that is neither Terminal.app
+nor an editor `IDEBridge` recognises is now refused outright.
+
 ### The handle is never a window
 
 `TerminalBinding.Handle` has three cases and all three are things the terminal

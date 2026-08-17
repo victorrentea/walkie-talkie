@@ -42,9 +42,24 @@ final class TerminalBinding {
         /// next sentence somewhere Victor never pointed at.
         case tmux(pane: String, tty: String)
 
-        /// Anything with no scripting surface — VS Code's integrated terminal,
-        /// IntelliJ's, a terminal emulator nobody has taught this app about.
-        /// Addressed by process id and driven with a paste and a Return.
+        /// A terminal panel inside VS Code or IntelliJ, addressed **through the
+        /// editor's own extension** (`IDEBridge`): the relay hands the line to a
+        /// loopback listener and the extension calls `sendText` on that exact
+        /// terminal. Like the first two, it does not touch the focus.
+        ///
+        /// This is what `.keystroke` should have been and could not be from
+        /// outside a window. It is guarded, because the extension hands back the
+        /// shell's pid and a tty follows from that.
+        case ide(IDEBridge.Handle)
+
+        /// The last resort: no scripting surface and no extension answering —
+        /// addressed by process id and driven with a paste and a Return.
+        ///
+        /// **The line goes wherever the caret is**, which is the whole problem:
+        /// measured on a bound IntelliJ, a delivery with the caret in the editor
+        /// pasted into the source file and pressed Return, and one with the
+        /// caret in a second terminal tab landed in the wrong terminal — both
+        /// reported as `delivered`, because "⌘V was sent" is all this can see.
         case keystroke(pid: pid_t, app: String)
     }
 
@@ -89,8 +104,14 @@ final class TerminalBinding {
         /// Whether delivery to this target can be checked before it happens.
         /// `.keystroke` cannot — see `foregroundIsShell`.
         var isGuarded: Bool {
-            if case .keystroke = handle { return false }
-            return true
+            switch handle {
+            case .keystroke: return false
+            // Guarded exactly when the extension could tell us which process
+            // owns the panel. It normally can; if it could not, saying so is
+            // better than implying a check that will not happen.
+            case .ide(let h): return h.shellPID != nil
+            case .terminalApp, .tmux: return true
+            }
         }
     }
 
@@ -133,15 +154,35 @@ final class TerminalBinding {
         let bound: Target?
         if bundleID == "com.apple.Terminal" {
             bound = bindTerminalApp(fallbackName: name)
-        } else {
-            // No scripting surface worth the name: VS Code and IntelliJ both
-            // host their terminal inside a window nothing outside can address —
-            // so the label stays the app's name and the window's own title
-            // stands in for the `folder@branch` a tty would have given.
+        } else if let editor = IDEBridge.kind(bundleID: bundleID) {
             let window = Self.focusedWindow(pid: app.processIdentifier)
-            bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
-                           label: name, address: name, folder: nil, title: window.title,
-                           sourceFrame: window.frame, boundAt: Date())
+            // **Ask the editor.** Its extension knows which terminal is active,
+            // can name it, and can hand back the shell's pid — three things
+            // nothing outside the window has ever been able to answer.
+            if let handle = IDEBridge.bind(bundleID: bundleID) {
+                bound = Target(handle: .ide(handle),
+                               label: name, address: "\(name) · \(handle.name)",
+                               folder: handle.shellPID.flatMap { Self.publishedDirectory(forTTY: Self.tty(ofPID: $0) ?? "") },
+                               title: window.title,
+                               sourceFrame: window.frame, boundAt: Date())
+            } else {
+                // The editor is one we know, but nothing answered — the
+                // extension is not installed, or the window has no terminal
+                // open. Paste is what is left, and it is announced as such.
+                Log.error("no \(editor) extension answering — falling back to paste, which lands wherever the caret is")
+                bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
+                               label: name, address: name, folder: nil, title: window.title,
+                               sourceFrame: window.frame, boundAt: Date())
+            }
+        } else {
+            // **Not a terminal, and no longer bound as if it were.** Every
+            // non-Terminal app used to fall through to the paste path, so ⌘⌃D
+            // pressed while looking at Chrome bound Chrome and typed the next
+            // dictation into whatever field held the caret. Proven, with the
+            // screen locked, by binding `loginwindow`. A refusal is the only
+            // correct answer: there is no terminal here to deliver to.
+            Log.error("⌘⌃D on \(name) — not a terminal, not binding")
+            bound = nil
         }
 
         guard let bound = bound else { return nil }
@@ -198,6 +239,10 @@ final class TerminalBinding {
         // kind of movement an agent's terminal title has — and this one costs an
         // AX read rather than a subprocess.
         case .keystroke(let pid, _): fresh = Self.focusedWindow(pid: pid).title
+        // The window's own title, exactly as for a paste target: the panel has
+        // no title of its own that means anything to Victor, and both IDEs put
+        // the project first in the window title.
+        case .ide: fresh = nil
         }
         guard fresh != existing.title else { return nil }
 
@@ -216,6 +261,9 @@ final class TerminalBinding {
         current = nil
         lock.unlock()
         if let had = had { Log.info("📍 unbound from \(had.label) (\(had.address))") }
+        // Let the editor drop its end too, so a window that is never bound again
+        // is not holding a reference to a terminal for the rest of its life.
+        if case .ide(let handle) = had?.handle { IDEBridge.release(handle) }
     }
 
     // MARK: - Delivery
@@ -266,6 +314,40 @@ final class TerminalBinding {
             }
             guard Self.writeToTmux(line, pane: pane) else {
                 return .failed("tmux send-keys failed")
+            }
+            return .delivered
+
+        case .ide(let handle):
+            // **The same guard the tty paths get**, and the reason the shell pid
+            // was worth asking the extension for. A dictation typed at a prompt
+            // is not a prompt, it is a command; IDE targets were the one place
+            // that could never be checked, and now they can. Fails closed, like
+            // the others: a panel we cannot interrogate counts as a shell.
+            // **No pid means unguarded, not refused.** Fail-closed is right for
+            // a tty target, where the alternative is running a sentence as a
+            // command in a shell we *could* have identified. It is wrong here:
+            // an IDE panel whose process we cannot name is exactly what every
+            // IDE target was before this existed, and they delivered. Refusing
+            // would trade a known, announced weakness for a feature that does
+            // nothing. `isGuarded` is false in this case and the bind flash says
+            // `— no shell guard`, which is where the fact belongs.
+            guard let shell = handle.shellPID, let tty = Self.tty(ofPID: shell) else {
+                guard IDEBridge.send(text, to: handle) else {
+                    return .failed("\(handle.name) did not take the line")
+                }
+                return .delivered
+            }
+            switch Self.foregroundCommand(onTTY: tty) {
+            case .none:
+                unbind()
+                return .targetGone("\(handle.name) is gone")
+            case .some(let command) where Self.isShell(command):
+                return .wouldRunAsShell(command)
+            case .some:
+                break
+            }
+            guard IDEBridge.send(text, to: handle) else {
+                return .failed("\(handle.name) did not take the line")
             }
             return .delivered
 
@@ -579,6 +661,19 @@ final class TerminalBinding {
             return (String(parts[1]).trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
         }
         return nil
+    }
+
+    /// The tty a process is attached to, `/dev/ttys004` style.
+    ///
+    /// The editor extensions hand back the **shell's pid** rather than a tty,
+    /// because a pid is what their API has. Everything the relay already knows
+    /// how to ask — what is in the foreground, which directory a Claude Code
+    /// published — is keyed on the tty, so this is the one hop between them.
+    static func tty(ofPID pid: pid_t) -> String? {
+        guard let out = run("/bin/ps", ["-o", "tty=", "-p", String(pid)])?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !out.isEmpty, out != "??"
+        else { return nil }
+        return out.hasPrefix("/dev/") ? out : "/dev/" + out
     }
 
     /// Would typing here run a command rather than talk to a program?
