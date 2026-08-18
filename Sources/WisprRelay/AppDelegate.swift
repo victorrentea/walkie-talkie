@@ -373,19 +373,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard engine == .whisper else {
             whisper.stop()
+            setEngineLoading(false)
             TranscriptionEngine.current = .wispr
             status.setEngine(.wispr)
-            overlay.flash("🎙️ transcription: Wispr Flow", duration: 3)
+            // Instant, unlike the other direction — nothing to load, and the
+            // ~2.5 GB the model was holding goes back as the helper exits. Said
+            // out loud anyway, because "did that take?" is the same question in
+            // both directions and only one of them answers itself.
+            overlay.flash("🎙️ Wispr Flow — ready", duration: 3)
             Log.info("engine → wispr")
             return
         }
 
-        status.setEngineLoading(true)
-        overlay.flash("🎙️ loading the local model…", duration: 12)
+        setEngineLoading(true)
+        // No duration: it ends when the model does, not when a timer says so.
+        // A banner that expires after twelve seconds on a load that took
+        // fourteen is worse than none — it says "ready" by disappearing.
+        overlay.flash("⏳ loading the local model — keep using Wispr until this clears", duration: 600)
         whisper.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.status.setEngineLoading(false)
+                self.setEngineLoading(false)
                 if let error = error {
                     TranscriptionEngine.current = .wispr
                     self.status.setEngine(.wispr)
@@ -395,10 +403,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 TranscriptionEngine.current = .whisper
                 self.status.setEngine(.whisper)
-                self.overlay.flash("🎙️ transcription: local Whisper", duration: 3)
+                // The one message he is actually waiting for. Worded as
+                // permission rather than as a state, because the question he has
+                // been holding for ten seconds is "can I talk yet".
+                self.overlay.flash("🎙️ local Whisper ready — go ahead", duration: 4)
                 Log.info("engine → whisper")
             }
         }
+    }
+
+    /// One switch for both places the ⏳ shows, so they can never disagree — the
+    /// chip beside the cursor and the menu bar glyph. Both are needed and
+    /// neither is enough: the chip is where he is looking, and the menu bar is
+    /// the half that survives him typing, since macOS hides the pointer then and
+    /// the chip goes with it.
+    private func setEngineLoading(_ loading: Bool) {
+        status.setEngineLoading(loading)
+        overlay.setEngineLoading(loading)
     }
 
     /// `kill -USR1 <pid>` writes what is on screen right now to
@@ -1234,6 +1255,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // not cancelling — Cancel is a button he presses on purpose — and the
         // outbox writes serially, so it lands in the right order.
         overlay?.flushHeldPrompt()
+        // Let the ~2.5 GB go on the way out. It would go anyway — the helper sees
+        // EOF on stdin when the relay's pipes close and exits on its own, measured
+        // at nine seconds even after a SIGKILL — but nine seconds of a model
+        // nobody is using is nine seconds of a laptop that is not his to spend.
+        whisper.stop()
         Log.info("session ended via \(reason)")
         Outbox.send(kind: "session_end", text: "user closed the relay")
     }

@@ -82,6 +82,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// when there is no selection row at all.
     private var selectionCount = 0
     private var paused = false
+    /// True while the local Whisper model is loading — see `titleText`.
+    private var engineLoading = false
     private var listening = false
     private var hovering = false
 
@@ -951,6 +953,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// is the fact that does not change, and the row below it now carries both the
     /// sign of life (the pulsing 🔴) and everything that does change.
     private var titleText: String {
+        // **Loading outranks every other state, including paused**, and it is the
+        // only state here that is about the *near future* rather than the present.
+        // The model takes ten seconds to come up and a dictation started inside
+        // that window is silently handed to the other engine — so the one thing
+        // worth saying while it loads is "not yet", and saying it beside the
+        // cursor is saying it where he is already looking. It disappears on its
+        // own, which is why it can afford to shout over ⏸️ for those seconds.
+        if engineLoading { return "⏳ \(identity)" }
         // Paused prefixes the robot rather than replacing it: the chip's job is
         // still to say *which agent this is*, and pause is a modifier on that, not
         // a different thing. Reading ⏸️ ahead of 🤖 is also the same order as the
@@ -1099,6 +1109,17 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         boundLabel = label
         boundTitle = label == nil ? nil : title
         boundFolder = label == nil ? nil : folder
+        refreshTitle()
+        layoutContent()
+    }
+
+    /// The local recogniser is coming up (or going away). Drives the ⏳ on the
+    /// chip; `StatusItem` shows the same thing in the menu bar, which is the half
+    /// that is still visible while he types and the pointer — and with it the
+    /// chip — is hidden.
+    func setEngineLoading(_ value: Bool) {
+        guard engineLoading != value else { return }
+        engineLoading = value
         refreshTitle()
         layoutContent()
     }

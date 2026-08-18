@@ -942,8 +942,24 @@ doing — by putting the local model on the real job instead of on a benchmark.
   between the end of a sentence and the agent seeing it. `helpers/whisper_helper.py`
   starts once, warms up on a second of silence, and answers one JSON line per
   request at ~0.1× the audio's duration.
+- **⏳ in two places while it loads, and that is the whole point of the setting
+  being visible.** The model takes ten seconds, and a dictation started inside
+  that window is silently handed to Wispr by the fallback — so what has to be
+  said is "not yet". The chip beside the cursor shows `⏳ folder@branch`, taking
+  the slot ⏸️ uses and outranking it for those seconds; the menu bar shows
+  `⏳🤖`, which is the half that survives him typing, since macOS hides the
+  pointer then and the chip goes with it. `AppDelegate.setEngineLoading` drives
+  both from one call so they cannot disagree, and `StatusItem.refreshGlyph`
+  arbitrates the glyph because pause and loading are set from different places
+  and both own it. Loading ends with **`🎙️ local Whisper ready — go ahead`** —
+  worded as permission, because the question he has been holding for ten seconds
+  is whether he may talk yet. The reverse direction is instant and says so
+  anyway (`🎙️ Wispr Flow — ready`): "did that take?" is the same question both
+  ways and only one of them answers itself.
 - **Started only when selected, and stopped when deselected.** The weights are
-  1.5 GB resident and the ordinary case is a relay running all day on Wispr. A
+  1.5 GB resident and the ordinary case is a relay running all day on Wispr — **measured: the relay alone is 56 MB, the
+  helper 2.5 GB once a transcription has run**, and it is 0 on Wispr because
+  nothing is started. A A
   relay that starts up *already* set to Whisper loads the model at launch rather
   than on the first dictation — otherwise the choice would silently cost ten
   seconds mid-sentence and the fallback would hand that dictation to Wispr,

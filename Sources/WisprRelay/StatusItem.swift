@@ -29,6 +29,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
+    private var isPaused = false
+    private var engineLoading = false
 
     override init() {
         super.init()
@@ -90,12 +92,30 @@ final class StatusItem: NSObject, NSMenuDelegate {
         for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
     }
 
-    /// Shown beside the name while the model is coming up, so a menu opened
-    /// during those ten seconds explains the wait instead of looking stuck.
+    /// Shown beside the name in the submenu **and** in the menu bar itself.
+    ///
+    /// The submenu half only helps a menu that is already open, which is not
+    /// where he will be looking: he clicks Local Whisper, the menu closes, and
+    /// then he wants to know when he may start talking. The menu bar is the one
+    /// place that is always in the same pixels — and the only one still visible
+    /// while he types, since the chip rides the pointer and macOS hides the
+    /// pointer while typing.
+    ///
+    /// ⏳ takes the same slot as ⏸️ and outranks it for the ten seconds it is up:
+    /// paused is a state he chose and can read at leisure, while this one is
+    /// about whether the *next* sentence will reach the engine he just picked.
     func setEngineLoading(_ loading: Bool) {
+        engineLoading = loading
         engineItems[.whisper]?.title = loading
             ? "\(TranscriptionEngine.whisper.label) — loading…"
             : TranscriptionEngine.whisper.label
+        refreshGlyph()
+    }
+
+    private func refreshGlyph() {
+        if engineLoading      { item.button?.title = "⏳🤖" }
+        else if isPaused      { item.button?.title = "⏸️🤖" }
+        else                  { item.button?.title = "🤖" }
     }
 
     /// Kept in step with the app's state by `AppDelegate`, not read on demand: the
@@ -107,9 +127,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// "Resume" while paused — rather than as a checkbox of the current state. A
     /// menu he opens for one second should say what the click will do.
     func setPaused(_ value: Bool) {
+        isPaused = value
         pause.title = value ? "Resume" : "Pause"
         // Same order as the chip: ⏸️ in front of the robot, never instead of it.
-        item.button?.title = value ? "⏸️🤖" : "🤖"
+        // Routed through `refreshGlyph` so it cannot stomp on a ⏳ that is up —
+        // the two states are set from different places and both own this glyph.
+        refreshGlyph()
     }
 
     /// The label is read when the menu opens rather than pushed on a timer: it
