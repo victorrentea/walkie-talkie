@@ -11,6 +11,12 @@ one square inch under the pointer.** Whole-desktop text costs *the same as the
 picture* and throws away the layout the picture was carrying. Pointer-local text
 costs ~1/40th of the picture and answered the pointing fixture 3/3.
 
+**And the ladder that came out of it went further than the question did.** Walked
+down from 1000px looking for the width where the answers blur out, 33 agent runs
+found **no legibility cliff at all, down to 500px** — so `handoverWidth` can go
+to 700 for −51% a frame on evidence, which is a larger saving than any text
+variant was ever going to produce.
+
 Everything below was measured on the same frames the other evals use, still on
 disk in `~/.Trash/shots` (`Outbox.retireLegacyShots` moved them there, which is
 the second time that decision has paid for itself). Probes are in
@@ -134,31 +140,103 @@ prediction rather than rationalised afterwards:
   form field's value, a truncated label's full text) and it degrades to nothing
   in the apps above, where OCR still works.
 
+## What the runs said
+
+33 runs, $22, both fixtures, three repeats a cell. The prediction going in was
+that the downscale ladder would break somewhere near where OCR breaks. It did
+not break anywhere, and what did go wrong at the bottom was not what the ladder
+was testing.
+
+| variant | tokens/frame | n | pooled accuracy |
+|---|---|---|---|
+| `small` — 1000px, today | 861 | 6 | 1.00 |
+| `small-800` | 551 | 6 | 1.00 |
+| **`small-700`** | **421** | 6 | **1.00** |
+| `small-600` | 309 | 6 | 0.89 |
+| `small-500` | 215 | 6 | 0.98 |
+| `small-ptrtext` — 1000px + the quoted line | 861 | 3 | 1.00 |
+
+**There is no legibility cliff, not even at 500px.** The ladder was walked down
+expecting the answers to blur out, and they never did — a 3456×2234 desktop at
+500px wide, 215 tokens, still gave `⇒in browser/sql LIMIT OFFSET` and all seven
+senders. The two cells that scored below 1.00 both failed at something other
+than reading:
+
+- `pointed/small-600`, 0.33: every quote **correct**, shots 1 and 2 **swapped**.
+  That is `small-crop`'s failure, arriving here without a crop — sequence, not
+  pixels.
+- `unsubscribe/small-500`, 0.86: `Survey` where the key says `fan courier`. And
+  a `small-600` run that scored 1.00 answered `Survey <survey@fancourier.ro>
+  (FAN Courier)` — so `Survey` is the sender's actual display name and the key
+  is narrow, the same shape as the wrong `pointed` key recorded in `fixtures.py`.
+  The model read the pixels correctly at 500px and the fixture marked it wrong.
+
+That 500 pooled *above* 600 is the tell: both are noise around 1.00 at three
+repeats, not a trend. **700px is the last rung where nothing at all goes wrong**,
+and it is where Vision OCR — a pessimistic stand-in, since it is clean at 700 and
+gibberish at 600 — puts the boundary too. Two unrelated proxies landing on the
+same rung is the most this suite can offer without a much bigger n.
+
+**So: `handoverWidth` 1000 → 700 is 861 → 421 tokens a frame, −51%**, and on the
+seven-frame Gmail dictation 6,027 → 2,947. 800px is the same call one rung more
+cautiously, at −36%.
+
+**And the fixtures are now saturated.** `small` scored 0.95 when it was first
+run and scores 1.00 now, on both fixtures, with the same frames. Whatever these
+evals still measure, they no longer measure whether the answer is *reachable* —
+only whether something breaks. Harder fixtures are what would move this further.
+
+### The pointer text does what it was meant to do
+
+`small-ptrtext` — today's frames, plus the OCR'd line under each pointer quoted
+in the message — kept accuracy at 1.00 and **halved the work**:
+
+| | `small` | `small-ptrtext` |
+|---|---|---|
+| turns, median | 12 | **5** |
+| output tokens, median | 3,109 | **1,323** |
+| best run | 10,512 fresh | **2 fresh, 1 turn, 12s** |
+
+One run in three answered **without opening a single picture**. The other two
+opened them and *corrected the OCR* — `⭐` where OCR had read `¿`, and
+`- Claude Opus ≥med for architecture/review` where OCR had cut the line short at
+`for architecture/review`. That is exactly the right relationship between the
+two: the text is a hint, the pixels are the authority.
+
+**Which is also the argument against `ptrtext-only`, before it is run.** The run
+that trusted the text alone returned the *poorer* answer — it lost the front half
+of the line — and still scored 1.00, because the key is a substring match. A
+text-only variant would therefore look better in the table than it is. Text is
+worth adding; it is not worth substituting.
+
+The clause costs ~100 tokens for three shots against the 2,583 the pictures cost,
+and it is `text-vs-pixels`'s finding 3 arriving in the message where the shots
+already are.
+
 ## What is worth doing, in order
 
-1. **Eval `small-800` and `small-700`.** One constant, no new code, and the
-   image bill drops 36% / 51% if it holds. As a cheap proxy: OCR of the retina
-   frame stays clean down to 700px wide and collapses at 600 (`»in browser/sql
-   LIMIT OFFSET` → `San broawry Cane uorare`), and the Gmail sender names
-   survive to 600. Claude reads worse-than-OCR text better than OCR does, so
-   700 is a plausible floor and 800 a safe one — but the evals decide, the same
-   way they decided 1000.
-2. **Eval `small-ptrtext`** — today's frame plus `[at pointer: "…"]` from the
-   OCR hit test. +20 tokens; the question is whether accuracy on `pointed`
-   holds at 1.0 while the frame shrinks under it.
-3. **Then eval `ptrtext-only`** on `pointed` — the pointer line with no picture
-   at all. 20 tokens against 861. This is the only variant that could take a
-   real bite, and the only one likely to fail: `unsubscribe` would certainly
-   fail it (the pointer was not on the sender), so it can at best become a
-   per-shot decision, never the default.
+1. **Take `handoverWidth` to 700**, or to 800 for the cautious version. Measured
+   above: 6/6 clean at both, −51% / −36% off every frame. One constant in
+   `ScreenCapture.swift`.
+2. **Ship the pointer line.** OCR at the recorded cursor, quoted in the shots
+   clause — ~20 tokens a shot, and it halved the turns and the thinking on
+   `pointed`. It runs off the shutter path, on the queue that already writes
+   the `-small.jpg` sibling.
+3. **Do not run `ptrtext-only`** expecting it to be the answer. The evidence is
+   already in: the run that trusted the text alone gave the poorer answer and
+   the substring key did not notice. It could at best become a per-shot
+   decision, never the default.
 4. **Do not dump the screen as text**, by OCR or by AX. It is finding 1 and 2,
    and it is the idea the question started from.
 
 **And a ceiling worth stating.** On `unsubscribe/small` the seven frames are
 6,027 of 29,349 fresh tokens — **the pictures are ~20% of the exchange**, and
 the other 23,000 is the agent working. Retina → 1000px was a 39% cut because it
-removed 18,000 tokens; there are only 6,000 left in there. 800px saves ~2,200,
-about 7% of a real exchange. Worth taking, not worth a week.
+removed 18,000 tokens; there are only 6,000 left in there. 700px takes 3,080 of
+them, about 10% of a real exchange, and after that the pictures are down to 2,947
+tokens and there is nothing left in this direction worth chasing. The remaining
+lever is the pointer line, and it works on the *other* 80% — the turns the agent
+spends looking.
 
 ## Cost of the OCR itself
 

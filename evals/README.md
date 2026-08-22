@@ -104,9 +104,31 @@ It is recorded in `fixtures.py` rather than quietly corrected, because a
 suspiciously flat 0.67 across five variants is exactly the shape a broken eval
 makes, and the next person to see one should recognise it.
 
-## Sending the screen as text instead
+## Sending the screen as text instead, and how far down the frames go
 
 `text-vs-pixels.md` answers the next obvious question — can a screen reader or
-OCR replace the picture — with numbers off these same frames. Short version:
-whole-screen text costs the same as the 1000px frame and loses the layout, but
-the single line under the pointer costs ~20 tokens and got `pointed` 3/3.
+OCR replace the picture — with numbers off these same frames, and then walks the
+downscale ladder past where 1000px stopped. 33 more runs:
+
+| variant | tokens/frame | n | accuracy |
+|---|---|---|---|
+| `small` — 1000px, today | 861 | 6 | 1.00 |
+| `small-800` | 551 | 6 | 1.00 |
+| **`small-700`** | **421** | 6 | **1.00** |
+| `small-600` | 309 | 6 | 0.89 |
+| `small-500` | 215 | 6 | 0.98 |
+| `small-ptrtext` — frames + the line under the pointer | 861 | 3 | 1.00 |
+
+**No legibility cliff, not even at 500px.** The two cells under 1.00 failed at
+sequence and at a narrow answer key, not at reading — and 500 pooling above 600
+says both are noise. 700px is the last rung where nothing goes wrong, which is
+also where Vision OCR puts the boundary, so `handoverWidth` has −51% in it.
+
+**Whole-screen text is not the saving it sounds like**: an OCR of a Gmail desktop
+is 890 tokens against the picture's 861, and 2,096 once you add the coordinates
+the layout questions need. The single line under the pointer is the exception —
+~20 tokens, and it cut `pointed`'s turns from 12 to 5.
+
+**Both fixtures are now saturated.** `small` scored 0.95 when it was first run
+and scores 1.00 today on the same frames. What these two still detect is
+breakage, not headroom; the next real question needs a harder fixture.

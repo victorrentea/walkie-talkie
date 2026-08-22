@@ -13,7 +13,17 @@ is pointing at, one clause per picture, so the transcript *is* the answer key.
 
 import os
 
-SHOTS = os.path.expanduser("~/.wispr-relay/shots")
+# Where these frames live now. `Outbox.retireLegacyShots` moved the pre-Caches
+# pile to the Trash on launch — deliberately to the Trash and not to `rm`,
+# because outbox lines still name those files. These fixtures are the second
+# thing that decision saved: the frames are still readable, so the evals still
+# run. They go for good when Victor empties it, and `run.py` says so by skipping
+# the fixture rather than failing.
+SHOTS = next(
+    (d for d in (os.path.expanduser("~/.wispr-relay/shots"),
+                 os.path.expanduser("~/.Trash/shots"))
+     if os.path.isdir(d)),
+    os.path.expanduser("~/.wispr-relay/shots"))
 
 
 def _p(name):
