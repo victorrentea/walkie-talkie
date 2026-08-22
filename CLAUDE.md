@@ -581,17 +581,17 @@ answers "where on the desk was the pointer". This one is in **pixels of that
 image**, because it answers "where in this picture do I look". Do not port either
 convention onto the other.
 
-## The agent gets a 1000px copy, Victor keeps the retina frame
+## The agent gets an 800px copy, Victor keeps the retina frame
 
 Every capture writes two files: `shot-00:38(mouse-at-1034x1466px).jpg` as
-`screencapture` produced it, and `…-small.jpg` beside it at 1000px wide. The
+`screencapture` produced it, and `…-small.jpg` beside it at 800px wide. The
 **small one is what travels** (`ScreenCapture.handover`, used by
 `AppDelegate.shotsClause`); the original is what he opens himself.
 
 An image costs `width × height / 750` tokens once the reading tool has fitted it
 to 2000px on the long edge, so a 3456×2234 desktop always lands at ~3450 tokens
 **whatever the JPEG weighs** — compressing harder buys exactly nothing. At
-1000px the same desktop is ~860.
+1000px the same desktop is ~860, and at 800px ~550.
 
 **That this is free was measured, not assumed** (`evals/`, 39 runs of a real
 agent over two real dictations replayed off the outbox). Pooled over the
@@ -600,11 +600,39 @@ either way, 29,349 tokens against 48,350, cost $0.38 against $0.56. On the
 "what was I pointing at" fixture the small frames produced **byte-identical
 answers**, quoting `⇒in browser/sql LIMIT OFFSET` off a code editor.
 
+**1000 was the first width tried, not the measured floor**, and it stayed for
+three weeks because it came out free against retina. `evals/text-vs-pixels.md`
+walked the ladder down on 2026-08-22: 33 runs, both fixtures, **6/6 clean at
+800, 6/6 at 700, and no legibility failure even at 500px** — where a 3456×2234
+desktop is 215 tokens and still yields all seven senders. The two cells under
+1.00 failed at the shots' *sequence* and at a fixture key too narrow to accept a
+correct answer, neither of them at reading.
+
+**800 is therefore one rung above what the evidence allows**, deliberately. 700
+is where the measurement points (−51% a frame instead of −36%); three repeats a
+cell is thin, both fixtures now score 1.00 at every width they used to
+discriminate, and Victor reads these frames too. Do not take the rest of the
+saving without a harder fixture — the missing rung is the one that would find a
+cliff in production instead of in `evals/`.
+
+**The width is said in one place.** `ScreenCapture.handoverWidth` is not private
+and `AppDelegate.shotsClause` interpolates it, because the shipped line tells the
+agent how wide the frames are and a second literal is how that sentence comes to
+disagree with the pixels.
+
 Written through ImageIO's thumbnail path, which scales during the JPEG decode —
 this sits in the capture path, and the burned-in cursor mark was removed from
 there partly for costing ~100ms of exactly the decode-and-re-encode this avoids.
 `prune()` counts **frames, not files**, and drops the sibling with its frame;
 counting both would silently halve a cap expressed in pictures.
+
+**One thing that was measured and deliberately not built** is the line under the
+pointer: OCR at the recorded cursor, quoted in the shots clause. It held accuracy
+at 1.00 and cut the agent's turns from 12 to 5 and its thinking from 3,109 output
+tokens to 1,323, with one run in three answering without opening a picture at
+all. It is not here because the shutter path is short and Victor chose to keep it
+that way. `docs/pointer-line.md` has the numbers, the build order and the traps —
+read it before either building it or re-deriving it.
 
 ### Three things that sound like improvements and are not
 

@@ -877,8 +877,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// name, oldest first.
     ///
     /// **The small copies travel, not the retina frames.** `ScreenCapture.handover`
-    /// picks the 1000px sibling, which the evals in `evals/` measured as costing
-    /// a quarter of the tokens for the same answers. The originals are named in
+    /// picks the downscaled sibling, which the evals in `evals/` measured as
+    /// costing a fraction of the tokens for the same answers. The originals are named in
     /// the clause too, because "I can't read that" has to have an answer that is
     /// not "take the picture again".
     ///
@@ -930,7 +930,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // end in a full stop, so the separator between the last shot and the
         // context frame stopped being a separator. Titles are arbitrary text;
         // the brackets are the only delimiter here that they cannot forge.
-        let note = "Each is 1000px wide; drop the -small for the full-resolution original."
+        let note = "Each is \(ScreenCapture.handoverWidth)px wide; "
+            + "drop the -small for the full-resolution original."
 
         // Nothing but the automatic frame — 168 of the 180 dictations in the
         // outbox look like this. One short clause and no ceremony.

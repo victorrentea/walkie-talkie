@@ -215,13 +215,13 @@ already are.
 
 ## What is worth doing, in order
 
-1. **Take `handoverWidth` to 700**, or to 800 for the cautious version. Measured
-   above: 6/6 clean at both, −51% / −36% off every frame. One constant in
-   `ScreenCapture.swift`.
-2. **Ship the pointer line.** OCR at the recorded cursor, quoted in the shots
-   clause — ~20 tokens a shot, and it halved the turns and the thinking on
-   `pointed`. It runs off the shutter path, on the queue that already writes
-   the `-small.jpg` sibling.
+1. ~~**Take `handoverWidth` to 700**~~ — **done at 800**, the cautious rung, on
+   2026-08-22. −36% off every frame; the remaining −15% waits for a fixture that
+   can still tell widths apart.
+2. **The pointer line is measured and deliberately not built.** OCR at the
+   recorded cursor, quoted in the shots clause — ~20 tokens a shot, and it halved
+   the turns and the thinking on `pointed`. Held for simplicity's sake, with the
+   numbers, the build order and the traps in `docs/pointer-line.md`.
 3. **Do not run `ptrtext-only`** expecting it to be the answer. The evidence is
    already in: the run that trusted the text alone gave the poorer answer and
    the substring key did not notice. It could at best become a per-shot

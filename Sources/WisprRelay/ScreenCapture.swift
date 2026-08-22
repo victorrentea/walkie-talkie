@@ -72,7 +72,7 @@ enum ScreenCapture {
     /// tokens after the tool has fitted it to 2000px on the long edge, so a
     /// 3456×2234 desktop arrives as 2000×1293 and costs ~3450 tokens **whatever
     /// the JPEG weighs** — compressing the file harder buys nothing at all. The
-    /// same desktop at 1000px wide costs ~860.
+    /// same desktop at 1000px wide costs ~860, and at 800px ~550.
     ///
     /// Whether that fourfold saving takes any of the answer with it is the one
     /// question that had to be answered by running it rather than by arguing, and
@@ -98,7 +98,27 @@ enum ScreenCapture {
     ///   already on his screen, so the context frame is routinely *picture one*
     ///   of the enumeration — in the Gmail dictation it is the first of the seven
     ///   senders. It is offered cheaply, not withheld.
-    private static let handoverWidth = 1000
+    ///
+    /// **1000 became 800 on 2026-08-22**, and the reason is that nothing had ever
+    /// measured *below* 1000 — it was the first width tried against retina, it
+    /// came out free, and it stayed. `evals/text-vs-pixels.md` walked the ladder
+    /// down: 33 more runs, both fixtures, and **6/6 clean at 800, 6/6 clean at
+    /// 700, and no legibility failure even at 500px**, where a 3456×2234 desktop
+    /// is 215 tokens and still gives all seven senders. The two cells that came
+    /// in under 1.00 failed at the *sequence* of the shots and at a fixture key
+    /// too narrow to accept a correct answer — neither of them at reading.
+    ///
+    /// So 800 is deliberately **one rung above the cheapest width that worked**.
+    /// 700 is what the evidence points at (-51% instead of -36%) and 500 is where
+    /// the pictures stop mattering at all, but three repeats a cell is thin, both
+    /// fixtures now score 1.00 at every width they used to discriminate, and the
+    /// frames are also read by Victor when he opens the folder. Taking the whole
+    /// measured saving on a saturated suite is how a cliff gets found in
+    /// production instead of in `evals/`.
+    /// Not private: `AppDelegate.shotsClause` tells the agent how wide these are,
+    /// and a second literal saying 1000 is how the line came to disagree with the
+    /// pixels the first time this number moved.
+    static let handoverWidth = 800
 
     /// Write `<name>-small.jpg` beside the frame, downscaled.
     ///
