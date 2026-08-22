@@ -103,3 +103,10 @@ was wrong; the model was right, unanimously and reproducibly.
 It is recorded in `fixtures.py` rather than quietly corrected, because a
 suspiciously flat 0.67 across five variants is exactly the shape a broken eval
 makes, and the next person to see one should recognise it.
+
+## Sending the screen as text instead
+
+`text-vs-pixels.md` answers the next obvious question — can a screen reader or
+OCR replace the picture — with numbers off these same frames. Short version:
+whole-screen text costs the same as the 1000px frame and loses the layout, but
+the single line under the pointer costs ~20 tokens and got `pointed` 3/3.
