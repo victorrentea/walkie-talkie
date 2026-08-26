@@ -9,7 +9,9 @@ import Foundation
 enum Outbox {
 
     /// `~/.walkie-talkie` unless overridden with `--home`.
-    static var home = FileManager.default.homeDirectoryForCurrentUser
+    static var home = defaultHome
+
+    static let defaultHome = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".walkie-talkie")
 
     static var outboxURL = home.appendingPathComponent("outbox.jsonl")
@@ -72,24 +74,72 @@ enum Outbox {
     /// that cannot be regenerated at any price. Starting fresh beside it would
     /// have orphaned every sample.
     ///
-    /// Runs before anything is created, so it can only ever see a run where the
-    /// new folder does not exist yet; the second launch finds nothing to do. A
-    /// `--home` override skips it by construction, since that points somewhere
-    /// else entirely.
+    /// **A merge, not a rename, and that distinction was not theoretical.** The
+    /// first version moved the whole folder and skipped itself if the new one
+    /// already existed — which it did within the minute: the VS Code extension
+    /// publishes its listener into `~/.walkie-talkie/ide/` and creates the folder
+    /// doing so, and the skill's `install.sh` does the same with `mkdir -p`. Both
+    /// run before the first renamed relay ever starts, so a rename-if-absent would
+    /// have skipped forever and left the corpus stranded under a name nothing
+    /// reads any more.
+    ///
+    /// So each entry moves only when the destination has no entry of that name,
+    /// and a directory present on both sides is merged one level down instead of
+    /// being refused whole. Nothing is ever overwritten: where both sides have a
+    /// file, the new one wins and the old one is left where it is, which is the
+    /// safe direction — the only files that can collide are the ones something has
+    /// already written under the new name, i.e. the current truth.
+    ///
+    /// **A `--home` override skips it**, and that has to be checked rather than
+    /// assumed: without the guard, a test instance pointed at a scratch directory
+    /// would drag Victor's real corpus into it — the one folder here that cannot
+    /// be regenerated, moved somewhere he would never think to look.
     ///
     /// This is the one place the old name is allowed to appear in a path, and it
     /// is here precisely so that it appears nowhere else.
     private static func adoptLegacyHome() {
+        guard home == defaultHome else { return }
         let legacy = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".wispr-relay")
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: home.path) else { return }
-        do {
-            try fm.moveItem(at: legacy, to: home)
-            Log.info("adopted \(legacy.lastPathComponent) → \(home.lastPathComponent)")
-        } catch {
-            Log.error("could not move \(legacy.path) to \(home.path): \(error)")
+        guard FileManager.default.fileExists(atPath: legacy.path) else { return }
+        let moved = merge(from: legacy, into: home)
+        if moved > 0 { Log.info("adopted \(moved) item(s) from \(legacy.lastPathComponent)") }
+        // Only when it is genuinely empty — an entry that could not move is a
+        // reason to keep the folder, not to delete it.
+        if (try? FileManager.default.contentsOfDirectory(atPath: legacy.path))?.isEmpty == true {
+            try? FileManager.default.removeItem(at: legacy)
         }
+    }
+
+    /// Moves everything in `source` into `destination`, recursing only where a
+    /// directory of the same name exists on both sides. Returns how many entries
+    /// actually moved.
+    @discardableResult
+    private static func merge(from source: URL, into destination: URL) -> Int {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: source.path) else { return 0 }
+        try? fm.createDirectory(at: destination, withIntermediateDirectories: true)
+
+        var moved = 0
+        for name in entries {
+            let from = source.appendingPathComponent(name)
+            let to = destination.appendingPathComponent(name)
+            var fromIsDir: ObjCBool = false
+            var toIsDir: ObjCBool = false
+            fm.fileExists(atPath: from.path, isDirectory: &fromIsDir)
+
+            guard fm.fileExists(atPath: to.path, isDirectory: &toIsDir) else {
+                if (try? fm.moveItem(at: from, to: to)) != nil { moved += 1 }
+                else { Log.error("could not move \(from.path)") }
+                continue
+            }
+            guard fromIsDir.boolValue, toIsDir.boolValue else { continue }
+            moved += merge(from: from, into: to)
+            if (try? fm.contentsOfDirectory(atPath: from.path))?.isEmpty == true {
+                try? fm.removeItem(at: from)
+            }
+        }
+        return moved
     }
 
     /// Shots used to live in `~/.wispr-relay/shots`, and moving them to Caches

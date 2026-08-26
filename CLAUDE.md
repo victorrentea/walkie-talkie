@@ -436,6 +436,45 @@ Binding takes the **first port that answers**, not all of them the way the Chrom
 extension does: pointing every relay on the machine at one terminal would mean
 every dictation arriving there two or three times.
 
+## The rename, and the two places the old name survives
+
+The app was `wispr-relay` until 2026-08-26 — folder, repo, Swift target, `.app`
+and home folder all say `walkie-talkie` now. **Wispr Flow keeps its own name**
+wherever it appears: it is a different program, and this app still reads its
+database, watches its recording state and falls back to its transcripts.
+
+Two strings deliberately still say the old name:
+
+- **The bundle id, `ro.victorrentea.wispr-relay`** — and with it the Caches path
+  and the dispatch-queue labels, which follow it. macOS keys Accessibility,
+  Screen Recording and the microphone to that string plus the signing identity;
+  changing it costs three grants re-ticked by hand in System Settings, on an app
+  whose whole job is to be running before Victor starts talking. It is invisible
+  everywhere he looks. `build-app.sh` says so beside the line, because it is
+  exactly the kind of inconsistency a later reader would tidy up.
+- **One quoted mis-transcription** in the `[dictated aloud]` note, where a local
+  recogniser turned `Wispr Relay` into `risparerile ei`. That is evidence about
+  what a recogniser did to a word, not a name to keep current.
+
+**`~/.wispr-relay` is merged into `~/.walkie-talkie` on the first launch**
+(`Outbox.adoptLegacyHome`), because it holds the voice corpus — 300 MB of
+Victor's own speech paired with transcripts, and the one thing here that cannot
+be regenerated at any price.
+
+It is a **merge, not a rename**, and that was not a hypothetical: the VS Code
+extension publishes its listener into `~/.walkie-talkie/ide/` and creates the
+folder doing so, and the skill's `install.sh` does the same with `mkdir -p` —
+both before the first renamed relay ever runs. A rename-if-absent would have
+skipped itself forever and left the corpus under a name nothing reads. So each
+entry moves only when the destination has none of that name, directories present
+on both sides are merged one level down, and nothing is overwritten. A `--home`
+override skips the whole thing, checked rather than assumed: without that guard a
+test instance would drag the real corpus into a scratch directory.
+
+`IDEBridge` reads **both** registries for the same transitional reason — an
+extension host keeps running the code loaded when its window opened, and a window
+not yet reloaded would otherwise fall back to a blind paste.
+
 ## Scope: dictation helper only
 
 There is **no text entry** and **no selection shortcut**. Both existed and were
