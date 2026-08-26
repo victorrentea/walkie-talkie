@@ -529,7 +529,8 @@ from the working directory (inherited from the session, since `/relay` launches
 
 | state | label |
 |---|---|
-| idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
+| idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound* |
+| idle, bound | the destination app's icon + `petclinic@main` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
@@ -575,11 +576,32 @@ because **which recogniser** is now a live question — and a pulse cannot carry
 name. And once one row spelled something out, the abbreviations beside it read as
 a different kind of thing rather than as a list.
 
-**The glyphs share one column** (`glyphColumn`, as wide as the widest of the
-three) so the text starts at the same x on every row. Measured per row — an
-emoji, a second emoji and a bitmap are three different widths — they lined up
-with nothing, which is what makes three rows read as three unrelated lines
-instead of one thing being assembled.
+**The glyphs share one column** (`glyphBox`, a fixed 17pt square) so the text
+starts at the same x on every row. Measured per row — an emoji, a second emoji
+and a bitmap are three different widths — they lined up with nothing, which is
+what makes three rows read as three unrelated lines instead of one thing being
+assembled.
+
+**Fixed, and centred in it, since 2026-08-26.** The column used to be the widest
+of the four glyphs, each measured its own way: the emoji asked of the font, the
+icons asked of the image. That aligns the boxes and nothing else — an emoji's
+ink is narrower than its advance and sits a bearing in from the left, an app
+icon fills its box corner to corner, and the map pin is 0.7 as wide as it is
+tall. Victor read the result exactly as it was: *"iconurile nu sunt
+left-aliniate si au dimensiuni diferite"*. Every glyph is now fitted into the
+same square — images scaled proportionally, both emoji at 15pt — and centred in
+it. Centring is what makes them *look* left-aligned: with equal boxes and
+unequal ink, flush-left puts the narrow glyph's ink where the wide one's bearing
+is.
+
+**Both halves of a row are centred on the row's midline** (`centre(_:…)`), which
+fixed two things at once. The glyph box was 15pt tall at y=1, and an emoji at
+14pt needs nearly 17pt of line box — so the 🔴 was drawn as a clipped arc, the
+pulse of all things ("bila rosie pulsanda e taiata jos"). And the label filled
+the row, where a single-line `NSTextField` draws its text high, so the words sat
+above the glyph beside them. Each now gets exactly the height its own font asks
+for, placed around the middle; neither half has to know anything about the
+other's font.
 
 Rows two and three are still Victor's list, not a designer's: **how many pictures
 this message is carrying, and the two ways to add another.** The count includes the automatic context capture — he took
@@ -1300,6 +1322,39 @@ Tracking has two modes, and the second is what keeps the chip catchable:
 lag, because it is lag), and after ~0.25s of stillness it *settles* and stays put
 until the cursor travels 70px. Growing into the panel is animated (0.22s ease
 out); everything else resizes instantly.
+
+## The pointer is clean when nothing is bound
+
+**Unbound and idle, there is no overlay window on screen at all** — not a faded
+one, not an empty one. `RelayWindow.refreshPresence` orders the panel out.
+
+The chip's one job at rest is to say *where the words go*. Bound, that is a real
+answer: the destination app's icon and `petclinic@main`. Unbound it was `🤖 `
+plus whatever directory the app was launched from — and since Walkie Talkie
+became a login item (`SMAppService`, started by macOS from nowhere in
+particular) that directory is `/`. A robot and a slash, riding beside the
+pointer every waking hour, naming nothing. Victor: *"acum langa mouse-ul meu e
+permanent un emoji cu un robot si un '/'. cand walkie nu e legat la nici un
+terminal, mouse-ul tre sa fie curat"*.
+
+**`orderOut`, not `alphaValue = 0`.** An invisible panel is still a panel: it
+sits 10pt right and 22pt below the cursor and it takes mouse events, so one
+following him around all day would swallow clicks on whatever it happened to be
+over. The `typing` state may fade to zero — it lasts as long as a keystroke —
+but this state lasts hours.
+
+**The rows decide, not a list of states.** Everything the overlay has to say is
+a row: the dictation in progress, a held prompt, a flash, a ⌘-picked element, a
+frozen selection. So a layout that produced *only* the title row is by
+construction an overlay with nothing to say, and `layoutContent` hands its row
+count straight to `refreshPresence`. The three states that change the *title*
+instead of adding a row have to be named there explicitly: bound, paused, and
+the model coming up. A row added later keeps the chip on screen without anyone
+remembering to come back and edit that condition.
+
+Coming back, it is `reposition`ed first: it may have been away for hours, so it
+lands where the pointer is now rather than reappearing wherever it was last
+parked.
 
 ## The menu bar item
 

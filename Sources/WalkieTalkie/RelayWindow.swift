@@ -47,12 +47,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// the name says *into what*; before this they were one glyph saying only the
     /// first half, at a time when there was nothing else it could have meant.
     private let engineRow = NSView()
-    private let recordDot = NSTextField(labelWithString: "🔴")
+    private let recordDot = NSImageView()
     private let engineInfo = NSTextField(labelWithString: "")
     /// The recording row: how many shots this dictation is carrying, and how to
     /// add another.
     private let recordRow = NSView()
-    private let shotGlyph = NSTextField(labelWithString: "📸")
+    private let shotGlyph = NSImageView()
     private let recordInfo = NSTextField(labelWithString: "")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
@@ -331,7 +331,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         startFollowingMouse()
         startWatchingTyping()
         startWatchingBranch()
-        panel.orderFrontRegardless()
+        // Not `orderFrontRegardless` any more: freshly launched at login it is
+        // unbound with nothing to say, and the first thing it did was park a
+        // robot beside the pointer. `layoutContent` above has already asked
+        // `refreshPresence`, which shows it if and only if there is a reason to.
     }
 
     // MARK: - Setup
@@ -387,7 +390,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // The box is as wide as the widest icon on the card, so without this the
         // image would sit centred in it — half a column right of the emoji above
         // and below, which is the misalignment the shared column was meant to fix.
-        titleGlyph.imageAlignment = .alignLeft
+        titleGlyph.imageAlignment = .alignCenter
         titleGlyph.isHidden = true          // only a bound relay shows a destination
         titleRow.addSubview(titleGlyph)
         titleRow.addSubview(titleLabel)
@@ -401,8 +404,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // Two labels rather than one string, because only the dot pulses: an
         // animation on the whole row would blink the engine's name too, and a
         // word that fades in and out is a word he has to wait to read.
-        recordDot.font = .systemFont(ofSize: 14)
-        recordDot.alignment = .left
+        // An image of the emoji rather than the emoji as text — see
+        // `Glyphs.emoji`. It is the only way this one ends up the same size as
+        // Chrome's icon two rows down, and starting at the same x.
+        recordDot.image = Self.pulseGlyph
+        recordDot.imageScaling = .scaleProportionallyUpOrDown
         recordDot.wantsLayer = true
         engineInfo.font = hintFont
         engineInfo.textColor = .secondaryLabelColor
@@ -411,8 +417,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         engineRow.isHidden = true
         root.addSubview(engineRow)
 
-        shotGlyph.font = .systemFont(ofSize: 14)
-        shotGlyph.alignment = .left
+        // Same treatment as the pulse above it — they are two glyphs in one
+        // column and any difference between them reads as a mistake.
+        shotGlyph.image = Self.cameraGlyph
+        shotGlyph.imageScaling = .scaleProportionallyUpOrDown
         recordInfo.font = hintFont
         recordInfo.textColor = .secondaryLabelColor
         recordRow.addSubview(shotGlyph)
@@ -425,7 +433,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // lost to the panel reading as one thing.
         pickGlyph.image = Self.browserIcon
         pickGlyph.imageScaling = .scaleProportionallyUpOrDown
-        pickGlyph.imageAlignment = .alignLeft
+        pickGlyph.imageAlignment = .alignCenter
         pickInfo.font = hintFont
         pickInfo.textColor = .secondaryLabelColor
         pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
@@ -891,6 +899,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
                                            y: height - closeButton.frame.height - 6)
         refreshChrome()
         root.needsDisplay = true
+        // Last, and here rather than in each setter: every state change already
+        // funnels through this method, and the rows it just assembled are the
+        // evidence for whether the overlay belongs on screen at all.
+        refreshPresence(rowCount: rows.count)
     }
 
     // MARK: The recording row
@@ -904,21 +916,50 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// own indicator rather than as punctuation in front of the count.
     private let recordDotGap: CGFloat = 5
 
-    private var recordDotWidth: CGFloat { ceil(measure(recordDot.stringValue, font: recordDot.font!)) }
-    private var shotGlyphWidth: CGFloat { ceil(measure(shotGlyph.stringValue, font: shotGlyph.font!)) }
-
-    /// **One column for all three glyphs**, as wide as the widest of them — the
-    /// pulse, the camera, Chrome's icon.
+    /// **One square box, the same for every glyph on the card** — the pulse, the
+    /// camera, Chrome's icon, the destination app's icon.
     ///
-    /// They used to be measured per row, which is fine for one row and wrong for
-    /// three: an emoji, a second emoji and a bitmap are three different widths, so
-    /// each row's text would start at its own x and the block would read as three
-    /// unrelated lines rather than as one thing being assembled. Aligning the
-    /// *text* is what makes it a list; aligning the glyphs is what makes it a
-    /// column.
-    private var glyphColumn: CGFloat {
-        max(recordDotWidth, max(shotGlyphWidth, max(pickGlyphWidth, titleGlyphWidth)))
-    }
+    /// It used to be the widest of the four, each measured its own way: two
+    /// emoji asked of the font, two bitmaps asked of the image. That lines up
+    /// the *boxes* and nothing else — an emoji's ink is narrower than its
+    /// advance and starts a bearing in from the left, an app icon fills its box
+    /// corner to corner, and the map pin is 0.7 as wide as it is tall. Four
+    /// glyphs of four different sizes, none of them starting at the same x,
+    /// which is exactly what Victor saw: "iconurile nu sunt left-aliniate si au
+    /// dimensiuni diferite".
+    ///
+    /// So the box is fixed and every glyph is fitted *into* it — images scaled
+    /// down proportionally, emoji set at a size whose ink fills about as much of
+    /// it — and each is centred in the box rather than shoved against its left
+    /// edge. Centring is what makes them look left-aligned: with equal boxes and
+    /// unequal ink, flush-left puts the narrow glyph's ink where the wide one's
+    /// bearing is.
+    /// Wide enough for an **emoji advance**, not just for its ink: Apple Color
+    /// Emoji lays a glyph out in about 1.3× its point size, so a 15pt 🔴 in a
+    /// 17pt box came out with its right-hand side sliced off — which is what a
+    /// clipped pulse looked like on the card. Measured from a `kill -USR1`
+    /// snapshot rather than guessed: ink at x 17…28 against a column ending at
+    /// 28, twice, for both emoji.
+    private let glyphBox: CGFloat = 20
+
+    /// How big a **bitmap** glyph is drawn inside that column — Chrome's icon,
+    /// the destination app's, the map pin.
+    ///
+    /// Smaller than the box on purpose. An icon fills its frame corner to
+    /// corner while an emoji covers about its point size inside a wider
+    /// advance, so a bitmap given the whole column draws visibly larger than the
+    /// emoji beside it. Matching the *ink* is what makes them look like one set;
+    /// matching the frames is what made them look like three different sizes.
+    private static let iconInk: CGFloat = 16
+    private var iconInk: CGFloat { Self.iconInk }
+
+    /// The two emoji on the card, rendered once and trimmed to their ink.
+    private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
+    private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
+
+    /// Kept as the old name so every measurement site still reads the same, and
+    /// so the width of the icon column is stated in exactly one place.
+    private var glyphColumn: CGFloat { glyphBox }
 
     /// The title row's own height, kept in step with the text in it.
     private let titleRowHeight: CGFloat = 21
@@ -927,14 +968,47 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         glyphColumn + recordDotGap + ceil(measure(text, font: hintFont))
     }
 
-    /// The emoji sit a pixel high: their ink is smaller than the line box, and
-    /// left on the baseline they hang below the text beside them.
-    private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSView, width: CGFloat) {
+    /// **Both halves are centred on the row, so they are centred on each other.**
+    ///
+    /// The glyph used to be a 15pt box parked at y=1 and the label the full
+    /// height of the row, which went wrong twice over. An emoji at 14pt needs
+    /// nearly 17pt of line box, so a 15pt frame cut the 🔴 off along the bottom
+    /// — the pulse, of all things, drawn as a clipped arc. And a label left to
+    /// fill the row draws its single line high in that frame, so the text sat
+    /// above the glyph beside it: "emoji de camera foto nu e v-centered cu
+    /// textul de dupa".
+    ///
+    /// Each is now given exactly the height it needs and placed around the row's
+    /// midline. Nothing is clipped, and neither half has to know anything about
+    /// the other's font.
+    private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSTextField, width: CGFloat) {
         row.frame.size = NSSize(width: width, height: recordRowHeight)
-        glyph.frame = NSRect(x: 0, y: 1, width: glyphColumn, height: 15)
-        label.frame = NSRect(x: glyphColumn + recordDotGap, y: 0,
-                             width: max(0, width - glyphColumn - recordDotGap),
-                             height: recordRowHeight)
+        centre(glyph, inRowOfHeight: recordRowHeight)
+        centre(label, x: glyphColumn + recordDotGap,
+               width: max(0, width - glyphColumn - recordDotGap),
+               inRowOfHeight: recordRowHeight)
+    }
+
+    /// A glyph in its box, on the row's midline. Labels get the height their own
+    /// font asks for; image views get the square box, since an image has no
+    /// metrics to ask and is scaled into whatever it is given.
+    private func centre(_ glyph: NSView, inRowOfHeight height: CGFloat) {
+        guard let label = glyph as? NSTextField else {
+            // A bitmap: `iconInk` square, centred in the column both ways.
+            glyph.frame = NSRect(x: ((glyphBox - iconInk) / 2).rounded(),
+                                 y: ((height - iconInk) / 2).rounded(),
+                                 width: iconInk, height: iconInk)
+            return
+        }
+        let h = ceil(label.intrinsicContentSize.height)
+        label.frame = NSRect(x: 0, y: ((height - h) / 2).rounded(),
+                             width: glyphBox, height: h)
+    }
+
+    /// A label on the row's midline, at the far side of the icon column.
+    private func centre(_ label: NSTextField, x: CGFloat, width: CGFloat, inRowOfHeight height: CGFloat) {
+        let h = ceil(label.intrinsicContentSize.height)
+        label.frame = NSRect(x: x, y: ((height - h) / 2).rounded(), width: width, height: h)
     }
 
     /// Chrome's icon as the system has it, looked up by bundle id so it is found
@@ -956,16 +1030,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// follows the cursor.
     private static let pinGlyph = Glyphs.mapPin(height: 18)
 
-    /// The glyph's box on the title row — an app icon when bound to one, the pin
-    /// otherwise. Asked of the image that is actually set rather than of the pin,
-    /// since the two are not the same width: the pin draws at `0.696 × height`
-    /// and an app icon is square, and reserving the wrong one clips the folder
-    /// name by exactly the difference.
-    private var titleGlyphWidth: CGFloat { ceil((titleGlyph.image ?? Self.pinGlyph).size.width) }
 
-    private static let pickGlyphSize: CGFloat = 17
-
-    private var pickGlyphWidth: CGFloat { Self.pickGlyphSize }
 
     /// Same shape as `recordRowWidth`, so the ⌘-pick row and the recording row
     /// can never disagree about where their text starts — but it asks the **label**
@@ -1002,17 +1067,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
         let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
-        if bound {
-            let image = titleGlyph.image ?? Self.pinGlyph
-            let h = min(image.size.height, titleRowHeight)
-            // Left-aligned in the column, like the others: the box is as wide as
-            // the widest icon, and an icon centred in it would sit right of the
-            // ones above and below.
-            titleGlyph.frame = NSRect(x: 0, y: ((titleRowHeight - h) / 2).rounded(),
-                                      width: column, height: ceil(h))
-        }
-        titleLabel.frame = NSRect(x: column + gap, y: 0,
-                                  width: max(0, width - column - gap), height: titleRowHeight)
+        // The same square box as every other row, scaled into rather than
+        // measured from — an app icon and a map pin are different shapes and
+        // only a fixed box makes them the same size on screen.
+        if bound { centre(titleGlyph, inRowOfHeight: titleRowHeight) }
+        centre(titleLabel, x: column + gap,
+               width: max(0, width - column - gap), inRowOfHeight: titleRowHeight)
     }
 
     /// Lay the thumbnails out in one row and answer how tall it came out.
@@ -1067,15 +1127,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private static let shotThumbGap: CGFloat = 6
 
     private func layoutPickRow(width: CGFloat) {
-        let glyphWidth = pickGlyphWidth
         pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
-        // Flush left in the shared column, like every other icon on the card.
-        pickGlyph.frame = NSRect(x: 0,
-                                 y: ((pickRowHeight - glyphWidth) / 2).rounded(),
-                                 width: glyphWidth, height: glyphWidth)
-        pickInfo.frame = NSRect(x: glyphColumn + recordDotGap, y: 0,
-                                width: max(0, width - glyphColumn - recordDotGap),
-                                height: pickRowHeight)
+        centre(pickGlyph, inRowOfHeight: pickRowHeight)
+        centre(pickInfo, x: glyphColumn + recordDotGap,
+               width: max(0, width - glyphColumn - recordDotGap),
+               inRowOfHeight: pickRowHeight)
     }
 
     /// At rest there is no window — only the text. A blurred, rounded, shadowed
@@ -1251,6 +1307,40 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     ///
     /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
     /// the overlay looking switched off is the point.
+    /// **Unbound and idle, the overlay is not on screen at all.**
+    ///
+    /// The chip's one job at rest is to say *where the words go*. Bound, that is
+    /// a real answer — `petclinic@main`, the terminal it will type into. Unbound
+    /// it was `🤖 ` plus whatever folder the app happened to be launched from,
+    /// and since Walkie Talkie became a login item that folder is `/`: a robot
+    /// and a slash, riding beside the pointer all day, naming nothing. Victor
+    /// read it as what it was — clutter on top of his work — and asked for a
+    /// clean pointer whenever nothing is bound.
+    ///
+    /// **`orderOut`, not an alpha of zero.** An invisible panel is still a
+    /// panel: it sits 10pt right and 22pt below the cursor, it takes clicks, and
+    /// one following him around every waking hour would swallow them on whatever
+    /// it happened to be over. Ordered out it cannot. (The `typing` state does
+    /// fade to zero, and may: it lasts as long as a keystroke.)
+    ///
+    /// **Asked of the rows, not of a list of states.** Anything the overlay has
+    /// to say — the dictation in progress, a held prompt, a flash, a picked
+    /// element, a frozen selection — is a row, so a layout that produced only
+    /// the title row is by construction an overlay with nothing to say. The
+    /// three states that change the *title* instead of adding a row are the ones
+    /// that have to be named here: bound, paused, and the model coming up. A row
+    /// added later keeps the chip on screen without anyone remembering to come
+    /// back and edit this.
+    private func refreshPresence(rowCount: Int) {
+        let wanted = rowCount > 1 || boundLabel != nil || paused || engineLoading
+        guard panel.isVisible != wanted else { return }
+        guard wanted else { return panel.orderOut(nil) }
+        // It may have been away for hours, so it lands where the pointer is now
+        // rather than reappearing wherever it was last parked.
+        reposition()
+        panel.orderFrontRegardless()
+    }
+
     private func refreshOpacity() {
         // The chip belongs to the pointer: no pointer, no chip. Panels are their
         // own reason to be on screen and stay put.
