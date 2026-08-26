@@ -179,7 +179,7 @@ final class TerminalBinding {
                                // to be the raw published path, which is why the row
                                // could read `/Users/victorrentea/workspace` — or,
                                // for a shell sitting at the root, just `/`.
-                               folder: handle.shellPID.flatMap { Self.folderLabel(shellPID: $0) },
+                               folder: Self.folder(ofIDE: handle),
                                title: window.title,
                                sourceFrame: window.frame, boundAt: Date())
             } else {
@@ -293,6 +293,7 @@ final class TerminalBinding {
         case .terminalApp(let tty):     return Self.sessionLabel(onTTY: tty)
         case .tmux(let pane, _):        return Self.tmuxPaneLabel(pane)
         case .ide(let handle):          return handle.shellPID.flatMap { Self.folderLabel(shellPID: $0) }
+                                            ?? IDEBridge.currentDirectory(of: handle).map { Self.label(forDirectory: $0) }
         case .keystroke:                return nil
         }
     }
@@ -815,6 +816,20 @@ final class TerminalBinding {
     /// session never moved, and it is all there is for a terminal running
     /// something other than Claude Code — or one whose status line is somebody
     /// else's.
+    /// `folder@branch` for an IDE panel, by whichever of the two routes answers.
+    ///
+    /// The pid is preferred where it exists: it is the process actually reading
+    /// the keystrokes, and it keeps IDE targets on the same footing as a
+    /// Terminal.app tab — the published session directory included. The editor's
+    /// own answer is behind it because a pid is not always on offer: IntelliJ
+    /// 2026.2 runs its terminal in a backend process and hands out a connector
+    /// with no `Process` at all, which is why the chip beside the cursor sat
+    /// there saying `IntelliJ IDEA` while the panel was plainly in `petclinic`.
+    private static func folder(ofIDE handle: IDEBridge.Handle) -> String? {
+        if let pid = handle.shellPID, let label = folderLabel(shellPID: pid) { return label }
+        return handle.cwd.map { label(forDirectory: $0) }
+    }
+
     /// `folder@branch` for an IDE panel, from the shell pid its extension named.
     ///
     /// **The same route a Terminal.app tab takes**, and it has to be: this used
@@ -840,34 +855,44 @@ final class TerminalBinding {
     private static func sessionLabel(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
 
-        // **The published file is only believed while a program is holding the
-        // tty.** It is written by an agent's status line and never cleaned up,
-        // and `ttysNNN` is a number macOS hands to the next tab that opens — so
-        // a shell sitting at a prompt on a recycled number reads back the folder
-        // of a Claude session that ended hours ago. Measured, on this Mac: a
-        // fresh zsh whose cwd was `petclinic` bound as `victor-macos-addons`,
-        // because that is what the last session on `ttys007` had published.
+        // **The live directory first, the published file only when there is no
+        // process to ask.** It used to be the other way round, and the file is
+        // never cleaned up while `ttysNNN` is a number macOS hands to the next
+        // tab that opens — so a tab on a recycled number reads back the folder
+        // of a session that ended hours ago. Measured twice on this Mac while
+        // testing this: a fresh zsh in `petclinic` bound as
+        // `victor-macos-addons`, and then, once "is a shell at the prompt" was
+        // used as the test, a `cat` in `petclinic` did the same, because `cat`
+        // is not a shell. Dating the file against the process was the third
+        // idea and does not survive contact with macOS either: `ps` has no
+        // `etimes`, and a live session's file can be hours old anyway, since the
+        // status line only rewrites it when it renders.
         //
-        // The existence check inside `publishedDirectory` cannot catch this: the
-        // stale directory is a real directory. What separates the two cases is
-        // whether anything is *running* — the file describes an agent session,
-        // and with no agent in the foreground there is no session it can be
-        // describing. A live `cwd` is the honest answer for a bare prompt, and
-        // it is the answer that changes when Victor `cd`s.
-        if let foreground = foregroundCommand(onTTY: tty), !isShell(foreground),
-           let published = publishedDirectory(forTTY: device) {
-            return label(forDirectory: published)
-        }
-
-        guard let out = run("/bin/ps", ["-t", device, "-o", "pid=,stat="]) else { return nil }
-        for line in out.components(separatedBy: "\n") {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard parts.count >= 2, parts[1].contains("+"), let pid = Int32(parts[0]) else { continue }
-            guard let dir = workingDirectory(ofPID: pid) else { return nil }
+        // Nothing is lost by the swap. The published value is the agent's
+        // session directory and the live value is the same process's `cwd` —
+        // measured equal on every running session here, because Claude Code's
+        // own directory is where it was started. The file's remaining job is the
+        // case it was written for: a tty whose foreground process cannot be read
+        // at all.
+        if let (pid, _) = foreground(onTTY: device),
+           let dir = workingDirectory(ofPID: pid) {
             return label(forDirectory: dir)
+        }
+        return publishedDirectory(forTTY: device).map { label(forDirectory: $0) }
+    }
+
+    /// The foreground process on a tty: its pid and its command, in one `ps`.
+    private static func foreground(onTTY device: String) -> (pid: Int32, command: String)? {
+        guard let out = run("/bin/ps", ["-t", device, "-o", "pid=,stat=,comm="]) else { return nil }
+        for line in out.components(separatedBy: "\n") {
+            let parts = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard parts.count == 3, parts[1].contains("+"), let pid = Int32(parts[0]) else { continue }
+            let command = (String(parts[2]).trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
+            return (pid, command)
         }
         return nil
     }
+
 
     /// The session directory last published for this tty, if any.
     ///

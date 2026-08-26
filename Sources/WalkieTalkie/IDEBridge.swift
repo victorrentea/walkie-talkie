@@ -68,6 +68,18 @@ enum IDEBridge {
         /// prompt? Until now IDE targets were the one place that could not be
         /// checked at all, and `guarded: false` was the honest admission.
         let shellPID: pid_t?
+        /// Where that terminal's shell is, **as the editor itself reports it**.
+        ///
+        /// The pid route cannot always be walked: an IDE running its terminal in
+        /// a backend process hands out a connector with no `Process` behind it,
+        /// so `shellPID` is nil however hard it is reflected over — measured on
+        /// IntelliJ 2026.2, whose connector is a `BackendTtyConnector`. The
+        /// folder is the one thing the pid was wanted for on screen, and the
+        /// widget knows it without any of that.
+        ///
+        /// Captured at bind and refreshed from `/state`, because Victor `cd`s
+        /// between repos inside one session.
+        let cwd: String?
 
         static func == (a: Handle, b: Handle) -> Bool {
             a.endpoint.port == b.endpoint.port && a.id == b.id
@@ -137,8 +149,17 @@ enum IDEBridge {
         else { return nil }
         let name = (obj["name"] as? String) ?? "terminal"
         let shell = (obj["shellPID"] as? Int).map { pid_t($0) }
-        Log.info("🔌 \(kind) bridge on :\(endpoint.port) → terminal #\(id) “\(name)” shell pid \(shell.map(String.init) ?? "?")")
-        return Handle(endpoint: endpoint, id: id, name: name, shellPID: shell)
+        let cwd = obj["cwd"] as? String
+        Log.info("🔌 \(kind) bridge on :\(endpoint.port) → terminal #\(id) “\(name)” shell pid \(shell.map(String.init) ?? "?") cwd \(cwd ?? "?")")
+        return Handle(endpoint: endpoint, id: id, name: name, shellPID: shell, cwd: cwd)
+    }
+
+    /// Where that terminal is **now** — the editor asked again rather than the
+    /// bind's answer replayed. Nil when the editor is gone or too old to know.
+    static func currentDirectory(of handle: Handle) -> String? {
+        guard let obj = request("GET", "/state?id=\(handle.id)", on: handle.endpoint),
+              (obj["ok"] as? Bool) == true else { return nil }
+        return obj["cwd"] as? String
     }
 
     /// Type the line into that terminal and nowhere else.
