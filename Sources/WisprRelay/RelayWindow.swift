@@ -401,7 +401,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     ///
     /// **Paused is anchored too.** It used to become a panel in the corner, on the
     /// argument that pausing was the only route to a ✕ at rest. The menu bar item
-    /// now carries both Pause/Resume and Exit, so that argument is gone — and what
+    /// now carries both Pause/Resume and Quit, so that argument is gone — and what
     /// is left is the fact that pause is a state he stays in for minutes at a time
     /// while dictating into other apps. A half-screen panel parked over his work
     /// for all of it says nothing he doesn't already know. The chip says it where

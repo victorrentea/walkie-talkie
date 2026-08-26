@@ -186,7 +186,7 @@ once, each taking one):
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |
-| menu bar 🤖 | Always there while the app runs — shows which session it is, plus **Pause/Resume** and **Exit** |
+| menu bar 🤖 | Always there while the app runs — shows which session it is, plus **Pause/Resume** and **Quit** |
 
 Paused, the chip reads `⏸️ 🤖 folder@branch` at 0.30 opacity and the menu bar
 icon becomes ⏸️🤖. Wispr Flow itself keeps working exactly as before — the point
@@ -208,7 +208,8 @@ every representation, snapshotted and restored around the probe.
 
 ### Wispr Flow, or a local Whisper
 
-The menu bar's **Transcription** submenu switches which recogniser's words reach
+The menu bar's two engine rows — **Wispr Flow** and **Local Whisper**, flat in the
+main menu below a separator — switch which recogniser's words reach
 the agent, and the choice survives a restart. Wispr still records in both modes:
 the local engine transcribes `History.audio`, the same 16 kHz WAV Wispr already
 stored, so there is no microphone code and no second capture that could drift

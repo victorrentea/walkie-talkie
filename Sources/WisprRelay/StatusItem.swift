@@ -12,7 +12,7 @@ import AppKit
 /// title does: with two overlays up, two identical 🤖 in the menu bar say nothing
 /// about which session a click is about to end.
 ///
-/// Two commands: **Pause/Resume** and **Exit**. Pause is here and not only on the
+/// Two commands: **Pause/Resume** and **Quit**. Pause is here and not only on the
 /// chip because the chip is a moving target — it rides the cursor and disappears
 /// while he types — and pausing is something he does *on his way into another
 /// app*, i.e. exactly when he has no patience to chase a label around.
@@ -20,7 +20,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     var onExit: (() -> Void)?
     var onTogglePause: (() -> Void)?
-    /// Picked from the Transcription submenu. `AppDelegate` owns what happens
+    /// Picked from the two engine rows in the menu. `AppDelegate` owns what happens
     /// next — bringing the model up or letting it go — and calls `setEngine`
     /// back, so the tick never claims something that has not happened.
     var onPickEngine: ((TranscriptionEngine) -> Void)?
@@ -45,38 +45,42 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // Pause above Exit, because it is the one he reaches for repeatedly: the
+        // Pause above Quit, because it is the one he reaches for repeatedly: the
         // relay is paused whenever he wants to dictate into something *other* than
-        // the agent, which happens many times a session, whereas Exit happens once.
+        // the agent, which happens many times a session, whereas Quit happens once.
         pause.action = #selector(pauseClicked)
         pause.target = self
         menu.addItem(pause)
 
-        // A submenu, and two ticked items rather than one "Use local Whisper"
-        // checkbox. The choice is between two named recognisers, and a checkbox
-        // would name only one of them — leaving the other as "not that", which
-        // is exactly the thing worth being explicit about while the local one is
-        // still being evaluated. Tucked behind a submenu because it is set once
-        // and then left alone, unlike Pause, which is the item he reaches for
-        // many times a session and which must stay one click away.
-        let engineItem = NSMenuItem(title: "Transcription", action: nil, keyEquivalent: "")
-        let engineMenu = NSMenu()
+        menu.addItem(.separator())
+
+        // Two ticked items rather than one "Use local Whisper" checkbox. The
+        // choice is between two named recognisers, and a checkbox would name only
+        // one of them — leaving the other as "not that", which is exactly the
+        // thing worth being explicit about while the local one is still being
+        // evaluated.
+        //
+        // Laid out flat in the main menu, one under the other, rather than behind
+        // a "Transcription" submenu: two items are not worth a hover-and-wait, and
+        // flat means the tick — which engine is live right now — is readable the
+        // moment the menu opens, instead of only after the submenu unfurls. The
+        // separator above is what a submenu was really providing: a visible break
+        // from the commands, so a row that *sets a mode* is never mistaken for one
+        // that *does something*.
         for engine in [TranscriptionEngine.wispr, .whisper] {
             let mi = NSMenuItem(title: engine.label, action: #selector(engineClicked(_:)), keyEquivalent: "")
             mi.target = self
             mi.representedObject = engine.rawValue
-            engineMenu.addItem(mi)
+            menu.addItem(mi)
             engineItems[engine] = mi
         }
-        engineItem.submenu = engineMenu
-        menu.addItem(engineItem)
         setEngine(TranscriptionEngine.current)
 
         menu.addItem(.separator())
 
         // No ⌘Q key equivalent: the app never becomes key, so the hint would
         // advertise a shortcut that does nothing outside the open menu.
-        let exit = NSMenuItem(title: "Exit", action: #selector(exitClicked), keyEquivalent: "")
+        let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "")
         exit.target = self
         menu.addItem(exit)
 
@@ -92,9 +96,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
     }
 
-    /// Shown beside the name in the submenu **and** in the menu bar itself.
+    /// Shown beside the name in the menu **and** in the menu bar itself.
     ///
-    /// The submenu half only helps a menu that is already open, which is not
+    /// The in-menu half only helps a menu that is already open, which is not
     /// where he will be looking: he clicks Local Whisper, the menu closes, and
     /// then he wants to know when he may start talking. The menu bar is the one
     /// place that is always in the same pixels — and the only one still visible

@@ -25,7 +25,8 @@ Current strings live in `RelayWindow.swift`:
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
-- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Exit`
+- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Quit`, plus the two
+  transcription-engine rows (`Wispr Flow` / `Local Whisper`), flat in the main menu
 
 ## Bound to a terminal: the second destination
 
@@ -948,7 +949,8 @@ not itself contain.
 
 ## Choosing the recogniser: Wispr Flow or a local Whisper
 
-The menu bar's **Transcription** submenu switches which recogniser's words reach
+The menu bar's two engine rows — **Wispr Flow** and **Local Whisper**, flat in the
+main menu below a separator — switch which recogniser's words reach
 the agent, and the choice is kept in `UserDefaults` so it survives a relay
 restart and a logout. `Transcriber.swift` holds both the setting and the engine;
 `POST /engine {"engine": …}` and `GET /engine` are the same switch on the
@@ -1088,7 +1090,7 @@ top-left of the current screen, with the blur, the ✕ on hover, and full opacit
 Entered by a prompt and by a flash. **Nothing else.**
 
 **Paused is not a panel state.** It was, on the argument that pausing was the
-only route to a ✕ at rest. The menu bar now carries Pause/Resume *and* Exit, so
+only route to a ✕ at rest. The menu bar now carries Pause/Resume *and* Quit, so
 that argument is gone — and what was left was a half-screen panel parked over his
 work for the whole time he dictates into other apps, which is minutes, saying
 something he entered on purpose. It stays a chip: `⏸️ 🤖 folder@branch`, at 0.30.
@@ -1110,7 +1112,7 @@ out); everything else resizes instantly.
 
 `StatusItem.swift` puts a 🤖 in the menu bar for the whole life of the process,
 with the session label as a disabled header and two commands: **Pause/Resume**
-and **Exit**.
+and **Quit**.
 
 It exists because neither shape is a dependable place to find the app. The chip
 belongs to the pointer and hides while he types; the panel comes and goes with
@@ -1132,7 +1134,7 @@ while he is typing the chip is hidden, so the menu bar is then the only thing on
 screen saying forwarding is off. `AppDelegate.togglePause(reason:)` is the single
 switch behind both routes, so the two can never disagree.
 
-Exit goes through the same `endSession(reason:)` as the ✕, so the outbox still
+Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:
 the app is `.accessory` and never becomes key, so the hint would advertise a
 shortcut that does nothing outside the open menu.

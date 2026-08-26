@@ -176,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
 
         status = StatusItem()
-        status.onExit = { [weak self] in self?.endSession(reason: "menu bar Exit") }
+        status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
         status.onPickEngine = { [weak self] engine in self?.pickEngine(engine) }
 
@@ -1234,7 +1234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return parts.joined(separator: "\n")
     }
 
-    /// The ✕ and the menu bar's Exit both end the session. Announce it through the
+    /// The ✕ and the menu bar's Quit both end the session. Announce it through the
     /// outbox before quitting so the watching agent learns the overlay is gone
     /// from the queue itself — it is blocked on that file, not on the process, and
     /// would otherwise sit waiting for messages that can no longer come.
