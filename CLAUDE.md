@@ -186,8 +186,8 @@ everything with something to `Read`. `[selected: …]`, `[look at: …]`,
 said in one line — and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
-**And `[this text was dictated in RO]`, which is the one clause that changes how
-the rest is read rather than adding something to read.** A transcript arrives
+**And `[this text was dictated in RO or EN]`, which is the one clause that
+changes how the rest is read rather than adding something to read.** A transcript arrives
 looking exactly like something Victor typed, so a mis-heard word reads as a word
 he chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` —
 what this app was called then — into
@@ -197,15 +197,20 @@ once. The same failure exists with Wispr — rarer, not absent.
 `dictation` only — inviting phonetic guessing at a screenshot's caption or a
 typed message would be inviting it to misread them.
 
-**The language is named because it is half the answer.** Victor dictates in
-Romanian and in English, and the phonetics that recover a mis-heard word are the
-phonetics of the language it was said in; `RO` also explains a Romanian sentence
-carrying English technical words verbatim, which is how he actually speaks. The
-code comes from whichever recogniser produced the text — MLX Whisper reports it
-in its JSON, and Wispr keeps it in `History.detectedLanguage` (`language` is the
-*setting* and is empty while Wispr is on auto). Nothing translates or guesses it:
-a row with no language recorded says only `[this text was dictated]`, because the
-recogniser is the one that heard it.
+**The languages are named because they are half the answer**, and they are
+named as a **fixed pair** rather than as the one the recogniser detected. Victor
+dictates in Romanian and in English, and the phonetics that recover a mis-heard
+word are the phonetics of the language it was said in — so *which two* to sound
+a word out in is worth saying, and `RO` also explains a Romanian sentence
+carrying English technical terms verbatim, which is how he actually speaks.
+
+For one commit the clause carried the detected code (MLX Whisper reports it in
+its JSON; Wispr keeps it in `History.detectedLanguage`, while `language` there is
+the *setting* and is empty on auto). It was taken out because the code is not
+reliable enough to assert: Wispr had labelled a sentence of Victor's plain
+Romanian `en` in the very row used to test it. A clause naming the wrong language
+is worse than one naming neither — it aims the phonetics at a language the words
+were never said in. Both, always, is true on every dictation.
 
 **The advice that used to follow it is gone**, on Victor's instruction — *"skip
 the rest of details - are obvious"*. It read `[dictated aloud — if a word makes

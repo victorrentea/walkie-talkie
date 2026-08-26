@@ -181,9 +181,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var sources: [String: String] = [:]
         let app: String?
         let elements: [ElementPick]
-        /// What it was heard as — `ro` / `en` — from whichever recogniser
-        /// produced the text. nil when neither reported one.
-        var language: String? = nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -275,10 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.corpus.capture(id: id, origin: "backfill")
             switch TranscriptionEngine.current {
-            case .wispr:   self.send(kind: "dictation", text: row.text, app: row.app,
-                                     language: row.language)
-            case .whisper: self.sendLocallyTranscribed(id: id, fallback: row.text, app: row.app,
-                                                       fallbackLanguage: row.language)
+            case .wispr:   self.send(kind: "dictation", text: row.text, app: row.app)
+            case .whisper: self.sendLocallyTranscribed(id: id, fallback: row.text, app: row.app)
             }
         }
         // Mouse 5 is only a hint; DictationMonitor is the authority. Kept because
@@ -298,15 +293,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it is Wispr's audio either way, so the samples keep accumulating while
         // the local model is on trial, and switching back and forth does not
         // punch holes in the record.
-        wispr.onTranscript = { [weak self] text, app, id, language in
+        wispr.onTranscript = { [weak self] text, app, id in
             guard let self = self else { return }
             self.corpus.capture(id: id)
             switch TranscriptionEngine.current {
             case .wispr:
-                self.send(kind: "dictation", text: text, app: app, language: language)
+                self.send(kind: "dictation", text: text, app: app)
             case .whisper:
-                self.sendLocallyTranscribed(id: id, fallback: text, app: app,
-                                            fallbackLanguage: language)
+                self.sendLocallyTranscribed(id: id, fallback: text, app: app)
             }
         }
 
@@ -374,14 +368,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// la revedere!" for a sentence about an invoice), which is the one failure
     /// an agent cannot defend itself against, since nothing about the text looks
     /// wrong. Almost all of them are clips under five seconds.
-    private func sendLocallyTranscribed(id: String, fallback: String, app: String?,
-                                        fallbackLanguage: String? = nil) {
+    private func sendLocallyTranscribed(id: String, fallback: String, app: String?) {
         func useWispr(_ why: String) {
             Log.error("local whisper → falling back to Wispr: \(why)")
             DispatchQueue.main.async { [weak self] in
                 self?.overlay.flash("🤖 Wispr — \(why)", duration: 4)
             }
-            send(kind: "dictation", text: fallback, app: app, language: fallbackLanguage)
+            send(kind: "dictation", text: fallback, app: app)
         }
 
         guard whisper.ready else { return useWispr("local model not ready") }
@@ -403,7 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
                             r.language ?? "?", r.avgLogprob, r.text.count))
-            self.send(kind: "dictation", text: r.text, app: app, language: r.language)
+            self.send(kind: "dictation", text: r.text, app: app)
         }
     }
 
@@ -591,7 +584,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
                                      duration: duration, app: app)
             try? FileManager.default.removeItem(at: wav)
-            self.send(kind: "dictation", text: r.text, app: app, language: r.language)
+            self.send(kind: "dictation", text: r.text, app: app)
         }
     }
 
@@ -1099,9 +1092,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the same split the outbox already makes, said in one line instead of in
     /// keys — and it is what replaces the skill, which is no longer there to
     /// explain what a field called `screen` is for.
-    /// **The agent is told the words were spoken, and in which language.**
-    /// This is the one clause here written to change how the text is *read*
-    /// rather than to add something to read.
+    /// **The agent is told the words were spoken, and in which two languages
+    /// they might have been spoken.** This is the one clause here written to
+    /// change how the text is *read* rather than to add something to read.
     ///
     /// A transcript arrives looking exactly like something Victor typed, so a
     /// mis-heard word reads as a word he chose. Measured on his own corpus, a
@@ -1109,38 +1102,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// into `risparerile ei`; an agent that knows the input came through a
     /// microphone sounds that out, one that does not has no reason to try.
     ///
-    /// **The language is half the answer**, and it is why this clause names it.
-    /// Victor dictates in Romanian and in English, and the phonetics that
-    /// recover a mis-heard word are the phonetics of the language it was said
-    /// in. `RO` also explains a Romanian sentence carrying English technical
-    /// words verbatim, which is how he actually speaks and which reads as noise
-    /// without it.
+    /// **`RO or EN`, fixed, rather than the language the recogniser detected.**
+    /// It did carry the detected code for one commit, and the reason it no
+    /// longer does is that the code is not reliable enough to assert: Wispr had
+    /// labelled a sentence of Victor's plain Romanian `en` in the very row used
+    /// to test it. A clause naming the wrong language is worse than one naming
+    /// neither — it points the phonetics of a mis-heard word in a direction it
+    /// was never said in. Both, always, is true on every dictation and is still
+    /// the useful half: *which* two languages to sound a word out in. He asked
+    /// for exactly this, twice, and the second time after being shown the
+    /// mislabel: *"RO or EN"*.
     ///
-    /// **Everything else went, on his instruction** — *"skip the rest of
+    /// **Everything else went, also on his instruction** — *"skip the rest of
     /// details - are obvious"*. The clause used to spell out what to do about a
     /// word that makes no sense; a reader capable of acting on that advice does
     /// not need it spelled out, and this rides on every single dictation.
     ///
-    /// The code is upper-cased and nothing translates it: `ro` and `en` are what
-    /// both recognisers report, and `RO`/`EN` is how Victor asked for it. A row
-    /// with no language recorded says only that it was dictated, rather than
-    /// guessing from the words — the recogniser is the one that heard it.
-    ///
     /// Only `dictation` gets it. A screenshot or a typed message was not spoken,
     /// and a hint that invites phonetic guessing at text nobody dictated is an
     /// invitation to misread it.
-    private static func dictatedHint(language: String?) -> String {
-        guard let code = language?.trimmingCharacters(in: .whitespaces), !code.isEmpty else {
-            return "[this text was dictated]"
-        }
-        return "[this text was dictated in \(code.uppercased())]"
-    }
+    private static let dictatedHint = "[this text was dictated in RO or EN]"
 
     private static func terminalLine(_ m: Message) -> String {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
-            parts.append(dictatedHint(language: m.language))
+            parts.append(dictatedHint)
         }
         if let selection = m.selection, !selection.isEmpty {
             parts.append("[selected: \(clampForTerminal(selection))]")
@@ -1578,8 +1565,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         announceEnd("app terminate")
     }
 
-    private func send(kind: String, text: String? = nil, paths: [String] = [],
-                      app: String? = nil, language: String? = nil) {
+    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {
         guard !paused else {
             Log.info("paused — dropped \(kind)")
             return
@@ -1630,7 +1616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks, language: language)
+                              app: app, elements: picks)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
