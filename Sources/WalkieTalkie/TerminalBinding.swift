@@ -179,10 +179,7 @@ final class TerminalBinding {
                                // to be the raw published path, which is why the row
                                // could read `/Users/victorrentea/workspace` — or,
                                // for a shell sitting at the root, just `/`.
-                               folder: handle.shellPID
-                                   .flatMap { Self.tty(ofPID: $0) }
-                                   .flatMap { Self.publishedDirectory(forTTY: $0) }
-                                   .map { Self.label(forDirectory: $0) },
+                               folder: handle.shellPID.flatMap { Self.folderLabel(shellPID: $0) },
                                title: window.title,
                                sourceFrame: window.frame, boundAt: Date())
             } else {
@@ -295,10 +292,7 @@ final class TerminalBinding {
         switch target.handle {
         case .terminalApp(let tty):     return Self.sessionLabel(onTTY: tty)
         case .tmux(let pane, _):        return Self.tmuxPaneLabel(pane)
-        case .ide(let handle):          return handle.shellPID
-                                            .flatMap { Self.tty(ofPID: $0) }
-                                            .flatMap { Self.publishedDirectory(forTTY: $0) }
-                                            .map { Self.label(forDirectory: $0) }
+        case .ide(let handle):          return handle.shellPID.flatMap { Self.folderLabel(shellPID: $0) }
         case .keystroke:                return nil
         }
     }
@@ -821,6 +815,28 @@ final class TerminalBinding {
     /// session never moved, and it is all there is for a terminal running
     /// something other than Claude Code — or one whose status line is somebody
     /// else's.
+    /// `folder@branch` for an IDE panel, from the shell pid its extension named.
+    ///
+    /// **The same route a Terminal.app tab takes**, and it has to be: this used
+    /// to call `publishedDirectory` directly with what `tty(ofPID:)` returns —
+    /// `/dev/ttys004` — while that function guards on `hasPrefix("ttys")` and
+    /// `!contains("/")` because it is naming a file in `~/.claude/cwd`. It
+    /// therefore answered nil for *every* IDE binding, the chip fell back to the
+    /// app name, and VS Code sat next to the cursor saying `Visual Code` for as
+    /// long as the feature existed. `sessionLabel` takes the device name off the
+    /// path itself, which is why the tty paths never had the bug.
+    ///
+    /// **And a second answer behind it.** `sessionLabel` asks the published file
+    /// first and the tty's foreground process second — both are about a *tty*,
+    /// and an IDE panel is the one target that can be freshly opened, at a
+    /// prompt, with nothing published for it yet. The shell's own working
+    /// directory is the honest fallback: it is the folder the panel is in, which
+    /// is exactly what the chip claims to be showing.
+    private static func folderLabel(shellPID pid: pid_t) -> String? {
+        if let tty = tty(ofPID: pid), let label = sessionLabel(onTTY: tty) { return label }
+        return workingDirectory(ofPID: pid).map { label(forDirectory: $0) }
+    }
+
     private static func sessionLabel(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
         if let published = publishedDirectory(forTTY: device) { return label(forDirectory: published) }
