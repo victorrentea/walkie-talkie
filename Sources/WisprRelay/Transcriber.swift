@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Which recogniser's words reach the agent.
@@ -79,6 +80,13 @@ final class LocalWhisper {
     static let confidenceFloor = -0.6
 
     private var proc: Process?
+    /// The helper's pid, kept beside `proc` so it can be read **without touching
+    /// the queue**. Everything else about the process is queue-confined, and this
+    /// one question is asked from the main thread while the menu is opening — a
+    /// `queue.sync` there would block behind a transcription that is allowed to
+    /// take five minutes.
+    private var helperPID: pid_t?
+    private let pidLock = NSLock()
     private var toHelper: FileHandle?
     private var fromHelper: FileHandle?
     private var buffer = Data()
@@ -144,6 +152,7 @@ final class LocalWhisper {
                 onReady("could not start python3: \(error)"); return
             }
             self.proc = p
+            self.pidLock.lock(); self.helperPID = p.processIdentifier; self.pidLock.unlock()
             self.toHelper = inPipe.fileHandleForWriting
             self.fromHelper = outPipe.fileHandleForReading
 
@@ -169,11 +178,35 @@ final class LocalWhisper {
             self.toHelper?.closeFile()
             self.proc?.terminate()
             self.proc = nil
+            self.pidLock.lock(); self.helperPID = nil; self.pidLock.unlock()
             self.toHelper = nil
             self.fromHelper = nil
             self.buffer = Data()
             Log.info("whisper helper stopped")
         }
+    }
+
+    /// What the model is costing **right now**, in bytes, or nil when it is not up.
+    ///
+    /// `ri_phys_footprint`, which is the number Activity Monitor calls "Memory" —
+    /// and the one that matters here, because MLX puts its weights in unified
+    /// memory: `ps`'s RSS tells a different story on the same process, and the
+    /// question being answered ("what is this costing me?") is Activity Monitor's,
+    /// not the resident-set one.
+    ///
+    /// Read straight from the kernel rather than by shelling out, since the caller
+    /// is the main thread with a menu half-open.
+    var footprintBytes: UInt64? {
+        pidLock.lock(); let pid = helperPID; pidLock.unlock()
+        guard let pid = pid else { return nil }
+        var info = rusage_info_current()
+        let rc = withUnsafeMutablePointer(to: &info) { p -> Int32 in
+            p.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(pid, RUSAGE_INFO_CURRENT, $0)
+            }
+        }
+        guard rc == 0, info.ri_phys_footprint > 0 else { return nil }
+        return info.ri_phys_footprint
     }
 
     /// Transcribes a WAV already on disk. Answers on a background queue.

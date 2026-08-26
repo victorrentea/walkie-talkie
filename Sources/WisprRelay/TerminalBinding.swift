@@ -503,6 +503,50 @@ final class TerminalBinding {
     /// vaguer true one. The window title is what the app itself says it is
     /// showing, and for both IDEs that begins with the project.
     private static func focusedWindow(pid: pid_t) -> (frame: CGRect?, title: String?) {
+        let ax = axFocusedWindow(pid: pid)
+        guard ax.frame == nil else { return ax }
+        // **The window server is the fallback, and VS Code is why.** Electron
+        // builds its Accessibility tree lazily — it is simply not there until an
+        // assistive client asks for it — so `kAXFocusedWindow` answers
+        // `cannotComplete` (-25204, measured) for every VS Code window, while
+        // IntelliJ answers it fine. The visible consequence was that binding a VS
+        // Code terminal skipped the bind flight entirely: no source rectangle, no
+        // frame, nothing to fly from, and the one gesture that says *that window
+        // is now this chip* silently did not happen there.
+        //
+        // The documented way to wake that tree is to set `AXManualAccessibility`
+        // on the application, and it is deliberately not used: VS Code answers it
+        // by switching the editor into screen-reader mode, which changes how
+        // Victor's editor renders. Asking the window server instead costs one call,
+        // changes nothing about the app, and answers the only question the flight
+        // has — where is that window.
+        let server = windowServerWindow(pid: pid)
+        return (server.frame, ax.title ?? server.title)
+    }
+
+    /// The frontmost on-screen window of a pid, as the window server has it.
+    ///
+    /// The list comes back front-to-back, so the first ordinary window (layer 0)
+    /// belonging to that pid is the one in front. Panels, tooltips and the
+    /// autocomplete popovers Electron scatters around sit on other layers and are
+    /// skipped by that test alone.
+    private static func windowServerWindow(pid: pid_t) -> (frame: CGRect?, title: String?) {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                                    kCGNullWindowID) as? [[String: Any]] else { return (nil, nil) }
+        for info in list {
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == pid,
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = bounds["X"], let y = bounds["Y"],
+                  let w = bounds["Width"], let h = bounds["Height"],
+                  w > 1, h > 1 else { continue }
+            return (cocoaRect(topLeft: CGPoint(x: x, y: y), size: CGSize(width: w, height: h)),
+                    clean(info[kCGWindowName as String] as? String))
+        }
+        return (nil, nil)
+    }
+
+    private static func axFocusedWindow(pid: pid_t) -> (frame: CGRect?, title: String?) {
         let app = AXUIElementCreateApplication(pid)
         var windowRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,

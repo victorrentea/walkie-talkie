@@ -27,6 +27,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// back, so the tick never claims something that has not happened.
     var onPickEngine: ((TranscriptionEngine) -> Void)?
 
+    /// What the local model is holding right now, in bytes — nil while it is not
+    /// up. Asked when the menu opens, like the header, because that is the only
+    /// moment the answer has to be right.
+    var whisperFootprint: (() -> UInt64?)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
@@ -118,10 +123,33 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// about whether the *next* sentence will reach the engine he just picked.
     func setEngineLoading(_ loading: Bool) {
         engineLoading = loading
-        engineItems[.whisper]?.title = loading
-            ? "\(TranscriptionEngine.whisper.label) — loading…"
-            : TranscriptionEngine.whisper.label
+        applyWhisperTitle()
         refreshGlyph()
+    }
+
+    /// `Local Whisper — 1.6 GB` while the model is up.
+    ///
+    /// **The cost is shown where the choice is made.** The weights are the whole
+    /// argument for starting the helper only when the engine is selected and
+    /// killing it the moment it is not; until now that cost was a number in this
+    /// file's comments, which is exactly where a fact nobody can check belongs.
+    /// Beside the row that turns it on, it is the answer to "what am I paying for
+    /// this?" at the moment the question can still be acted on — and it doubles as
+    /// proof the helper is actually alive, since a dead one has no footprint and
+    /// the row goes back to its bare name.
+    ///
+    /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
+    /// `LocalWhisper.footprintBytes` for why not RSS.
+    private func applyWhisperTitle() {
+        let name = TranscriptionEngine.whisper.label
+        if engineLoading {
+            engineItems[.whisper]?.title = "\(name) — loading…"
+        } else if let bytes = whisperFootprint?() {
+            engineItems[.whisper]?.title = String(format: "%@ — %.1f GB", name,
+                                                  Double(bytes) / 1_073_741_824)
+        } else {
+            engineItems[.whisper]?.title = name
+        }
     }
 
     private func refreshGlyph() {
@@ -179,6 +207,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         SessionLabel.refresh()
         applyHeader()
+        applyWhisperTitle()
     }
 
     private func applyHeader() {

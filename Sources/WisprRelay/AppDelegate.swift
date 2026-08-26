@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
         status.onPickEngine = { [weak self] engine in self?.pickEngine(engine) }
+        status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
 
         // The setting outlives the process, so a relay that starts up already set
         // to Local Whisper brings the model up **now** rather than on the first

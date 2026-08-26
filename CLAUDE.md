@@ -93,6 +93,15 @@ relay *pushes*, so the editor listens.
   and the bind flash says `— no shell guard`.
 - **`.keystroke` survives as the fallback** for a known editor with no extension
   answering, and is logged as such.
+- **VS Code's window is found through the window server, not Accessibility.**
+  Electron builds its AX tree lazily, so `kAXFocusedWindow` answers
+  `cannotComplete` (-25204, measured) for every VS Code window while IntelliJ
+  answers it fine — and the visible consequence was that binding a VS Code
+  terminal skipped the **bind flight**: no source rectangle, so the one gesture
+  that says *that window is now this chip* silently did not happen there.
+  `CGWindowListCopyWindowInfo` answers it instead. The documented alternative,
+  setting `AXManualAccessibility` on the app, is deliberately not used: VS Code
+  answers it by switching the editor into screen-reader mode.
 - **The Return is `\r`, written separately, and both halves matter.** Both
   extensions used to let the editor's own API append the newline —
   `sendText(line, true)`, `sendCommandToExecute(line)` — and both append `\n` on
@@ -1104,6 +1113,23 @@ endings. And plain WER badly understates the model, because the transcript is
 going to an agent and not into a document: casing, punctuation and verb endings
 cost WER and cost the agent nothing, while a mangled identifier costs the agent
 everything and is what rare-word recall is there to measure.
+
+### The menu says what the model costs
+
+While the helper is up, the Local Whisper row reads `Local Whisper — 1.6 GB`,
+read when the menu opens (like the header) rather than pushed on a timer.
+
+The number is `ri_phys_footprint` from `proc_pid_rusage` — Activity Monitor's
+"Memory", not `ps`'s RSS, because MLX puts its weights in unified memory and the
+two disagree on the same process. The question being answered is "what am I
+paying for this?", which is Activity Monitor's question.
+
+**It is shown where the choice is made.** The weights being 1.5 GB resident is
+the whole argument for starting the helper only when the engine is selected and
+killing it the moment it is not — and until now that cost was a number in a
+comment, which is exactly where a fact nobody can check belongs. Beside the row
+that turns it on, it is also proof the helper is alive: a dead one has no
+footprint and the row goes back to its bare name.
 
 ### Mouse 5 is the relay's on Local Whisper
 
