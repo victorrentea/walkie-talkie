@@ -35,6 +35,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
+    /// Let go of the terminal without ending the session — the menu's answer to
+    /// ⌘⌃D pressed on the bound target, minus the quitting.
+    private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var isPaused = false
     private var engineLoading = false
@@ -77,6 +80,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
         pause.action = #selector(pauseClicked)
         pause.target = self
         menu.addItem(pause)
+
+        // **Under Pause, because it is the other half of the same question.**
+        // Pause stops the words going *anywhere*; this one stops them going to
+        // *that terminal* and hands them back to the outbox, which is what the
+        // relay does when nothing is bound. ⌘⌃D on the bound target already
+        // does something adjacent and stronger — it ends the session — and there
+        // was no way to simply let go of a tab: he had to quit the relay and
+        // start it again somewhere else. Disabled while nothing is bound, since
+        // it would then be a command with nothing to act on.
+        disconnect.action = #selector(disconnectClicked)
+        disconnect.target = self
+        disconnect.isEnabled = false
+        menu.addItem(disconnect)
 
         menu.addItem(.separator())
 
@@ -245,9 +261,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
         destination = line
         header.image = icon
         isBound = line != nil
+        disconnect.isEnabled = isBound
         refreshGlyph()
         applyHeader()
     }
+
+    /// Called when he picks Disconnect — release the terminal, keep the session.
+    var onDisconnect: (() -> Void)?
+
+    @objc private func disconnectClicked() { onDisconnect?() }
 
     private var destination: String?
 

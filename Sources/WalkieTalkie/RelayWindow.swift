@@ -1355,11 +1355,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// rather than a notice, and has now been kept. Without this the promise
     /// outlives the thing it promised by however long its timer had left.
     func clearFlash() {
-        guard flashMessage != nil else { return }
-        flashMessage = nil
-        layoutContent()
-        reposition()
-        refreshOpacity()
+        // Through the same dissolve as a flash that ran its course: a promise
+        // being kept early is still a message leaving, and it leaves the same way.
+        guard let message = flashMessage else { return }
+        fadeOutFlash(message)
     }
 
     /// Wispr started / stopped listening.
@@ -1485,17 +1484,54 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// rest that row is not on screen at all.
     func flash(_ message: String, duration: TimeInterval = 2.0) {
         flashMessage = message
+        // A previous flash may still be halfway through its fade; whatever it
+        // faded has to be opaque again before this one is drawn into it.
+        hintLabel.alphaValue = 1
+        root.blur?.alphaValue = 1
         layoutContent()
         reposition()             // still beside the pointer — a flash is not a reason to move
         refreshOpacity()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            self?.fadeOutFlash(message)
+        }
+    }
+
+    /// **The message dissolves; it does not vanish.**
+    ///
+    /// A flash used to be cut at the end of its timer — the row gone and the
+    /// blur behind it gone in the same frame, beside the pointer, while Victor
+    /// was looking somewhere else entirely. What that reads as is a *window
+    /// closing*, which is an event; and since the chip is otherwise bare text on
+    /// his work, the panel appearing and disappearing under his hand was the most
+    /// eventful thing on screen for something as unremarkable as `🎙️ local
+    /// Whisper ready`.
+    ///
+    /// Both halves fade together — the words and the blur they are sitting on —
+    /// so what is left behind is the chip that was there before, rather than a
+    /// backdrop with nothing in it for a frame.
+    private func fadeOutFlash(_ message: String) {
+        guard flashMessage == message else { return }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = Self.flashFade
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            hintLabel.animator().alphaValue = 0
+            root.blur?.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
             guard let self = self, self.flashMessage == message else { return }
             self.flashMessage = nil
+            // Reset before the relayout, not after: the same two views carry the
+            // next flash, and one that inherited a zero alpha would never appear.
+            self.hintLabel.alphaValue = 1
+            self.root.blur?.alphaValue = 1
             self.layoutContent()
             self.reposition()
             self.refreshOpacity()
-        }
+        })
     }
+
+    /// Long enough to read as a dissolve rather than as a blink, short enough
+    /// that a message he has finished reading is not still going.
+    private static let flashFade: TimeInterval = 0.45
 
     fileprivate func setHovering(_ value: Bool) {
         guard hovering != value else { return }
@@ -1653,16 +1689,18 @@ final class PillButton: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let pill = NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2)
-        // Red only under the cursor. At rest it is one more quiet control: the
-        // overlay is on screen all day and a permanently red button reads as an
-        // error rather than as an offer.
-        if hot {
-            accent.withAlphaComponent(0.92).setFill()
-        } else {
-            NSColor.secondaryLabelColor.withAlphaComponent(0.22).setFill()
-        }
+        // **Coloured at rest, not only under the cursor.** Both buttons were grey
+        // until touched, on the argument that a permanently red control reads as
+        // an error — true of a button that is on screen all day, and this pair is
+        // not: it exists for the few seconds a dictation is held, with a clock
+        // running, and in those seconds the colours *are* the instruction. Green
+        // goes, red stops; the hand picks one without reading either.
+        //
+        // Tinted rather than filled at rest so the panel is not two poster
+        // colours; the cursor brings the full one up.
+        accent.withAlphaComponent(hot ? 0.92 : 0.30).setFill()
         pill.fill()
-        NSColor.secondaryLabelColor.withAlphaComponent(hot ? 0.0 : 0.35).setStroke()
+        accent.withAlphaComponent(hot ? 0.0 : 0.55).setStroke()
         pill.lineWidth = 1
         pill.stroke()
 
@@ -1670,7 +1708,7 @@ final class PillButton: NSView {
         style.alignment = .center
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14, weight: .medium),
-            .foregroundColor: hot ? NSColor.white : NSColor.labelColor,
+            .foregroundColor: NSColor.white,
             .paragraphStyle: style,
         ]
         let size = (title as NSString).size(withAttributes: attrs)

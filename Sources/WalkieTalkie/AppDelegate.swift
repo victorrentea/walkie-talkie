@@ -196,6 +196,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
         status.onPickEngine = { [weak self] engine in self?.pickEngine(engine) }
+        // The same call `POST /unbind` makes: the words go back to the outbox and
+        // the relay keeps running, which is the difference between this and ⌘⌃D
+        // on the bound target.
+        status.onDisconnect = { [weak self] in self?.unbindTerminal() }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
 
         // **The model is not brought up at launch any more**, even when the
