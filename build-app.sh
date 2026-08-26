@@ -39,6 +39,12 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <dict>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
+    <!-- **The old name, on purpose.** The app is Walkie Talkie; its identity to
+         macOS is not. TCC keys Accessibility, Screen Recording and the microphone
+         to this string plus the signing identity, so changing it costs three
+         grants re-ticked by hand in System Settings — and it is invisible
+         everywhere Victor looks. The Caches folder follows it for the same
+         reason. Do not "fix" this to match the name. -->
     <key>CFBundleIdentifier</key>
     <string>ro.victorrentea.wispr-relay</string>
     <key>CFBundleName</key>
