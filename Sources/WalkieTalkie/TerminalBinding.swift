@@ -839,7 +839,25 @@ final class TerminalBinding {
 
     private static func sessionLabel(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
-        if let published = publishedDirectory(forTTY: device) { return label(forDirectory: published) }
+
+        // **The published file is only believed while a program is holding the
+        // tty.** It is written by an agent's status line and never cleaned up,
+        // and `ttysNNN` is a number macOS hands to the next tab that opens — so
+        // a shell sitting at a prompt on a recycled number reads back the folder
+        // of a Claude session that ended hours ago. Measured, on this Mac: a
+        // fresh zsh whose cwd was `petclinic` bound as `victor-macos-addons`,
+        // because that is what the last session on `ttys007` had published.
+        //
+        // The existence check inside `publishedDirectory` cannot catch this: the
+        // stale directory is a real directory. What separates the two cases is
+        // whether anything is *running* — the file describes an agent session,
+        // and with no agent in the foreground there is no session it can be
+        // describing. A live `cwd` is the honest answer for a bare prompt, and
+        // it is the answer that changes when Victor `cd`s.
+        if let foreground = foregroundCommand(onTTY: tty), !isShell(foreground),
+           let published = publishedDirectory(forTTY: device) {
+            return label(forDirectory: published)
+        }
 
         guard let out = run("/bin/ps", ["-t", device, "-o", "pid=,stat="]) else { return nil }
         for line in out.components(separatedBy: "\n") {
