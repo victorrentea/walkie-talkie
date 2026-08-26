@@ -88,6 +88,14 @@ final class MenuBarMirror {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        // **Dimmed, because every icon beside it is.** macOS draws the menu bar on
+        // an inactive display at reduced opacity, and these panels only ever exist
+        // on inactive displays — so at full strength ours was the one bright thing
+        // in a greyed-out bar, which reads as an alert rather than as a mirror of
+        // the item on the other screen. It brightens the moment that display takes
+        // the focus, since the mirror is then removed and the real status item
+        // arrives in its place.
+        panel.alphaValue = 0.45
         // Above the menu bar (`.mainMenu` is 24) so it is not drawn behind the
         // strip it is pretending to be part of.
         panel.level = .statusBar

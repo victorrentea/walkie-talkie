@@ -925,11 +925,23 @@ final class TerminalBinding {
         return nil
     }
 
+    /// `folder`, or `folder@branch` when the branch is worth saying.
+    ///
+    /// **`main` and `master` are not worth saying.** They are where most of these
+    /// sessions are most of the time, so `@main` was on the chip permanently —
+    /// the same six characters on every bind, carrying no information and costing
+    /// width on a label that rides over Victor's work. A branch that is *not* the
+    /// default is the one fact worth interrupting for: it says this session is
+    /// somewhere other than where he usually is.
     static func label(forDirectory dir: String) -> String {
         let folder = (dir as NSString).lastPathComponent
         guard let branch = run("/usr/bin/git", ["-C", dir, "rev-parse", "--abbrev-ref", "HEAD"]),
-              !branch.isEmpty, branch != "HEAD" else { return folder }
-        return "\(folder)@\(branch)"
+              !branch.isEmpty, branch != "HEAD",
+              branch != "main", branch != "master" else { return folder }
+        // Spaces around the `@`: `petclinic @ fix/tax-bug` reads as two facts,
+        // where `petclinic@fix/tax-bug` reads as one long token — an email
+        // address, or a package name — and the eye stops to parse it.
+        return "\(folder) @ \(branch)"
     }
 
     // MARK: - Text
