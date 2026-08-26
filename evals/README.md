@@ -29,7 +29,7 @@ images pre-attached has already made that decision for us.
 
 ## The fixtures are real dictations
 
-Both come out of `~/.wispr-relay/outbox.jsonl` with their screenshots still on
+Both come out of `~/.walkie-talkie/outbox.jsonl` with their screenshots still on
 disk. Nothing is synthesised — the whole question is whether an agent can
 follow *Victor's* pointing, and a made-up sequence would answer it about a
 made-up habit.

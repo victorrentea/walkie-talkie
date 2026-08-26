@@ -1,4 +1,4 @@
-# Wispr Relay
+# Walkie Talkie
 
 A small macOS overlay that **relays [Wispr Flow](https://wisprflow.ai) dictation
 into a running coding agent** — along with the text you had selected and
@@ -6,7 +6,7 @@ screenshots of what you were looking at — so you can drive the agent while
 looking at something else entirely: a browser, an IDE, a projector.
 
 Wispr Flow types its transcript wherever the caret is, which is exactly wrong
-when you are talking *about* something you are only reading. Wispr Relay takes
+when you are talking *about* something you are only reading. Walkie Talkie takes
 that same speech and sends it somewhere else: to whatever agent is watching its
 queue. That is the whole idea, and the name — it is not tied to any one agent
 (it was called Claude Bubble until it turned out to work with all of them).
@@ -133,7 +133,7 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 
 ### The outbox
 
-Bound or not, the overlay appends JSON lines to `~/.wispr-relay/outbox.jsonl`.
+Bound or not, the overlay appends JSON lines to `~/.walkie-talkie/outbox.jsonl`.
 Anything that watches that file can consume them; there is no back-channel.
 
 ```json
@@ -241,7 +241,7 @@ fallback is wired to.
 ### The voice corpus
 
 While the relay runs, every dictation also leaves the **recording** beside the
-transcript, in `~/.wispr-relay/voice-corpus/`:
+transcript, in `~/.walkie-talkie/voice-corpus/`:
 
 ```
 2026-08-17/14-30-22-a1b2c3d4.wav    16 kHz mono — Wispr's own audio, copied
@@ -272,7 +272,7 @@ after that.
 ## Build
 
 ```bash
-./build-app.sh          # → /Applications/Wispr Relay.app, signed
+./build-app.sh          # → /Applications/Walkie Talkie.app, signed
 ```
 
 The `.app` wrapper is not cosmetic: macOS keys Accessibility and Screen Recording
@@ -286,7 +286,7 @@ work and nothing else does.
 
 ## Debug switches
 
-- `kill -USR1 <pid>` — writes what is on screen to `~/.wispr-relay/snapshot.png`.
+- `kill -USR1 <pid>` — writes what is on screen to `~/.walkie-talkie/snapshot.png`.
   The overlay sets `sharingType = .none` so it never lands in the screenshots it
   takes, which also makes it impossible to photograph while working on it — and
   on macOS 15 the old opt-out below no longer buys it back. So it draws itself

@@ -1,7 +1,7 @@
 """Real dictations, replayed.
 
 Every fixture here is a message Victor actually spoke into the relay — pulled
-out of `~/.wispr-relay/outbox.jsonl` with the screenshots it carried still on
+out of `~/.walkie-talkie/outbox.jsonl` with the screenshots it carried still on
 disk. Nothing is synthesised: the whole question these evals exist to answer is
 whether an agent can follow *his* pointing, and a made-up sequence would answer
 it about a made-up habit.
@@ -20,10 +20,10 @@ import os
 # run. They go for good when Victor empties it, and `run.py` says so by skipping
 # the fixture rather than failing.
 SHOTS = next(
-    (d for d in (os.path.expanduser("~/.wispr-relay/shots"),
+    (d for d in (os.path.expanduser("~/.walkie-talkie/shots"),
                  os.path.expanduser("~/.Trash/shots"))
      if os.path.isdir(d)),
-    os.path.expanduser("~/.wispr-relay/shots"))
+    os.path.expanduser("~/.walkie-talkie/shots"))
 
 
 def _p(name):

@@ -37,6 +37,18 @@ enum IDEBridge {
     /// Fixed, and deliberately not under `--home`: that flag moves the outbox
     /// for testing, and an editor extension has no way to learn it was passed.
     static let registry = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".walkie-talkie/ide")
+
+    /// Where the extensions published before the rename.
+    ///
+    /// **Read for as long as an un-reloaded editor can still exist.** The relay
+    /// updates itself the moment it is restarted; a VS Code extension host and an
+    /// IntelliJ plugin do not — they keep running the code loaded when the window
+    /// opened, which may be yesterday's. Ignoring this folder would mean ⌘⌃D in
+    /// those windows quietly falling back to a blind paste, which is precisely the
+    /// failure the extensions exist to prevent, for a reason no one could guess
+    /// from the symptom. It costs one extra directory listing per bind.
+    private static let legacyRegistry = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".wispr-relay/ide")
 
     struct Endpoint {
@@ -80,8 +92,10 @@ enum IDEBridge {
     /// host. Stale files are normal — an editor killed with `-9` never gets to
     /// clean up — and are filtered by the ping, not by trusting the file.
     private static func endpoints(kind: String) -> [Endpoint] {
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: registry, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        let files = [registry, legacyRegistry].flatMap { dir in
+            (try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        }
         return files.compactMap { url in
             guard let data = try? Data(contentsOf: url),
                   let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

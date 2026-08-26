@@ -110,7 +110,7 @@ final class HotkeyTap {
             callback: tapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            Log.error("could not create event tap — grant Accessibility permission to Wispr Relay")
+            Log.error("could not create event tap — grant Accessibility permission to Walkie Talkie")
             return false
         }
         tapPort = tap
@@ -120,7 +120,7 @@ final class HotkeyTap {
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CFRunLoopRun()
         }
-        thread.name = "WisprRelayEventTap"
+        thread.name = "WalkieTalkieEventTap"
         thread.start()
         return true
     }

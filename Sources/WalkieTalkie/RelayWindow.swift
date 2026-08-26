@@ -1037,7 +1037,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// title is the one part of this with no length anybody controls.
     private var identity: String {
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
-        // `wispr-relay@main` — the working directory of the session the words are
+        // `walkie-talkie@main` — the working directory of the session the words are
         // going to, with its branch when that directory is a repo. The icon beside
         // it (`titleGlyph`) says which app, so this line never spells out an app
         // name it can show instead; only a target with no directory to read falls

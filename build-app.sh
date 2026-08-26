@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Wispr Relay and wrap it in a signed .app.
+# Build Walkie Talkie and wrap it in a signed .app.
 #
 # The .app is not cosmetic: macOS keys Accessibility / Screen Recording (TCC)
 # grants to a code-signing identity. A bare SwiftPM binary is ad-hoc signed and
@@ -9,16 +9,16 @@
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="Wispr Relay"
+APP_NAME="Walkie Talkie"
 APP_DIR="/Applications/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 
-echo "Building WisprRelay (release)…"
+echo "Building WalkieTalkie (release)…"
 cd "$DIR"
 swift build -c release
 
-BIN="$DIR/.build/release/WisprRelay"
+BIN="$DIR/.build/release/WalkieTalkie"
 [ -x "$BIN" ] || { echo "❌ build produced no binary at $BIN"; exit 1; }
 
 echo "Assembling $APP_NAME.app…"
@@ -50,9 +50,9 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>LSUIElement</key>
     <true/>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Wispr Relay needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
+    <string>Walkie Talkie needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Wispr Relay records your dictation itself when the Local Whisper engine is selected, so that Wispr Flow is not in the loop at all.</string>
+    <string>Walkie Talkie records your dictation itself when the Local Whisper engine is selected, so that Wispr Flow is not in the loop at all.</string>
 </dict>
 </plist>
 PLIST

@@ -796,7 +796,7 @@ final class TerminalBinding {
     /// **Claude Code keeps two.** The process is launched somewhere and stays
     /// there forever; the *session* moves, and that move is what its status line
     /// shows and what Victor means by "which folder". Measured on a live session
-    /// working in `wispr-relay`: `lsof -d cwd` on the pid still answered
+    /// working in `walkie-talkie`: `lsof -d cwd` on the pid still answered
     /// `~/workspace`, which is also why the branch went missing — `~/workspace`
     /// is not a repo, so there was nothing to put after the `@`.
     ///

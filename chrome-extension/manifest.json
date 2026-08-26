@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Wispr Relay Inspector",
+  "name": "Walkie Talkie Inspector",
   "version": "1.0",
-  "description": "Hold ⌘⇧ to outline the element under the cursor; ⌘⇧-click hands its selector to the agent Wispr Relay is talking to.",
+  "description": "Hold ⌘⇧ to outline the element under the cursor; ⌘⇧-click hands its selector to the agent Walkie Talkie is talking to.",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -13,6 +13,6 @@
     }
   ],
   "background": { "service_worker": "relay.js" },
-  "action": { "default_title": "Wispr Relay Inspector" },
+  "action": { "default_title": "Walkie Talkie Inspector" },
   "host_permissions": ["http://127.0.0.1/*"]
 }

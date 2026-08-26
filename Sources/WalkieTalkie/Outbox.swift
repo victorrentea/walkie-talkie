@@ -8,9 +8,9 @@ import Foundation
 /// can never read half a line.
 enum Outbox {
 
-    /// `~/.wispr-relay` unless overridden with `--home`.
+    /// `~/.walkie-talkie` unless overridden with `--home`.
     static var home = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".wispr-relay")
+        .appendingPathComponent(".walkie-talkie")
 
     static var outboxURL = home.appendingPathComponent("outbox.jsonl")
 
@@ -30,6 +30,12 @@ enum Outbox {
     /// pressure is not a log.
     static let cacheRoot = FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        // **The old bundle id, on purpose.** The app is Walkie Talkie now, but its
+        // identity to macOS is unchanged — see `build-app.sh` — because TCC keys
+        // Accessibility, Screen Recording and the microphone to that string, and
+        // a new one costs three grants Victor has to re-tick in System Settings.
+        // The Caches folder follows the bundle id rather than the name, so it is
+        // the one place the old name survives, and it survives for a reason.
         .appendingPathComponent("ro.victorrentea.wispr-relay/shots")
 
     /// One folder per relay session, stamped with when it started.
@@ -51,12 +57,39 @@ enum Outbox {
     private static let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.outbox")
 
     static func prepare() {
+        adoptLegacyHome()
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: shotsDir, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: outboxURL.path) {
             FileManager.default.createFile(atPath: outboxURL.path, contents: Data())
         }
         retireLegacyShots()
+    }
+
+    /// The home folder was `~/.wispr-relay` until the app was renamed, and it is
+    /// **moved rather than recreated**: it holds the voice corpus — 300 MB of
+    /// Victor's own speech paired with transcripts, and the one thing in this app
+    /// that cannot be regenerated at any price. Starting fresh beside it would
+    /// have orphaned every sample.
+    ///
+    /// Runs before anything is created, so it can only ever see a run where the
+    /// new folder does not exist yet; the second launch finds nothing to do. A
+    /// `--home` override skips it by construction, since that points somewhere
+    /// else entirely.
+    ///
+    /// This is the one place the old name is allowed to appear in a path, and it
+    /// is here precisely so that it appears nowhere else.
+    private static func adoptLegacyHome() {
+        let legacy = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".wispr-relay")
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: home.path) else { return }
+        do {
+            try fm.moveItem(at: legacy, to: home)
+            Log.info("adopted \(legacy.lastPathComponent) → \(home.lastPathComponent)")
+        } catch {
+            Log.error("could not move \(legacy.path) to \(home.path): \(error)")
+        }
     }
 
     /// Shots used to live in `~/.wispr-relay/shots`, and moving them to Caches
@@ -78,8 +111,7 @@ enum Outbox {
     /// One-shot by nature: nothing recreates the folder, so the second launch
     /// finds nothing to do.
     private static func retireLegacyShots() {
-        let legacy = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".wispr-relay/shots")
+        let legacy = home.appendingPathComponent("shots")
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: legacy.path, isDirectory: &isDir),
               isDir.boolValue else { return }

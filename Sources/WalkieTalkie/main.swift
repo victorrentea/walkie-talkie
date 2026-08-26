@@ -1,7 +1,7 @@
 import AppKit
 
 // `--home <dir>` relocates the outbox (one directory per agent session when
-// several run at once). Defaults to ~/.wispr-relay. Screenshots are not part of
+// several run at once). Defaults to ~/.walkie-talkie. Screenshots are not part of
 // it — they go to Caches, under a folder per relay session.
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
@@ -18,10 +18,10 @@ while let arg = args.next() {
         if let label = args.next() { SessionLabel.override(label) }
     case "--help", "-h":
         print("""
-        Wispr Relay — floating overlay that relays what Wispr Flow hears,
+        Walkie Talkie — floating overlay that relays what Wispr Flow hears,
         the text you had selected, and screenshots to a waiting agent.
 
-          --home <dir>   outbox directory (default ~/.wispr-relay). Screenshots
+          --home <dir>   outbox directory (default ~/.walkie-talkie). Screenshots
                          always go to ~/Library/Caches/ro.victorrentea.wispr-relay,
                          under a folder per relay session, so the system can
                          reclaim them.

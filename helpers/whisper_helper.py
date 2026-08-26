@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-lived local transcriber for Wispr Relay.
+"""Long-lived local transcriber for Walkie Talkie.
 
 **It is a daemon and not a script because of one measurement**: importing
 `mlx_whisper` costs 7.4s and the first transcription pays another 2.8s to load

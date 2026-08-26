@@ -307,7 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("accessibility trusted=\(trusted) eventTap=\(tapped)")
         if !trusted || !tapped {
             DispatchQueue.main.async { [weak self] in
-                self?.overlay.flash("⚠️ grant Accessibility to Wispr Relay", duration: 15)
+                self?.overlay.flash("⚠️ grant Accessibility to Walkie Talkie", duration: 15)
             }
         }
         startListeningForSnapshots()
@@ -436,7 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // menu — not mid-sentence with an agent waiting.
                 MicRecorder.requestAccess { ok in
                     guard !ok else { return }
-                    self.overlay.flash("⚠️ grant Microphone to Wispr Relay — mouse 5 cannot record", duration: 15)
+                    self.overlay.flash("⚠️ grant Microphone to Walkie Talkie — mouse 5 cannot record", duration: 15)
                     Log.error("microphone access denied — local recording will not work")
                 }
                 // The one message he is actually waiting for. Worded as
@@ -904,7 +904,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The one place the binding is put on screen, so the chip and the menu can
     /// never disagree about where the words are going.
     ///
-    /// Both show the same line — `wispr-relay@main` behind the destination app's
+    /// Both show the same line — `walkie-talkie@main` behind the destination app's
     /// own icon — because they answer the same question in two places: the chip is
     /// where he is looking while he talks, and the menu bar is what is left when
     /// the pointer (and with it the chip) is hidden because he started typing.
@@ -1016,7 +1016,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// A transcript arrives looking exactly like something Victor typed, so a
     /// mis-heard word reads as a word he chose. Measured on his own corpus, a
-    /// local recogniser turned `Wispr Relay` into `risparerile ei` — and an agent
+    /// local recogniser turned `Wispr Relay` — what this app was called then —
+    /// into `risparerile ei`, and an agent
     /// that does not know the input came through a microphone has no reason to
     /// try sounding that out, while one that does resolves it immediately. The
     /// same failure exists with Wispr, which is merely rarer, not absent.

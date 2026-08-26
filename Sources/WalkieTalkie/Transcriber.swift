@@ -108,7 +108,7 @@ final class LocalWhisper {
         // A `swift build` run: .build/<config>/<bin> → <repo>/helpers/…
         //
         // `arguments[0]` is whatever was typed, so it is routinely relative
-        // (`.build/debug/WisprRelay`) — which is why it is resolved against the
+        // (`.build/debug/WalkieTalkie`) — which is why it is resolved against the
         // working directory before any `..` is taken off it. Not doing that was
         // a real bug: the walk produced a path relative to nothing and the
         // helper "did not exist" in a checkout that plainly had it.

@@ -1,4 +1,4 @@
-# Wispr Relay — working notes
+# Walkie Talkie — working notes
 
 See `README.md` for what this is and how it works. This file is for rules that
 must survive across sessions.
@@ -48,7 +48,7 @@ is the one kind that is not delivered.
 `⌘⌃D` on VS Code or IntelliJ no longer pastes. The relay finds a loopback
 listener published by Victor's own extensions — `victor-vsc`'s
 `relay-terminal.js` and the `live-coding` plugin's `RelayTerminalService` — under
-`~/.wispr-relay/ide/`, asks it which terminal is selected, and hands it every
+`~/.walkie-talkie/ide/`, asks it which terminal is selected, and hands it every
 later line (`IDEBridge.swift`). The extension calls `sendText` /
 `sendCommandToExecute` on **that** widget.
 
@@ -190,7 +190,8 @@ to explain what a field called `screen` is for.
 **And `[dictated aloud — …]`, which is the one clause that changes how the rest
 is read rather than adding something to read.** A transcript arrives looking
 exactly like something Victor typed, so a mis-heard word reads as a word he
-chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` into
+chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` —
+what this app was called then — into
 `risparerile ei`; an agent that does not know the input came through a
 microphone has no reason to sound that out, and one that does resolves it at
 once. The same failure exists with Wispr — rarer, not absent. It rides every
@@ -307,7 +308,7 @@ Four further decisions behind where that folder comes from:
   two different things.** Claude Code keeps a *session* directory that moves when
   Victor moves, and a *process* directory that never leaves where it was
   launched. `lsof -d cwd` gives the second: measured on a live session working in
-  `wispr-relay`, it still answered `~/workspace`, which is also why the branch was
+  `walkie-talkie`, it still answered `~/workspace`, which is also why the branch was
   missing (`~/workspace` is not a repo).
 
   So the session directory is **published rather than inferred**. Victor's status
@@ -419,7 +420,7 @@ into a live session the one part nobody could test at a desk.
 
 ### ⌘⌃D lives in Victor Addons
 
-`WisprRelayBinder.swift`, there, not here. The relay is started per session and
+`WalkieTalkieBinder.swift`, there, not here. The relay is started per session and
 is down most of the time; Addons is a login item and is always up, so a binding
 key that needed the relay running first would need the trip into a terminal the
 whole feature exists to remove. A cold press therefore **launches the relay**
@@ -823,12 +824,12 @@ disk pressure — all welcome. `/tmp` was the other candidate and is worse for t
 stated requirement: it clears on reboot and on a 3-day sweep, neither of which is
 "when the disk is full". Same call `ScreenshotManager` makes in Victor Addons.
 
-**The outbox stays put**, in `~/.wispr-relay`. It is the log of what Victor said,
+**The outbox stays put**, in `~/.walkie-talkie`. It is the log of what Victor said,
 the record that outlives the session, and a log the system may delete under
 pressure is not a log.
 
 **The pre-Caches pile is retired to the Trash on launch** (`Outbox.retireLegacyShots`).
-Moving shots to Caches left `~/.wispr-relay/shots` behind with nothing that would
+Moving shots to Caches left `~/.walkie-talkie/shots` behind with nothing that would
 ever clean it: `prune()` walks `cacheRoot` and only `cacheRoot`, so the cap of
 300 never applied there, and no cleaner tool reaches a dotfolder in `$HOME`.
 Measured when this was written: **382 MB in 209 retina JPGs**, going back to the
@@ -900,7 +901,7 @@ fires at launch, long before a dictation.
 
 ## The voice corpus: audio kept beside the transcript, forever
 
-**`~/.wispr-relay/voice-corpus/`** — `VoiceCorpus.swift`. Every dictation the
+**`~/.walkie-talkie/voice-corpus/`** — `VoiceCorpus.swift`. Every dictation the
 watcher sees while the relay is up leaves three things behind:
 
 ```

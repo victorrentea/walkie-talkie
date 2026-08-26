@@ -26,7 +26,7 @@ import SQLite3
 ///
 /// ## It lives outside Caches, deliberately
 ///
-/// `~/.wispr-relay/voice-corpus/`, next to the outbox and by the outbox's
+/// `~/.walkie-talkie/voice-corpus/`, next to the outbox and by the outbox's
 /// argument: screenshots are a staging area whose purpose expires within the
 /// turn that reads them, and Caches is right for those. This is the opposite —
 /// a corpus that is worthless unless it accumulates, and a folder the system may

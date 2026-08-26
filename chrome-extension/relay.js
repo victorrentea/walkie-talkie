@@ -52,8 +52,8 @@ async function probe() {
   chrome.action.setBadgeBackgroundColor({ color: '#ff453a' });
   chrome.action.setTitle({
     title: cached.sessions.length
-      ? `Wispr Relay Inspector — ⌘⇧-hold to pick, feeding ${cached.sessions.join(', ')}`
-      : 'Wispr Relay Inspector — no relay session dictating',
+      ? `Walkie Talkie Inspector — ⌘⇧-hold to pick, feeding ${cached.sessions.join(', ')}`
+      : 'Walkie Talkie Inspector — no relay session dictating',
   });
   return cached;
 }

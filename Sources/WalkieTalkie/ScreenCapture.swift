@@ -1,7 +1,7 @@
 import AppKit
 import ImageIO
 
-/// Screenshots the display under the cursor into `~/.wispr-relay/shots`.
+/// Screenshots the display under the cursor into `~/Library/Caches/…/shots`.
 ///
 /// The overlay does **not** need hiding: `sharingType = .none` on the panel
 /// already excludes it from every capture — verified with a shot taken by a
