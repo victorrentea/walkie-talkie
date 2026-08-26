@@ -38,6 +38,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var isPaused = false
     private var engineLoading = false
+    /// Whether the relay is pointed at a terminal, which is what the two icons
+    /// distinguish. Set from the same `setDestination` the header uses, so the
+    /// picture in the menu bar and the line inside the menu cannot disagree.
+    private var isBound = false
 
     /// The same 🤖, on every other screen. `NSStatusItem` only ever appears in the
     /// menu bar of the display with the focus, and that is the one display Victor
@@ -47,9 +51,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
     override init() {
         super.init()
 
-        // Emoji rather than an SF Symbol: the overlay already says 🤖 in the
-        // chip, and the eye pairs the two without reading either.
-        item.button?.title = "🤖"
+        // **A drawing of a walkie-talkie, in two states, replacing the 🤖.**
+        //
+        // The robot was inherited from the overlay's chip, and it said what the
+        // app *did* rather than what it is — fine while the app was started per
+        // session by another app's shortcut, and wrong now that this one runs
+        // from login and is the thing Victor looks for in the bar. The two
+        // pictures are the same drawing: at rest the device alone, and bound the
+        // full icon, ring and all. So "is it pointed at a terminal?" is answered
+        // by the ring appearing round something already in that spot, which is a
+        // faster read than a glyph swap and needs no colour vocabulary.
+        item.button?.image = Self.idleIcon
+        item.button?.imagePosition = .imageLeading
+        item.button?.title = ""
 
         let menu = NSMenu()
         menu.delegate = self
@@ -158,15 +172,44 @@ final class StatusItem: NSObject, NSMenuDelegate {
     }
 
     private func refreshGlyph() {
-        let glyph: String
-        if engineLoading      { glyph = "⏳🤖" }
-        else if isPaused      { glyph = "⏸️🤖" }
-        else                  { glyph = "🤖" }
-        item.button?.title = glyph
-        // The same glyph, repeated on the displays macOS will not put a status
-        // item on. One call site, so the copies cannot say something the original
-        // does not — see `MenuBarMirror`.
-        mirror.setGlyph(glyph)
+        // The picture says bound; the badge in front of it says the two states
+        // that are *not* about where the words go. ⏳ outranks ⏸️ for the ten
+        // seconds it is up, since "will the next sentence reach the engine I just
+        // picked" is the more urgent of the two questions.
+        let badge: String
+        if engineLoading      { badge = "⏳" }
+        else if isPaused      { badge = "⏸️" }
+        else                  { badge = "" }
+        let icon = isBound ? Self.boundIcon : Self.idleIcon
+        item.button?.image = icon
+        item.button?.title = badge
+        // The same picture and badge, repeated on the displays macOS will not put
+        // a status item on. One call site, so the copies cannot say something the
+        // original does not — see `MenuBarMirror`.
+        mirror.set(icon: icon, badge: badge)
+    }
+
+    /// The two menu-bar pictures, scaled to the bar's height once.
+    ///
+    /// Not templates: the ring is the whole signal in the bound one, and a
+    /// template image is drawn as a silhouette in a single colour. macOS dims
+    /// them on an inactive display either way, which is the behaviour that was
+    /// asked for.
+    private static let idleIcon = loadIcon("walkie-idle")
+    private static let boundIcon = loadIcon("walkie-bound")
+
+    private static func loadIcon(_ name: String) -> NSImage? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        let height: CGFloat = 18
+        let size = NSSize(width: (image.size.width / image.size.height * height).rounded(),
+                          height: height)
+        let scaled = NSImage(size: size)
+        scaled.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(origin: .zero, size: size))
+        scaled.unlockFocus()
+        return scaled
     }
 
     /// Kept in step with the app's state by `AppDelegate`, not read on demand: the
@@ -201,6 +244,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     func setDestination(_ line: String?, icon: NSImage?) {
         destination = line
         header.image = icon
+        isBound = line != nil
+        refreshGlyph()
         applyHeader()
     }
 

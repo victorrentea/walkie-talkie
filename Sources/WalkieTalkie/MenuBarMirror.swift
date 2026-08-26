@@ -28,7 +28,8 @@ final class MenuBarMirror {
     }
 
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
-    private var glyph = "🤖"
+    private var icon: NSImage?
+    private var badge = ""
     private var timer: Timer?
 
     func start() {
@@ -50,12 +51,22 @@ final class MenuBarMirror {
         panels = [:]
     }
 
-    /// The same string the menu bar shows — `🤖`, `⏸️🤖`, `⏳🤖`.
-    func setGlyph(_ value: String) {
-        guard glyph != value else { return }
-        glyph = value
-        for (_, panel) in panels { (panel.contentView?.subviews.first as? NSTextField)?.stringValue = value }
+    /// The same picture and badge the real status item shows — the walkie-talkie
+    /// with its ring when bound, without it at rest, behind a `⏸️` or `⏳`.
+    func set(icon: NSImage?, badge: String) {
+        guard icon !== self.icon || badge != self.badge else { return }
+        self.icon = icon
+        self.badge = badge
+        for (_, panel) in panels { apply(to: panel) }
         sync()
+    }
+
+    /// Both subviews of a mirror panel, in the order the real item draws them:
+    /// the badge in front, the picture after it.
+    private func apply(to panel: NSPanel) {
+        guard let root = panel.contentView else { return }
+        (root.subviews.first { $0 is NSTextField } as? NSTextField)?.stringValue = badge
+        (root.subviews.first { $0 is NSImageView } as? NSImageView)?.image = icon
     }
 
     private func sync() {
@@ -70,7 +81,7 @@ final class MenuBarMirror {
             guard id != active else { continue }
             live.insert(id)
             let panel = panels[id] ?? makePanel(id: id)
-            (panel.contentView?.subviews.first as? NSTextField)?.stringValue = glyph
+            apply(to: panel)
             place(panel, on: screen)
             panel.orderFront(nil)
         }
@@ -82,7 +93,7 @@ final class MenuBarMirror {
     }
 
     private func makePanel(id: CGDirectDisplayID) -> NSPanel {
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 30, height: 22),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 34, height: 22),
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isOpaque = false
@@ -111,12 +122,20 @@ final class MenuBarMirror {
         // it is not part of what is being recorded.
         panel.sharingType = .none
 
-        let label = NSTextField(labelWithString: glyph)
-        label.font = .systemFont(ofSize: 14)
-        label.alignment = .center
-        label.frame = NSRect(x: 0, y: 2, width: 30, height: 18)
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 30, height: 22))
+        // Badge then picture, left to right, the same order the real status item
+        // lays them out in — a mirror that reads differently from the thing it
+        // mirrors is worse than no mirror.
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 34, height: 22))
+        let label = NSTextField(labelWithString: badge)
+        label.font = .systemFont(ofSize: 12)
+        label.alignment = .right
+        label.frame = NSRect(x: 0, y: 3, width: 12, height: 16)
         content.addSubview(label)
+
+        let image = NSImageView(frame: NSRect(x: 14, y: 2, width: 18, height: 18))
+        image.image = icon
+        image.imageScaling = .scaleProportionallyUpOrDown
+        content.addSubview(image)
         panel.contentView = content
 
         panels[id] = panel

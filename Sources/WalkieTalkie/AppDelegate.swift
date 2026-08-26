@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import ApplicationServices
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -184,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
+        Self.startAtLogin()
         Outbox.prepare()
         overlay = RelayWindow()
 
@@ -196,13 +198,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onPickEngine = { [weak self] engine in self?.pickEngine(engine) }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
 
-        // The setting outlives the process, so a relay that starts up already set
-        // to Local Whisper brings the model up **now** rather than on the first
-        // dictation. Otherwise the choice would silently cost ten seconds at the
-        // worst possible moment — mid-sentence, with an agent waiting — and the
-        // fallback would quietly hand that dictation to Wispr, which is exactly
-        // the confusion this feature must not create.
-        if TranscriptionEngine.current == .whisper { pickEngine(.whisper) }
+        // **The model is not brought up at launch any more**, even when the
+        // setting says Local Whisper.
+        //
+        // It used to be, on the argument that loading it lazily would cost ten
+        // seconds mid-sentence. That argument was made when the relay was started
+        // per session by ⌘⌃D and lived for as long as Victor was dictating.
+        // Since 2026-08-26 it starts at **login** and sits there all day, so
+        // eager loading means 2.5 GB of unified memory held from breakfast for a
+        // dictation that may not come until the afternoon — on a Mac whose GPU
+        // memory is also what the training demos run in.
+        //
+        // The ten seconds are not paid mid-sentence either: the load is kicked
+        // off by the two gestures that mean a dictation is coming — ⌘⌃D binding a
+        // terminal, and mouse 5 on an engine that is not up yet — and both say
+        // ⏳ while it happens.
+        if TranscriptionEngine.current == .whisper {
+            Log.info("engine is whisper — helper stays down until a session starts")
+        }
         status.setPaused(paused)
         syncLocalCapture()
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
@@ -214,6 +227,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
+        // The same call the loopback route makes, from the key Victor actually
+        // presses. Already off the main thread — the tap dispatches globally —
+        // which this needs: it spends several subprocesses working out what it
+        // is looking at.
+        hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
         picker.onUnbind = { [weak self] in self?.unbindTerminal() }
         picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
         // Enters exactly where `wispr.onTranscript` does, so what it exercises
@@ -478,8 +496,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startLocalRecording() {
         guard !paused else { return }
         guard whisper.ready else {
-            overlay.flash("⚠️ the local model is not up — nothing was recorded", duration: 5)
-            Log.error("mouse 5 pressed with no local model ready")
+            // Not an error any more, since the helper is deliberately down until
+            // something says a dictation is coming — this press is one of the two
+            // things that say it. It still costs him this sentence, which is why
+            // the banner is worded as a wait rather than as a failure.
+            if !engineLoading {
+                Log.info("mouse 5 with the model down — bringing it up now")
+                pickEngine(.whisper)
+            }
+            overlay.flash("⏳ the local model is coming up — say it again in a moment", duration: 6)
             return
         }
 
@@ -501,7 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listening = true
         syncBorrowedGestures()
         overlay.setListening(true)
-        overlay.setLocalListening(true)
+        overlay.setLocalListening(true, model: whisper.modelName)
         publishShotCount()
         publishPicks()
     }
@@ -564,9 +589,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// neither is enough: the chip is where he is looking, and the menu bar is
     /// the half that survives him typing, since macOS hides the pointer then and
     /// the chip goes with it.
+    /// Whether the helper is on its way up right now — asked by the two gestures
+    /// that can kick the load off, so neither starts a second one on top of it.
+    private var engineLoading = false
+
     private func setEngineLoading(_ loading: Bool) {
+        engineLoading = loading
         status.setEngineLoading(loading)
         overlay.setEngineLoading(loading)
+    }
+
+    /// Register the app as a login item, once, quietly.
+    ///
+    /// **The relay has to be up before Victor starts talking**, and since ⌘⌃D
+    /// moved into this app there is nothing else left to launch it: the key that
+    /// starts a session is served by the very process that has to be running to
+    /// hear it. A login item is the whole of what that requires — the app is an
+    /// accessory with no window, so starting it costs a menu bar icon and 56 MB,
+    /// and the model it could load is deliberately not loaded until a session
+    /// begins (see `applicationDidFinishLaunching`).
+    ///
+    /// `SMAppService` rather than a LaunchAgent plist: it registers the bundle
+    /// that is running, so a copy moved or renamed cannot leave a stale plist
+    /// pointing at a path with nothing behind it — and Victor can turn it off in
+    /// System Settings → General → Login Items, which is where he would look.
+    /// Already-registered is not an error, and a failure is logged rather than
+    /// shown: an app that cannot register is still an app that runs.
+    private static func startAtLogin() {
+        guard #available(macOS 13, *) else { return }
+        let service = SMAppService.mainApp
+        guard service.status != .enabled else {
+            Log.info("already a login item")
+            return
+        }
+        do {
+            try service.register()
+            Log.info("registered as a login item")
+        } catch {
+            Log.error("could not register as a login item: \(error.localizedDescription)")
+        }
     }
 
     /// `kill -USR1 <pid>` writes what is on screen right now to
@@ -871,6 +932,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             //
             // With no window to fly from — nothing resolved a frame — there is no
             // arrival to wait for and the chip is set at once.
+            // A bind means a dictation is coming, which is the moment to pay for
+            // the model if it is the selected engine and is not up — ten seconds
+            // that overlap him settling into the session, rather than ten seconds
+            // in the middle of the first sentence.
+            if TranscriptionEngine.current == .whisper, !self.whisper.ready, !self.engineLoading {
+                self.pickEngine(.whisper)
+            }
             // **The chip is set first, and the rectangle flies into it.** It used
             // to be the other way round — the label appeared when the rectangle
             // landed — which meant the flight ended on empty screen and the
@@ -885,7 +953,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.overlay.flash("walkie: started in \(bound.label)\(unguarded)",
                                duration: BindFlight.duration)
             BindFlight.fly(from: frame, to: { [weak self] in
-                self?.overlay.chipCentre ?? NSEvent.mouseLocation
+                self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
             })
         }
         return Self.describe(bound)
@@ -1561,7 +1629,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let words = shown.split(whereSeparator: { $0.isWhitespace }).count
             let hold = min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
-            if self.overlay.showSentPrompt(shown, hold: hold) {
+            // Oldest first, context frame included — it is picture one of the
+            // enumeration far more often than it is a spare, and a strip that
+            // skipped it would disagree with the count in the row above.
+            let frames = ([screen] + attached).compactMap { $0 }
+            if self.overlay.showSentPrompt(shown, hold: hold, shots: frames) {
                 self.held = message
             } else {
                 self.commit(message)

@@ -601,6 +601,21 @@ final class TerminalBinding {
     /// into the tab and presses Return rather than starting anything. That is
     /// exactly the gesture wanted here, and it reaches a tab that is not in
     /// front, not on this Space, and not in the active window.
+    ///
+    /// **The Return is a second `do script`, with an empty string.** `do script`
+    /// writes the text and the `\r` in **one write** — measured with a raw-mode
+    /// reader logging read boundaries: `109 b'…like]\r'`, one chunk — and a TUI
+    /// in raw mode reads a chunk that ends in `\r` as a **paste**, keeping the
+    /// return as a newline in its prompt instead of submitting. So the dictation
+    /// sat there unsent, which is exactly what Victor reported for a terminal on
+    /// 2026-08-26, and exactly the bug the IDE bridges were fixed for a few
+    /// hours earlier. `do script ""` sends a bare `\r` in a read of its own,
+    /// which is a keypress: `17 b'hello-from-split\r'` then `1 b'\r'`.
+    ///
+    /// It costs an empty line in the two cases the paste reading does not apply
+    /// to — a TUI that submitted on the first chunk gets an empty submit, a
+    /// shell gets an empty command — and both are nothing. The shell case is
+    /// mostly unreachable anyway: the guard refuses to deliver at a prompt.
     private static func writeToTerminalApp(_ text: String, tty: String) -> Bool {
         let script = """
         tell application "Terminal"
@@ -609,6 +624,8 @@ final class TerminalBinding {
                     try
                         if tty of t is "\(escape(tty))" then
                             do script "\(escape(text))" in t
+                            delay 0.12
+                            do script "" in t
                             return "ok"
                         end if
                     end try

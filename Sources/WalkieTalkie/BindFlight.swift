@@ -85,7 +85,13 @@ enum BindFlight {
     private static var timer: Timer?
     private static var startedAt: CFTimeInterval = 0
     private static var origin: CGRect = .zero
-    private static var target: () -> CGPoint = { NSEvent.mouseLocation }
+    /// Asked every frame for **the chip's frame**, not just its centre: the
+    /// rectangle now ends the exact size of the label it is flying into, so the
+    /// last thing it does before sliding under it is match its outline. It used
+    /// to shrink to a fixed 5% of the captured window — a token whose size said
+    /// nothing about where it was going, and which arrived as a different shape
+    /// from the thing that was supposed to have become it.
+    private static var target: () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) }
 
     /// Fly from `source` to wherever the cursor is, for the whole 2s — the mouse
     /// is re-read every frame rather than sampled once, so the rectangle chases
@@ -103,7 +109,7 @@ enum BindFlight {
     /// and one that goes *into* it. Defaults to the pointer for callers with no
     /// chip to aim at.
     static func fly(from source: CGRect,
-                    to destination: @escaping () -> CGPoint = { NSEvent.mouseLocation },
+                    to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
                     landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
@@ -174,13 +180,20 @@ enum BindFlight {
         let flight = max(0, (t - holdFraction) / (1 - holdFraction))
         let eased = ease(flight)
 
-        let scale = 1 - (1 - endScale) * eased
         let from = CGPoint(x: origin.midX, y: origin.midY)
         // Re-read every frame: this is what makes it follow the hand.
-        let to = target()
+        let destination = target()
+        let to = CGPoint(x: destination.midX, y: destination.midY)
         let centre = CGPoint(x: from.x + (to.x - from.x) * eased,
                              y: from.y + (to.y - from.y) * eased)
-        let size = CGSize(width: origin.width * scale, height: origin.height * scale)
+        // Toward the chip's own width and height, or — with no chip to land in —
+        // the old fixed fraction, so a caller without one still gets a token
+        // rather than a rectangle that never shrinks.
+        let end = destination.isEmpty
+            ? CGSize(width: origin.width * endScale, height: origin.height * endScale)
+            : destination.size
+        let size = CGSize(width: origin.width + (end.width - origin.width) * eased,
+                          height: origin.height + (end.height - origin.height) * eased)
         // The rectangle in global screen coordinates, computed once and then
         // expressed in each screen's own — so every display draws the same shape
         // and it crosses their edges continuously rather than jumping.
@@ -189,7 +202,11 @@ enum BindFlight {
 
         let fade = t > 1 - fadeFraction ? CGFloat((1 - t) / fadeFraction) : 1
         let fill = NSColor.systemBlue.withAlphaComponent(0.45 * eased).cgColor
-        let border = max(1.5, 4 * (0.35 + 0.65 * scale))
+        // The border thins as the shape does, and "how far along is it" is now
+        // read off the flight itself rather than off a scale factor that no
+        // longer exists — the rectangle interpolates toward the chip's size, not
+        // toward a fraction of its own.
+        let border = max(1.5, 4 * (1 - 0.65 * eased))
         let radius = min(10, min(size.width, size.height) / 4)
 
         // Implicit animations off: every frame is already the animation, and

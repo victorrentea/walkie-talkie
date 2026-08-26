@@ -19,7 +19,7 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
-  and `engineText` beside the pulsing 🔴 (`Recording with Wispr Flow` / `Recording with Local Whisper`)
+  and `engineText` beside the pulsing 🔴 (`Listening with Wispr Flow` / `Listening with <model id>`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
@@ -33,9 +33,8 @@ Current strings live in `RelayWindow.swift`:
 
 Since 2026-08-15 the relay can be **pointed at a terminal**, and every dictation
 from then on is typed into that session and submitted — no `/relay`, no skill, no
-`Monitor` armed on the outbox, no label filter to get right. `⌘⌃D` (owned by
-Victor Addons, see below) `POST`s `/bind` and the relay grabs whatever terminal
-is in front.
+`Monitor` armed on the outbox, no label filter to get right. `⌘⌃D` (this app's own key since 2026-08-26, see below) binds whatever
+terminal is in front.
 
 **The outbox is still written, always.** A binding is a second destination, not a
 replacement: `AppDelegate.commit` writes the JSONL line and *then* delivers, so
@@ -388,7 +387,7 @@ quick presses bind it and then stop.
   that made one. It goes through the same `endSession` the ✕ takes, so the outbox
   still gets its `session_end` and an agent watching the queue learns the overlay
   is gone rather than waiting on it.
-- **Autorepeat is swallowed** in Victor Addons' tap. With two presses meaning
+- **Autorepeat is swallowed** in this app's tap (`HotkeyTap`). With two presses meaning
   "stop", a key held a moment too long would otherwise bind and immediately end
   the session it had just started — the one input mistake this gesture cannot
   afford.
@@ -418,19 +417,29 @@ prompt, the countdown, the outbox line, the delivery — was otherwise reachable
 only by talking into a microphone, which made the one part of this app that types
 into a live session the one part nobody could test at a desk.
 
-### ⌘⌃D lives in Victor Addons
+### ⌘⌃D is this app's own key (since 2026-08-26)
 
-`WalkieTalkieBinder.swift`, there, not here. The relay is started per session and
-is down most of the time; Addons is a login item and is always up, so a binding
-key that needed the relay running first would need the trip into a terminal the
-whole feature exists to remove. A cold press therefore **launches the relay**
-(`open -g`, and the `-g` is load-bearing: the relay decides what to bind by
-asking which app is frontmost, so a launch that brought anything forward would
-spoil the very bind it enables), waits for the listener, then binds.
+`HotkeyTap.onBindHotkey` → `AppDelegate.bindFrontmostTerminal`, the same call the
+loopback `POST /bind` makes.
 
-It is also the **only** owner of that key. The relay has its own event tap, and
-two taps claiming ⌘⌃D would both fire on one press. NB it shadows the system-wide
-⌘⌃D "look up in dictionary".
+It lived in **Victor Addons** (`WalkieTalkieBinder.swift`) until then, and the
+reason was real at the time: the relay was started per session and was down most
+of the time, while Addons is a login item, so a cold press had to *launch* the
+relay (`open -g`) before it could ask it to bind. That whole apparatus is gone
+now that this app **starts at login itself** (`AppDelegate.startAtLogin`,
+`SMAppService.mainApp`) — an app that is already running does not need another
+app to launch it, and a key served by the process it acts on cannot go stale
+against it.
+
+Nothing about ⌘⌃D remains in Addons: no binder, no banner, no hotkey branch. The
+cheat sheet still lists the key, display-only, exactly the way it lists Wispr
+Flow's ⌘⌃W — the sheet answers "what does this combination do on **this Mac**",
+which a key owned by another app still answers.
+
+It is still the **only** owner: two taps claiming ⌘⌃D would both fire on one
+press. Autorepeat is swallowed here now (a held key would bind and then
+immediately stop the session it started). NB it shadows the system-wide ⌘⌃D
+"look up in dictionary".
 
 Binding takes the **first port that answers**, not all of them the way the Chrome
 extension does: pointing every relay on the machine at one terminal would mean

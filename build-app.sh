@@ -32,6 +32,12 @@ cp "$BIN" "$MACOS/$APP_NAME"
 mkdir -p "$CONTENTS/Resources"
 cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
 
+# The menu bar item's two faces: the device alone at rest, the full icon with its
+# ring once the relay is pointed at a terminal. Copied rather than declared as SPM
+# resources because this target has none — the bundle is assembled here.
+cp "$DIR/assets/walkie-idle.png" "$CONTENTS/Resources/walkie-idle.png"
+cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

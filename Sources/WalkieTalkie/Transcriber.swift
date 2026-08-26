@@ -90,6 +90,13 @@ final class LocalWhisper {
     private var toHelper: FileHandle?
     private var fromHelper: FileHandle?
     private var buffer = Data()
+    /// What the helper said it loaded, e.g. `mlx-community/whisper-large-v3-turbo`.
+    ///
+    /// Read back rather than hardcoded: the id lives in `whisper_helper.py` and is
+    /// overridable through `RELAY_WHISPER_MODEL`, so a copy on this side would be
+    /// a second answer to a question that already has one — and the row it feeds
+    /// exists precisely so Victor can see *which* model is about to be believed.
+    private(set) var modelName: String?
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.whisper")
     private(set) var ready = false
 
@@ -162,6 +169,7 @@ final class LocalWhisper {
             }
             if let ok = hello["ready"] as? Bool, ok {
                 self.ready = true
+                self.modelName = hello["model"] as? String
                 Log.info("whisper helper ready — \(hello["model"] as? String ?? "?")")
                 onReady(nil)
             } else {
@@ -175,6 +183,7 @@ final class LocalWhisper {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.ready = false
+            self.modelName = nil
             self.toHelper?.closeFile()
             self.proc?.terminate()
             self.proc = nil

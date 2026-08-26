@@ -41,6 +41,12 @@ final class HotkeyTap {
     /// recording. Fired on the press only — the release is swallowed with it and
     /// says nothing, because this is a toggle and not a push-to-talk.
     var onLocalToggle: (() -> Void)?
+    /// ⌘⌃D — point the relay at the terminal in front, or end the session when it
+    /// is already pointed there. Owned here since 2026-08-26; it used to live in
+    /// Victor Addons, which had to launch this app before it could ask it to
+    /// bind. Now that the relay starts at login there is nothing to launch, and
+    /// the key belongs to the app it acts on.
+    var onBindHotkey: (() -> Void)?
 
     /// Wispr is recording **and** the relay is forwarding — the only window in
     /// which mouse 4 is ours. Written from the main thread, read from the tap
@@ -80,7 +86,8 @@ final class HotkeyTap {
 
     private let stateLock = NSLock()
 
-    private let VK_P: CGKeyCode = 0x23
+    private let VK_D: CGKeyCode = 0x02
+private let VK_P: CGKeyCode = 0x23
     private let VK_F3: CGKeyCode = 0x63
     private let VK_RETURN: CGKeyCode = 0x24        // Return
     private let VK_KEYPAD_ENTER: CGKeyCode = 0x4C  // Enter (keypad / Fn-Return)
@@ -222,6 +229,21 @@ final class HotkeyTap {
         if keyCode == VK_F3 && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
             let cursor = NSEvent.mouseLocation
             DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
+            return nil
+        }
+
+        // ⌘⌃D, and not ⌘⌃⌥D — that one is Victor Addons' dark-mode toggle, and
+        // the two are told apart by ⌥ alone.
+        //
+        // **Autorepeat is swallowed, not acted on.** A second press on the target
+        // already bound *ends the session*, so a key held a moment too long would
+        // otherwise bind and immediately stop the session it just started — the
+        // one input mistake this gesture cannot afford. The event is eaten either
+        // way, so nothing downstream sees the repeat (it shadows the system-wide
+        // ⌘⌃D "look up in dictionary", which is deliberate and long-standing).
+        if keyCode == VK_D && cmd && ctrl && !opt {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            DispatchQueue.global().async { [weak self] in self?.onBindHotkey?() }
             return nil
         }
 

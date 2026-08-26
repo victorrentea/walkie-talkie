@@ -21,6 +21,16 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let hintLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
+    /// The pictures this message is carrying, drawn under the words it is
+    /// carrying them with.
+    ///
+    /// The prompt panel listed them as `📸 ×2 0:38` — a count and two offsets,
+    /// which answers *how many* and *when* and leaves the only question worth a
+    /// panel unanswered: **did I photograph the right thing?** This is the last
+    /// instant at which the answer is free, since the Cancel clock is still
+    /// running; afterwards it costs a trip into a Caches folder.
+    private let shotsRow = NSView()
+    private var shotViews: [NSImageView] = []
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
     private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 116, height: 28))
     /// **The countdown moved onto Send.** The clock was on Cancel, which made the
@@ -100,6 +110,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private var listening = false
     /// The relay's own microphone is the one that is open, not Wispr's.
     private var localListening = false
+    /// Which local model is loaded — `mlx-community/whisper-large-v3-turbo` —
+    /// shown in full while it is the one listening.
+    private var localModel: String?
     private var hovering = false
 
     private var followTimer: Timer?
@@ -113,6 +126,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
+    /// Paths of the frames riding with the held prompt, newest last.
+    private var promptShots: [String] = []
     private var promptTimer: Timer?
     /// When the held prompt is due to be released. Drives the Cancel countdown,
     /// so the button says how long Victor still has rather than making him guess.
@@ -153,19 +168,22 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// **One face for the whole overlay, and one scale.**
     ///
     /// The title used to be the system face and everything under it monospaced,
-    /// which made the chip read as two things stacked rather than one card: the
-    /// folder in one typeface, the row saying what is listening in another,
-    /// three pixels apart. The monospaced face is the one that has to stay — the
-    /// ⌘-pick row carries `div.card > span.price`, which a proportional face
-    /// turns into prose — so it is the one everything else joined.
+    /// which made the chip read as two things stacked rather than one card. They
+    /// are one face now, and it is the **system** face: unifying them on the
+    /// monospaced one was tried first and Victor rejected it on sight — this
+    /// panel is prose (`Listening with …`, a dictated sentence, `started in
+    /// petclinic`), and a terminal face makes prose look like output. The one
+    /// row with a real claim to monospace is the ⌘-pick selector, and a
+    /// selector reads fine in the system face at this size; four rows agreeing
+    /// is worth more than one row's alignment.
     ///
     /// Sizes are the old ones ×1.3, asked for after a session across the room
     /// from the screen: 13 → 17, 12 → 16, 11 → 14. Every box the text sits in is
     /// scaled with it (`recordRowHeight`, `titleRowHeight`, the glyph sizes), or
     /// the letters grow into a row that clips them.
-    private let titleFont = NSFont.monospacedSystemFont(ofSize: 17, weight: .semibold)
-    private let promptFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
-    private let hintFont = NSFont.monospacedSystemFont(ofSize: 17, weight: .regular)
+    private let titleFont = NSFont.systemFont(ofSize: 17, weight: .semibold)
+    private let promptFont = NSFont.systemFont(ofSize: 16)
+    private let hintFont = NSFont.systemFont(ofSize: 17)
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
@@ -239,7 +257,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// transcript nothing else can double-check.
     private var engineText: String? {
         guard listening, !paused else { return nil }
-        return "Listening with " + (localListening ? "Local Whisper" : "Wispr Flow")
+        guard localListening else { return "Listening with Wispr Flow" }
+        // **The model's own id, in full.** `Local Whisper` names a category, and
+        // the category has not been the interesting half since the local engine
+        // stopped being one fixed thing: `RELAY_WHISPER_MODEL` swaps it, and the
+        // whole reason the row exists is to say which recogniser is about to be
+        // believed. The id is what a comparison is written down against.
+        return "Listening with " + (localModel ?? "Local Whisper")
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -396,8 +420,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         recordRow.isHidden = true
         root.addSubview(recordRow)
 
-        // Monospaced, like the recording row: what it carries is a CSS selector,
-        // and a proportional font makes `div.card > span.price` read as prose.
+        // Same face as every other row (see `titleFont`): it carries a CSS
+        // selector, which was the argument for monospace here, and that argument
+        // lost to the panel reading as one thing.
         pickGlyph.image = Self.browserIcon
         pickGlyph.imageScaling = .scaleProportionallyUpOrDown
         pickGlyph.imageAlignment = .alignLeft
@@ -410,7 +435,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         pickRow.isHidden = true
         root.addSubview(pickRow)
 
-        selectionLabel.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        selectionLabel.font = .systemFont(ofSize: 14)
         selectionLabel.textColor = .secondaryLabelColor
         selectionLabel.lineBreakMode = .byTruncatingTail
         selectionLabel.maximumNumberOfLines = 1
@@ -423,6 +448,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         promptLabel.isHidden = true
         promptLabel.maximumNumberOfLines = 0        // wrap freely; the height follows
         root.addSubview(promptLabel)
+
+        shotsRow.isHidden = true
+        root.addSubview(shotsRow)
 
         closeButton.isHidden = true          // revealed on hover, like a notification
         closeButton.onClick = { [weak self] in self?.onEndSession?() }
@@ -437,7 +465,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // Left of Cancel, and not red: it is the button that does what he already
         // meant to do. Red is kept for the one that throws the dictation away.
         sendButton.isHidden = true
-        sendButton.accent = .controlAccentColor
+        // Green for go, red for stop — the pair reads without being read, which
+        // is the point of a control that has a clock running on it.
+        sendButton.accent = .systemGreen
         sendButton.onClick = { [weak self] in self?.resolvePrompt(send: true) }
         root.addSubview(sendButton)
 
@@ -493,12 +523,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// of the way of the thing being pointed at.
     private let anchorGap = NSSize(width: 10, height: 22)
 
-    /// The middle of the chip in screen coordinates — what the bind rectangle
-    /// flies into. Asked for live, since the chip is following the pointer while
-    /// the rectangle is in the air.
-    var chipCentre: CGPoint {
-        CGPoint(x: panel.frame.midX, y: panel.frame.midY)
-    }
+    /// The chip's frame in screen coordinates — where the bind rectangle is
+    /// flying, and what size it should be when it gets there. Asked for live,
+    /// since the chip is following the pointer while the rectangle is in the air
+    /// and it resizes under it as rows come and go.
+    var chipFrame: CGRect { panel.frame }
 
     /// Tracking has two states, and the second one is what keeps the ✕ reachable.
     ///
@@ -781,6 +810,20 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             promptLabel.isHidden = true
         }
 
+        // The frames, in a strip under the words — oldest first, the same order
+        // the agent will read them in and the same order the offsets are listed.
+        if sentPrompt != nil, !promptShots.isEmpty {
+            let height = layoutShots(width: innerWidth)
+            if height > 0 {
+                shotsRow.isHidden = false
+                rows.append((shotsRow, height))
+            } else {
+                shotsRow.isHidden = true
+            }
+        } else {
+            shotsRow.isHidden = true
+        }
+
         // Its own row rather than an overlay in a corner: the prompt can be many
         // lines long, and a button floating over the last one is a button that
         // sometimes sits on top of a word.
@@ -971,6 +1014,57 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.frame = NSRect(x: column + gap, y: 0,
                                   width: max(0, width - column - gap), height: titleRowHeight)
     }
+
+    /// Lay the thumbnails out in one row and answer how tall it came out.
+    ///
+    /// **One row, never two.** The panel is already as wide as half the screen
+    /// with a clock running on it; a grid of frames would make it a gallery, and
+    /// what is being asked here is "is that the right screen?", which a strip of
+    /// small frames answers at a glance. More frames than fit are dropped from
+    /// the *front* — the newest are the ones he has not seen — and the row keeps
+    /// its height so the panel does not jump as they load.
+    ///
+    /// The images are the **small** copies already written beside each frame
+    /// (800px), so this costs a decode of something the size of a screenshot
+    /// thumbnail rather than of a retina desktop.
+    private func layoutShots(width: CGFloat) -> CGFloat {
+        shotViews.forEach { $0.removeFromSuperview() }
+        shotViews = []
+
+        let height = Self.shotThumbHeight
+        var x: CGFloat = 0
+        for path in promptShots.reversed() {
+            guard let image = NSImage(contentsOfFile: path), image.size.height > 0 else { continue }
+            let w = (image.size.width / image.size.height * height).rounded()
+            guard x + w <= width else { break }
+            let view = NSImageView(frame: NSRect(x: 0, y: 0, width: w, height: height))
+            view.image = image
+            view.imageScaling = .scaleProportionallyUpOrDown
+            view.wantsLayer = true
+            view.layer?.cornerRadius = 4
+            view.layer?.masksToBounds = true
+            view.layer?.borderWidth = 1
+            view.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
+            shotViews.append(view)
+            x += w + Self.shotThumbGap
+        }
+        guard !shotViews.isEmpty else { return 0 }
+
+        // Built newest-first so the ones that fit are the newest; drawn oldest
+        // first, because that is the order they were taken in and the order the
+        // offsets under them are listed in.
+        var cursor: CGFloat = 0
+        for view in shotViews.reversed() {
+            view.frame.origin = NSPoint(x: cursor, y: 0)
+            shotsRow.addSubview(view)
+            cursor += view.frame.width + Self.shotThumbGap
+        }
+        shotsRow.frame.size = NSSize(width: width, height: height)
+        return height
+    }
+
+    private static let shotThumbHeight: CGFloat = 54
+    private static let shotThumbGap: CGFloat = 6
 
     private func layoutPickRow(width: CGFloat) {
         let glyphWidth = pickGlyphWidth
@@ -1250,9 +1344,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// than watching Wispr do it. Set around `setListening`, which stays the one
     /// switch for everything that is the same in both modes — the pulse, the row,
     /// the borrowed gestures.
-    func setLocalListening(_ value: Bool) {
-        guard localListening != value else { return }
+    func setLocalListening(_ value: Bool, model: String? = nil) {
+        guard localListening != value || (value && model != localModel) else { return }
         localListening = value
+        if value { localModel = model }
         layoutContent()
     }
 
@@ -1316,7 +1411,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// Returns false if there was nothing worth showing, in which case the caller
     /// still owns the message and must release it itself.
     @discardableResult
-    func showSentPrompt(_ text: String, hold: TimeInterval) -> Bool {
+    func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = []) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         // A prompt still on screen has not been released yet. Let it go first, so
@@ -1324,6 +1419,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         resolvePrompt(send: true)
 
         sentPrompt = trimmed
+        promptShots = shots
         // The selection is already part of what is displayed here, so drop the
         // separate preview row rather than showing it twice.
         selection = nil
@@ -1372,6 +1468,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         countdownTimer = nil
         promptDeadline = nil
         sentPrompt = nil
+        promptShots = []
         layoutContent()
         reposition()
         refreshOpacity()
@@ -1544,8 +1641,7 @@ final class CloseButton: NSView {
 /// swallow the first click activating the window. This one is always live.
 final class PillButton: NSView {
     var onClick: (() -> Void)?
-    /// What it looks like under the cursor. Red for the destructive one, the
-    /// system accent for the one that simply does the expected thing sooner.
+    /// What it looks like under the cursor: green on Send, red on Cancel.
     var accent: NSColor = .systemRed
     var title: String = "" {
         didSet { guard title != oldValue else { return }; needsDisplay = true }
@@ -1573,7 +1669,7 @@ final class PillButton: NSView {
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 14, weight: .medium),
             .foregroundColor: hot ? NSColor.white : NSColor.labelColor,
             .paragraphStyle: style,
         ]
