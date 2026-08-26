@@ -18,7 +18,8 @@ are unaffected, and the dictation content itself is obviously whatever language
 he spoke.
 
 Current strings live in `RelayWindow.swift`:
-- `Self.shotHint` + `recordText` — the recording row (`🔴 📸 ×2 🖱️/F3`)
+- `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
+  and `engineText` beside the pulsing 🔴 (`Wispr Flow` / `Local Whisper`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
@@ -496,18 +497,34 @@ entire point of the state is reassurance that speech is being captured.
 Paused wears ⏹️ because it is the one state that has to be readable from across a
 room. Opacity separates it further (1.00 vs 0.30).
 
-## The recording row
+## The recording rows
 
-While dictating and not paused, one row sits directly under the title:
+While dictating and not paused, three rows sit directly under the title, one
+glyph column and one text column:
 
 ```
 🤖 ai@master
-🔴 📸 ×2 🖱️/F3
+🔴 Wispr Flow                       ← something is listening, and this is what
+📸 2 — mouse/F3 for more shots      ← what the message is carrying
+[chrome] — ⌘⇧+click to select element
 ```
 
-That is the whole of what the overlay says during a dictation, and it is Victor's
-list, not a designer's: **how many pictures this message is carrying, and the two
-ways to add another.** The count includes the automatic context capture — he took
+It was one row (`🔴 📸 ×2 🖱️/F3`) until 2026-08-26, packed as tight as it would
+go on the argument that every character costs width over the work underneath.
+Two things made it three rows. The 🔴 acquired a second meaning the moment the
+relay grew a microphone of its own — *recording* was no longer the whole story,
+because **which recogniser** is now a live question — and a pulse cannot carry a
+name. And once one row spelled something out, the abbreviations beside it read as
+a different kind of thing rather than as a list.
+
+**The glyphs share one column** (`glyphColumn`, as wide as the widest of the
+three) so the text starts at the same x on every row. Measured per row — an
+emoji, a second emoji and a bitmap are three different widths — they lined up
+with nothing, which is what makes three rows read as three unrelated lines
+instead of one thing being assembled.
+
+Rows two and three are still Victor's list, not a designer's: **how many pictures
+this message is carrying, and the two ways to add another.** The count includes the automatic context capture — he took
 that one by starting to talk, and a count that skipped it would disagree with
 what the agent receives. It goes up live, so taking a shot needs no other receipt.
 
@@ -527,12 +544,11 @@ they change. The mouse is named first because it is the half that needs saying:
 F3 has always been there, while the back button is borrowed only for the length
 of the dictation.
 
-**The glyph alone names the mouse** — `🖱️/F3`, not `🖱️back/F3`. The word said
-*which button* exactly once, on the first dictation after it was introduced;
-after that the hand knows, and what remained was three characters of width taken
-out of a row riding over the work he is looking at. The 🖱️ still has to be
-there — that half of the pair is the one a keyboard-shaped hint would never
-suggest.
+**The mouse is named in words now** — `— mouse/F3 for more shots`, where it was
+`🖱️/F3`. The glyph-only form was right while the row was one line of shorthand
+sitting under a title; beside a row that says `Wispr Flow` in full it reads as a
+different register. Which button is still unsaid, and still does not need saying:
+the hand knows by the second dictation.
 
 ## Two gestures are borrowed, and only while dictating
 
@@ -1157,11 +1173,11 @@ empty space the whole time.
 Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
-Row heights, for checking a layout change without seeing it: title 16, folder
-row 15, recording row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between
-them, `pad` 12 all round. So the idle chip is 40 tall, 61 once bound (the folder
-row and its gap), and dictating with a selection is 84 (107 with a pick
-waiting).
+Row heights, for checking a layout change without seeing it: title 16, engine row
+17, shots row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between them, `pad`
+12 all round. So the idle chip is 40 tall — bound is the same, since the folder
+moved *into* the title row — and dictating is 40 + 3 × 23 for the three rows and
+their gaps, plus 21 more with a selection.
 
 **No screen capture can contain this window**, and `RELAY_CAPTURABLE=1` no
 longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both

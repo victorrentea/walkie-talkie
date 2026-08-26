@@ -23,10 +23,20 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
     private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 96, height: 22))
-    /// The recording row: a pulsing 🔴 and, beside it, how many shots this
-    /// dictation is carrying and the key that adds another.
-    private let recordRow = NSView()
+    /// The engine row: a slowly pulsing 🔴 and the name of whatever is listening.
+    ///
+    /// **Which ear is open is a fact about the dictation, not about the app**, and
+    /// since the relay grew a microphone of its own it is a fact with two possible
+    /// answers — Wispr Flow, or the local model. The pulse says *recording* and
+    /// the name says *into what*; before this they were one glyph saying only the
+    /// first half, at a time when there was nothing else it could have meant.
+    private let engineRow = NSView()
     private let recordDot = NSTextField(labelWithString: "🔴")
+    private let engineInfo = NSTextField(labelWithString: "")
+    /// The recording row: how many shots this dictation is carrying, and how to
+    /// add another.
+    private let recordRow = NSView()
+    private let shotGlyph = NSTextField(labelWithString: "📸")
     private let recordInfo = NSTextField(labelWithString: "")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
@@ -165,7 +175,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// knows by the second dictation. The row rides under the cursor over his
     /// actual work, so every character it does not need is width taken from the
     /// thing he is looking at underneath.
-    private static let shotHint = "🖱️/F3"
+    private static let shotHint = "— mouse/F3 for more shots"
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
@@ -184,14 +194,18 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
-        let row = "📸 ×\(shotCount) \(Self.shotHint)"
-        // Which ear is open, but only when it is the unusual one. On Wispr the
-        // pulsing 🔴 beside this row has always meant "something is hearing you"
-        // and there was only ever one candidate; with the relay holding the
-        // microphone itself, "recording" and "recording *into the local model*"
-        // are different enough to be worth a word — the local engine is the one
-        // on trial, and the one whose transcript nothing else can double-check.
-        return localListening ? "whisper \(row)" : row
+        return "\(shotCount) \(Self.shotHint)"
+    }
+
+    /// What is listening, beside the pulse that says it is listening *now*.
+    ///
+    /// Spelled out rather than abbreviated: it is one word wider than the row
+    /// below it and it answers the question the whole engine switch exists for —
+    /// which of the two recognisers is about to be believed. The local one is on
+    /// trial, and it is the one whose transcript nothing else can double-check.
+    private var engineText: String? {
+        guard listening, !paused else { return nil }
+        return localListening ? "Local Whisper" : "Wispr Flow"
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -209,7 +223,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// mechanic describes the input and leaves the outcome unsaid — and the
     /// outcome is the only half worth a row beside the cursor. The chord and the
     /// mouse still follow it, so the delay is still discoverable by trying it.
-    private static let pickHint = "select element ⌘⇧🖱️"
+    private static let pickHint = "— ⌘⇧+click to select element"
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
     /// he picked once he has.
@@ -323,13 +337,21 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         root.addSubview(hintLabel)
 
         // Two labels rather than one string, because only the dot pulses: an
-        // animation on the whole row would blink the count and the key too, and
-        // a number that fades in and out is a number he has to wait to read.
+        // animation on the whole row would blink the engine's name too, and a
+        // word that fades in and out is a word he has to wait to read.
         recordDot.font = .systemFont(ofSize: 11)
         recordDot.wantsLayer = true
+        engineInfo.font = hintFont
+        engineInfo.textColor = .secondaryLabelColor
+        engineRow.addSubview(recordDot)
+        engineRow.addSubview(engineInfo)
+        engineRow.isHidden = true
+        root.addSubview(engineRow)
+
+        shotGlyph.font = .systemFont(ofSize: 11)
         recordInfo.font = hintFont
         recordInfo.textColor = .secondaryLabelColor
-        recordRow.addSubview(recordDot)
+        recordRow.addSubview(shotGlyph)
         recordRow.addSubview(recordInfo)
         recordRow.isHidden = true
         root.addSubview(recordRow)
@@ -591,12 +613,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
-        let recordWidth = recordText.map { recordRowWidth($0) } ?? 0
+        let engineWidth = engineText.map { rowWidth($0) } ?? 0
+        let recordWidth = recordText.map { rowWidth($0) } ?? 0
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
         let natural = ceil(max(titleWidth + reserve,
-                               max(hintWidth, max(recordWidth, pickWidth)))) + pad * 2
+                               max(hintWidth, max(engineWidth, max(recordWidth, pickWidth))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -627,12 +650,24 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         layoutTitleRow(width: innerWidth)
         rows.append((titleRow, 16))
 
-        // Directly under the title, ahead of the selection: while he is talking
-        // this is the row that changes, and the one he glances down at to check
-        // that the shot he just took landed.
+        // First of the three, because it is the one that is *about* the dictation
+        // rather than about what is riding along with it: something is listening,
+        // and this is what.
+        if let engine = engineText {
+            engineInfo.stringValue = engine
+            layoutGlyphRow(engineRow, glyph: recordDot, label: engineInfo, width: innerWidth)
+            engineRow.isHidden = false
+            rows.append((engineRow, recordRowHeight))
+        } else {
+            engineRow.isHidden = true
+        }
+
+        // Then what the message is carrying: while he is talking this is the row
+        // that changes, and the one he glances down at to check that the shot he
+        // just took landed.
         if let record = recordText {
             recordInfo.stringValue = record
-            layoutRecordRow(width: innerWidth)
+            layoutGlyphRow(recordRow, glyph: shotGlyph, label: recordInfo, width: innerWidth)
             recordRow.isHidden = false
             rows.append((recordRow, recordRowHeight))
         } else {
@@ -748,20 +783,31 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let recordDotGap: CGFloat = 5
 
     private var recordDotWidth: CGFloat { ceil(measure(recordDot.stringValue, font: recordDot.font!)) }
+    private var shotGlyphWidth: CGFloat { ceil(measure(shotGlyph.stringValue, font: shotGlyph.font!)) }
 
-    private func recordRowWidth(_ text: String) -> CGFloat {
-        recordDotWidth + recordDotGap + ceil(measure(text, font: hintFont))
+    /// **One column for all three glyphs**, as wide as the widest of them — the
+    /// pulse, the camera, Chrome's icon.
+    ///
+    /// They used to be measured per row, which is fine for one row and wrong for
+    /// three: an emoji, a second emoji and a bitmap are three different widths, so
+    /// each row's text would start at its own x and the block would read as three
+    /// unrelated lines rather than as one thing being assembled. Aligning the
+    /// *text* is what makes it a list; aligning the glyphs is what makes it a
+    /// column.
+    private var glyphColumn: CGFloat { max(recordDotWidth, max(shotGlyphWidth, pickGlyphWidth)) }
+
+    private func rowWidth(_ text: String) -> CGFloat {
+        glyphColumn + recordDotGap + ceil(measure(text, font: hintFont))
     }
 
-    private func layoutRecordRow(width: CGFloat) {
-        let dotWidth = recordDotWidth
-        recordRow.frame.size = NSSize(width: width, height: recordRowHeight)
-        // The dot sits a pixel high: the emoji's ink is smaller than its line box,
-        // and left on the baseline it hangs below the text beside it.
-        recordDot.frame = NSRect(x: 0, y: 1, width: dotWidth, height: 15)
-        recordInfo.frame = NSRect(x: dotWidth + recordDotGap, y: 0,
-                                  width: max(0, width - dotWidth - recordDotGap),
-                                  height: recordRowHeight)
+    /// The emoji sit a pixel high: their ink is smaller than the line box, and
+    /// left on the baseline they hang below the text beside them.
+    private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSView, width: CGFloat) {
+        row.frame.size = NSSize(width: width, height: recordRowHeight)
+        glyph.frame = NSRect(x: 0, y: 1, width: glyphColumn, height: 15)
+        label.frame = NSRect(x: glyphColumn + recordDotGap, y: 0,
+                             width: max(0, width - glyphColumn - recordDotGap),
+                             height: recordRowHeight)
     }
 
     /// Chrome's icon as the system has it, looked up by bundle id so it is found
@@ -808,7 +854,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private func glyphRowWidth(_ text: String) -> CGFloat {
         pickInfo.stringValue = text
         pickInfo.sizeToFit()
-        return pickGlyphWidth + recordDotGap + ceil(pickInfo.frame.width)
+        return glyphColumn + recordDotGap + ceil(pickInfo.frame.width)
     }
 
     /// The pin is vertically centred on the row rather than sat on the baseline:
@@ -832,10 +878,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private func layoutPickRow(width: CGFloat) {
         let glyphWidth = pickGlyphWidth
         pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
-        pickGlyph.frame = NSRect(x: 0, y: ((pickRowHeight - glyphWidth) / 2).rounded(),
+        // Centred **inside the shared column** rather than at its left edge: it is
+        // the narrow one of the three, and flush-left it would sit a pixel or two
+        // off the two emoji above it.
+        pickGlyph.frame = NSRect(x: ((glyphColumn - glyphWidth) / 2).rounded(),
+                                 y: ((pickRowHeight - glyphWidth) / 2).rounded(),
                                  width: glyphWidth, height: glyphWidth)
-        pickInfo.frame = NSRect(x: glyphWidth + recordDotGap, y: 0,
-                                width: max(0, width - glyphWidth - recordDotGap),
+        pickInfo.frame = NSRect(x: glyphColumn + recordDotGap, y: 0,
+                                width: max(0, width - glyphColumn - recordDotGap),
                                 height: pickRowHeight)
     }
 
@@ -861,6 +911,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // *layer* shadow, since the string-attribute route doesn't render here.
         titleLabel.wantsLayer = true
         recordInfo.wantsLayer = true
+        engineInfo.wantsLayer = true
+        shotGlyph.wantsLayer = true
         pickInfo.wantsLayer = true
         if bare {
             titleLabel.shadow = Self.halo()
@@ -868,6 +920,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             // whole life on the chip, over his editor rather than over the blur.
             recordInfo.shadow = Self.halo()
             recordInfo.textColor = .white
+            engineInfo.shadow = Self.halo()
+            engineInfo.textColor = .white
             // The picked row spends even more of its life on the chip than the
             // recording one: it is up between messages, which is most of the day.
             pickInfo.shadow = Self.halo()
@@ -876,6 +930,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             titleLabel.shadow = nil
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
+            engineInfo.shadow = nil
+            engineInfo.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
         }
