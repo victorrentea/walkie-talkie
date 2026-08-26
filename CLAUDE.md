@@ -19,7 +19,7 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
-  and `engineText` beside the pulsing 🔴 (`Wispr Flow` / `Local Whisper`)
+  and `engineText` beside the pulsing 🔴 (`Recording with Wispr Flow` / `Recording with Local Whisper`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string

@@ -197,15 +197,24 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         return "\(shotCount) \(Self.shotHint)"
     }
 
-    /// What is listening, beside the pulse that says it is listening *now*.
+    /// What is happening, and what is doing it — beside the pulse that says it is
+    /// happening *now*.
     ///
-    /// Spelled out rather than abbreviated: it is one word wider than the row
-    /// below it and it answers the question the whole engine switch exists for —
-    /// which of the two recognisers is about to be believed. The local one is on
-    /// trial, and it is the one whose transcript nothing else can double-check.
+    /// **The verb is said, not left to the dot.** The row used to be the engine's
+    /// name alone (`Wispr Flow`), on the reading that a pulsing red dot already
+    /// means recording. It does to whoever built it; to a room seeing the overlay
+    /// for the first time — and to Victor at a glance, mid-sentence — a bare
+    /// product name beside a light is a status *badge*, not an event. `Recording
+    /// with Wispr Flow` is the same two facts in the order they are asked in: is
+    /// it listening, and who is listening.
+    ///
+    /// The engine is still spelled out rather than abbreviated: it answers the
+    /// question the whole engine switch exists for — which of the two recognisers
+    /// is about to be believed. The local one is on trial, and it is the one whose
+    /// transcript nothing else can double-check.
     private var engineText: String? {
         guard listening, !paused else { return nil }
-        return localListening ? "Local Whisper" : "Wispr Flow"
+        return "Recording with " + (localListening ? "Local Whisper" : "Wispr Flow")
     }
 
     /// The gesture that picks an element out of the page — shown **only while
