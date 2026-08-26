@@ -843,14 +843,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            // The flash names the **address**, which the chip then drops: this is
-            // the one moment the answer to "did it grab the right tab?" is worth
-            // a panel, and `ttys004` is what settles it. Afterwards the chip's
-            // job is to say which session, not which device file.
+            // **`walkie: started in petclinic@main`** — the folder, and nothing
+            // else. The flash used to name the `ttysNNN` address as well, on the
+            // grounds that it settles "did it grab the right tab?"; it never was
+            // the question Victor asks at this moment, and the device file is
+            // noise on a projector. Addons' banner for the same press says the
+            // same words, so the two panels read as one event rather than as two
+            // announcements of it.
             //
-            // It is also where the shell guard's absence is reported, now that
+            // It is still where the shell guard's absence is reported, now that
             // the chip no longer distinguishes ⌨️ from 🎯: binding is the moment
-            // that fact can still change what Victor does about it.
+            // that fact can still change what Victor does about it, and a warning
+            // is not a label — it survives the shortening.
             let unguarded = bound.isGuarded ? "" : " — no shell guard"
 
             // **The rectangle hands over to the chip.** It flies from the window
@@ -869,10 +873,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // arrival to wait for and the chip is set at once.
             guard let frame = bound.sourceFrame else {
                 self.showBound(bound)
-                self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
+                self.overlay.flash("walkie: started in \(bound.label)\(unguarded)", duration: 3)
                 return
             }
-            self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)",
+            self.overlay.flash("walkie: started in \(bound.label)\(unguarded)",
                                duration: BindFlight.duration)
             BindFlight.fly(from: frame) { [weak self] in
                 self?.showBound(bound)
