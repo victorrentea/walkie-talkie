@@ -92,6 +92,20 @@ relay *pushes*, so the editor listens.
   and the bind flash says `— no shell guard`.
 - **`.keystroke` survives as the fallback** for a known editor with no extension
   answering, and is logged as such.
+- **The Return is `\r`, written separately, and both halves matter.** Both
+  extensions used to let the editor's own API append the newline —
+  `sendText(line, true)`, `sendCommandToExecute(line)` — and both append `\n` on
+  macOS. In a TUI in raw mode `\n` is not Enter: it is *insert a newline*, the
+  convention Claude Code uses for a multi-line prompt. So the dictation landed in
+  the prompt and sat there until Victor pressed Return himself (reported
+  2026-08-26, in VS Code). The tty paths never had this — tmux's `send-keys
+  Enter` and Terminal.app's `do script` press a real Return. Each extension now
+  writes the text, then writes `\r` 120ms later, the second half being the same
+  reason tmux has always been two calls: a TUI that reads `text\r` in one chunk
+  takes the whole thing for a paste and keeps the Return as text.
+- **The IDE branch also used to send `text` where every other branch sends
+  `line`**, i.e. the unflattened message — so the one path that could not survive
+  an embedded newline was the one path that did not strip them.
 
 ### Only terminals get bound
 

@@ -380,7 +380,7 @@ final class TerminalBinding {
             // nothing. `isGuarded` is false in this case and the bind flash says
             // `— no shell guard`, which is where the fact belongs.
             guard let shell = handle.shellPID, let tty = Self.tty(ofPID: shell) else {
-                guard IDEBridge.send(text, to: handle) else {
+                guard IDEBridge.send(line, to: handle) else {
                     return .failed("\(handle.name) did not take the line")
                 }
                 return .delivered
@@ -394,7 +394,7 @@ final class TerminalBinding {
             case .some:
                 break
             }
-            guard IDEBridge.send(text, to: handle) else {
+            guard IDEBridge.send(line, to: handle) else {
                 return .failed("\(handle.name) did not take the line")
             }
             return .delivered
