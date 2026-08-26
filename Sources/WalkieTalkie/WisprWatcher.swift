@@ -17,6 +17,9 @@ import SQLite3
 ///   `formattedText`  the polished text (always present when `formatted`)
 ///   `asrText`        raw ASR, the fallback
 ///   `app`            app that had focus during dictation
+///   `detectedLanguage` what Wispr heard it as (`ro`/`en`), often the only one
+///                    of the two language columns filled: `language` holds the
+///                    *setting*, which is empty while Wispr is on auto
 ///
 /// Opened **read-only** while Wispr keeps writing; the `-wal`/`-shm` siblings
 /// are readable by the same user, so committed rows are visible immediately.
@@ -30,7 +33,10 @@ final class WisprWatcher {
     /// megabytes and this poll is the path the words reach the agent by, so it
     /// is deliberately not selected here — the id is the handle, the fetch
     /// happens elsewhere and later.
-    var onTranscript: ((_ text: String, _ app: String?, _ id: String) -> Void)?
+    /// `language` is Wispr's own detection for this row (`ro` / `en`), nil when
+    /// it recorded none — it travels with the words because the agent reading
+    /// them is told they were spoken, and in which language.
+    var onTranscript: ((_ text: String, _ app: String?, _ id: String, _ language: String?) -> Void)?
 
     private var watermark: String = ""
     private var timer: DispatchSourceTimer?
@@ -64,7 +70,8 @@ final class WisprWatcher {
         defer { sqlite3_close(db) }
 
         let sql = """
-            SELECT timestamp, COALESCE(NULLIF(formattedText,''), asrText), app, transcriptEntityId
+            SELECT timestamp, COALESCE(NULLIF(formattedText,''), asrText), app, transcriptEntityId,
+                   COALESCE(NULLIF(detectedLanguage,''), NULLIF(language,''))
             FROM History
             WHERE timestamp > ? AND status IN ('formatted','raw_transcript')
             ORDER BY timestamp ASC
@@ -81,7 +88,7 @@ final class WisprWatcher {
                   !text.isEmpty else { continue }
             let app = FlowDB.text(stmt, 2)
             guard let id = FlowDB.text(stmt, 3) else { continue }
-            onTranscript?(text, app, id)
+            onTranscript?(text, app, id, FlowDB.text(stmt, 4))
         }
     }
 

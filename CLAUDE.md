@@ -186,18 +186,31 @@ everything with something to `Read`. `[selected: …]`, `[look at: …]`,
 said in one line — and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
-**And `[dictated aloud — …]`, which is the one clause that changes how the rest
-is read rather than adding something to read.** A transcript arrives looking
-exactly like something Victor typed, so a mis-heard word reads as a word he
-chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` —
+**And `[this text was dictated in RO]`, which is the one clause that changes how
+the rest is read rather than adding something to read.** A transcript arrives
+looking exactly like something Victor typed, so a mis-heard word reads as a word
+he chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` —
 what this app was called then — into
 `risparerile ei`; an agent that does not know the input came through a
 microphone has no reason to sound that out, and one that does resolves it at
-once. The same failure exists with Wispr — rarer, not absent. It rides every
-dictation, so it stays one short clause: *that it was spoken* is the part the
-agent cannot infer, and what to do about it follows for any capable reader.
+once. The same failure exists with Wispr — rarer, not absent.
 `dictation` only — inviting phonetic guessing at a screenshot's caption or a
 typed message would be inviting it to misread them.
+
+**The language is named because it is half the answer.** Victor dictates in
+Romanian and in English, and the phonetics that recover a mis-heard word are the
+phonetics of the language it was said in; `RO` also explains a Romanian sentence
+carrying English technical words verbatim, which is how he actually speaks. The
+code comes from whichever recogniser produced the text — MLX Whisper reports it
+in its JSON, and Wispr keeps it in `History.detectedLanguage` (`language` is the
+*setting* and is empty while Wispr is on auto). Nothing translates or guesses it:
+a row with no language recorded says only `[this text was dictated]`, because the
+recogniser is the one that heard it.
+
+**The advice that used to follow it is gone**, on Victor's instruction — *"skip
+the rest of details - are obvious"*. It read `[dictated aloud — if a word makes
+no sense, it was mis-heard: try what it sounds like]`, and a reader capable of
+acting on that does not need it spelled out on every single dictation.
 
 ### The bind flight
 
@@ -461,7 +474,7 @@ Two strings deliberately still say the old name:
   whose whole job is to be running before Victor starts talking. It is invisible
   everywhere he looks. `build-app.sh` says so beside the line, because it is
   exactly the kind of inconsistency a later reader would tidy up.
-- **One quoted mis-transcription** in the `[dictated aloud]` note, where a local
+- **One quoted mis-transcription** in the notes above `dictatedHint`, where a local
   recogniser turned `Wispr Relay` into `risparerile ei`. That is evidence about
   what a recogniser did to a word, not a name to keep current.
 

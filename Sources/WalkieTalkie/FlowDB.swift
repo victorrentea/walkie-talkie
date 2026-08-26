@@ -57,16 +57,20 @@ enum FlowDB {
 
     /// Wispr's own reading of one row, the way the watcher would have delivered
     /// it — same `COALESCE`, so a replay is the transcript that really was sent.
-    static func transcriptRow(forID id: String) -> (text: String, app: String?)? {
+    static func transcriptRow(forID id: String) -> (text: String, app: String?, language: String?)? {
         guard let db = openReadOnly() else { return nil }
         defer { sqlite3_close(db) }
         var stmt: OpaquePointer?
-        let sql = "SELECT COALESCE(NULLIF(formattedText,''), asrText), app FROM History WHERE transcriptEntityId = ?"
+        let sql = """
+            SELECT COALESCE(NULLIF(formattedText,''), asrText), app,
+                   COALESCE(NULLIF(detectedLanguage,''), NULLIF(language,''))
+            FROM History WHERE transcriptEntityId = ?
+            """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
         guard sqlite3_step(stmt) == SQLITE_ROW, let t = text(stmt, 0), !t.isEmpty else { return nil }
-        return (t, text(stmt, 1))
+        return (t, text(stmt, 1), text(stmt, 2))
     }
 
     static func text(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
