@@ -51,6 +51,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <true/>
     <key>NSAccessibilityUsageDescription</key>
     <string>Wispr Relay needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Wispr Relay records your dictation itself when the Local Whisper engine is selected, so that Wispr Flow is not in the loop at all.</string>
 </dict>
 </plist>
 PLIST

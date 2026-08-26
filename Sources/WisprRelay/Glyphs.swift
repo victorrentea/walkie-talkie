@@ -72,39 +72,4 @@ enum Glyphs {
         }
     }
 
-    /// The folder: a rounded yellow body with a darker tab rising behind its
-    /// top-left corner, the tab's right edge cut on the diagonal.
-    ///
-    /// Proportions from the reference: `width = 1.25 × height`, the body starts
-    /// `0.124 × height` down (the tab is what shows above it), the tab runs to
-    /// `0.44 × width` before the diagonal, and the corners are `0.055 × width`.
-    static func folder(height: CGFloat) -> NSImage {
-        let width = height * 1.25
-        return NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let bodyTop = height - height * 0.124        // y counts up here
-            let corner = width * 0.055
-
-            // The tab first, so the body covers where the two meet and the seam
-            // never shows.
-            ctx.setFillColor(NSColor(srgbRed: 1.0, green: 0.60, blue: 0.0, alpha: 1).cgColor)
-            ctx.beginPath()
-            ctx.move(to: CGPoint(x: corner, y: height))
-            ctx.addLine(to: CGPoint(x: width * 0.395, y: height))
-            ctx.addLine(to: CGPoint(x: width * 0.44, y: bodyTop))
-            ctx.addLine(to: CGPoint(x: 0, y: bodyTop))
-            ctx.addLine(to: CGPoint(x: 0, y: height - corner))
-            ctx.addQuadCurve(to: CGPoint(x: corner, y: height),
-                             control: CGPoint(x: 0, y: height))
-            ctx.closePath()
-            ctx.fillPath()
-
-            ctx.setFillColor(NSColor(srgbRed: 1.0, green: 0.78, blue: 0.20, alpha: 1).cgColor)
-            let body = CGRect(x: 0, y: 0, width: width, height: bodyTop)
-            ctx.addPath(CGPath(roundedRect: body, cornerWidth: corner, cornerHeight: corner,
-                               transform: nil))
-            ctx.fillPath()
-            return true
-        }
-    }
 }

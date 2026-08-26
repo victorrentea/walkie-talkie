@@ -240,14 +240,44 @@ mistake stays invisible until a second monitor is plugged in. Verified against a
 Terminal window set to a known `{200, 150, 1000, 700}` on a multi-monitor desk:
 `200,417 800×550` with a primary 1117 tall.
 
-### What the chip says when bound: two rows, two drawn glyphs
+### What the chip says when bound: one row, and the destination app's own icon
 
 ```
-📍 ✳ extracting the tax calculation      ← what the agent says it is doing
-📁 petclinic@test-pr                     ← where it is doing it
+[VSCode icon] petclinic@test-pr          ← which app, and which session inside it
 ```
 
-`🤖 folder@branch` becomes those two. Four deliberate decisions:
+`🤖 folder@branch` becomes that. It was two rows until 2026-08-26 — a drawn pin
+plus the agent's own title (`✳ extracting the tax calculation`), and a drawn
+folder plus `petclinic@test-pr` under it — and the collapse to one line was
+Victor's call, made in three steps in a single sitting: three rows, then two,
+then this.
+
+**The icon is the half that carries the most and costs the least.** The pin only
+ever said *bound*, which the presence of a folder name says by itself; which of
+Terminal, Visual Code and IntelliJ is receiving the words is the fact that
+actually differs between two bindings, and it is the difference between a
+delivery that can be refused at a shell prompt and one pasted blind. Drawn as the
+application's real icon (`AppDelegate.appIcon`, asked of the bundle on disk
+rather than of the running app, whose `icon` is lazily loaded and often nil), it
+takes exactly the space the pin was taking and is read without being read.
+
+**The agent's self-title is what was given up for it.** It moved while the
+session worked, which made it the one part of the chip that proved the session
+was alive — but it is also the part with no length anybody controls, and this
+line rides beside the cursor over whatever Victor is reading. The liveness it
+provided is still there in the pulsing 🔴 one row down.
+
+**The folder is the folder name and nothing else** — no parents, and never
+truncated with an ellipsis. `label(forDirectory:)` takes `lastPathComponent` and
+appends `@branch` when the directory is a repo. It is also now **re-read on the
+poll** (`refreshBinding`), not read once at bind: as the only line, it has to be
+the current answer, and Victor `cd`s between repos inside one session all day.
+
+**The IDE path used to show a raw path here**, which is how the row came to read
+`/` for a shell sitting at the root — it was the one target whose folder skipped
+`label(forDirectory:)`. Fixed at the same time.
+
+Four further decisions behind where that folder comes from:
 
 - **The label is the bound session's, not the launch directory's — and those are
   two different things.** Claude Code keeps a *session* directory that moves when
@@ -429,9 +459,9 @@ from the working directory (inherited from the session, since `/relay` launches
 | idle (the chip) | `🤖 ai@master` — no state word: "standing by" is what he can already infer from nothing happening |
 | Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
-| bound to a terminal | a drawn pin + `✳ fixing the tax bug`, and a **second row** with a drawn folder + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
-| bound to an IDE (VS Code, IntelliJ) | pin + the window's own title. **No folder row**: there is no tty, so there is no directory to read and none is invented |
-| bound **and** paused | `⏸️` still prefixes the identity, and the folder row stays |
+| bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
+| bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
+| bound **and** paused | `⏸️` still prefixes the identity |
 
 Paused prefixes rather than replaces, and carries no state word. The chip's job
 is still to say *which agent this is*; pause is a modifier on that, not a
@@ -956,15 +986,17 @@ restart and a logout. `Transcriber.swift` holds both the setting and the engine;
 `POST /engine {"engine": …}` and `GET /engine` are the same switch on the
 loopback surface.
 
-**Wispr still records in both modes, and this is not independence from it.** The
-local engine transcribes `History.audio` — the complete 16 kHz WAV Wispr already
-stored, the same bytes Wispr's own recogniser scored. That is what keeps this a
-switch rather than a rewrite: no microphone code, no new TCC grant, no second
-capture that could drift from the first, and a genuinely like-for-like
-comparison in live use. Wispr still decides when a dictation starts and ends and
-still has to be installed. Dropping it entirely means owning the microphone and
-a push-to-talk key, and this is the step that answers whether that work is worth
-doing — by putting the local model on the real job instead of on a benchmark.
+**Wispr recorded in both modes until 2026-08-26, and that was deliberate**: the
+local engine transcribed `History.audio` — the complete 16 kHz WAV Wispr already
+stored, the same bytes Wispr's own recogniser scored — so there was no microphone
+code, no new TCC grant, no second capture that could drift from the first, and a
+genuinely like-for-like comparison in live use. That was the step that answered
+whether owning the microphone was worth the work. It was.
+
+**Local Whisper now records for itself, and Wispr is out of the loop entirely.**
+See *Mouse 5 is the relay's on Local Whisper* below. The Wispr-recorded path is
+still there and still the one that runs on the Wispr engine, and it is still what
+a `POST /test/transcript` replays.
 
 - **A daemon, not a subprocess per dictation, and that is measured.** Importing
   `mlx_whisper` costs 7.4s and the first transcription another 2.8s for the
@@ -1043,6 +1075,62 @@ going to an agent and not into a document: casing, punctuation and verb endings
 cost WER and cost the agent nothing, while a mangled identifier costs the agent
 everything and is what rare-word recall is there to measure.
 
+### Mouse 5 is the relay's on Local Whisper
+
+On the Wispr engine, mouse 5 is Wispr's push-to-talk and the tap only *observes*
+it (`onDictationStarted`, a hint that lands a beat before CoreAudio confirms).
+On Local Whisper the same button is **swallowed** — Wispr never sees it, never
+records, and therefore never pastes — and drives `MicRecorder` instead.
+
+**A toggle, not a push-to-talk.** Wispr's button is held down for the length of
+the sentence, which is right for a sentence; a dictation aimed at an agent runs
+to a minute or more, and a mouse button held for a minute is a hand that cannot
+take the screenshots (mouse 4, F3) the same minute exists for.
+
+`MicRecorder` opens the input device at its native rate and converts to 16 kHz
+mono 16-bit through `AVAudioConverter` — the format Whisper resamples to anyway
+and the format every existing corpus sample is in. Anything under 0.35s is
+dropped as a misfire. The microphone is asked for **when the engine is picked**,
+not at the first press: the grant dialog is modal and a refusal costs a trip
+through System Settings, and mid-sentence with an agent waiting is the wrong
+moment to find out.
+
+**A local recording is sent even below the confidence floor**, unlike the
+Wispr-recorded path, and the difference is not an oversight. There, a low
+`avg_logprob` meant falling back to Wispr's own reading of the same audio; here
+Wispr never heard the sentence, so the alternative to a shaky transcript is
+silence — and silence is the one outcome Victor cannot notice and correct. The
+banner says the score instead.
+
+The corpus keeps growing in this mode (`VoiceCorpus.captureLocal`), stamped
+`engine: "whisper-local"` and with **no `asr` field**: there is one reading and no
+second opinion, and a manifest that duplicated the text into both fields would
+read as a comparison that never happened.
+
+### Wispr's paste is swallowed
+
+Wispr drops its transcript wherever the caret is. The relay has always taken the
+words from Wispr's database instead, which made that injection pure damage: a
+sentence about a page he is reading, typed into the document, the search field,
+the terminal.
+
+`HotkeyTap.blockInjection` drops every keyboard event **posted by Wispr Flow's
+own process** — matched by source pid, the same discriminator that tells a
+LinearMouse Return from a typed one, and cached per pid because it runs on the
+tap for every key of a transcript. All three keyboard event types are covered:
+half a synthetic ⌘V is worse than all of it, since the target app would be left
+holding a ⌘ that was never released.
+
+**Off while paused**, and that is what pause has always meant: pausing is what
+Victor does *in order to* dictate into an app, so the app getting the text is
+then exactly the point.
+
+Each burst logs one line (`🛑 swallowed Wispr injection — …`) with the first
+event's keycode, flags and unicode payload, then a tally. That line is also the
+measurement: if Wispr ever stops going through posted events — if it starts
+writing the text through the Accessibility API — nothing will be logged, because
+no event tap can see that, and this block will silently stop working.
+
 ## Size: minimal, per state
 
 `layoutContent()` hugs the **current** state's content — not the widest state
@@ -1111,8 +1199,14 @@ out); everything else resizes instantly.
 ## The menu bar item
 
 `StatusItem.swift` puts a 🤖 in the menu bar for the whole life of the process,
-with the session label as a disabled header and two commands: **Pause/Resume**
-and **Quit**.
+with **where the words go** as a disabled header — the destination app's icon
+beside `folder@branch` of the bound session, exactly the line the chip shows —
+and two commands: **Pause/Resume** and **Quit**, plus the two engine rows.
+
+`AppDelegate.showBound` is the single place both are written, so the chip and the
+menu cannot disagree about the destination. Unbound, the header falls back to
+`🤖 <launch label>`, which is what an unbound relay is: an outbox in a directory
+with some agent watching it.
 
 It exists because neither shape is a dependable place to find the app. The chip
 belongs to the pointer and hides while he types; the panel comes and goes with
@@ -1138,6 +1232,26 @@ Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:
 the app is `.accessory` and never becomes key, so the hint would advertise a
 shortcut that does nothing outside the open menu.
+
+### The 🤖 on the other screens
+
+`NSStatusItem` appears in exactly one menu bar: the display that currently has
+the keyboard focus. Victor works across three, and the state that glyph carries —
+paused, model loading — is precisely what he needs while looking at one of the
+other two, since the chip is hidden the moment he starts typing.
+
+`MenuBarMirror` draws the rest: one borderless, click-through panel per screen at
+`.statusBar` level (above `.mainMenu`), carrying the same string `refreshGlyph`
+puts in the real item, on every space including full-screen ones. It is an
+indicator only — no menu — because opening one is a focus change away, and a
+click here means crossing to another display anyway.
+
+**Centred in the strip, not at either end**: the right end is the clock and
+Control Center, the left is the frontmost app's menus, and the middle is the only
+part of an inactive menu bar that is reliably empty. `NSScreen.main` is polled
+every 500ms rather than observed — it moves with the focus and posts nothing —
+and the panel on the active screen is hidden, since the real status item is
+already there.
 
 ## The prompt is held, not sent
 

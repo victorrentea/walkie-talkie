@@ -8,9 +8,11 @@ import AppKit
 /// which at rest means pausing first just to reach it. A menu bar item sits in
 /// the same pixels for the whole life of the process.
 ///
-/// It carries the session label as a disabled header, for the same reason the
-/// title does: with two overlays up, two identical 🤖 in the menu bar say nothing
-/// about which session a click is about to end.
+/// It carries **where the words go** as a disabled header — the bound session's
+/// `folder@branch` behind the destination app's icon, or the launch label while
+/// nothing is bound. Same reason the chip's top line does: with two overlays up,
+/// two identical 🤖 in the menu bar say nothing about which session a click is
+/// about to end, and nothing at all about which terminal is receiving sentences.
 ///
 /// Two commands: **Pause/Resume** and **Quit**. Pause is here and not only on the
 /// chip because the chip is a moving target — it rides the cursor and disappears
@@ -31,6 +33,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var isPaused = false
     private var engineLoading = false
+
+    /// The same 🤖, on every other screen. `NSStatusItem` only ever appears in the
+    /// menu bar of the display with the focus, and that is the one display Victor
+    /// is *not* looking at whenever this matters.
+    private let mirror = MenuBarMirror()
 
     override init() {
         super.init()
@@ -85,6 +92,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(exit)
 
         item.menu = menu
+        mirror.start()
     }
 
     /// The tick follows the engine that is actually in use, which is why
@@ -117,9 +125,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
     }
 
     private func refreshGlyph() {
-        if engineLoading      { item.button?.title = "⏳🤖" }
-        else if isPaused      { item.button?.title = "⏸️🤖" }
-        else                  { item.button?.title = "🤖" }
+        let glyph: String
+        if engineLoading      { glyph = "⏳🤖" }
+        else if isPaused      { glyph = "⏸️🤖" }
+        else                  { glyph = "🤖" }
+        item.button?.title = glyph
+        // The same glyph, repeated on the displays macOS will not put a status
+        // item on. One call site, so the copies cannot say something the original
+        // does not — see `MenuBarMirror`.
+        mirror.setGlyph(glyph)
     }
 
     /// Kept in step with the app's state by `AppDelegate`, not read on demand: the
@@ -139,12 +153,36 @@ final class StatusItem: NSObject, NSMenuDelegate {
         refreshGlyph()
     }
 
+    /// Where the words are going: the bound session's `folder@branch`, behind the
+    /// destination app's own icon.
+    ///
+    /// The same line the chip shows, and here for the reason the chip cannot
+    /// cover: it rides the pointer, and macOS hides the pointer the moment he
+    /// starts typing. The menu is then the only place left that can be asked
+    /// *which* terminal is about to receive the next sentence — and with two
+    /// relays running, two identical 🤖 in the menu bar is exactly the confusion
+    /// this answers.
+    ///
+    /// nil puts it back to the launch label, which is what an unbound relay is:
+    /// an outbox in a directory, with some agent watching it.
+    func setDestination(_ line: String?, icon: NSImage?) {
+        destination = line
+        header.image = icon
+        applyHeader()
+    }
+
+    private var destination: String?
+
     /// The label is read when the menu opens rather than pushed on a timer: it
     /// changes with the branch, and the only moment it has to be right is the
     /// moment he is looking at it.
     func menuWillOpen(_ menu: NSMenu) {
         SessionLabel.refresh()
-        header.title = SessionLabel.value
+        applyHeader()
+    }
+
+    private func applyHeader() {
+        header.title = destination ?? "🤖 \(SessionLabel.value)"
     }
 
     @objc private func exitClicked() {

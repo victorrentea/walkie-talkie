@@ -65,9 +65,6 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// and made the chip as wide as the two of them together, beside the cursor,
     /// over Victor's work. Split, each row is short and the eye picks the one it
     /// came for.
-    private let folderRow = NSView()
-    private let folderGlyph = NSImageView()
-    private let folderInfo = NSTextField(labelWithString: "")
 
     var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
@@ -85,6 +82,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// True while the local Whisper model is loading — see `titleText`.
     private var engineLoading = false
     private var listening = false
+    /// The relay's own microphone is the one that is open, not Wispr's.
+    private var localListening = false
     private var hovering = false
 
     private var followTimer: Timer?
@@ -108,13 +107,20 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// The terminal dictations are being typed into — `folder@branch` of the
     /// bound session, or nil while the relay is only writing the outbox.
     private var boundLabel: String?
-    /// What that terminal is calling itself right now — the agent's own title,
-    /// or an IDE's window title where there is no tty to ask.
-    private var boundTitle: String?
-    /// The bound terminal's working directory, `petclinic@main`. nil for targets
-    /// with no tty to read one from, which is when the folder row stays away
-    /// rather than inventing an answer.
+    /// The bound terminal's working directory, `petclinic@main` — **the one thing
+    /// the chip says** once it is bound. nil for targets with no tty to read one
+    /// from, where the app's own name takes the line rather than inventing a
+    /// folder.
     private var boundFolder: String?
+    /// The destination app's own icon — Terminal's, Visual Code's, IntelliJ's —
+    /// drawn where the pin used to be.
+    ///
+    /// It replaces the pin because the pin only ever said *bound*, which the
+    /// presence of a folder name already says. Which of the three apps is
+    /// receiving the words is the fact that actually differs between bindings,
+    /// and an icon is the one way to carry it in a chip this narrow: it costs the
+    /// space the pin was already taking and is read without being read.
+    private var boundIcon: NSImage?
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -178,7 +184,14 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
-        return "📸 ×\(shotCount) \(Self.shotHint)"
+        let row = "📸 ×\(shotCount) \(Self.shotHint)"
+        // Which ear is open, but only when it is the unusual one. On Wispr the
+        // pulsing 🔴 beside this row has always meant "something is hearing you"
+        // and there was only ever one candidate; with the relay holding the
+        // microphone itself, "recording" and "recording *into the local model*"
+        // are different enough to be worth a word — the local engine is the one
+        // on trial, and the one whose transcript nothing else can double-check.
+        return localListening ? "whisper \(row)" : row
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -299,21 +312,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.textColor = .labelColor
         titleGlyph.image = Self.pinGlyph
         titleGlyph.imageScaling = .scaleProportionallyUpOrDown
-        titleGlyph.isHidden = true          // only a bound relay has a pin
+        titleGlyph.isHidden = true          // only a bound relay shows a destination
         titleRow.addSubview(titleGlyph)
         titleRow.addSubview(titleLabel)
         root.addSubview(titleRow)
-
-        folderGlyph.image = Self.folderGlyphImage
-        folderGlyph.imageScaling = .scaleProportionallyUpOrDown
-        folderInfo.font = hintFont
-        folderInfo.textColor = .secondaryLabelColor
-        folderInfo.lineBreakMode = .byTruncatingMiddle
-        folderInfo.maximumNumberOfLines = 1
-        folderRow.addSubview(folderGlyph)
-        folderRow.addSubview(folderInfo)
-        folderRow.isHidden = true
-        root.addSubview(folderRow)
 
         hintLabel.font = hintFont
         hintLabel.textColor = .secondaryLabelColor
@@ -584,7 +586,6 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.sizeToFit()
         // The pin sits in its own box ahead of the text, so it counts too.
         let titleWidth = ceil(titleLabel.frame.width) + (boundLabel != nil ? titleGlyphWidth + recordDotGap : 0)
-        let folderWidth = folderText.map { folderGlyphWidth + recordDotGap + ceil(measure($0, font: hintFont)) } ?? 0
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -595,7 +596,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
         let natural = ceil(max(titleWidth + reserve,
-                               max(folderWidth, max(hintWidth, max(recordWidth, pickWidth))))) + pad * 2
+                               max(hintWidth, max(recordWidth, pickWidth)))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -625,17 +626,6 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         layoutTitleRow(width: innerWidth)
         rows.append((titleRow, 16))
-
-        // Directly under the title: it answers "where", which is the question the
-        // title's "what" leaves open, and the two are read as a pair.
-        if let folder = folderText {
-            folderInfo.stringValue = folder
-            layoutFolderRow(width: innerWidth)
-            folderRow.isHidden = false
-            rows.append((folderRow, folderRowHeight))
-        } else {
-            folderRow.isHidden = true
-        }
 
         // Directly under the title, ahead of the selection: while he is talking
         // this is the row that changes, and the one he glances down at to check
@@ -792,13 +782,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// on every relayout would be work done sixty times a second while the chip
     /// follows the cursor.
     private static let pinGlyph = Glyphs.mapPin(height: 14)
-    private static let folderGlyphImage = Glyphs.folder(height: 11)
 
-    /// The pin's box on the title row. Its drawn width is `0.696 × height`;
-    /// asked of the image rather than recomputed, so the two cannot disagree.
-    private var titleGlyphWidth: CGFloat { ceil(Self.pinGlyph.size.width) }
-    private var folderGlyphWidth: CGFloat { ceil(Self.folderGlyphImage.size.width) }
-    private let folderRowHeight: CGFloat = 15
+    /// The glyph's box on the title row — an app icon when bound to one, the pin
+    /// otherwise. Asked of the image that is actually set rather than of the pin,
+    /// since the two are not the same width: the pin draws at `0.696 × height`
+    /// and an app icon is square, and reserving the wrong one clips the folder
+    /// name by exactly the difference.
+    private var titleGlyphWidth: CGFloat { ceil((titleGlyph.image ?? Self.pinGlyph).size.width) }
 
     private static let pickGlyphSize: CGFloat = 13
 
@@ -831,22 +821,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         let glyphWidth = bound ? titleGlyphWidth : 0
         let gap = bound ? recordDotGap : 0
         if bound {
-            let h = Self.pinGlyph.size.height
+            let h = (titleGlyph.image ?? Self.pinGlyph).size.height
             titleGlyph.frame = NSRect(x: 0, y: ((16 - h) / 2).rounded(),
                                       width: glyphWidth, height: ceil(h))
         }
         titleLabel.frame = NSRect(x: glyphWidth + gap, y: 0,
                                   width: max(0, width - glyphWidth - gap), height: 16)
-    }
-
-    private func layoutFolderRow(width: CGFloat) {
-        let h = Self.folderGlyphImage.size.height
-        folderRow.frame.size = NSSize(width: width, height: folderRowHeight)
-        folderGlyph.frame = NSRect(x: 0, y: ((folderRowHeight - h) / 2).rounded(),
-                                   width: folderGlyphWidth, height: ceil(h))
-        folderInfo.frame = NSRect(x: folderGlyphWidth + recordDotGap, y: 0,
-                                  width: max(0, width - folderGlyphWidth - recordDotGap),
-                                  height: folderRowHeight)
     }
 
     private func layoutPickRow(width: CGFloat) {
@@ -882,7 +862,6 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.wantsLayer = true
         recordInfo.wantsLayer = true
         pickInfo.wantsLayer = true
-        folderInfo.wantsLayer = true
         if bare {
             titleLabel.shadow = Self.halo()
             // Same reasoning as the title, and the recording row now spends its
@@ -893,16 +872,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             // recording one: it is up between messages, which is most of the day.
             pickInfo.shadow = Self.halo()
             pickInfo.textColor = .white
-            folderInfo.shadow = Self.halo()
-            folderInfo.textColor = .white
         } else {
             titleLabel.shadow = nil
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
-            folderInfo.shadow = nil
-            folderInfo.textColor = .secondaryLabelColor
         }
     }
 
@@ -1006,29 +981,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// title is the one part of this with no length anybody controls.
     private var identity: String {
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
-        // The pin is drawn beside this, not typed into it (`titleGlyph`), and the
-        // working directory has a row of its own — so what is left here is the one
-        // thing that changes: what the agent says it is doing. With no title to
-        // show, the address is the fallback, because `ttys004` at least
-        // distinguishes two sessions where a repeated folder name would not.
-        return boundTitle.map { Self.fitHead($0, 28) } ?? boundLabel ?? ""
-    }
-
-    /// The folder row's text — the bound terminal's working directory and branch.
-    /// Absent for targets with no tty to read one from (VS Code, IntelliJ), where
-    /// the row goes away rather than showing the app's name beside a folder icon.
-    private var folderText: String? {
-        guard boundLabel != nil else { return nil }
-        return boundFolder
-    }
-
-    /// Keep the head, drop the tail — the opposite of `fit`, and for the
-    /// opposite reason. A selector's last steps are the element while its first
-    /// steps are the page he is already looking at; a title an agent writes puts
-    /// the subject first and the detail after it, so the identifying half is the
-    /// one at the front.
-    private static func fitHead(_ s: String, _ limit: Int) -> String {
-        s.count <= limit ? s : String(s.prefix(limit - 1)) + "…"
+        // `wispr-relay@main` — the working directory of the session the words are
+        // going to, with its branch when that directory is a repo. The icon beside
+        // it (`titleGlyph`) says which app, so this line never spells out an app
+        // name it can show instead; only a target with no directory to read falls
+        // back to one.
+        return boundFolder ?? boundLabel ?? ""
     }
 
     // The title used to be borrowable for a moment (`flashTitle`, for the "+1 📸"
@@ -1104,11 +1062,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     ///
     /// Relayouts because the title drives the chip's width, and a bound label is
     /// a different length from the launch-directory one it replaces.
-    func setBound(label: String?, title: String? = nil, folder: String? = nil) {
-        guard boundLabel != label || boundTitle != title || boundFolder != folder else { return }
+    func setBound(label: String?, folder: String? = nil, icon: NSImage? = nil) {
+        guard boundLabel != label || boundFolder != folder || boundIcon !== icon else { return }
         boundLabel = label
-        boundTitle = label == nil ? nil : title
         boundFolder = label == nil ? nil : folder
+        boundIcon = label == nil ? nil : icon
+        titleGlyph.image = boundIcon ?? Self.pinGlyph
         refreshTitle()
         layoutContent()
     }
@@ -1129,6 +1088,27 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         refreshTitle()
         layoutContent()          // pausing mid-dictation retracts the recording row
         reposition()             // …and parks the panel back in its corner
+    }
+
+    /// The relay is recording through its own microphone (Local Whisper), rather
+    /// than watching Wispr do it. Set around `setListening`, which stays the one
+    /// switch for everything that is the same in both modes — the pulse, the row,
+    /// the borrowed gestures.
+    func setLocalListening(_ value: Bool) {
+        guard localListening != value else { return }
+        localListening = value
+        layoutContent()
+    }
+
+    /// Take a banner down early — for one that was a promise ("transcribing…")
+    /// rather than a notice, and has now been kept. Without this the promise
+    /// outlives the thing it promised by however long its timer had left.
+    func clearFlash() {
+        guard flashMessage != nil else { return }
+        flashMessage = nil
+        layoutContent()
+        reposition()
+        refreshOpacity()
     }
 
     /// Wispr started / stopped listening.

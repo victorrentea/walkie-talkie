@@ -89,6 +89,81 @@ final class VoiceCorpus {
         queue.async { [weak self] in self?.attempt(id: id, origin: origin, step: 0) }
     }
 
+    /// A sample the relay recorded **itself**, with the local model's reading of
+    /// it — the Local Whisper path, where Wispr is out of the loop and there is
+    /// no `History` row to go back to.
+    ///
+    /// The corpus has to keep growing in that mode or it dies the day Victor
+    /// stops using Wispr, which is the direction this is all heading. What it
+    /// cannot do is pretend these are the same kind of sample: there is one
+    /// reading here and no second opinion, the audio is this app's capture rather
+    /// than Wispr's, and a later evaluation that mixed the two would be comparing
+    /// a model against itself. So the manifest stamps `engine: "whisper-local"`
+    /// and leaves `asr` out entirely — an absent field is a question a reader
+    /// asks, where a duplicated one is an answer they believe.
+    ///
+    /// The bytes are read on the caller's thread on purpose: the staged WAV is
+    /// deleted as soon as this returns, and a copy queued for later would race it.
+    func captureLocal(wav: URL, text: String, language: String?, duration: TimeInterval, app: String?) {
+        guard let audio = try? Data(contentsOf: wav), audio.count > 44 else {
+            Log.error("corpus: local recording vanished before it could be filed")
+            return
+        }
+        let when = Date()
+        queue.async { [weak self] in
+            self?.writeLocal(audio: audio, text: text, language: language,
+                             duration: duration, app: app, when: when)
+        }
+    }
+
+    private func writeLocal(audio: Data, text: String, language: String?,
+                            duration: TimeInterval, app: String?, when: Date) {
+        let dir = Self.root.appendingPathComponent(Self.dayFormatter.string(from: when))
+        // No Wispr id to key on, so the clock is the key. Two relays recording the
+        // same second is not a thing — there is one microphone and one hand on the
+        // button — but the millisecond keeps a retry from overwriting a sample.
+        let stem = "\(Self.timeFormatter.string(from: when))-local\(Int(when.timeIntervalSince1970 * 1000) % 1000)"
+        let wav = dir.appendingPathComponent(stem + ".wav")
+        let txt = dir.appendingPathComponent(stem + ".txt")
+
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try audio.write(to: wav)
+            try Data((text + "\n").utf8).write(to: txt)
+        } catch {
+            Log.error("corpus: could not write \(stem): \(error)")
+            return
+        }
+
+        var obj: [String: Any] = [
+            "id": stem,
+            "ts": ISO8601DateFormatter().string(from: when),
+            "wav": Self.relative(wav),
+            "txt": Self.relative(txt),
+            "bytes": audio.count,
+            "text": text,
+            "engine": "whisper-local",
+            "duration": duration,
+            "session": SessionLabel.value,
+        ]
+        if let v = app, !v.isEmpty { obj["app"] = v }
+        if let v = language, !v.isEmpty { obj["detectedLanguage"] = v }
+
+        guard var data = try? JSONSerialization.data(withJSONObject: obj, options: [.withoutEscapingSlashes]) else { return }
+        data.append(0x0A)
+        if !FileManager.default.fileExists(atPath: Self.manifestURL.path) {
+            FileManager.default.createFile(atPath: Self.manifestURL.path, contents: Data())
+        }
+        guard let handle = try? FileHandle(forWritingTo: Self.manifestURL) else {
+            Log.error("corpus: manifest unavailable at \(Self.manifestURL.path)")
+            return
+        }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
+        Log.info(String(format: "corpus: %@ — %d KB, %.1fs (local)", stem, audio.count / 1024, duration))
+    }
+
     // MARK: - Fetch
 
     private func attempt(id: String, origin: String?, step: Int) {

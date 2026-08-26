@@ -73,13 +73,25 @@ final class TerminalBinding {
         /// sessions in one repo produce the same label and nothing else tells
         /// them apart.
         let address: String
+        /// The **destination app**: `Terminal`, `Visual Code`, `IntelliJ IDEA`.
+        ///
+        /// It is what the overlay draws the icon of, and the icon is the half of
+        /// the chip Victor reads without reading: three destinations that behave
+        /// differently (a tty he can be refused at, an editor extension, a blind
+        /// paste) and are otherwise told apart only by a folder name that is
+        /// often the same in all three.
+        let appName: String
+        /// …and where to get that icon from. Kept as the bundle id rather than an
+        /// `NSImage` because this type is built on a background queue, several
+        /// subprocesses deep, and `NSWorkspace.icon` is a main-thread errand.
+        let bundleID: String
         /// `petclinic@main` — the working directory of whatever is running on the
         /// bound tty, plus its git branch. **nil when there is no tty to ask**:
         /// a terminal panel inside VS Code or IntelliJ has none, and nothing
         /// outside those apps can even say which panel owns the caret, so there
         /// is no honest answer rather than a guessed one. The chip shows its
         /// folder row only when this is present.
-        let folder: String?
+        var folder: String?
         /// **What the terminal is currently calling itself** — the title the
         /// agent sets and keeps updating as it works (`✳ fixing the tax bug`),
         /// read from Terminal.app's `custom title` or tmux's `pane_title`.
@@ -153,7 +165,7 @@ final class TerminalBinding {
 
         let bound: Target?
         if bundleID == "com.apple.Terminal" {
-            bound = bindTerminalApp(fallbackName: name)
+            bound = bindTerminalApp(fallbackName: name, bundleID: bundleID)
         } else if let editor = IDEBridge.kind(bundleID: bundleID) {
             let window = Self.focusedWindow(pid: app.processIdentifier)
             // **Ask the editor.** Its extension knows which terminal is active,
@@ -161,8 +173,16 @@ final class TerminalBinding {
             // nothing outside the window has ever been able to answer.
             if let handle = IDEBridge.bind(bundleID: bundleID) {
                 bound = Target(handle: .ide(handle),
-                               label: name, address: "\(name) · \(handle.name)",
-                               folder: handle.shellPID.flatMap { Self.publishedDirectory(forTTY: Self.tty(ofPID: $0) ?? "") },
+                               label: Self.display(name), address: "\(Self.display(name)) · \(handle.name)",
+                               appName: Self.display(name), bundleID: bundleID,
+                               // `folder@branch`, like every other target. It used
+                               // to be the raw published path, which is why the row
+                               // could read `/Users/victorrentea/workspace` — or,
+                               // for a shell sitting at the root, just `/`.
+                               folder: handle.shellPID
+                                   .flatMap { Self.tty(ofPID: $0) }
+                                   .flatMap { Self.publishedDirectory(forTTY: $0) }
+                                   .map { Self.label(forDirectory: $0) },
                                title: window.title,
                                sourceFrame: window.frame, boundAt: Date())
             } else {
@@ -171,7 +191,9 @@ final class TerminalBinding {
                 // open. Paste is what is left, and it is announced as such.
                 Log.error("no \(editor) extension answering — falling back to paste, which lands wherever the caret is")
                 bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
-                               label: name, address: name, folder: nil, title: window.title,
+                               label: Self.display(name), address: Self.display(name),
+                               appName: Self.display(name), bundleID: bundleID,
+                               folder: nil, title: window.title,
                                sourceFrame: window.frame, boundAt: Date())
             }
         } else {
@@ -194,7 +216,7 @@ final class TerminalBinding {
 
     /// Terminal.app: ask it for the tty of the tab in front, then find out what
     /// is actually running there.
-    private func bindTerminalApp(fallbackName: String) -> Target? {
+    private func bindTerminalApp(fallbackName: String, bundleID: String) -> Target? {
         guard let front = Self.frontTerminalTab() else {
             Log.error("bind: Terminal.app would not name its front tab's tty")
             return nil
@@ -211,25 +233,32 @@ final class TerminalBinding {
         if let pane = Self.tmuxPane(clientTTY: tty) {
             let folder = Self.tmuxPaneLabel(pane)
             return Target(handle: .tmux(pane: pane, tty: tty), label: folder ?? fallbackName,
-                          address: pane, folder: folder, title: Self.tmuxPaneTitle(pane),
+                          address: pane, appName: Self.display(fallbackName), bundleID: bundleID,
+                          folder: folder, title: Self.tmuxPaneTitle(pane),
                           sourceFrame: frame, boundAt: Date())
         }
 
         let short = (tty as NSString).lastPathComponent
         let folder = Self.sessionLabel(onTTY: tty)
         return Target(handle: .terminalApp(tty: tty), label: folder ?? fallbackName,
-                      address: short, folder: folder, title: front.title,
+                      address: short, appName: Self.display(fallbackName), bundleID: bundleID,
+                      folder: folder, title: front.title,
                       sourceFrame: frame, boundAt: Date())
     }
 
-    /// Re-read what the bound terminal is calling itself.
+    /// Re-read the two parts of a binding that move under it: what the terminal
+    /// calls itself, and **which directory it is in**.
     ///
-    /// The title is the one part of a binding that legitimately changes while
-    /// nothing else about it does — the agent rewrites it as it moves between
-    /// tasks — so it is the one part worth polling. Returns the updated target
-    /// only when the title actually moved, so a caller can skip a relayout it
-    /// does not need.
-    func refreshTitle() -> Target? {
+    /// The directory used to be read once, at bind. That was true for as long as
+    /// the chip showed `folder@branch` as a second line beside the agent's title —
+    /// a caption on a binding. It is now the *only* line, so it has to be the
+    /// current answer: Victor `cd`s between repos and switches branches inside one
+    /// session all day, and a chip still naming the folder he bound in an hour ago
+    /// says the words are going somewhere they are not.
+    ///
+    /// Returns the updated target only when something actually moved, so a caller
+    /// can skip a relayout it does not need.
+    func refreshBinding() -> Target? {
         guard let existing = target else { return nil }
         let fresh: String?
         switch existing.handle {
@@ -244,15 +273,34 @@ final class TerminalBinding {
         // the project first in the window title.
         case .ide: fresh = nil
         }
-        guard fresh != existing.title else { return nil }
+        let folder = currentFolder(for: existing)
+        guard fresh != existing.title || folder != existing.folder else { return nil }
 
         lock.lock()
         // Another bind may have landed while the subprocesses above were running.
         guard current?.handle == existing.handle else { lock.unlock(); return nil }
         current?.title = fresh
+        current?.folder = folder
         let updated = current
         lock.unlock()
         return updated
+    }
+
+    /// Where the bound session is **now**, by the same route the bind used.
+    ///
+    /// A target with no tty to ask (a blind-paste app) has no honest answer and
+    /// keeps the `nil` it was born with, rather than being handed the folder of
+    /// whatever happens to be running elsewhere.
+    private func currentFolder(for target: Target) -> String? {
+        switch target.handle {
+        case .terminalApp(let tty):     return Self.sessionLabel(onTTY: tty)
+        case .tmux(let pane, _):        return Self.tmuxPaneLabel(pane)
+        case .ide(let handle):          return handle.shellPID
+                                            .flatMap { Self.tty(ofPID: $0) }
+                                            .flatMap { Self.publishedDirectory(forTTY: $0) }
+                                            .map { Self.label(forDirectory: $0) }
+        case .keystroke:                return nil
+        }
     }
 
     func unbind() {
@@ -689,6 +737,14 @@ final class TerminalBinding {
         return shells.contains(command) || shells.contains(command.replacingOccurrences(of: "-", with: ""))
     }
 
+    /// What the app is called **on screen**, which is not always what macOS calls
+    /// it. VS Code's bundle name is the single word `Code`, and a chip that says
+    /// `Code` beside a folder name reads as a noun, not as an application. Victor
+    /// calls it Visual Code, so that is what the overlay calls it.
+    static func display(_ appName: String) -> String {
+        appName == "Code" || appName == "Code - OSS" ? "Visual Code" : appName
+    }
+
     /// `folder@branch` for whatever Claude Code is running on this tty — the
     /// directory it is **working in**, which is not the same thing as the
     /// directory its process is in.
@@ -766,7 +822,7 @@ final class TerminalBinding {
         return nil
     }
 
-    private static func label(forDirectory dir: String) -> String {
+    static func label(forDirectory dir: String) -> String {
         let folder = (dir as NSString).lastPathComponent
         guard let branch = run("/usr/bin/git", ["-C", dir, "rev-parse", "--abbrev-ref", "HEAD"]),
               !branch.isEmpty, branch != "HEAD" else { return folder }

@@ -23,6 +23,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// relay running all day on Wispr.
     private let whisper = LocalWhisper()
 
+    /// The microphone, held by the relay itself while Local Whisper is the engine.
+    /// Wispr is then out of the loop entirely: it never hears the sentence, so it
+    /// never pastes it either. See `MicRecorder` for why a second capture is now
+    /// wanted after the corpus argued so hard against one.
+    private let mic = MicRecorder()
+
+    /// A local recording is open. Main thread only — it is written and read from
+    /// the mouse-5 toggle and the engine switch, both of which hop to main.
+    private var localRecording = false
+
+    /// What was in front when the local recording started, for the `app` field a
+    /// Wispr dictation gets from Wispr's own row. Read at the press, not at the
+    /// end: by the time the model answers he has usually switched away.
+    private var localRecordingApp: String?
+
     /// The terminal dictations are typed into, when Victor has pointed the relay
     /// at one. Unbound, everything below behaves exactly as it did before this
     /// existed — the outbox is still written, and the skill's watcher still
@@ -188,10 +203,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the confusion this feature must not create.
         if TranscriptionEngine.current == .whisper { pickEngine(.whisper) }
         status.setPaused(paused)
+        syncLocalCapture()
         overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
+        hotkeys.onLocalToggle = { [weak self] in
+            DispatchQueue.main.async { self?.toggleLocalRecording() }
+        }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
         picker.onUnbind = { [weak self] in self?.unbindTerminal() }
@@ -372,10 +391,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard engine != TranscriptionEngine.current || (engine == .whisper && !whisper.ready) else { return }
 
         guard engine == .whisper else {
+            // A recording still open when he switches back would have nobody left
+            // to transcribe it — the helper is about to be terminated — so it is
+            // finished first, on the engine that is still up.
+            if localRecording { stopLocalRecording() }
             whisper.stop()
             setEngineLoading(false)
             TranscriptionEngine.current = .wispr
             status.setEngine(.wispr)
+            syncLocalCapture()
             // Instant, unlike the other direction — nothing to load, and the
             // ~2.5 GB the model was holding goes back as the helper exits. Said
             // out loud anyway, because "did that take?" is the same question in
@@ -399,16 +423,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.status.setEngine(.wispr)
                     self.overlay.flash("⚠️ local Whisper unavailable — \(error)", duration: 12)
                     Log.error("engine → whisper failed: \(error)")
+                    self.syncLocalCapture()
                     return
                 }
                 TranscriptionEngine.current = .whisper
                 self.status.setEngine(.whisper)
+                self.syncLocalCapture()
+                // Asked here rather than at the first press: the grant dialog is
+                // modal and a refusal takes a trip through System Settings, and
+                // the moment to find that out is while picking an engine from a
+                // menu — not mid-sentence with an agent waiting.
+                MicRecorder.requestAccess { ok in
+                    guard !ok else { return }
+                    self.overlay.flash("⚠️ grant Microphone to Wispr Relay — mouse 5 cannot record", duration: 15)
+                    Log.error("microphone access denied — local recording will not work")
+                }
                 // The one message he is actually waiting for. Worded as
                 // permission rather than as a state, because the question he has
                 // been holding for ten seconds is "can I talk yet".
                 self.overlay.flash("🎙️ local Whisper ready — go ahead", duration: 4)
                 Log.info("engine → whisper")
             }
+        }
+    }
+
+    // MARK: - The relay's own microphone
+
+    /// Who owns mouse 5, and whether Wispr's typing is allowed through — the two
+    /// answers that change together with the engine and with pause.
+    ///
+    /// One function for both because they are the same fact seen from two sides:
+    /// while the relay is forwarding, the transcript belongs to the agent and not
+    /// to whatever holds the caret — and on Local Whisper the *microphone* belongs
+    /// to the relay too, so the button that would start Wispr must never reach it.
+    /// Paused, both go back: pause is what Victor does in order to dictate **into**
+    /// an app, and the app getting the text is then the whole point.
+    private func syncLocalCapture() {
+        hotkeys.localCapture = TranscriptionEngine.current == .whisper && !paused
+        hotkeys.blockInjection = !paused
+    }
+
+    /// Mouse 5 on Local Whisper: start recording, or finish the one that is open.
+    ///
+    /// A **toggle**, not a push-to-talk. Wispr's own button is held down for the
+    /// length of the sentence, which is fine for a sentence; the dictations that
+    /// go to an agent run to a minute or more, and a mouse button held for a
+    /// minute is a hand that cannot do anything else — including take the
+    /// screenshots (mouse 4, F3) that the same minute is for.
+    private func toggleLocalRecording() {
+        if localRecording { stopLocalRecording() } else { startLocalRecording() }
+    }
+
+    private func startLocalRecording() {
+        guard !paused else { return }
+        guard whisper.ready else {
+            overlay.flash("⚠️ the local model is not up — nothing was recorded", duration: 5)
+            Log.error("mouse 5 pressed with no local model ready")
+            return
+        }
+
+        let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
+        if let why = mic.start(to: wav) {
+            overlay.flash("⚠️ \(why)", duration: 6)
+            Log.error("local recording did not start: \(why)")
+            return
+        }
+
+        localRecording = true
+        localRecordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
+        Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
+
+        // Exactly what `dictation.onChange(true)` does for a Wispr dictation, and
+        // in the same order: the context shot is booked synchronously first,
+        // because `setListening(true)` zeroes the count the shot has to appear in.
+        captureContext()
+        listening = true
+        syncBorrowedGestures()
+        overlay.setListening(true)
+        overlay.setLocalListening(true)
+        publishShotCount()
+        publishPicks()
+    }
+
+    private func stopLocalRecording() {
+        localRecording = false
+        let app = localRecordingApp
+        localRecordingApp = nil
+        let recording = mic.stop()
+
+        listening = false
+        syncBorrowedGestures()
+        overlay.setListening(false)
+        overlay.setLocalListening(false)
+
+        guard let (wav, duration) = recording else {
+            Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
+            return
+        }
+        Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
+        overlay.flash("⏳ transcribing…", duration: 30)
+
+        whisper.transcribe(wav: wav.path) { [weak self] result in
+            guard let self = self else { return }
+            guard let r = result, !r.text.isEmpty else {
+                DispatchQueue.main.async {
+                    self.overlay.flash("⚠️ the model returned nothing — that dictation is lost", duration: 8)
+                }
+                Log.error("local recording produced no transcript")
+                try? FileManager.default.removeItem(at: wav)
+                return
+            }
+            Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
+                            r.language ?? "?", r.avgLogprob, r.text.count))
+            // **Sent even below the confidence floor**, unlike the Wispr-recorded
+            // path, and for the one reason that path had a choice: there, a low
+            // score meant falling back to Wispr's own reading of the same audio.
+            // Here there is no second reading — Wispr never heard this — so the
+            // alternative to a shaky transcript is silence, and silence is the
+            // one outcome Victor cannot notice and correct. The banner says so.
+            if r.avgLogprob < LocalWhisper.confidenceFloor {
+                DispatchQueue.main.async {
+                    self.overlay.flash(String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob),
+                                       duration: 8)
+                }
+            } else {
+                DispatchQueue.main.async { self.overlay.clearFlash() }
+            }
+            // Reads the bytes on this thread and files the sample on its own, so
+            // the staged copy can go immediately after — the corpus keeps its own.
+            self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
+                                     duration: duration, app: app)
+            try? FileManager.default.removeItem(at: wav)
+            self.send(kind: "dictation", text: r.text, app: app)
         }
     }
 
@@ -616,9 +762,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// without the lock from the capture paths.
     private func togglePause(reason: String) {
         paused.toggle()
+        // Pausing mid-recording finishes it rather than abandoning it: he said
+        // the words, and the ordinary reason to pause here is that he is done
+        // and on his way into another app.
+        if paused && localRecording { stopLocalRecording() }
         overlay.setPaused(paused)
         status.setPaused(paused)
         syncBorrowedGestures()
+        syncLocalCapture()
         Log.info(paused ? "paused via \(reason) — dictation stays in Wispr, nothing is relayed"
                         : "resumed via \(reason)")
     }
@@ -716,14 +867,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // With no window to fly from — nothing resolved a frame — there is no
             // arrival to wait for and the chip is set at once.
             guard let frame = bound.sourceFrame else {
-                self.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
+                self.showBound(bound)
                 self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)", duration: 3)
                 return
             }
             self.overlay.flash("→ \(bound.label) · \(bound.address)\(unguarded)",
                                duration: BindFlight.duration)
             BindFlight.fly(from: frame) { [weak self] in
-                self?.overlay.setBound(label: bound.label, title: bound.title, folder: bound.folder)
+                self?.showBound(bound)
             }
         }
         return Self.describe(bound)
@@ -732,7 +883,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func unbindTerminal() {
         terminal.unbind()
         DispatchQueue.main.async { [weak self] in
-            self?.overlay.setBound(label: nil)
+            self?.showBound(nil)
             self?.overlay.flash("unbound — back to the outbox", duration: 3)
         }
     }
@@ -744,11 +895,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshBoundTitle() {
         guard terminal.target != nil else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self, let updated = self.terminal.refreshTitle() else { return }
-            DispatchQueue.main.async {
-                self.overlay.setBound(label: updated.label, title: updated.title, folder: updated.folder)
-            }
+            guard let self = self, let updated = self.terminal.refreshBinding() else { return }
+            DispatchQueue.main.async { self.showBound(updated) }
         }
+    }
+
+    /// The one place the binding is put on screen, so the chip and the menu can
+    /// never disagree about where the words are going.
+    ///
+    /// Both show the same line — `wispr-relay@main` behind the destination app's
+    /// own icon — because they answer the same question in two places: the chip is
+    /// where he is looking while he talks, and the menu bar is what is left when
+    /// the pointer (and with it the chip) is hidden because he started typing.
+    /// Main thread only: it draws.
+    private func showBound(_ target: TerminalBinding.Target?) {
+        guard let target = target else {
+            overlay.setBound(label: nil)
+            status.setDestination(nil, icon: nil)
+            return
+        }
+        // A target with no readable directory (a blind-paste app) says its own
+        // name instead. That is the one case where the icon is not enough on its
+        // own — there is nothing else on the line to give it a subject.
+        let line = target.folder ?? target.appName
+        overlay.setBound(label: target.label, folder: line,
+                         icon: Self.appIcon(target.bundleID, height: 14))
+        status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 16))
+    }
+
+    /// The destination app's icon, drawn down to the row height it has to sit in.
+    ///
+    /// Asked of the installed application rather than of the running one: a
+    /// running app answers `nil` for its icon often enough (it is loaded lazily,
+    /// and an app that is busy launching has none yet), and the bundle on disk is
+    /// the same picture with no timing to it.
+    private static func appIcon(_ bundleID: String, height: CGFloat) -> NSImage? {
+        guard !bundleID.isEmpty,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        let source = NSWorkspace.shared.icon(forFile: url.path)
+        let size = NSSize(width: height, height: height)
+        let scaled = NSImage(size: size)
+        scaled.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        source.draw(in: NSRect(origin: .zero, size: size))
+        scaled.unlockFocus()
+        return scaled
     }
 
     private static func describe(_ target: TerminalBinding.Target) -> [String: Any] {
@@ -790,7 +981,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case .targetGone(let what):
             Log.error("⌨️ \(what) — unbound")
-            overlay.setBound(label: nil)
+            showBound(nil)
             overlay.flash("⚠️ \(what) — unbound", duration: 6)
         case .wouldRunAsShell(let shell):
             Log.error("⛔️ \(shell) is at the prompt — refused, nothing sent")

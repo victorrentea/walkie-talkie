@@ -37,6 +37,11 @@ final class HotkeyTap {
     var onScreenshot: ((NSPoint) -> Void)?
     var onDictationStarted: (() -> Void)?
 
+    /// Mouse 5, when it is the relay's and not Wispr's: start or stop the local
+    /// recording. Fired on the press only — the release is swallowed with it and
+    /// says nothing, because this is a toggle and not a push-to-talk.
+    var onLocalToggle: (() -> Void)?
+
     /// Wispr is recording **and** the relay is forwarding — the only window in
     /// which mouse 4 is ours. Written from the main thread, read from the tap
     /// thread, hence the lock.
@@ -45,6 +50,34 @@ final class HotkeyTap {
         set { stateLock.lock(); dictatingFlag = newValue; stateLock.unlock() }
     }
     private var dictatingFlag = false
+
+    /// Local Whisper is the engine **and** the relay is forwarding — the state in
+    /// which mouse 5 belongs to the relay and must never reach Wispr, because in
+    /// that mode Wispr is not in the loop at all: the relay holds the microphone
+    /// itself. Set from the main thread by `AppDelegate.syncLocalCapture`.
+    var localCapture: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return localCaptureFlag }
+        set { stateLock.lock(); localCaptureFlag = newValue; stateLock.unlock() }
+    }
+    private var localCaptureFlag = false
+
+    /// Swallow keystrokes **posted by Wispr Flow itself** — i.e. the transcript it
+    /// types or pastes into whatever holds the caret.
+    ///
+    /// That paste is the thing Victor dictates *around*: he talks about a page he
+    /// is reading, and Wispr drops the sentence into the document, the search
+    /// field, the terminal — wherever the caret happened to be. The relay already
+    /// takes the words from Wispr's database, so the injection is pure damage.
+    ///
+    /// Off while paused, and that is the whole meaning of pause: pausing is what
+    /// he does to dictate *into* an app, and the app getting the text is then
+    /// exactly what he wants.
+    var blockInjection: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return blockInjectionFlag }
+        set { stateLock.lock(); blockInjectionFlag = newValue; stateLock.unlock() }
+    }
+    private var blockInjectionFlag = false
+
     private let stateLock = NSLock()
 
     private let VK_P: CGKeyCode = 0x23
@@ -59,7 +92,13 @@ final class HotkeyTap {
 
     @discardableResult
     func start() -> Bool {
+        // `keyUp` and `flagsChanged` are here only for the injection block: a
+        // synthetic ⌘V is a modifier press, a key down and a key up, and letting
+        // two thirds of that through would leave the target app holding a ⌘ that
+        // was never released.
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+                 | CGEventMask(1 << CGEventType.keyUp.rawValue)
+                 | CGEventMask(1 << CGEventType.flagsChanged.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseUp.rawValue)
 
@@ -111,11 +150,38 @@ final class HotkeyTap {
                 return nil
             }
 
+            if button == MOUSE_BUTTON_5 && localCapture {
+                // Local Whisper: the button is the relay's own record toggle and
+                // Wispr must not see it at all — a Wispr that starts listening
+                // would record the same sentence a second time and paste it.
+                // Both halves are swallowed, so nothing downstream sees an orphan
+                // release either.
+                if type == .otherMouseDown {
+                    Log.info("🎙️ mouse 5 — local recording toggle")
+                    DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                }
+                return nil
+            }
+
             if type == .otherMouseDown && button == MOUSE_BUTTON_5 {
                 // Pass through — Wispr Flow must still see its push-to-talk.
                 DispatchQueue.global().async { [weak self] in self?.onDictationStarted?() }
             }
             return Unmanaged.passUnretained(event)
+        }
+
+        // Anything Wispr Flow types or pastes, dropped before it reaches the app
+        // under the caret. Checked first, and for all three keyboard event types:
+        // whatever mechanism Wispr uses, if it arrives as a posted event it is
+        // stopped here, and if nothing is ever logged then it does not arrive as
+        // one at all (it would be going through the Accessibility API instead,
+        // which no event tap can see).
+        if blockInjection {
+            let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
+            if pid != 0 && isWispr(pid) {
+                noteSwallowed(type: type, event: event, pid: pid)
+                return nil
+            }
         }
 
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
@@ -198,4 +264,71 @@ final class HotkeyTap {
     /// mapping lives; this is the process that acts on it.
     private static let remapperProcessName = "LinearMouse"
     private var remapperPids: [pid_t: Bool] = [:]
+
+    /// Is this pid Wispr Flow, or one of its helpers?
+    ///
+    /// Matched on the process name by prefix because Electron spreads itself over
+    /// `Wispr Flow`, `Wispr Flow Helper (Renderer)` and friends, and which of them
+    /// posts the keystrokes is an implementation detail of a third-party app —
+    /// one that may well change under us. Cached per pid like `isRemapper`: this
+    /// runs on the event tap, for every key of a transcript being typed out.
+    private func isWispr(_ pid: pid_t) -> Bool {
+        stateLock.lock()
+        if let known = wisprPids[pid] { stateLock.unlock(); return known }
+        stateLock.unlock()
+
+        var buf = [CChar](repeating: 0, count: 256)
+        let match = proc_name(pid, &buf, UInt32(buf.count)) > 0
+                 && String(cString: buf).hasPrefix(Self.wisprProcessPrefix)
+
+        stateLock.lock()
+        wisprPids[pid] = match
+        stateLock.unlock()
+        return match
+    }
+
+    private static let wisprProcessPrefix = "Wispr Flow"
+    private var wisprPids: [pid_t: Bool] = [:]
+
+    /// One line per burst, not per key.
+    ///
+    /// A transcript typed character by character is hundreds of events, and a log
+    /// line each would bury everything else the relay says. What is worth knowing
+    /// is *that* an injection was stopped and what it looked like — the first
+    /// event carries the mechanism (a ⌘V, or a key with a unicode payload) — plus
+    /// how many followed it. A gap of a second ends the burst.
+    private func noteSwallowed(type: CGEventType, event: CGEvent, pid: pid_t) {
+        stateLock.lock()
+        let now = Date().timeIntervalSinceReferenceDate
+        let fresh = now - lastSwallowAt > 1.0
+        if fresh {
+            if burstCount > 0 { Log.info("🛑 …and \(burstCount) more events from Wispr") }
+            burstCount = 0
+        } else {
+            burstCount += 1
+        }
+        lastSwallowAt = now
+        stateLock.unlock()
+
+        guard fresh else { return }
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 8)
+        event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length, unicodeString: &chars)
+        let typed = length > 0 ? String(utf16CodeUnits: chars, count: length) : ""
+        let key = event.getIntegerValueField(.keyboardEventKeycode)
+        Log.info("🛑 swallowed Wispr injection — \(Self.name(type)) key=\(key) flags=\(event.flags.rawValue)"
+                 + (typed.isEmpty ? "" : " text=\(typed.debugDescription)") + " pid=\(pid)")
+    }
+
+    private var lastSwallowAt: TimeInterval = 0
+    private var burstCount = 0
+
+    private static func name(_ type: CGEventType) -> String {
+        switch type {
+        case .keyDown:      return "keyDown"
+        case .keyUp:        return "keyUp"
+        case .flagsChanged: return "flagsChanged"
+        default:            return "type\(type.rawValue)"
+        }
+    }
 }

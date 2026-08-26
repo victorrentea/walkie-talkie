@@ -198,7 +198,10 @@ no context capture, no screenshots, nothing written to the outbox.
 
 [Wispr Flow](https://wisprflow.ai) pastes its transcript wherever the caret is,
 which is useless when you are dictating *about* something you are only reading.
-So the overlay reads Wispr's own local history instead:
+So the overlay reads Wispr's own local history instead — **and stops the paste**:
+every keystroke Wispr's process posts is dropped by the event tap while the relay
+is forwarding (and let through while it is paused, which is when you *are*
+dictating into an app):
 `~/Library/Application Support/Wispr Flow/flow.sqlite`, opened **read-only** and
 polled once a second for rows newer than a watermark taken at startup.
 
@@ -208,18 +211,26 @@ every representation, snapshotted and restored around the probe.
 
 ### Wispr Flow, or a local Whisper
 
+On **Local Whisper**, mouse 5 belongs to the relay: the button never reaches
+Wispr, and instead toggles the relay's own recording (press to start, press again
+to stop) into a local model. Wispr is not in the loop at all in that mode — it
+does not record, and there is nothing for it to paste.
+
 The menu bar's two engine rows — **Wispr Flow** and **Local Whisper**, flat in the
 main menu below a separator — switch which recogniser's words reach
-the agent, and the choice survives a restart. Wispr still records in both modes:
-the local engine transcribes `History.audio`, the same 16 kHz WAV Wispr already
-stored, so there is no microphone code and no second capture that could drift
-from the first — and the comparison is like-for-like. It needs `mlx_whisper`
+the agent, and the choice survives a restart. A dictation that Wispr *did* record
+— on the Wispr engine, or one started with Wispr's own hotkey — is still
+transcribed from `History.audio`, the same 16 kHz WAV Wispr stored, so that
+comparison stays like-for-like. It needs `mlx_whisper`
 (`pip install mlx-whisper`); the model is `mlx-community/whisper-large-v3-turbo`,
 overridable with `RELAY_WHISPER_MODEL`.
 
-Whenever the local engine cannot answer — not loaded, no audio, or a transcript
-it is not confident in — Wispr's own text goes out instead, and the fallback is
-flashed and logged. A dictation is never dropped because of a setting.
+Whenever the local engine cannot answer on a **Wispr-recorded** dictation — not
+loaded, no audio, or a transcript it is not confident in — Wispr's own text goes
+out instead, and the fallback is flashed and logged. A dictation is never dropped
+because of a setting. For a dictation the relay recorded itself there is no such
+second reading, so a low-confidence transcript is sent with a warning rather than
+swallowed: silence is the one outcome you cannot notice and correct.
 
 Measured over 442 real dictations (163 min): 86% of local transcripts are
 semantically equivalent to Wispr's, 2.5% are broken, and the broken ones are
