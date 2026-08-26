@@ -127,7 +127,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         refreshGlyph()
     }
 
-    /// `Local Whisper — 1.6 GB` while the model is up.
+    /// `Local Whisper — 1.6 GB RAM` while the model is up.
     ///
     /// **The cost is shown where the choice is made.** The weights are the whole
     /// argument for starting the helper only when the engine is selected and
@@ -138,6 +138,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// proof the helper is actually alive, since a dead one has no footprint and
     /// the row goes back to its bare name.
     ///
+    /// **`RAM` is spelled out after the number** because a size in a menu is
+    /// read as a download by default — the one thing this number is not. It is
+    /// what the helper is holding *right now*, and the row is the switch that
+    /// gives it back.
+    ///
     /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
     /// `LocalWhisper.footprintBytes` for why not RSS.
     private func applyWhisperTitle() {
@@ -145,7 +150,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         if engineLoading {
             engineItems[.whisper]?.title = "\(name) — loading…"
         } else if let bytes = whisperFootprint?() {
-            engineItems[.whisper]?.title = String(format: "%@ — %.1f GB", name,
+            engineItems[.whisper]?.title = String(format: "%@ — %.1f GB RAM", name,
                                                   Double(bytes) / 1_073_741_824)
         } else {
             engineItems[.whisper]?.title = name
