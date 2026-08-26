@@ -22,7 +22,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let selectionLabel = NSTextField(labelWithString: "")
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
-    private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 96, height: 22))
+    private let cancelButton = PillButton(frame: NSRect(x: 0, y: 0, width: 116, height: 28))
+    /// **The countdown moved onto Send.** The clock was on Cancel, which made the
+    /// one destructive control the only one worth looking at and left "it is
+    /// going out in 3s" to be inferred from "you can still stop it for 3s". Send
+    /// says the same seconds as an offer — and it is a button, so the wait can be
+    /// skipped whenever he already knows the text is right.
+    private let sendButton = PillButton(frame: NSRect(x: 0, y: 0, width: 128, height: 28))
     /// The engine row: a slowly pulsing 🔴 and the name of whatever is listening.
     ///
     /// **Which ear is open is a fact about the dictation, not about the app**, and
@@ -141,10 +147,25 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let margin: CGFloat = 24
     /// Space kept clear on the title row for the hover-revealed ✕.
     private let closeReserve: CGFloat = 26
+    /// Between Send and Cancel.
+    private let buttonGap: CGFloat = 8
 
-    private let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
-    private let promptFont = NSFont.systemFont(ofSize: 12)
-    private let hintFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)   // 10 × 1.3
+    /// **One face for the whole overlay, and one scale.**
+    ///
+    /// The title used to be the system face and everything under it monospaced,
+    /// which made the chip read as two things stacked rather than one card: the
+    /// folder in one typeface, the row saying what is listening in another,
+    /// three pixels apart. The monospaced face is the one that has to stay — the
+    /// ⌘-pick row carries `div.card > span.price`, which a proportional face
+    /// turns into prose — so it is the one everything else joined.
+    ///
+    /// Sizes are the old ones ×1.3, asked for after a session across the room
+    /// from the screen: 13 → 17, 12 → 16, 11 → 14. Every box the text sits in is
+    /// scaled with it (`recordRowHeight`, `titleRowHeight`, the glyph sizes), or
+    /// the letters grow into a row that clips them.
+    private let titleFont = NSFont.monospacedSystemFont(ofSize: 17, weight: .semibold)
+    private let promptFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+    private let hintFont = NSFont.monospacedSystemFont(ofSize: 17, weight: .regular)
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
@@ -204,9 +225,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// name alone (`Wispr Flow`), on the reading that a pulsing red dot already
     /// means recording. It does to whoever built it; to a room seeing the overlay
     /// for the first time — and to Victor at a glance, mid-sentence — a bare
-    /// product name beside a light is a status *badge*, not an event. `Recording
+    /// product name beside a light is a status *badge*, not an event. `Listening
     /// with Wispr Flow` is the same two facts in the order they are asked in: is
     /// it listening, and who is listening.
+    ///
+    /// **`Listening`, not `Recording`.** Recording is what a device does to a
+    /// file; listening is what the other end of a conversation does, and this
+    /// row is on screen precisely while Victor is talking *to* something.
     ///
     /// The engine is still spelled out rather than abbreviated: it answers the
     /// question the whole engine switch exists for — which of the two recognisers
@@ -214,7 +239,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// transcript nothing else can double-check.
     private var engineText: String? {
         guard listening, !paused else { return nil }
-        return "Recording with " + (localListening ? "Local Whisper" : "Wispr Flow")
+        return "Listening with " + (localListening ? "Local Whisper" : "Wispr Flow")
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -335,6 +360,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.textColor = .labelColor
         titleGlyph.image = Self.pinGlyph
         titleGlyph.imageScaling = .scaleProportionallyUpOrDown
+        // The box is as wide as the widest icon on the card, so without this the
+        // image would sit centred in it — half a column right of the emoji above
+        // and below, which is the misalignment the shared column was meant to fix.
+        titleGlyph.imageAlignment = .alignLeft
         titleGlyph.isHidden = true          // only a bound relay shows a destination
         titleRow.addSubview(titleGlyph)
         titleRow.addSubview(titleLabel)
@@ -348,7 +377,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // Two labels rather than one string, because only the dot pulses: an
         // animation on the whole row would blink the engine's name too, and a
         // word that fades in and out is a word he has to wait to read.
-        recordDot.font = .systemFont(ofSize: 11)
+        recordDot.font = .systemFont(ofSize: 14)
+        recordDot.alignment = .left
         recordDot.wantsLayer = true
         engineInfo.font = hintFont
         engineInfo.textColor = .secondaryLabelColor
@@ -357,7 +387,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         engineRow.isHidden = true
         root.addSubview(engineRow)
 
-        shotGlyph.font = .systemFont(ofSize: 11)
+        shotGlyph.font = .systemFont(ofSize: 14)
+        shotGlyph.alignment = .left
         recordInfo.font = hintFont
         recordInfo.textColor = .secondaryLabelColor
         recordRow.addSubview(shotGlyph)
@@ -369,6 +400,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // and a proportional font makes `div.card > span.price` read as prose.
         pickGlyph.image = Self.browserIcon
         pickGlyph.imageScaling = .scaleProportionallyUpOrDown
+        pickGlyph.imageAlignment = .alignLeft
         pickInfo.font = hintFont
         pickInfo.textColor = .secondaryLabelColor
         pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
@@ -378,7 +410,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         pickRow.isHidden = true
         root.addSubview(pickRow)
 
-        selectionLabel.font = .systemFont(ofSize: 11)
+        selectionLabel.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         selectionLabel.textColor = .secondaryLabelColor
         selectionLabel.lineBreakMode = .byTruncatingTail
         selectionLabel.maximumNumberOfLines = 1
@@ -401,6 +433,13 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         cancelButton.isHidden = true
         cancelButton.onClick = { [weak self] in self?.resolvePrompt(send: false) }
         root.addSubview(cancelButton)
+
+        // Left of Cancel, and not red: it is the button that does what he already
+        // meant to do. Red is kept for the one that throws the dictation away.
+        sendButton.isHidden = true
+        sendButton.accent = .controlAccentColor
+        sendButton.onClick = { [weak self] in self?.resolvePrompt(send: true) }
+        root.addSubview(sendButton)
 
         refreshTitle()
     }
@@ -439,11 +478,27 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// while dictating into other apps. A half-screen panel parked over his work
     /// for all of it says nothing he doesn't already know. The chip says it where
     /// he is looking: ⏸️ in front of the robot, at 0.30.
-    private var anchored: Bool { sentPrompt == nil && flashMessage == nil }
+    /// **A flash is anchored too, since 2026-08-26.** It used to throw the panel
+    /// into the top-left corner — `⏳ loading the local model`, `🎙️ ready`, every
+    /// warning — which put the overlay's words in two different places depending
+    /// on which kind of word it was. Victor read the corner as a *second*,
+    /// unrelated thing on screen ("e confuzant"), and he is right: the eye that
+    /// has learned to find this app beside the pointer has no reason to go
+    /// looking in a corner for the rest of it. The prompt is the one thing left
+    /// that earns the panel, because it is the one thing he has to read whole
+    /// before a clock runs out.
+    private var anchored: Bool { sentPrompt == nil }
 
     /// Where the chip rides relative to the pointer: below and to the right, out
     /// of the way of the thing being pointed at.
     private let anchorGap = NSSize(width: 10, height: 22)
+
+    /// The middle of the chip in screen coordinates — what the bind rectangle
+    /// flies into. Asked for live, since the chip is following the pointer while
+    /// the rectangle is in the air.
+    var chipCentre: CGPoint {
+        CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+    }
 
     /// Tracking has two states, and the second one is what keeps the ✕ reachable.
     ///
@@ -616,7 +671,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         titleLabel.stringValue = titleText
         titleLabel.sizeToFit()
         // The pin sits in its own box ahead of the text, so it counts too.
-        let titleWidth = ceil(titleLabel.frame.width) + (boundLabel != nil ? titleGlyphWidth + recordDotGap : 0)
+        let titleWidth = ceil(titleLabel.frame.width) + (boundLabel != nil ? glyphColumn + recordDotGap : 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -627,8 +682,15 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
+        // The two buttons are a row like any other and have to be measured like
+        // one. With only Cancel on it that was survivable; Send beside it is
+        // 252pt of control, which a short dictation's panel is narrower than —
+        // and a button laid out past the left edge is a button he cannot press.
+        let buttonsWidth = sentPrompt == nil ? 0
+            : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
-                               max(hintWidth, max(engineWidth, max(recordWidth, pickWidth))))) + pad * 2
+                               max(buttonsWidth,
+                                   max(hintWidth, max(engineWidth, max(recordWidth, pickWidth)))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -657,7 +719,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         var rows: [(view: NSView, height: CGFloat)] = []
 
         layoutTitleRow(width: innerWidth)
-        rows.append((titleRow, 16))
+        rows.append((titleRow, titleRowHeight))
 
         // First of the three, because it is the one that is *about* the dictation
         // rather than about what is riding along with it: something is listening,
@@ -697,9 +759,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         if let selection = selection {
             selectionLabel.stringValue = (selectionCount > 1 ? "↪ ×\(selectionCount) " : "↪ ") + singleLine(selection)
-            selectionLabel.frame.size = NSSize(width: innerWidth, height: 15)
+            selectionLabel.frame.size = NSSize(width: innerWidth, height: 19)
             selectionLabel.isHidden = false
-            rows.append((selectionLabel, 15))
+            rows.append((selectionLabel, 19))
         } else {
             selectionLabel.isHidden = true
         }
@@ -724,17 +786,19 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // sometimes sits on top of a word.
         if sentPrompt != nil {
             cancelButton.isHidden = false
+            sendButton.isHidden = false
             rows.append((cancelButton, cancelButton.frame.height))
         } else {
             cancelButton.isHidden = true
+            sendButton.isHidden = true
         }
 
         if let hint = hintText {
             hintLabel.stringValue = hint
             hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor : .labelColor
-            hintLabel.frame.size = NSSize(width: innerWidth, height: 17)
+            hintLabel.frame.size = NSSize(width: innerWidth, height: 22)
             hintLabel.isHidden = false
-            rows.append((hintLabel, 17))
+            rows.append((hintLabel, 22))
         } else {
             hintLabel.isHidden = true
         }
@@ -772,6 +836,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         // button belongs, far from the drag area his cursor arrives through.
         if !cancelButton.isHidden {
             cancelButton.frame.origin.x = width - pad - cancelButton.frame.width
+            // Send sits on the same line, immediately left of Cancel: the pair
+            // reads left-to-right as "send / don't", and the hand that comes for
+            // either arrives at the same corner.
+            sendButton.frame.origin = NSPoint(
+                x: cancelButton.frame.minX - buttonGap - sendButton.frame.width,
+                y: cancelButton.frame.origin.y)
         }
 
         closeButton.frame.origin = NSPoint(x: width - closeButton.frame.width - 6,
@@ -782,11 +852,11 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
     // MARK: The recording row
 
-    private let recordRowHeight: CGFloat = 17
+    private let recordRowHeight: CGFloat = 22
     /// Same as the recording row: the two are the same kind of fact about the
     /// message being assembled, and a row that stood a pixel taller than its
     /// neighbour would read as a different kind of thing.
-    private let pickRowHeight: CGFloat = 17
+    private let pickRowHeight: CGFloat = 22
     /// Between the dot and the text. Wide enough that the pulsing dot reads as its
     /// own indicator rather than as punctuation in front of the count.
     private let recordDotGap: CGFloat = 5
@@ -803,7 +873,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// unrelated lines rather than as one thing being assembled. Aligning the
     /// *text* is what makes it a list; aligning the glyphs is what makes it a
     /// column.
-    private var glyphColumn: CGFloat { max(recordDotWidth, max(shotGlyphWidth, pickGlyphWidth)) }
+    private var glyphColumn: CGFloat {
+        max(recordDotWidth, max(shotGlyphWidth, max(pickGlyphWidth, titleGlyphWidth)))
+    }
+
+    /// The title row's own height, kept in step with the text in it.
+    private let titleRowHeight: CGFloat = 21
 
     private func rowWidth(_ text: String) -> CGFloat {
         glyphColumn + recordDotGap + ceil(measure(text, font: hintFont))
@@ -836,7 +911,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// Both drawn once and reused: they never change, and re-rasterising a shape
     /// on every relayout would be work done sixty times a second while the chip
     /// follows the cursor.
-    private static let pinGlyph = Glyphs.mapPin(height: 14)
+    private static let pinGlyph = Glyphs.mapPin(height: 18)
 
     /// The glyph's box on the title row — an app icon when bound to one, the pin
     /// otherwise. Asked of the image that is actually set rather than of the pin,
@@ -845,7 +920,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// name by exactly the difference.
     private var titleGlyphWidth: CGFloat { ceil((titleGlyph.image ?? Self.pinGlyph).size.width) }
 
-    private static let pickGlyphSize: CGFloat = 13
+    private static let pickGlyphSize: CGFloat = 17
 
     private var pickGlyphWidth: CGFloat { Self.pickGlyphSize }
 
@@ -869,28 +944,39 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// The pin is vertically centred on the row rather than sat on the baseline:
     /// it is a shape, not a letter, and lining its middle up with the text's is
     /// what stops it reading as having slipped.
+    /// **The title's icon sits in the same column as every other icon**, and its
+    /// text starts where every other row's text starts.
+    ///
+    /// It used to be laid out on its own measurements — the app icon is square,
+    /// the pin is `0.696 × height`, the emoji below are something else again —
+    /// so the folder name began at one x, the engine row at a second and the
+    /// ⌘-pick row at a third. Four rows, four left edges, on a card 200px wide.
+    /// One column for the icons and one for the text is what makes it a card
+    /// rather than four labels that happen to be adjacent.
     private func layoutTitleRow(width: CGFloat) {
         let bound = boundLabel != nil
         titleGlyph.isHidden = !bound
-        titleRow.frame.size = NSSize(width: width, height: 16)
-        let glyphWidth = bound ? titleGlyphWidth : 0
+        titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
+        let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
         if bound {
-            let h = (titleGlyph.image ?? Self.pinGlyph).size.height
-            titleGlyph.frame = NSRect(x: 0, y: ((16 - h) / 2).rounded(),
-                                      width: glyphWidth, height: ceil(h))
+            let image = titleGlyph.image ?? Self.pinGlyph
+            let h = min(image.size.height, titleRowHeight)
+            // Left-aligned in the column, like the others: the box is as wide as
+            // the widest icon, and an icon centred in it would sit right of the
+            // ones above and below.
+            titleGlyph.frame = NSRect(x: 0, y: ((titleRowHeight - h) / 2).rounded(),
+                                      width: column, height: ceil(h))
         }
-        titleLabel.frame = NSRect(x: glyphWidth + gap, y: 0,
-                                  width: max(0, width - glyphWidth - gap), height: 16)
+        titleLabel.frame = NSRect(x: column + gap, y: 0,
+                                  width: max(0, width - column - gap), height: titleRowHeight)
     }
 
     private func layoutPickRow(width: CGFloat) {
         let glyphWidth = pickGlyphWidth
         pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
-        // Centred **inside the shared column** rather than at its left edge: it is
-        // the narrow one of the three, and flush-left it would sit a pixel or two
-        // off the two emoji above it.
-        pickGlyph.frame = NSRect(x: ((glyphColumn - glyphWidth) / 2).rounded(),
+        // Flush left in the shared column, like every other icon on the card.
+        pickGlyph.frame = NSRect(x: 0,
                                  y: ((pickRowHeight - glyphWidth) / 2).rounded(),
                                  width: glyphWidth, height: glyphWidth)
         pickInfo.frame = NSRect(x: glyphColumn + recordDotGap, y: 0,
@@ -904,7 +990,12 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// The panel comes back the moment there is something to *contain*: a
     /// dictation, a prompt, a warning.
     private func refreshChrome() {
-        let bare = anchored
+        // **Bare is not the same question as anchored any more.** Anchored is
+        // *where* the overlay is; bare is whether it draws a window around the
+        // words. The chip at rest is bare — a label on his work. A flash is a
+        // sentence he has to read once, often over a busy screen, so it keeps
+        // the blur and the shadow while riding the pointer like everything else.
+        let bare = anchored && flashMessage == nil
         root.blur?.isHidden = bare
         root.layer?.cornerRadius = bare ? 0 : 14
         if panel.hasShadow != !bare {
@@ -1266,7 +1357,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private func updateCancelTitle() {
         guard let deadline = promptDeadline else { return }
         let left = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
-        cancelButton.title = "✕ Cancel \(left)s"
+        sendButton.title = "⏎ Send \(left)s"
+        cancelButton.title = "✕ Cancel"
     }
 
     /// The single exit from the displayed-prompt state: collapse back to the
@@ -1297,7 +1389,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     func flash(_ message: String, duration: TimeInterval = 2.0) {
         flashMessage = message
         layoutContent()
-        reposition()             // a warning is a panel, not a chip: back to the corner
+        reposition()             // still beside the pointer — a flash is not a reason to move
         refreshOpacity()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             guard let self = self, self.flashMessage == message else { return }
@@ -1452,6 +1544,9 @@ final class CloseButton: NSView {
 /// swallow the first click activating the window. This one is always live.
 final class PillButton: NSView {
     var onClick: (() -> Void)?
+    /// What it looks like under the cursor. Red for the destructive one, the
+    /// system accent for the one that simply does the expected thing sooner.
+    var accent: NSColor = .systemRed
     var title: String = "" {
         didSet { guard title != oldValue else { return }; needsDisplay = true }
     }
@@ -1466,7 +1561,7 @@ final class PillButton: NSView {
         // overlay is on screen all day and a permanently red button reads as an
         // error rather than as an offer.
         if hot {
-            NSColor.systemRed.withAlphaComponent(0.92).setFill()
+            accent.withAlphaComponent(0.92).setFill()
         } else {
             NSColor.secondaryLabelColor.withAlphaComponent(0.22).setFill()
         }
@@ -1478,7 +1573,7 @@ final class PillButton: NSView {
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .medium),
             .foregroundColor: hot ? NSColor.white : NSColor.labelColor,
             .paragraphStyle: style,
         ]

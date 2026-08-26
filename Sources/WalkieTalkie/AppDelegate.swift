@@ -871,16 +871,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             //
             // With no window to fly from — nothing resolved a frame — there is no
             // arrival to wait for and the chip is set at once.
+            // **The chip is set first, and the rectangle flies into it.** It used
+            // to be the other way round — the label appeared when the rectangle
+            // landed — which meant the flight ended on empty screen and the
+            // answer arrived a frame later. Showing it up front gives the
+            // rectangle something to aim at, and it now slides underneath and
+            // disappears there: the window that was captured is *this* label.
+            self.showBound(bound)
             guard let frame = bound.sourceFrame else {
-                self.showBound(bound)
                 self.overlay.flash("walkie: started in \(bound.label)\(unguarded)", duration: 3)
                 return
             }
             self.overlay.flash("walkie: started in \(bound.label)\(unguarded)",
                                duration: BindFlight.duration)
-            BindFlight.fly(from: frame) { [weak self] in
-                self?.showBound(bound)
-            }
+            BindFlight.fly(from: frame, to: { [weak self] in
+                self?.overlay.chipCentre ?? NSEvent.mouseLocation
+            })
         }
         return Self.describe(bound)
     }
@@ -924,8 +930,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // own — there is nothing else on the line to give it a subject.
         let line = target.folder ?? target.appName
         overlay.setBound(label: target.label, folder: line,
-                         icon: Self.appIcon(target.bundleID, height: 14))
-        status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 16))
+                         icon: Self.appIcon(target.bundleID, height: 18))
+        status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 20))
     }
 
     /// The destination app's icon, drawn down to the row height it has to sit in.

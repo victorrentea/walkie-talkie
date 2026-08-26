@@ -85,6 +85,7 @@ enum BindFlight {
     private static var timer: Timer?
     private static var startedAt: CFTimeInterval = 0
     private static var origin: CGRect = .zero
+    private static var target: () -> CGPoint = { NSEvent.mouseLocation }
 
     /// Fly from `source` to wherever the cursor is, for the whole 2s — the mouse
     /// is re-read every frame rather than sampled once, so the rectangle chases
@@ -96,7 +97,14 @@ enum BindFlight {
     /// the chip's label appears, so the two read as one gesture: the rectangle
     /// does not merely end near the pointer, it *becomes* the thing now sitting
     /// there.
-    static func fly(from source: CGRect, landed: (() -> Void)? = nil) {
+    /// `to` is asked **every frame** for where the rectangle is heading — the
+    /// chip's own centre, not the raw pointer. The two are 10×22pt apart, which
+    /// is the whole difference between a rectangle that stops next to the label
+    /// and one that goes *into* it. Defaults to the pointer for callers with no
+    /// chip to aim at.
+    static func fly(from source: CGRect,
+                    to destination: @escaping () -> CGPoint = { NSEvent.mouseLocation },
+                    landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
 
@@ -112,7 +120,12 @@ enum BindFlight {
             panel.backgroundColor = .clear
             panel.hasShadow = false
             panel.ignoresMouseEvents = true
-            panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+            // **Under the chip, not over it.** This used to sit at the maximum
+            // window level, which put the rectangle *on top of* the label it is
+            // flying into — the last thing it did was cover the answer. One level
+            // below the overlay's own `.statusBar` and it slides underneath and
+            // is gone, which is what "it becomes the chip" should look like.
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
             // A bind is very often followed by a dictation, whose first act is to
             // photograph the screen. This must never be in that picture.
@@ -137,6 +150,7 @@ enum BindFlight {
         guard !panes.isEmpty else { return }
 
         origin = source
+        target = destination
         onLanded = landed
         startedAt = CACurrentMediaTime()
 
@@ -163,7 +177,7 @@ enum BindFlight {
         let scale = 1 - (1 - endScale) * eased
         let from = CGPoint(x: origin.midX, y: origin.midY)
         // Re-read every frame: this is what makes it follow the hand.
-        let to = NSEvent.mouseLocation
+        let to = target()
         let centre = CGPoint(x: from.x + (to.x - from.x) * eased,
                              y: from.y + (to.y - from.y) * eased)
         let size = CGSize(width: origin.width * scale, height: origin.height * scale)
