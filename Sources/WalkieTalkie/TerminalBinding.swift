@@ -171,7 +171,16 @@ final class TerminalBinding {
             // **Ask the editor.** Its extension knows which terminal is active,
             // can name it, and can hand back the shell's pid — three things
             // nothing outside the window has ever been able to answer.
-            if let handle = IDEBridge.bind(bundleID: bundleID) {
+            switch IDEBridge.bind(bundleID: bundleID) {
+            case .noTerminal:
+                // The extension answered and said there is no terminal in this
+                // window. Nothing to type into, so nothing is bound — a paste
+                // here would land in whatever the window *does* hold, which is a
+                // source file. Refusing sends the same message the banner
+                // already knows how to say: click into a terminal first.
+                Log.error("⌘⌃D on \(name) — that window has no terminal open, not binding")
+                bound = nil
+            case .bound(let handle):
                 bound = Target(handle: .ide(handle),
                                label: Self.display(name), address: "\(Self.display(name)) · \(handle.name)",
                                appName: Self.display(name), bundleID: bundleID,
@@ -182,10 +191,10 @@ final class TerminalBinding {
                                folder: Self.folder(ofIDE: handle),
                                title: window.title,
                                sourceFrame: window.frame, boundAt: Date())
-            } else {
-                // The editor is one we know, but nothing answered — the
-                // extension is not installed, or the window has no terminal
-                // open. Paste is what is left, and it is announced as such.
+            case .noExtension:
+                // Nobody answered at all: the extension is not installed, or the
+                // window has not loaded it yet. Paste is what is left — it is
+                // that or nothing — and it is announced as such.
                 Log.error("no \(editor) extension answering — falling back to paste, which lands wherever the caret is")
                 bound = Target(handle: .keystroke(pid: app.processIdentifier, app: name),
                                label: Self.display(name), address: Self.display(name),

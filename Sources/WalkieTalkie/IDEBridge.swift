@@ -140,18 +140,35 @@ enum IDEBridge {
         return candidates.count == 1 ? candidates[0] : nil
     }
 
+    /// What asking an editor to bind its terminal came back with.
+    ///
+    /// **The two failures are not the same failure**, and collapsing them into
+    /// `nil` is what put a dictation into Victor's open file. `noExtension` means
+    /// nobody answered — an editor without the extension, or one that has not
+    /// loaded it yet — and pasting at the caret is a fair last resort there,
+    /// because it is that or nothing. `noTerminal` means the extension answered
+    /// and said this window has no terminal in it: there is nothing to type into,
+    /// and the paste lands in whatever the window *does* have, which is a source
+    /// file. Measured — ⌘⌃D in a VS Code window holding notes.txt typed the next
+    /// dictation into line 23 of the notes.
+    enum BindResult {
+        case bound(Handle)
+        case noTerminal
+        case noExtension
+    }
+
     /// Point the editor at its active terminal and take a handle to it.
-    static func bind(bundleID: String) -> Handle? {
+    static func bind(bundleID: String) -> BindResult {
         guard let kind = kind(bundleID: bundleID),
-              let endpoint = focusedEndpoint(kind: kind),
-              let obj = request("POST", "/bind", on: endpoint),
-              let id = obj["id"] as? Int
-        else { return nil }
+              let endpoint = focusedEndpoint(kind: kind)
+        else { return .noExtension }
+        guard let obj = request("POST", "/bind", on: endpoint) else { return .noTerminal }
+        guard let id = obj["id"] as? Int else { return .noTerminal }
         let name = (obj["name"] as? String) ?? "terminal"
         let shell = (obj["shellPID"] as? Int).map { pid_t($0) }
         let cwd = obj["cwd"] as? String
         Log.info("🔌 \(kind) bridge on :\(endpoint.port) → terminal #\(id) “\(name)” shell pid \(shell.map(String.init) ?? "?") cwd \(cwd ?? "?")")
-        return Handle(endpoint: endpoint, id: id, name: name, shellPID: shell, cwd: cwd)
+        return .bound(Handle(endpoint: endpoint, id: id, name: name, shellPID: shell, cwd: cwd))
     }
 
     /// Where that terminal is **now** — the editor asked again rather than the
