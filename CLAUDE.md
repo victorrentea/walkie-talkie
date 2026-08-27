@@ -36,11 +36,14 @@ from then on is typed into that session and submitted — no `/relay`, no skill,
 `Monitor` armed on the outbox, no label filter to get right. `⌘⌃D` (this app's own key since 2026-08-26, see below) binds whatever
 terminal is in front.
 
-**The outbox is still written, always.** A binding is a second destination, not a
-replacement: `AppDelegate.commit` writes the JSONL line and *then* delivers, so
-the log survives, an agent watching the queue the old way keeps working, and
-`session_end` — which is addressed to a watcher and means nothing to a terminal —
-is the one kind that is not delivered.
+**The outbox is still written whenever a message goes out.** A binding is a
+second destination, not a replacement: `AppDelegate.commit` writes the JSONL line
+and *then* delivers, so the log survives, an agent watching the queue the old way
+keeps working, and `session_end` — which is addressed to a watcher and means
+nothing to a terminal — is the one kind that is not delivered.
+
+**But a binding is now also the on switch** — see *Unbound is inert*. There is no
+longer such a thing as a relay that writes the outbox with nothing bound.
 
 ### IDE terminals go through the editor's own extension
 
@@ -380,12 +383,13 @@ Four further decisions behind where that folder comes from:
   and redrawing a shape sixty times a second for a picture that never changes is
   work for nothing.
 
-**🤖 is still what unbound looks like**, and the glyph replaces it rather than
-decorating it: 🤖 has always meant "this overlay is writing an outbox somebody is
-watching", and bound that is no longer what happens.
+**🤖 is still what unbound looks like** in the menu bar, and the glyph replaces
+it rather than decorating it: 🤖 used to mean "this overlay is writing an outbox
+somebody is watching", and bound that is no longer what happens. Since *Unbound
+is inert* it means less than that — the app is running, and that is all.
 
 The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
-`unbound — back to the outbox` at release. They are text rows, so the only pin
+`unbound — nothing is relayed now` at release. They are text rows, so the only pin
 available to them is the pushpin emoji the drawn one exists to avoid.
 
 ### ⌘⌃D again on the same target stops the relay
@@ -422,7 +426,7 @@ port scheme for a caller to guess between, and buys nothing.
 | route | what it does |
 |---|---|
 | `POST /bind` | bind the frontmost terminal; 409 if there is nothing bindable |
-| `POST /unbind` | back to outbox-only |
+| `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
 
@@ -518,6 +522,63 @@ is the opposite gesture: it puts words somewhere else without the overlay ever
 becoming key. `.keystroke` targets are the one place focus moves at all, and it
 moves to the target and straight back.
 
+## Unbound is inert
+
+**With no terminal bound, the app does nothing to a dictation at all.** Not a
+picture, not a borrowed mouse button, not an outbox line — and Wispr Flow's own
+paste goes through untouched. Since 2026-08-27, `AppDelegate.isBound`
+(`terminal.target != nil`) gates every path that pause gates, plus one pause
+never did: `syncLocalCapture`, which is where `HotkeyTap.blockInjection` lives.
+
+| gate | unbound | paused |
+|---|---|---|
+| `captureContext` — flash, selection probe, screen capture | off | off |
+| `plusOneShot` — F3 / mouse 4 | off | off |
+| `send` — the outbox line and the delivery | off | off |
+| `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off | off |
+| `syncLocalCapture` — **Wispr's injection**, mouse 5 on Whisper | **off** | off |
+| `dictation.onChange` — the recording row | off (the *stop* edge still runs) | on |
+| `corpus.capture` | **on** | on |
+
+Why it had to change. The relay used to be started per session by `/relay` and
+live only as long as Victor was dictating at an agent, so "running" and "aimed at
+something" were the same fact and none of this could misfire. Since 2026-08-26 it
+is a **login item** and sits there all day — so every sentence he spoke into a
+browser, a chat or a commit message was getting a screenshot taken of it, was
+losing him mouse 4 and ⌘⇧-click, and, worst of the three, was having Wispr's
+paste swallowed by a relay with nowhere to put the words instead. Pause existed
+to stop exactly that, and he was having to press it against an app that had no
+destination anyway.
+
+**The outbox goes quiet too, and that is a deliberate loss.** The `/relay` skill's
+original mode was an unbound relay appending to a queue with an agent watching
+it; that mode is gone. Victor was asked directly on 2026-08-27 and chose the
+whole switch over half of it — an outbox filled all day for a watcher that is
+usually not there is not a feature, it is a log of his private dictation. A
+`/relay` session gets its destination the way everything else does now, by
+binding.
+
+**The corpus is the one thing that keeps running**, on the argument it was always
+kept running through pause: it is a file on Victor's own disk, the samples are
+what the local model is being judged on, and one dropped because he happened to
+be dictating into a browser cannot be taken again.
+
+**`showBound` is where the switch is thrown**, since it is the one place every
+route into and out of a binding passes through — ⌘⌃D, `POST /unbind`, and a
+target discovered gone at delivery time (`report(.targetGone)`). That last one is
+why it lives there and not in the two callers: a relay whose terminal was closed
+under it must stop swallowing Wispr's paste at that moment, not at the next
+deliberate gesture.
+
+**The stop edge of `dictation.onChange` is never gated**, only the start edge. A
+relay unbound in the middle of a sentence would otherwise leave the recording row
+on screen with nothing left running to take it down.
+
+**`/test/dictation` is gated too**, which makes it useless at a desk with nothing
+bound. That is the right reading of a route whose whole claim is that it enters
+exactly where a real transcript does — bind something first, which is what the
+path under test needs anyway.
+
 ## What pause is (and is not)
 
 Pause **does not touch Wispr Flow**. That is the whole purpose of it: Victor
@@ -525,7 +586,9 @@ pauses so he can dictate into a browser, a chat, a commit message *normally*,
 without those words also landing in the agent's queue. Nothing in this app may
 try to stop, mute or intercept the transcription — it only stops acting on it.
 
-Concretely, `paused` bails out of four places and nowhere else: `captureContext`
+Concretely, `paused` bails out of four places and nowhere else — the same four
+`isBound` gates, plus the injection block it does not touch (see *Unbound is
+inert*): `captureContext`
 (no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
 nothing), `send` (nothing reaches the outbox), and `syncBorrowedGestures` — which
 hands mouse 4 back to LinearMouse *and* ⌘⇧-click back to Chrome. That last one is

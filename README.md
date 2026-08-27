@@ -133,8 +133,16 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 
 ### The outbox
 
-Bound or not, the overlay appends JSON lines to `~/.walkie-talkie/outbox.jsonl`.
-Anything that watches that file can consume them; there is no back-channel.
+While bound, the overlay *also* appends JSON lines to
+`~/.walkie-talkie/outbox.jsonl`. Anything that watches that file can consume
+them; there is no back-channel.
+
+**Unbound, nothing is written** — and nothing else happens either: no picture
+when you start talking, no borrowed mouse buttons, and Wispr Flow's own paste is
+let through untouched. The app runs from login and is aimed at nothing most of
+the day; a relay with no destination has no business acting on a sentence you
+are dictating into a browser. Bind a terminal and both routes come alive
+together.
 
 ```json
 {"ts":"2026-07-30T08:12:03Z","session":"myrepo@main","kind":"dictation",
@@ -166,7 +174,7 @@ once, each taking one):
 | route | |
 |---|---|
 | `POST /bind` | point it at the frontmost terminal |
-| `POST /unbind` | back to outbox-only |
+| `POST /unbind` | stop — the relay goes inert until something is bound again |
 | `GET /target` | what it is currently aimed at |
 | `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
 | `POST /test/corpus` | `{"id":"<transcriptEntityId>"}` — collect the voice-corpus sample for a Wispr row that already exists |
@@ -178,7 +186,7 @@ once, each taking one):
 
 | input | effect |
 |---|---|
-| start dictating | Red flash, screen captured, selection grabbed — all automatic |
+| start dictating | Red flash, screen captured, selection grabbed — all automatic, and only while a terminal is bound |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |

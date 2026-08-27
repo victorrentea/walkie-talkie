@@ -145,6 +145,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var paused = false
     private var endAnnounced = false
 
+    /// **There is a destination, so a dictation is the relay's business.**
+    ///
+    /// Unbound the app does nothing to a dictation at all: Wispr's injection is
+    /// let through, mouse 4 and mouse 5 and ⌘⇧-click stay with the software they
+    /// belong to, no picture is taken when he starts talking, and no line is
+    /// written. It bails out of exactly the places `paused` does —
+    /// `captureContext`, `plusOneShot`, `send`, `syncBorrowedGestures` — plus
+    /// `syncLocalCapture`, which is where the injection block lives.
+    ///
+    /// Why this became necessary: the relay was started per session and lived
+    /// only as long as Victor was dictating at an agent, so "running" and "aimed
+    /// at something" were the same fact. Since 2026-08-26 it is a login item and
+    /// sits there all day — and every one of those behaviours was being applied
+    /// to every sentence he spoke into a browser, a chat or a commit message,
+    /// with nowhere for the words to go. That is what pause exists to stop, and
+    /// he was having to press it against an app that had no destination anyway.
+    ///
+    /// Read off `TerminalBinding`, which locks, so this is safe from any thread.
+    private var isBound: Bool { terminal.target != nil }
+
     /// Wispr is recording. Main thread only, and kept here rather than read back
     /// off the overlay because it is half of what decides whether mouse 4 and
     /// ⌘-click belong to the relay or to the software they were borrowed from
@@ -296,6 +316,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wispr.onTranscript = { [weak self] text, app, id in
             guard let self = self else { return }
             self.corpus.capture(id: id)
+            // **After the corpus, before the engine.** Unbound there is nowhere
+            // for the words to go, and on Local Whisper the engine switch below
+            // would otherwise spend a GPU pass re-transcribing audio Wispr has
+            // already read, for a message nobody is waiting for.
+            guard self.isBound else { return }
             switch TranscriptionEngine.current {
             case .wispr:
                 self.send(kind: "dictation", text: text, app: app)
@@ -309,6 +334,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other order publishes `×1` into a row that is about to reset it to zero.
         dictation.onChange = { [weak self] recording in
             guard let self = self else { return }
+            // Unbound, Wispr recording is Victor dictating into some app, and
+            // none of this is about it — no picture, no recording row, no
+            // borrowed gestures. **The stop edge is still honoured**, so a
+            // session unbound in the middle of a sentence cannot leave the row
+            // on screen with nothing left to take it down.
+            guard self.isBound || !recording else { return }
             if recording { self.captureContext() }
             DispatchQueue.main.async {
                 self.listening = recording
@@ -481,9 +512,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// to the relay too, so the button that would start Wispr must never reach it.
     /// Paused, both go back: pause is what Victor does in order to dictate **into**
     /// an app, and the app getting the text is then the whole point.
+    /// **Both are off while nothing is bound**, and that is the whole of "stop
+    /// intercepting Wispr Flow": with no destination there is no transcript to
+    /// protect from the caret, so swallowing Wispr's paste would be taking the
+    /// text away from the app he is dictating into and dropping it on the floor,
+    /// and holding mouse 5 would be stopping Wispr from hearing him at all.
     private func syncLocalCapture() {
-        hotkeys.localCapture = TranscriptionEngine.current == .whisper && !paused
-        hotkeys.blockInjection = !paused
+        hotkeys.localCapture = isBound && TranscriptionEngine.current == .whisper && !paused
+        hotkeys.blockInjection = isBound && !paused
     }
 
     /// Mouse 5 on Local Whisper: start recording, or finish the one that is open.
@@ -498,7 +534,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startLocalRecording() {
-        guard !paused else { return }
+        // Unreachable in practice — mouse 5 is only the relay's while
+        // `syncLocalCapture` says so, and that now needs a binding too — but the
+        // gate is repeated here for the same reason `paused` is: this is the
+        // path that opens the microphone.
+        guard isBound, !paused else { return }
         guard whisper.ready else {
             // Not an error any more, since the helper is deliberately down until
             // something says a dictation is coming — this press is one of the two
@@ -710,7 +750,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// harmless — but the screen is only captured once per dictation, since a
     /// second capture would cost a megabyte for an identical frame.
     private func captureContext() {
-        guard !paused else { return }
+        // Nothing bound is the same answer as paused, one step earlier: a
+        // picture of the screen at the moment he starts talking is only worth
+        // taking when there is somebody it is being taken *for*.
+        guard isBound, !paused else { return }
 
         // Where he was pointing when he started talking. Taken here and carried
         // down: by the time the capture actually runs, a clipboard probe and a
@@ -845,15 +888,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Mouse 4 is Victor's Return key (LinearMouse types one with it) and ⌘-click
     /// is how a link opens in a new tab; the relay takes both **only while there is
-    /// a dictation for them to add to**. Outside that window — at rest, and the
-    /// whole time forwarding is paused — they must go back to doing what every
-    /// other app expects, so this is called from both edges that can change the
-    /// answer: Wispr starting or stopping, and pause being toggled.
+    /// a dictation for them to add to**. Outside that window — at rest, the whole
+    /// time forwarding is paused, and the whole time nothing is bound — they must
+    /// go back to doing what every other app expects, so this is called from all
+    /// three edges that can change the answer: Wispr starting or stopping, pause
+    /// being toggled, and a binding appearing or going away (`showBound`).
     ///
     /// One switch for both, so the recording row can never be on screen advertising
     /// a gesture that is no longer live, or off while one still is. Main thread only.
     private func syncBorrowedGestures() {
-        let live = listening && !paused
+        let live = isBound && listening && !paused
         hotkeys.dictating = live
         picker.dictating = live
     }
@@ -967,7 +1011,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         terminal.unbind()
         DispatchQueue.main.async { [weak self] in
             self?.showBound(nil)
-            self?.overlay.flash("unbound — back to the outbox", duration: 3)
+            // Not "back to the outbox" any more: unbound is inert, and telling
+            // him his words are still going somewhere would be the one wrong
+            // thing to say at the moment he stopped them going anywhere.
+            self?.overlay.flash("unbound — nothing is relayed now", duration: 3)
         }
     }
 
@@ -992,6 +1039,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the pointer (and with it the chip) is hidden because he started typing.
     /// Main thread only: it draws.
     private func showBound(_ target: TerminalBinding.Target?) {
+        // Binding is also the switch that decides whether the relay touches a
+        // dictation at all, and this is the one place every route into it passes
+        // through — ⌘⌃D, `/unbind`, and a target found gone at delivery. Doing it
+        // here is what keeps a relay that lost its terminal mid-session from
+        // going on swallowing Wispr's paste.
+        defer { syncLocalCapture(); syncBorrowedGestures() }
         guard let target = target else {
             overlay.setBound(label: nil)
             status.setDestination(nil, icon: nil)
@@ -1322,7 +1375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
     private func plusOneShot(cursor: NSPoint) {
-        guard !paused else { return }
+        guard isBound, !paused else { return }
         // Sampled at the gesture, like the cursor and for the same reason: by the
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
@@ -1566,6 +1619,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {
+        // **The outbox is not written either.** It used to be, on the grounds
+        // that an agent might be watching the queue without a binding — the
+        // `/relay` skill's original mode. Victor settled it on 2026-08-27: with
+        // the app running from login, that meant every sentence he spoke all day
+        // was being filed for a watcher that mostly is not there. Unbound now
+        // means inert, and `/relay` gets its destination by binding like
+        // everything else. `session_end` is unaffected: it goes to `Outbox`
+        // directly, not through here.
+        guard isBound else {
+            Log.info("unbound — dropped \(kind)")
+            return
+        }
         guard !paused else {
             Log.info("paused — dropped \(kind)")
             return
