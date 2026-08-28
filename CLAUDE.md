@@ -1459,8 +1459,17 @@ parked.
 
 `StatusItem.swift` puts a 🤖 in the menu bar for the whole life of the process,
 with **where the words go** as a disabled header — the destination app's icon
-beside `folder@branch` of the bound session, exactly the line the chip shows —
-and two commands: **Pause/Resume** and **Quit**, plus the two engine rows.
+beside `Bound to: folder@branch` of the bound session — and two commands:
+**Pause/Resume** and **Quit**, plus the two engine rows.
+
+The chip shows the same line **without** the `Bound to:` prefix, and that is not
+a drift between them. Beside the cursor a folder name has nothing else it could
+be naming; in the menu it sits above `Pause` / `Disconnect` / `Stop Recording`,
+where a bare name between an icon and a stack of commands reads as a section
+title — as what the commands are *for* — rather than as a destination. Only the
+bound form is prefixed: unbound the row falls back to the launch label, and
+`Bound to:` in front of that would be false in the state the row is most often
+read in.
 
 `AppDelegate.showBound` is the single place both are written, so the chip and the
 menu cannot disagree about the destination. Unbound, the header falls back to

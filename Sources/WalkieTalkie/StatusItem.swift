@@ -337,8 +337,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyStopRecording()
     }
 
+    /// **`Bound to: petclinic@main`**, not the bare line the chip shows.
+    ///
+    /// The chip can afford to be bare: it rides the cursor, it appears when a
+    /// binding does, and beside a pointer there is nothing else it could be
+    /// naming. In the menu the same line sits above `Pause` / `Disconnect` /
+    /// `Stop Recording`, and a folder name on its own between an icon and a
+    /// stack of commands reads as the title of a section — i.e. as what the
+    /// commands are *for*, rather than as where the words are going. The two
+    /// words say which of the two it is.
+    ///
+    /// Only the bound form takes the prefix. Unbound the row falls back to the
+    /// launch label, and "Bound to:" in front of that would be a plain lie: with
+    /// nothing bound the relay is inert, which is the state this row is most
+    /// often read in.
     private func applyHeader() {
-        header.title = destination ?? "🤖 \(SessionLabel.value)"
+        header.title = destination.map { "Bound to: \($0)" } ?? "🤖 \(SessionLabel.value)"
     }
 
     @objc private func exitClicked() {
