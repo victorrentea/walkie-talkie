@@ -52,6 +52,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the name says *into what*; before this they were one glyph saying only the
     /// first half, at a time when there was nothing else it could have meant.
     private let engineRow = NSView()
+    /// What to press, while it is bound and nothing is happening. A glyph row
+    /// like the ones below rather than an emoji inside a sentence: as text the
+    /// 🖱️ came out a different size from the destination icon above it and
+    /// started at a different x, because an emoji's advance is not the icon's
+    /// box. This is the same mistake `Glyphs.emoji` was written for.
+    private let idleRow = NSView()
+    private let idleGlyph = NSImageView()
+    private let idleInfo = NSTextField(labelWithString: "")
     private let recordDot = NSImageView()
     private let engineInfo = NSTextField(labelWithString: "")
     /// The recording row: how many shots this dictation is carrying, and how to
@@ -261,7 +269,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and the string that is drawn cannot drift apart.
     private static func frontLine(_ front: String) -> String { "🪟 Active window: " + front }
 
-    private var hintText: String? { flashMessage ?? idleHint }
+    private var hintText: String? { flashMessage }
 
     /// **Bound, and nothing happening yet.** The chip has always said *where*
     /// the words will go and never *how to say any* — which is fine for the
@@ -279,7 +287,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard boundLabel != nil, !listening, !paused, !engineLoading, sentPrompt == nil else { return nil }
         // One word. The chip rides beside the cursor, over his work, for hours at
         // a time — "to start dictating" was a sentence where a label was needed.
-        return "🖱️ dictate"
+        return "dictate"
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -469,6 +477,18 @@ private let frontLabel = NSTextField(labelWithString: "")
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.isHidden = true            // summoned by layoutContent when there is something to say
         root.addSubview(hintLabel)
+
+        // Straight under the destination icon, in the same column and the same
+        // box — the two are read as one pair: where it goes, and how to send.
+        idleGlyph.image = Self.mouseGlyph
+        idleGlyph.imageScaling = .scaleProportionallyUpOrDown
+        idleInfo.font = hintFont
+        idleInfo.textColor = .secondaryLabelColor
+        idleInfo.stringValue = "dictate"
+        idleRow.addSubview(idleGlyph)
+        idleRow.addSubview(idleInfo)
+        idleRow.isHidden = true
+        root.addSubview(idleRow)
 
         // Two labels rather than one string, because only the dot pulses: an
         // animation on the whole row would blink the engine's name too, and a
@@ -803,6 +823,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
+        let idleWidth = idleHint.map { rowWidth($0) } ?? 0
         let engineWidth = engineText.map { rowWidth($0) } ?? 0
         let recordWidth = recordText.map { rowWidth($0) } ?? 0
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
@@ -816,7 +837,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
-                                   max(hintWidth, max(engineWidth, max(recordWidth, pickWidth)))))) + pad * 2
+                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, pickWidth))))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -863,6 +884,15 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         layoutTitleRow(width: innerWidth)
         rows.append((titleRow, titleRowHeight))
+
+        if let hint = idleHint {
+            idleInfo.stringValue = hint
+            layoutGlyphRow(idleRow, glyph: idleGlyph, label: idleInfo, width: innerWidth)
+            idleRow.isHidden = false
+            rows.append((idleRow, recordRowHeight))
+        } else {
+            idleRow.isHidden = true
+        }
 
         // **Above the words, not inside them.** The selection used to be folded
         // into the prompt text as a `↪ …` first line, which made the passage he
@@ -1108,6 +1138,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The two emoji on the card, rendered once and trimmed to their ink.
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
+    private static let mouseGlyph = Glyphs.emoji("🖱️", ink: iconInk)
 
     /// Kept as the old name so every measurement site still reads the same, and
     /// so the width of the icon column is stated in exactly one place.
