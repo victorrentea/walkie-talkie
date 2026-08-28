@@ -181,7 +181,12 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     // MARK: Geometry
     private let pad: CGFloat = 12
-    private let rowGap: CGFloat = 6
+    /// Was 6. Every row already carries its own vertical padding — a 17pt label
+    /// centred in a 22pt box is 2–3pt of air above and below before this gap is
+    /// added at all — so 6 on top of that stacked into a chip taller than its
+    /// content, in every state. 2 keeps the rows from touching and lets the rest
+    /// come from the boxes.
+    private let rowGap: CGFloat = 2
     private let margin: CGFloat = 24
     /// Space kept clear on the title row for the hover-revealed ✕.
     private let closeReserve: CGFloat = 26
