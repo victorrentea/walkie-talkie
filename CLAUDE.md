@@ -249,14 +249,19 @@ sentence**: that window is now this chip.
   both *announce an event*. This one **moves a thing**, and the thing now carries
   its own colours; white frames it without claiming a third meaning, and it is
   the colour of the chip it flies into.
-- **Faint first, half-solid last.** Opacity climbs 20% → 50% as it shrinks, which
-  is backwards for an alpha ramp and is the point: at the start it lies exactly
-  over the window it was copied from, where anything solid would hide the thing
-  being pointed at — on a projector, mid-workshop — and where being faint costs
-  nothing, since what is underneath is the same picture. By the time it is small
-  enough to hide nothing it is solid enough to follow across a desk. It never
-  reaches full: a picture arriving opaque reads as a small real window sitting on
-  the desktop rather than as a token going into the chip.
+- **Solid first, half on arrival.** Opacity falls 100% → 50% as it shrinks, and
+  the first number is the one that matters: at full opacity, lying exactly over
+  the window it was copied from, the picture is **invisible** — pixel for pixel
+  what is already there — so the flight starts as the window itself coming loose
+  rather than as a copy fading up on top of it. It briefly ran the other way
+  (20% → 50%, on the old reasoning that anything solid over a terminal hides it
+  mid-workshop); that reasoning does not survive the picture, because a picture of
+  the window hides nothing of the window, and what it bought was a washed-out
+  start at the one moment the seam has to be invisible. It ends at half because by
+  then it is a small rectangle on unrelated desktop, where arriving opaque reads
+  as a real window sitting there rather than as a token going into the chip. The
+  white border is the one thing visible at the start, and carries "this window"
+  on its own.
 - **1s, halved from 2s** on 2026-08-28. Two seconds is how long a flight has to
   be to be *studied*, and this one is not studied twice — after the gesture is
   learned it is a receipt glanced at, and a receipt that outstays the glance is

@@ -31,13 +31,20 @@ import QuartzCore
 /// without claiming to mean something, and it is the colour the chip it flies
 /// into is drawn in.
 ///
-/// **It starts faint and arrives at half.** Opacity climbs from 20% to 50% as it
-/// shrinks, which is the inverse of what an alpha ramp usually does and is the
-/// point: at the start it lies exactly over the window it was copied from, where
-/// anything solid would hide the thing being pointed at — mid-workshop, on a
-/// projector — and where being faint costs nothing, since what is underneath is
-/// the same picture. By the time it is small enough to hide nothing it is solid
-/// enough to be followed across a desk.
+/// **It starts solid and arrives at half.** Opacity falls from 100% to 50% as it
+/// shrinks, and the first number is the one that matters: at full opacity, lying
+/// exactly over the window it was copied from, the picture is **invisible** —
+/// pixel for pixel what is already there — so the flight begins as the window
+/// itself coming loose rather than as a copy fading up on top of it. It briefly
+/// tried the opposite (20% → 50%, on the reasoning that anything solid over a
+/// terminal hides it mid-workshop): that reasoning does not survive the picture,
+/// because a picture of the window hides nothing of the window. What it bought
+/// was a start that looked washed out at the one moment the seam has to be
+/// invisible.
+///
+/// It ends at half because by then it is a small rectangle on unrelated desktop:
+/// arriving opaque reads as a real window sitting there, rather than as a token
+/// going into the chip.
 ///
 /// **One panel per screen, and that is not an optimisation — it is the only
 /// thing that works.** This was written as a single panel spanning the union of
@@ -81,11 +88,11 @@ enum BindFlight {
     /// what makes it *end* rather than blink out mid-flight.
     private static let fadeFraction = 0.2
 
-    /// Opacity at the window and opacity at the cursor. It climbs — see the note
-    /// on the type. 0.5 is where it stops: a picture that arrived opaque would be
-    /// a small window sitting on the desktop for a frame, which reads as a real
-    /// window rather than as a token vanishing into the chip.
-    private static let startAlpha: CGFloat = 0.2
+    /// Opacity at the window and opacity at the cursor — see the note on the
+    /// type. Full at the source, because there the picture *is* what is
+    /// underneath and the seam has to be invisible; half on arrival, because by
+    /// then it is over unrelated desktop.
+    private static let startAlpha: CGFloat = 1.0
     private static let endAlpha: CGFloat = 0.5
 
     /// One per display, each drawing the same rectangle in its own coordinates.
@@ -189,10 +196,9 @@ enum BindFlight {
             // The picture has to be clipped by the rounded corners, or it draws
             // square over them and the radius is only visible in the border.
             rect.masksToBounds = true
-            // Opaque white deliberately: the layer's own opacity ramp already
-            // dims it to a fifth at the start, and a border that was translucent
-            // *as well* would leave the shape with no visible edge over the very
-            // window it is naming.
+            // The one thing that *is* visible at the start, and deliberately: the
+            // picture is invisible where it lies on its source, so the border is
+            // the whole of "this window", and it wants to be crisp for it.
             rect.borderColor = NSColor.white.cgColor
             // Only ever seen without a picture — behind one it would be invisible.
             // It is the old rectangle's fill, in white.
@@ -254,10 +260,10 @@ enum BindFlight {
                             width: size.width, height: size.height)
 
         let fade = t > 1 - fadeFraction ? CGFloat((1 - t) / fadeFraction) : 1
-        // The climb from faint to half-solid, times the fade at the end. With a
-        // picture the layer's own opacity is the whole effect; without one the
-        // white fill does the same job the blue one used to, and the two are
-        // multiplied rather than added so a fallback flight is not twice as pale.
+        // The fall from solid to half, times the fade at the end. With a picture
+        // the layer's own opacity is the whole effect; without one the white fill
+        // does the same job the blue one used to, and the two are multiplied
+        // rather than added so a fallback flight is not twice as pale.
         let alpha = startAlpha + (endAlpha - startAlpha) * eased
         let fill = hasPicture
             ? NSColor.white.withAlphaComponent(0).cgColor
