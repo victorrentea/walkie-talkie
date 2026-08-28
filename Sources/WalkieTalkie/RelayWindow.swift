@@ -855,8 +855,8 @@ private let frontLabel = NSTextField(labelWithString: "")
             }
         }
         let width = sentPrompt != nil
-            ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 2)
-            : min(natural, screenWidth / 2)
+            ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3)
+            : min(natural, screenWidth / 3)
         let innerWidth = width - pad * 2
 
         var rows: [(view: NSView, height: CGFloat)] = []
@@ -1732,9 +1732,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the text the clock was started for.
     private var promptHold: TimeInterval = 0
     private var editingPrompt = false
-    /// Watches for a click anywhere outside the panel while editing — the other
-    /// half of "click away and it goes out on its own".
-    private var outsideClickMonitor: Any?
 
     /// Click on the words → they become a text field, and the countdown stops
     /// while he is in it.
@@ -1781,12 +1778,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         panel.makeFirstResponder(promptLabel)
         promptLabel.currentEditor()?.selectedRange = NSRange(location: words.count, length: 0)
 
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            // Global monitors only see events going to *other* apps, so this
-            // fires for clicks outside the panel and never for clicks inside it.
-            self?.endPromptEdit(resume: true)
-        }
+        // **Nothing takes him out of the field except Send or Cancel.** There
+        // used to be a global click monitor here that ended the edit the moment
+        // he clicked in another app, and a click on the panel around the field
+        // did the same — both then restarted the countdown, i.e. a message he was
+        // in the middle of correcting went back to being one that sends itself
+        // shortly. Editing is a decision to change what goes out; it ends when he
+        // says it does.
     }
 
     /// The panel grows with what he types: the transcript row is measured from
@@ -1798,13 +1796,13 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     /// Leave the field. `resume` restarts the countdown; the send path does not,
     /// because it is about to take the prompt away entirely.
-    fileprivate func endPromptEdit(resume: Bool) {
+    /// Leave the field. Reached only from `resolvePrompt` now — Send or Cancel —
+    /// which is why nothing here restarts the countdown: there is no longer a way
+    /// out of the field that leaves the message still waiting to go.
+    fileprivate func endPromptEdit() {
         guard editingPrompt else { return }
         editingPrompt = false
         promptWords = promptLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
-        outsideClickMonitor = nil
 
         promptLabel.isEditable = false
         promptLabel.isSelectable = false
@@ -1820,8 +1818,6 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         sentPrompt = [promptWords, promptExtras.nilIfEmpty].compactMap { $0 }.joined()
         layoutContent()
-        guard resume, sentPrompt != nil else { return }
-        startPromptCountdown(hold: promptHold)
     }
 
     private func startPromptCountdown(hold: TimeInterval) {
@@ -1863,7 +1859,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard sentPrompt != nil else { return }
         // Leave the field before anything else: it owns the text being resolved,
         // and it is holding the keyboard.
-        endPromptEdit(resume: false)
+        endPromptEdit()
         let edited = promptWords
         promptTimer?.invalidate()
         promptTimer = nil
@@ -1999,7 +1995,11 @@ private let frontLabel = NSTextField(labelWithString: "")
             // Inside the field while editing: the field handles its own clicks,
             // so this is a click on the panel *around* it — which is the "click
             // away" that ends the edit and restarts the clock.
-            if editingPrompt { return endPromptEdit(resume: true) }
+            // A click on the panel while the field is open is not an answer.
+            // It used to close the field and restart the clock, which turned a
+            // stray click into "send this in three seconds" while he was still
+            // reading his own correction.
+            if editingPrompt { return }
             if onWords, promptWords != nil { return beginPromptEdit() }
             resolvePrompt(send: true)
             return
