@@ -514,11 +514,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // No duration: it ends when the model does, not when a timer says so.
         // A banner that expires after twelve seconds on a load that took
         // fourteen is worse than none — it says "ready" by disappearing.
-        // Two words. The sentence it replaces spelled out the fallback — "keep
-        // using Wispr until this clears" — which is advice he has not needed
-        // since a press made during the load started being remembered: there is
-        // nothing to do differently, so there is nothing to read.
-        overlay.flash("⏳ preparing", duration: 600)
+        // **Only when there is no chip to say it.** Bound, the state sits in the
+        // status row under the destination, where every other "what is happening
+        // now" lives; flashing it as well would put the same hourglass twice on
+        // one small panel. Unbound — an engine picked from the menu — there is no
+        // row, and this is the only thing that would say anything at all.
+        if !isBound {
+            overlay.flash("⏳ preparing", duration: 600)
+        }
         whisper.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -630,11 +633,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // gesture. The intention is unambiguous, so it is held and honoured
             // when the weights land.
             recordWhenModelReady = true
-            // The same two words the engine switch flashes. It said what would
-            // happen next — "recording starts the moment it is ready" — which is
-            // a sentence for a state that lasts a few seconds and asks nothing
-            // of him.
-            overlay.flash("⏳ preparing", duration: 6)
+            // Nothing to flash: mouse 5 means he is bound, so the status row
+            // under the destination is already showing `⏳ preparing`, and it
+            // stays until the model is up — which is exactly when the press he
+            // just made turns into a recording.
             return
         }
 

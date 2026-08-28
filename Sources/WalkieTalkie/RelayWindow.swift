@@ -300,7 +300,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var statusLine: (glyph: NSImage?, text: String)? {
         guard boundLabel != nil, !paused, sentPrompt == nil else { return nil }
         if transcribing { return (Self.waitGlyph, "transcribing…") }
-        guard !listening, !engineLoading else { return nil }
+        if engineLoading { return (Self.waitGlyph, "preparing") }
+        guard !listening else { return nil }
         // One word. The chip rides beside the cursor, over his work, for hours at
         // a time — "to start dictating" was a sentence where a label was needed.
         return (Self.mouseGlyph, "dictate")
@@ -1444,7 +1445,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         // worth saying while it loads is "not yet", and saying it beside the
         // cursor is saying it where he is already looking. It disappears on its
         // own, which is why it can afford to shout over ⏸️ for those seconds.
-        if engineLoading { return "⏳ \(identity)" }
+        // **No ⏳ on the name.** The state has a row of its own now, directly
+        // under this line, and an hourglass in front of the folder said the same
+        // thing a second time — while also making the one line that never changes
+        // during a session change. What the chip *is* stays put; what it is
+        // *doing* is the row below.
+        if engineLoading { return identity }
         // Paused prefixes the robot rather than replacing it: the chip's job is
         // still to say *which agent this is*, and pause is a modifier on that, not
         // a different thing. Reading ⏸️ ahead of 🤖 is also the same order as the
