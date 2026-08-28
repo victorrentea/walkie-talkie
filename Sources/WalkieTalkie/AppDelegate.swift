@@ -474,6 +474,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// so the press does not have to wait for it.
     private var recordWhenModelReady = false
 
+    /// A note the next panel should carry under its transcript — set by the
+    /// confidence gate, consumed by the `showSentPrompt` that follows it.
+    private var pendingPromptWarning: String?
+
     private func pickEngine(_ engine: TranscriptionEngine) {
         guard engine != TranscriptionEngine.current || (engine == .whisper && !whisper.ready) else { return }
 
@@ -677,11 +681,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // alternative to a shaky transcript is silence, and silence is the
             // one outcome Victor cannot notice and correct. The banner says so.
             if r.avgLogprob < LocalWhisper.confidenceFloor {
-                DispatchQueue.main.async {
-                    self.overlay.flash(String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob),
-                                       duration: 8)
-                }
+                // Handed to the panel rather than flashed: a flash lands in the
+                // hint row above the transcript, and this is a note *about* the
+                // transcript. It rides along to `showSentPrompt` below.
+                self.pendingPromptWarning = String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
             } else {
+                self.pendingPromptWarning = nil
                 DispatchQueue.main.async { self.overlay.clearFlash() }
             }
             // Reads the bytes on this thread and files the sample on its own, so
@@ -1687,8 +1692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let s = max(0, Int(offset.rounded()))
             return String(format: "%d:%02d", s / 60, s % 60)
         }
-        guard !stamps.isEmpty else { return "📸 ×\(offsets.count)" }
-        return "📸 ×\(offsets.count) " + stamps.joined(separator: " · ")
+        // **No 📸 and no count.** The strip of thumbnails under this line says
+        // both, in the picture rather than in a number, and the panel is read in
+        // the few seconds the clock is running. What the strip cannot say is
+        // *when* each frame was taken, so the stamps stay — in the same order the
+        // frames are drawn, which is what lets them read as captions for it.
+        guard !stamps.isEmpty else { return nil }
+        return stamps.joined(separator: " · ")
     }
 
     /// What to render in the overlay as "this is what the agent got". Returns nil
@@ -1850,6 +1860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Nothing to read is nothing to cancel: a bare screenshot goes
             // straight out, and so does the goodbye.
             guard let shown = shown else {
+                self.pendingPromptWarning = nil
                 self.commit(message)
                 if kind == "dictation" {
                     // `offsets`, not `attached`: same total the recording row was
@@ -1859,6 +1870,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            let warning = self.pendingPromptWarning
+            self.pendingPromptWarning = nil
             let words = shown.split(whereSeparator: { $0.isWhitespace }).count
             let hold = min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
             // Oldest first, context frame included — it is picture one of the
@@ -1871,7 +1884,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            // What he said, apart from what the
                                            // preview adds to it — the panel needs
                                            // the seam to know what is editable.
-                                           words: text) {
+                                           words: text, warning: warning) {
                 self.held = message
                 self.hotkeys.promptHeld = true
             } else {

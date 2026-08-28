@@ -19,6 +19,7 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let root: RelayView
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
+    private let warningLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
@@ -132,9 +133,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var sentPrompt: String?
     /// Paths of the frames riding with the held prompt, newest last.
     private var promptShots: [String] = []
-/// Shown above the words rather than folded into them — see `layoutContent`.
-private var promptSelection: String?
-private var promptFront: String?
+    /// Shown above the words rather than folded into them — see `layoutContent`.
+    private var promptSelection: String?
+    private var promptFront: String?
+    /// A note about the transcript on screen — currently only the confidence
+    /// score, and only when it came out below the floor.
+    private var promptWarning: String?
     private var promptTimer: Timer?
     /// When the held prompt is due to be released. Drives the Cancel countdown,
     /// so the button says how long Victor still has rather than making him guess.
@@ -446,6 +450,18 @@ private var promptFront: String?
         titleRow.addSubview(titleGlyph)
         titleRow.addSubview(titleLabel)
         root.addSubview(titleRow)
+
+        // **Under the words, and quieter than them.** A low-confidence score is a
+        // note *about* the transcript above it, so it is set smaller than
+        // everything else on the panel — readable in the seconds the clock is
+        // running, without competing with the sentence it is qualifying. It used
+        // to be a flash, which put it in the hint row directly under the title,
+        // i.e. above the transcript, where a warning reads as a heading over
+        // words it is only commenting on.
+        warningLabel.font = NSFont.systemFont(ofSize: 12)
+        warningLabel.textColor = .secondaryLabelColor
+        warningLabel.isHidden = true
+        root.addSubview(warningLabel)
 
         hintLabel.font = hintFont
         hintLabel.textColor = .secondaryLabelColor
@@ -832,6 +848,9 @@ private var promptFront: String?
                 let text: CGFloat = measure(Self.frontLine(front), font: NSFont.systemFont(ofSize: 14))
                 contextWidth = max(contextWidth, text + pad * 2)
             }
+            if let warning = promptWarning {
+                contextWidth = max(contextWidth, measure(warning, font: warningLabel.font ?? hintFont) + pad * 2)
+            }
         }
         let width = sentPrompt != nil
             ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 2)
@@ -922,6 +941,15 @@ private var promptFront: String?
             rows.append((promptLabel, h))
         } else {
             promptLabel.isHidden = true
+        }
+
+        if let warning = promptWarning, sentPrompt != nil {
+            warningLabel.stringValue = warning
+            warningLabel.frame.size = NSSize(width: innerWidth, height: 16)
+            warningLabel.isHidden = false
+            rows.append((warningLabel, 16))
+        } else {
+            warningLabel.isHidden = true
         }
 
         // The frames, in a strip under the words — oldest first, the same order
@@ -1245,7 +1273,9 @@ private var promptFront: String?
         return height
     }
 
-    private static let shotThumbHeight: CGFloat = 54
+    /// Was 54. The strip is the receipt now that the count above it is gone, so
+    /// it is worth the extra fifth of a row.
+    private static let shotThumbHeight: CGFloat = 65
     private static let shotThumbGap: CGFloat = 6
 
     private func layoutPickRow(width: CGFloat) {
@@ -1624,7 +1654,7 @@ private var promptFront: String?
     @discardableResult
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
                         selection: String? = nil, front: String? = nil,
-                        words: String? = nil) -> Bool {
+                        words: String? = nil, warning: String? = nil) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // **A selection with no words is still worth holding.** It stopped being
@@ -1655,6 +1685,11 @@ private var promptFront: String?
         promptShots = shots
         promptSelection = quoted
         promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        // Handed in with the prompt rather than through a setter of its own:
+        // `showSentPrompt` resolves any panel still on screen first, and that
+        // clears this — so a warning set before the panel opened would be wiped
+        // by the panel opening.
+        promptWarning = warning
         // The narrow overlay's own truncated `↪ …` receipt goes: this panel shows
         // the same selection, quoted and at the top, and two of them is one too
         // many.
@@ -1827,6 +1862,7 @@ private var promptFront: String?
         promptShots = []
         promptSelection = nil
         promptFront = nil
+        promptWarning = nil
         layoutContent()
         reposition()
         refreshOpacity()
