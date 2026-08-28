@@ -1904,10 +1904,15 @@ running what I just built?" had no answer anywhere in the app.
 ## The app icon and the build stamp
 
 - **The Finder/Spotlight icon is generated at build time** from
-  `assets/walkie-idle.png` — the *idle* picture, the device without the orange
-  ring. The ring means "bound to a terminal right now"; an app icon is the same
-  picture whether the relay is running or not, so a ring baked into it would be a
-  claim the icon cannot keep. `build-app.sh` scales the ten iconset sizes with
+  `assets/walkie-bound.png` — the device inside its **orange ring**. It was the
+  idle picture for two days, on the argument that the ring means "bound to a
+  terminal right now" and an app icon is the same picture whether the relay is
+  running or not. Victor reversed that on 2026-08-28 (*"iconul app sa fie cu
+  cercul portocaliu in jur, ca originalul"*), and the argument does not survive
+  the reversal: the ring reads as a *state* only in the menu bar, where the two
+  pictures alternate in the same pixels. Nothing ever shows the app icon beside
+  its own alternative — there it is the app's identity, and the ring is what
+  makes it findable at 32px in a folder of a hundred icons. `build-app.sh` scales the ten iconset sizes with
   `sips` and calls `iconutil`, rather than committing an `.icns`, so the PNG stays
   the single source of truth and the app icon follows it on the next build. The
   bundle is `touch`ed afterwards or Finder and the Dock keep serving the cached

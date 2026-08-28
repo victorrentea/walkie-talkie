@@ -38,20 +38,24 @@ cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
 cp "$DIR/assets/walkie-idle.png" "$CONTENTS/Resources/walkie-idle.png"
 cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
 
-# The Dock / Finder / ⌘-Tab / Spotlight icon, built here from the *idle* menu bar
-# picture — the device alone, without the orange ring. The ring means "bound to a
-# terminal right now", which is a live state; an app icon is the same picture
-# whether or not the relay is running, so a ring baked into it would be a claim
-# the icon cannot keep. Generated rather than committed as an .icns so the one
-# source of truth stays `assets/walkie-idle.png`: change that file and the app
-# icon follows on the next build.
+# The Finder / Spotlight / Get Info icon, built here from the *bound* picture —
+# the device inside its orange ring. It was the idle one for two days, on the
+# argument that the ring means "bound to a terminal right now" and an app icon
+# cannot make a claim about a live state. Victor reversed it on 2026-08-28
+# ("iconul app sa fie cu cercul portocaliu in jur, ca originalul"), and the
+# argument does not survive the reversal: in the menu bar the two pictures sit
+# side by side and the ring is a *state*, but nothing shows the app icon beside
+# its own alternative — there it is only the app's identity, and the ring is what
+# makes it recognisable at 32px among a hundred other icons. Generated rather
+# than committed as an .icns so the one source of truth stays the PNG: change
+# that file and the app icon follows on the next build.
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
             "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" \
             "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
     set -- $spec
-    sips -s format png -Z "$1" "$DIR/assets/walkie-idle.png" \
+    sips -s format png -Z "$1" "$DIR/assets/walkie-bound.png" \
         --out "$ICONSET/$2.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/AppIcon.icns"
