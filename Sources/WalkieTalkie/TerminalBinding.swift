@@ -916,7 +916,12 @@ final class TerminalBinding {
         // Code) and then the tty-keyed file (all there is when the foreground
         // process cannot be read at all).
         let live = foreground(onTTY: device)
-        if let (pid, _) = live, let dir = publishedDirectory(ownedBy: pid) {
+        // Every process on the tty, not just the foreground one: Claude Code is
+        // not always what `ps` calls foreground here — measured on ttys005, where
+        // the foreground pid had no published file at all while the session
+        // sitting behind it did. Whichever pid on this tty owns a `.last-` file
+        // *is* the agent, and its answer is the session directory.
+        if let dir = publishedDirectory(onTTY: device) {
             return label(forDirectory: dir)
         }
         if let (pid, _) = live, let dir = workingDirectory(ofPID: pid) {
@@ -933,6 +938,18 @@ final class TerminalBinding {
     /// whatever held it before. And the path must still be a directory — the
     /// same defence `publishedDirectory(forTTY:)` takes, since nothing ever
     /// cleans these files up.
+    /// The session directory published by whichever process on this tty owns
+    /// one. Nothing on the tty owning one means no agent is running there, which
+    /// is when the process's own `cwd` becomes the honest answer.
+    private static func publishedDirectory(onTTY device: String) -> String? {
+        guard let out = run("/bin/ps", ["-t", device, "-o", "pid="]) else { return nil }
+        for line in out.components(separatedBy: "\n") {
+            guard let pid = Int32(line.trimmingCharacters(in: .whitespaces)) else { continue }
+            if let dir = publishedDirectory(ownedBy: pid) { return dir }
+        }
+        return nil
+    }
+
     private static func publishedDirectory(ownedBy pid: Int32) -> String? {
         let file = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/cwd").appendingPathComponent(".last-\(pid)")

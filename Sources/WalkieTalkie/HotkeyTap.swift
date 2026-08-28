@@ -41,6 +41,20 @@ final class HotkeyTap {
     /// recording. Fired on the press only — the release is swallowed with it and
     /// says nothing, because this is a toggle and not a push-to-talk.
     var onLocalToggle: (() -> Void)?
+
+    /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃D does.** The keyboard
+    /// shortcut asks for both hands at the moment his pointing hand is already
+    /// on the terminal he means; the button is where the hand already is.
+    ///
+    /// Recognised *retroactively*, on the second press, and never by delaying the
+    /// first. Waiting out the double-click interval before acting would put
+    /// macOS's own 0.5s in front of every single press — i.e. in front of the
+    /// start of every dictation — to serve the rarer gesture. So the first press
+    /// does what it has always done and the second undoes it: on Local Whisper
+    /// that means a microphone opened for a couple of hundred milliseconds, which
+    /// is under `MicRecorder.minimumDuration` and is thrown away by the guard
+    /// that already exists for a slipped click.
+    var onMouse5Double: (() -> Void)?
     /// ⌘⌃D — point the relay at the terminal in front, or end the session when it
     /// is already pointed there. Owned here since 2026-08-26; it used to live in
     /// Victor Addons, which had to launch this app before it could ask it to
@@ -84,6 +98,14 @@ final class HotkeyTap {
         set { stateLock.lock(); localCaptureFlag = newValue; stateLock.unlock() }
     }
     private var localCaptureFlag = false
+
+    /// When mouse 5 last went down, for the double-click test. Touched only from
+    /// the tap callback, which is one thread, so it needs no lock — unlike the
+    /// flags above, which the main thread writes.
+    private var lastMouse5DownAt: CFTimeInterval = 0
+    /// The release of a press we swallowed. It has to go with it: LinearMouse is
+    /// downstream of this tap and would otherwise act on an orphan release.
+    private var swallowMouse5Up = false
 
     /// Swallow keystrokes **posted by Wispr Flow itself** — i.e. the transcript it
     /// types or pastes into whatever holds the caret.
@@ -174,6 +196,30 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                 }
                 return nil
+            }
+
+            // The double-click test comes first, and applies whether or not
+            // anything is bound: binding by pointing is most useful precisely
+            // when nothing is bound yet, and that is the state in which mouse 5
+            // is otherwise passed straight through to Wispr.
+            if button == MOUSE_BUTTON_5 && bare {
+                if type == .otherMouseUp && swallowMouse5Up {
+                    swallowMouse5Up = false
+                    return nil
+                }
+                if type == .otherMouseDown {
+                    let now = CACurrentMediaTime()
+                    if now - lastMouse5DownAt <= NSEvent.doubleClickInterval {
+                        // Zeroed rather than restamped, so a third click starts a
+                        // fresh pair instead of binding again on every press.
+                        lastMouse5DownAt = 0
+                        swallowMouse5Up = true
+                        Log.info("🎯 mouse 5 ×2 — binding")
+                        DispatchQueue.main.async { [weak self] in self?.onMouse5Double?() }
+                        return nil
+                    }
+                    lastMouse5DownAt = now
+                }
             }
 
             if button == MOUSE_BUTTON_5 && localCapture {

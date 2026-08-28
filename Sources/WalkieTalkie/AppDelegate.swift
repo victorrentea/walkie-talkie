@@ -275,6 +275,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which this needs: it spends several subprocesses working out what it
         // is looking at.
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
+        hotkeys.onMouse5Double = { [weak self] in
+            guard let self = self else { return }
+            // The first click of the pair has already opened the microphone if
+            // the local engine is up. Close it: a double click is by definition
+            // faster than `MicRecorder.minimumDuration`, so the recording is
+            // dropped by the guard there rather than transcribed and sent.
+            if self.localRecording { self.stopLocalRecording() }
+            _ = self.bindFrontmostTerminal()
+        }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
         hotkeys.onPromptEscape = { [weak self] in self?.overlay.cancelHeldPrompt() }
         picker.onUnbind = { [weak self] in self?.unbindTerminal() }
@@ -1106,11 +1115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func unbindTerminal() {
         terminal.unbind()
         DispatchQueue.main.async { [weak self] in
-            self?.showBound(nil)
-            // Not "back to the outbox" any more: unbound is inert, and telling
-            // him his words are still going somewhere would be the one wrong
-            // thing to say at the moment he stopped them going anywhere.
-            self?.overlay.flash("unbound — nothing is relayed now", duration: 3)
+            guard let self = self else { return }
+            // **Read before the chip goes**, or the burst is aimed at whatever
+            // shape the overlay has already shrunk to.
+            let chip = self.overlay.chipFrame
+            self.showBound(nil)
+            // No sentence any more. `unbound — nothing is relayed now` was a
+            // panel appearing in order to announce a disappearance, a few pixels
+            // from the thing that disappeared. The chip coming apart where it
+            // stood says it in the place it happened, and leaves nothing behind,
+            // which is the whole of the message.
+            UnbindPop.burst(at: chip)
         }
     }
 
