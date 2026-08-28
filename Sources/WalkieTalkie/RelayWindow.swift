@@ -20,6 +20,10 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
+/// The frozen selection, quoted, at the very top of the prompt panel.
+private let quoteLabel = NSTextField(labelWithString: "")
+/// What was in front of him when he started talking.
+private let frontLabel = NSTextField(labelWithString: "")
     private let promptLabel = NSTextField(wrappingLabelWithString: "")
     /// The pictures this message is carrying, drawn under the words it is
     /// carrying them with.
@@ -128,6 +132,9 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private var sentPrompt: String?
     /// Paths of the frames riding with the held prompt, newest last.
     private var promptShots: [String] = []
+/// Shown above the words rather than folded into them — see `layoutContent`.
+private var promptSelection: String?
+private var promptFront: String?
     private var promptTimer: Timer?
     /// When the held prompt is due to be released. Drives the Cancel countdown,
     /// so the button says how long Victor still has rather than making him guess.
@@ -184,6 +191,29 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     private let titleFont = NSFont.systemFont(ofSize: 17, weight: .semibold)
     private let promptFont = NSFont.systemFont(ofSize: 16)
     private let hintFont = NSFont.systemFont(ofSize: 17)
+
+    /// The quote mark is 30pt against the text's 16 — big enough to be the thing
+    /// the eye lands on first, which is the whole job. What he is checking in this
+    /// panel is *"is this the right passage"*, and that question is answered by
+    /// recognising the opening words, not by reading them; an oversized `“` turns
+    /// the row into something scanned rather than parsed. Dropped below the
+    /// baseline so it reads as a mark hanging beside the line instead of a
+    /// character sitting on it.
+    private let quoteFont = NSFont.systemFont(ofSize: 30, weight: .bold)
+    /// Tall enough for the 30pt mark; the 16pt text rides inside it.
+    private let quoteRowHeight: CGFloat = 30
+
+    private func quoted(_ text: String) -> NSAttributedString {
+        let out = NSMutableAttributedString(
+            string: "“",
+            attributes: [.font: quoteFont,
+                         .foregroundColor: NSColor.tertiaryLabelColor,
+                         .baselineOffset: -7])
+        out.append(NSAttributedString(
+            string: " " + singleLine(text),
+            attributes: [.font: promptFont, .foregroundColor: NSColor.labelColor]))
+        return out
+    }
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
@@ -450,6 +480,23 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         selectionLabel.cell?.truncatesLastVisibleLine = true
         selectionLabel.isHidden = true
         root.addSubview(selectionLabel)
+
+        // Both truncate rather than wrap: they are context for the words below,
+        // and a two-line answer to "where was I" pushes the thing he actually has
+        // to approve further down a panel with a clock running on it.
+        quoteLabel.lineBreakMode = .byTruncatingTail
+        quoteLabel.maximumNumberOfLines = 1
+        quoteLabel.cell?.truncatesLastVisibleLine = true
+        quoteLabel.isHidden = true
+        root.addSubview(quoteLabel)
+
+        frontLabel.font = .systemFont(ofSize: 14)
+        frontLabel.textColor = .secondaryLabelColor
+        frontLabel.lineBreakMode = .byTruncatingTail
+        frontLabel.maximumNumberOfLines = 1
+        frontLabel.cell?.truncatesLastVisibleLine = true
+        frontLabel.isHidden = true
+        root.addSubview(frontLabel)
 
         promptLabel.font = promptFont
         promptLabel.textColor = .labelColor
@@ -748,8 +795,22 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             (prompt.split(whereSeparator: { $0.isNewline })
                    .map { measure(String($0), font: promptFont) }.max() ?? 0) + pad * 2 + 8
         } ?? 0
+        // The quoted selection and the window title are truncated, not wrapped, so
+        // without a say in the width a four-word dictation would leave them both
+        // reading `“ Lor…`. They ask, and the half-screen cap still answers.
+        var contextWidth: CGFloat = 0
+        if sentPrompt != nil {
+            if let selection = promptSelection {
+                let text: CGFloat = measure(singleLine(selection), font: promptFont)
+                contextWidth = max(contextWidth, text + quoteRowHeight + pad * 2)
+            }
+            if let front = promptFront {
+                let text: CGFloat = measure("🪟 " + front, font: NSFont.systemFont(ofSize: 14))
+                contextWidth = max(contextWidth, text + pad * 2)
+            }
+        }
         let width = sentPrompt != nil
-            ? min(max(natural, promptWidth), screenWidth / 2)
+            ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 2)
             : min(natural, screenWidth / 2)
         let innerWidth = width - pad * 2
 
@@ -757,6 +818,34 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 
         layoutTitleRow(width: innerWidth)
         rows.append((titleRow, titleRowHeight))
+
+        // **Above the words, not inside them.** The selection used to be folded
+        // into the prompt text as a `↪ …` first line, which made the passage he
+        // is approving indistinguishable at a glance from the sentence he spoke
+        // about it — same size, same colour, same block. It is a quotation, so it
+        // is set as one: big mark, one line, ellipsis. One line on purpose — a
+        // selection can be a whole file, and this panel exists to be read in the
+        // few seconds the Cancel clock is running, not to display the file.
+        if let selection = promptSelection {
+            quoteLabel.attributedStringValue = quoted(selection)
+            quoteLabel.frame.size = NSSize(width: innerWidth, height: quoteRowHeight)
+            quoteLabel.isHidden = false
+            rows.append((quoteLabel, quoteRowHeight))
+        } else {
+            quoteLabel.isHidden = true
+        }
+
+        // Where he was when he said it. The agent has had this since the envelope
+        // grew a `[Focused window: …]` block; the panel had not, which left the
+        // one place the *message* is checked showing less than the message.
+        if let front = promptFront {
+            frontLabel.stringValue = "🪟 " + front
+            frontLabel.frame.size = NSSize(width: innerWidth, height: 19)
+            frontLabel.isHidden = false
+            rows.append((frontLabel, 19))
+        } else {
+            frontLabel.isHidden = true
+        }
 
         // First of the three, because it is the one that is *about* the dictation
         // rather than about what is riding along with it: something is listening,
@@ -803,7 +892,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
             selectionLabel.isHidden = true
         }
 
-        if let prompt = sentPrompt {
+        if let prompt = sentPrompt, !prompt.isEmpty {
             // Vertically: whatever it takes to show the prompt whole, bounded
             // only by the screen so a very long dictation can't grow an overlay
             // taller than the display.
@@ -1500,18 +1589,27 @@ final class RelayWindow: NSObject, NSWindowDelegate {
     /// Returns false if there was nothing worth showing, in which case the caller
     /// still owns the message and must release it itself.
     @discardableResult
-    func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = []) -> Bool {
+    func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
+                        selection: String? = nil, front: String? = nil) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        // **A selection with no words is still worth holding.** It stopped being
+        // part of `text` when it moved above the words, so a highlight sent with
+        // nothing said would have gone straight out past the Cancel button that
+        // exists for exactly that case.
+        guard !trimmed.isEmpty || quoted != nil else { return false }
         // A prompt still on screen has not been released yet. Let it go first, so
         // two dictations in quick succession reach the agent in the order spoken.
         resolvePrompt(send: true)
 
         sentPrompt = trimmed
         promptShots = shots
-        // The selection is already part of what is displayed here, so drop the
-        // separate preview row rather than showing it twice.
-        selection = nil
+        promptSelection = quoted
+        promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        // The narrow overlay's own truncated `↪ …` receipt goes: this panel shows
+        // the same selection, quoted and at the top, and two of them is one too
+        // many.
+        self.selection = nil
         promptDeadline = Date().addingTimeInterval(hold)
         updateCancelTitle()
         // Park first, then unfold: repositioning after an animated resize would
@@ -1558,6 +1656,8 @@ final class RelayWindow: NSObject, NSWindowDelegate {
         promptDeadline = nil
         sentPrompt = nil
         promptShots = []
+        promptSelection = nil
+        promptFront = nil
         layoutContent()
         reposition()
         refreshOpacity()
@@ -1874,4 +1974,10 @@ final class RelayView: NSView {
 
     override func mouseEntered(with event: NSEvent) { owner?.setHovering(true) }
     override func mouseExited(with event: NSEvent)  { owner?.setHovering(false) }
+}
+
+private extension String {
+    /// A blank window title and a blank selection are both "there is none" — the
+    /// panel should not open a row to say so.
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

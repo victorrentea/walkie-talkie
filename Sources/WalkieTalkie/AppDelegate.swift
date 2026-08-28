@@ -201,6 +201,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var sources: [String: String] = [:]
         let app: String?
         let elements: [ElementPick]
+        /// True when the words came from the local Whisper rather than from
+        /// Wispr. Carried on the message rather than read from
+        /// `TranscriptionEngine.current` at render time, because the two disagree
+        /// exactly when it matters: on the fallback path the engine setting still
+        /// says `whisper` while the text being sent is Wispr's.
+        var local: Bool = false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -427,7 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
                             r.language ?? "?", r.avgLogprob, r.text.count))
-            self.send(kind: "dictation", text: r.text, app: app)
+            self.send(kind: "dictation", text: r.text, app: app, local: true)
         }
     }
 
@@ -624,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
                                      duration: duration, app: app)
             try? FileManager.default.removeItem(at: wav)
-            self.send(kind: "dictation", text: r.text, app: app)
+            self.send(kind: "dictation", text: r.text, app: app, local: true)
         }
     }
 
@@ -1176,11 +1182,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// invitation to misread it.
     private static let dictatedHint = "[this text was dictated in RO or EN]"
 
+    /// What rides on a dictation the **local** model transcribed.
+    ///
+    /// **Its failure mode is not a mis-heard word, it is a fluent invention.**
+    /// Measured over 442 dictations, 11 came back semantically broken — not
+    /// garbled, but confident sentences that were never said ("Nu uitați să vă
+    /// abonați" for a sentence about an invoice). The confidence gate catches 7
+    /// of them before they are sent; the other 4, and everything the relay's own
+    /// microphone path deliberately sends *below* the gate rather than
+    /// swallowing, arrive looking exactly like a correct transcript. That is the
+    /// one failure an agent cannot defend itself against by reading, so it is
+    /// told instead — which is what Victor asked for.
+    ///
+    /// Only on the local engine. Wispr has its own mis-hearings, but they read
+    /// like mis-hearings, and a warning on every dictation ever sent is a warning
+    /// nobody reads by the second day.
+    private static let localDictatedHint =
+        "[this text was dictated in RO or EN and transcribed by a local Whisper — "
+        + "it can hallucinate a fluent sentence that was never said]"
+
     private static func terminalLine(_ m: Message) -> String {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
-            parts.append(dictatedHint)
+            parts.append(m.local ? localDictatedHint : dictatedHint)
         }
         if let selection = m.selection, !selection.isEmpty {
             parts.append("[selected: \(clampForTerminal(selection))]")
@@ -1517,6 +1542,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// seconds Cancel is still available, and a comma-separated run of CSS paths
     /// is not readable at that speed.
     ///
+    /// **The type, not the selector.** These lines used to carry `pick.short` —
+    /// the last two steps of the path, `div#cart > span.price` — which is the
+    /// right thing to *send* and the wrong thing to show here. Three of them turn
+    /// the panel into a wall of punctuation to be read at the exact moment the
+    /// Cancel clock is running, and the question he is answering is not "which
+    /// selector" but "did my three clicks land". `button`, `div`, `a` answers that
+    /// in a glance. The full selector still travels in the message; nothing is
+    /// lost, it is just not shouted at him. Bulleted for the same reason: a list
+    /// of three is read as a count when it looks like a list.
+    ///
     /// **Negative stamps are the point, not an edge case.** Pointing usually comes
     /// *before* the sentence — he finds the thing, then says what to do with it —
     /// so `−0:08` reads exactly as it should: you pointed at this eight seconds
@@ -1524,13 +1559,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func pickLines(_ picks: [ElementPick], since: Date?) -> [String] {
         let shown = picks.prefix(maxPickLines)
         var lines = shown.map { pick -> String in
-            guard let since = since else { return "🎯 \(pick.short)" }
+            guard let since = since else { return "• \(pick.tag)" }
             let seconds = Int(pick.at.timeIntervalSince(since).rounded())
             let sign = seconds < 0 ? "−" : ""
             let abs = Swift.abs(seconds)
-            return String(format: "🎯 %@%d:%02d %@", sign, abs / 60, abs % 60, pick.short)
+            return String(format: "• %@%d:%02d %@", sign, abs / 60, abs % 60, pick.tag)
         }
-        if picks.count > shown.count { lines.append("🎯 +\(picks.count - shown.count) more") }
+        if picks.count > shown.count { lines.append("• +\(picks.count - shown.count) more") }
         return lines
     }
 
@@ -1579,9 +1614,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       shotOffsets: [TimeInterval],
                                       picks: [ElementPick], since: Date?) -> String? {
         var parts: [String] = []
-        if let selection = selection, !selection.isEmpty { parts.append("↪ " + selection) }
         if let text = text, !text.isEmpty { parts.append(text) }
-        guard !parts.isEmpty else { return nil }
+        // **The selection counts as something to show, but is not shown here.**
+        // It goes to the panel separately and is drawn above the words, quoted —
+        // so this string must not carry it, and must still refuse to return nil
+        // for a message that has one. Getting only the first half of that right
+        // would send a highlighted-with-no-words message straight out, past the
+        // Cancel button that exists for it.
+        let hasSelection = !(selection ?? "").isEmpty
+        guard !parts.isEmpty || hasSelection else { return nil }
         // Stamped, and after the words rather than before them: the frozen
         // selection is what he was talking *about* and belongs at the top, while
         // these are things he reached for part-way through and read back in the
@@ -1645,7 +1686,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         announceEnd("app terminate")
     }
 
-    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {
+    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil,
+                      local: Bool = false) {
         // **The outbox is not written either.** It used to be, on the grounds
         // that an agent might be watching the queue without a binding — the
         // `/relay` skill's original mode. Victor settled it on 2026-08-27: with
@@ -1708,7 +1750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks)
+                              app: app, elements: picks, local: local)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -1738,7 +1780,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // enumeration far more often than it is a spare, and a strip that
             // skipped it would disagree with the count in the row above.
             let frames = ([screen] + attached).compactMap { $0 }
-            if self.overlay.showSentPrompt(shown, hold: hold, shots: frames) {
+            if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
+                                           selection: selection,
+                                           front: screen.flatMap { sources[$0] }) {
                 self.held = message
             } else {
                 self.commit(message)
