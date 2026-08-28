@@ -160,7 +160,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         // No ⌘Q key equivalent: the app never becomes key, so the hint would
         // advertise a shortcut that does nothing outside the open menu.
-        let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "")
+        //
+        // The build stamp rides on this row rather than taking a line of its own,
+        // the way Victor Addons does it: it is read once a session, when the
+        // question is "am I looking at what I just built?" — and that question is
+        // asked while reaching for Quit anyway, since the answer to "no" is to
+        // quit and relaunch.
+        let exit = NSMenuItem(title: "Quit — built \(Self.buildStamp)",
+                              action: #selector(exitClicked), keyEquivalent: "")
         exit.target = self
         menu.addItem(exit)
 
@@ -263,6 +270,26 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// template image is drawn as a silhouette in a single colour. macOS dims
     /// them on an inactive display either way, which is the behaviour that was
     /// asked for.
+    /// When this binary was put in place, for the Quit row.
+    ///
+    /// **Taken from the executable's own mtime, not from a constant stamped into
+    /// the source.** Victor Addons seds a `BUILD_TIME` literal into its Swift file
+    /// on every build, which works but dirties a tracked file on each run and
+    /// lands in commits as noise. The file date says the same thing for free and
+    /// cannot go stale: `build-app.sh` copies the binary into the bundle with a
+    /// plain `cp`, so the date is the moment of install even when `swift build`
+    /// had nothing to recompile — and a `swift build` run from the terminal gets
+    /// its own honest date the same way.
+    private static let buildStamp: String = {
+        let path = Bundle.main.executablePath ?? CommandLine.arguments[0]
+        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        let date = attrs?[.modificationDate] as? Date
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, HH:mm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: date ?? Date())
+    }()
+
     private static let idleIcon = loadIcon("walkie-idle")
     private static let boundIcon = loadIcon("walkie-bound")
 

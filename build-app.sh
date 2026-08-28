@@ -38,6 +38,25 @@ cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
 cp "$DIR/assets/walkie-idle.png" "$CONTENTS/Resources/walkie-idle.png"
 cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
 
+# The Dock / Finder / ⌘-Tab / Spotlight icon, built here from the *idle* menu bar
+# picture — the device alone, without the orange ring. The ring means "bound to a
+# terminal right now", which is a live state; an app icon is the same picture
+# whether or not the relay is running, so a ring baked into it would be a claim
+# the icon cannot keep. Generated rather than committed as an .icns so the one
+# source of truth stays `assets/walkie-idle.png`: change that file and the app
+# icon follows on the next build.
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
+            "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" \
+            "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
+    set -- $spec
+    sips -s format png -Z "$1" "$DIR/assets/walkie-idle.png" \
+        --out "$ICONSET/$2.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/AppIcon.icns"
+rm -rf "$(dirname "$ICONSET")"
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -55,6 +74,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>ro.victorrentea.wispr-relay</string>
     <key>CFBundleName</key>
     <string>$APP_NAME</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
@@ -84,4 +105,8 @@ else
     codesign --force --sign - "$APP_DIR"
 fi
 
-echo "✅ Installed $APP_DIR"
+# Finder and the Dock cache an app's icon by bundle path; touching the bundle is
+# what tells them the cache is stale, or the old picture survives the rebuild.
+touch "$APP_DIR"
+
+echo "✅ Installed $APP_DIR (built $(date '+%b %-d, %H:%M'))"

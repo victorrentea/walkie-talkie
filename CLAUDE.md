@@ -1789,3 +1789,49 @@ sent or flushed (`stashSelection` bails when `pendingSelection` is already set;
 minute, another window jumps in front, he switches apps to look something up —
 none of that changes what he is talking about. Later probes exist only to fill a
 blank the first one left.
+
+## A stale bundle in /Applications is three bugs at once
+
+On 2026-08-28 all three of these were reported as separate faults:
+
+- `⌘⌃D` no longer bound a terminal — macOS's "look up in dictionary" took it;
+- Local Whisper refused to start with `cannot import mlx_whisper`;
+- the menu bar showed an old glyph instead of the walkie talkie.
+
+One cause: `/Applications/Walkie Talkie.app` predated three commits
+(`e635128` its own ⌘⌃D, `584ecd2` the python probe, and the icon assets) while
+the working tree was clean and at HEAD. Nothing on screen says which build is
+installed, so each symptom looked like its own regression, and the ⌘⌃D one looks
+exactly like an OS shortcut winning a fight — it isn't; **nobody was claiming the
+key**, because Victor Addons had already given it up (see *⌘⌃D is this app's own
+key*) and the installed relay had not yet taken it.
+
+**Read the bundle, not the repo, when a fix "did not take".**
+`find "/Applications/Walkie Talkie.app" -type f` is the whole diagnostic: a
+Resources folder without `walkie-idle.png` dates the build older than the icons.
+Source mtimes lie here — `build-app.sh` copies with `cp`, so every file in the
+bundle carries the *install* time whatever its contents.
+
+This is why the Quit row now carries a build stamp (below): the question "am I
+running what I just built?" had no answer anywhere in the app.
+
+## The app icon and the build stamp
+
+- **The Finder/Spotlight icon is generated at build time** from
+  `assets/walkie-idle.png` — the *idle* picture, the device without the orange
+  ring. The ring means "bound to a terminal right now"; an app icon is the same
+  picture whether the relay is running or not, so a ring baked into it would be a
+  claim the icon cannot keep. `build-app.sh` scales the ten iconset sizes with
+  `sips` and calls `iconutil`, rather than committing an `.icns`, so the PNG stays
+  the single source of truth and the app icon follows it on the next build. The
+  bundle is `touch`ed afterwards or Finder and the Dock keep serving the cached
+  old picture. (The app is `LSUIElement`, so this icon never appears in the Dock —
+  Finder, Spotlight and Get Info are where it shows.)
+- **`Quit — built Aug 28, 17:48`**, one row, the way Victor Addons does it: read
+  once a session, and read while reaching for Quit anyway, since the answer to
+  "no, that's the old build" is to quit and relaunch. The date is the
+  **executable's own mtime**, not a constant stamped into the source: Addons seds
+  a `BUILD_TIME` literal into a tracked Swift file on every build, which dirties
+  the working tree and lands in commits as noise, while the file date says the
+  same thing for free, cannot go stale, and works unchanged for a plain
+  `swift build` run from the terminal.
