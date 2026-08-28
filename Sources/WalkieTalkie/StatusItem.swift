@@ -48,6 +48,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// out wrong before it was ever worth transcribing.
     var onCancelDictation: (() -> Void)?
 
+    /// Picked from **Start Dictation** — open the microphone, the same thing
+    /// mouse 5 does. The other end of the pair that already had two ways out and
+    /// only one way in.
+    var onStartDictation: (() -> Void)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// Let go of the terminal without ending the session — the menu's answer to
@@ -55,7 +60,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
-    private let stopRecording = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
+    /// Opens the microphone from the menu — see `onStartDictation`.
+    private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "")
+    private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
@@ -135,6 +142,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // nothing is bound: the row is the only place in the menu that says
         // whether the microphone is open at all, so it stays visible and answers
         // that question even when there is nothing to click.
+        // **Above Stop, because it comes first.** Mouse 5 was the only way in, and
+        // it is a thumb button on one specific mouse — the same argument that put
+        // Stop here, which had been keeping the menu able to end a dictation it
+        // could not begin. Enabled only while something is bound: unbound the
+        // relay is inert and `startLocalRecording` would refuse anyway, and a row
+        // that silently does nothing is worse than one that says it cannot.
+        startDictation.action = #selector(startDictationClicked)
+        startDictation.target = self
+        startDictation.isEnabled = false
+        menu.addItem(startDictation)
+
         stopRecording.action = #selector(stopRecordingClicked)
         stopRecording.target = self
         stopRecording.isEnabled = false
@@ -262,9 +280,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// beside it) is on the chip and in the overlay already.
     private func applyStopRecording() {
         let recording = isRecording?() ?? false
-        stopRecording.isHidden = engine != .whisper
+        // All three are the relay's own microphone, which it only has on Local
+        // Whisper: with Wispr Flow the recording is Wispr's, started and ended on
+        // Wispr's button, and a row claiming otherwise would be a promise this
+        // app cannot keep.
+        let mine = engine == .whisper
+        startDictation.isHidden = !mine
+        startDictation.isEnabled = isBound && !recording
+        stopRecording.isHidden = !mine
         stopRecording.isEnabled = recording
-        cancelDictation.isHidden = engine != .whisper
+        cancelDictation.isHidden = !mine
         cancelDictation.isEnabled = recording
     }
 
@@ -373,6 +398,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func stopRecordingClicked() { onStopRecording?() }
     @objc private func cancelDictationClicked() { onCancelDictation?() }
+    @objc private func startDictationClicked() { onStartDictation?() }
 
     private var destination: String?
 

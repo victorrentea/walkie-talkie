@@ -239,6 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // transcribed and sent exactly as if the button had ended it.
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
         status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
+        status.onStartDictation = { [weak self] in self?.startLocalRecording() }
 
         // **The model is not brought up at launch any more**, even when the
         // setting says Local Whisper.
