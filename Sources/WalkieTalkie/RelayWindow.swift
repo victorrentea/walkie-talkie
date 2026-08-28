@@ -277,7 +277,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// work.
     private var idleHint: String? {
         guard boundLabel != nil, !listening, !paused, !engineLoading, sentPrompt == nil else { return nil }
-        return "🖱️ to start dictating"
+        // One word. The chip rides beside the cursor, over his work, for hours at
+        // a time — "to start dictating" was a sentence where a label was needed.
+        return "🖱️ dictate"
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
