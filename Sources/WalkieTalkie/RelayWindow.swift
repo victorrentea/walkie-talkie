@@ -1498,7 +1498,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func refreshOpacity() {
         // The chip belongs to the pointer: no pointer, no chip. Panels are their
         // own reason to be on screen and stay put.
-        let target: CGFloat = (anchored && typing) ? 0.0
+        //
+        // **Except while it is listening**, which is the one state where the chip
+        // is not a label about the pointer but the only evidence the microphone
+        // is open. Vanishing at the exact moment he presses the button — because
+        // the pointer went with it — leaves him talking at a screen that shows
+        // nothing, which is the one thing he cannot afford to guess about. He is
+        // speaking, not pointing, so the pointer's absence says nothing about
+        // whether this is still worth showing.
+        let target: CGFloat = (anchored && typing && !listening) ? 0.0
                             : paused ? 0.30
                             : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in

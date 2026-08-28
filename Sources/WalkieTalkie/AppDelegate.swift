@@ -514,7 +514,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // No duration: it ends when the model does, not when a timer says so.
         // A banner that expires after twelve seconds on a load that took
         // fourteen is worse than none — it says "ready" by disappearing.
-        overlay.flash("⏳ loading the local model — keep using Wispr until this clears", duration: 600)
+        // Two words. The sentence it replaces spelled out the fallback — "keep
+        // using Wispr until this clears" — which is advice he has not needed
+        // since a press made during the load started being remembered: there is
+        // nothing to do differently, so there is nothing to read.
+        overlay.flash("⏳ preparing", duration: 600)
         whisper.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
