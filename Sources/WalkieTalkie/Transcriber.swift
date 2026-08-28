@@ -131,6 +131,79 @@ final class LocalWhisper {
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }?.path
     }
 
+    /// Which `python3` runs the helper, found by probing rather than by PATH.
+    ///
+    /// **`/usr/bin/env python3` was the bug.** A relay launched the way it is
+    /// actually used — from Finder, `open`, or a LaunchAgent — inherits launchd's
+    /// `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, so `env` finds Apple's
+    /// `/usr/bin/python3`, which has no `mlx_whisper` and cannot get one: it is
+    /// the Command Line Tools' interpreter and its site-packages is not a place
+    /// `pip install` may write. The identical binary started from a terminal saw
+    /// Victor's python.org 3.12 on PATH and worked, which is why this looked like
+    /// a broken model rather than a broken lookup — the failure was
+    /// `cannot import mlx_whisper`, and the module was installed the whole time.
+    ///
+    /// Each candidate is asked for `find_spec("mlx_whisper")`, a `sys.path`
+    /// lookup and not an import, so a probe costs milliseconds against the 7.4s
+    /// the real import takes. The first interpreter that has the module wins.
+    /// `RELAY_WHISPER_PYTHON` skips the probe entirely and is used as given, so
+    /// that naming an interpreter that turns out to lack the module produces the
+    /// helper's own honest error instead of being silently overridden.
+    private static var pythonPath: String? {
+        if let override = ProcessInfo.processInfo.environment["RELAY_WHISPER_PYTHON"] {
+            return override
+        }
+        var candidates: [String] = []
+        // A `swift build` run from a terminal already has the right one on PATH;
+        // looking there first keeps a developer run on the same interpreter the
+        // shell would have picked.
+        for dir in (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":") {
+            candidates.append("\(dir)/python3")
+        }
+        candidates += ["/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        // python.org framework installs, newest first — `.numeric` because a
+        // plain string sort puts 3.9 above 3.12.
+        let frameworks = "/Library/Frameworks/Python.framework/Versions"
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: frameworks) {
+            for v in versions.sorted(by: { $0.compare($1, options: .numeric) == .orderedDescending }) {
+                candidates.append("\(frameworks)/\(v)/bin/python3")
+            }
+        }
+        return candidates.first { Self.hasMLXWhisper($0) }
+    }
+
+    /// The helper's environment, which is this process's with a PATH that can
+    /// actually find Homebrew.
+    ///
+    /// **The same launchd PATH bites twice.** Resolving the interpreter by hand
+    /// gets the helper running, and then `mlx_whisper` shells out to `ffmpeg` to
+    /// decode the WAV — and `ffmpeg` is at `/opt/homebrew/bin/ffmpeg`, which
+    /// `PATH=/usr/bin:/bin:/usr/sbin:/sbin` does not contain. The second failure
+    /// was hidden behind the first and reads nothing like it: warm-up dies with
+    /// `[Errno 2] No such file or directory: 'ffmpeg'`. Fixing only the import
+    /// would have moved the error, not removed it.
+    private static var helperEnvironment: [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let dirs = ["/opt/homebrew/bin", "/usr/local/bin"]
+        var path = (env["PATH"] ?? "").split(separator: ":").map(String.init)
+        for dir in dirs where !path.contains(dir) { path.append(dir) }
+        env["PATH"] = path.joined(separator: ":")
+        return env
+    }
+
+    /// Whether this interpreter can see `mlx_whisper`, without paying to import it.
+    private static func hasMLXWhisper(_ python: String) -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: python) else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: python)
+        p.arguments = ["-c", "import importlib.util as u, sys; sys.exit(0 if u.find_spec('mlx_whisper') else 1)"]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
     /// Brings the model up. `onReady` fires with nil on success, or the reason.
     func start(_ onReady: @escaping (String?) -> Void) {
         queue.async { [weak self] in
@@ -140,9 +213,16 @@ final class LocalWhisper {
                 onReady("whisper_helper.py not found beside the binary"); return
             }
 
+            guard let python = Self.pythonPath else {
+                onReady("no python3 here has mlx_whisper — `pip3 install mlx-whisper`, "
+                        + "or point RELAY_WHISPER_PYTHON at the one that does")
+                return
+            }
+
             let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            p.arguments = ["python3", helper]
+            p.executableURL = URL(fileURLWithPath: python)
+            p.arguments = [helper]
+            p.environment = Self.helperEnvironment
             let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
             p.standardInput = inPipe
             p.standardOutput = outPipe
@@ -156,14 +236,14 @@ final class LocalWhisper {
                 }
             }
             do { try p.run() } catch {
-                onReady("could not start python3: \(error)"); return
+                onReady("could not start \(python): \(error)"); return
             }
             self.proc = p
             self.pidLock.lock(); self.helperPID = p.processIdentifier; self.pidLock.unlock()
             self.toHelper = inPipe.fileHandleForWriting
             self.fromHelper = outPipe.fileHandleForReading
 
-            Log.info("whisper helper starting (\(helper)) — loading weights")
+            Log.info("whisper helper starting (\(python) \(helper)) — loading weights")
             guard let hello = self.readLine(timeout: 180) else {
                 onReady("the model did not come up within 180s"); return
             }

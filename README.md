@@ -230,8 +230,16 @@ the agent, and the choice survives a restart. A dictation that Wispr *did* recor
 — on the Wispr engine, or one started with Wispr's own hotkey — is still
 transcribed from `History.audio`, the same 16 kHz WAV Wispr stored, so that
 comparison stays like-for-like. It needs `mlx_whisper`
-(`pip install mlx-whisper`); the model is `mlx-community/whisper-large-v3-turbo`,
-overridable with `RELAY_WHISPER_MODEL`.
+(`pip install mlx-whisper`) and `ffmpeg`, which `mlx_whisper` shells out to for
+decoding; the model is `mlx-community/whisper-large-v3-turbo`, overridable with
+`RELAY_WHISPER_MODEL`.
+
+The interpreter is **found by probing, not taken from PATH**: an app launched from
+Finder or a LaunchAgent inherits launchd's bare `PATH=/usr/bin:/bin:/usr/sbin:/sbin`,
+where `python3` is Apple's — which has no `mlx_whisper` and cannot be given one.
+The first `python3` that can see the module wins, and `RELAY_WHISPER_PYTHON` names
+one outright. `/opt/homebrew/bin` and `/usr/local/bin` are put on the helper's PATH
+for the same reason, so its `ffmpeg` is findable too.
 
 Whenever the local engine cannot answer on a **Wispr-recorded** dictation — not
 loaded, no audio, or a transcript it is not confident in — Wispr's own text goes
