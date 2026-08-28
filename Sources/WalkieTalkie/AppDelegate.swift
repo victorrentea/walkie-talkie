@@ -462,8 +462,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// does not exist. Choosing Wispr stops the helper, because the weights are
     /// resident and a relay left running all day must not hold them for an
     /// engine nobody selected.
-    /// A bind is waiting on the model, and the microphone opens the instant it
-    /// is up. See where it is set, in `bindFrontmostTerminal`.
+    /// **A mouse 5 press is waiting on the model**, and the microphone opens the
+    /// instant it is up. See where it is set, in `startLocalRecording`.
+    ///
+    /// It used to be the *bind* that set this, on the reading that ⌘⌃D means "I
+    /// am about to talk to this agent". It does not: binding is how Victor points
+    /// the relay at a terminal on his way into a session, often several minutes
+    /// before he says anything, and a bind that opened the microphone by itself
+    /// was recording a room that had not been asked. Only the button that means
+    /// "record" may arm this — the bind's remaining job is to bring the model up
+    /// so the press does not have to wait for it.
     private var recordWhenModelReady = false
 
     private func pickEngine(_ engine: TranscriptionEngine) {
@@ -519,18 +527,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.flash("⚠️ grant Microphone to Walkie Talkie — mouse 5 cannot record", duration: 15)
                     Log.error("microphone access denied — local recording will not work")
                 }
-                // **A bind that had to wait for the model starts recording the
-                // moment it is up.** ⌘⌃D means "I am about to talk to this
-                // agent", and on a cold model that intention was costing him ten
-                // seconds of waiting followed by a mouse 5 he had to remember to
-                // press — with nothing on screen counting those seconds down. The
-                // ready-flash then said "go ahead" to a relay that was not
-                // listening. Only when the *bind* asked for the load: a load
-                // started from the menu is Victor choosing an engine, which is a
-                // different sentence and must not open the microphone.
+                // **A mouse 5 pressed against a cold model records the moment
+                // it is up.** On a cold model that press was costing him ten
+                // seconds of waiting followed by a second press he had to
+                // remember to make, with nothing on screen counting the seconds
+                // down — and the ready-flash then said "go ahead" to a relay
+                // that was not listening. Only a *press* arms this: a load
+                // started from the menu, or by a bind, is Victor choosing an
+                // engine, which is a different sentence and must not open the
+                // microphone.
                 if self.recordWhenModelReady {
                     self.recordWhenModelReady = false
-                    Log.info("model up after a bind — opening the microphone")
+                    Log.info("model up after a mouse 5 that had to wait — opening the microphone")
                     self.startLocalRecording()
                     return
                 }
@@ -590,7 +598,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.info("mouse 5 with the model down — bringing it up now")
                 pickEngine(.whisper)
             }
-            overlay.flash("⏳ the local model is coming up — say it again in a moment", duration: 6)
+            // **The press is kept.** Telling him to say it again was making him
+            // watch for a banner and then remember to press a button he had
+            // already pressed — the ten seconds cost him the sentence *and* the
+            // gesture. The intention is unambiguous, so it is held and honoured
+            // when the weights land.
+            recordWhenModelReady = true
+            overlay.flash("⏳ the local model is coming up — recording starts the moment it is ready", duration: 6)
             return
         }
 
@@ -1036,9 +1050,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // that overlap him settling into the session, rather than ten seconds
             // in the middle of the first sentence.
             if TranscriptionEngine.current == .whisper, !self.whisper.ready, !self.engineLoading {
-                // …and it starts listening by itself when the weights land: see
-                // `recordWhenModelReady` in `pickEngine`.
-                self.recordWhenModelReady = true
+                // **The load only.** Arming the microphone here was wrong: a
+                // bind is Victor pointing the relay at a terminal, not Victor
+                // starting to talk, and the two can be minutes apart. Mouse 5
+                // remains the only thing that opens it — and if he presses it
+                // while this load is still running, `startLocalRecording`
+                // remembers the press and it fires the moment the weights land.
                 self.pickEngine(.whisper)
             }
             // **The chip is set first, and the rectangle flies into it.** It used
