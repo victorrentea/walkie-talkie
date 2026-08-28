@@ -13,7 +13,7 @@ import AppKit
 ///
 /// Because it never takes keyboard focus, `canBecomeKey` stays false: the overlay
 /// must never steal the caret from whatever Victor is actually working in.
-final class RelayWindow: NSObject, NSWindowDelegate {
+final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
 
     private let panel: RelayPanel
     private let root: RelayView
@@ -24,7 +24,7 @@ final class RelayWindow: NSObject, NSWindowDelegate {
 private let quoteLabel = NSTextField(labelWithString: "")
 /// What was in front of him when he started talking.
 private let frontLabel = NSTextField(labelWithString: "")
-    private let promptLabel = NSTextField(wrappingLabelWithString: "")
+    private let promptLabel = PromptField(wrappingLabelWithString: "")
     /// The pictures this message is carrying, drawn under the words it is
     /// carrying them with.
     ///
@@ -101,7 +101,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// How a displayed prompt ended: `true` — release it to the agent (the hold
     /// ran out, or he clicked the overlay away), `false` — he pressed Cancel and
     /// it must never be written. Fires exactly once per prompt.
-    var onPromptResolved: ((Bool) -> Void)?
+    var onPromptResolved: ((Bool, String?) -> Void)?
 
     private(set) var selection: String?
 
@@ -502,6 +502,9 @@ private var promptFront: String?
         promptLabel.textColor = .labelColor
         promptLabel.isHidden = true
         promptLabel.maximumNumberOfLines = 0        // wrap freely; the height follows
+        promptLabel.focusRingType = .none           // the panel is chrome-less; a ring on it would be the only box on the card
+        promptLabel.delegate = self
+        promptLabel.onClickWhenIdle = { [weak self] in self?.handleClick(onWords: true) }
         root.addSubview(promptLabel)
 
         shotsRow.isHidden = true
@@ -897,9 +900,14 @@ private var promptFront: String?
             // only by the screen so a very long dictation can't grow an overlay
             // taller than the display.
             let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800) - margin * 2 - 80
-            promptLabel.stringValue = prompt
+            // While he is in the field the field owns its text: writing
+            // `sentPrompt` back over it on the next layout pass would undo his
+            // last keystroke, and layout runs on every keystroke precisely so the
+            // panel can grow with what he types.
+            if !editingPrompt { promptLabel.stringValue = prompt }
+            let shown = promptLabel.stringValue
             promptLabel.preferredMaxLayoutWidth = innerWidth
-            let h = min(measureWrapped(prompt, font: promptFont, width: innerWidth), maxHeight)
+            let h = min(measureWrapped(shown, font: promptFont, width: innerWidth), maxHeight)
             promptLabel.frame.size = NSSize(width: innerWidth, height: h)
             promptLabel.isHidden = false
             rows.append((promptLabel, h))
@@ -1590,7 +1598,8 @@ private var promptFront: String?
     /// still owns the message and must release it itself.
     @discardableResult
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
-                        selection: String? = nil, front: String? = nil) -> Bool {
+                        selection: String? = nil, front: String? = nil,
+                        words: String? = nil) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // **A selection with no words is still worth holding.** It stopped being
@@ -1603,6 +1612,21 @@ private var promptFront: String?
         resolvePrompt(send: true)
 
         sentPrompt = trimmed
+        // Split the preview back into "what he said" and "what the app added",
+        // which is the line the editor is allowed to cross. The words come in
+        // separately rather than being guessed at, and the prefix test is what
+        // proves the two agree; when they do not — a message with no words at
+        // all, a preview built some other way — `promptWords` stays nil and the
+        // text is simply not editable, which is the honest failure.
+        let spoken = words?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        if let spoken = spoken, trimmed.hasPrefix(spoken) {
+            promptWords = spoken
+            promptExtras = String(trimmed.dropFirst(spoken.count))
+        } else {
+            promptWords = nil
+            promptExtras = ""
+        }
+        promptHold = hold
         promptShots = shots
         promptSelection = quoted
         promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -1610,13 +1634,125 @@ private var promptFront: String?
         // the same selection, quoted and at the top, and two of them is one too
         // many.
         self.selection = nil
-        promptDeadline = Date().addingTimeInterval(hold)
-        updateCancelTitle()
         // Park first, then unfold: repositioning after an animated resize would
         // snap the window to its destination and eat the animation.
         reposition()
         layoutContent(animated: true)
         refreshOpacity()
+
+        startPromptCountdown(hold: hold)
+        return true
+    }
+
+    /// **The words on their own** — what Victor actually said, without the
+    /// `📸 ×2 0:38` and `↪` lines the preview adds under them. It is the half of
+    /// the panel he is allowed to edit, and the half that ends up in the outbox;
+    /// the rest is the app describing what it is carrying, which there is no
+    /// sense in letting him rewrite.
+    private var promptWords: String?
+    /// Everything the preview shows after the words, kept so the two can be put
+    /// back together when an edit ends.
+    private var promptExtras = ""
+    /// The hold this prompt was given, kept because an edit **restarts** the
+    /// countdown rather than resuming it: what is on screen after an edit is not
+    /// the text the clock was started for.
+    private var promptHold: TimeInterval = 0
+    private var editingPrompt = false
+    /// Watches for a click anywhere outside the panel while editing — the other
+    /// half of "click away and it goes out on its own".
+    private var outsideClickMonitor: Any?
+
+    /// Click on the words → they become a text field, and the countdown stops
+    /// while he is in it.
+    ///
+    /// **Because a local Whisper transcript is sometimes fluent nonsense.** The
+    /// panel already existed to let him *see* what was heard before it went out,
+    /// and the only two answers it offered were send it or lose the sentence and
+    /// say it again. One wrong word in forty is not worth saying again, and it is
+    /// exactly what the model gets wrong — so the third answer, fix it, is the
+    /// one this panel was missing.
+    ///
+    /// The clock stops rather than running on: he is typing, and a dictation that
+    /// went out from under his hands mid-word would be the one failure worse than
+    /// the mis-transcription. It restarts, whole, when he leaves the field —
+    /// clicking away means "that's right now", and the new text deserves the same
+    /// read-through the old one got.
+    fileprivate func beginPromptEdit() {
+        guard !editingPrompt, sentPrompt != nil, let words = promptWords else { return }
+        editingPrompt = true
+
+        promptTimer?.invalidate(); promptTimer = nil
+        countdownTimer?.invalidate(); countdownTimer = nil
+        promptDeadline = nil
+        sendButton.title = "⏎ Send"
+
+        // The decorations go while he is in the field: they are not his words, so
+        // they must not be in the box he is typing in, and a second read-only
+        // label under it would be a row appearing at the moment the panel should
+        // be getting simpler.
+        promptLabel.stringValue = words
+        promptLabel.isEditable = true
+        promptLabel.isSelectable = true
+        promptLabel.wantsLayer = true
+        promptLabel.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        promptLabel.layer?.cornerRadius = 4
+        layoutContent()
+
+        // A panel that never takes the caret has to take it now — `.nonactivating`
+        // is what makes that safe: it becomes key without the app activating, so
+        // the terminal behind it stays the frontmost app and comes straight back
+        // when the field is done.
+        panel.wantsKey = true
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(promptLabel)
+        promptLabel.currentEditor()?.selectedRange = NSRange(location: words.count, length: 0)
+
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            // Global monitors only see events going to *other* apps, so this
+            // fires for clicks outside the panel and never for clicks inside it.
+            self?.endPromptEdit(resume: true)
+        }
+    }
+
+    /// The panel grows with what he types: the transcript row is measured from
+    /// the string, so a longer one needs a taller panel to stay whole.
+    func controlTextDidChange(_ obj: Notification) {
+        guard editingPrompt else { return }
+        layoutContent()
+    }
+
+    /// Leave the field. `resume` restarts the countdown; the send path does not,
+    /// because it is about to take the prompt away entirely.
+    fileprivate func endPromptEdit(resume: Bool) {
+        guard editingPrompt else { return }
+        editingPrompt = false
+        promptWords = promptLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
+        outsideClickMonitor = nil
+
+        promptLabel.isEditable = false
+        promptLabel.isSelectable = false
+        promptLabel.layer?.backgroundColor = NSColor.clear.cgColor
+        // Hand the keyboard back. `orderOut` then `orderFrontRegardless` is what
+        // drops key status without asking anyone to take it: there is no API for
+        // "give it back to whoever had it", and the window server does exactly
+        // that on its own the moment this panel stops being key.
+        panel.wantsKey = false
+        panel.makeFirstResponder(nil)
+        panel.orderOut(nil)
+        panel.orderFrontRegardless()
+
+        sentPrompt = [promptWords, promptExtras.nilIfEmpty].compactMap { $0 }.joined()
+        layoutContent()
+        guard resume, sentPrompt != nil else { return }
+        startPromptCountdown(hold: promptHold)
+    }
+
+    private func startPromptCountdown(hold: TimeInterval) {
+        promptDeadline = Date().addingTimeInterval(hold)
+        updateCancelTitle()
 
         promptTimer?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: hold, repeats: false) { [weak self] _ in
@@ -1634,7 +1770,6 @@ private var promptFront: String?
         }
         RunLoop.main.add(tick, forMode: .common)
         countdownTimer = tick
-        return true
     }
 
     private func updateCancelTitle() {
@@ -1649,12 +1784,18 @@ private var promptFront: String?
     /// it. Fires once — every later call finds `sentPrompt` already nil.
     private func resolvePrompt(send: Bool) {
         guard sentPrompt != nil else { return }
+        // Leave the field before anything else: it owns the text being resolved,
+        // and it is holding the keyboard.
+        endPromptEdit(resume: false)
+        let edited = promptWords
         promptTimer?.invalidate()
         promptTimer = nil
         countdownTimer?.invalidate()
         countdownTimer = nil
         promptDeadline = nil
         sentPrompt = nil
+        promptWords = nil
+        promptExtras = ""
         promptShots = []
         promptSelection = nil
         promptFront = nil
@@ -1662,8 +1803,10 @@ private var promptFront: String?
         reposition()
         refreshOpacity()
         // Last, and with the state already cleared: the delegate may well show
-        // the next prompt from inside this call.
-        onPromptResolved?(send)
+        // the next prompt from inside this call. The edited words travel with the
+        // verdict rather than being fetched afterwards — by then this state is
+        // gone, and it has to be gone before the next prompt can use it.
+        onPromptResolved?(send, edited)
     }
 
     /// Release anything still being held — used when the app is going away and
@@ -1770,13 +1913,34 @@ private var promptFront: String?
     /// countdown, and gets the wide panel off his work. The one place where a
     /// click means *no* is the Cancel button, which swallows its own clicks.
     /// Toggling pause here would be the mistake he would never notice.
-    fileprivate func handleClick() {
+    /// A click on the panel body. `onWords` is true when it landed on the
+    /// transcript itself, which is the one part of the panel that means something
+    /// other than "yes, send it".
+    fileprivate func handleClick(onWords: Bool = false) {
         if sentPrompt != nil {
+            // Inside the field while editing: the field handles its own clicks,
+            // so this is a click on the panel *around* it — which is the "click
+            // away" that ends the edit and restarts the clock.
+            if editingPrompt { return endPromptEdit(resume: true) }
+            if onWords, promptWords != nil { return beginPromptEdit() }
             resolvePrompt(send: true)
             return
         }
         onTogglePause?()
     }
+
+    /// ⏎ while a prompt is up. It is what the Send button has always said it
+    /// was — the button reads `⏎ Send 3s` — and until now the key did nothing,
+    /// because the overlay never takes the keyboard. It is caught in the event
+    /// tap instead and swallowed, so the Return does not also land in whatever
+    /// is behind the panel.
+    func sendHeldPrompt() {
+        guard sentPrompt != nil else { return }
+        resolvePrompt(send: true)
+    }
+
+    /// Whether a prompt is on screen and therefore whether ⏎ belongs to it.
+    var isHoldingPrompt: Bool { sentPrompt != nil }
 
     /// Dragging is a panel gesture. The chip is pinned to the cursor, so hauling
     /// it around would only mean fighting the thing that puts it back.
@@ -1790,12 +1954,43 @@ private var promptFront: String?
     }
 }
 
+// MARK: - The transcript, which is also a text field
+
+/// The words of the dictation: a plain label until it is clicked, an editable
+/// field afterwards.
+///
+/// One view for both states rather than a label swapped for a field, because the
+/// two have to occupy the same place in a panel whose height is measured from its
+/// rows — a swap would be a row disappearing and another appearing at the moment
+/// the panel should be doing nothing but growing a caret.
+///
+/// The `mouseDown` override exists because a label *does* swallow the click that
+/// lands on it: without this, clicking the words reached nothing at all, and the
+/// panel's own "click to send" only ever fired on the empty space around them.
+final class PromptField: NSTextField {
+    var onClickWhenIdle: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEditable else {
+            onClickWhenIdle?()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+}
+
 // MARK: - Panel
 
 final class RelayPanel: NSPanel {
-    // The overlay has no text entry, so it must never take the caret away from
-    // the app Victor is working in.
-    override var canBecomeKey: Bool { false }
+    /// True only while the transcript is being edited. The overlay has no text
+    /// entry the rest of the time and must never take the caret away from the app
+    /// Victor is working in — but the one moment it does have text entry, it has
+    /// to have the keyboard as well. `.nonactivatingPanel` in the style mask is
+    /// what makes that affordable: the panel becomes key without the app
+    /// activating, so the terminal stays frontmost and gets the keyboard straight
+    /// back when the field is done with it.
+    var wantsKey = false
+    override var canBecomeKey: Bool { wantsKey }
     override var canBecomeMain: Bool { false }
 
     // AppKit likes to pull windows back onto the screen. The chip is pinned to
@@ -1957,6 +2152,12 @@ final class RelayView: NSView {
         guard !dragged else { return }     // a drag is not a click
         owner?.handleClick()
     }
+
+    /// The transcript is a label, and a label swallows the click that lands on
+    /// it rather than passing it up here — which is why the field reports its own
+    /// (see `PromptField`) instead of this view testing the point against a frame
+    /// it would have to be told about.
+
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .openHand)

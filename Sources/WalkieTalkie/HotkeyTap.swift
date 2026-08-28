@@ -48,6 +48,22 @@ final class HotkeyTap {
     /// the key belongs to the app it acts on.
     var onBindHotkey: (() -> Void)?
 
+    /// ⏎ while the overlay is holding a prompt: send it now instead of waiting
+    /// out the countdown. The Send button has read `⏎ Send 3s` since it was
+    /// written; this is the key finally meaning what the label promised.
+    var onPromptEnter: (() -> Void)?
+
+    /// A prompt is on screen with its clock running — the only window in which
+    /// Return is the overlay's. It is a **short** window (3–5s, and only after a
+    /// dictation), which is what makes taking a key as ordinary as Return
+    /// affordable at all: outside it the key is untouched, and inside it Victor
+    /// is reading a panel, not typing into a terminal.
+    var promptHeld: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return promptHeldFlag }
+        set { stateLock.lock(); promptHeldFlag = newValue; stateLock.unlock() }
+    }
+    private var promptHeldFlag = false
+
     /// Wispr is recording **and** the relay is forwarding — the only window in
     /// which mouse 4 is ours. Written from the main thread, read from the tap
     /// thread, hence the lock.
@@ -198,6 +214,19 @@ private let VK_P: CGKeyCode = 0x23
         let ctrl = flags.contains(.maskControl)
         let opt = flags.contains(.maskAlternate)
         let cmd = flags.contains(.maskCommand)
+
+        // ⏎ sends the prompt that is on screen. Bare only: ⌘⏎ and ⇧⏎ are other
+        // people's shortcuts, and this window is short enough that a modified
+        // Return during it is far more likely to be meant for the app behind.
+        //
+        // Above the mouse-5 branch below because the two cannot overlap — the
+        // prompt appears when the dictation has ended — and because being first
+        // makes that independence readable rather than merely true.
+        if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER) && promptHeld
+            && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
+            DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
+            return nil   // swallow: the panel took it, so nothing behind it should
+        }
 
         // The same button, arriving as a keystroke.
         //

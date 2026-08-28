@@ -1228,6 +1228,13 @@ a `POST /test/transcript` replays.
   between the end of a sentence and the agent seeing it. `helpers/whisper_helper.py`
   starts once, warms up on a second of silence, and answers one JSON line per
   request at ~0.1× the audio's duration.
+- **A bind that has to wait for the model opens the microphone itself.** ⌘⌃D
+  means "I am about to talk to this agent", and on a cold model that intention was
+  costing ten seconds of waiting followed by a mouse 5 he had to remember to
+  press — with the ready-flash saying "go ahead" to a relay that was not
+  listening. `recordWhenModelReady` is set only when the **bind** asked for the
+  load: a load started from the menu is Victor choosing an engine, a different
+  sentence, and must not open the microphone.
 - **⏳ in two places while it loads, and that is the whole point of the setting
   being visible.** The model takes ten seconds, and a dictation started inside
   that window is silently handed to Wispr by the fallback — so what has to be
@@ -1601,6 +1608,48 @@ second of drift is a whole sentence.
 
 Ordering is preserved: a second dictation arriving mid-countdown releases the
 first one before displaying itself.
+
+### ⏎ sends it, and clicking the words edits them
+
+Since 2026-08-28 the panel is not only a thing to read.
+
+- **⏎ sends now.** The Send button has read `⏎ Send 3s` since it was written and
+  the key did nothing, because the overlay never takes the keyboard. It is caught
+  in `HotkeyTap` instead (`promptHeld`, `onPromptEnter`) and **swallowed**, so the
+  Return does not also land in whatever is behind the panel. Bare only — ⌘⏎ and
+  ⇧⏎ belong to other people — and only during the 3–5s a prompt is actually up,
+  which is what makes taking a key as ordinary as Return affordable: outside that
+  window it is untouched, and inside it Victor is reading a panel, not typing.
+- **A click on the transcript turns it into a text field**, because a local
+  Whisper line is occasionally *fluent nonsense* and the only two answers the
+  panel offered were send it or lose the sentence and say it again. One wrong word
+  in forty is not worth saying again, and is exactly what the model gets wrong.
+- **Only the words are editable.** The preview also carries `📸 ×2 0:38` and the
+  `↪` lines, which are the app describing what it is carrying — `showSentPrompt`
+  now takes the raw `words:` alongside the assembled preview and keeps the seam
+  (`promptWords` / `promptExtras`), so the box he types in holds his sentence and
+  nothing else. If the two do not agree the text is simply not editable, which is
+  the honest failure.
+- **The clock stops while he is in the field, and restarts whole when he leaves.**
+  A dictation going out from under his hands mid-word is the one failure worse
+  than the mis-transcription. Clicking away means "that's right now" — and the
+  new text deserves the same read-through the old one got, so it is a restart and
+  not a resume.
+- **Clicking outside the panel counts as clicking away** (a global mouse monitor,
+  armed only while editing). Global monitors see only events going to other apps,
+  so it can never fire for a click inside the field.
+- **The panel takes the keyboard for exactly that long.** `RelayPanel.wantsKey`
+  gates `canBecomeKey`, and `.nonactivatingPanel` is what makes it affordable: the
+  panel becomes key **without the app activating**, so the terminal stays
+  frontmost and gets the keyboard straight back. Handing it back is
+  `orderOut` + `orderFrontRegardless` — there is no API for "give it to whoever
+  had it", and the window server does exactly that once the panel stops being key.
+- **One view, not a label swapped for a field** (`PromptField`). The panel's
+  height is measured from its rows, so a swap would be a row vanishing and another
+  appearing at the moment the panel should be doing nothing but growing a caret.
+  Its `mouseDown` override is load-bearing: a label *does* swallow the click that
+  lands on it, so before this, clicking the words reached nothing at all and the
+  panel's "click to send" only ever fired on the empty space around them.
 
 ## Dark mode
 

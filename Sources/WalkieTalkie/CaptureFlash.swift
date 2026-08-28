@@ -10,8 +10,21 @@ import QuartzCore
 enum CaptureFlash {
     private static var activePanels: [NSPanel] = []
 
+    /// **One clock for both halves of the receipt.** The vignette has always run
+    /// 1.2s; the reticle used to run 2s, so the red edges went out and the target
+    /// stayed behind on the desktop for the better part of a second — long enough
+    /// to stop reading as *part of* the shutter and start reading as a mark left
+    /// on the screen, which is exactly what it is not. They are one event and now
+    /// end on one number.
+    ///
+    /// Short is the point: the shot is taken in the first milliseconds and the
+    /// mark exists to be *checked*, not to be lived with — Victor is already
+    /// talking by the time it is gone, and it is drawn over the very thing he is
+    /// talking about.
+    static let receiptDuration: CFTimeInterval = 1.2
+
     static func flash(on screen: NSScreen,
-                      duration: CFTimeInterval = 1.2,
+                      duration: CFTimeInterval = receiptDuration,
                       thickness: CGFloat = 30,
                       color: NSColor = .captureAccent) {
         let panel = NSPanel(
@@ -126,10 +139,14 @@ enum CaptureFlash {
     /// mark that fades *in* asks to be watched arriving, and this one has to be
     /// already there when the eye gets to it.
     ///
+    /// The 0.35s zoom is untouched by the shorter life: it is the gesture of a
+    /// scope coming down on the spot, and stretching or clipping it to fit a
+    /// duration would cost the one part that is read as movement.
+    ///
     /// `sharingType = .none`, like the vignette: the relay photographs the
     /// screen milliseconds after this appears, and the confirmation of a capture
     /// must never be inside the capture it confirms.
-    static func markCursor(at point: NSPoint, duration: CFTimeInterval = 2.0) {
+    static func markCursor(at point: NSPoint, duration: CFTimeInterval = receiptDuration) {
         let reticle = CursorMarker.makeLayer(box: reticleBox)
         let side = reticle.bounds.width
         let frame = NSRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)

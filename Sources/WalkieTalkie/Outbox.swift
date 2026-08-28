@@ -251,7 +251,52 @@ enum Outbox {
     }
 }
 
+/// Every line goes to stderr **and** to `~/.walkie-talkie/relay.log`.
+///
+/// **The file half was added on 2026-08-28, and it closed a hole that had been
+/// open since the app started at login.** Logging was stderr only, and the file
+/// existed only because whatever launched the relay redirected stderr into it —
+/// true of the old per-session launcher, false of `open`, of Finder, and of the
+/// login item the app now is. So the app that runs all day wrote nothing at all,
+/// and `relay.log` sat there looking current while being hours stale: worse than
+/// no log, because it answers questions about a session that ended long ago.
+/// Every "why did that not work?" since has been unanswerable for want of two
+/// lines the app was already producing.
+///
+/// Stamped, unlike the old lines: the file now spans days rather than one
+/// session, so "when" is the first thing asked of any line in it.
 enum Log {
-    static func info(_ msg: String)  { FileHandle.standardError.write(Data("[relay] \(msg)\n".utf8)) }
-    static func error(_ msg: String) { FileHandle.standardError.write(Data("[relay] ⚠️ \(msg)\n".utf8)) }
+    static func info(_ msg: String)  { write("[relay] \(msg)") }
+    static func error(_ msg: String) { write("[relay] ⚠️ \(msg)") }
+
+    private static let lock = NSLock()
+
+    /// Opened once, appended to for the life of the process. Failing to open it
+    /// is not worth reporting anywhere — the only place a complaint could go is
+    /// the log that could not be opened.
+    private static let file: FileHandle? = {
+        let url = Outbox.home.appendingPathComponent("relay.log")
+        let fm = FileManager.default
+        try? fm.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
+        handle.seekToEndOfFile()
+        return handle
+    }()
+
+    private static let clock: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MM-dd HH:mm:ss"
+        return f
+    }()
+
+    private static func write(_ line: String) {
+        let stamped = "\(clock.string(from: Date())) \(line)\n"
+        let data = Data(stamped.utf8)
+        FileHandle.standardError.write(data)
+        lock.lock()
+        file?.write(data)
+        lock.unlock()
+    }
 }

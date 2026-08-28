@@ -187,7 +187,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// back, released, or dropped as a unit.
     private struct Message {
         let kind: String
-        let text: String?
+        /// `var`, because the panel can hand back a corrected transcript: a local
+        /// Whisper line is occasionally fluent nonsense, and the hold exists so
+        /// that is catchable before it reaches an agent.
+        var text: String?
         let selection: String?
         /// Highlighted later in the same dictation, each with its offset. Empty
         /// in the ordinary case, which is why `selection` above stays exactly
@@ -256,7 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.setPaused(paused)
         syncLocalCapture()
-        overlay.onPromptResolved = { [weak self] send in self?.releaseHeld(send: send) }
+        overlay.onPromptResolved = { [weak self] send, edited in
+            self?.releaseHeld(send: send, edited: edited)
+        }
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
@@ -270,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which this needs: it spends several subprocesses working out what it
         // is looking at.
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
+        hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
         picker.onUnbind = { [weak self] in self?.unbindTerminal() }
         picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
         // Enters exactly where `wispr.onTranscript` does, so what it exercises
@@ -455,6 +461,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// does not exist. Choosing Wispr stops the helper, because the weights are
     /// resident and a relay left running all day must not hold them for an
     /// engine nobody selected.
+    /// A bind is waiting on the model, and the microphone opens the instant it
+    /// is up. See where it is set, in `bindFrontmostTerminal`.
+    private var recordWhenModelReady = false
+
     private func pickEngine(_ engine: TranscriptionEngine) {
         guard engine != TranscriptionEngine.current || (engine == .whisper && !whisper.ready) else { return }
 
@@ -463,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // to transcribe it — the helper is about to be terminated — so it is
             // finished first, on the engine that is still up.
             if localRecording { stopLocalRecording() }
+            recordWhenModelReady = false
             whisper.stop()
             setEngineLoading(false)
             TranscriptionEngine.current = .wispr
@@ -487,6 +498,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self else { return }
                 self.setEngineLoading(false)
                 if let error = error {
+                    self.recordWhenModelReady = false
                     TranscriptionEngine.current = .wispr
                     self.status.setEngine(.wispr)
                     self.overlay.flash("⚠️ local Whisper unavailable — \(error)", duration: 12)
@@ -505,6 +517,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard !ok else { return }
                     self.overlay.flash("⚠️ grant Microphone to Walkie Talkie — mouse 5 cannot record", duration: 15)
                     Log.error("microphone access denied — local recording will not work")
+                }
+                // **A bind that had to wait for the model starts recording the
+                // moment it is up.** ⌘⌃D means "I am about to talk to this
+                // agent", and on a cold model that intention was costing him ten
+                // seconds of waiting followed by a mouse 5 he had to remember to
+                // press — with nothing on screen counting those seconds down. The
+                // ready-flash then said "go ahead" to a relay that was not
+                // listening. Only when the *bind* asked for the load: a load
+                // started from the menu is Victor choosing an engine, which is a
+                // different sentence and must not open the microphone.
+                if self.recordWhenModelReady {
+                    self.recordWhenModelReady = false
+                    Log.info("model up after a bind — opening the microphone")
+                    self.startLocalRecording()
+                    return
                 }
                 // The one message he is actually waiting for. Worded as
                 // permission rather than as a state, because the question he has
@@ -1008,6 +1035,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // that overlap him settling into the session, rather than ten seconds
             // in the middle of the first sentence.
             if TranscriptionEngine.current == .whisper, !self.whisper.ready, !self.engineLoading {
+                // …and it starts listening by itself when the weights land: see
+                // `recordWhenModelReady` in `pickEngine`.
+                self.recordWhenModelReady = true
                 self.pickEngine(.whisper)
             }
             // **The chip is set first, and the rectangle flies into it.** It used
@@ -1799,8 +1829,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frames = ([screen] + attached).compactMap { $0 }
             if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
                                            selection: selection,
-                                           front: screen.flatMap { sources[$0] }) {
+                                           front: screen.flatMap { sources[$0] },
+                                           // What he said, apart from what the
+                                           // preview adds to it — the panel needs
+                                           // the seam to know what is editable.
+                                           words: text) {
                 self.held = message
+                self.hotkeys.promptHeld = true
             } else {
                 self.commit(message)
             }
@@ -1842,9 +1877,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cancelling is cheap precisely because nothing was written: the agent polls
     /// the outbox every couple of seconds, so a line already in the file may
     /// already be a tool call in flight.
-    private func releaseHeld(send: Bool) {
-        guard let m = held else { return }
+    /// `edited` is the transcript as it stands on the panel — the same words
+    /// unless he clicked into them and fixed something, which is the whole reason
+    /// it travels back here rather than the panel being trusted to have shown
+    /// what was already in `held`.
+    private func releaseHeld(send: Bool, edited: String? = nil) {
+        hotkeys.promptHeld = false
+        guard var m = held else { return }
         held = nil
+        if let edited = edited, edited != m.text {
+            Log.info("✎ transcript edited before sending — \(m.text?.count ?? 0) → \(edited.count) chars")
+            m.text = edited
+        }
         guard send else {
             Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay")
             // The picked elements go back in the queue. Cancel means the sentence
