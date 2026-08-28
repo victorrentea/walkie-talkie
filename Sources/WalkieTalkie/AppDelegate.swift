@@ -938,7 +938,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        // **⌘⌃D on the target it is already pointed at ends the session.**
+        // **⌘⌃D on the target it is already pointed at lets go of it.**
         //
         // The key had no off. Starting the relay is a keystroke and stopping it
         // was a trip to the menu bar — and the menu bar is a moving target when
@@ -952,17 +952,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // more useful reading of "again" — the thing bound is a session, not an
         // application.
         //
-        // It quits rather than unbinding, because ⌘⌃D is what *starts* the relay
-        // and a gesture whose off switch left a process running would not be the
-        // opposite of the gesture that made one. `endSession` is the same route
-        // the ✕ takes, so the outbox still gets its `session_end` and any agent
-        // watching the queue learns the overlay is gone rather than waiting on it.
+        // **It unbinds; it does not quit.** It used to quit, and the argument was
+        // that ⌘⌃D is what *starts* the relay, so its off switch should not leave
+        // a process running. That argument died with the two changes underneath
+        // it: the app now **starts at login** and is up all day whether or not
+        // anything is bound (*⌘⌃D is this app's own key*), and *unbound is inert*
+        // made an idle relay cost nothing — it touches no dictation at all. So
+        // quitting no longer undoes a launch, it undoes a **binding** plus a
+        // login item, and the second half has to be put back by hand before the
+        // key works again. The opposite of "point this at that terminal" is
+        // "stop pointing at it", which is exactly `unbindTerminal` — the same
+        // call `POST /unbind` and the menu's Disconnect make, so all three routes
+        // out of a binding now end in the same state instead of two of them
+        // leaving the app running and one killing it.
         if let previous = previous, previous == bound.handle {
             DispatchQueue.main.async { [weak self] in
                 BindFlight.cancel()
-                self?.endSession(reason: "⌘⌃D on the bound target")
+                Log.info("⌘⌃D on the bound target — unbinding")
+                self?.unbindTerminal()
             }
-            return ["stopped": true, "label": bound.label, "address": bound.address]
+            return ["unbound": true, "label": bound.label, "address": bound.address]
         }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

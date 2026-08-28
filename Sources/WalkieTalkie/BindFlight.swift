@@ -1,9 +1,9 @@
 import AppKit
 import QuartzCore
 
-/// The receipt for a bind: a translucent rectangle that appears **over the
-/// window that was just captured**, then shrinks and flies to the cursor,
-/// arriving under it at a twentieth of its size and vanishing.
+/// The receipt for a bind: **a picture of the window that was just captured**,
+/// which appears exactly over that window, then shrinks and flies to the cursor,
+/// arriving under it at the size of the chip and vanishing.
 ///
 /// **Why a flight and not a flash.** ⌘⌃D is pressed while looking at a terminal
 /// and answered by a chip that lives next to the *cursor* — two places, and
@@ -13,19 +13,31 @@ import QuartzCore
 /// *this* chip. It is the same argument Victor Addons' break timer makes when it
 /// flies in from the coffee that started it.
 ///
-/// **Blue, and that is a three-way distinction, not a preference.** Victor
-/// Addons flashes **yellow** for "I captured this", the relay flashes **red**
-/// for "it went to the agent" (`CaptureFlash`), and neither of those is what
-/// this says. A bind takes no picture and sends nothing; it changes where words
-/// will go. A third meaning that borrowed either colour would be read as the
-/// thing it borrowed from.
+/// **The thing that flies is the window itself, not a chenar around it.** An
+/// outline says "something here"; the picture says *which* — a rectangle over a
+/// terminal is a rectangle, and two terminals side by side make one of them the
+/// wrong answer at a glance. Carrying the pixels also makes the sentence literal:
+/// what lands under the cursor is the window, so the chip that stays there is
+/// visibly what that window became. Falls back to the old hollow rectangle when
+/// the grab returns nothing (no Screen Recording permission, or a window that
+/// went away between the bind and the frame) — a flight with no picture still
+/// answers *where from*, which is most of what it is for.
 ///
-/// **It starts as an outline and ends as a solid.** A filled rectangle over a
-/// whole terminal window hides the thing it is pointing at — and mid-workshop
-/// that window is on a projector. So the border does the work while the shape is
-/// big enough for a border to mean anything, and the fill comes up as it
-/// shrinks: at 5% there is nothing left to see through, and a hollow token that
-/// small is a token nobody sees arrive.
+/// **White, not blue, and not a signal colour at all.** Victor Addons flashes
+/// **yellow** for "I captured this" and the relay flashes **red** for "it went to
+/// the agent" (`CaptureFlash`) — both of those are events being announced. This
+/// is not an announcement, it is a thing being *moved*, and a screenshot in
+/// flight already carries its own colours. White is the one tint that frames it
+/// without claiming to mean something, and it is the colour the chip it flies
+/// into is drawn in.
+///
+/// **It starts faint and arrives at half.** Opacity climbs from 20% to 50% as it
+/// shrinks, which is the inverse of what an alpha ramp usually does and is the
+/// point: at the start it lies exactly over the window it was copied from, where
+/// anything solid would hide the thing being pointed at — mid-workshop, on a
+/// projector — and where being faint costs nothing, since what is underneath is
+/// the same picture. By the time it is small enough to hide nothing it is solid
+/// enough to be followed across a desk.
 ///
 /// **One panel per screen, and that is not an optimisation — it is the only
 /// thing that works.** This was written as a single panel spanning the union of
@@ -45,13 +57,16 @@ import QuartzCore
 /// the shape `CaptureFlash` already had for the same reason.
 enum BindFlight {
 
-    /// 2s, as asked. Long enough to follow with the eye across a desk, short
-    /// enough that it is gone before it becomes something in the way.
+    /// 1s — **halved on 2026-08-28**, from the 2s it was first asked for. Two
+    /// seconds is how long a flight has to be to be *studied*, and this one is
+    /// not studied twice: once the gesture is learned the animation is a receipt
+    /// glanced at, and a receipt that outstays the glance is in the way. Still
+    /// long enough to be followed across a desk, which is the floor.
     ///
     /// Not private: the bind flash is sized to it, so the panel in the corner
-    /// clears at the exact moment the rectangle lands and the chip takes over.
+    /// clears at the exact moment the picture lands and the chip takes over.
     /// A second number would drift from this one.
-    static let duration: CFTimeInterval = 2.0
+    static let duration: CFTimeInterval = 1.0
 
     /// The first eighth is spent standing still at full size. Without it the
     /// rectangle is already shrinking by the time the eye arrives, and the one
@@ -65,6 +80,13 @@ enum BindFlight {
     /// The last fifth is a fade. It is already small by then, so the fade is
     /// what makes it *end* rather than blink out mid-flight.
     private static let fadeFraction = 0.2
+
+    /// Opacity at the window and opacity at the cursor. It climbs — see the note
+    /// on the type. 0.5 is where it stops: a picture that arrived opaque would be
+    /// a small window sitting on the desktop for a frame, which reads as a real
+    /// window rather than as a token vanishing into the chip.
+    private static let startAlpha: CGFloat = 0.2
+    private static let endAlpha: CGFloat = 0.5
 
     /// One per display, each drawing the same rectangle in its own coordinates.
     private struct Pane {
@@ -92,8 +114,12 @@ enum BindFlight {
     /// nothing about where it was going, and which arrived as a different shape
     /// from the thing that was supposed to have become it.
     private static var target: () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) }
+    /// Whether the grab came back with anything. Only the fill consults it: with
+    /// a picture in the layer a fill would be behind it and invisible, and
+    /// without one it is the whole shape.
+    private static var hasPicture = false
 
-    /// Fly from `source` to wherever the cursor is, for the whole 2s — the mouse
+    /// Fly from `source` to wherever the cursor is, for the whole second — the mouse
     /// is re-read every frame rather than sampled once, so the rectangle chases
     /// a hand that keeps moving instead of arriving where it used to be.
     ///
@@ -113,6 +139,15 @@ enum BindFlight {
                     landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
+
+        // **Grabbed before the panels exist, not after.** The panels are excluded
+        // from captures anyway (`sharingType = .none`), but the grab is also the
+        // slowest thing here, and doing it first means the picture is ready for
+        // frame one — a flight that started as an outline and acquired its
+        // contents a few frames in would flicker at the only moment the eye is
+        // actually on it.
+        let picture = grab(source)
+        hasPicture = picture != nil
 
         panes = NSScreen.screens.map { screen in
             // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` pulls a
@@ -142,8 +177,26 @@ enum BindFlight {
             view.wantsLayer = true
 
             let rect = CALayer()
-            rect.borderColor = NSColor.systemBlue.withAlphaComponent(0.95).cgColor
-            rect.backgroundColor = NSColor.systemBlue.withAlphaComponent(0).cgColor
+            // One `CGImage` shared by every screen's layer: it is read-only and
+            // immutable, and copying a retina window per display would be a few
+            // megabytes each for a picture that is on screen for one second.
+            rect.contents = picture
+            // `.resize` and not `.resizeAspect`: the frame *is* the window's
+            // aspect on the way out and the chip's on the way in, so letterboxing
+            // would open bars along the sides exactly as it arrives. The squeeze
+            // into the chip's proportions is the shape becoming the label.
+            rect.contentsGravity = .resize
+            // The picture has to be clipped by the rounded corners, or it draws
+            // square over them and the radius is only visible in the border.
+            rect.masksToBounds = true
+            // Opaque white deliberately: the layer's own opacity ramp already
+            // dims it to a fifth at the start, and a border that was translucent
+            // *as well* would leave the shape with no visible edge over the very
+            // window it is naming.
+            rect.borderColor = NSColor.white.cgColor
+            // Only ever seen without a picture — behind one it would be invisible.
+            // It is the old rectangle's fill, in white.
+            rect.backgroundColor = NSColor.white.withAlphaComponent(0).cgColor
             rect.borderWidth = 4
             rect.cornerRadius = 10
             view.layer?.addSublayer(rect)
@@ -170,7 +223,7 @@ enum BindFlight {
         timer = tick
     }
 
-    /// One frame. `t` is 0…1 across the whole 2s, hold included.
+    /// One frame. `t` is 0…1 across the whole flight, hold included.
     private static func place(at t: CFTimeInterval) {
         guard !panes.isEmpty else { return }
 
@@ -201,7 +254,14 @@ enum BindFlight {
                             width: size.width, height: size.height)
 
         let fade = t > 1 - fadeFraction ? CGFloat((1 - t) / fadeFraction) : 1
-        let fill = NSColor.systemBlue.withAlphaComponent(0.45 * eased).cgColor
+        // The climb from faint to half-solid, times the fade at the end. With a
+        // picture the layer's own opacity is the whole effect; without one the
+        // white fill does the same job the blue one used to, and the two are
+        // multiplied rather than added so a fallback flight is not twice as pale.
+        let alpha = startAlpha + (endAlpha - startAlpha) * eased
+        let fill = hasPicture
+            ? NSColor.white.withAlphaComponent(0).cgColor
+            : NSColor.white.withAlphaComponent(0.55 * eased).cgColor
         // The border thins as the shape does, and "how far along is it" is now
         // read off the flight itself rather than off a scale factor that no
         // longer exists — the rectangle interpolates toward the chip's size, not
@@ -227,9 +287,37 @@ enum BindFlight {
             pane.shape.backgroundColor = fill
             pane.shape.borderWidth = border
             pane.shape.cornerRadius = radius
-            pane.shape.opacity = Float(fade)
+            pane.shape.opacity = Float(fade * alpha)
         }
         CATransaction.commit()
+    }
+
+    /// A picture of what is on screen inside `source`, in Cocoa coordinates.
+    ///
+    /// **The screen, not the window.** `CGWindowListCreateImage` can be asked for
+    /// one window's own buffer by id, which would come back unobstructed and
+    /// without a shadow — and would be the *wrong* picture: what has to be
+    /// recognisable is what Victor was looking at when he pressed, including
+    /// whatever is sitting on top of that terminal. Grabbing the rectangle also
+    /// costs nothing extra and needs no window id, which the binding does not
+    /// keep (see `Target.sourceFrame`).
+    ///
+    /// **Not `screencapture`**, which everything else in this app uses: that is a
+    /// subprocess, waited on, ~200ms — a fifth of the whole flight spent before
+    /// the first frame, and the gesture would feel like it had missed the press.
+    /// This is one in-process call at retina resolution in a few milliseconds.
+    /// It is deprecated in favour of ScreenCaptureKit, whose API is async and
+    /// would put the picture a callback away from a flight that has to start now.
+    ///
+    /// Cocoa's y grows upward from the primary screen's bottom, the window
+    /// server's downward from its top — the same conversion `TerminalBinding`
+    /// does on the way in, run backwards.
+    private static func grab(_ source: CGRect) -> CGImage? {
+        guard let primary = NSScreen.screens.first else { return nil }
+        let flipped = CGRect(x: source.minX,
+                             y: primary.frame.maxY - source.maxY,
+                             width: source.width, height: source.height)
+        return CGWindowListCreateImage(flipped, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
     }
 
     /// Cubic ease-in-out: it leaves the window unhurriedly enough to be followed
@@ -252,5 +340,6 @@ enum BindFlight {
         for pane in panes { pane.panel.orderOut(nil) }
         panes = []
         onLanded = nil
+        hasPicture = false
     }
 }

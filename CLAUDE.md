@@ -223,9 +223,9 @@ acting on that does not need it spelled out on every single dictation.
 
 ### The bind flight
 
-Binding draws a **translucent blue rectangle over the window it just captured**,
-which then shrinks and flies to the cursor over 2s, arriving under it at 5% and
-fading out (`BindFlight.swift`).
+Binding takes a **picture of the window it just captured**, lays it exactly over
+that window, then shrinks it and flies it to the cursor over 1s, arriving under
+it at the chip's size and fading out (`BindFlight.swift`).
 
 ⌘⌃D is pressed while looking at a terminal and answered by a chip that lives next
 to the *cursor* — two places, with nothing connecting them. A blink over the
@@ -233,15 +233,34 @@ window would confirm the capture and leave the chip unexplained; a blink at the
 cursor would confirm the chip and never say which window. **The travel is the
 sentence**: that window is now this chip.
 
-- **Blue, and that is a three-way distinction.** Victor Addons flashes yellow for
-  "I captured this", `CaptureFlash` flashes red for "it went to the agent". A
-  bind takes no picture and sends nothing — it changes where words will go — and
-  a third meaning borrowing either colour would be read as the thing it borrowed.
-- **Outline first, fill last.** A filled rectangle over a whole terminal window
-  hides the thing it points at, and mid-workshop that window is on a projector.
-  The border carries it while the shape is big enough for a border to mean
-  something; the fill comes up as it shrinks, because at 5% there is nothing left
-  to see through and a hollow token that small is one nobody sees arrive.
+- **It carries the window's pixels, not a chenar round them** — since
+  2026-08-28. An outline says "something here"; the picture says *which*, and two
+  terminals side by side are the case where that is the whole question. It also
+  makes the sentence literal: what lands under the cursor is the window, so the
+  chip left sitting there is visibly what the window became. Grabbed with
+  `CGWindowListCreateImage` on the **screen rectangle**, not on a window id:
+  what has to be recognisable is what he was looking at when he pressed,
+  overlapping windows included, and the binding does not keep a window id anyway.
+  Not `screencapture`, which everything else here uses — a subprocess waited on
+  is ~200ms, a fifth of the flight, spent before the first frame. Falls back to
+  the old hollow rectangle if the grab returns nothing.
+- **White, not blue, and not a signal colour.** Victor Addons flashes yellow for
+  "I captured this", `CaptureFlash` flashes red for "it went to the agent" —
+  both *announce an event*. This one **moves a thing**, and the thing now carries
+  its own colours; white frames it without claiming a third meaning, and it is
+  the colour of the chip it flies into.
+- **Faint first, half-solid last.** Opacity climbs 20% → 50% as it shrinks, which
+  is backwards for an alpha ramp and is the point: at the start it lies exactly
+  over the window it was copied from, where anything solid would hide the thing
+  being pointed at — on a projector, mid-workshop — and where being faint costs
+  nothing, since what is underneath is the same picture. By the time it is small
+  enough to hide nothing it is solid enough to follow across a desk. It never
+  reaches full: a picture arriving opaque reads as a small real window sitting on
+  the desktop rather than as a token going into the chip.
+- **1s, halved from 2s** on 2026-08-28. Two seconds is how long a flight has to
+  be to be *studied*, and this one is not studied twice — after the gesture is
+  learned it is a receipt glanced at, and a receipt that outstays the glance is
+  in the way.
 - **The first eighth is spent standing still**, at full size. Without it the
   rectangle is already shrinking by the time the eye arrives, and the question it
   exists to answer is asked of a shape that has stopped covering the answer.
@@ -265,7 +284,8 @@ sentence**: that window is now this chip.
   coordinates, which is the shape `CaptureFlash` already had for the same reason.
 
   Verified by burst-capturing a non-primary display through a whole flight:
-  strong-blue pixels go 178 → 3070 the frame the rectangle arrives.
+  strong-blue pixels went 178 → 3070 the frame the rectangle arrived — measured
+  when the shape was blue, and the multi-screen wiring it proved is unchanged.
 - **The rectangle hands over to the chip.** The label appears beside the cursor
   the instant the rectangle gets there (`BindFlight.fly(from:landed:)`), so the
   two are one gesture rather than two announcements: the shape that lands
@@ -393,30 +413,42 @@ The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
 `unbound — nothing is relayed now` at release. They are text rows, so the only pin
 available to them is the pushpin emoji the drawn one exists to avoid.
 
-### ⌘⌃D again on the same target stops the relay
+### ⌘⌃D again on the same target lets go of it
 
 The key had no off. Starting the relay is a keystroke and stopping it was a trip
 to the menu bar — and the menu bar is a moving target precisely when the reason
 to stop is that Victor is already somewhere else. So a bind that resolves to the
-target **already bound** ends the session instead of re-pointing at it, which
-also makes the off switch reachable without aiming: whatever app is in front, two
-quick presses bind it and then stop.
+target **already bound** releases it instead of re-pointing at it, which also
+makes the off switch reachable without aiming: whatever app is in front, two
+quick presses bind it and then let it go.
 
 - **Compared by handle, not by app.** Two tabs of Terminal are two ttys, so
   pressing in a different tab re-points rather than stops. What is bound is a
   session, not an application.
-- **It quits rather than unbinding.** ⌘⌃D is what *starts* the relay, and an off
-  switch that left the process running would not be the opposite of the gesture
-  that made one. It goes through the same `endSession` the ✕ takes, so the outbox
-  still gets its `session_end` and an agent watching the queue learns the overlay
-  is gone rather than waiting on it.
+- **It unbinds; it does not quit** — since 2026-08-28. It quit until then, and
+  the argument was that ⌘⌃D is what *starts* the relay, so an off switch leaving
+  the process running would not be the opposite of the gesture that made one.
+  That argument died with the two changes underneath it: the app **starts at
+  login** now and is up all day regardless (*⌘⌃D is this app's own key*), and
+  *unbound is inert* made an idle relay free — it touches no dictation at all. So
+  quitting stopped undoing a launch and started undoing a binding **plus a login
+  item**, and the second half had to be put back by hand before the key worked
+  again. It now calls the same `unbindTerminal` that `POST /unbind` and the
+  menu's **Disconnect** call, so all three routes out of a binding land in one
+  state.
+- **No `session_end` goes out on this any more**, precisely because it is the
+  Disconnect route and not the Quit route. An agent watching the outbox is left
+  waiting rather than told to stop — which is the correct reading now: the relay
+  is still there and a second ⌘⌃D can point it back at that terminal, whereas a
+  `session_end` says the overlay is gone. Quitting (✕, menu **Quit**) still
+  announces itself.
 - **Autorepeat is swallowed** in this app's tap (`HotkeyTap`). With two presses meaning
   "stop", a key held a moment too long would otherwise bind and immediately end
   the session it had just started — the one input mistake this gesture cannot
   afford.
 
-Verified across all three cases: bind, re-point to a second tab (relay survives),
-press again on that tab (relay gone, `session_end` written).
+Verified across all three cases: bind, re-point to a second tab (the first tab is
+let go), press again on that tab (nothing bound, app still running).
 
 ### The loopback control surface
 
@@ -426,7 +458,7 @@ port scheme for a caller to guess between, and buys nothing.
 
 | route | what it does |
 |---|---|
-| `POST /bind` | bind the frontmost terminal; 409 if there is nothing bindable |
+| `POST /bind` | bind the frontmost terminal; 409 if there is nothing bindable. Called on the terminal already bound it **unbinds** instead, answering `{"unbound": true}` |
 | `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
