@@ -1666,6 +1666,18 @@ private let frontLabel = NSTextField(labelWithString: "")
         // two dictations in quick succession reach the agent in the order spoken.
         resolvePrompt(send: true)
 
+        // **Nothing said before this panel existed is still true on it.** Every
+        // flash raised on the way here is about getting *to* here — `⏳
+        // transcribing…` most of all, which is a promise about the very transcript
+        // this panel is now showing. The hint row is the panel's last row, so a
+        // leftover sits under the words as a caption that contradicts them.
+        //
+        // Cleared here rather than at each call site, which is where it was and
+        // is why it broke: the site that used to take the ⏳ down stopped
+        // flashing, and nothing else knew it had inherited the job. The panel
+        // opening is the one moment that is true of every path into it.
+        clearFlash()
+
         sentPrompt = trimmed
         // Split the preview back into "what he said" and "what the app added",
         // which is the line the editor is allowed to cross. The words come in
