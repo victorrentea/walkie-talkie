@@ -238,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a recording ended from the menu is still a dictation, and it is
         // transcribed and sent exactly as if the button had ended it.
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
+        status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
 
         // **The model is not brought up at launch any more**, even when the
         // setting says Local Whisper.
@@ -661,6 +662,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setLocalListening(true, model: whisper.modelName)
         publishShotCount()
         publishPicks()
+    }
+
+    /// End the open dictation and throw it away — no decode, nothing delivered.
+    ///
+    /// Deliberately not `stopLocalRecording` with a flag: that one's whole body
+    /// after the microphone closes is about getting a transcript somewhere, and
+    /// the difference here is that none of it should happen. What the two share
+    /// is closing the microphone and putting the overlay back, which is the part
+    /// written out again rather than shared, because a `cancel` that fell through
+    /// into the send path by accident is the one bug this must not have.
+    ///
+    /// Everything the dictation had gathered goes with it. Shots and picks are
+    /// stamped against `dictationStartedAt`, so leaving them behind would attach
+    /// them to the *next* sentence, timed from a clock that no longer exists.
+    private func cancelLocalRecording() {
+        guard localRecording else { return }
+        localRecording = false
+        localRecordingApp = nil
+        let recording = mic.stop()
+
+        listening = false
+        syncBorrowedGestures()
+        overlay.setListening(false)
+        overlay.setLocalListening(false)
+
+        if let (wav, duration) = recording {
+            try? FileManager.default.removeItem(at: wav)
+            Log.info(String(format: "🗑️ dictation cancelled — %.1fs of audio discarded", duration))
+        } else {
+            Log.info("🗑️ dictation cancelled — nothing had been recorded yet")
+        }
+
+        stateLock.lock()
+        pendingPicks = []
+        pendingShots = []
+        pendingShotOffsets = []
+        pendingSelection = nil
+        pendingExtraSelections = []
+        shotSources = [:]
+        dictationStartedAt = nil
+        pendingScreen = nil
+        dictationInFlight = false
+        contextShotPending = false
+        stateLock.unlock()
+
+        publishShotCount()
+        publishPicks()
+        overlay.flash("🗑️ dictation cancelled", duration: 3)
     }
 
     private func stopLocalRecording() {

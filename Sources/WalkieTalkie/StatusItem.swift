@@ -42,15 +42,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// same thing a second mouse 5 does.
     var onStopRecording: (() -> Void)?
 
+    /// Picked from **Cancel Dictation** — end the open dictation and throw it
+    /// away: no transcript, nothing delivered, and the shots and picks it had
+    /// gathered go with it. The counterpart of Stop, for the sentence that came
+    /// out wrong before it was ever worth transcribing.
+    var onCancelDictation: (() -> Void)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃D pressed on the bound target, minus the quitting.
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
-    private let stopRecording = NSMenuItem(title: "Stop Recording", action: nil, keyEquivalent: "")
+    private let stopRecording = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
+    /// Same row, opposite verdict — see `onCancelDictation`.
+    private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var engine = TranscriptionEngine.current
     private var isPaused = false
@@ -88,12 +95,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // Pause above Quit, because it is the one he reaches for repeatedly: the
-        // relay is paused whenever he wants to dictate into something *other* than
-        // the agent, which happens many times a session, whereas Quit happens once.
-        pause.action = #selector(pauseClicked)
-        pause.target = self
-        menu.addItem(pause)
+        // **No Pause row.** It was the first command in the menu on the reading
+        // that pausing is what he does whenever he wants to dictate into
+        // something other than the agent. Disconnect turned out to be the thing
+        // he actually reaches for — it says which terminal, where pause says only
+        // "not now" — and two commands that both mean "stop relaying" are one
+        // question the menu should not be asking. The state itself is still
+        // there, and clicking the chip still toggles it.
 
         // **Under Pause, because it is the other half of the same question.**
         // Pause stops the words going *anywhere*; this one stops them going to
@@ -131,6 +139,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
         stopRecording.target = self
         stopRecording.isEnabled = false
         menu.addItem(stopRecording)
+
+        // **Directly under Stop, because it is the same moment with the other
+        // answer.** Stopping sends what was said; this throws it away — the
+        // sentence that came out wrong, the interruption, the dictation started
+        // by accident. Without it the only way out of a bad recording was to
+        // stop it, watch it transcribe, and cancel the panel — three steps and a
+        // model run for something he already knew he did not want.
+        cancelDictation.action = #selector(cancelDictationClicked)
+        cancelDictation.target = self
+        cancelDictation.isEnabled = false
+        menu.addItem(cancelDictation)
 
         menu.addItem(.separator())
 
@@ -242,8 +261,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// state readout, and the readout that matters (🔴, and the model's name
     /// beside it) is on the chip and in the overlay already.
     private func applyStopRecording() {
+        let recording = isRecording?() ?? false
         stopRecording.isHidden = engine != .whisper
-        stopRecording.isEnabled = isRecording?() ?? false
+        stopRecording.isEnabled = recording
+        cancelDictation.isHidden = engine != .whisper
+        cancelDictation.isEnabled = recording
     }
 
     private func refreshGlyph() {
@@ -317,7 +339,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// menu he opens for one second should say what the click will do.
     func setPaused(_ value: Bool) {
         isPaused = value
-        pause.title = value ? "Resume" : "Pause"
         // Same order as the chip: ⏸️ in front of the robot, never instead of it.
         // Routed through `refreshGlyph` so it cannot stomp on a ⏳ that is up —
         // the two states are set from different places and both own this glyph.
@@ -351,6 +372,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func disconnectClicked() { onDisconnect?() }
 
     @objc private func stopRecordingClicked() { onStopRecording?() }
+    @objc private func cancelDictationClicked() { onCancelDictation?() }
 
     private var destination: String?
 
