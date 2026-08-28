@@ -227,6 +227,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // on the bound target.
         status.onDisconnect = { [weak self] in self?.unbindTerminal() }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
+        // The menu asks rather than being told, like the footprint above: the flag
+        // flips on every dictation, and the only moment its answer has to be right
+        // is the moment the row is on screen.
+        status.isRecording = { [weak self] in self?.localRecording ?? false }
+        // Deliberately the *same* call mouse 5 makes rather than a quieter variant:
+        // a recording ended from the menu is still a dictation, and it is
+        // transcribed and sent exactly as if the button had ended it.
+        status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
 
         // **The model is not brought up at launch any more**, even when the
         // setting says Local Whisper.

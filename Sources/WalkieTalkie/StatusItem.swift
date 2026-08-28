@@ -32,13 +32,27 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// moment the answer has to be right.
     var whisperFootprint: (() -> UInt64?)?
 
+    /// Whether the relay's own microphone is open right now. Asked when the menu
+    /// opens, for the same reason the footprint is: it is a fact that changes
+    /// with every dictation, and the one moment it has to be right is the moment
+    /// the row that ends it is on screen.
+    var isRecording: (() -> Bool)?
+
+    /// Picked from **Stop Recording** — end the open dictation and send it, the
+    /// same thing a second mouse 5 does.
+    var onStopRecording: (() -> Void)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃D pressed on the bound target, minus the quitting.
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
+    /// Ends the dictation the relay is recording itself — Local Whisper only,
+    /// see the comment at the row's construction.
+    private let stopRecording = NSMenuItem(title: "Stop Recording", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
+    private var engine = TranscriptionEngine.current
     private var isPaused = false
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
@@ -94,6 +108,30 @@ final class StatusItem: NSObject, NSMenuDelegate {
         disconnect.isEnabled = false
         menu.addItem(disconnect)
 
+        // **Only on Local Whisper, because only then does the relay hold the
+        // microphone.** With Wispr Flow the recording is Wispr's — it starts and
+        // ends on Wispr's own button, and a row here claiming to stop it would be
+        // a lie the app cannot make true. So the row is hidden outright rather
+        // than shown greyed: a permanently dead command is a question ("why can't
+        // I?") the menu then has to answer, and there is no answer that fits in a
+        // menu.
+        //
+        // Mouse 5 already ends a recording — this is the same call, for the case
+        // the mouse is not where the hand is: mouse 5 is a thumb button on one
+        // specific mouse, and a dictation started at the desk has to be closable
+        // from the trackpad, from another room's Bluetooth mouse, or after the
+        // mouse's battery has gone. Recording is the one state where being unable
+        // to reach the button costs the dictation *and* keeps the microphone open.
+        //
+        // Disabled while nothing is being recorded, the way Disconnect is while
+        // nothing is bound: the row is the only place in the menu that says
+        // whether the microphone is open at all, so it stays visible and answers
+        // that question even when there is nothing to click.
+        stopRecording.action = #selector(stopRecordingClicked)
+        stopRecording.target = self
+        stopRecording.isEnabled = false
+        menu.addItem(stopRecording)
+
         menu.addItem(.separator())
 
         // Two ticked items rather than one "Use local Whisper" checkbox. The
@@ -136,7 +174,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// outright, and a tick that moved on the click would say the switch had
     /// happened while the weights were still loading — or after it had failed.
     func setEngine(_ engine: TranscriptionEngine) {
+        self.engine = engine
         for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
+        applyStopRecording()
     }
 
     /// Shown beside the name in the menu **and** in the menu bar itself.
@@ -185,6 +225,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         } else {
             engineItems[.whisper]?.title = name
         }
+    }
+
+    /// Present only on Local Whisper, live only while the microphone is open.
+    ///
+    /// The title does not change with the state — greyed is the whole of "there
+    /// is nothing being recorded", the same way Disconnect is greyed while
+    /// nothing is bound. A row that renamed itself would be claiming to *be* the
+    /// state readout, and the readout that matters (🔴, and the model's name
+    /// beside it) is on the chip and in the overlay already.
+    private func applyStopRecording() {
+        stopRecording.isHidden = engine != .whisper
+        stopRecording.isEnabled = isRecording?() ?? false
     }
 
     private func refreshGlyph() {
@@ -271,6 +323,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func disconnectClicked() { onDisconnect?() }
 
+    @objc private func stopRecordingClicked() { onStopRecording?() }
+
     private var destination: String?
 
     /// The label is read when the menu opens rather than pushed on a timer: it
@@ -280,6 +334,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         SessionLabel.refresh()
         applyHeader()
         applyWhisperTitle()
+        applyStopRecording()
     }
 
     private func applyHeader() {

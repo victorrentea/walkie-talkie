@@ -26,8 +26,9 @@ Current strings live in `RelayWindow.swift`:
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
-- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Quit`, plus the two
-  transcription-engine rows (`Wispr Flow` / `Local Whisper`), flat in the main menu
+- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Disconnect` /
+  `Stop Recording` / `Quit`, plus the two transcription-engine rows
+  (`Wispr Flow` / `Local Whisper`), flat in the main menu
 
 ## Bound to a terminal: the second destination
 
@@ -1309,6 +1310,23 @@ Wispr-recorded path, and the difference is not an oversight. There, a low
 Wispr never heard the sentence, so the alternative to a shaky transcript is
 silence — and silence is the one outcome Victor cannot notice and correct. The
 banner says the score instead.
+
+**The menu can end a recording too.** `Stop Recording` sits under Disconnect and
+calls the same `stopLocalRecording()` a second mouse 5 does — the transcript is
+made and sent exactly as if the button had ended it. It exists because mouse 5 is
+a thumb button on one specific mouse, and a dictation started at the desk has to
+be closable from the trackpad or after that mouse's battery has gone; recording
+is the one state where not reaching the button costs the dictation *and* leaves
+the microphone open.
+
+The row is **hidden outright on the Wispr engine**, not greyed: there the
+recording is Wispr's, started and ended on Wispr's own button, so a row claiming
+to stop it would be a promise the app cannot keep. On Local Whisper it is always
+visible and merely disabled while nothing is being recorded — the way Disconnect
+is while nothing is bound — since it is then the only line in the menu that says
+whether the microphone is open at all. Both answers are read when the menu opens
+(`StatusItem.isRecording`), like the footprint above, because the flag flips on
+every dictation.
 
 The corpus keeps growing in this mode (`VoiceCorpus.captureLocal`), stamped
 `engine: "whisper-local"` and with **no `asr` field**: there is one reading and no
