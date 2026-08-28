@@ -253,6 +253,10 @@ private var promptFront: String?
     /// Flashes must survive the idle case: the Accessibility warning fires at
     /// launch, long before any dictation, and would be invisible if this row only
     /// ever appeared while listening.
+    /// The focused-window row's text, in one place so the string that is measured
+    /// and the string that is drawn cannot drift apart.
+    private static func frontLine(_ front: String) -> String { "🪟 Active window: " + front }
+
     private var hintText: String? { flashMessage ?? idleHint }
 
     /// **Bound, and nothing happening yet.** The chip has always said *where*
@@ -269,7 +273,7 @@ private var promptFront: String?
     /// work.
     private var idleHint: String? {
         guard boundLabel != nil, !listening, !paused, !engineLoading, sentPrompt == nil else { return nil }
-        return "🎤 🖱️ to start dictating"
+        return "🖱️ to start dictating"
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -825,7 +829,7 @@ private var promptFront: String?
                 contextWidth = max(contextWidth, text + quoteRowHeight + pad * 2)
             }
             if let front = promptFront {
-                let text: CGFloat = measure("🪟 " + front, font: NSFont.systemFont(ofSize: 14))
+                let text: CGFloat = measure(Self.frontLine(front), font: NSFont.systemFont(ofSize: 14))
                 contextWidth = max(contextWidth, text + pad * 2)
             }
         }
@@ -853,18 +857,6 @@ private var promptFront: String?
             rows.append((quoteLabel, quoteRowHeight))
         } else {
             quoteLabel.isHidden = true
-        }
-
-        // Where he was when he said it. The agent has had this since the envelope
-        // grew a `[Focused window: …]` block; the panel had not, which left the
-        // one place the *message* is checked showing less than the message.
-        if let front = promptFront {
-            frontLabel.stringValue = "🪟 " + front
-            frontLabel.frame.size = NSSize(width: innerWidth, height: 19)
-            frontLabel.isHidden = false
-            rows.append((frontLabel, 19))
-        } else {
-            frontLabel.isHidden = true
         }
 
         // First of the three, because it is the one that is *about* the dictation
@@ -944,6 +936,22 @@ private var promptFront: String?
             }
         } else {
             shotsRow.isHidden = true
+        }
+
+        // **Under the strip, and named.** Where he was when he said it used to sit
+        // above the transcript, where it read as a heading over the words — as if
+        // the sentence were about that window. It is not: it is one more thing
+        // the envelope is carrying, like the frames, and it belongs at the end of
+        // the manifest with them. Naming it is the other half — a bare title
+        // under a row of screenshots is indistinguishable from a caption for
+        // them, and "Active window" is the label that says which of the two it is.
+        if let front = promptFront {
+            frontLabel.stringValue = Self.frontLine(front)
+            frontLabel.frame.size = NSSize(width: innerWidth, height: 19)
+            frontLabel.isHidden = false
+            rows.append((frontLabel, 19))
+        } else {
+            frontLabel.isHidden = true
         }
 
         // Its own row rather than an overlay in a corner: the prompt can be many

@@ -1029,7 +1029,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the chip no longer distinguishes ⌨️ from 🎯: binding is the moment
             // that fact can still change what Victor does about it, and a warning
             // is not a label — it survives the shortening.
-            let unguarded = bound.isGuarded ? "" : " — no shell guard"
+            // **Only the warning survives.** The flash used to read
+            // `walkie: started in <folder>`, and the chip beside the cursor
+            // changes to that same folder at this exact instant — so it was the
+            // one fact said twice, in two places, one of which then sat over his
+            // work for three seconds. The missing shell guard has nowhere else
+            // to be said, and it is the one thing here that can still change what
+            // Victor does about it, so it flashes on its own.
+            let unguarded = bound.isGuarded ? nil : "⚠️ no shell guard"
 
             // **The rectangle hands over to the chip.** It flies from the window
             // that was captured to the cursor, and the label appears there the
@@ -1066,11 +1073,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // disappears there: the window that was captured is *this* label.
             self.showBound(bound)
             guard let frame = bound.sourceFrame else {
-                self.overlay.flash("walkie: started in \(bound.label)\(unguarded)", duration: 3)
+                if let unguarded = unguarded { self.overlay.flash(unguarded, duration: 3) }
                 return
             }
-            self.overlay.flash("walkie: started in \(bound.label)\(unguarded)",
-                               duration: BindFlight.duration)
+            // Still sized to the flight when there is one: a flash is a panel,
+            // and a panel is not the chip, so an overlay still showing one has
+            // nowhere to put a label beside the pointer.
+            if let unguarded = unguarded {
+                self.overlay.flash(unguarded, duration: BindFlight.duration)
+            }
             BindFlight.fly(from: frame, to: { [weak self] in
                 self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
             })
