@@ -630,7 +630,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // gesture. The intention is unambiguous, so it is held and honoured
             // when the weights land.
             recordWhenModelReady = true
-            overlay.flash("⏳ the local model is coming up — recording starts the moment it is ready", duration: 6)
+            // The same two words the engine switch flashes. It said what would
+            // happen next — "recording starts the moment it is ready" — which is
+            // a sentence for a state that lasts a few seconds and asks nothing
+            // of him.
+            overlay.flash("⏳ preparing", duration: 6)
             return
         }
 

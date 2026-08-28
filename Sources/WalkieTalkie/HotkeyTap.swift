@@ -215,7 +215,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         lastMouse5DownAt = 0
                         swallowMouse5Up = true
                         Log.info("🎯 mouse 5 ×2 — binding")
-                        DispatchQueue.main.async { [weak self] in self?.onMouse5Double?() }
+                        // **Global, not main** — the same queue ⌘⌃D uses, and for
+                        // the reason it uses it: `bindFrontmostTerminal` asks the
+                        // main thread for the frontmost app with `main.sync`, so
+                        // arriving there already on main is a wait for a queue
+                        // that is waiting for you. libdispatch does not deadlock
+                        // on that, it traps — this crashed the app on the first
+                        // real double-click.
+                        DispatchQueue.global().async { [weak self] in self?.onMouse5Double?() }
                         return nil
                     }
                     lastMouse5DownAt = now
