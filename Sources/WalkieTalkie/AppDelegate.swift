@@ -1194,6 +1194,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for extra in m.extraSelections {
             parts.append("[selected \(stamp(extra.at)): \(clampForTerminal(extra.text))]")
         }
+        // **What was in front of him is not a caption for a picture.**
+        // It used to ride inside the context frame's clause, as
+        // `shot-00:00(…).jpg = Terminal — ✳ walkie-talkie`, which made a fact
+        // about the dictation readable only by an agent that had decided to open
+        // an image — and that clause says in the same breath that opening it is
+        // usually unnecessary. The title is the cheapest context here and the one
+        // most often enough on its own: it names the app he is talking about and
+        // the file, page or session inside it, in a dozen characters, with no
+        // megabyte attached. So it is its own block, delivered whether or not any
+        // frame is ever opened. He asked for exactly this: *"it has nothing to do
+        // with the images"*.
+        //
+        // The manual shots keep their `= title` — there it genuinely is a caption,
+        // the thing that says which picture is which in an enumeration of five.
+        if let screen = m.screen, let front = m.sources[screen],
+           !front.trimmingCharacters(in: .whitespaces).isEmpty {
+            parts.append("[Focused window: \(front)]")
+        }
         // `look at` and `context` stay separate, exactly as `paths` and `screen`
         // do: one is what he deliberately photographed and wants opened, the
         // other is the frame that happened to be on screen when he started
@@ -1255,10 +1273,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// leaves Victor, who reads these names himself, with something he
         /// cannot read. The evals settled the cost question: the addressing is a
         /// rounding error beside the pixels, so the line has room.
+        ///
+        /// **Only the deliberate shots are described this way.** The automatic
+        /// context frame gets `handed` instead: what was in front of him then is
+        /// now its own `[Focused window: …]` block in the envelope, because it is
+        /// a fact about the dictation rather than a caption identifying one
+        /// picture among several — and burying it here hid it behind a clause
+        /// that tells you not to open the file.
+        func handed(_ original: String) -> String {
+            ((ScreenCapture.handover(for: original)) as NSString).lastPathComponent
+        }
         func described(_ original: String) -> String {
-            let handed = ((ScreenCapture.handover(for: original)) as NSString).lastPathComponent
-            guard let source = sources[original] else { return handed }
-            return "\(handed) = \(source)"
+            guard let source = sources[original] else { return handed(original) }
+            return "\(handed(original)) = \(source)"
         }
 
         // **A clause each, rather than one sentence with the context tacked on.**
@@ -1275,13 +1302,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !paths.isEmpty else {
             guard let screen = screen else { return [] }
             return ["[the screen when I started talking, open only if the words need it: "
-                    + "\(dir)/\(described(screen)). \(note)]"]
+                    + "\(dir)/\(handed(screen)). \(note)]"]
         }
 
         var clauses = ["[the shots I took, in \(dir)/, oldest first, each named by what was in front of me: "
                        + paths.map(described).joined(separator: "; ") + ". \(note)]"]
         if let screen = screen {
-            clauses.append("[and \(described(screen)) is the screen when I started talking, "
+            clauses.append("[and \(handed(screen)) is the screen when I started talking, "
                            + "open it only if the words need it]")
         }
         return clauses
