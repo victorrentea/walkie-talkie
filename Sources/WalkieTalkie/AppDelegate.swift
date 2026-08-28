@@ -276,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is looking at.
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
+        hotkeys.onPromptEscape = { [weak self] in self?.overlay.cancelHeldPrompt() }
         picker.onUnbind = { [weak self] in self?.unbindTerminal() }
         picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
         // Enters exactly where `wispr.onTranscript` does, so what it exercises

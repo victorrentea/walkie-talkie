@@ -881,30 +881,85 @@ final class TerminalBinding {
     private static func sessionLabel(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
 
-        // **The live directory first, the published file only when there is no
-        // process to ask.** It used to be the other way round, and the file is
-        // never cleaned up while `ttysNNN` is a number macOS hands to the next
-        // tab that opens — so a tab on a recycled number reads back the folder
-        // of a session that ended hours ago. Measured twice on this Mac while
-        // testing this: a fresh zsh in `petclinic` bound as
-        // `victor-macos-addons`, and then, once "is a shell at the prompt" was
-        // used as the test, a `cat` in `petclinic` did the same, because `cat`
-        // is not a shell. Dating the file against the process was the third
-        // idea and does not survive contact with macOS either: `ps` has no
-        // `etimes`, and a live session's file can be hours old anyway, since the
-        // status line only rewrites it when it renders.
+        // **The session's directory first, and only from a file that provably
+        // belongs to the process sitting on this tty.**
         //
-        // Nothing is lost by the swap. The published value is the agent's
-        // session directory and the live value is the same process's `cwd` —
-        // measured equal on every running session here, because Claude Code's
-        // own directory is where it was started. The file's remaining job is the
-        // case it was written for: a tty whose foreground process cannot be read
-        // at all.
-        if let (pid, _) = foreground(onTTY: device),
-           let dir = workingDirectory(ofPID: pid) {
+        // The order here has now been wrong in both directions, for opposite
+        // reasons, and this is the version that answers both.
+        //
+        // Reading the published file blindly was wrong because `ttysNNN` is a
+        // number macOS hands to the next tab that opens, so a tab on a recycled
+        // number read back the folder of a session that ended hours ago
+        // (measured: a fresh zsh in `petclinic` bound as `victor-macos-addons`).
+        //
+        // Preferring the live process's `cwd` was wrong because of the claim it
+        // rested on — that the two are equal, "because Claude Code's own
+        // directory is where it was started". They are not. Claude Code keeps a
+        // *session* directory that follows the agent as it works, and a
+        // *process* directory that never leaves the launch folder. Measured on
+        // this Mac: **9 of the 20 live ttys disagreed**, every one of them a
+        // session whose agent had moved — `~/.claude/cwd/ttys003` said
+        // `victor-macos-addons` while `lsof` on its pid still said `~/workspace`.
+        // That is exactly the chip saying `workspace` beside a terminal whose
+        // status line reads `victor-macos-addons`.
+        //
+        // So: ask for the published value **keyed by the pid**, not by the tty.
+        // The status line writes `~/.claude/cwd/.last-<its parent pid>` beside
+        // the tty file, and that parent is the very process `foreground` finds
+        // here. A pid can be recycled too, so the file must also postdate the
+        // process — `ps -o lstart=` is the one process timestamp macOS does
+        // offer, now that `etimes` is known not to exist here. A file that
+        // survives both checks was written by *this* session.
+        //
+        // The rest stays as a fallback, in the order it was already in: the live
+        // `cwd` (right for a plain shell, and for any terminal not running Claude
+        // Code) and then the tty-keyed file (all there is when the foreground
+        // process cannot be read at all).
+        let live = foreground(onTTY: device)
+        if let (pid, _) = live, let dir = publishedDirectory(ownedBy: pid) {
+            return label(forDirectory: dir)
+        }
+        if let (pid, _) = live, let dir = workingDirectory(ofPID: pid) {
             return label(forDirectory: dir)
         }
         return publishedDirectory(forTTY: device).map { label(forDirectory: $0) }
+    }
+
+    /// The session directory the status line last published *for this process*,
+    /// from `~/.claude/cwd/.last-<pid>`.
+    ///
+    /// Two guards, and both are needed. The **modification date must postdate
+    /// the process**, or a pid the kernel has recycled inherits the folder of
+    /// whatever held it before. And the path must still be a directory — the
+    /// same defence `publishedDirectory(forTTY:)` takes, since nothing ever
+    /// cleans these files up.
+    private static func publishedDirectory(ownedBy pid: Int32) -> String? {
+        let file = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/cwd").appendingPathComponent(".last-\(pid)")
+        guard let written = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date,
+              let started = processStart(pid), written > started,
+              let raw = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var isDirectory: ObjCBool = false
+        guard !trimmed.isEmpty,
+              FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return nil }
+        return trimmed
+    }
+
+    /// When a process started. `ps -o lstart=` prints `Fri Aug 28 02:55:03 2026`
+    /// — and pads a single-digit day with a *second* space, which is why the run
+    /// of spaces is collapsed before parsing rather than trusted to a format
+    /// string.
+    private static func processStart(_ pid: Int32) -> Date? {
+        guard let out = run("/bin/ps", ["-o", "lstart=", "-p", String(pid)]) else { return nil }
+        let normalized = out.split(separator: " ", omittingEmptySubsequences: true)
+            .joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "EEE MMM d HH:mm:ss yyyy"
+        return fmt.date(from: normalized)
     }
 
     /// The foreground process on a tty: its pid and its command, in one `ps`.

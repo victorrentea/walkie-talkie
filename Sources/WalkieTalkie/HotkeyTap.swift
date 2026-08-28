@@ -52,6 +52,8 @@ final class HotkeyTap {
     /// out the countdown. The Send button has read `⏎ Send 3s` since it was
     /// written; this is the key finally meaning what the label promised.
     var onPromptEnter: (() -> Void)?
+    /// ⎋ while the prompt is held: stop it going out.
+    var onPromptEscape: (() -> Void)?
 
     /// A prompt is on screen with its clock running — the only window in which
     /// Return is the overlay's. It is a **short** window (3–5s, and only after a
@@ -107,6 +109,7 @@ private let VK_P: CGKeyCode = 0x23
     private let VK_F3: CGKeyCode = 0x63
     private let VK_RETURN: CGKeyCode = 0x24        // Return
     private let VK_KEYPAD_ENTER: CGKeyCode = 0x4C  // Enter (keypad / Fn-Return)
+private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private let MOUSE_BUTTON_4: Int64 = 3   // 0-indexed "back" side button — LinearMouse types Return with it
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
 
@@ -226,6 +229,15 @@ private let VK_P: CGKeyCode = 0x23
             && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
             DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
             return nil   // swallow: the panel took it, so nothing behind it should
+        }
+
+        // ⎋ cancels the prompt that is on screen, the mirror of the ⏎ above and
+        // swallowed the same way — while a countdown is running, Escape is this
+        // panel's, not the editor's behind it. Bare only, for the same reason.
+        if keyCode == VK_ESCAPE && promptHeld
+            && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
+            DispatchQueue.main.async { [weak self] in self?.onPromptEscape?() }
+            return nil
         }
 
         // The same button, arriving as a keystroke.

@@ -253,7 +253,24 @@ private var promptFront: String?
     /// Flashes must survive the idle case: the Accessibility warning fires at
     /// launch, long before any dictation, and would be invisible if this row only
     /// ever appeared while listening.
-    private var hintText: String? { flashMessage }
+    private var hintText: String? { flashMessage ?? idleHint }
+
+    /// **Bound, and nothing happening yet.** The chip has always said *where*
+    /// the words will go and never *how to say any* — which is fine for the
+    /// person who built it and useless to a room watching the overlay sit there.
+    /// So the line under the folder answers the only question left at rest: what
+    /// do I press. It says the button rather than naming it, because the button
+    /// is what his hand is already on.
+    ///
+    /// It is a hint, not a notice: `flashMessage` outranks it above, so anything
+    /// the relay actually has to say takes the row back, and the row disappears
+    /// the moment a dictation starts — by then the recording row below is
+    /// carrying the state and repeating the invitation would be noise over his
+    /// work.
+    private var idleHint: String? {
+        guard boundLabel != nil, !listening, !paused, !engineLoading, sentPrompt == nil else { return nil }
+        return "🎤 🖱️ to start dictating"
+    }
 
     /// The recording row shows **only while dictating and not paused** — the one
     /// window in which there is a recording to report and in which F3 and the
@@ -1776,7 +1793,10 @@ private var promptFront: String?
         guard let deadline = promptDeadline else { return }
         let left = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
         sendButton.title = "⏎ Send \(left)s"
-        cancelButton.title = "✕ Cancel"
+        // ⎋ named on the button for the same reason ⏎ is named on Send: the key
+        // works whether or not it says so, and a countdown is the worst moment
+        // to be looking for the mouse.
+        cancelButton.title = "⎋ Cancel"
     }
 
     /// The single exit from the displayed-prompt state: collapse back to the
@@ -1937,6 +1957,14 @@ private var promptFront: String?
     func sendHeldPrompt() {
         guard sentPrompt != nil else { return }
         resolvePrompt(send: true)
+    }
+
+    /// ⎋ while a prompt is up — the other half of ⏎. Sending early already had a
+    /// key; stopping the send did not, so the only way to catch a dictation he
+    /// did not mean was to find the Cancel button before the clock ran out.
+    func cancelHeldPrompt() {
+        guard sentPrompt != nil else { return }
+        resolvePrompt(send: false)
     }
 
     /// Whether a prompt is on screen and therefore whether ⏎ belongs to it.
