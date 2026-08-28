@@ -689,15 +689,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Here there is no second reading — Wispr never heard this — so the
             // alternative to a shaky transcript is silence, and silence is the
             // one outcome Victor cannot notice and correct. The banner says so.
-            if r.avgLogprob < LocalWhisper.confidenceFloor {
-                // Handed to the panel rather than flashed: a flash lands in the
-                // hint row above the transcript, and this is a note *about* the
-                // transcript. It rides along to `showSentPrompt` below.
-                self.pendingPromptWarning = String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
-            } else {
-                self.pendingPromptWarning = nil
-                DispatchQueue.main.async { self.overlay.clearFlash() }
-            }
+            // **The ⏳ comes down here, on both paths.** `transcribing…` is a
+            // promise about this exact moment, and it is flashed with a 30s
+            // duration precisely because it is meant to be taken down by whatever
+            // arrives rather than to expire. It used to be *replaced* by the
+            // low-confidence flash; now that the warning goes to the panel
+            // instead, nothing was left to take it down, and it sat at the foot
+            // of the pre-send panel — a stale "transcribing…" under the finished
+            // transcript.
+            DispatchQueue.main.async { self.overlay.clearFlash() }
+            // Handed to the panel rather than flashed: a flash lands in the hint
+            // row, which is the last row of the panel, and this is a note about
+            // the transcript — it belongs under the words it qualifies.
+            self.pendingPromptWarning = r.avgLogprob < LocalWhisper.confidenceFloor
+                ? String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
+                : nil
             // Reads the bytes on this thread and files the sample on its own, so
             // the staged copy can go immediately after — the corpus keeps its own.
             self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
