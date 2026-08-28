@@ -538,14 +538,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // microphone.
                 if self.recordWhenModelReady {
                     self.recordWhenModelReady = false
+                    // The ⏳ was a promise about this moment; it is being kept, so
+                    // it comes down rather than sitting over a live dictation for
+                    // whatever its timer had left.
+                    self.overlay.clearFlash()
                     Log.info("model up after a mouse 5 that had to wait — opening the microphone")
                     self.startLocalRecording()
                     return
                 }
-                // The one message he is actually waiting for. Worded as
-                // permission rather than as a state, because the question he has
-                // been holding for ten seconds is "can I talk yet".
-                self.overlay.flash("🎙️ local Whisper ready — go ahead", duration: 4)
+                // **Nothing is said.** This used to flash "local Whisper ready —
+                // go ahead", which was the right answer while a bind opened the
+                // microphone by itself and he was waiting for permission to talk.
+                // He is not waiting any more: a press made during the load is
+                // remembered and fires above, and a load nobody pressed into is
+                // just the engine coming up in the background. So the ⏳ is taken
+                // down — it promised this moment — and the chip, which goes back
+                // to reading `🖱️ to start dictating`, is the whole message.
+                self.overlay.clearFlash()
                 Log.info("engine → whisper")
             }
         }
