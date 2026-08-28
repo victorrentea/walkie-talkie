@@ -677,12 +677,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
-        overlay.flash("⏳ transcribing…", duration: 30)
+        overlay.setTranscribing(true)
 
         whisper.transcribe(wav: wav.path) { [weak self] result in
             guard let self = self else { return }
             guard let r = result, !r.text.isEmpty else {
                 DispatchQueue.main.async {
+                    self.overlay.setTranscribing(false)
                     self.overlay.flash("⚠️ the model returned nothing — that dictation is lost", duration: 8)
                 }
                 Log.error("local recording produced no transcript")
@@ -705,7 +706,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // instead, nothing was left to take it down, and it sat at the foot
             // of the pre-send panel — a stale "transcribing…" under the finished
             // transcript.
-            DispatchQueue.main.async { self.overlay.clearFlash() }
+            DispatchQueue.main.async { self.overlay.setTranscribing(false) }
             // Handed to the panel rather than flashed: a flash lands in the hint
             // row, which is the last row of the panel, and this is a note about
             // the transcript — it belongs under the words it qualifies.

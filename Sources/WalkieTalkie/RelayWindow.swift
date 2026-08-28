@@ -147,6 +147,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// A note about the transcript on screen — currently only the confidence
     /// score, and only when it came out below the floor.
     private var promptWarning: String?
+    /// The model has the audio and has not answered yet. Drives the same row the
+    /// invitation to dictate lives on — see `statusLine`.
+    private var transcribing = false
+    private var transcribeWatchdog: Timer?
     private var promptTimer: Timer?
     /// When the held prompt is due to be released. Drives the Cancel countdown,
     /// so the button says how long Victor still has rather than making him guess.
@@ -283,11 +287,23 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the moment a dictation starts — by then the recording row below is
     /// carrying the state and repeating the invitation would be noise over his
     /// work.
-    private var idleHint: String? {
-        guard boundLabel != nil, !listening, !paused, !engineLoading, sentPrompt == nil else { return nil }
+    /// **The row under the destination is one row with two states**, not two rows
+    /// in two places. `⏳ transcribing…` used to be a flash, which lands in the
+    /// hint row at the *foot* of the panel, while the invitation to dictate sat
+    /// at the top — so pressing the button made a label vanish from under the
+    /// icon and an unrelated one appear somewhere else. They are the same fact at
+    /// two moments: what this chip is doing, or what to press when it is doing
+    /// nothing. So they take turns in the same place.
+    ///
+    /// Nothing here while it is listening: the recording row below is already
+    /// saying it, with a pulse.
+    private var statusLine: (glyph: NSImage?, text: String)? {
+        guard boundLabel != nil, !paused, sentPrompt == nil else { return nil }
+        if transcribing { return (Self.waitGlyph, "transcribing…") }
+        guard !listening, !engineLoading else { return nil }
         // One word. The chip rides beside the cursor, over his work, for hours at
         // a time — "to start dictating" was a sentence where a label was needed.
-        return "dictate"
+        return (Self.mouseGlyph, "dictate")
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -823,7 +839,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
-        let idleWidth = idleHint.map { rowWidth($0) } ?? 0
+        let idleWidth = statusLine.map { rowWidth($0.text) } ?? 0
         let engineWidth = engineText.map { rowWidth($0) } ?? 0
         let recordWidth = recordText.map { rowWidth($0) } ?? 0
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
@@ -885,8 +901,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutTitleRow(width: innerWidth)
         rows.append((titleRow, titleRowHeight))
 
-        if let hint = idleHint {
-            idleInfo.stringValue = hint
+        if let status = statusLine {
+            idleGlyph.image = status.glyph
+            idleInfo.stringValue = status.text
             layoutGlyphRow(idleRow, glyph: idleGlyph, label: idleInfo, width: innerWidth)
             idleRow.isHidden = false
             rows.append((idleRow, recordRowHeight))
@@ -1139,6 +1156,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
     private static let mouseGlyph = Glyphs.emoji("🖱️", ink: iconInk)
+    private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
 
     /// Kept as the old name so every measurement site still reads the same, and
     /// so the width of the icon column is stated in exactly one place.
@@ -1613,6 +1631,27 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard engineLoading != value else { return }
         engineLoading = value
         refreshTitle()
+        layoutContent()
+    }
+
+    /// The model is chewing on the audio. Shown where the invitation to dictate
+    /// was, because it is the answer to the button he just pressed.
+    func setTranscribing(_ value: Bool) {
+        guard transcribing != value else { return }
+        transcribing = value
+        transcribeWatchdog?.invalidate()
+        transcribeWatchdog = nil
+        // **A row does not expire the way a flash did.** The banner this replaces
+        // carried a 30s duration, so a helper that died holding the audio simply
+        // took its promise off the screen with it. A row stays until something
+        // says otherwise, and "transcribing…" beside the cursor forever is worse
+        // than nothing. Three minutes is far past any real decode and far short
+        // of forever.
+        if value {
+            transcribeWatchdog = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in
+                self?.setTranscribing(false)
+            }
+        }
         layoutContent()
     }
 
