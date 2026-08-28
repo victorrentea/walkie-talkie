@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictation = DictationMonitor()
     private let picker = ElementPicker()
 
+    /// Pauses whatever Chrome is playing for the length of a dictation, and
+    /// resumes exactly that afterwards. Driven from `syncBorrowedGestures`, the
+    /// one place that already knows when the window opens and closes.
+    private let music = MusicBridge()
+
     /// Keeps every dictation's **recording** beside Wispr's reading of it, so a
     /// local ASR model can one day be measured against Wispr on Victor's own
     /// voice. It transcribes nothing and changes nothing about what the agent
@@ -400,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wispr.start()
         dictation.start()
         picker.start()
+        music.start()
 
         if !wispr.isAvailable {
             DispatchQueue.main.async { [weak self] in
@@ -1046,6 +1052,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let live = isBound && listening && !paused
         hotkeys.dictating = live
         picker.dictating = live
+        // The music is pausing for the same window and for the same reason: it
+        // is the span in which Victor is talking rather than using the machine.
+        // Hanging it here rather than off `listening` alone is deliberate — a
+        // dictation that is not being relayed anywhere (unbound, or forwarding
+        // paused) is Victor talking into some other app, and silencing his music
+        // for that would be the relay reaching outside its own session.
+        music.setActive(live)
     }
 
     // MARK: - The bound terminal
@@ -1856,6 +1869,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// asked for a fresh session — the one failure mode worth writing code to
     /// avoid, since it is silent and he would only notice by talking into a void.
     func applicationWillTerminate(_ notification: Notification) {
+        // Before either branch: a relay that quits mid-sentence must not leave
+        // Chrome silent. The extension also resumes on a dead socket, but that is
+        // the safety net for a crash, not the way an orderly quit should look.
+        music.stop()
         guard !SingleInstance.beingReplaced() else {
             Log.info("terminating to make way for a new instance — no session_end")
             return

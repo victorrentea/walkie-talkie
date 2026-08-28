@@ -104,6 +104,25 @@ first free port per relay session; it posts to all of them, so several sessions
 can share one browser). With nothing dictating, every relay refuses its probe and
 the extension never arms at all — its toolbar badge is how you tell.
 
+### It also pauses your music while you talk
+
+The moment a dictation opens, every Chrome tab that is making sound is paused,
+and exactly those tabs resume when it closes — a tab you had already paused by
+hand is left alone. Nothing to turn on: it rides the same extension.
+
+This has to happen inside the browser. CoreAudio funnels every tab through one
+Chrome audio helper process, so from outside, "Chrome is making sound" is the
+finest grain there is — you cannot name the tab, let alone stop it.
+`chrome.tabs.query({audible: true})` is the per-tab answer, and it only exists in
+here. The relay pushes the window over a second loopback socket
+(`ws://127.0.0.1:8920`) rather than being polled, so the pause lands with the
+recording row instead of up to a poll interval later.
+
+It follows the *relayed* dictation, not the microphone: unbound, or with
+forwarding paused, you are talking into some other app and your music is none of
+the relay's business. If the relay dies mid-sentence the extension resumes on the
+dead socket, so the music can never be left off with nothing alive to restore it.
+
 ## How it reaches the agent
 
 Two ways, and they are not alternatives — the second is layered on the first.

@@ -73,6 +73,129 @@ async function deliver(pick) {
   return { count: accepted.length, sessions: accepted.map((a) => a.session).filter(Boolean) };
 }
 
+// ---------------------------------------------------------------------------
+// Pausing the music for the length of a dictation
+//
+// The other half of this file is Chrome asking the relay a question. This half
+// is the relay telling Chrome something: a WebSocket on 127.0.0.1:8920 carrying
+// {type:"dictation", active:bool}. It has to be a push — the extension would
+// otherwise have to poll all day to catch the front edge of a sentence — and it
+// has to be decided here, because "which tab is making noise" is knowable only
+// inside the browser (see MusicBridge.swift for the CoreAudio half of that).
+//
+// State lives in chrome.storage.session rather than in a variable: an MV3
+// service worker can be torn down between the pause and the resume, and the
+// resume must still land on exactly the tabs that were paused.
+
+const MUSIC_PORT = 8920;
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+
+let musicSocket = null;
+let musicReconnectDelay = RECONNECT_MIN_MS;
+
+// --- the two halves of the job, injected into the page ---------------------
+
+// Pause every media element that is actually playing, and mark it, so the resume
+// can find exactly those — and not the ones Victor had already paused himself.
+function pauseAudibleMedia() {
+  for (const el of document.querySelectorAll('video, audio')) {
+    if (el.paused || el.ended) continue;
+    el.dataset.wtDictationPaused = '1';
+    el.pause();
+  }
+}
+
+// Resume only what we paused. A tab he closed the media in, or navigated away
+// from, simply has nothing marked — nothing happens.
+function resumeMarkedMedia() {
+  for (const el of document.querySelectorAll('[data-wt-dictation-paused]')) {
+    delete el.dataset.wtDictationPaused;
+    const p = el.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  }
+}
+
+async function pauseEverythingAudible() {
+  const { engaged } = await chrome.storage.session.get('engaged');
+  if (engaged) return;                 // already paused for this dictation
+  const tabs = await chrome.tabs.query({ audible: true });
+  const ids = [];
+  for (const tab of tabs) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        func: pauseAudibleMedia,
+      });
+      ids.push(tab.id);
+    } catch (e) {
+      // A tab we may not script: chrome://, the Web Store, the PDF viewer.
+      console.log('[walkie-music] cannot script tab', tab.id, e.message);
+    }
+  }
+  await chrome.storage.session.set({ engaged: true, pausedTabs: ids });
+  console.log('[walkie-music] paused', ids.length, 'tab(s)');
+}
+
+async function resumeWhatWePaused() {
+  const { engaged, pausedTabs } = await chrome.storage.session.get(['engaged', 'pausedTabs']);
+  // Clear the latch first: a failure below must not leave us believing a pause
+  // is still outstanding, or the next dictation would never pause anything.
+  await chrome.storage.session.set({ engaged: false, pausedTabs: [] });
+  if (!engaged) return;
+  for (const tabId of pausedTabs || []) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: resumeMarkedMedia,
+      });
+    } catch (e) {
+      console.log('[walkie-music] tab gone on resume', tabId, e.message);
+    }
+  }
+  console.log('[walkie-music] resumed', (pausedTabs || []).length, 'tab(s)');
+}
+
+function connectMusic() {
+  if (musicSocket &&
+      (musicSocket.readyState === WebSocket.OPEN || musicSocket.readyState === WebSocket.CONNECTING)) return;
+  musicSocket = new WebSocket(`ws://127.0.0.1:${MUSIC_PORT}`);
+
+  musicSocket.onopen = () => {
+    musicReconnectDelay = RECONNECT_MIN_MS;
+    console.log('[walkie-music] connected to the relay');
+  };
+
+  musicSocket.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === 'ping') return;   // keeps this worker resident
+    if (msg.type !== 'dictation') return;
+    // The relay replays the state on connect, so this is also how a worker that
+    // was torn down mid-dictation learns it still owes a resume.
+    (msg.active ? pauseEverythingAudible() : resumeWhatWePaused())
+      .catch((e) => console.log('[walkie-music] failed', e));
+  };
+
+  const retry = () => {
+    musicSocket = null;
+    // **A dead socket resumes.** The relay is started and killed per agent
+    // session, far more often than it is left running, and a relay that goes
+    // away mid-sentence would otherwise leave the music off with nothing left
+    // alive to turn it back on. A blip that is only a blip costs a stutter: the
+    // reconnect replays active:true and pauses again.
+    resumeWhatWePaused().catch(() => {});
+    setTimeout(connectMusic, musicReconnectDelay);
+    musicReconnectDelay = Math.min(musicReconnectDelay * 2, RECONNECT_MAX_MS);
+  };
+  musicSocket.onclose = retry;
+  musicSocket.onerror = () => { try { musicSocket.close(); } catch {} };
+}
+
+chrome.runtime.onStartup.addListener(connectMusic);
+chrome.runtime.onInstalled.addListener(connectMusic);
+connectMusic();
+
 chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   if (msg?.type === 'probe') {
     probe().then((c) => respond({ live: c.ports.length > 0, sessions: c.sessions }));

@@ -755,6 +755,58 @@ Mouse 4 and ⌘⇧-click in Chrome both belong to other software the rest of the
 and `syncBorrowedGestures()` is the single switch that takes them and gives them
 back. The two sections below are one argument applied twice.
 
+Since 2026-08-28 the same switch also **pauses Chrome's music** (`MusicBridge`,
+below). It is not a gesture, but it is the same window and the same argument: for
+the length of a sentence, something that belongs to the rest of the machine is
+borrowed and then handed straight back.
+
+## The music pauses for the length of a dictation
+
+`MusicBridge` pushes `{type:"dictation", active, seq}` over a WebSocket on
+**127.0.0.1:8920** and `chrome-extension/relay.js` pauses every audible tab,
+resuming exactly those. Ported from Victor Addons' `DictationBridge` + its
+`chrome-extension/`, which does the same for Wispr's own dictations — read
+`victor-macos-addons/docs/audio-sounds.md` for the CoreAudio half of the story.
+
+**Why Chrome decides which tab.** CoreAudio funnels every tab through one Chrome
+audio helper process, so from outside the browser "Chrome is making sound" is the
+finest grain obtainable — the tab cannot be named, let alone stopped.
+`chrome.tabs.query({audible: true})` is the per-tab answer and only exists inside
+the extension. Same shape as the picker's argument about the DOM.
+
+**Why a push and not the HTTP server already there.** The extension polls
+`ElementPicker` only while ⌘⇧ is held. A poll fast enough to catch the front edge
+of a sentence would have to run all day for something that happens a few times an
+hour; a socket the app writes to costs nothing idle and lands in the same
+millisecond as the recording row. It pings every 20 s because an MV3 service
+worker is torn down after ~30 s idle and socket traffic resets that timer, and it
+replays the state on connect, so a worker that *was* torn down mid-dictation
+comes back knowing it still owes a resume.
+
+**8920, not 8766.** Victor Addons holds 8766 for its own bridge. Both may be
+installed and both may pause, which is harmless — each extension marks what it
+stopped (`data-wt-dictation-paused` here, `data-va-dictation-paused` there) and
+resumes only its own marks, and an element the other already stopped is skipped
+as "not playing". They cannot share a listener, so this sits just past
+`ElementPicker`'s 8917–8919.
+
+**A dead socket resumes**, which is a deliberate departure from Victor Addons.
+That app runs from login and is rarely killed; the relay is started and killed
+*per agent session*, so a relay that goes away mid-sentence would otherwise leave
+the music off with nothing alive to turn it back on. A blip that is only a blip
+costs a stutter — the reconnect replays `active:true` and pauses again.
+`applicationWillTerminate` also calls `music.stop()`, so the ordinary quit says
+so rather than relying on the net.
+
+**Gated on `live`, not on `listening`.** A dictation nobody is relaying (unbound,
+or forwarding paused) is Victor talking into some other app, and silencing his
+music for that would be the relay reaching outside its own session.
+
+**The extension needs `tabs`, `scripting`, `storage` and `<all_urls>`** — new
+permissions on an extension that had only `http://127.0.0.1/*`, so a **Reload** in
+`chrome://extensions` is required after pulling this; the pause silently does
+nothing until then.
+
 ## Mouse 4 is the shutter, but only while dictating
 
 The back side button (`MOUSE_BUTTON_4` = 3) takes a shot, and the relay
