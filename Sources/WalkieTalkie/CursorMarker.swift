@@ -17,9 +17,15 @@ import AppKit
 /// is already what that desktop draws to say "here", and it is drawn on screen
 /// right after every ⌃P capture. A second, differently-shaped mark for the same
 /// idea would be one to learn for nothing. Hence a ring, four arms with an empty
-/// centre, a centre dot — `systemRed`, over a symmetric black shadow rather than
-/// a white outline, which is what makes it survive a light page and a dark
-/// terminal alike.
+/// centre, a centre dot — over a symmetric black shadow rather than a white
+/// outline, which is what makes it survive a light page and a dark terminal
+/// alike.
+///
+/// **The same colour as the border, deliberately.** The two are one event — the
+/// screen border says *this was photographed*, the reticle says *from here* —
+/// and they used to disagree, red mark inside a red border only by coincidence.
+/// Both are now `NSColor.captureAccent`, which is the amber ⌃P has drawn in
+/// `victor-macos-addons` for years.
 enum CursorMarker {
 
     /// Ratios lifted from `makeSniperReticle`, where they are expressed against a
@@ -64,8 +70,8 @@ enum CursorMarker {
         ctx.setShadow(offset: .zero,
                       blur: box * shadowRatio,
                       color: NSColor.black.withAlphaComponent(0.6).cgColor)
-        ctx.setStrokeColor(NSColor.systemRed.cgColor)
-        ctx.setFillColor(NSColor.systemRed.cgColor)
+        ctx.setStrokeColor(NSColor.captureAccent.cgColor)
+        ctx.setFillColor(NSColor.captureAccent.cgColor)
         ctx.setLineWidth(stroke)
 
         ctx.addEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius,

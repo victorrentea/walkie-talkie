@@ -13,7 +13,7 @@ enum CaptureFlash {
     static func flash(on screen: NSScreen,
                       duration: CFTimeInterval = 1.2,
                       thickness: CGFloat = 30,
-                      color: NSColor = .systemRed) {
+                      color: NSColor = .captureAccent) {
         let panel = NSPanel(
             contentRect: screen.frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -165,7 +165,14 @@ enum CaptureFlash {
         reticle.add(zoom, forKey: "zoom")
 
         let life = CAKeyframeAnimation(keyPath: "opacity")
-        life.values = [0.8, 0.8, 0.0]
+        // **Half, not 80%.** The reticle is drawn over whatever he is talking
+        // about — routinely the very line or button he is describing — so the
+        // louder it is, the more of the thing it points at it hides. At 0.5 it is
+        // still the first thing the eye finds (nothing else on that screen is
+        // yellow and moving) while the pixels underneath stay readable, which
+        // matters because the reason it is on screen is so a mis-aimed shot can
+        // be noticed and retaken while the sentence is still being spoken.
+        life.values = [0.5, 0.5, 0.0]
         life.keyTimes = [0.0, 0.75, 1.0]
         life.duration = duration
         life.fillMode = .forwards
@@ -191,4 +198,21 @@ enum CaptureFlash {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     }
+}
+
+extension NSColor {
+    /// The one colour that means "the relay just photographed this".
+    ///
+    /// **Lifted from `victor-macos-addons`, where ⌃P has meant it for years.**
+    /// That desktop already draws this exact border around the screen when it
+    /// takes a picture, and Victor watches both apps on the same Mac — two
+    /// different colours for the same event is a distinction that has to be
+    /// learned and buys nothing. It replaces `systemRed`, which was doing double
+    /// duty: red is also how every UI on that screen says *error*, and a red
+    /// border thrown across the display at the moment a dictation starts reads as
+    /// something going wrong for the fraction of a second before it is recognised.
+    ///
+    /// `systemYellow` is the literal value there — its own code calls it "the
+    /// yellow border" — and it renders as the amber Victor calls orange.
+    static var captureAccent: NSColor { .systemYellow }
 }
