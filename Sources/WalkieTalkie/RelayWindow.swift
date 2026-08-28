@@ -982,7 +982,17 @@ private let frontLabel = NSTextField(labelWithString: "")
             // Vertically: whatever it takes to show the prompt whole, bounded
             // only by the screen so a very long dictation can't grow an overlay
             // taller than the display.
-            let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800) - margin * 2 - 80
+            // The 80 that used to come off here was room kept for the rows under
+            // the transcript. It is now measured rather than guessed — the rows
+            // below are all fixed-height — so a long dictation gets every pixel
+            // that is actually free instead of 80 fewer.
+            let below = (promptWarning != nil ? 16 + rowGap : 0)
+                + (promptShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
+                + (promptFront != nil ? 19 + rowGap : 0)
+                + cancelButton.frame.height + rowGap
+                + (hintText != nil ? 22 + rowGap : 0)
+            let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800)
+                - margin * 2 - pad * 2 - titleRowHeight - rowGap - below
             // While he is in the field the field owns its text: writing
             // `sentPrompt` back over it on the next layout pass would undo his
             // last keystroke, and layout runs on every keystroke precisely so the
@@ -990,7 +1000,20 @@ private let frontLabel = NSTextField(labelWithString: "")
             if !editingPrompt { promptLabel.stringValue = prompt }
             let shown = promptLabel.stringValue
             promptLabel.preferredMaxLayoutWidth = innerWidth
-            let h = min(measureWrapped(shown, font: promptFont, width: innerWidth), maxHeight)
+            // **Ask the label, not a parallel calculation.** The height used to
+            // come from `boundingRect` on the bare string, which is a second
+            // implementation of the thing the text system is about to do — and
+            // any disagreement between the two is text drawn outside the frame,
+            // which an `NSTextField` clips *silently*: no ellipsis, just a
+            // sentence that stops. `cellSize(forBounds:)` is the same layout the
+            // cell will actually perform, so the two cannot drift.
+            let measured = promptLabel.cell?.cellSize(
+                forBounds: NSRect(x: 0, y: 0, width: innerWidth, height: .greatestFiniteMagnitude)).height
+                ?? measureWrapped(shown, font: promptFont, width: innerWidth)
+            // A hair of slack on top, for the same reason the width carries some:
+            // measuring a line and laying it out disagree by a fraction, and a
+            // fraction is a whole last line when it rounds the wrong way.
+            let h = min(ceil(measured) + 2, maxHeight)
             promptLabel.frame.size = NSSize(width: innerWidth, height: h)
             promptLabel.isHidden = false
             rows.append((promptLabel, h))
