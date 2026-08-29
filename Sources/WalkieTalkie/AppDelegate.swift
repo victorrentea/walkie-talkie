@@ -245,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
         status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
         status.onStartDictation = { [weak self] in self?.startLocalRecording() }
+        hotkeys.onLocalCancel = { [weak self] in self?.cancelLocalRecording() }
 
         // **The model is not brought up at launch any more**, even when the
         // setting says Local Whisper.

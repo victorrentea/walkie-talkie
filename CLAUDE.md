@@ -1388,9 +1388,24 @@ which of the two was armed. Victor's call: mouse 5 goes back to Wispr alone (the
 tap only *observes* it, `onDictationStarted`), and the relay drives `MicRecorder`
 from the **wheel**.
 
-**Hold to start, tap to stop, and the two live in different states.** Starting is
-the deliberate gesture and costs a **400ms hold**; stopping happens while the
-recording row is on screen, so a tap is unambiguous there and acts instantly.
+**The wheel says three things, and the length of the press separates them:**
+
+| state | press | verdict |
+|---|---|---|
+| idle | hold 400ms | start a dictation |
+| dictating | tap | end it — transcribe and send |
+| dictating | hold 400ms | **cancel** it — throw the audio away |
+
+Holding is the deliberate half in both states, and in both it is the half that
+cannot be taken back: starting a recording of a room, or discarding a sentence
+already spoken. A tap is the ordinary outcome and costs nothing to repeat. The
+hold reads the state **when it fires**, not when the button went down — a
+dictation can begin or end inside those 400ms, and what the hold means is decided
+by the state it lands in.
+
+Cancelling from the wheel is the same verdict as the menu's `Cancel Dictation`,
+and the same one as pressing Cancel on the panel a moment later — without waiting
+for the model to transcribe something already known to be unwanted.
 
 **A tap while nothing is recording is given back.** It means nothing to this app
 in that state, so the click is **replayed** as a synthetic middle click and
@@ -1398,8 +1413,10 @@ Chrome goes on opening links and closing tabs. That is what makes the wheel
 affordable at all: it was swallowed outright for as long as a terminal was
 bound — hours — for a gesture Victor uses in a browser all day.
 
-The press is swallowed first and judged on release, because the decision cannot
-be made when the button goes down. The alternative — pass the press through and
+Every press is swallowed first and judged on release, because the decision cannot
+be made when the button goes down — which is also why ending a dictation now
+waits for the finger to lift, the price of the same button being able to cancel
+one. The alternative — pass the press through and
 swallow only the release — leaves whatever is underneath holding a button that
 never came up, which is the orphan-event bug this file guards against twice
 already, pointing the other way. The replay is let past the tap by a 0.3s time

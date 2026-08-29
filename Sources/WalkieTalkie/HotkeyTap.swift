@@ -42,6 +42,12 @@ final class HotkeyTap {
     /// says nothing, because this is a toggle and not a push-to-talk.
     var onLocalToggle: (() -> Void)?
 
+    /// The wheel held down **while a dictation is running** — throw it away.
+    /// Same verdict as the menu's Cancel Dictation, and the same verdict as
+    /// pressing Cancel on the panel a moment later, without waiting for the model
+    /// to transcribe something already known to be unwanted.
+    var onLocalCancel: (() -> Void)?
+
     /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃D does.** The keyboard
     /// shortcut asks for both hands at the moment his pointing hand is already
     /// on the terminal he means; the button is where the hand already is.
@@ -272,28 +278,53 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return Unmanaged.passUnretained(event)   // our own replay, going out
             }
 
+            // **The wheel says three things, and the length of the press is what
+            // separates them.**
+            //
+            //   idle      + hold  → start a dictation
+            //   dictating + tap   → end it: transcribe and send
+            //   dictating + hold  → cancel it: throw the audio away
+            //
+            // Holding is the deliberate half in both states, and in both states
+            // it is the one that cannot be taken back — starting a recording of a
+            // room, or discarding a sentence already spoken. A tap is the
+            // ordinary outcome and costs nothing to repeat.
+            //
+            // **A tap while nothing is recording is given back.** It means
+            // nothing to this app in that state, so the click is replayed and
+            // Chrome goes on opening links and closing tabs. That is what makes
+            // the wheel affordable: it was swallowed outright for as long as a
+            // terminal was bound — hours — for a gesture Victor uses in a browser
+            // all day.
+            //
+            // Every press is swallowed first and judged on release, because the
+            // decision cannot be made when the button goes down. The alternative
+            // — pass the press through and swallow only the release — leaves
+            // whatever is underneath holding a button that never came up, which
+            // is the orphan-event bug this file already guards against twice,
+            // pointing the other way. The cost is that ending a dictation now
+            // waits for the finger to lift, which is what it took to make the
+            // same button also able to cancel one.
             if button == MOUSE_BUTTON_MIDDLE && bare && localCapture {
                 if type == .otherMouseDown {
-                    if dictating {
-                        // Recording: the tap ends it, now.
-                        wheelArmed = true
-                        Log.info("🎙️ wheel — ending the dictation")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                        return nil
-                    }
                     let position = event.location
                     wheelPending = (CACurrentMediaTime(), position)
                     let work = DispatchWorkItem { [weak self] in
                         guard let self = self, self.wheelPending != nil else { return }
                         self.wheelPending = nil
                         self.wheelArmed = true
-                        Log.info("🎙️ wheel held — starting a dictation")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                        // Read here, not at the press: a dictation can start or
+                        // end inside the hold, and what the hold means is decided
+                        // by the state it lands in.
+                        if self.dictating {
+                            Log.info("🗑️ wheel held while dictating — cancelling it")
+                            DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
+                        } else {
+                            Log.info("🎙️ wheel held — starting a dictation")
+                            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                        }
                     }
                     wheelHold = work
-                    // On main, so cancelling from the tap thread races nothing:
-                    // the tap serialises its own callbacks and this is the only
-                    // other toucher.
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.wheelHoldSeconds, execute: work)
                     return nil
                 }
@@ -303,12 +334,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     wheelArmed = false
                     return nil
                 }
-                if let pending = wheelPending {
-                    wheelPending = nil
-                    wheelHold?.cancel()
-                    wheelHold = nil
+                guard let pending = wheelPending else { return nil }
+                wheelPending = nil
+                wheelHold?.cancel()
+                wheelHold = nil
+                if dictating {
+                    Log.info("🎙️ wheel tapped — ending the dictation")
+                    DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                } else {
                     replayMiddleClick(at: pending.position)
-                    return nil
                 }
                 return nil
             }
