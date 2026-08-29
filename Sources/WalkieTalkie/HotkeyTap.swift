@@ -48,6 +48,22 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
+    /// The wheel tapped over a window a dictation could be typed into. Same call
+    /// ⌘⌃D makes, including its toggle: tapped on the terminal already bound, it
+    /// lets go. Returns whether anything was bound, so a tap that found nothing
+    /// can still be handed back to the app underneath as a plain middle click.
+    var onWheelBind: (() -> Bool)?
+
+    /// Whether the frontmost app is one `bind` would take. Pushed from
+    /// `AppDelegate` on every app switch rather than asked here: the answer needs
+    /// `NSWorkspace`, which is a main-thread question, and an event tap that
+    /// blocks on the main thread is a frozen mouse.
+    var frontIsBindable: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return frontIsBindableFlag }
+        set { stateLock.lock(); frontIsBindableFlag = newValue; stateLock.unlock() }
+    }
+    private var frontIsBindableFlag = false
+
     /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃D does.** The keyboard
     /// shortcut asks for both hands at the moment his pointing hand is already
     /// on the terminal he means; the button is where the hand already is.
@@ -305,7 +321,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // pointing the other way. The cost is that ending a dictation now
             // waits for the finger to lift, which is what it took to make the
             // same button also able to cancel one.
-            if button == MOUSE_BUTTON_MIDDLE && bare && localCapture {
+            if button == MOUSE_BUTTON_MIDDLE && bare && (localCapture || dictating || frontIsBindable) {
                 if type == .otherMouseDown {
                     let position = event.location
                     wheelPending = (CACurrentMediaTime(), position)
@@ -319,9 +335,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         if self.dictating {
                             Log.info("🗑️ wheel held while dictating — cancelling it")
                             DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
-                        } else {
+                        } else if self.localCapture {
                             Log.info("🎙️ wheel held — starting a dictation")
                             DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                        } else {
+                            // Nothing bound: a dictation has nowhere to go, and
+                            // the thing he is holding the wheel over is the
+                            // window he means. So a hold does what a tap does
+                            // here rather than nothing at all.
+                            Log.info("🎯 wheel held with nothing bound — binding instead")
+                            DispatchQueue.global().async { [weak self] in _ = self?.onWheelBind?() }
                         }
                     }
                     wheelHold = work
@@ -341,9 +364,26 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if dictating {
                     Log.info("🎙️ wheel tapped — ending the dictation")
                     DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                } else {
-                    replayMiddleClick(at: pending.position)
+                    return nil
                 }
+                // **A tap over a bindable window points the relay at it.** The
+                // wheel then means one thing throughout — *this window*, then
+                // *these words* — and binding stops being a keyboard-only
+                // gesture on a hand that is already on the mouse and already
+                // pointing at the terminal it means.
+                //
+                // Asked rather than assumed: `frontIsBindable` is a bundle-id
+                // test and an editor with no terminal open still refuses, so the
+                // click is handed back when the bind comes to nothing.
+                if frontIsBindable {
+                    let position = pending.position
+                    DispatchQueue.global().async { [weak self] in
+                        guard let self = self else { return }
+                        if self.onWheelBind?() != true { self.replayMiddleClick(at: position) }
+                    }
+                    return nil
+                }
+                replayMiddleClick(at: pending.position)
                 return nil
             }
 

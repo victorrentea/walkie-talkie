@@ -246,6 +246,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
         status.onStartDictation = { [weak self] in self?.startLocalRecording() }
         hotkeys.onLocalCancel = { [weak self] in self?.cancelLocalRecording() }
+        hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal() != nil }
+        status.onBind = { [weak self] in
+            // Off the main thread: `bindFrontmostTerminal` asks it for the front
+            // app with `main.sync`, and a menu action arrives already on main.
+            DispatchQueue.global().async { [weak self] in _ = self?.bindFrontmostTerminal() }
+        }
+        status.frontIsBindable = { [weak self] in self?.hotkeys.frontIsBindable ?? false }
+        startWatchingFrontApp()
 
         // **The model is not brought up at launch any more**, even when the
         // setting says Local Whisper.
@@ -1085,6 +1093,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 60 Hz. Only the one main-thread question — which app is in front — is
     /// asked there, and it is asked first, before any of that work has had the
     /// chance to move the focus it is about to read.
+    /// Keep `HotkeyTap.frontIsBindable` current, so the wheel can decide whether
+    /// a tap is a bind or a plain middle click **without asking the main thread**
+    /// — an event tap that blocks is a mouse that stops moving.
+    ///
+    /// Pushed on every activation rather than polled: app switches are rare and
+    /// the notification is exact, where a poll would be a timer running all day
+    /// to answer a question that changes a few dozen times.
+    private func startWatchingFrontApp() {
+        let update: (NSRunningApplication?) -> Void = { [weak self] app in
+            let bundle = app?.bundleIdentifier ?? ""
+            self?.hotkeys.frontIsBindable = TerminalBinding.isBindable(bundleID: bundle)
+        }
+        update(NSWorkspace.shared.frontmostApplication)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { note in
+            update(note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
+        }
+    }
+
     private func bindFrontmostTerminal() -> [String: Any]? {
         var front: NSRunningApplication?
         DispatchQueue.main.sync { front = NSWorkspace.shared.frontmostApplication }

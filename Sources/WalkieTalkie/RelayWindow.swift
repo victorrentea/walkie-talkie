@@ -265,7 +265,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// knows by the second dictation. The row rides under the cursor over his
     /// actual work, so every character it does not need is width taken from the
     /// thing he is looking at underneath.
-    private static let shotHint = "— mouse/F3 for more shots"
+    /// **The button, named, before the count.** It read `2 — mouse/F3 for more
+    /// shots`, which put the number first and then spent a sentence on how to
+    /// change it. The glyph at the head of the row already says these are
+    /// pictures, so what the words are for is the one thing that is not on
+    /// screen: *which* button. `mouse 4` names it outright — the hand knows the
+    /// thumb button by the second dictation, but nothing tells a room watching
+    /// the overlay, and the wheel now means something else entirely.
+    private static let shotHint = "🖱️ mouse 4"
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
@@ -324,7 +331,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
-        return "\(shotCount) \(Self.shotHint)"
+        return "\(Self.shotHint) — \(shotCount)"
     }
 
     /// What is happening, and what is doing it — beside the pulse that says it is
@@ -372,7 +379,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// mechanic describes the input and leaves the outcome unsaid — and the
     /// outcome is the only half worth a row beside the cursor. The chord and the
     /// mouse still follow it, so the delay is still discoverable by trying it.
-    private static let pickHint = "— ⌘⇧+click to select element"
+    /// **The chord first, then what it does.** It trailed the sentence
+    /// (`— ⌘⇧+click to select element`), which is the wrong order for a row read
+    /// at a glance mid-sentence: the keys are the part he has to *do*, and they
+    /// are what the eye can match against the hand already on the keyboard.
+    private static let pickHint = "⌘⇧🖱️ select element"
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
     /// he picked once he has.

@@ -159,6 +159,14 @@ final class TerminalBinding {
     /// taken at the keypress — before any of that work has had a chance to move
     /// the focus.
     @discardableResult
+    /// Whether `bind` would even try — Terminal.app or an editor `IDEBridge`
+    /// recognises. A pure bundle-id test, so it can be asked from an event tap
+    /// on every app switch without touching the main thread; `bind` still does
+    /// the real work and can still refuse (an editor with no terminal open).
+    static func isBindable(bundleID: String) -> Bool {
+        bundleID == "com.apple.Terminal" || IDEBridge.kind(bundleID: bundleID) != nil
+    }
+
     func bind(app: NSRunningApplication) -> Target? {
         let bundleID = app.bundleIdentifier ?? ""
         let name = app.localizedName ?? bundleID

@@ -38,6 +38,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the row that ends it is on screen.
     var isRecording: (() -> Bool)?
 
+    /// Whether the frontmost app is one the relay could bind. Asked when the menu
+    /// opens, like the rest — it changes with every app switch, and the moment it
+    /// has to be right is the moment the row is on screen.
+    var frontIsBindable: (() -> Bool)?
+
     /// Picked from **Stop Recording** — end the open dictation and send it, the
     /// same thing a second mouse 5 does.
     var onStopRecording: (() -> Void)?
@@ -53,18 +58,33 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only one way in.
     var onStartDictation: (() -> Void)?
 
+    /// Picked from **Bind This Window** — the same call ⌘⌃D and a wheel tap make.
+    var onBind: (() -> Void)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// **The menu is where the gestures are written down.** Every one of these
+    /// commands also has a mouse or keyboard route, and none of those routes
+    /// announces itself anywhere else: ⌘⌃D shadows a system shortcut, and the
+    /// wheel's three meanings are separated by how long it is held, which is not
+    /// a thing anybody guesses. A menu row is read while reaching for the thing
+    /// it does, which makes it the one place a gesture can be learned without
+    /// being taught.
+    ///
+    /// ⌘⌃D rides as a real key equivalent so macOS right-aligns it; the wheel
+    /// gestures have no key equivalent to be, so they are said in the title.
+    private let bind = NSMenuItem(title: "Bind This Window — or tap the wheel", action: nil, keyEquivalent: "d")
+
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃D pressed on the bound target, minus the quitting.
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`.
-    private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "")
-    private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "")
+    private let startDictation = NSMenuItem(title: "Start Dictation — hold the wheel", action: nil, keyEquivalent: "")
+    private let stopRecording = NSMenuItem(title: "End Dictation — tap the wheel", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
-    private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
+    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var engine = TranscriptionEngine.current
     private var isPaused = false
@@ -111,6 +131,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
+
+        bind.keyEquivalentModifierMask = [.command, .control]
+        bind.action = #selector(bindClicked)
+        bind.target = self
+        menu.addItem(bind)
 
         // **No Pause row.** It was the first command in the menu on the reading
         // that pausing is what he does whenever he wants to dictate into
@@ -239,6 +264,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         self.engine = engine
         for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
         applyStopRecording()
+        applyBind()
     }
 
     /// Shown beside the name in the menu **and** in the menu bar itself.
@@ -296,6 +322,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// nothing is bound. A row that renamed itself would be claiming to *be* the
     /// state readout, and the readout that matters (🔴, and the model's name
     /// beside it) is on the chip and in the overlay already.
+    /// Bound already, the row is how he lets go — `bind` toggles on its own
+    /// target — so it stays enabled either way and only goes dead when the
+    /// frontmost window is not something a dictation could be typed into.
+    private func applyBind() {
+        bind.isEnabled = isBound || (frontIsBindable?() ?? true)
+    }
+
     private func applyStopRecording() {
         let recording = isRecording?() ?? false
         // All three are the relay's own microphone, which it only has on Local
@@ -417,6 +450,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func stopRecordingClicked() { onStopRecording?() }
     @objc private func cancelDictationClicked() { onCancelDictation?() }
     @objc private func startDictationClicked() { onStartDictation?() }
+    @objc private func bindClicked() { onBind?() }
 
     private var destination: String?
 

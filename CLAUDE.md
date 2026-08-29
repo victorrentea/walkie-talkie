@@ -1392,9 +1392,21 @@ from the **wheel**.
 
 | state | press | verdict |
 |---|---|---|
-| idle | hold 400ms | start a dictation |
+| over a bindable window, not dictating | tap | **bind** it — same call as ⌘⌃D, toggle included |
+| nothing bound | hold 400ms | bind it too: a dictation with no destination is nothing |
+| bound, not dictating | hold 400ms | start a dictation |
 | dictating | tap | end it — transcribe and send |
 | dictating | hold 400ms | **cancel** it — throw the audio away |
+| anywhere else, not dictating | tap | given back as a plain middle click |
+
+**Binding from the wheel** is what makes the button mean one thing throughout —
+*this window*, then *these words* — and takes the gesture off a keyboard while
+the hand is already on the mouse, already pointing at the terminal it means.
+`HotkeyTap.frontIsBindable` is pushed from `AppDelegate` on every app activation
+rather than asked in the tap: the answer needs `NSWorkspace`, which is a
+main-thread question, and an event tap that blocks on the main thread is a mouse
+that stops moving. It is a bundle-id test only, so a bind can still come to
+nothing (an editor with no terminal open) — and then the click is handed back.
 
 Holding is the deliberate half in both states, and in both it is the half that
 cannot be taken back: starting a recording of a room, or discarding a sentence
