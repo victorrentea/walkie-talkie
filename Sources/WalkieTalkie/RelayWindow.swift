@@ -58,6 +58,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let idleRow = NSView()
     private let idleGlyph = NSImageView()
     private let idleInfo = NSTextField(labelWithString: "")
+    /// **The second hint row.** The card names two gestures at rest, not one —
+    /// how to rebind and how to dictate — and they are two rows because they are
+    /// two different presses. One row per gesture is also what lets each carry
+    /// its own picture of the mouse in the icon column, lined up under the
+    /// destination's icon like every other row on the card.
+    private let bindRow = NSView()
+    private let bindGlyph = NSImageView()
+    private let bindInfo = NSTextField(labelWithString: "")
     private let recordDot = NSImageView()
     private let engineInfo = NSTextField(labelWithString: "")
     /// The recording row: how many shots this dictation is carrying, and how to
@@ -274,13 +282,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// at. Victor asked for it gone; `shotCount` still exists and still drives
     /// the outbox's `📸`.
     private static func shotHintText(font: NSFont) -> NSAttributedString {
-        // **−6 of kerning, measured.** An emoji's advance is far wider than its
-        // ink, so the arrow landed a clear space away from the mouse and read as
-        // two separate pictures rather than one mouse with a button called out.
-        // Rendered at 0, −2, −4, −6 and −8 and looked at: −6 tucks it against the
-        // mouse's lower edge, −8 puts it inside the body.
-        let a = NSMutableAttributedString(string: "🖱️", attributes: [.font: font, .kern: -6])
-        a.append(mark("🔽", raised: false, font: font))
+        // **His mouse, with the side button red** — `Glyphs.mouse`. This row used
+        // to be 🖱️ with a 🔽 kerned in under it, which is a rebus: it needs a
+        // legend, and the legend is the thing the row was supposed to be.
+        let a = NSMutableAttributedString()
+        a.append(inline(Self.mouseBackGlyph, font: font))
         // **`+ selection` was already true and said nowhere.** The shutter has
         // recorded whatever is highlighted at that moment since selections
         // started riding along stamped (`stashExtraSelection`) — a picture shows
@@ -291,21 +297,22 @@ private let frontLabel = NSTextField(labelWithString: "")
         return a
     }
 
-    /// A button of the mouse, drawn where it sits on the mouse: the wheel above,
-    /// the lower side button below. Rendered at 0.55 of the row's size and moved
-    /// off the baseline, which is what turns two adjacent emoji into one picture
-    /// of a mouse with a part of it singled out — the alternative was spelling
-    /// out `mouse 4` and `the wheel` in words that cost a row Victor reads over
-    /// his own work.
+    /// A drawn glyph set **inside a line of text**, sunk to the text's optical
+    /// centre rather than left on its baseline.
     ///
-    /// Both numbers are measured, not guessed: rendered to a PNG and looked at
-    /// before being used, because an emoji's ink sits differently in its line box
-    /// than a letter's and no amount of reasoning settles where it lands.
-    private static func mark(_ emoji: String, raised: Bool, font: NSFont) -> NSAttributedString {
-        NSAttributedString(string: emoji, attributes: [
-            .font: NSFont.systemFont(ofSize: font.pointSize * 0.55),
-            .baselineOffset: raised ? 6 : -4,
-        ])
+    /// `NSTextField(labelWithString:)` renders an attachment perfectly well —
+    /// checked with a bitmap before this was relied on, because the note on
+    /// `applyTitleText` says these labels drop everything but emoji, and that is
+    /// true of the *title* label's halo setup and not of an attachment here.
+    ///
+    /// −3 is measured against the 17pt hint font: an attachment sits with its
+    /// bottom on the baseline, so a 16pt drawing beside 17pt text otherwise
+    /// floats a descender's worth high.
+    private static func inline(_ image: NSImage, font: NSFont) -> NSAttributedString {
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = NSRect(x: 0, y: -3, width: image.size.width, height: image.size.height)
+        return NSAttributedString(attachment: attachment)
     }
 
     private func plain(_ words: String) -> NSAttributedString {
@@ -324,6 +331,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static func frontLine(_ front: String) -> String { "🪟 Active window: " + front }
 
     private var hintText: String? { flashMessage }
+
+    /// The hint rows, in the order they are laid out. `statusLines` fills as many
+    /// of them as it has something to say for and the rest stay hidden — which is
+    /// what keeps a two-row state and a one-row state from needing two layouts.
+    private var hintRows: [(row: NSView, glyph: NSImageView, label: NSTextField)] {
+        [(bindRow, bindGlyph, bindInfo), (idleRow, idleGlyph, idleInfo)]
+    }
 
     /// **Bound, and nothing happening yet.** The chip has always said *where*
     /// the words will go and never *how to say any* — which is fine for the
@@ -353,17 +367,24 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// whole mouse — for a row that is only ever about one part of it. The
     /// column is where a row says what it is about, so the wheel belongs there
     /// and the words are left to say what to do with it.
-    private var statusLine: (glyph: NSImage?, text: NSAttributedString)? {
+    /// **Two rows at rest, not one**, since the wheel stopped meaning both
+    /// things on its own. Rebinding is now the wheel *with the left button
+    /// already down*, and a chord cannot be said in the words of a single row —
+    /// so each gesture gets a row, and each row leads with a picture of the mouse
+    /// carrying the buttons that gesture presses.
+    ///
+    /// The other states are still one row: they are reports, not invitations.
+    private var statusLines: [(glyph: NSImage?, text: NSAttributedString)] {
         // **In the field, the wheel is Send.** Editing is the one panel state
         // with no clock running, so nothing goes out until he says so — and his
         // hand is on the mouse, having just clicked the words to open the field.
         // The button beside the transcript already says `⏎ Send`; this says the
         // other way, which is the one he cannot see from the keyboard.
-        if editingPrompt { return (Self.wheelGlyph, plain("send")) }
-        guard !paused, sentPrompt == nil else { return nil }
-        if transcribing { return (Self.waitGlyph, plain("transcribing…")) }
-        if engineLoading { return (Self.waitGlyph, plain("preparing")) }
-        guard !listening else { return nil }
+        if editingPrompt { return [(Self.mouseWheelGlyph, plain("send"))] }
+        guard !paused, sentPrompt == nil else { return [] }
+        if transcribing { return [(Self.waitGlyph, plain("transcribing…"))] }
+        if engineLoading { return [(Self.waitGlyph, plain("preparing"))] }
+        guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
         // not earn the pixels: the pointer is where Victor works, an unbound
@@ -371,14 +392,28 @@ private let frontLabel = NSTextField(labelWithString: "")
         // advertise a gesture he already knows is exactly the noise the empty
         // pointer was won back from. He said so within the hour, in the plainest
         // terms available: *"mă încurcă, mă enervează"*.
-        if boundLabel == nil { return nil }
-        // **Only the half he cannot already see.** Bound, the destination is on
-        // the line above and the hold that starts a dictation is the gesture he
-        // makes dozens of times a day; what the row is left to say is the other
-        // thing the same button does — a tap re-points the relay at whatever
-        // window is in front. `click to bind` was wrong here for the same reason:
-        // it named a state this row is never on screen in.
-        return (Self.wheelGlyph, plain("click to rebind"))
+        if boundLabel == nil { return [] }
+        // **Rebind first, dictate second** — the order they are needed in. The
+        // card is read at the moment the relay is pointed somewhere; the question
+        // that brings his eyes to it is *is this still the right terminal*, and
+        // dictating is the thing his hand already knows.
+        return [(Self.mouseLeftGlyph, Self.rebindText(font: hintFont)),
+                (Self.mouseWheelGlyph, plain("dictate"))]
+    }
+
+    /// `🖱️(left) → 🖱️(wheel)  ReBind` — the chord drawn as the two presses it
+    /// is, in the order the hand makes them.
+    ///
+    /// The mouse is repeated after the arrow rather than the wheel appearing on
+    /// its own: the second half of the gesture is a button *on the same mouse*,
+    /// and a bare wheel beside an arrow reads as a different object. The first
+    /// picture rides in the icon column, where every row on this card puts what
+    /// it is about; only the second is inline.
+    private static func rebindText(font: NSFont) -> NSAttributedString {
+        let a = NSMutableAttributedString(string: "→ ", attributes: [.font: font])
+        a.append(inline(mouseWheelGlyph, font: font))
+        a.append(NSAttributedString(string: "  ReBind", attributes: [.font: font]))
+        return a
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -439,7 +474,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// (`— ⌘⇧+click to select element`), which is the wrong order for a row read
     /// at a glance mid-sentence: the keys are the part he has to *do*, and they
     /// are what the eye can match against the hand already on the keyboard.
-    private static let pickHint = "⌘⇧🖱️"
+    private static func pickHint(font: NSFont) -> NSAttributedString {
+        let a = NSMutableAttributedString(string: "⌘⇧", attributes: [.font: font])
+        a.append(inline(mouseLeftGlyph, font: font))
+        return a
+    }
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
     /// he picked once he has.
@@ -453,11 +492,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Gated on `listening` like the recording row above it, and hidden while
     /// paused for the same reason: with ⌘⇧ handed back to Chrome, a row saying
     /// otherwise is a lie about which gestures are live.
-    private var pickText: String? {
+    private var pickText: NSAttributedString? {
         guard listening, !paused else { return nil }
-        guard pickCount > 0 else { return Self.pickHint }
-        guard let newest = pickNewest, !newest.isEmpty else { return "×\(pickCount)" }
-        return "×\(pickCount) \(Self.fit(newest, 34))"
+        guard pickCount > 0 else { return Self.pickHint(font: hintFont) }
+        guard let newest = pickNewest, !newest.isEmpty else { return plain("×\(pickCount)") }
+        return plain("×\(pickCount) \(Self.fit(newest, 34))")
     }
 
     /// Keep the tail, drop the head. A selector's last steps are the element; its
@@ -573,15 +612,15 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         // Straight under the destination icon, in the same column and the same
         // box — the two are read as one pair: where it goes, and how to send.
-        idleGlyph.image = Self.mouseGlyph
-        idleGlyph.imageScaling = .scaleProportionallyUpOrDown
-        idleInfo.font = hintFont
-        idleInfo.textColor = .secondaryLabelColor
-        idleInfo.stringValue = "dictate"
-        idleRow.addSubview(idleGlyph)
-        idleRow.addSubview(idleInfo)
-        idleRow.isHidden = true
-        root.addSubview(idleRow)
+        for hint in hintRows {
+            hint.glyph.imageScaling = .scaleProportionallyUpOrDown
+            hint.label.font = hintFont
+            hint.label.textColor = .secondaryLabelColor
+            hint.row.addSubview(hint.glyph)
+            hint.row.addSubview(hint.label)
+            hint.row.isHidden = true
+            root.addSubview(hint.row)
+        }
 
         // Two labels rather than one string, because only the dot pulses: an
         // animation on the whole row would blink the engine's name too, and a
@@ -920,10 +959,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         // lines carry a glyph at a size and baseline of its own, and `measure`
         // knows one font.
         var idleWidth: CGFloat = 0
-        if let status = statusLine {
-            idleInfo.attributedStringValue = status.text
-            idleInfo.sizeToFit()
-            idleWidth = glyphColumn + recordDotGap + ceil(idleInfo.frame.width)
+        for (line, hint) in zip(statusLines, hintRows) {
+            hint.label.attributedStringValue = line.text
+            hint.label.sizeToFit()
+            idleWidth = max(idleWidth, glyphColumn + recordDotGap + ceil(hint.label.frame.width))
         }
         let engineWidth = engineText.map { rowWidth($0) } ?? 0
         // Asked of the label rather than of the font: this row is an attributed
@@ -1004,15 +1043,15 @@ private let frontLabel = NSTextField(labelWithString: "")
             titleRow.isHidden = true
         }
 
-        if let status = statusLine {
-            idleGlyph.image = status.glyph
-            idleInfo.attributedStringValue = status.text
-            idleInfo.sizeToFit()
-            layoutGlyphRow(idleRow, glyph: idleGlyph, label: idleInfo, width: innerWidth)
-            idleRow.isHidden = false
-            rows.append((idleRow, recordRowHeight))
-        } else {
-            idleRow.isHidden = true
+        let hints = statusLines
+        for (i, hint) in hintRows.enumerated() {
+            guard i < hints.count else { hint.row.isHidden = true; continue }
+            hint.glyph.image = hints[i].glyph
+            hint.label.attributedStringValue = hints[i].text
+            hint.label.sizeToFit()
+            layoutGlyphRow(hint.row, glyph: hint.glyph, label: hint.label, width: innerWidth)
+            hint.row.isHidden = false
+            rows.append((hint.row, recordRowHeight))
         }
 
         // **Above the words, not inside them.** The selection used to be folded
@@ -1060,7 +1099,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // things this message is carrying, and unlike them it is also there
         // between messages, which is when he needs it most.
         if let pick = pickText {
-            pickInfo.stringValue = pick
+            pickInfo.attributedStringValue = pick
             layoutPickRow(width: innerWidth)
             pickRow.isHidden = false
             rows.append((pickRow, pickRowHeight))
@@ -1283,9 +1322,19 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The two emoji on the card, rendered once and trimmed to their ink.
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
-    private static let mouseGlyph = Glyphs.emoji("🖱️", ink: iconInk)
     private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
-    private static let wheelGlyph = Glyphs.emoji("🛞", ink: iconInk)
+
+    /// **The mouse is drawn, not typed** — `Glyphs.mouse`, one image per gesture
+    /// the card names, with the buttons that gesture presses filled in red.
+    ///
+    /// 🖱️ and 🛞 were the old vocabulary and it had run out: an emoji can say
+    /// *the mouse* and, with a second emoji kerned beside it, roughly *this part
+    /// of the mouse* — but it cannot say **this button while that one is held**,
+    /// which is what rebinding now is. A drawing can, and it is also his own
+    /// mouse rather than whichever one Apple ships this year.
+    private static let mouseLeftGlyph = Glyphs.mouse(height: iconInk, pressed: .left)
+    private static let mouseWheelGlyph = Glyphs.mouse(height: iconInk, pressed: .wheel)
+    private static let mouseBackGlyph = Glyphs.mouse(height: iconInk, pressed: .back)
 
     /// Kept as the old name so every measurement site still reads the same, and
     /// so the width of the icon column is stated in exactly one place.
@@ -1373,8 +1422,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// ellipsize — and since the tail is the part worth keeping, what it ate was
     /// the count at the front. The rows above tolerate the same error only because
     /// they do not truncate at all.
-    private func glyphRowWidth(_ text: String) -> CGFloat {
-        pickInfo.stringValue = text
+    private func glyphRowWidth(_ text: NSAttributedString) -> CGFloat {
+        pickInfo.attributedStringValue = text
         pickInfo.sizeToFit()
         return glyphColumn + recordDotGap + ceil(pickInfo.frame.width)
     }

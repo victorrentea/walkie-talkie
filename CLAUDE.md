@@ -397,15 +397,22 @@ Four further decisions behind where that folder comes from:
   terminal; the folder is `1.25 ×` as wide as it is tall with the tab's diagonal
   at `0.44 × width`.
 
-  **They are images in boxes of their own, and that is not a style choice.**
-  These labels are `NSTextField(labelWithString:)`, where `attributedStringValue`
-  renders the image and turns **every other glyph fully transparent** — the bug
-  that once left the chip showing a robot head and no session name. So an inline
-  drawn glyph is impossible here, and the title joins the row-with-a-glyph
-  pattern the ⌘-pick row already uses. Both images are rasterised **once**
-  (`pinGlyph`, `folderGlyphImage`): the chip relayouts as it follows the cursor,
-  and redrawing a shape sixty times a second for a picture that never changes is
-  work for nothing.
+  **They are images in boxes of their own**, and the title joins the
+  row-with-a-glyph pattern the ⌘-pick row already uses. Both images are rasterised
+  **once** (`pinGlyph`, `folderGlyphImage`): the chip relayouts as it follows the
+  cursor, and redrawing a shape sixty times a second for a picture that never
+  changes is work for nothing.
+
+  **The old note here said an inline drawn glyph was impossible. It is not** —
+  measured 2026-08-29, by putting an `NSTextAttachment` into a fresh
+  `NSTextField(labelWithString:)` and reading the pixels back: the drawing and the
+  text beside it both render. The "everything but the emoji comes out transparent"
+  failure is the **title** label's, which carries a shadow/halo (`refreshChrome`),
+  and `applyTitleText` is where that warning belongs — it is not a property of
+  these labels in general. `shotHintText` had been mixing emoji and text in one of
+  them the whole time. `RelayWindow.inline(_:font:)` is the helper; the rows that
+  need a glyph *between* words use it, and the rows whose glyph is what the row is
+  *about* still put it in the icon column.
 
 **🤖 is still what unbound looks like** in the menu bar, and the glyph replaces
 it rather than decorating it: 🤖 used to mean "this overlay is writing an outbox
@@ -734,11 +741,71 @@ they change. The mouse is named first because it is the half that needs saying:
 F3 has always been there, while the back button is borrowed only for the length
 of the dictation.
 
-**The mouse is named in words now** — `— mouse/F3 for more shots`, where it was
-`🖱️/F3`. The glyph-only form was right while the row was one line of shorthand
-sitting under a title; beside a row that spells the model out in full it reads as a
-different register. Which button is still unsaid, and still does not need saying:
-the hand knows by the second dictation.
+**The mouse is drawn here too** — the row leads with `Glyphs.mouse(pressed:
+.back)` inline, its rear thumb button red, then `+ selection`. It has been through
+three forms: `🖱️/F3`, then the words `— mouse/F3 for more shots`, then 🖱️ with a
+🔽 kerned underneath. The last was a rebus — it needed a legend, and the legend was
+the thing the row was supposed to be. A drawing of the actual button does not.
+
+## The mouse is drawn, and the buttons the gesture presses are red
+
+**Rule, from Victor, 2026-08-29: wherever the UI has to show the mouse, draw his
+mouse — never an emoji.** `Glyphs.mouse(height:pressed:)` takes a `Buttons` option
+set (`.left`, `.right`, `.wheel`, `.back`, `.forward`) and fills those regions in
+`.systemRed`.
+
+The old vocabulary was 🖱️ for the device with a second emoji kerned beside it for
+which part of it to press, and it ran out the day rebinding became a **chord**: an
+emoji pair cannot say *this button while that one is held*, and two red regions on
+one drawing can. It was also a rebus at every size, dependent on whatever Apple
+Color Emoji ships this year, and it was not his mouse.
+
+**The silhouette is traced, not drawn by eye.** Victor supplied a wireframe
+(`~/Downloads/image.png`, a line drawing of the **Logitech Signature M650 L** on
+his desk — `~/.config/linearmouse/linearmouse.json` names the device). A one-off
+program read the outer dark run per row off that PNG and emitted 33 normalised
+`(v, left, right)` samples, which are the `mouseOutline` table; the aspect ratio
+0.568 is that trace's bounding box. Two corrections, both because a min-x scan
+reads *ink* and not *body*: the thumb buttons protrude past the left edge in the
+drawing and came back as a notch at v 0.34…0.47, interpolated across, and the
+whole column is 3-tap smoothed so the flanks are not faceted at 150pt.
+
+The interior landmarks come off the same trace: the central island the wheel sits
+in spans u 0.382…0.620, the wheel 0.456…0.548. **That island is what makes the
+picture work at 16pt** — the two buttons are not halves of a blob split down the
+middle, they are the areas either side of the island, so filling one red is a
+shape the eye already sees the boundary of.
+
+Two things learned by rendering it to a PNG and looking, which is the only way any
+of these numbers were settled:
+
+- **A pressed part is outlined in its own colour, not the body's.** The wheel and
+  the thumb buttons are small enough that a stroke is a large fraction of the
+  mark, and a grey ring round a red wheel renders at 16pt as a grey wheel.
+- **The thumb buttons are drawn only when one of them is the button being named.**
+  Two extra marks on every mouse in the card is texture, not information.
+
+The wireframe is line art; the glyph is not. A 0.16-alpha wash fills the
+silhouette, because the chip floats over a terminal, an editor, a photograph, and
+an unfilled outline is a few grey strokes with somebody's code showing through.
+
+**Where they appear.** Bound and idle, the chip is now **three rows** — the
+folder, then one row per gesture (`statusLines`, two of `hintRows`):
+
+```
+🤖 workspace
+🖱️(left) → 🖱️(wheel)  ReBind
+🖱️(wheel)  dictate
+```
+
+The first picture of each row rides in the icon column, under the destination's
+own icon; only the wheel after the arrow is inline. The mouse is repeated after
+the arrow rather than the wheel appearing on its own, because the second half of
+the gesture is a button *on the same mouse* and a bare wheel beside an arrow reads
+as a different object. Rebind is first: the card is read at the moment the relay
+is pointed somewhere, and dictating is the half his hand already knows. The same
+drawings carry the `send` row while a prompt is being edited, the shot-hint row
+(`.back`) and the ⌘⇧-pick hint (`.left`).
 
 ## Two gestures are borrowed, and only while dictating
 
@@ -1302,62 +1369,68 @@ question of which of the two was armed. Victor's call: mouse 5 goes back
 untouched (only a *double* click still means anything to this app: bind), and the
 relay drives `MicRecorder` from the **wheel**.
 
-**The wheel says three things, and the length of the press separates them:**
+**The wheel says three things — and only one of them is about how long it is
+held. The third is a chord with the left button.**
 
 | state | press | verdict |
 |---|---|---|
-| over a bindable window, not dictating | tap | **bind** it — same call as ⌘⌃D, toggle included |
-| nothing bound | hold **1s** | bind it too: a dictation with no destination is nothing |
-| bound, not dictating | hold **1s** | start a dictation |
-| dictating | tap | end it — transcribe and send |
+| bound, not dictating | **click** | start a dictation |
+| dictating | **click** | end it — transcribe and send |
 | dictating | hold **2s** | **cancel** it — throw the audio away |
-| anywhere else, not dictating | tap | given back as a plain middle click |
+| anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃D, toggle included |
+| nothing bound, no chord | click | passed straight through |
 
-**Binding from the wheel** is what makes the button mean one thing throughout —
-*this window*, then *these words* — and takes the gesture off a keyboard while
-the hand is already on the mouse, already pointing at the terminal it means.
-`HotkeyTap.frontIsBindable` is pushed from `AppDelegate` on every app activation
-rather than asked in the tap: the answer needs `NSWorkspace`, which is a
-main-thread question, and an event tap that blocks on the main thread is a mouse
-that stops moving. It is a bundle-id test only, so a bind can still come to
-nothing (an editor with no terminal open) — and then the click is handed back.
+**Rebinding moved off the wheel and onto the chord on 2026-08-29**, and the two
+halves of that are one decision. Starting a dictation used to cost a **1s hold**,
+bought so that a bare click could still be handed back to whatever was underneath
+— which is what kept middle-click working in Chrome while a terminal was bound.
+Victor gave that trade up: the gesture he makes dozens of times a day should not
+be the one with a wait in it. Once a click means *dictate*, there is nothing left
+for a click to also mean, and the old rebind rules — a tap over a bindable window
+binds, a hold with nothing bound binds — are exactly the ones it collides with.
 
-**The two holds are not the same length, because they are not equally
-reversible.** Starting costs a second: a recording begun by accident is noticed
-at once and ended by a tap. Cancelling costs two, because it throws away a
-sentence already spoken and there is nothing to undo it with — the longer press
-is the confirmation dialog this gesture does not have. The state at the press
-picks the threshold and the state at the fire has to still agree, so a dictation
-that ended under his finger cannot have its two-second cancel land on the next
-one.
+So rebinding is now **hold the left button, then click the wheel**. That is not a
+compromise: it is unmistakable, it needs no timer to disambiguate, and the hand
+that rebinds is already on the mouse already pointing at the terminal it means.
+`chordHoldSeconds` (0.3s) is only there to separate *holding the left button and
+reaching for the wheel* from *the wheel going down inside a click* — a drag, a
+click-through, a slip. Nobody holds the left button a third of a second by
+accident while pressing something else.
 
-Holding is the deliberate half in both states, and in both it is the half that
-cannot be taken back: starting a recording of a room, or discarding a sentence
-already spoken. A tap is the ordinary outcome and costs nothing to repeat. The
-hold reads the state **when it fires**, not when the button went down — a
-dictation can begin or end inside those 400ms, and what the hold means is decided
-by the state it lands in.
+**The price, stated:** while something is bound — which is hours — the wheel is
+the relay's, full stop. Middle-click in a browser does not open links in new tabs
+or close them until the session ends. That was Victor's explicit call and it
+reverses the bargain the previous build was written to protect; if it grates, the
+cheap fix is to hand the click back when the frontmost app is a browser, not to
+put the hold back.
 
-Cancelling from the wheel is the same verdict as the menu's `Cancel Dictation`,
-and the same one as pressing Cancel on the panel a moment later — without waiting
-for the model to transcribe something already known to be unwanted.
+**The left button is watched and never taken.** `HotkeyTap` adds `.leftMouseDown`
+/ `.leftMouseUp` to the tap only to record *when* the button went down, and both
+are returned untouched at the top of `handle`. Nothing in that file may ever
+swallow one.
 
-**A tap while nothing is recording is given back.** It means nothing to this app
-in that state, so the click is **replayed** as a synthetic middle click and
-Chrome goes on opening links and closing tabs. That is what makes the wheel
-affordable at all: it was swallowed outright for as long as a terminal was
-bound — hours — for a gesture Victor uses in a browser all day.
+**Cancelling still costs a 2s hold**, because it is the one verdict that cannot
+be taken back: it throws away a sentence already spoken and there is nothing to
+undo it with — the long press is the confirmation dialog this gesture does not
+have. The state at the press picks the timer and the state at the fire has to
+still agree, so a dictation that ended under his finger cannot have its cancel
+land on the next one. It is the same verdict as the menu's `Cancel Dictation` and
+as pressing Cancel on the panel a moment later, without waiting for the model to
+transcribe something already known to be unwanted.
 
-Every press is swallowed first and judged on release, because the decision cannot
-be made when the button goes down — which is also why ending a dictation now
-waits for the finger to lift, the price of the same button being able to cancel
-one. The alternative — pass the press through and
-swallow only the release — leaves whatever is underneath holding a button that
-never came up, which is the orphan-event bug this file guards against twice
-already, pointing the other way. The replay is let past the tap by a 0.3s time
-window (`wheelReplayUntil`) rather than by a tag on the event: a tag that failed
-to survive posting would be an infinite loop, where a window that fails is one
-click let through.
+**Nothing is replayed any more.** `replayMiddleClick` and its `wheelReplayUntil`
+window are gone: the wheel is now either the relay's (and always acts) or nobody
+touched it (and it was passed through at the press). What replaced them is a
+single rule at the release — **any release whose press we swallowed is ours**,
+whatever the state has become in between. The left button may have come up, the
+binding may have been dropped; the app underneath must still never be handed a
+middle-up it never saw a middle-down for. That is the orphan-event bug this file
+guards against twice already, written a third time.
+
+`HotkeyTap.frontIsBindable` survives the change but the wheel no longer consults
+it: the chord acts wherever it is made and lets `bindFrontmostTerminal` refuse.
+It is still pushed from `AppDelegate` on every app activation, because the menu's
+**Bind This Window** row greys itself out with it.
 
 **A toggle, not a push-to-talk.** A button held down for the length of the
 sentence is right for a sentence; a dictation aimed at an agent runs to a minute

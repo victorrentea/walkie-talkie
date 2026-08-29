@@ -53,7 +53,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only one way in.
     var onStartDictation: (() -> Void)?
 
-    /// Picked from **Bind This Window** — the same call ⌘⌃D and a wheel tap make.
+    /// Picked from **Bind This Window** — the same call ⌘⌃D and the left-plus-wheel
+    /// chord make.
     var onBind: (() -> Void)?
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -61,14 +62,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// **The menu is where the gestures are written down.** Every one of these
     /// commands also has a mouse or keyboard route, and none of those routes
     /// announces itself anywhere else: ⌘⌃D shadows a system shortcut, and the
-    /// wheel's three meanings are separated by how long it is held, which is not
-    /// a thing anybody guesses. A menu row is read while reaching for the thing
-    /// it does, which makes it the one place a gesture can be learned without
-    /// being taught.
+    /// wheel means one thing alone, another held, and a third with the left
+    /// button already down — none of which anybody guesses. A menu row is read
+    /// while reaching for the thing it does, which makes it the one place a
+    /// gesture can be learned without being taught.
     ///
     /// ⌘⌃D rides as a real key equivalent so macOS right-aligns it; the wheel
     /// gestures have no key equivalent to be, so they are said in the title.
-    private let bind = NSMenuItem(title: "Bind This Window — or tap the wheel", action: nil, keyEquivalent: "d")
+    private let bind = NSMenuItem(title: "Bind This Window — or hold left, click the wheel", action: nil, keyEquivalent: "d")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃D pressed on the bound target, minus the quitting.
@@ -76,8 +77,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`.
-    private let startDictation = NSMenuItem(title: "Start Dictation — hold the wheel 1s", action: nil, keyEquivalent: "")
-    private let stopRecording = NSMenuItem(title: "End Dictation — tap the wheel", action: nil, keyEquivalent: "")
+    private let startDictation = NSMenuItem(title: "Start Dictation — click the wheel", action: nil, keyEquivalent: "")
+    private let stopRecording = NSMenuItem(title: "End Dictation — click the wheel", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.

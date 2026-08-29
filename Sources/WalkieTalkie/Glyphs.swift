@@ -140,3 +140,195 @@ enum Glyphs {
     }
 
 }
+
+extension Glyphs {
+
+    /// Which buttons of the mouse the drawing calls out, in red.
+    struct Buttons: OptionSet {
+        let rawValue: Int
+        /// The left button — the whole left half of the front deck.
+        static let left = Buttons(rawValue: 1 << 0)
+        static let right = Buttons(rawValue: 1 << 1)
+        /// The wheel, in its notch between the two.
+        static let wheel = Buttons(rawValue: 1 << 2)
+        /// The rear side button on the left flank — mouse 4, the one LinearMouse
+        /// types Return with and the one the shutter borrows.
+        static let back = Buttons(rawValue: 1 << 3)
+        /// The forward side button, ahead of it — mouse 5.
+        static let forward = Buttons(rawValue: 1 << 4)
+    }
+
+    /// **His actual mouse, seen from above, with the buttons the gesture needs
+    /// coloured in.**
+    ///
+    /// The overlay used to say a gesture with emoji: 🖱️ for the device and a
+    /// small ▲/🔽 tucked beside it for which part of it to press. That is a
+    /// rebus — it needs a legend of its own, it depends on whatever Apple Color
+    /// Emoji renders this year, and it cannot say *hold this one while you click
+    /// that one*, which is now a gesture the app has. A drawing can: two buttons
+    /// red at once is the same picture with one more region filled.
+    ///
+    /// **Traced from the wireframe Victor supplied**, not drawn by eye. The
+    /// outline below is 33 rows sampled off that PNG by a one-off program —
+    /// left and right edge per row, normalised — which is why the silhouette is
+    /// the real **Logitech Signature M650 L** on his desk
+    /// (`~/.config/linearmouse/linearmouse.json` names it): narrow round nose,
+    /// the thumb swell low on the left, widest at 72% back. The interior
+    /// landmarks come off the same trace: the central island the wheel sits in
+    /// spans u 0.382…0.620, the wheel itself 0.456…0.548.
+    ///
+    /// That island is what makes the picture work at 16pt. The two buttons are
+    /// not halves of a blob split down the middle — they are the areas *either
+    /// side of the island*, so filling one red is a shape the eye already sees
+    /// the boundary of.
+    ///
+    /// Height is the size that is asked for and the width follows from the
+    /// traced proportion, so the result is a tall image in a square icon box
+    /// and lines up with the emoji-derived glyphs beside it.
+    static func mouse(height: CGFloat,
+                      pressed: Buttons = [],
+                      body: NSColor = .secondaryLabelColor,
+                      highlight: NSColor = .systemRed) -> NSImage {
+        let width = (height * Self.mouseAspect).rounded()
+        return NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            // The trace counts v **down** from the nose; AppKit counts y up. One
+            // conversion here beats flipping every number in the table.
+            func p(_ u: CGFloat, _ v: CGFloat) -> CGPoint {
+                CGPoint(x: u * width, y: (1 - v) * height)
+            }
+
+            // Down the right edge, up the left — the sampled rows, closed into a
+            // loop and smoothed through their own midpoints. Straight segments
+            // would be invisible at 16pt and faceted at 120; the quadratics cost
+            // nothing and are right at both.
+            var points = Self.mouseOutline.map { p($0.right, $0.v) }
+            points += Self.mouseOutline.reversed().map { p($0.left, $0.v) }
+            let outline = CGMutablePath()
+            outline.move(to: CGPoint(x: (points[points.count - 1].x + points[0].x) / 2,
+                                     y: (points[points.count - 1].y + points[0].y) / 2))
+            for (i, point) in points.enumerated() {
+                let next = points[(i + 1) % points.count]
+                outline.addQuadCurve(to: CGPoint(x: (point.x + next.x) / 2, y: (point.y + next.y) / 2),
+                                     control: point)
+            }
+            outline.closeSubpath()
+
+            func stadium(_ u0: CGFloat, _ v0: CGFloat, _ u1: CGFloat, _ v1: CGFloat) -> CGPath {
+                let r = (u1 - u0) * width / 2
+                return CGPath(roundedRect: CGRect(x: u0 * width, y: (1 - v1) * height,
+                                                  width: (u1 - u0) * width, height: (v1 - v0) * height),
+                              cornerWidth: r, cornerHeight: r, transform: nil)
+            }
+            let island = stadium(0.382, 0.085, 0.620, 0.560)
+            let wheel = stadium(0.456, 0.135, 0.548, 0.290)
+
+            // A wash inside the outline. The wireframe itself is pure line art,
+            // which is right on paper and not on this card: the chip floats over
+            // a terminal, an editor, a photograph, and an unfilled outline is a
+            // few grey strokes with somebody's code showing through them.
+            ctx.addPath(outline)
+            ctx.setFillColor(body.withAlphaComponent(0.16).cgColor)
+            ctx.fillPath()
+
+            // **A button is the area beside the island, not a half of the body.**
+            // Above the island the two meet along the nose seam at u 0.50; below
+            // it they stop where the island stops. Filled inside a clip of the
+            // silhouette, so the red ends at the mouse's own edge.
+            ctx.saveGState()
+            ctx.addPath(outline)
+            ctx.clip()
+            ctx.setFillColor(highlight.cgColor)
+            for (on, sign) in [(pressed.contains(.left), CGFloat(-1)), (pressed.contains(.right), CGFloat(1))] where on {
+                let inner: CGFloat = 0.5 + sign * 0.118   // the island's near wall
+                let deck = CGMutablePath()
+                deck.move(to: p(0.5, -0.05))
+                deck.addLine(to: p(0.5, 0.085))
+                deck.addLine(to: p(inner, 0.085))
+                deck.addLine(to: p(inner, 0.560))
+                deck.addLine(to: p(0.5 + sign * 0.7, 0.560))
+                deck.addLine(to: p(0.5 + sign * 0.7, -0.05))
+                deck.closeSubpath()
+                ctx.addPath(deck)
+                ctx.fillPath()
+            }
+            ctx.restoreGState()
+
+            // **A pressed part is outlined in its own colour, not in the body's.**
+            // These are small enough that the outline is a large fraction of the
+            // mark: a grey ring around a red wheel renders, at 16pt, as a grey
+            // wheel. Rendered at both sizes and looked at — that is what it did.
+            func part(_ path: CGPath, on: Bool, line: CGFloat) {
+                ctx.addPath(path)
+                ctx.setFillColor(on ? highlight.cgColor : body.withAlphaComponent(0.22).cgColor)
+                ctx.fillPath()
+                ctx.addPath(path)
+                ctx.setStrokeColor(on ? highlight.cgColor : body.cgColor)
+                ctx.setLineWidth(line)
+                ctx.strokePath()
+            }
+
+            let line = max(0.8, height * 0.024)
+            ctx.setLineCap(.round)
+
+            // The seam between the two buttons, from the nose down to the island.
+            ctx.setStrokeColor(body.cgColor)
+            ctx.setLineWidth(line)
+            ctx.move(to: p(0.501, 0.0))
+            ctx.addLine(to: p(0.501, 0.09))
+            ctx.strokePath()
+
+            part(island, on: false, line: line)
+            part(wheel, on: pressed.contains(.wheel), line: max(0.5, height * 0.020))
+
+            // The two thumb buttons, as the slanted pair they are on the flank —
+            // drawn only when one of them is the button being named. At 16pt two
+            // extra marks on every mouse in the card is texture, not information.
+            if pressed.contains(.back) || pressed.contains(.forward) {
+                ctx.setLineWidth(max(1.0, width * 0.11))
+                for (on, from, to) in [(pressed.contains(.forward), (CGFloat(0.055), CGFloat(0.340)), (CGFloat(0.075), CGFloat(0.445))),
+                                       (pressed.contains(.back), (CGFloat(0.088), CGFloat(0.470)), (CGFloat(0.130), CGFloat(0.580)))] {
+                    ctx.setStrokeColor(on ? highlight.cgColor : body.withAlphaComponent(0.55).cgColor)
+                    ctx.move(to: p(from.0, from.1))
+                    ctx.addLine(to: p(to.0, to.1))
+                    ctx.strokePath()
+                }
+            }
+
+            ctx.addPath(outline)
+            ctx.setStrokeColor(body.cgColor)
+            ctx.setLineWidth(line)
+            ctx.strokePath()
+
+            return true
+        }
+    }
+
+    /// Width over height, from the traced wireframe's bounding box.
+    private static let mouseAspect: CGFloat = 0.568
+
+    /// The silhouette, 33 rows off the wireframe: how far in the left and right
+    /// edges sit at each fraction of the way down. Machine-read, so the taper at
+    /// the nose and the widest point at v 0.72 are the real mouse's and not a
+    /// memory of it.
+    ///
+    /// Two corrections to the raw trace, both because a min-x-per-row scan reads
+    /// *ink*, not *body*: the thumb buttons stick out past the left edge in the
+    /// drawing and came back as a notch at v 0.34…0.47, so that stretch is
+    /// interpolated across; and the whole column is 3-tap smoothed, which costs
+    /// nothing at 16pt and stops the flanks looking chewed at 150.
+    private static let mouseOutline: [(v: CGFloat, left: CGFloat, right: CGFloat)] = [
+        (0.000, 0.5106, 0.5159), (0.031, 0.2960, 0.7116), (0.062, 0.1825, 0.8188),
+        (0.094, 0.1336, 0.8680), (0.125, 0.1015, 0.9008), (0.156, 0.0797, 0.9230),
+        (0.188, 0.0655, 0.9368), (0.219, 0.0586, 0.9435), (0.250, 0.0569, 0.9451),
+        (0.281, 0.0575, 0.9444), (0.312, 0.0587, 0.9425), (0.344, 0.0589, 0.9392),
+        (0.375, 0.0584, 0.9352), (0.406, 0.0578, 0.9319), (0.438, 0.0573, 0.9302),
+        (0.469, 0.0567, 0.9312), (0.500, 0.0562, 0.9365), (0.531, 0.0524, 0.9461),
+        (0.562, 0.0423, 0.9580), (0.594, 0.0298, 0.9706), (0.625, 0.0188, 0.9822),
+        (0.656, 0.0099, 0.9914), (0.688, 0.0036, 0.9974), (0.719, 0.0013, 0.9990),
+        (0.750, 0.0040, 0.9964), (0.781, 0.0119, 0.9891), (0.812, 0.0261, 0.9755),
+        (0.844, 0.0483, 0.9540), (0.875, 0.0794, 0.9236), (0.906, 0.1220, 0.8816),
+        (0.938, 0.1812, 0.8217), (0.969, 0.2883, 0.7129), (1.000, 0.4669, 0.5344),
+    ]
+
+}

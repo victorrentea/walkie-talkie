@@ -393,22 +393,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.flash("⚠️ grant Microphone to Walkie Talkie — the relay cannot record", duration: 15)
                     Log.error("microphone access denied — local recording will not work")
                 }
-                // **A mouse 5 pressed against a cold model records the moment
-                // it is up.** On a cold model that press was costing him ten
-                // seconds of waiting followed by a second press he had to
-                // remember to make, with nothing on screen counting the seconds
-                // down — and the ready-flash then said "go ahead" to a relay
-                // that was not listening. Only a *hold* arms this: a load
-                // started by a bind is Victor pointing the relay at a terminal,
-                // which is a different sentence and must not open the
-                // microphone.
+                // **A wheel pressed against a cold model records the moment it
+                // is up.** On a cold model that press was costing him ten seconds
+                // of waiting followed by a second press he had to remember to
+                // make, with nothing on screen counting the seconds down — and
+                // the ready-flash then said "go ahead" to a relay that was not
+                // listening. Only the *dictate* press arms this: a load started
+                // by a bind is Victor pointing the relay at a terminal, which is
+                // a different sentence and must not open the microphone.
                 if self.recordWhenModelReady {
                     self.recordWhenModelReady = false
                     // The ⏳ was a promise about this moment; it is being kept, so
                     // it comes down rather than sitting over a live dictation for
                     // whatever its timer had left.
                     self.overlay.clearFlash()
-                    Log.info("model up after a hold that had to wait — opening the microphone")
+                    Log.info("model up after a press that had to wait — opening the microphone")
                     self.startLocalRecording()
                     return
                 }
@@ -419,7 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // remembered and fires above, and a load nobody held the wheel
                 // into is just the model coming up in the background. So the ⏳ is
                 // taken down — it promised this moment — and the chip, which goes
-                // back to reading `🖱️ to start dictating`, is the whole message.
+                // back to reading `🖱️ dictate`, is the whole message.
                 self.overlay.clearFlash()
                 Log.info("whisper ready")
             }
@@ -456,10 +455,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard isBound, !paused else { return }
         guard whisper.ready else {
             // Not an error, since the helper is deliberately down until something
-            // says a dictation is coming — this hold is one of the two things
+            // says a dictation is coming — this press is one of the two things
             // that say it. It still costs him this sentence, which is why the
             // banner is worded as a wait rather than as a failure.
-            Log.info("wheel held with the model down — bringing it up now")
+            Log.info("wheel clicked with the model down — bringing it up now")
             startWhisper()
             // **The gesture is kept.** Telling him to say it again was making him
             // watch for a banner and then remember to repeat a gesture he had
@@ -469,7 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordWhenModelReady = true
             // Nothing to flash: the wheel means he is bound, so the status row
             // under the destination is already showing `⏳ preparing`, and it
-            // stays until the model is up — which is exactly when the hold he
+            // stays until the model is up — which is exactly when the click he
             // just made turns into a recording.
             return
         }
@@ -894,7 +893,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 60 Hz. Only the one main-thread question — which app is in front — is
     /// asked there, and it is asked first, before any of that work has had the
     /// chance to move the focus it is about to read.
-    /// Keep `HotkeyTap.frontIsBindable` current, so the wheel can decide whether
+    /// Keep `HotkeyTap.frontIsBindable` current, so the menu can decide whether
     /// a tap is a bind or a plain middle click **without asking the main thread**
     /// — an event tap that blocks is a mouse that stops moving.
     ///

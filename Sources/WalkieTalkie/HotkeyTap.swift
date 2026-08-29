@@ -21,7 +21,8 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
 /// ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D).
 ///
 /// Mouse 5 is passed through untouched apart from a **double** click, which
-/// binds the window under the pointer.
+/// binds the window under the pointer. So does the left button, always — it is
+/// watched only so the wheel can tell a rebind chord from a plain click.
 ///
 /// **Mouse 4 (the back side button) is the same shot, without the keyboard.**
 /// LinearMouse turns that button into a Return (`~/.config/linearmouse/`), which
@@ -36,10 +37,10 @@ final class HotkeyTap {
     /// The cursor at the instant of the gesture — what he was pointing at.
     var onScreenshot: ((NSPoint) -> Void)?
 
-    /// The wheel: start the recording, or end the one that is open. A toggle
-    /// and not a push-to-talk — a dictation at an agent runs to a minute or
-    /// more, and a button held for a minute is a hand that cannot do anything
-    /// else, including take the screenshots the same minute is for.
+    /// The wheel, clicked on its own: start the recording, or end the one that is
+    /// open. A toggle and not a push-to-talk — a dictation at an agent runs to a
+    /// minute or more, and a button held for a minute is a hand that cannot do
+    /// anything else, including take the screenshots the same minute is for.
     var onLocalToggle: (() -> Void)?
 
     /// The wheel held down **while a dictation is running** — throw it away.
@@ -48,16 +49,25 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
-    /// The wheel tapped over a window a dictation could be typed into. Same call
-    /// ⌘⌃D makes, including its toggle: tapped on the terminal already bound, it
-    /// lets go. Returns whether anything was bound, so a tap that found nothing
-    /// can still be handed back to the app underneath as a plain middle click.
+    /// The wheel clicked **with the left button already held** — point the relay
+    /// at the window in front. Same call ⌘⌃D makes, including its toggle: made on
+    /// the terminal already bound, it lets go.
+    ///
+    /// Still returns whether anything was bound, and the return is now only
+    /// logged: the click is never handed back to the app underneath, because with
+    /// the left button down a replayed middle click would land in the middle of
+    /// whatever drag or selection that button is in.
     var onWheelBind: (() -> Bool)?
 
     /// Whether the frontmost app is one `bind` would take. Pushed from
     /// `AppDelegate` on every app switch rather than asked here: the answer needs
     /// `NSWorkspace`, which is a main-thread question, and an event tap that
     /// blocks on the main thread is a frozen mouse.
+    ///
+    /// The wheel no longer consults it — rebinding is the left-plus-wheel chord
+    /// and it acts wherever it is made, letting `bindFrontmostTerminal` refuse.
+    /// It survives because the menu's **Bind This Window** row greys itself out
+    /// with it, and this is where the answer is already kept up to date.
     var frontIsBindable: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return frontIsBindableFlag }
         set { stateLock.lock(); frontIsBindableFlag = newValue; stateLock.unlock() }
@@ -128,29 +138,31 @@ final class HotkeyTap {
     /// downstream of this tap and would otherwise act on an orphan release.
     private var swallowMouse5Up = false
 
-    // MARK: The wheel's two presses
+    // MARK: The wheel's presses
 
-    /// **Two thresholds, because the two holds are not equally reversible.**
-    /// Starting a dictation costs a second: a recording begun by accident is
-    /// noticed at once and ended by a tap. Cancelling one costs two, because it
-    /// throws away a sentence already spoken and there is nothing to undo it
-    /// with — the longer press is the confirmation dialog this gesture does not
-    /// have.
-    private static let startHoldSeconds: TimeInterval = 1.0
+    /// How long a dictation must be cancelled for. Ending one is a tap; throwing
+    /// one away costs two seconds, because it discards a sentence already spoken
+    /// and there is nothing to undo it with — the long press is the confirmation
+    /// dialog this gesture does not have.
     private static let cancelHoldSeconds: TimeInterval = 2.0
-    /// The hold fired (or a stop was sent) — the matching release is ours too,
-    /// or the app underneath is left holding a button that was never let go.
+
+    /// How long the left button must **already** have been down for a wheel click
+    /// on top of it to read as the rebind chord rather than as two buttons that
+    /// happened to overlap. Short on purpose: nobody holds the left button a
+    /// third of a second by accident while reaching for the wheel.
+    private static let chordHoldSeconds: CFTimeInterval = 0.3
+
+    /// When the left button went down, or 0 while it is up. Written and read only
+    /// from the tap callback, which is one thread.
+    private var leftDownAt: CFTimeInterval = 0
+    private var leftIsHeld: Bool { leftDownAt > 0 && CACurrentMediaTime() - leftDownAt >= Self.chordHoldSeconds }
+
+    /// The hold fired (or the chord was taken) — the matching release is ours
+    /// too, or the app underneath is left holding a button that was never let go.
     private var wheelArmed = false
-    /// A press we swallowed and have not yet judged. If it ends short, it was a
-    /// plain middle click and is replayed.
-    private var wheelPending: (at: CFTimeInterval, position: CGPoint)?
+    /// A press we swallowed and have not yet judged.
+    private var wheelDown = false
     private var wheelHold: DispatchWorkItem?
-    /// While `CACurrentMediaTime()` is under this, wheel events are passed
-    /// through untouched — it is how a replayed click gets past the tap that
-    /// produced it. A time window rather than a tag on the event, because a tag
-    /// that failed to survive posting would be an infinite loop, and a window
-    /// that fails is one click let through.
-    private var wheelReplayUntil: CFTimeInterval = 0
 
     private let stateLock = NSLock()
 
@@ -178,6 +190,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                  | CGEventMask(1 << CGEventType.flagsChanged.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseUp.rawValue)
+                 // The left button is watched, never taken: rebinding is the
+                 // wheel pressed *while it is already down*, so the tap has to
+                 // know whether it is and since when. Both are passed straight
+                 // through — see the branch at the top of `handle`.
+                 | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
+                 | CGEventMask(1 << CGEventType.leftMouseUp.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -206,6 +224,20 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // Re-enable after a system timeout disable, else the tap dies silently.
         if type.rawValue == 0xFFFFFFFE || type.rawValue == 0xFFFFFFFF {
             if let port = tapPort { CGEvent.tapEnable(tap: port, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
+
+        // **Watched, never taken.** Every left click in the session comes past
+        // here and every one goes straight back out; all this records is when the
+        // button went down, which is what the wheel's rebind chord is judged
+        // against. Nothing else in this file may ever swallow one — that button
+        // is how the Mac is used.
+        if type == .leftMouseDown {
+            leftDownAt = CACurrentMediaTime()
+            return Unmanaged.passUnretained(event)
+        }
+        if type == .leftMouseUp {
+            leftDownAt = 0
             return Unmanaged.passUnretained(event)
         }
 
@@ -258,57 +290,40 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 }
             }
 
-            // **Hold the wheel to start, tap it to stop.**
+            // **The wheel means one thing on its own, and another with the left
+            // button already held.**
             //
-            // The two live in different states, which is what makes the wheel
-            // affordable at all. Starting is the deliberate gesture, so it costs
-            // a 400ms hold; stopping happens while a row on screen says a
-            // dictation is running, so a tap is unambiguous there and instant.
-            // And a tap while nothing is recording now means nothing to this app
-            // — so it is **given back**, and middle-click goes on opening links
-            // and closing tabs the way it always did. That is the half that
-            // repairs the bargain: the wheel was swallowed outright for as long
-            // as a terminal was bound, which is hours, for a gesture Victor uses
-            // in Chrome all day.
+            //   wheel, alone         → start the dictation, or end the open one
+            //   wheel, dictating,
+            //     held two seconds   → cancel it: throw the audio away
+            //   left held, then
+            //     wheel              → rebind: point the relay at the window in front
             //
-            // The press is swallowed first and judged on release, because the
-            // decision cannot be made when the button goes down. A short one is
-            // then **replayed** as a synthetic click. The alternative — pass the
-            // press through and swallow only the release — leaves whatever is
-            // underneath holding a button that never came up, which is the same
-            // orphan-event bug this file already guards against twice, pointing
-            // the other way.
-            if button == MOUSE_BUTTON_MIDDLE && CACurrentMediaTime() < wheelReplayUntil {
-                return Unmanaged.passUnretained(event)   // our own replay, going out
-            }
+            // **Starting used to cost a one-second hold and now costs a tap.**
+            // The hold was buying one thing: a bare middle click could still be
+            // handed back to whatever was underneath, so Chrome went on opening
+            // links in new tabs while a terminal was bound. Victor gave that up
+            // deliberately — the gesture he makes dozens of times a day should
+            // not be the one with a wait in it. So while something is bound the
+            // wheel is the relay's, and middle-click in a browser is not
+            // available until the session ends.
+            //
+            // **Rebinding moved onto the left button because it had to move off
+            // the wheel.** With a tap meaning "dictate" there is nothing left for
+            // a tap to also mean, and the old rules — a tap over a bindable
+            // window binds, a hold with nothing bound binds — were exactly the
+            // ones a tap now collides with. A chord is not a compromise here: it
+            // is unmistakable, it needs no timer to disambiguate, and the hand
+            // that rebinds is already on the mouse pointing at the terminal it
+            // means.
+            //
+            // The press is still swallowed and acted on at the release for the
+            // dictation cases, because a hold has to be told from a tap. The
+            // alternative — pass the press through and swallow only the release —
+            // leaves whatever is underneath holding a button that never came up,
+            // which is the orphan-event bug this file already guards against
+            // twice, pointing the other way.
 
-            // **The wheel says three things, and the length of the press is what
-            // separates them.**
-            //
-            //   idle      + hold  → start a dictation
-            //   dictating + tap   → end it: transcribe and send
-            //   dictating + hold  → cancel it: throw the audio away
-            //
-            // Holding is the deliberate half in both states, and in both states
-            // it is the one that cannot be taken back — starting a recording of a
-            // room, or discarding a sentence already spoken. A tap is the
-            // ordinary outcome and costs nothing to repeat.
-            //
-            // **A tap while nothing is recording is given back.** It means
-            // nothing to this app in that state, so the click is replayed and
-            // Chrome goes on opening links and closing tabs. That is what makes
-            // the wheel affordable: it was swallowed outright for as long as a
-            // terminal was bound — hours — for a gesture Victor uses in a browser
-            // all day.
-            //
-            // Every press is swallowed first and judged on release, because the
-            // decision cannot be made when the button goes down. The alternative
-            // — pass the press through and swallow only the release — leaves
-            // whatever is underneath holding a button that never came up, which
-            // is the orphan-event bug this file already guards against twice,
-            // pointing the other way. The cost is that ending a dictation now
-            // waits for the finger to lift, which is what it took to make the
-            // same button also able to cancel one.
             // **A prompt on screen outranks everything else the wheel means.**
             // It is the same verdict a click on the panel already gives and the
             // same one ⏎ gives; what it adds is that the hand which just clicked
@@ -322,73 +337,77 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return nil
             }
 
-            if button == MOUSE_BUTTON_MIDDLE && bare && (localCapture || dictating || frontIsBindable) {
-                if type == .otherMouseDown {
-                    let position = event.location
-                    wheelPending = (CACurrentMediaTime(), position)
-                    // The state at the press picks the threshold, and the state
-                    // at the fire has to still agree — a dictation that ended
-                    // under his finger must not have its two-second cancel land
-                    // on the next one.
-                    let cancelling = dictating
-                    let wait = cancelling ? Self.cancelHoldSeconds : Self.startHoldSeconds
-                    let work = DispatchWorkItem { [weak self] in
-                        guard let self = self, self.wheelPending != nil else { return }
-                        guard self.dictating == cancelling else { return }
-                        self.wheelPending = nil
-                        self.wheelArmed = true
-                        if self.dictating {
-                            Log.info("🗑️ wheel held while dictating — cancelling it")
-                            DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
-                        } else if self.localCapture {
-                            Log.info("🎙️ wheel held — starting a dictation")
-                            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                        } else {
-                            // Nothing bound: a dictation has nowhere to go, and
-                            // the thing he is holding the wheel over is the
-                            // window he means. So a hold does what a tap does
-                            // here rather than nothing at all.
-                            Log.info("🎯 wheel held with nothing bound — binding instead")
-                            DispatchQueue.global().async { [weak self] in _ = self?.onWheelBind?() }
-                        }
-                    }
-                    wheelHold = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
-                    return nil
-                }
-
-                // .otherMouseUp
-                if wheelArmed {
-                    wheelArmed = false
-                    return nil
-                }
-                guard let pending = wheelPending else { return nil }
-                wheelPending = nil
+            // **Any release whose press we swallowed is ours**, whatever the
+            // state has become in between — the left button may have come up,
+            // the binding may have been dropped, the dictation may have ended
+            // another way. The app underneath must never be handed a middle-up
+            // it never saw a middle-down for; that is the orphan-event bug this
+            // file guards against twice already, and re-deciding the state at the
+            // release is how you write it a third time.
+            //
+            // This is also where a plain click becomes a dictation: `wheelArmed`
+            // means something already fired on the press or during the hold, so
+            // what is left — a press we took and nothing acted on — is the tap.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
+                let tapped = wheelDown && !wheelArmed
+                wheelArmed = false
+                wheelDown = false
                 wheelHold?.cancel()
                 wheelHold = nil
-                if dictating {
-                    Log.info("🎙️ wheel tapped — ending the dictation")
+                if tapped && (localCapture || dictating) {
+                    Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
+                                       : "🎙️ wheel tapped — starting a dictation")
                     DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                    return nil
                 }
-                // **A tap over a bindable window points the relay at it.** The
-                // wheel then means one thing throughout — *this window*, then
-                // *these words* — and binding stops being a keyboard-only
-                // gesture on a hand that is already on the mouse and already
-                // pointing at the terminal it means.
-                //
-                // Asked rather than assumed: `frontIsBindable` is a bundle-id
-                // test and an editor with no terminal open still refuses, so the
-                // click is handed back when the bind comes to nothing.
-                if frontIsBindable {
-                    let position = pending.position
-                    DispatchQueue.global().async { [weak self] in
-                        guard let self = self else { return }
-                        if self.onWheelBind?() != true { self.replayMiddleClick(at: position) }
-                    }
-                    return nil
+                return nil
+            }
+
+            // **The chord, judged at the press.** `chordHoldSeconds` is what
+            // separates "he is holding the left button and reached for the wheel"
+            // from "the wheel went down during a click" — a drag, a
+            // click-through, a slip. It is deliberately short: the left button is
+            // not a modifier anyone holds by accident for a third of a second
+            // while pressing something else.
+            //
+            // Acted on the press and not the release, unlike the dictation below:
+            // there is nothing to tell it apart from, so waiting would only make
+            // it feel slow.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && leftIsHeld {
+                wheelArmed = true    // the release is ours too
+                Log.info("🎯 left held + wheel — binding")
+                // **Global, not main** — the same queue ⌘⌃D uses, and for the
+                // reason it uses it: `bindFrontmostTerminal` asks the main thread
+                // for the frontmost app with `main.sync`, so arriving there
+                // already on main is a wait for a queue that is waiting for you.
+                // libdispatch does not deadlock on that, it traps.
+                DispatchQueue.global().async { [weak self] in _ = self?.onWheelBind?() }
+                return nil
+            }
+
+            // **The wheel on its own, while there is somewhere for words to go.**
+            // Swallowed on the press and judged at the release above, because a
+            // tap and a two-second hold are the same event until the finger
+            // lifts.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare
+                && (localCapture || dictating) {
+                wheelDown = true
+                // Only a running dictation has a second meaning for a long press.
+                // Idle, the press is a tap however long it lasts — there is
+                // nothing left for a hold to mean.
+                guard dictating else { return nil }
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self = self, self.wheelDown else { return }
+                    // The state at the press picked this timer and the state at
+                    // the fire has to still agree — a dictation that ended under
+                    // his finger must not have its cancel land on the next one.
+                    guard self.dictating else { return }
+                    self.wheelDown = false
+                    self.wheelArmed = true
+                    Log.info("🗑️ wheel held while dictating — cancelling it")
+                    DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
                 }
-                replayMiddleClick(at: pending.position)
+                wheelHold = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelHoldSeconds, execute: work)
                 return nil
             }
 
@@ -483,19 +502,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return nil   // swallow
         }
         return Unmanaged.passUnretained(event)
-    }
-
-    /// Post the middle click we swallowed while waiting to see whether it was a
-    /// hold. Sent at the position it was pressed at, not at the pointer now: the
-    /// judgement took 400ms at most, but a click belongs where the hand put it.
-    private func replayMiddleClick(at position: CGPoint) {
-        wheelReplayUntil = CACurrentMediaTime() + 0.3
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-        for type in [CGEventType.otherMouseDown, .otherMouseUp] {
-            guard let e = CGEvent(mouseEventSource: source, mouseType: type,
-                                  mouseCursorPosition: position, mouseButton: .center) else { continue }
-            e.post(tap: .cgSessionEventTap)
-        }
     }
 
     /// Is this pid the mouse remapper — i.e. is that Return a button press in

@@ -5,9 +5,9 @@ A small macOS overlay that **relays your dictation into a running coding agent**
 at — so you can drive the agent while looking at something else entirely: a
 browser, an IDE, a projector.
 
-It records and transcribes on its own, with a Whisper running on your Mac: hold
-the mouse wheel to start, tap it to stop, and the words go to whatever agent is
-watching its queue rather than into whatever holds the caret. That is the whole
+It records and transcribes on its own, with a Whisper running on your Mac: click
+the mouse wheel to start, click it again to stop, and the words go to whatever
+agent is watching its queue rather than into whatever holds the caret. That is the whole
 idea, and the name — it is not tied to any one agent (it was called Claude Bubble
 until it turned out to work with all of them).
 
@@ -201,9 +201,9 @@ once, each taking one):
 
 | input | effect |
 |---|---|
-| **hold the wheel** | Starts a dictation — red flash, screen captured, selection grabbed. Only while a terminal is bound |
-| **tap the wheel** | Ends the dictation and sends it. At rest, re-points the relay at the window in front |
+| **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
+| **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃D |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
@@ -221,9 +221,11 @@ capture, no screenshots, nothing written to the outbox.
 
 ## How dictation is captured
 
-The relay owns the whole path. **Hold the mouse wheel** while a terminal is bound
-and it opens the microphone itself; **tap the wheel** to end the recording, or
-hold it for two seconds to throw the dictation away. The WAV goes to a Whisper
+The relay owns the whole path. **Click the mouse wheel** while a terminal is bound
+and it opens the microphone itself; **click it again** to end the recording, or
+hold it for two seconds to throw the dictation away. Rebinding is the wheel with
+the **left button already held** — a chord, so that a bare click is free to mean
+the thing it means dozens of times a day. The WAV goes to a Whisper
 running on this Mac, and the transcript goes to the agent — nothing is ever typed
 or pasted into whatever holds the caret.
 
@@ -238,7 +240,7 @@ It needs `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`, which
 `mlx-community/whisper-large-v3-turbo`, overridable with `RELAY_WHISPER_MODEL`.
 
 The weights are ~1.5 GB resident, so the helper is **not** started at login: it
-comes up when a bind or a wheel hold says a dictation is coming, and it is
+comes up when a bind or a wheel click says a dictation is coming, and it is
 released when the session ends. The menu bar's `Local Whisper` row says whether
 it is loading, and what it is holding while it is up.
 
