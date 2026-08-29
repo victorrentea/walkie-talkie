@@ -1399,10 +1399,10 @@ from the **wheel**.
 | state | press | verdict |
 |---|---|---|
 | over a bindable window, not dictating | tap | **bind** it — same call as ⌘⌃D, toggle included |
-| nothing bound | hold 400ms | bind it too: a dictation with no destination is nothing |
-| bound, not dictating | hold 400ms | start a dictation |
+| nothing bound | hold **1s** | bind it too: a dictation with no destination is nothing |
+| bound, not dictating | hold **1s** | start a dictation |
 | dictating | tap | end it — transcribe and send |
-| dictating | hold 400ms | **cancel** it — throw the audio away |
+| dictating | hold **2s** | **cancel** it — throw the audio away |
 | anywhere else, not dictating | tap | given back as a plain middle click |
 
 **Binding from the wheel** is what makes the button mean one thing throughout —
@@ -1413,6 +1413,15 @@ rather than asked in the tap: the answer needs `NSWorkspace`, which is a
 main-thread question, and an event tap that blocks on the main thread is a mouse
 that stops moving. It is a bundle-id test only, so a bind can still come to
 nothing (an editor with no terminal open) — and then the click is handed back.
+
+**The two holds are not the same length, because they are not equally
+reversible.** Starting costs a second: a recording begun by accident is noticed
+at once and ended by a tap. Cancelling costs two, because it throws away a
+sentence already spoken and there is nothing to undo it with — the longer press
+is the confirmation dialog this gesture does not have. The state at the press
+picks the threshold and the state at the fire has to still agree, so a dictation
+that ended under his finger cannot have its two-second cancel land on the next
+one.
 
 Holding is the deliberate half in both states, and in both it is the half that
 cannot be taken back: starting a recording of a room, or discarding a sentence

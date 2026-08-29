@@ -81,10 +81,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`.
-    private let startDictation = NSMenuItem(title: "Start Dictation — hold the wheel", action: nil, keyEquivalent: "")
+    private let startDictation = NSMenuItem(title: "Start Dictation — hold the wheel 1s", action: nil, keyEquivalent: "")
     private let stopRecording = NSMenuItem(title: "End Dictation — tap the wheel", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
-    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel", action: nil, keyEquivalent: "")
+    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
     private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
     private var engine = TranscriptionEngine.current
     private var isPaused = false

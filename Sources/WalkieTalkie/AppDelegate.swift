@@ -245,7 +245,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
         status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
         status.onStartDictation = { [weak self] in self?.startLocalRecording() }
-        hotkeys.onLocalCancel = { [weak self] in self?.cancelLocalRecording() }
+        // **On main, like the toggle two lines down.** It was not, and the
+        // asymmetry is the whole bug: the tap dispatches globally, so cancelling
+        // reached `RelayWindow.layoutContent` → `NSWindow.setFrame` on
+        // `com.apple.root.default-qos` and AppKit trapped. Crash log
+        // 2026-08-29 11:04:40, EXC_BREAKPOINT, one frame under
+        // `cancelLocalRecording`.
+        hotkeys.onLocalCancel = { [weak self] in
+            DispatchQueue.main.async { self?.cancelLocalRecording() }
+        }
         hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal() != nil }
         status.onBind = { [weak self] in
             // Off the main thread: `bindFrontmostTerminal` asks it for the front

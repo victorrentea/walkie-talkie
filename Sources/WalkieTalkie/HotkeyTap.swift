@@ -131,8 +131,14 @@ final class HotkeyTap {
 
     // MARK: The wheel's two presses
 
-    /// How long the wheel must be held to start a dictation.
-    private static let wheelHoldSeconds: TimeInterval = 0.4
+    /// **Two thresholds, because the two holds are not equally reversible.**
+    /// Starting a dictation costs a second: a recording begun by accident is
+    /// noticed at once and ended by a tap. Cancelling one costs two, because it
+    /// throws away a sentence already spoken and there is nothing to undo it
+    /// with — the longer press is the confirmation dialog this gesture does not
+    /// have.
+    private static let startHoldSeconds: TimeInterval = 1.0
+    private static let cancelHoldSeconds: TimeInterval = 2.0
     /// The hold fired (or a stop was sent) — the matching release is ours too,
     /// or the app underneath is left holding a button that was never let go.
     private var wheelArmed = false
@@ -325,13 +331,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if type == .otherMouseDown {
                     let position = event.location
                     wheelPending = (CACurrentMediaTime(), position)
+                    // The state at the press picks the threshold, and the state
+                    // at the fire has to still agree — a dictation that ended
+                    // under his finger must not have its two-second cancel land
+                    // on the next one.
+                    let cancelling = dictating
+                    let wait = cancelling ? Self.cancelHoldSeconds : Self.startHoldSeconds
                     let work = DispatchWorkItem { [weak self] in
                         guard let self = self, self.wheelPending != nil else { return }
+                        guard self.dictating == cancelling else { return }
                         self.wheelPending = nil
                         self.wheelArmed = true
-                        // Read here, not at the press: a dictation can start or
-                        // end inside the hold, and what the hold means is decided
-                        // by the state it lands in.
                         if self.dictating {
                             Log.info("🗑️ wheel held while dictating — cancelling it")
                             DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
@@ -348,7 +358,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         }
                     }
                     wheelHold = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.wheelHoldSeconds, execute: work)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
                     return nil
                 }
 
