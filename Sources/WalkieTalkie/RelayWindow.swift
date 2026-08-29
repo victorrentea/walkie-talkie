@@ -265,14 +265,26 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// knows by the second dictation. The row rides under the cursor over his
     /// actual work, so every character it does not need is width taken from the
     /// thing he is looking at underneath.
-    /// **The button, named, before the count.** It read `2 — mouse/F3 for more
-    /// shots`, which put the number first and then spent a sentence on how to
-    /// change it. The glyph at the head of the row already says these are
-    /// pictures, so what the words are for is the one thing that is not on
-    /// screen: *which* button. `mouse 4` names it outright — the hand knows the
-    /// thumb button by the second dictation, but nothing tells a room watching
-    /// the overlay, and the wheel now means something else entirely.
-    private static let shotHint = "🖱️ mouse 4"
+    /// **The button is drawn, not spelled.** It read `2 — mouse/F3 for more
+    /// shots`, then `🖱️ mouse 4 — 2`; both spend a row saying in words what a
+    /// picture says at a glance. A mouse with a small arrow tucked under it
+    /// *is* "the lower side button", and it is the arrow's position that carries
+    /// which of the two — set below the baseline because that is where the
+    /// button is on the mouse.
+    ///
+    /// **And no count.** It went live as the shot's only receipt; the red
+    /// vignette and the cursor mark now land at the moment of the gesture, which
+    /// is a better answer to "did that take" than a number he has to look down
+    /// at. Victor asked for it gone; `shotCount` still exists and still drives
+    /// the outbox's `📸`.
+    private static func shotHintText(font: NSFont) -> NSAttributedString {
+        let a = NSMutableAttributedString(string: "🖱️", attributes: [.font: font])
+        a.append(NSAttributedString(string: "⇩", attributes: [
+            .font: NSFont.systemFont(ofSize: font.pointSize * 0.65),
+            .baselineOffset: -3,
+        ]))
+        return a
+    }
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
@@ -310,17 +322,21 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Nothing here while it is listening: the recording row below is already
     /// saying it, with a pulse.
     private var statusLine: (glyph: NSImage?, text: String)? {
-        guard boundLabel != nil, !paused, sentPrompt == nil else { return nil }
+        guard !paused, sentPrompt == nil else { return nil }
         if transcribing { return (Self.waitGlyph, "transcribing…") }
         if engineLoading { return (Self.waitGlyph, "preparing") }
         guard !listening else { return nil }
+        // **Unbound is one row and nothing else** — no `🤖 /`, which is what
+        // emptied the pointer in the first place, and no folder, because there
+        // is none. Just the gesture that ends the state.
+        if boundLabel == nil { return (Self.mouseGlyph, "🛞 bind") }
         // **The verb, and the one thing about it that is not guessable.** It was
         // the bare word `dictate` while a tap started a dictation — nothing to
         // say about a click on the thing the glyph is a picture of. Since the
         // wheel starts on a 400ms hold and a tap goes back to being a plain
         // middle click, "hold" is the whole difference between the gesture
         // working and appearing to do nothing.
-        return (Self.mouseGlyph, "hold to dictate")
+        return (Self.mouseGlyph, "🛞 hold to dictate, click to bind")
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -331,7 +347,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
-        return "\(Self.shotHint) — \(shotCount)"
+        return ""   // the row is drawn from `shotHintText`; see `layoutContent`
     }
 
     /// What is happening, and what is doing it — beside the pulse that says it is
@@ -383,7 +399,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// (`— ⌘⇧+click to select element`), which is the wrong order for a row read
     /// at a glance mid-sentence: the keys are the part he has to *do*, and they
     /// are what the eye can match against the hand already on the keyboard.
-    private static let pickHint = "⌘⇧🖱️ select element"
+    private static let pickHint = "⌘⇧🖱️"
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
     /// he picked once he has.
@@ -862,7 +878,15 @@ private let frontLabel = NSTextField(labelWithString: "")
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
         let idleWidth = statusLine.map { rowWidth($0.text) } ?? 0
         let engineWidth = engineText.map { rowWidth($0) } ?? 0
-        let recordWidth = recordText.map { rowWidth($0) } ?? 0
+        // Asked of the label rather than of the font: this row is an attributed
+        // string with a smaller, lowered glyph in it, and `measure` knows only
+        // one font. Same reason the ⌘-pick row has always measured this way.
+        var recordWidth: CGFloat = 0
+        if recordText != nil {
+            recordInfo.attributedStringValue = Self.shotHintText(font: hintFont)
+            recordInfo.sizeToFit()
+            recordWidth = glyphColumn + recordDotGap + ceil(recordInfo.frame.width)
+        }
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
@@ -919,8 +943,18 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         var rows: [(view: NSView, height: CGFloat)] = []
 
-        layoutTitleRow(width: innerWidth)
-        rows.append((titleRow, titleRowHeight))
+        // **No title row while nothing is bound.** The line names where the words
+        // go, and unbound there is nowhere — it used to read `🤖 /`, the launch
+        // directory of a login item, which is what got the whole chip taken off
+        // the pointer at rest. Now the chip stays, carrying the one row that says
+        // how to end that state.
+        if boundLabel != nil || paused || engineLoading || sentPrompt != nil || listening {
+            layoutTitleRow(width: innerWidth)
+            titleRow.isHidden = false
+            rows.append((titleRow, titleRowHeight))
+        } else {
+            titleRow.isHidden = true
+        }
 
         if let status = statusLine {
             idleGlyph.image = status.glyph
@@ -963,8 +997,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         // Then what the message is carrying: while he is talking this is the row
         // that changes, and the one he glances down at to check that the shot he
         // just took landed.
-        if let record = recordText {
-            recordInfo.stringValue = record
+        if recordText != nil {
+            recordInfo.attributedStringValue = Self.shotHintText(font: hintFont)
+            recordInfo.sizeToFit()
             layoutGlyphRow(recordRow, glyph: shotGlyph, label: recordInfo, width: innerWidth)
             recordRow.isHidden = false
             rows.append((recordRow, recordRowHeight))
@@ -1584,7 +1619,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// added later keeps the chip on screen without anyone remembering to come
     /// back and edit this.
     private func refreshPresence(rowCount: Int) {
-        let wanted = rowCount > 1 || boundLabel != nil || paused || engineLoading
+        // Any row at all is something to say. It was `rowCount > 1` while the
+        // title row was unconditional and therefore free — one row meant *only*
+        // the title, i.e. nothing. The title is now absent when unbound, so the
+        // single row left is the invitation to bind, and it is the whole reason
+        // the chip is there.
+        let wanted = rowCount > 0 || paused || engineLoading
         guard panel.isVisible != wanted else { return }
         guard wanted else { return panel.orderOut(nil) }
         // It may have been away for hours, so it lands where the pointer is now

@@ -1568,10 +1568,20 @@ lag, because it is lag), and after ~0.25s of stillness it *settles* and stays pu
 until the cursor travels 70px. Growing into the panel is animated (0.22s ease
 out); everything else resizes instantly.
 
-## The pointer is clean when nothing is bound
+## The pointer is clean when nothing is bound — one row, and only that
 
-**Unbound and idle, there is no overlay window on screen at all** — not a faded
-one, not an empty one. `RelayWindow.refreshPresence` orders the panel out.
+**Unbound and idle the chip is a single row, `🖱️ 🛞 bind`, and nothing else** —
+no title, no `🤖`, no folder. Until 2026-08-29 there was no window at all;
+Victor asked for the row back so the state has a way out that is visible where
+his hand already is.
+
+The original complaint is still answered, and that is the whole point of the
+shape. What was on the pointer all day was `🤖 /` — a robot and the launch
+directory of a login item, naming nothing (see below). What is there now is the
+gesture that ends the state. `layoutContent` therefore omits the **title row**
+while unbound rather than dressing it up, and `refreshPresence` counts any row at
+all as a reason to be on screen (it was `rowCount > 1`, which only made sense
+while the title row was unconditional and therefore free).
 
 The chip's one job at rest is to say *where the words go*. Bound, that is a real
 answer: the destination app's icon and `petclinic@main`. Unbound it was `🤖 `
