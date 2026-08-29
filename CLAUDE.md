@@ -1583,20 +1583,24 @@ lag, because it is lag), and after ~0.25s of stillness it *settles* and stays pu
 until the cursor travels 70px. Growing into the panel is animated (0.22s ease
 out); everything else resizes instantly.
 
-## The pointer is clean when nothing is bound — one row, and only that
+## The pointer is clean when nothing is bound
 
-**Unbound and idle the chip is a single row, `🖱️ 🛞 bind`, and nothing else** —
-no title, no `🤖`, no folder. Until 2026-08-29 there was no window at all;
-Victor asked for the row back so the state has a way out that is visible where
-his hand already is.
+**Unbound and idle, there is no overlay window on screen at all** — not a faded
+one, not an empty one. `RelayWindow.refreshPresence` orders the panel out.
 
-The original complaint is still answered, and that is the whole point of the
-shape. What was on the pointer all day was `🤖 /` — a robot and the launch
-directory of a login item, naming nothing (see below). What is there now is the
-gesture that ends the state. `layoutContent` therefore omits the **title row**
-while unbound rather than dressing it up, and `refreshPresence` counts any row at
-all as a reason to be on screen (it was `rowCount > 1`, which only made sense
-while the title row was unconditional and therefore free).
+**Tried and reverted the same hour, 2026-08-29.** A single row, `🛞 bind`, went
+in so the state would have a visible way out; Victor had it out again within the
+hour — *"mă încurcă, mă enervează"*. The lesson is the one this section already
+carried and is worth stating in its stronger form: the pointer is where he
+works, an unbound relay is inert, and **nothing** is the correct amount to say
+about a state in which the app does nothing. A gesture he already knows does not
+buy a label that rides beside the cursor for hours.
+
+What survives from the attempt is structural and worth keeping: `layoutContent`
+omits the **title row** entirely when there is no destination (it used to render
+`🤖 /` and lean on `refreshPresence` to hide it), and `refreshPresence` counts any
+row at all as a reason to be on screen rather than `rowCount > 1`, which only
+made sense while the title row was unconditional and therefore free.
 
 The chip's one job at rest is to say *where the words go*. Bound, that is a real
 answer: the destination app's icon and `petclinic@main`. Unbound it was `🤖 `

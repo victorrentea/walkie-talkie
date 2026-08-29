@@ -327,6 +327,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // pointing the other way. The cost is that ending a dictation now
             // waits for the finger to lift, which is what it took to make the
             // same button also able to cancel one.
+            // **A prompt on screen outranks everything else the wheel means.**
+            // It is the same verdict a click on the panel already gives and the
+            // same one ⏎ gives; what it adds is that the hand which just clicked
+            // the words to edit them does not have to travel to the keyboard to
+            // approve them. Acted on the press, with no hold to wait out: there
+            // is no second meaning here to tell it apart from.
+            if button == MOUSE_BUTTON_MIDDLE && bare && promptHeld {
+                if type == .otherMouseDown {
+                    DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
+                }
+                return nil
+            }
+
             if button == MOUSE_BUTTON_MIDDLE && bare && (localCapture || dictating || frontIsBindable) {
                 if type == .otherMouseDown {
                     let position = event.location

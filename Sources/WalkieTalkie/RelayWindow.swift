@@ -278,7 +278,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// at. Victor asked for it gone; `shotCount` still exists and still drives
     /// the outbox's `📸`.
     private static func shotHintText(font: NSFont) -> NSAttributedString {
-        let a = NSMutableAttributedString(string: "🖱️", attributes: [.font: font])
+        // **−6 of kerning, measured.** An emoji's advance is far wider than its
+        // ink, so the arrow landed a clear space away from the mouse and read as
+        // two separate pictures rather than one mouse with a button called out.
+        // Rendered at 0, −2, −4, −6 and −8 and looked at: −6 tucks it against the
+        // mouse's lower edge, −8 puts it inside the body.
+        let a = NSMutableAttributedString(string: "🖱️", attributes: [.font: font, .kern: -6])
         a.append(mark("🔽", raised: false, font: font))
         // **`+ selection` was already true and said nowhere.** The shutter has
         // recorded whatever is highlighted at that moment since selections
@@ -309,14 +314,6 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     private func plain(_ words: String) -> NSAttributedString {
         NSAttributedString(string: words, attributes: [.font: hintFont])
-    }
-
-    /// The wheel, raised, then the words. Used by every state of the status row,
-    /// which is always about the wheel.
-    private func wheelLine(_ words: String) -> NSAttributedString {
-        let a = NSMutableAttributedString(attributedString: Self.mark("🛞", raised: true, font: hintFont))
-        a.append(NSAttributedString(string: " " + words, attributes: [.font: hintFont]))
-        return a
     }
 
     /// The subtitle row is now flashes only. The shortcut legend used to live here
@@ -354,22 +351,38 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// Nothing here while it is listening: the recording row below is already
     /// saying it, with a pulse.
+    /// **The wheel is the row's icon, at icon size.** It rode in the text as a
+    /// raised mark beside a mouse for one build, which put two pictures of the
+    /// same hardware on one short row and made the glyph column say `🖱️` — the
+    /// whole mouse — for a row that is only ever about one part of it. The
+    /// column is where a row says what it is about, so the wheel belongs there
+    /// and the words are left to say what to do with it.
     private var statusLine: (glyph: NSImage?, text: NSAttributedString)? {
+        // **In the field, the wheel is Send.** Editing is the one panel state
+        // with no clock running, so nothing goes out until he says so — and his
+        // hand is on the mouse, having just clicked the words to open the field.
+        // The button beside the transcript already says `⏎ Send`; this says the
+        // other way, which is the one he cannot see from the keyboard.
+        if editingPrompt { return (Self.wheelGlyph, plain("send")) }
         guard !paused, sentPrompt == nil else { return nil }
         if transcribing { return (Self.waitGlyph, plain("transcribing…")) }
         if engineLoading { return (Self.waitGlyph, plain("preparing")) }
         guard !listening else { return nil }
-        // **Unbound is one row and nothing else** — no `🤖 /`, which is what
-        // emptied the pointer in the first place, and no folder, because there
-        // is none. Just the gesture that ends the state.
-        if boundLabel == nil { return (Self.mouseGlyph, wheelLine("bind")) }
+        // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
+        // on the reading that the state should have a visible way out. It does
+        // not earn the pixels: the pointer is where Victor works, an unbound
+        // relay is inert, and a label riding along beside the cursor for hours to
+        // advertise a gesture he already knows is exactly the noise the empty
+        // pointer was won back from. He said so within the hour, in the plainest
+        // terms available: *"mă încurcă, mă enervează"*.
+        if boundLabel == nil { return nil }
         // **The verb, and the one thing about it that is not guessable.** It was
         // the bare word `dictate` while a tap started a dictation — nothing to
         // say about a click on the thing the glyph is a picture of. Since the
         // wheel starts on a 400ms hold and a tap goes back to being a plain
         // middle click, "hold" is the whole difference between the gesture
         // working and appearing to do nothing.
-        return (Self.mouseGlyph, wheelLine("hold to dictate, click to bind"))
+        return (Self.wheelGlyph, plain("hold to dictate, click to bind"))
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -1278,6 +1291,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
     private static let mouseGlyph = Glyphs.emoji("🖱️", ink: iconInk)
     private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
+    private static let wheelGlyph = Glyphs.emoji("🛞", ink: iconInk)
 
     /// Kept as the old name so every measurement site still reads the same, and
     /// so the width of the icon column is stated in exactly one place.
