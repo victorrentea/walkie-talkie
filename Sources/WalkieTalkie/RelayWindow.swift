@@ -279,10 +279,43 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the outbox's `📸`.
     private static func shotHintText(font: NSFont) -> NSAttributedString {
         let a = NSMutableAttributedString(string: "🖱️", attributes: [.font: font])
-        a.append(NSAttributedString(string: "⇩", attributes: [
-            .font: NSFont.systemFont(ofSize: font.pointSize * 0.65),
-            .baselineOffset: -3,
-        ]))
+        a.append(mark("🔽", raised: false, font: font))
+        // **`+ selection` was already true and said nowhere.** The shutter has
+        // recorded whatever is highlighted at that moment since selections
+        // started riding along stamped (`stashExtraSelection`) — a picture shows
+        // a line of code, the selection *is* that line, in characters something
+        // can grep for. A capability nothing announces is a capability nobody
+        // uses, and this row is the only place the gesture is described at all.
+        a.append(NSAttributedString(string: " + selection", attributes: [.font: font]))
+        return a
+    }
+
+    /// A button of the mouse, drawn where it sits on the mouse: the wheel above,
+    /// the lower side button below. Rendered at 0.55 of the row's size and moved
+    /// off the baseline, which is what turns two adjacent emoji into one picture
+    /// of a mouse with a part of it singled out — the alternative was spelling
+    /// out `mouse 4` and `the wheel` in words that cost a row Victor reads over
+    /// his own work.
+    ///
+    /// Both numbers are measured, not guessed: rendered to a PNG and looked at
+    /// before being used, because an emoji's ink sits differently in its line box
+    /// than a letter's and no amount of reasoning settles where it lands.
+    private static func mark(_ emoji: String, raised: Bool, font: NSFont) -> NSAttributedString {
+        NSAttributedString(string: emoji, attributes: [
+            .font: NSFont.systemFont(ofSize: font.pointSize * 0.55),
+            .baselineOffset: raised ? 6 : -4,
+        ])
+    }
+
+    private func plain(_ words: String) -> NSAttributedString {
+        NSAttributedString(string: words, attributes: [.font: hintFont])
+    }
+
+    /// The wheel, raised, then the words. Used by every state of the status row,
+    /// which is always about the wheel.
+    private func wheelLine(_ words: String) -> NSAttributedString {
+        let a = NSMutableAttributedString(attributedString: Self.mark("🛞", raised: true, font: hintFont))
+        a.append(NSAttributedString(string: " " + words, attributes: [.font: hintFont]))
         return a
     }
 
@@ -321,22 +354,22 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// Nothing here while it is listening: the recording row below is already
     /// saying it, with a pulse.
-    private var statusLine: (glyph: NSImage?, text: String)? {
+    private var statusLine: (glyph: NSImage?, text: NSAttributedString)? {
         guard !paused, sentPrompt == nil else { return nil }
-        if transcribing { return (Self.waitGlyph, "transcribing…") }
-        if engineLoading { return (Self.waitGlyph, "preparing") }
+        if transcribing { return (Self.waitGlyph, plain("transcribing…")) }
+        if engineLoading { return (Self.waitGlyph, plain("preparing")) }
         guard !listening else { return nil }
         // **Unbound is one row and nothing else** — no `🤖 /`, which is what
         // emptied the pointer in the first place, and no folder, because there
         // is none. Just the gesture that ends the state.
-        if boundLabel == nil { return (Self.mouseGlyph, "🛞 bind") }
+        if boundLabel == nil { return (Self.mouseGlyph, wheelLine("bind")) }
         // **The verb, and the one thing about it that is not guessable.** It was
         // the bare word `dictate` while a tap started a dictation — nothing to
         // say about a click on the thing the glyph is a picture of. Since the
         // wheel starts on a 400ms hold and a tap goes back to being a plain
         // middle click, "hold" is the whole difference between the gesture
         // working and appearing to do nothing.
-        return (Self.mouseGlyph, "🛞 hold to dictate, click to bind")
+        return (Self.mouseGlyph, wheelLine("hold to dictate, click to bind"))
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
@@ -876,7 +909,15 @@ private let frontLabel = NSTextField(labelWithString: "")
         // dictation starts, but that reservation is exactly the empty space that
         // has no business being there the rest of the time.
         let hintWidth = hintText.map { measure($0, font: hintFont) } ?? 0
-        let idleWidth = statusLine.map { rowWidth($0.text) } ?? 0
+        // Asked of the label, like the record row and for the same reason: these
+        // lines carry a glyph at a size and baseline of its own, and `measure`
+        // knows one font.
+        var idleWidth: CGFloat = 0
+        if let status = statusLine {
+            idleInfo.attributedStringValue = status.text
+            idleInfo.sizeToFit()
+            idleWidth = glyphColumn + recordDotGap + ceil(idleInfo.frame.width)
+        }
         let engineWidth = engineText.map { rowWidth($0) } ?? 0
         // Asked of the label rather than of the font: this row is an attributed
         // string with a smaller, lowered glyph in it, and `measure` knows only
@@ -958,7 +999,8 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         if let status = statusLine {
             idleGlyph.image = status.glyph
-            idleInfo.stringValue = status.text
+            idleInfo.attributedStringValue = status.text
+            idleInfo.sizeToFit()
             layoutGlyphRow(idleRow, glyph: idleGlyph, label: idleInfo, width: innerWidth)
             idleRow.isHidden = false
             rows.append((idleRow, recordRowHeight))

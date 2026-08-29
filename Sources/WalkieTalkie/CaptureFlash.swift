@@ -146,10 +146,22 @@ enum CaptureFlash {
     /// `sharingType = .none`, like the vignette: the relay photographs the
     /// screen milliseconds after this appears, and the confirmation of a capture
     /// must never be inside the capture it confirms.
-    static func markCursor(at point: NSPoint, duration: CFTimeInterval = receiptDuration) {
+    /// **It arrives small and leaves large.** It used to land at 1.3× and settle
+    /// to 0.9× over 0.35s — a scope being brought down onto a spot — and then sit
+    /// there for the rest of 1.2 seconds. Sitting is the part that was wrong: the
+    /// mark is over the very line or button he is describing, and a shape that
+    /// holds still on top of it for a second is something to wait out. Blooming
+    /// outward instead means the pixels it covered are uncovered by the same
+    /// motion that makes it noticeable, and the whole event is over in half a
+    /// second — which is all it has to be, since what it answers ("did that catch
+    /// where I was pointing?") is answered by the first frame.
+    static func markCursor(at point: NSPoint, duration: CFTimeInterval = markerDuration) {
         let reticle = CursorMarker.makeLayer(box: reticleBox)
         let side = reticle.bounds.width
-        let frame = NSRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)
+        // The window has to hold the mark at its **largest**, or the bloom is
+        // clipped by its own panel a third of the way out.
+        let grown = (side * markerEndScale).rounded(.up)
+        let frame = NSRect(x: point.x - grown / 2, y: point.y - grown / 2, width: grown, height: grown)
 
         let panel = NSPanel(contentRect: frame,
                             styleMask: [.borderless, .nonactivatingPanel],
@@ -165,7 +177,7 @@ enum CaptureFlash {
 
         let view = NSView(frame: NSRect(origin: .zero, size: frame.size))
         view.wantsLayer = true
-        reticle.position = CGPoint(x: side / 2, y: side / 2)
+        reticle.position = CGPoint(x: grown / 2, y: grown / 2)
         view.layer?.addSublayer(reticle)
 
         panel.contentView = view
@@ -173,12 +185,17 @@ enum CaptureFlash {
         panel.orderFrontRegardless()
         activePanels.append(panel)
 
-        reticle.transform = CATransform3DMakeScale(0.9, 0.9, 1)   // the resting size
+        reticle.transform = CATransform3DMakeScale(markerEndScale, markerEndScale, 1)
         let zoom = CABasicAnimation(keyPath: "transform.scale")
-        zoom.fromValue = 1.3
-        zoom.toValue = 0.9
-        zoom.duration = 0.35
+        zoom.fromValue = markerStartScale
+        zoom.toValue = markerEndScale
+        zoom.duration = duration
+        // Fast out of the gate and slow at the edge: a bloom decelerating as it
+        // spreads reads as something released, where a linear one reads as
+        // something being pushed.
         zoom.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        zoom.fillMode = .forwards
+        zoom.isRemovedOnCompletion = false
         reticle.add(zoom, forKey: "zoom")
 
         let life = CAKeyframeAnimation(keyPath: "opacity")
@@ -189,8 +206,11 @@ enum CaptureFlash {
         // yellow and moving) while the pixels underneath stay readable, which
         // matters because the reason it is on screen is so a mis-aimed shot can
         // be noticed and retaken while the sentence is still being spoken.
-        life.values = [0.5, 0.5, 0.0]
-        life.keyTimes = [0.0, 0.75, 1.0]
+        // Held only long enough to be seen at all, then gone: the fade rides the
+        // same half second as the bloom, so the mark is at its faintest exactly
+        // when it is at its widest and covering the most.
+        life.values = [0.5, 0.45, 0.0]
+        life.keyTimes = [0.0, 0.35, 1.0]
         life.duration = duration
         life.fillMode = .forwards
         life.isRemovedOnCompletion = false
@@ -205,6 +225,12 @@ enum CaptureFlash {
     /// Roughly what the Addons reticle covers on his display — that one is
     /// `makeSniperReticle(scale: 1.25)` over a 65pt base.
     private static let reticleBox: CGFloat = 81
+    /// Half a second, start to finish.
+    static let markerDuration: CFTimeInterval = 0.5
+    /// Where the bloom starts and ends, against the mark's drawn size. The end is
+    /// ~4× the old resting 0.9×, which is what Victor asked for.
+    private static let markerStartScale: CGFloat = 0.5
+    private static let markerEndScale: CGFloat = 3.6
 
     private static func screen(containing point: NSPoint) -> NSScreen? {
         NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main

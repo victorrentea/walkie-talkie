@@ -1120,10 +1120,16 @@ retaken with F3 on the spot.
 Dropping the burn-in also dropped a second JPEG pass over a frame `screencapture`
 had already encoded: ~100ms, and at quality 1.0 the file came back *larger*.
 
-The animation is Victor Addons' `ScreenCaptureFlash.markCursor` verbatim: lands
-at 1.3× and settles to 0.9× over 0.35s (a scope brought down onto a spot, not a
-badge appearing beside one), 80% opaque from the first frame, fading only in its
-last quarter.
+The animation **blooms** since 2026-08-29: it arrives at 0.5×, spreads to 3.6×
+and fades from 0.5 to nothing, all inside **half a second**. It was Victor
+Addons' `markCursor` verbatim — landing at 1.3×, settling to 0.9× over 0.35s,
+then holding for the rest of 1.2s. The holding is what was wrong: the mark sits
+over the very line or button he is describing, and a shape that stays there for a
+second is something to wait out. Blooming uncovers those pixels by the same
+motion that makes it noticeable, and the question it answers — "did that catch
+where I was pointing?" — is answered by the first frame. The panel is sized to
+the mark at its **largest**, or the bloom is clipped by its own window a third of
+the way out.
 
 `sharingType = .none`, like the vignette — the relay photographs the screen
 milliseconds later and the confirmation must never be inside the capture it
