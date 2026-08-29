@@ -403,16 +403,21 @@ private let frontLabel = NSTextField(labelWithString: "")
                 (Self.mouseWheelHint, plain("dictate"), Self.hintInk)]
     }
 
-    /// `🖱️(left) → 🖱️(wheel)  ReBind` — the chord drawn as the two presses it
-    /// is, in the order the hand makes them.
+    /// `🖱️(left) 🖱️(wheel)  ReBind` — the chord drawn as the two presses it is,
+    /// in the order the hand makes them.
     ///
-    /// The mouse is repeated after the arrow rather than the wheel appearing on
-    /// its own: the second half of the gesture is a button *on the same mouse*,
-    /// and a bare wheel beside an arrow reads as a different object. The first
-    /// picture rides in the icon column, where every row on this card puts what
-    /// it is about; only the second is inline.
+    /// **No arrow between them.** It was there to say *then*, and at 30pt the two
+    /// drawings say it on their own: left-to-right already reads as an order, and
+    /// the arrow was a third object competing with the two that carry the
+    /// meaning. Victor's call, looking at it.
+    ///
+    /// The mouse is repeated for the second press rather than the wheel appearing
+    /// on its own: it is a button *on the same mouse*, and a bare wheel beside a
+    /// mouse reads as a different object. The first picture rides in the icon
+    /// column, where every row on this card puts what it is about; only the
+    /// second is inline.
     private static func rebindText(font: NSFont) -> NSAttributedString {
-        let a = NSMutableAttributedString(string: "→  ", attributes: [.font: font])
+        let a = NSMutableAttributedString(string: " ", attributes: [.font: font])
         a.append(inline(mouseWheelHint, font: font))
         a.append(NSAttributedString(string: "  ReBind", attributes: [.font: font]))
         return a

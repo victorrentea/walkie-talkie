@@ -794,16 +794,21 @@ folder, then one row per gesture (`statusLines`, two of `hintRows`):
 
 ```
 🤖 workspace
-🖱️(left) → 🖱️(wheel)  ReBind
+🖱️(left) 🖱️(wheel)  ReBind
 🖱️(wheel)  dictate
 ```
 
 The first picture of each row rides in the icon column, under the destination's
-own icon; only the wheel after the arrow is inline. The mouse is repeated after
-the arrow rather than the wheel appearing on its own, because the second half of
-the gesture is a button *on the same mouse* and a bare wheel beside an arrow reads
-as a different object. Rebind is first: the card is read at the moment the relay
-is pointed somewhere, and dictating is the half his hand already knows.
+own icon; only the second is inline. The mouse is repeated for the second press
+rather than the wheel appearing on its own, because it is a button *on the same
+mouse* and a bare wheel beside a mouse reads as a different object. Rebind is
+first: the card is read at the moment the relay is pointed somewhere, and
+dictating is the half his hand already knows.
+
+**There is no arrow between the two.** One rode there for a build to say *then*;
+at 30pt the drawings say it on their own — left-to-right already reads as an
+order — and the arrow was a third object competing with the two that carry the
+meaning.
 
 **These two rows draw the mouse at 30pt, not 16** (`hintInk`), so they are 34 tall
 where every other row is 22. Everywhere else a glyph is a label for a row that
