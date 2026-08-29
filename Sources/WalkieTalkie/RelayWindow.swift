@@ -307,9 +307,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         if transcribing { return (Self.waitGlyph, "transcribing…") }
         if engineLoading { return (Self.waitGlyph, "preparing") }
         guard !listening else { return nil }
-        // One word. The chip rides beside the cursor, over his work, for hours at
-        // a time — "to start dictating" was a sentence where a label was needed.
-        return (Self.mouseGlyph, "dictate")
+        // **The verb, and the one thing about it that is not guessable.** It was
+        // the bare word `dictate` while a tap started a dictation — nothing to
+        // say about a click on the thing the glyph is a picture of. Since the
+        // wheel starts on a 400ms hold and a tap goes back to being a plain
+        // middle click, "hold" is the whole difference between the gesture
+        // working and appearing to do nothing.
+        return (Self.mouseGlyph, "hold to dictate")
     }
 
     /// The recording row shows **only while dictating and not paused** — the one

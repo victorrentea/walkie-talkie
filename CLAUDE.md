@@ -1380,12 +1380,32 @@ comment, which is exactly where a fact nobody can check belongs. Beside the row
 that turns it on, it is also proof the helper is alive: a dead one has no
 footprint and the row goes back to its bare name.
 
-### Mouse 5 is the relay's on Local Whisper
+### The wheel is the relay's; mouse 5 is Wispr's, whole
 
-On the Wispr engine, mouse 5 is Wispr's push-to-talk and the tap only *observes*
-it (`onDictationStarted`, a hint that lands a beat before CoreAudio confirms).
-On Local Whisper the same button is **swallowed** — Wispr never sees it, never
-records, and therefore never pastes — and drives `MicRecorder` instead.
+Until 2026-08-29 the relay took **mouse 5** on Local Whisper — the same button
+Wispr Flow uses for push-to-talk — so every dictation began with the question of
+which of the two was armed. Victor's call: mouse 5 goes back to Wispr alone (the
+tap only *observes* it, `onDictationStarted`), and the relay drives `MicRecorder`
+from the **wheel**.
+
+**Hold to start, tap to stop, and the two live in different states.** Starting is
+the deliberate gesture and costs a **400ms hold**; stopping happens while the
+recording row is on screen, so a tap is unambiguous there and acts instantly.
+
+**A tap while nothing is recording is given back.** It means nothing to this app
+in that state, so the click is **replayed** as a synthetic middle click and
+Chrome goes on opening links and closing tabs. That is what makes the wheel
+affordable at all: it was swallowed outright for as long as a terminal was
+bound — hours — for a gesture Victor uses in a browser all day.
+
+The press is swallowed first and judged on release, because the decision cannot
+be made when the button goes down. The alternative — pass the press through and
+swallow only the release — leaves whatever is underneath holding a button that
+never came up, which is the orphan-event bug this file guards against twice
+already, pointing the other way. The replay is let past the tap by a 0.3s time
+window (`wheelReplayUntil`) rather than by a tag on the event: a tag that failed
+to survive posting would be an infinite loop, where a window that fails is one
+click let through.
 
 **A toggle, not a push-to-talk.** Wispr's button is held down for the length of
 the sentence, which is right for a sentence; a dictation aimed at an agent runs
@@ -1407,7 +1427,8 @@ Wispr never heard the sentence, so the alternative to a shaky transcript is
 silence — and silence is the one outcome Victor cannot notice and correct. The
 banner says the score instead.
 
-**The menu can end a recording too.** `Stop Recording` sits under Disconnect and
+**The menu can start, end and cancel one.** `Start Dictation` / `End Dictation` /
+`Cancel Dictation` sit under Disconnect and
 calls the same `stopLocalRecording()` a second mouse 5 does — the transcript is
 made and sent exactly as if the button had ended it. It exists because mouse 5 is
 a thumb button on one specific mouse, and a dictation started at the desk has to
