@@ -606,7 +606,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and holding mouse 5 would be stopping Wispr from hearing him at all.
     private func syncLocalCapture() {
         hotkeys.localCapture = isBound && TranscriptionEngine.current == .whisper && !paused
-        hotkeys.blockInjection = isBound && !paused
+        // **Only while the Wispr engine is actually selected**, which since
+        // 2026-08-29 it cannot be from the menu (see `StatusItem`, the row is
+        // disabled). Swallowing Wispr's paste made sense while the relay took the
+        // words out of Wispr's database and Wispr's own injection was pure
+        // damage. Now that mouse 5 is Wispr's alone and the relay records for
+        // itself, a relay that kept eating those keystrokes would leave Victor
+        // with a Wispr Flow that transcribes and then types nothing anywhere —
+        // i.e. it would break the tool it has just stopped depending on.
+        //
+        // Gated on the engine rather than deleted, because that is the shape of
+        // "kept for anyone who wants it": re-enable the row and the whole path,
+        // injection block included, works again.
+        hotkeys.blockInjection = isBound && !paused && TranscriptionEngine.current == .wispr
     }
 
     /// Mouse 5 on Local Whisper: start recording, or finish the one that is open.

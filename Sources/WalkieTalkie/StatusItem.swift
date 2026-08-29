@@ -97,6 +97,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
         item.button?.title = ""
 
         let menu = NSMenu()
+        // **Every `isEnabled` in this file was inert until 2026-08-29.** AppKit
+        // auto-enables an item whenever its target responds to the action, unless
+        // the menu says otherwise or the target implements `validateMenuItem` —
+        // and this one does neither. So `Disconnect` with nothing bound, and
+        // `End Dictation` with nothing recording, both looked disabled in the
+        // source and were fully clickable on screen. (The header only ever
+        // greyed out because it has no action at all.) The flags are set from
+        // `menuWillOpen`, which is the moment they have to be right, so turning
+        // auto-enabling off makes them mean what they say.
+        menu.autoenablesItems = false
         menu.delegate = self
         header.isEnabled = false
         menu.addItem(header)
@@ -186,6 +196,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // that *does something*.
         for engine in [TranscriptionEngine.wispr, .whisper] {
             let mi = NSMenuItem(title: engine.label, action: #selector(engineClicked(_:)), keyEquivalent: "")
+            // **Wispr Flow is shown and cannot be picked.** The relay owns the
+            // microphone now — mouse 5 went back to Wispr on 2026-08-29 and the
+            // wheel starts a local dictation — so choosing Wispr here would put
+            // both apps on one button again. The row stays visible rather than
+            // being removed: the code behind it is intact and this is the one
+            // place that says the choice exists, for whoever needs it on a
+            // machine that cannot host a model.
+            if engine == .wispr { mi.isEnabled = false }
             mi.target = self
             mi.representedObject = engine.rawValue
             menu.addItem(mi)

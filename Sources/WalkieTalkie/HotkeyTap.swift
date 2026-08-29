@@ -134,6 +134,7 @@ private let VK_P: CGKeyCode = 0x23
 private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private let MOUSE_BUTTON_4: Int64 = 3   // 0-indexed "back" side button — LinearMouse types Return with it
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
+    private let MOUSE_BUTTON_MIDDLE: Int64 = 2   // the wheel, pressed
 
     private var tapPort: CFMachPort?
     var isActive: Bool { tapPort != nil }
@@ -229,21 +230,38 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 }
             }
 
-            if button == MOUSE_BUTTON_5 && localCapture {
-                // Local Whisper: the button is the relay's own record toggle and
-                // Wispr must not see it at all — a Wispr that starts listening
-                // would record the same sentence a second time and paste it.
-                // Both halves are swallowed, so nothing downstream sees an orphan
-                // release either.
+            // **The wheel is the local dictation toggle**, and mouse 5 is not.
+            //
+            // It was mouse 5 until 2026-08-29, which put the relay and Wispr Flow
+            // on the same button and made every dictation a question of which of
+            // the two was armed. Victor's call: mouse 5 goes back to being Wispr's
+            // alone, and the relay takes a button Wispr has never wanted.
+            //
+            // **The wheel is a wide theft and that is deliberate.** Mouse 4 and
+            // ⌘⇧-click are borrowed only for the length of a dictation, on the
+            // argument that a load-bearing gesture may only be taken while a row
+            // on screen says so. This one is taken for as long as a terminal is
+            // bound, which is hours — because it is the gesture that *starts* a
+            // dictation, and a starter that only works while already dictating is
+            // no starter at all. The narrowest gate available is therefore the
+            // binding itself, which is the same gate that already decides whether
+            // this app touches anything (`localCapture`). The cost is real and
+            // was accepted: middle-click opens links in a new tab and closes tabs
+            // in Chrome, and pastes the selection in an X-style terminal.
+            if button == MOUSE_BUTTON_MIDDLE && bare && localCapture {
                 if type == .otherMouseDown {
-                    Log.info("🎙️ mouse 5 — local recording toggle")
+                    Log.info("🎙️ wheel — local dictation toggle")
                     DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                 }
+                // Both halves swallowed, so nothing downstream is left holding an
+                // orphan release.
                 return nil
             }
 
             if type == .otherMouseDown && button == MOUSE_BUTTON_5 {
-                // Pass through — Wispr Flow must still see its push-to-talk.
+                // Untouched, always: mouse 5 is Wispr Flow's push-to-talk and the
+                // relay only *observes* it — a hint that lands a beat before
+                // CoreAudio confirms, for the Wispr engine's own path.
                 DispatchQueue.global().async { [weak self] in self?.onDictationStarted?() }
             }
             return Unmanaged.passUnretained(event)
