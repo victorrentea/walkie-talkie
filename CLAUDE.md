@@ -803,9 +803,21 @@ own icon; only the wheel after the arrow is inline. The mouse is repeated after
 the arrow rather than the wheel appearing on its own, because the second half of
 the gesture is a button *on the same mouse* and a bare wheel beside an arrow reads
 as a different object. Rebind is first: the card is read at the moment the relay
-is pointed somewhere, and dictating is the half his hand already knows. The same
-drawings carry the `send` row while a prompt is being edited, the shot-hint row
-(`.back`) and the ⌘⇧-pick hint (`.left`).
+is pointed somewhere, and dictating is the half his hand already knows.
+
+**These two rows draw the mouse at 30pt, not 16** (`hintInk`), so they are 34 tall
+where every other row is 22. Everywhere else a glyph is a label for a row that
+says its own thing in words; here the picture *is* the sentence — which button, on
+which mouse, in which order — and at icon size that sentence was a smudge with a
+red pixel in it. The drawing is still narrower than the icon column (30 × 0.568 ≈
+17 against a box of 20), so only the height changes and the column the
+destination's icon starts in is kept. `statusLines` carries each row's ink size and
+`hintRowHeight` turns it into a height, which is what lets the same two views also
+render the 16pt `send` / `transcribing…` / `preparing` states at 22.
+
+The `send` row, the shot-hint row (`.back`) and the ⌘⇧-pick hint (`.left`) use the
+same drawings at icon size: those rows say what they mean in words, so the picture
+only has to identify the device.
 
 ## Two gestures are borrowed, and only while dictating
 

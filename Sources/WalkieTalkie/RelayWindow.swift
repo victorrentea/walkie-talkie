@@ -305,13 +305,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// `applyTitleText` says these labels drop everything but emoji, and that is
     /// true of the *title* label's halo setup and not of an attachment here.
     ///
-    /// −3 is measured against the 17pt hint font: an attachment sits with its
-    /// bottom on the baseline, so a 16pt drawing beside 17pt text otherwise
-    /// floats a descender's worth high.
+    /// An attachment sits with its **bottom** on the baseline, so a drawing taller
+    /// than the text floats. The offset is derived rather than tuned — centre the
+    /// image on the middle of the capital letters beside it — because the two
+    /// sizes in use differ by 14pt and a constant that suits one wrecks the other.
     private static func inline(_ image: NSImage, font: NSFont) -> NSAttributedString {
         let attachment = NSTextAttachment()
         attachment.image = image
-        attachment.bounds = NSRect(x: 0, y: -3, width: image.size.width, height: image.size.height)
+        attachment.bounds = NSRect(x: 0, y: (font.capHeight - image.size.height) / 2,
+                                   width: image.size.width, height: image.size.height)
         return NSAttributedString(attachment: attachment)
     }
 
@@ -374,16 +376,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// carrying the buttons that gesture presses.
     ///
     /// The other states are still one row: they are reports, not invitations.
-    private var statusLines: [(glyph: NSImage?, text: NSAttributedString)] {
+    private var statusLines: [(glyph: NSImage?, text: NSAttributedString, ink: CGFloat)] {
         // **In the field, the wheel is Send.** Editing is the one panel state
         // with no clock running, so nothing goes out until he says so — and his
         // hand is on the mouse, having just clicked the words to open the field.
         // The button beside the transcript already says `⏎ Send`; this says the
         // other way, which is the one he cannot see from the keyboard.
-        if editingPrompt { return [(Self.mouseWheelGlyph, plain("send"))] }
+        if editingPrompt { return [(Self.mouseWheelGlyph, plain("send"), iconInk)] }
         guard !paused, sentPrompt == nil else { return [] }
-        if transcribing { return [(Self.waitGlyph, plain("transcribing…"))] }
-        if engineLoading { return [(Self.waitGlyph, plain("preparing"))] }
+        if transcribing { return [(Self.waitGlyph, plain("transcribing…"), iconInk)] }
+        if engineLoading { return [(Self.waitGlyph, plain("preparing"), iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -397,8 +399,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // card is read at the moment the relay is pointed somewhere; the question
         // that brings his eyes to it is *is this still the right terminal*, and
         // dictating is the thing his hand already knows.
-        return [(Self.mouseLeftGlyph, Self.rebindText(font: hintFont)),
-                (Self.mouseWheelGlyph, plain("dictate"))]
+        return [(Self.mouseLeftHint, Self.rebindText(font: hintFont), Self.hintInk),
+                (Self.mouseWheelHint, plain("dictate"), Self.hintInk)]
     }
 
     /// `🖱️(left) → 🖱️(wheel)  ReBind` — the chord drawn as the two presses it
@@ -410,8 +412,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// picture rides in the icon column, where every row on this card puts what
     /// it is about; only the second is inline.
     private static func rebindText(font: NSFont) -> NSAttributedString {
-        let a = NSMutableAttributedString(string: "→ ", attributes: [.font: font])
-        a.append(inline(mouseWheelGlyph, font: font))
+        let a = NSMutableAttributedString(string: "→  ", attributes: [.font: font])
+        a.append(inline(mouseWheelHint, font: font))
         a.append(NSAttributedString(string: "  ReBind", attributes: [.font: font]))
         return a
     }
@@ -1049,9 +1051,10 @@ private let frontLabel = NSTextField(labelWithString: "")
             hint.glyph.image = hints[i].glyph
             hint.label.attributedStringValue = hints[i].text
             hint.label.sizeToFit()
-            layoutGlyphRow(hint.row, glyph: hint.glyph, label: hint.label, width: innerWidth)
+            let h = hintRowHeight(hints[i].ink)
+            layoutGlyphRow(hint.row, glyph: hint.glyph, label: hint.label, width: innerWidth, height: h)
             hint.row.isHidden = false
-            rows.append((hint.row, recordRowHeight))
+            rows.append((hint.row, h))
         }
 
         // **Above the words, not inside them.** The selection used to be folded
@@ -1336,6 +1339,20 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static let mouseWheelGlyph = Glyphs.mouse(height: iconInk, pressed: .wheel)
     private static let mouseBackGlyph = Glyphs.mouse(height: iconInk, pressed: .back)
 
+    /// **The two rows that teach a gesture draw the mouse nearly twice icon
+    /// size.** Everywhere else a glyph is a label for a row that says its own
+    /// thing in words; here the picture *is* the sentence — which button, on
+    /// which mouse, in which order — and at 16pt that sentence was a smudge with
+    /// a red pixel in it. Victor asked for it in the plainest terms: *2 mouseuri
+    /// mari unul după altul*.
+    ///
+    /// Still narrower than the icon column (30 × 0.568 ≈ 17 against a box of 20),
+    /// so the pictures keep the column the destination's own icon starts in and
+    /// only the row gets taller.
+    private static let hintInk: CGFloat = 30
+    private static let mouseLeftHint = Glyphs.mouse(height: hintInk, pressed: .left)
+    private static let mouseWheelHint = Glyphs.mouse(height: hintInk, pressed: .wheel)
+
     /// Kept as the old name so every measurement site still reads the same, and
     /// so the width of the icon column is stated in exactly one place.
     private var glyphColumn: CGFloat { glyphBox }
@@ -1360,23 +1377,33 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Each is now given exactly the height it needs and placed around the row's
     /// midline. Nothing is clipped, and neither half has to know anything about
     /// the other's font.
-    private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSTextField, width: CGFloat) {
-        row.frame.size = NSSize(width: width, height: recordRowHeight)
-        centre(glyph, inRowOfHeight: recordRowHeight)
+    private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSTextField,
+                                width: CGFloat, height: CGFloat? = nil) {
+        let h = height ?? recordRowHeight
+        row.frame.size = NSSize(width: width, height: h)
+        centre(glyph, inRowOfHeight: h)
         centre(label, x: glyphColumn + recordDotGap,
                width: max(0, width - glyphColumn - recordDotGap),
-               inRowOfHeight: recordRowHeight)
+               inRowOfHeight: h)
     }
+
+    /// A row's height is whatever its glyph needs, floored at the ordinary row.
+    /// The gesture rows draw a 30pt mouse and are 34 tall; everything else keeps
+    /// the 22 it always had.
+    private func hintRowHeight(_ ink: CGFloat) -> CGFloat { max(recordRowHeight, ink + 4) }
 
     /// A glyph in its box, on the row's midline. Labels get the height their own
     /// font asks for; image views get the square box, since an image has no
     /// metrics to ask and is scaled into whatever it is given.
     private func centre(_ glyph: NSView, inRowOfHeight height: CGFloat) {
         guard let label = glyph as? NSTextField else {
-            // A bitmap: `iconInk` square, centred in the column both ways.
-            glyph.frame = NSRect(x: ((glyphBox - iconInk) / 2).rounded(),
-                                 y: ((height - iconInk) / 2).rounded(),
-                                 width: iconInk, height: iconInk)
+            // A bitmap, at its own size, centred in the column both ways. Asked of
+            // the image rather than assumed square: the drawn mouse is 17 × 30,
+            // and an `iconInk` box would either squash it or park it off-centre.
+            let ink = (glyph as? NSImageView)?.image?.size ?? NSSize(width: iconInk, height: iconInk)
+            glyph.frame = NSRect(x: ((glyphBox - ink.width) / 2).rounded(),
+                                 y: ((height - ink.height) / 2).rounded(),
+                                 width: ink.width, height: ink.height)
             return
         }
         let h = ceil(label.intrinsicContentSize.height)

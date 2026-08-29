@@ -221,7 +221,11 @@ extension Glyphs {
                               cornerWidth: r, cornerHeight: r, transform: nil)
             }
             let island = stadium(0.382, 0.085, 0.620, 0.560)
-            let wheel = stadium(0.456, 0.135, 0.548, 0.290)
+            // Drawn a shade wider than the trace (0.456…0.548) and a shade
+            // longer. The wireframe's wheel is a tenth of the body's width, which
+            // is honest and, filled red at icon size, is a mark two pixels across
+            // that reads as a smudge. Victor's words: *abia se vede că e roșu*.
+            let wheel = stadium(0.437, 0.125, 0.567, 0.310)
 
             // A wash inside the outline. The wireframe itself is pure line art,
             // which is right on paper and not on this card: the chip floats over
@@ -278,8 +282,21 @@ extension Glyphs {
             ctx.addLine(to: p(0.501, 0.09))
             ctx.strokePath()
 
-            part(island, on: false, line: line)
-            part(wheel, on: pressed.contains(.wheel), line: max(0.5, height * 0.020))
+            // **The island answers for the wheel.** When the wheel is the button
+            // being named, the well it sits in is outlined in red too — a red
+            // pill inside a red capsule is a mark the size of the island, where
+            // the wheel alone is the size of the wheel. It is not a lie about
+            // which button is pressed: the island *is* where the wheel is.
+            let wheelPressed = pressed.contains(.wheel)
+            ctx.addPath(island)
+            ctx.setFillColor(body.withAlphaComponent(0.22).cgColor)
+            ctx.fillPath()
+            ctx.addPath(island)
+            ctx.setStrokeColor(wheelPressed ? highlight.cgColor : body.cgColor)
+            ctx.setLineWidth(wheelPressed ? line * 1.6 : line)
+            ctx.strokePath()
+
+            part(wheel, on: wheelPressed, line: max(0.5, height * 0.020))
 
             // The two thumb buttons, as the slanted pair they are on the flank —
             // drawn only when one of them is the button being named. At 16pt two
