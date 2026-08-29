@@ -1,26 +1,14 @@
 import AVFoundation
 
-/// The relay's own microphone, used only when Local Whisper is the engine.
+/// The relay's own microphone — the only one in the loop.
 ///
-/// ## Why this exists at all, after arguing it should not
+/// For months the relay read a finished transcript out of another app's database
+/// and swallowed that app's paste on the way past. It owns the whole path now:
+/// it opens the input itself, hands the WAV to the model, and nothing outside
+/// this app hears the sentence or types it anywhere.
 ///
-/// `VoiceCorpus` and `Transcriber` both say, at length, that the local engine
-/// transcribes **Wispr's** recording — that a second capture would be a different
-/// signal from the one Wispr scored, and a comparison between two models that
-/// heard different audio measures nothing. That argument is still correct, and it
-/// is still why the *corpus* is collected from `History.audio` whenever Wispr is
-/// the one recording.
-///
-/// What changed is the goal. As long as Wispr held the microphone, every local
-/// dictation still went through Wispr's push-to-talk, its recording, and — the
-/// part Victor actually wanted gone — its paste into whatever had the caret. The
-/// local engine was a second opinion on Wispr's audio; it is now allowed to be
-/// the whole path, and a path that owns its own microphone is the only kind that
-/// can leave Wispr out of the loop entirely.
-///
-/// The two modes therefore hear different signals *by design*, and nothing in the
-/// corpus mixes them: a sample recorded here is stamped `engine: "whisper-local"`
-/// so a later evaluation can keep the like-for-like rows apart from these.
+/// Samples are stamped `engine: "whisper-local"` in the corpus, so rows recorded
+/// this way stay distinguishable from anything filed before it.
 ///
 /// ## 16 kHz mono 16-bit, because that is what the other half already speaks
 ///

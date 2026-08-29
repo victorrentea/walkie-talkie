@@ -3,8 +3,8 @@ import AppKit
 /// The floating, translucent, always-on-top overlay.
 ///
 /// It is a **dictation helper only** — there is no text entry and no selection
-/// shortcut. Everything it reports happens by itself: Wispr starts listening,
-/// the selection and the screen are captured, the transcript is relayed.
+/// shortcut. Everything it reports happens by itself: the microphone opens, the
+/// selection and the screen are captured, the transcript is relayed.
 ///
 /// Interaction is therefore minimal:
 ///   drag           move it
@@ -44,13 +44,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// says the same seconds as an offer — and it is a button, so the wait can be
     /// skipped whenever he already knows the text is right.
     private let sendButton = PillButton(frame: NSRect(x: 0, y: 0, width: 128, height: 28))
-    /// The engine row: a slowly pulsing 🔴 and the name of whatever is listening.
+    /// The engine row: a slowly pulsing 🔴 and the name of the model listening.
     ///
-    /// **Which ear is open is a fact about the dictation, not about the app**, and
-    /// since the relay grew a microphone of its own it is a fact with two possible
-    /// answers — Wispr Flow, or the local model. The pulse says *recording* and
-    /// the name says *into what*; before this they were one glyph saying only the
-    /// first half, at a time when there was nothing else it could have meant.
+    /// The pulse says *recording* and the name says *which recogniser is about to
+    /// be believed*; before this they were one glyph saying only the first half,
+    /// at a time when there was nothing else it could have meant.
     private let engineRow = NSView()
     /// What to press, while it is bound and nothing is happening. A glyph row
     /// like the ones below rather than an emoji inside a sentence: as text the
@@ -121,10 +119,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// True while the local Whisper model is loading — see `titleText`.
     private var engineLoading = false
     private var listening = false
-    /// The relay's own microphone is the one that is open, not Wispr's.
-    private var localListening = false
-    /// Which local model is loaded — `mlx-community/whisper-large-v3-turbo` —
-    /// shown in full while it is the one listening.
+    /// Which model is loaded — `mlx-community/whisper-large-v3-turbo` — shown in
+    /// full while it is the one listening.
     private var localModel: String?
     private var hovering = false
 
@@ -376,21 +372,20 @@ private let frontLabel = NSTextField(labelWithString: "")
         // pointer was won back from. He said so within the hour, in the plainest
         // terms available: *"mă încurcă, mă enervează"*.
         if boundLabel == nil { return nil }
-        // **The verb, and the one thing about it that is not guessable.** It was
-        // the bare word `dictate` while a tap started a dictation — nothing to
-        // say about a click on the thing the glyph is a picture of. Since the
-        // wheel starts on a 400ms hold and a tap goes back to being a plain
-        // middle click, "hold" is the whole difference between the gesture
-        // working and appearing to do nothing.
-        return (Self.wheelGlyph, plain("hold to dictate, click to bind"))
+        // **Only the half he cannot already see.** Bound, the destination is on
+        // the line above and the hold that starts a dictation is the gesture he
+        // makes dozens of times a day; what the row is left to say is the other
+        // thing the same button does — a tap re-points the relay at whatever
+        // window is in front. `click to bind` was wrong here for the same reason:
+        // it named a state this row is never on screen in.
+        return (Self.wheelGlyph, plain("click to rebind"))
     }
 
     /// The recording row shows **only while dictating and not paused** — the one
     /// window in which there is a recording to report and in which F3 and the
-    /// back button do anything. Wispr keeps reporting that it is listening while
-    /// forwarding is off, so advertising them in that state would be a lie — and
-    /// for the mouse it would be worse than a lie: paused is exactly when the
-    /// button is handed back to LinearMouse and types Return again.
+    /// back button do anything. Advertising them while forwarding is off would be
+    /// a lie — and for the mouse it would be worse than a lie: paused is exactly
+    /// when the button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
         return ""   // the row is drawn from `shotHintText`; see `layoutContent`
@@ -399,13 +394,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// What is happening, and what is doing it — beside the pulse that says it is
     /// happening *now*.
     ///
-    /// **The verb is said, not left to the dot.** The row used to be the engine's
-    /// name alone (`Wispr Flow`), on the reading that a pulsing red dot already
-    /// means recording. It does to whoever built it; to a room seeing the overlay
-    /// for the first time — and to Victor at a glance, mid-sentence — a bare
-    /// product name beside a light is a status *badge*, not an event. `Listening
-    /// with Wispr Flow` is the same two facts in the order they are asked in: is
-    /// it listening, and who is listening.
+    /// **The verb is said, not left to the dot.** The row used to be the model's
+    /// name alone, on the reading that a pulsing red dot already means recording.
+    /// It does to whoever built it; to a room seeing the overlay for the first
+    /// time — and to Victor at a glance, mid-sentence — a bare name beside a
+    /// light is a status *badge*, not an event. `Listening with …` is the same
+    /// two facts in the order they are asked in: is it listening, and who is
+    /// listening.
     ///
     /// **`Listening`, not `Recording`.** Recording is what a device does to a
     /// file; listening is what the other end of a conversation does, and this
@@ -417,12 +412,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// transcript nothing else can double-check.
     private var engineText: String? {
         guard listening, !paused else { return nil }
-        guard localListening else { return "Listening with Wispr Flow" }
         // **The model's own id, in full.** `Local Whisper` names a category, and
-        // the category has not been the interesting half since the local engine
-        // stopped being one fixed thing: `RELAY_WHISPER_MODEL` swaps it, and the
-        // whole reason the row exists is to say which recogniser is about to be
-        // believed. The id is what a comparison is written down against.
+        // the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
+        // the model, and the whole reason the row exists is to say which
+        // recogniser is about to be believed. The id is what a comparison is
+        // written down against.
         return "Listening with " + (localModel ?? "Local Whisper")
     }
 
@@ -962,7 +956,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // time he talks — to show him text he highlighted himself a second ago.
         // It rides along truncated in the narrow overlay instead, which is all the
         // receipt it needs, and the overlay grows only at the end, when there is
-        // finally something he has *not* seen: what Wispr actually heard.
+        // finally something he has *not* seen: what the model actually heard.
         // …and even then it takes only what the text needs. Half the screen is the
         // ceiling, not the size: a four-word dictation in a half-screen panel is
         // mostly empty space parked over his work.
@@ -1711,7 +1705,7 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     // MARK: - Animations
 
-    /// The 🔴 breathes while Wispr is listening, so the overlay visibly *lives* — a
+    /// The 🔴 breathes while the microphone is open, so the overlay visibly *lives* — a
     /// frozen recording row is indistinguishable from a hung app, and the whole
     /// point of the state is reassurance that speech is being caught.
     ///
@@ -1807,14 +1801,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         reposition()             // …and parks the panel back in its corner
     }
 
-    /// The relay is recording through its own microphone (Local Whisper), rather
-    /// than watching Wispr do it. Set around `setListening`, which stays the one
-    /// switch for everything that is the same in both modes — the pulse, the row,
-    /// the borrowed gestures.
-    func setLocalListening(_ value: Bool, model: String? = nil) {
-        guard localListening != value || (value && model != localModel) else { return }
-        localListening = value
-        if value { localModel = model }
+    /// Which model is doing the listening, for the row beside the pulse. Set
+    /// around `setListening`, which stays the one switch for everything else the
+    /// dictation turns on — the pulse, the row, the borrowed gestures.
+    func setListeningModel(_ model: String?) {
+        guard model != localModel else { return }
+        localModel = model
         layoutContent()
     }
 
@@ -1828,7 +1820,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         fadeOutFlash(message)
     }
 
-    /// Wispr started / stopped listening.
+    /// A dictation started / stopped.
     func setListening(_ value: Bool) {
         guard listening != value else { return }
         listening = value
@@ -1865,7 +1857,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     /// Show the prompt on its way to the agent, whole, so Victor can see exactly
-    /// what Wispr heard — a mis-transcription is much cheaper to catch here than
+    /// what the model heard — a mis-transcription is much cheaper to catch here than
     /// three tool calls later.
     ///
     /// The prompt is **held**, not already gone: for `hold` seconds it sits here

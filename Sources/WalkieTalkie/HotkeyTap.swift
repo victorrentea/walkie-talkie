@@ -18,10 +18,10 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
 ///
 /// ⌃⌥P still works, since it is what the muscle memory and the older notes say.
 /// It was chosen to not collide with anything Victor Addons claims (⌃P, ⌃⇧P, ⌃W,
-/// ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D) or with Wispr's own ⌘⌥V.
+/// ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D).
 ///
-/// Mouse 5 (Wispr push-to-talk) is still observed — never swallowed — but only
-/// as a hint; the authoritative dictation signal is `DictationMonitor`.
+/// Mouse 5 is passed through untouched apart from a **double** click, which
+/// binds the window under the pointer.
 ///
 /// **Mouse 4 (the back side button) is the same shot, without the keyboard.**
 /// LinearMouse turns that button into a Return (`~/.config/linearmouse/`), which
@@ -35,11 +35,11 @@ final class HotkeyTap {
 
     /// The cursor at the instant of the gesture — what he was pointing at.
     var onScreenshot: ((NSPoint) -> Void)?
-    var onDictationStarted: (() -> Void)?
 
-    /// Mouse 5, when it is the relay's and not Wispr's: start or stop the local
-    /// recording. Fired on the press only — the release is swallowed with it and
-    /// says nothing, because this is a toggle and not a push-to-talk.
+    /// The wheel: start the recording, or end the one that is open. A toggle
+    /// and not a push-to-talk — a dictation at an agent runs to a minute or
+    /// more, and a button held for a minute is a hand that cannot do anything
+    /// else, including take the screenshots the same minute is for.
     var onLocalToggle: (() -> Void)?
 
     /// The wheel held down **while a dictation is running** — throw it away.
@@ -102,8 +102,8 @@ final class HotkeyTap {
     }
     private var promptHeldFlag = false
 
-    /// Wispr is recording **and** the relay is forwarding — the only window in
-    /// which mouse 4 is ours. Written from the main thread, read from the tap
+    /// A dictation is running **and** the relay is forwarding — the only window
+    /// in which mouse 4 is ours. Written from the main thread, read from the tap
     /// thread, hence the lock.
     var dictating: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return dictatingFlag }
@@ -111,10 +111,9 @@ final class HotkeyTap {
     }
     private var dictatingFlag = false
 
-    /// Local Whisper is the engine **and** the relay is forwarding — the state in
-    /// which mouse 5 belongs to the relay and must never reach Wispr, because in
-    /// that mode Wispr is not in the loop at all: the relay holds the microphone
-    /// itself. Set from the main thread by `AppDelegate.syncLocalCapture`.
+    /// There is a destination **and** the relay is forwarding — the state in
+    /// which the wheel can open the microphone at all. Set from the main thread
+    /// by `AppDelegate.syncLocalCapture`.
     var localCapture: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return localCaptureFlag }
         set { stateLock.lock(); localCaptureFlag = newValue; stateLock.unlock() }
@@ -152,23 +151,6 @@ final class HotkeyTap {
     /// that failed to survive posting would be an infinite loop, and a window
     /// that fails is one click let through.
     private var wheelReplayUntil: CFTimeInterval = 0
-
-    /// Swallow keystrokes **posted by Wispr Flow itself** — i.e. the transcript it
-    /// types or pastes into whatever holds the caret.
-    ///
-    /// That paste is the thing Victor dictates *around*: he talks about a page he
-    /// is reading, and Wispr drops the sentence into the document, the search
-    /// field, the terminal — wherever the caret happened to be. The relay already
-    /// takes the words from Wispr's database, so the injection is pure damage.
-    ///
-    /// Off while paused, and that is the whole meaning of pause: pausing is what
-    /// he does to dictate *into* an app, and the app getting the text is then
-    /// exactly what he wants.
-    var blockInjection: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return blockInjectionFlag }
-        set { stateLock.lock(); blockInjectionFlag = newValue; stateLock.unlock() }
-    }
-    private var blockInjectionFlag = false
 
     private let stateLock = NSLock()
 
@@ -248,7 +230,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // The double-click test comes first, and applies whether or not
             // anything is bound: binding by pointing is most useful precisely
             // when nothing is bound yet, and that is the state in which mouse 5
-            // is otherwise passed straight through to Wispr.
+            // is otherwise passed straight through.
             if button == MOUSE_BUTTON_5 && bare {
                 if type == .otherMouseUp && swallowMouse5Up {
                     swallowMouse5Up = false
@@ -410,27 +392,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return nil
             }
 
-            if type == .otherMouseDown && button == MOUSE_BUTTON_5 {
-                // Untouched, always: mouse 5 is Wispr Flow's push-to-talk and the
-                // relay only *observes* it — a hint that lands a beat before
-                // CoreAudio confirms, for the Wispr engine's own path.
-                DispatchQueue.global().async { [weak self] in self?.onDictationStarted?() }
-            }
+            // Mouse 5 otherwise belongs to whatever the system has mapped it
+            // to — the relay only ever claims the double click above.
             return Unmanaged.passUnretained(event)
-        }
-
-        // Anything Wispr Flow types or pastes, dropped before it reaches the app
-        // under the caret. Checked first, and for all three keyboard event types:
-        // whatever mechanism Wispr uses, if it arrives as a posted event it is
-        // stopped here, and if nothing is ever logged then it does not arrive as
-        // one at all (it would be going through the Accessibility API instead,
-        // which no event tap can see).
-        if blockInjection {
-            let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
-            if pid != 0 && isWispr(pid) {
-                noteSwallowed(type: type, event: event, pid: pid)
-                return nil
-            }
         }
 
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
@@ -563,71 +527,4 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// mapping lives; this is the process that acts on it.
     private static let remapperProcessName = "LinearMouse"
     private var remapperPids: [pid_t: Bool] = [:]
-
-    /// Is this pid Wispr Flow, or one of its helpers?
-    ///
-    /// Matched on the process name by prefix because Electron spreads itself over
-    /// `Wispr Flow`, `Wispr Flow Helper (Renderer)` and friends, and which of them
-    /// posts the keystrokes is an implementation detail of a third-party app —
-    /// one that may well change under us. Cached per pid like `isRemapper`: this
-    /// runs on the event tap, for every key of a transcript being typed out.
-    private func isWispr(_ pid: pid_t) -> Bool {
-        stateLock.lock()
-        if let known = wisprPids[pid] { stateLock.unlock(); return known }
-        stateLock.unlock()
-
-        var buf = [CChar](repeating: 0, count: 256)
-        let match = proc_name(pid, &buf, UInt32(buf.count)) > 0
-                 && String(cString: buf).hasPrefix(Self.wisprProcessPrefix)
-
-        stateLock.lock()
-        wisprPids[pid] = match
-        stateLock.unlock()
-        return match
-    }
-
-    private static let wisprProcessPrefix = "Wispr Flow"
-    private var wisprPids: [pid_t: Bool] = [:]
-
-    /// One line per burst, not per key.
-    ///
-    /// A transcript typed character by character is hundreds of events, and a log
-    /// line each would bury everything else the relay says. What is worth knowing
-    /// is *that* an injection was stopped and what it looked like — the first
-    /// event carries the mechanism (a ⌘V, or a key with a unicode payload) — plus
-    /// how many followed it. A gap of a second ends the burst.
-    private func noteSwallowed(type: CGEventType, event: CGEvent, pid: pid_t) {
-        stateLock.lock()
-        let now = Date().timeIntervalSinceReferenceDate
-        let fresh = now - lastSwallowAt > 1.0
-        if fresh {
-            if burstCount > 0 { Log.info("🛑 …and \(burstCount) more events from Wispr") }
-            burstCount = 0
-        } else {
-            burstCount += 1
-        }
-        lastSwallowAt = now
-        stateLock.unlock()
-
-        guard fresh else { return }
-        var length = 0
-        var chars = [UniChar](repeating: 0, count: 8)
-        event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length, unicodeString: &chars)
-        let typed = length > 0 ? String(utf16CodeUnits: chars, count: length) : ""
-        let key = event.getIntegerValueField(.keyboardEventKeycode)
-        Log.info("🛑 swallowed Wispr injection — \(Self.name(type)) key=\(key) flags=\(event.flags.rawValue)"
-                 + (typed.isEmpty ? "" : " text=\(typed.debugDescription)") + " pid=\(pid)")
-    }
-
-    private var lastSwallowAt: TimeInterval = 0
-    private var burstCount = 0
-
-    private static func name(_ type: CGEventType) -> String {
-        switch type {
-        case .keyDown:      return "keyDown"
-        case .keyUp:        return "keyUp"
-        case .flagsChanged: return "flagsChanged"
-        default:            return "type\(type.rawValue)"
-        }
-    }
 }

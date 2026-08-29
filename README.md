@@ -1,15 +1,15 @@
 # Walkie Talkie
 
-A small macOS overlay that **relays [Wispr Flow](https://wisprflow.ai) dictation
-into a running coding agent** — along with the text you had selected and
-screenshots of what you were looking at — so you can drive the agent while
-looking at something else entirely: a browser, an IDE, a projector.
+A small macOS overlay that **relays your dictation into a running coding agent**
+— along with the text you had selected and screenshots of what you were looking
+at — so you can drive the agent while looking at something else entirely: a
+browser, an IDE, a projector.
 
-Wispr Flow types its transcript wherever the caret is, which is exactly wrong
-when you are talking *about* something you are only reading. Walkie Talkie takes
-that same speech and sends it somewhere else: to whatever agent is watching its
-queue. That is the whole idea, and the name — it is not tied to any one agent
-(it was called Claude Bubble until it turned out to work with all of them).
+It records and transcribes on its own, with a Whisper running on your Mac: hold
+the mouse wheel to start, tap it to stop, and the words go to whatever agent is
+watching its queue rather than into whatever holds the caret. That is the whole
+idea, and the name — it is not tied to any one agent (it was called Claude Bubble
+until it turned out to work with all of them).
 
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
@@ -156,12 +156,11 @@ While bound, the overlay *also* appends JSON lines to
 `~/.walkie-talkie/outbox.jsonl`. Anything that watches that file can consume
 them; there is no back-channel.
 
-**Unbound, nothing is written** — and nothing else happens either: no picture
-when you start talking, no borrowed mouse buttons, and Wispr Flow's own paste is
-let through untouched. The app runs from login and is aimed at nothing most of
-the day; a relay with no destination has no business acting on a sentence you
-are dictating into a browser. Bind a terminal and both routes come alive
-together.
+**Unbound, nothing is written** — and nothing else happens either: no dictation
+can be started, no picture is taken, and no mouse button is borrowed. The app
+runs from login and is aimed at nothing most of the day; a relay with no
+destination has no business opening a microphone. Bind a terminal and both
+routes come alive together.
 
 ```json
 {"ts":"2026-07-30T08:12:03Z","session":"myrepo@main","kind":"dictation",
@@ -196,16 +195,15 @@ once, each taking one):
 | `POST /unbind` | stop — the relay goes inert until something is bound again |
 | `GET /target` | what it is currently aimed at |
 | `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
-| `POST /test/corpus` | `{"id":"<transcriptEntityId>"}` — collect the voice-corpus sample for a Wispr row that already exists |
-| `POST /engine` | `{"engine":"wispr"\|"whisper"}` — pick the recogniser (202: bringing the local model up takes ~10s and can fail) |
-| `GET /engine` | which recogniser is in use, and whether it is ready |
-| `POST /test/transcript` | `{"id":"<transcriptEntityId>"}` — replay a real row through the whole transcript path |
+| `GET /engine` | which recogniser is loaded, and whether it is ready |
 
 ## Input
 
 | input | effect |
 |---|---|
-| start dictating | Red flash, screen captured, selection grabbed — all automatic, and only while a terminal is bound |
+| **hold the wheel** | Starts a dictation — red flash, screen captured, selection grabbed. Only while a terminal is bound |
+| **tap the wheel** | Ends the dictation and sends it. At rest, re-points the relay at the window in front |
+| **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
@@ -216,42 +214,33 @@ once, each taking one):
 | menu bar 🤖 | Always there while the app runs — shows which session it is, plus **Pause/Resume** and **Quit** |
 
 Paused, the chip reads `⏸️ 🤖 folder@branch` at 0.30 opacity and the menu bar
-icon becomes ⏸️🤖. Wispr Flow itself keeps working exactly as before — the point
-of pausing is to dictate into a browser, a chat, a commit message without those
-words also reaching the agent. The relay just stops acting on the transcripts:
-no context capture, no screenshots, nothing written to the outbox.
+icon becomes ⏸️🤖. The point of pausing is to get the mouse and the keyboard
+back — the wheel goes to the app underneath, the back button types Return again,
+and no dictation can be started. The relay stops acting on everything: no context
+capture, no screenshots, nothing written to the outbox.
 
 ## How dictation is captured
 
-[Wispr Flow](https://wisprflow.ai) pastes its transcript wherever the caret is,
-which is useless when you are dictating *about* something you are only reading.
-So the overlay reads Wispr's own local history instead — **and stops the paste**:
-every keystroke Wispr's process posts is dropped by the event tap while the relay
-is forwarding (and let through while it is paused, which is when you *are*
-dictating into an app):
-`~/Library/Application Support/Wispr Flow/flow.sqlite`, opened **read-only** and
-polled once a second for rows newer than a watermark taken at startup.
+The relay owns the whole path. **Hold the mouse wheel** while a terminal is bound
+and it opens the microphone itself; **tap the wheel** to end the recording, or
+hold it for two seconds to throw the dictation away. The WAV goes to a Whisper
+running on this Mac, and the transcript goes to the agent — nothing is ever typed
+or pasted into whatever holds the caret.
 
 The selection is read via Accessibility (`kAXSelectedTextAttribute`), falling
 back to a simulated ⌘C for apps that don't expose it — with the full clipboard,
 every representation, snapshotted and restored around the probe.
 
-### Wispr Flow, or a local Whisper
+### The recogniser
 
-On **Local Whisper**, mouse 5 belongs to the relay: the button never reaches
-Wispr, and instead toggles the relay's own recording (press to start, press again
-to stop) into a local model. Wispr is not in the loop at all in that mode — it
-does not record, and there is nothing for it to paste.
+It needs `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`, which
+`mlx_whisper` shells out to for decoding; the model is
+`mlx-community/whisper-large-v3-turbo`, overridable with `RELAY_WHISPER_MODEL`.
 
-The menu bar's two engine rows — **Wispr Flow** and **Local Whisper**, flat in the
-main menu below a separator — switch which recogniser's words reach
-the agent, and the choice survives a restart. A dictation that Wispr *did* record
-— on the Wispr engine, or one started with Wispr's own hotkey — is still
-transcribed from `History.audio`, the same 16 kHz WAV Wispr stored, so that
-comparison stays like-for-like. It needs `mlx_whisper`
-(`pip install mlx-whisper`) and `ffmpeg`, which `mlx_whisper` shells out to for
-decoding; the model is `mlx-community/whisper-large-v3-turbo`, overridable with
-`RELAY_WHISPER_MODEL`.
+The weights are ~1.5 GB resident, so the helper is **not** started at login: it
+comes up when a bind or a wheel hold says a dictation is coming, and it is
+released when the session ends. The menu bar's `Local Whisper` row says whether
+it is loading, and what it is holding while it is up.
 
 The interpreter is **found by probing, not taken from PATH**: an app launched from
 Finder or a LaunchAgent inherits launchd's bare `PATH=/usr/bin:/bin:/usr/sbin:/sbin`,
@@ -260,18 +249,16 @@ The first `python3` that can see the module wins, and `RELAY_WHISPER_PYTHON` nam
 one outright. `/opt/homebrew/bin` and `/usr/local/bin` are put on the helper's PATH
 for the same reason, so its `ffmpeg` is findable too.
 
-Whenever the local engine cannot answer on a **Wispr-recorded** dictation — not
-loaded, no audio, or a transcript it is not confident in — Wispr's own text goes
-out instead, and the fallback is flashed and logged. A dictation is never dropped
-because of a setting. For a dictation the relay recorded itself there is no such
-second reading, so a low-confidence transcript is sent with a warning rather than
-swallowed: silence is the one outcome you cannot notice and correct.
+There is one reading of each recording and nothing to fall back on, so a
+low-confidence transcript is **sent with a warning** rather than swallowed:
+silence is the one outcome you cannot notice and correct. The pre-send panel
+holds it long enough to fix or cancel.
 
-Measured over 442 real dictations (163 min): 86% of local transcripts are
-semantically equivalent to Wispr's, 2.5% are broken, and the broken ones are
-overwhelmingly clips under five seconds, where Whisper hallucinates fluent
-nonsense. A gate on decoder confidence catches most of those, which is what the
-fallback is wired to.
+Measured over 442 real dictations (163 min): 2.5% of local transcripts come back
+semantically broken, and they are overwhelmingly clips under five seconds, where
+Whisper hallucinates fluent nonsense. A gate on decoder confidence catches most
+of those; the message an agent receives says the text came through a recogniser
+that can invent a sentence.
 
 ### The voice corpus
 
@@ -279,26 +266,20 @@ While the relay runs, every dictation also leaves the **recording** beside the
 transcript, in `~/.walkie-talkie/voice-corpus/`:
 
 ```
-2026-08-17/14-30-22-a1b2c3d4.wav    16 kHz mono — Wispr's own audio, copied
-2026-08-17/14-30-22-a1b2c3d4.txt    what Wispr made of it
+2026-08-17/14-30-22-local123.wav    16 kHz mono — what you said
+2026-08-17/14-30-22-local123.txt    what the model made of it
 corpus.jsonl                        one line per sample, with metadata
 ```
 
-This is groundwork for one future decision — whether a **local ASR model** could
-replace Wispr Flow — and it collects paired data now because it cannot be
-collected later: Wispr keeps each recording for roughly a fortnight and then
-drops it, leaving the text alone.
+It exists so a recogniser can be judged on **your own voice** later — the words
+you actually say to an agent, at the speed and in the accent you say them. The
+`.txt` is the transcript alone, so it can be diffed directly against another
+model's output over the same WAVs; everything else (duration, detected language,
+the app that was in front, `engine: "whisper-local"`) is in the manifest.
 
-The audio is Wispr's own `History.audio` blob, which is already a complete
-16 kHz mono 16-bit `.wav`; the relay copies bytes and never opens the
-microphone. That is what makes the eventual comparison like-for-like — both
-models score the same signal.
-
-The `.txt` holds Wispr's *formatted* text and nothing else, so it can be diffed
-directly against another model's output. The manifest carries the raw `asr`
-string beside it, which is the fairer reference: the formatted text has been
-through Wispr's LLM post-processing, and charging a plain recogniser for
-punctuation and casing would flatter the wrong side.
+Note what it is **not**: a reference transcript. The line beside each recording
+is what the model that produced it heard, so scoring that same model against it
+would measure nothing.
 
 Nothing prunes this folder — it is meant to accumulate, at roughly 35 MB a day
 of speech. Delete it if you don't want it; the relay recreates only what arrives
@@ -315,9 +296,8 @@ grants to a signing identity plus bundle id, and a bare SwiftPM binary is ad-hoc
 signed with a fresh identity on every rebuild — so you would re-grant permission
 after every change. Set `CODESIGN_IDENTITY` to your own signing identity.
 
-Requires macOS, **Accessibility** (event tap + selection read) and **Screen
-Recording** (screenshots). Wispr Flow is optional — without it, screenshots still
-work and nothing else does.
+Requires macOS, **Accessibility** (event tap + selection read), **Screen
+Recording** (screenshots) and the **Microphone**.
 
 ## Debug switches
 

@@ -1,54 +1,6 @@
 import Darwin
 import Foundation
 
-/// Which recogniser's words reach the agent.
-///
-/// Wispr Flow remains the default and the recorder in both cases. What the
-/// setting changes is **whose reading of the recording is believed**: Wispr's
-/// own `formattedText`, or a Whisper running on this Mac over the very same
-/// audio.
-///
-/// ## Why this can exist without a microphone
-///
-/// `History.audio` is a complete 16 kHz mono WAV — the same bytes Wispr scored —
-/// so the local engine transcribes Wispr's recording rather than making one of
-/// its own. That is what keeps this a switch rather than a rewrite: no
-/// microphone code, no new TCC grant, no second capture that could drift from
-/// the first, and a like-for-like comparison in live use.
-///
-/// **It is therefore not independence from Wispr yet, and must not be described
-/// as such.** Wispr still records, still decides when a dictation starts and
-/// ends, and still has to be installed and running. Dropping it entirely means
-/// owning the microphone and a push-to-talk key, which is a separate piece of
-/// work — this is the step that answers whether that work is worth doing, by
-/// putting the local model on the real job instead of on a benchmark.
-enum TranscriptionEngine: String {
-    case wispr
-    case whisper
-
-    var label: String {
-        switch self {
-        case .wispr:   return "Wispr Flow"
-        case .whisper: return "Local Whisper"
-        }
-    }
-
-    /// `UserDefaults`, so the choice survives both a relay restart and a logout.
-    ///
-    /// The alternative was a file beside the outbox, which is where this app puts
-    /// things it wants Victor to find. This is the opposite kind of state: it is
-    /// set from a menu and read by the app, never by hand and never by an agent,
-    /// and a preference is exactly what `UserDefaults` is. It is keyed under the
-    /// bundle id, so a `--home` test instance shares it — deliberately: the
-    /// engine is a property of *this Mac's* setup, not of one outbox.
-    private static let key = "transcriptionEngine"
-
-    static var current: TranscriptionEngine {
-        get { TranscriptionEngine(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .wispr }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
-    }
-}
-
 /// Runs the local model, by talking to a Python daemon over pipes.
 ///
 /// **The daemon shape is forced by a measurement**: importing `mlx_whisper`
@@ -58,9 +10,11 @@ enum TranscriptionEngine: String {
 /// warms up on a second of silence, and then answers at roughly a tenth of the
 /// audio's duration.
 ///
-/// **It is started only when the engine is actually selected.** The weights are
-/// 1.5 GB resident, and the overwhelmingly common case is a relay running all
-/// day on Wispr, which must not be paying for a model nobody asked for.
+/// **It is started only when a dictation is coming.** The weights are 1.5 GB
+/// resident, and the ordinary case is a relay sitting in the menu bar all day
+/// with nothing bound, which must not be paying for a model nobody asked for.
+/// The two gestures that mean a dictation is coming — binding a terminal, and
+/// the wheel held on a model that is not up yet — are what bring it up.
 final class LocalWhisper {
 
     struct Result {

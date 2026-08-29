@@ -15,8 +15,8 @@
 
 (() => {
   'use strict';
-  if (window.__wisprRelayInspector) return;
-  window.__wisprRelayInspector = true;
+  if (window.__walkieTalkieInspector) return;
+  window.__walkieTalkieInspector = true;
 
   // The chord has to be *held*, not merely pressed.
   //

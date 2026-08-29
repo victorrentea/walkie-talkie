@@ -89,7 +89,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>NSAccessibilityUsageDescription</key>
     <string>Walkie Talkie needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Walkie Talkie records your dictation itself when the Local Whisper engine is selected, so that Wispr Flow is not in the loop at all.</string>
+    <string>Walkie Talkie records your dictation so it can transcribe it locally and relay it to your coding agent.</string>
 </dict>
 </plist>
 PLIST

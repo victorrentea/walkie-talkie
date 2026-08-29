@@ -22,11 +22,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     var onExit: (() -> Void)?
     var onTogglePause: (() -> Void)?
-    /// Picked from the two engine rows in the menu. `AppDelegate` owns what happens
-    /// next — bringing the model up or letting it go — and calls `setEngine`
-    /// back, so the tick never claims something that has not happened.
-    var onPickEngine: ((TranscriptionEngine) -> Void)?
-
     /// What the local model is holding right now, in bytes — nil while it is not
     /// up. Asked when the menu opens, like the header, because that is the only
     /// moment the answer has to be right.
@@ -85,8 +80,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let stopRecording = NSMenuItem(title: "End Dictation — tap the wheel", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
-    private var engineItems: [TranscriptionEngine: NSMenuItem] = [:]
-    private var engine = TranscriptionEngine.current
+    /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
+    private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     private var isPaused = false
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
@@ -158,27 +153,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
         disconnect.isEnabled = false
         menu.addItem(disconnect)
 
-        // **Only on Local Whisper, because only then does the relay hold the
-        // microphone.** With Wispr Flow the recording is Wispr's — it starts and
-        // ends on Wispr's own button, and a row here claiming to stop it would be
-        // a lie the app cannot make true. So the row is hidden outright rather
-        // than shown greyed: a permanently dead command is a question ("why can't
-        // I?") the menu then has to answer, and there is no answer that fits in a
-        // menu.
-        //
-        // Mouse 5 already ends a recording — this is the same call, for the case
-        // the mouse is not where the hand is: mouse 5 is a thumb button on one
-        // specific mouse, and a dictation started at the desk has to be closable
-        // from the trackpad, from another room's Bluetooth mouse, or after the
-        // mouse's battery has gone. Recording is the one state where being unable
-        // to reach the button costs the dictation *and* keeps the microphone open.
+        // The wheel already ends a recording — this is the same call, for the
+        // case the mouse is not where the hand is: a dictation started at the
+        // desk has to be closable from the trackpad, from another room's
+        // Bluetooth mouse, or after the mouse's battery has gone. Recording is
+        // the one state where being unable to reach the button costs the
+        // dictation *and* keeps the microphone open.
         //
         // Disabled while nothing is being recorded, the way Disconnect is while
         // nothing is bound: the row is the only place in the menu that says
         // whether the microphone is open at all, so it stays visible and answers
         // that question even when there is nothing to click.
-        // **Above Stop, because it comes first.** Mouse 5 was the only way in, and
-        // it is a thumb button on one specific mouse — the same argument that put
+        // **Above Stop, because it comes first.** The wheel was the only way in,
+        // and it is one button on one specific mouse — the same argument that put
         // Stop here, which had been keeping the menu able to end a dictation it
         // could not begin. Enabled only while something is bound: unbound the
         // relay is inert and `startLocalRecording` would refuse anyway, and a row
@@ -206,35 +193,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // Two ticked items rather than one "Use local Whisper" checkbox. The
-        // choice is between two named recognisers, and a checkbox would name only
-        // one of them — leaving the other as "not that", which is exactly the
-        // thing worth being explicit about while the local one is still being
-        // evaluated.
+        // **One row, and it is a readout rather than a switch.** There used to be
+        // two — Wispr Flow and Local Whisper, ticked — from the months the relay
+        // read another app's database. It records for itself now, so there is
+        // nothing to choose between; what is left is the one question the row was
+        // really being read for, which is whether the model is up and what it is
+        // holding.
         //
-        // Laid out flat in the main menu, one under the other, rather than behind
-        // a "Transcription" submenu: two items are not worth a hover-and-wait, and
-        // flat means the tick — which engine is live right now — is readable the
-        // moment the menu opens, instead of only after the submenu unfurls. The
-        // separator above is what a submenu was really providing: a visible break
-        // from the commands, so a row that *sets a mode* is never mistaken for one
-        // that *does something*.
-        for engine in [TranscriptionEngine.wispr, .whisper] {
-            let mi = NSMenuItem(title: engine.label, action: #selector(engineClicked(_:)), keyEquivalent: "")
-            // **Wispr Flow is shown and cannot be picked.** The relay owns the
-            // microphone now — mouse 5 went back to Wispr on 2026-08-29 and the
-            // wheel starts a local dictation — so choosing Wispr here would put
-            // both apps on one button again. The row stays visible rather than
-            // being removed: the code behind it is intact and this is the one
-            // place that says the choice exists, for whoever needs it on a
-            // machine that cannot host a model.
-            if engine == .wispr { mi.isEnabled = false }
-            mi.target = self
-            mi.representedObject = engine.rawValue
-            menu.addItem(mi)
-            engineItems[engine] = mi
-        }
-        setEngine(TranscriptionEngine.current)
+        // Kept in the menu rather than deleted: it is the only place that says
+        // the weights are resident, and the only place `— loading…` is visible
+        // when the chip is not on screen.
+        whisperItem.isEnabled = false
+        menu.addItem(whisperItem)
+        applyWhisperTitle()
 
         menu.addItem(.separator())
 
@@ -255,30 +226,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         mirror.start()
     }
 
-    /// The tick follows the engine that is actually in use, which is why
-    /// `AppDelegate` calls this rather than the click handler doing it: choosing
-    /// Local Whisper starts a model that takes ten seconds to load and can fail
-    /// outright, and a tick that moved on the click would say the switch had
-    /// happened while the weights were still loading — or after it had failed.
-    func setEngine(_ engine: TranscriptionEngine) {
-        self.engine = engine
-        for (e, mi) in engineItems { mi.state = (e == engine) ? .on : .off }
-        applyStopRecording()
-        applyBind()
-    }
-
     /// Shown beside the name in the menu **and** in the menu bar itself.
     ///
     /// The in-menu half only helps a menu that is already open, which is not
-    /// where he will be looking: he clicks Local Whisper, the menu closes, and
-    /// then he wants to know when he may start talking. The menu bar is the one
-    /// place that is always in the same pixels — and the only one still visible
-    /// while he types, since the chip rides the pointer and macOS hides the
-    /// pointer while typing.
+    /// where he will be looking: he binds a terminal, the menu closes, and then
+    /// he wants to know when he may start talking. The menu bar is the one place
+    /// that is always in the same pixels — and the only one still visible while
+    /// he types, since the chip rides the pointer and macOS hides the pointer
+    /// while typing.
     ///
     /// ⏳ takes the same slot as ⏸️ and outranks it for the ten seconds it is up:
     /// paused is a state he chose and can read at leisure, while this one is
-    /// about whether the *next* sentence will reach the engine he just picked.
+    /// about whether the *next* sentence has a recogniser to reach.
     func setEngineLoading(_ loading: Bool) {
         engineLoading = loading
         applyWhisperTitle()
@@ -287,12 +246,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// `Local Whisper — 1.6 GB RAM` while the model is up.
     ///
-    /// **The cost is shown where the choice is made.** The weights are the whole
-    /// argument for starting the helper only when the engine is selected and
-    /// killing it the moment it is not; until now that cost was a number in this
-    /// file's comments, which is exactly where a fact nobody can check belongs.
-    /// Beside the row that turns it on, it is the answer to "what am I paying for
-    /// this?" at the moment the question can still be acted on — and it doubles as
+    /// **The cost is shown, because the weights are the whole argument** for
+    /// starting the helper only when a dictation is coming and letting it go
+    /// afterwards; until this row existed that cost was a number in a comment,
+    /// which is exactly where a fact nobody can check belongs. It doubles as
     /// proof the helper is actually alive, since a dead one has no footprint and
     /// the row goes back to its bare name.
     ///
@@ -304,18 +261,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
     /// `LocalWhisper.footprintBytes` for why not RSS.
     private func applyWhisperTitle() {
-        let name = TranscriptionEngine.whisper.label
+        let name = "Local Whisper"
         if engineLoading {
-            engineItems[.whisper]?.title = "\(name) — loading…"
+            whisperItem.title = "\(name) — loading…"
         } else if let bytes = whisperFootprint?() {
-            engineItems[.whisper]?.title = String(format: "%@ — %.1f GB RAM", name,
-                                                  Double(bytes) / 1_073_741_824)
+            whisperItem.title = String(format: "%@ — %.1f GB RAM", name,
+                                       Double(bytes) / 1_073_741_824)
         } else {
-            engineItems[.whisper]?.title = name
+            whisperItem.title = name
         }
     }
 
-    /// Present only on Local Whisper, live only while the microphone is open.
+    /// Live only while the microphone is open.
     ///
     /// The title does not change with the state — greyed is the whole of "there
     /// is nothing being recorded", the same way Disconnect is greyed while
@@ -331,24 +288,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     private func applyStopRecording() {
         let recording = isRecording?() ?? false
-        // All three are the relay's own microphone, which it only has on Local
-        // Whisper: with Wispr Flow the recording is Wispr's, started and ended on
-        // Wispr's button, and a row claiming otherwise would be a promise this
-        // app cannot keep.
-        let mine = engine == .whisper
-        startDictation.isHidden = !mine
         startDictation.isEnabled = isBound && !recording
-        stopRecording.isHidden = !mine
         stopRecording.isEnabled = recording
-        cancelDictation.isHidden = !mine
         cancelDictation.isEnabled = recording
     }
 
     private func refreshGlyph() {
         // The picture says bound; the badge in front of it says the two states
         // that are *not* about where the words go. ⏳ outranks ⏸️ for the ten
-        // seconds it is up, since "will the next sentence reach the engine I just
-        // picked" is the more urgent of the two questions.
+        // seconds it is up, since "will the next sentence have a recogniser" is
+        // the more urgent of the two questions.
         let badge: String
         if engineLoading      { badge = "⏳" }
         else if isPaused      { badge = "⏸️" }
@@ -490,9 +439,4 @@ final class StatusItem: NSObject, NSMenuDelegate {
         onTogglePause?()
     }
 
-    @objc private func engineClicked(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let engine = TranscriptionEngine(rawValue: raw) else { return }
-        onPickEngine?(engine)
-    }
 }

@@ -18,8 +18,9 @@ while let arg = args.next() {
         if let label = args.next() { SessionLabel.override(label) }
     case "--help", "-h":
         print("""
-        Walkie Talkie — floating overlay that relays what Wispr Flow hears,
-        the text you had selected, and screenshots to a waiting agent.
+        Walkie Talkie — floating overlay that records what you dictate,
+        transcribes it locally, and relays it with the text you had selected
+        and your screenshots to a waiting agent.
 
           --home <dir>   outbox directory (default ~/.walkie-talkie). Screenshots
                          always go to ~/Library/Caches/ro.victorrentea.wispr-relay,

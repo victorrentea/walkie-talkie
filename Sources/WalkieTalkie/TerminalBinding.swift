@@ -712,8 +712,8 @@ final class TerminalBinding {
     /// make, and it exists only because VS Code and IntelliJ host their
     /// terminals inside windows nothing outside the app can address. The focus
     /// does move — for about a fifth of a second — which is survivable because
-    /// by the time this runs Wispr has long finished pasting its transcript
-    /// wherever it was going to.
+    /// by the time this runs the dictation is long over and nothing else is
+    /// competing for the caret.
     ///
     /// The clipboard is restored, because the relay must not cost Victor
     /// whatever he was carrying on it.

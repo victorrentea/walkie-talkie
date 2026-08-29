@@ -23,11 +23,11 @@ import Network
 /// also replayed to each client the moment it connects, so a worker that *was*
 /// torn down mid-dictation comes back knowing it still owes a resume.
 ///
-/// **Its own port, and not 8766.** Victor Addons runs the same bridge for Wispr
-/// Flow's own dictations. Both may be installed, both may pause, and that is
-/// harmless — each extension resumes only the elements it marked, and an element
-/// the other one already stopped is skipped as "not playing". But they cannot
-/// share a listener, so this takes 8920, just past `ElementPicker`'s 8917–8919.
+/// **Its own port, and not 8766.** Victor Addons runs the same bridge for its
+/// own dictations. Both may be installed, both may pause, and that is harmless —
+/// each extension resumes only the elements it marked, and an element the other
+/// one already stopped is skipped as "not playing". But they cannot share a
+/// listener, so this takes 8920, just past `ElementPicker`'s 8917–8919.
 final class MusicBridge {
 
     static let port: UInt16 = 8920

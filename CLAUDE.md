@@ -19,7 +19,7 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
-  and `engineText` beside the pulsing 🔴 (`Listening with Wispr Flow` / `Listening with <model id>`)
+  and `engineText` beside the pulsing 🔴 (`Listening with <model id>`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
@@ -27,8 +27,7 @@ Current strings live in `RelayWindow.swift`:
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Disconnect` /
-  `Stop Recording` / `Quit`, plus the two transcription-engine rows
-  (`Wispr Flow` / `Local Whisper`), flat in the main menu
+  `Stop Recording` / `Quit`, plus the `Local Whisper` readout row
 
 ## Bound to a terminal: the second destination
 
@@ -193,11 +192,11 @@ to explain what a field called `screen` is for.
 **And `[this text was dictated in RO or EN]`, which is the one clause that
 changes how the rest is read rather than adding something to read.** A transcript arrives
 looking exactly like something Victor typed, so a mis-heard word reads as a word
-he chose. Measured on his own corpus, a local recogniser turned `Wispr Relay` —
+he chose. Measured on his own corpus, the recogniser turned `Wispr Relay` —
 what this app was called then — into
 `risparerile ei`; an agent that does not know the input came through a
 microphone has no reason to sound that out, and one that does resolves it at
-once. The same failure exists with Wispr — rarer, not absent.
+once.
 `dictation` only — inviting phonetic guessing at a screenshot's caption or a
 typed message would be inviting it to misread them.
 
@@ -209,10 +208,9 @@ a word out in is worth saying, and `RO` also explains a Romanian sentence
 carrying English technical terms verbatim, which is how he actually speaks.
 
 For one commit the clause carried the detected code (MLX Whisper reports it in
-its JSON; Wispr keeps it in `History.detectedLanguage`, while `language` there is
-the *setting* and is empty on auto). It was taken out because the code is not
-reliable enough to assert: Wispr had labelled a sentence of Victor's plain
-Romanian `en` in the very row used to test it. A clause naming the wrong language
+its JSON). It was taken out because the code is not reliable enough to assert: a
+sentence of Victor's plain Romanian came back labelled `en` in the very recording
+used to test it. A clause naming the wrong language
 is worse than one naming neither — it aims the phonetics at a language the words
 were never said in. Both, always, is true on every dictation.
 
@@ -467,12 +465,14 @@ port scheme for a caller to guess between, and buys nothing.
 | `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
+| `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero to count from |
+| `GET /engine` | which model is loaded, and whether it is ready |
 
 `/bind`, `/unbind` and `/target` are **not gated on `dictating`**, unlike `/ping`
 and `/pick`: pointing the relay at a terminal is something Victor does at rest,
 and a bind that only worked mid-sentence would be one he could never make.
 
-`/test/dictation` exists because everything downstream of Wispr — the held
+`/test/dictation` exists because everything downstream of the microphone — the held
 prompt, the countdown, the outbox line, the delivery — was otherwise reachable
 only by talking into a microphone, which made the one part of this app that types
 into a live session the one part nobody could test at a desk.
@@ -492,9 +492,8 @@ app to launch it, and a key served by the process it acts on cannot go stale
 against it.
 
 Nothing about ⌘⌃D remains in Addons: no binder, no banner, no hotkey branch. The
-cheat sheet still lists the key, display-only, exactly the way it lists Wispr
-Flow's ⌘⌃W — the sheet answers "what does this combination do on **this Mac**",
-which a key owned by another app still answers.
+cheat sheet still lists the key, display-only — the sheet answers "what does this
+combination do on **this Mac**", which a key owned by another app still answers.
 
 It is still the **only** owner: two taps claiming ⌘⌃D would both fire on one
 press. Autorepeat is swallowed here now (a held key would bind and then
@@ -508,9 +507,9 @@ every dictation arriving there two or three times.
 ## The rename, and the two places the old name survives
 
 The app was `wispr-relay` until 2026-08-26 — folder, repo, Swift target, `.app`
-and home folder all say `walkie-talkie` now. **Wispr Flow keeps its own name**
-wherever it appears: it is a different program, and this app still reads its
-database, watches its recording state and falls back to its transcripts.
+and home folder all say `walkie-talkie` now. The dictation app it was named after
+is gone from the code entirely since 2026-08-29 (see *The recogniser*): no
+database read, no recording watch, no fallback, no swallowed paste.
 
 Two strings deliberately still say the old name:
 
@@ -521,7 +520,7 @@ Two strings deliberately still say the old name:
   whose whole job is to be running before Victor starts talking. It is invisible
   everywhere he looks. `build-app.sh` says so beside the line, because it is
   exactly the kind of inconsistency a later reader would tidy up.
-- **One quoted mis-transcription** in the notes above `dictatedHint`, where a local
+- **One quoted mis-transcription** in the notes above `dictatedHint`, where the
   recogniser turned `Wispr Relay` into `risparerile ei`. That is evidence about
   what a recogniser did to a word, not a name to keep current.
 
@@ -548,7 +547,7 @@ not yet reloaded would otherwise fall back to a blind paste.
 
 There is **no text entry** and **no selection shortcut**. Both existed and were
 deliberately removed — everything except "one more shot" now happens by itself
-when Wispr starts listening, and that one is reachable without the keyboard at
+when a dictation opens, and that one is reachable without the keyboard at
 all (see *Mouse 4 is the shutter*). Do not reintroduce a typing affordance:
 the panel's `canBecomeKey` is false precisely so the overlay can never steal the
 caret from the app Victor is working in.
@@ -562,11 +561,11 @@ moves to the target and straight back.
 
 ## Unbound is inert
 
-**With no terminal bound, the app does nothing to a dictation at all.** Not a
-picture, not a borrowed mouse button, not an outbox line — and Wispr Flow's own
-paste goes through untouched. Since 2026-08-27, `AppDelegate.isBound`
-(`terminal.target != nil`) gates every path that pause gates, plus one pause
-never did: `syncLocalCapture`, which is where `HotkeyTap.blockInjection` lives.
+**With no terminal bound, the app does nothing at all.** No dictation can be
+started, no picture is taken, no mouse button is borrowed, no line is written.
+Since 2026-08-27, `AppDelegate.isBound` (`terminal.target != nil`) gates every
+path that pause gates, plus `syncLocalCapture`, which is what lets the wheel open
+the microphone.
 
 | gate | unbound | paused |
 |---|---|---|
@@ -574,17 +573,15 @@ never did: `syncLocalCapture`, which is where `HotkeyTap.blockInjection` lives.
 | `plusOneShot` — F3 / mouse 4 | off | off |
 | `send` — the outbox line and the delivery | off | off |
 | `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off | off |
-| `syncLocalCapture` — **Wispr's injection**, mouse 5 on Whisper | **off** | off |
-| `dictation.onChange` — the recording row | off (the *stop* edge still runs) | on |
-| `corpus.capture` | **on** | on |
+| `syncLocalCapture` — the wheel's claim on the microphone | **off** | off |
+| `corpus.captureLocal` | **on** | on |
 
 Why it had to change. The relay used to be started per session by `/relay` and
 live only as long as Victor was dictating at an agent, so "running" and "aimed at
 something" were the same fact and none of this could misfire. Since 2026-08-26 it
 is a **login item** and sits there all day — so every sentence he spoke into a
-browser, a chat or a commit message was getting a screenshot taken of it, was
-losing him mouse 4 and ⌘⇧-click, and, worst of the three, was having Wispr's
-paste swallowed by a relay with nowhere to put the words instead. Pause existed
+browser, a chat or a commit message was getting a screenshot taken of it and was
+losing him mouse 4 and ⌘⇧-click, with nowhere for the words to go. Pause existed
 to stop exactly that, and he was having to press it against an app that had no
 destination anyway.
 
@@ -605,12 +602,8 @@ be dictating into a browser cannot be taken again.
 route into and out of a binding passes through — ⌘⌃D, `POST /unbind`, and a
 target discovered gone at delivery time (`report(.targetGone)`). That last one is
 why it lives there and not in the two callers: a relay whose terminal was closed
-under it must stop swallowing Wispr's paste at that moment, not at the next
-deliberate gesture.
-
-**The stop edge of `dictation.onChange` is never gated**, only the start edge. A
-relay unbound in the middle of a sentence would otherwise leave the recording row
-on screen with nothing left running to take it down.
+under it must hand the wheel and the microphone back at that moment, not at the
+next deliberate gesture.
 
 **`/test/dictation` is gated too**, which makes it useless at a desk with nothing
 bound. That is the right reading of a route whose whole claim is that it enters
@@ -619,22 +612,20 @@ path under test needs anyway.
 
 ## What pause is (and is not)
 
-Pause **does not touch Wispr Flow**. That is the whole purpose of it: Victor
-pauses so he can dictate into a browser, a chat, a commit message *normally*,
-without those words also landing in the agent's queue. Nothing in this app may
-try to stop, mute or intercept the transcription — it only stops acting on it.
+Pause **hands the machine back**. Victor pauses so the wheel goes to the app
+underneath, the back button types Return again, and nothing he says is recorded
+or relayed — which is what he wants while dictating into a browser, a chat or a
+commit message with some other tool.
 
 Concretely, `paused` bails out of four places and nowhere else — the same four
-`isBound` gates, plus the injection block it does not touch (see *Unbound is
-inert*): `captureContext`
+`isBound` gates (see *Unbound is inert*): `captureContext`
 (no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
 nothing), `send` (nothing reaches the outbox), and `syncBorrowedGestures` — which
 hands mouse 4 back to LinearMouse *and* ⌘⇧-click back to Chrome. That last one is
 load-bearing rather than tidy: dictating into a browser is the reason he paused,
 and an inspector still eating his ⌘⇧-clicks would be the one thing pause was
-supposed to stop. Wispr keeps reporting that it
-is listening, which is why `recordText` also hides the recording row while
-paused — advertising F3 in a state where it does nothing would be a lie.
+supposed to stop. `recordText` also hides the recording row while paused —
+advertising F3 in a state where it does nothing would be a lie.
 
 ## Title states
 
@@ -650,7 +641,7 @@ from the working directory (inherited from the session, since `/relay` launches
 |---|---|
 | idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound* |
 | idle, bound | the destination app's icon + `petclinic@main` — no state word: "standing by" is what he can already infer from nothing happening |
-| Wispr recording | `🤖 ai@master`, unchanged, **plus the recording row below it** |
+| dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
@@ -682,7 +673,7 @@ glyph column and one text column:
 
 ```
 🤖 ai@master
-🔴 Wispr Flow                       ← something is listening, and this is what
+🔴 whisper-large-v3-turbo           ← something is listening, and this is what
 📸 2 — mouse/F3 for more shots      ← what the message is carrying
 [chrome] — ⌘⇧+click to select element
 ```
@@ -745,7 +736,7 @@ of the dictation.
 
 **The mouse is named in words now** — `— mouse/F3 for more shots`, where it was
 `🖱️/F3`. The glyph-only form was right while the row was one line of shorthand
-sitting under a title; beside a row that says `Wispr Flow` in full it reads as a
+sitting under a title; beside a row that spells the model out in full it reads as a
 different register. Which button is still unsaid, and still does not need saying:
 the hand knows by the second dictation.
 
@@ -765,7 +756,7 @@ borrowed and then handed straight back.
 `MusicBridge` pushes `{type:"dictation", active, seq}` over a WebSocket on
 **127.0.0.1:8920** and `chrome-extension/relay.js` pauses every audible tab,
 resuming exactly those. Ported from Victor Addons' `DictationBridge` + its
-`chrome-extension/`, which does the same for Wispr's own dictations — read
+`chrome-extension/`, which does the same for its own dictations — read
 `victor-macos-addons/docs/audio-sounds.md` for the CoreAudio half of the story.
 
 **Why Chrome decides which tab.** CoreAudio funnels every tab through one Chrome
@@ -810,7 +801,7 @@ nothing until then.
 ## Mouse 4 is the shutter, but only while dictating
 
 The back side button (`MOUSE_BUTTON_4` = 3) takes a shot, and the relay
-**swallows it** so nothing else acts on it — while Wispr is recording and
+**swallows it** so nothing else acts on it — while a dictation is running and
 forwarding is on, and at no other time.
 
 That button is Victor's Return key: LinearMouse
@@ -825,7 +816,7 @@ Three rules keep the theft honest:
 
 - **Gated on `listening && !paused`**, pushed to the tap by
   `AppDelegate.syncBorrowedGestures()` from both edges that can change the answer
-  (Wispr starting/stopping, pause toggling). At rest and while paused the button
+  (a dictation starting/stopping, pause toggling). At rest and while paused the button
   is untouched and still types Return. That one method sets **both** borrowed
   gestures — this button and ⌘⇧-click in Chrome — from a single expression, so the
   recording row can never advertise one of them in a state where it is dead.
@@ -1149,30 +1140,19 @@ fires at launch, long before a dictation.
 ## The voice corpus: audio kept beside the transcript, forever
 
 **`~/.walkie-talkie/voice-corpus/`** — `VoiceCorpus.swift`. Every dictation the
-watcher sees while the relay is up leaves three things behind:
+relay records leaves three things behind:
 
 ```
-voice-corpus/2026-08-17/14-30-22-a1b2c3d4.wav   ← what Victor said
-voice-corpus/2026-08-17/14-30-22-a1b2c3d4.txt   ← what Wispr made of it
+voice-corpus/2026-08-17/14-30-22-local123.wav   ← what Victor said
+voice-corpus/2026-08-17/14-30-22-local123.txt   ← what the model made of it
 voice-corpus/corpus.jsonl                        ← one line per sample
 ```
 
-It exists to make one future decision measurable: **replacing Wispr Flow with a
-local model.** The relay transcribes nothing today and is not being taught to.
-What it cannot do later is go back and collect the samples — Wispr keeps the
-audio for a while and then drops it (measured 2026-08-17: **495 rows still had
-audio out of 11,999**, roughly the last fortnight; the rest are text forever).
-Every day the relay runs without this is a day of paired data that is gone.
+It exists so a recogniser can be judged on **Victor's own voice** later — the
+words he actually says to an agent, at the speed and in the accent he says them.
+That is the one thing no public benchmark contains and the one thing that cannot
+be collected retroactively.
 
-- **The audio is Wispr's own bytes, not a second recording.** `History.audio` is
-  a complete `.wav` — RIFF header and all, 16 kHz mono 16-bit PCM. Verified by
-  writing a blob straight out and reading it back: `afinfo` says
-  `1 ch, 16000 Hz, Int16`, 23.384s against the row's `duration` of 23.4, and the
-  written file is byte-identical to the blob. Beyond being free, it is the only
-  way the eventual comparison is *like-for-like*: a parallel recording made by
-  this app would be a different signal from the one Wispr scored — other device,
-  other gain, other start and end — and a benchmark where the two models heard
-  different audio measures nothing. **Do not add a microphone to this app.**
 - **It is not in Caches, and that is the opposite of the shots' argument.** A
   screenshot's purpose expires within the turn that reads it, so a folder the
   system may purge is right for it. A corpus is worthless unless it accumulates.
@@ -1184,106 +1164,51 @@ Every day the relay runs without this is a day of paired data that is gone.
   ever bites, `afconvert` to FLAC halves it losslessly and is already on the Mac
   — but do not compress lossily, which would put a second codec between Victor's
   voice and the model being judged.
-- **The `.txt` is the formatted text and the manifest carries `asr` beside it**,
-  and that split is the point of having a manifest. `formattedText` has been
-  through Wispr's LLM post-processing — punctuation, casing, the user dictionary
-  — so scoring a local Whisper against it charges the model for work an ASR does
-  not do. `asr` is the apples-to-apples reference; the formatted text is the bar
-  the *product* has to clear. The two already differ on the first sample
-  collected (a trailing full stop). The `.txt` holds the transcript **and
-  nothing else**, ending in a newline: it is meant to be diffed against another
-  model's output, and metadata mixed in would have to be stripped by everything
-  that reads it.
-- **Everything the watcher sees, paused included.** Pause is documented as
+- **The `.txt` is the transcript and nothing else**, ending in a newline: it is
+  meant to be diffed against another model's output over the same WAVs, and
+  metadata mixed in would have to be stripped by everything that reads it.
+  Duration, detected language, the app that was in front and
+  `engine: "whisper-local"` are in the manifest, which is the thing built to
+  carry them.
+- **The line beside a recording is not ground truth.** It is what the model that
+  produced it heard, so scoring *that* model against it measures nothing. Real
+  ground truth means transcripts corrected by hand, which this corpus makes
+  possible and does not itself contain. A field that merely *looks* like a
+  correction is not one either: the relay once had access to a "what the user
+  edited afterwards" column and it turned out to record where the text had been
+  pasted, not what the recogniser got wrong.
+- **Everything the microphone hears, paused included.** Pause is documented as
   bailing out of exactly four places and this is deliberately not a fifth: it
-  stops the relay *acting* on a dictation, and collecting the recording is not
-  acting on it — nothing is sent anywhere, the file is on his own disk either
-  way. Narrowing it to unpaused would throw away the minutes he spends dictating
-  into a browser, which are some of his longest and least technical, i.e.
-  precisely the coverage a corpus of agent prompts otherwise lacks. `capture` is
-  therefore called from `wispr.onTranscript` beside `send`, never through it.
-- **Keyed by Wispr's own `transcriptEntityId`**, which is what makes two relays
-  safe. Both watch the same DB and both are handed the same id; the second finds
-  the `.wav` already there and stops, so the sample is written once. The id also
-  survives into the file name (first 8 chars) and the manifest, so a sample can
-  always be traced back to the row it came from.
-- **The blob is fetched off the poll path.** `WisprWatcher.onTranscript` carries
-  the id and not the audio: the blob is megabytes, and the poll is how the words
-  reach the agent. `VoiceCorpus` re-reads the row on its own utility queue, and
-  **retries at 0/1.5/4s** because Wispr writes the text and the audio in its own
-  order and the watcher can win that race. A row that still has no audio after
-  that is logged and skipped — a corpus entry with no recording is not a sample.
-- **`POST /test/corpus {"id": "…", "origin": "…"}`** collects a sample for a row
-  that already exists. `/test/dictation` cannot reach this code, because a
-  fabricated transcript has no recording behind it — and this is the same
-  argument that route was added for.
+  stops the relay *acting* on a dictation, and filing the recording is not acting
+  on it — nothing is sent anywhere, the file is on his own disk either way.
+  `captureLocal` is therefore called from `stopLocalRecording` beside `send`,
+  never through it.
+- **The bytes are read on the caller's thread**, before the queue hop: the staged
+  WAV is deleted as soon as `captureLocal` returns, and a copy queued for later
+  would race it.
+- **The clock is the key**, `HH-mm-ss` plus the millisecond. There is one
+  microphone and one hand on the wheel, so two samples cannot share a second —
+  and the millisecond keeps a retry from overwriting one.
 
-  **It is also how the corpus was back-filled**, on 2026-08-17, the day it was
-  written: 478 rows still had their audio, so driving every id through this
-  route filled the corpus with **2.75 h over 3–15 August** (305 MB, 339 ro /
-  132 en) instead of waiting a fortnight for it. Driving the route rather than
-  writing the files from a script is the point — the app stays the only writer
-  of that format, so a back-fill cannot drift from what live capture produces.
+## The recogniser
 
-  `origin` is what makes that honest. It replaces the manifest's `session`,
-  which for live capture is the relay session that heard the dictation and is
-  the truth. A back-filled row was dictated days ago from a session long gone;
-  stamping it with whatever session happens to be running now would not be a
-  useless field but a **wrong** one, and this corpus is meant to be read months
-  from now. Back-filled samples say `"session": "backfill"`.
+`Transcriber.swift` (`LocalWhisper`) plus `helpers/whisper_helper.py`. There is
+**one** recogniser and no setting to change it: the relay records through
+`MicRecorder` and transcribes locally. It needs `mlx_whisper`
+(`pip install mlx-whisper`) and `ffmpeg`, which `mlx_whisper` shells out to for
+decoding; the model is `mlx-community/whisper-large-v3-turbo`, overridable with
+`RELAY_WHISPER_MODEL`.
 
-### `editedText` is not ground truth — do not use it as one
-
-It looks like exactly what an evaluation wants: 105 rows have both audio and an
-`editedText`, which reads like "the transcript after Victor corrected it". It is
-not. Wispr fills it by **observing the target app after the paste**
-(`contentObservationEndReason` is the giveaway), so it records what happened to
-the text downstream, not what was wrong with the recognition.
-
-Measured before believing it: of 104 such rows, **56 are identical** to
-`formattedText` once whitespace is normalised, and the 48 that differ are
-overwhelmingly of this shape:
-
-```
-formatted: Arată-mi ce viziți ai, șters!
-edited   : arată-mi ce viziți ai, șters
-formatted: It is degrading for the human being to prove manually…
-edited   : "it is degrading for the human being to prove manually…"
-```
-
-A lowercased initial because it was pasted mid-sentence, a stripped full stop,
-added quotation marks. Scoring a recogniser against that measures where Victor
-pasted, not what the microphone heard.
-
-**There is no ground truth in this DB.** Every number the corpus can produce
-today is a *disagreement rate* between two recognisers, not an error rate — and
-when they disagree, either one may be the correct side. Real ground truth needs
-transcripts corrected by hand, which is what the corpus makes possible and does
-not itself contain.
-- `FlowDB.swift` now holds the read-only opener both readers share. The URI form
-  with `mode=ro` is load-bearing (see `WisprWatcher`) and was not worth
-  remembering correctly in two places.
-
-## Choosing the recogniser: Wispr Flow or a local Whisper
-
-The menu bar's two engine rows — **Wispr Flow** and **Local Whisper**, flat in the
-main menu below a separator — switch which recogniser's words reach
-the agent, and the choice is kept in `UserDefaults` so it survives a relay
-restart and a logout. `Transcriber.swift` holds both the setting and the engine;
-`POST /engine {"engine": …}` and `GET /engine` are the same switch on the
-loopback surface.
-
-**Wispr recorded in both modes until 2026-08-26, and that was deliberate**: the
-local engine transcribed `History.audio` — the complete 16 kHz WAV Wispr already
-stored, the same bytes Wispr's own recogniser scored — so there was no microphone
-code, no new TCC grant, no second capture that could drift from the first, and a
-genuinely like-for-like comparison in live use. That was the step that answered
-whether owning the microphone was worth the work. It was.
-
-**Local Whisper now records for itself, and Wispr is out of the loop entirely.**
-See *Mouse 5 is the relay's on Local Whisper* below. The Wispr-recorded path is
-still there and still the one that runs on the Wispr engine, and it is still what
-a `POST /test/transcript` replays.
+**It used to read another app's database.** Until 2026-08-29 the relay watched
+Wispr Flow's `flow.sqlite` for finished transcripts, transcribed the WAV blob it
+found there, swallowed Wispr's own paste on the way past, and fell back to
+Wispr's text whenever the local model could not answer — with a menu row to pick
+between the two. All of that is gone, on Victor's instruction, and it went whole:
+`WisprWatcher.swift`, `FlowDB.swift`, `DictationMonitor.swift`, the
+`TranscriptionEngine` setting, `HotkeyTap.blockInjection`, and the
+`POST /engine`, `POST /test/corpus` and `POST /test/transcript` routes. **Do not
+reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
+*local* model, not another app's database.
 
 - **A daemon, not a subprocess per dictation, and that is measured.** Importing
   `mlx_whisper` costs 7.4s and the first transcription another 2.8s for the
@@ -1291,46 +1216,27 @@ a `POST /test/transcript` replays.
   between the end of a sentence and the agent seeing it. `helpers/whisper_helper.py`
   starts once, warms up on a second of silence, and answers one JSON line per
   request at ~0.1× the audio's duration.
-- **A bind that has to wait for the model opens the microphone itself.** ⌘⌃D
-  means "I am about to talk to this agent", and on a cold model that intention was
-  costing ten seconds of waiting followed by a mouse 5 he had to remember to
-  press — with the ready-flash saying "go ahead" to a relay that was not
-  listening. `recordWhenModelReady` is set only when the **bind** asked for the
-  load: a load started from the menu is Victor choosing an engine, a different
-  sentence, and must not open the microphone.
-- **⏳ in two places while it loads, and that is the whole point of the setting
-  being visible.** The model takes ten seconds, and a dictation started inside
-  that window is silently handed to Wispr by the fallback — so what has to be
-  said is "not yet". The chip beside the cursor shows `⏳ folder@branch`, taking
-  the slot ⏸️ uses and outranking it for those seconds; the menu bar shows
-  `⏳🤖`, which is the half that survives him typing, since macOS hides the
-  pointer then and the chip goes with it. `AppDelegate.setEngineLoading` drives
-  both from one call so they cannot disagree, and `StatusItem.refreshGlyph`
-  arbitrates the glyph because pause and loading are set from different places
-  and both own it. Loading ends with **`🎙️ local Whisper ready — go ahead`** —
-  worded as permission, because the question he has been holding for ten seconds
-  is whether he may talk yet. The reverse direction is instant and says so
-  anyway (`🎙️ Wispr Flow — ready`): "did that take?" is the same question both
-  ways and only one of them answers itself.
-- **Started only when selected, and stopped when deselected.** The weights are
-  1.5 GB resident and the ordinary case is a relay running all day on Wispr — **measured: the relay alone is 56 MB, the
-  helper 2.5 GB once a transcription has run**, and it is 0 on Wispr because
-  nothing is started. A A
-  relay that starts up *already* set to Whisper loads the model at launch rather
-  than on the first dictation — otherwise the choice would silently cost ten
-  seconds mid-sentence and the fallback would hand that dictation to Wispr,
-  which is the one confusion this feature must not create.
-- **The tick follows the engine actually in use.** Choosing Local Whisper starts
-  something that takes ten seconds and can fail outright (no `mlx_whisper`, most
-  likely), so the setting is written only once the model has answered; a failure
-  leaves Victor on Wispr with a banner saying why. This is why `AppDelegate`
-  calls `setEngine` back rather than the click handler moving the tick itself,
-  and why `POST /engine` answers **202** rather than 200.
-- **A dictation is never dropped for the sake of a setting.** Model not up,
-  helper dead, no audio on the row, low confidence — every one of those falls
-  back to Wispr's own text, because Victor said something and an agent is
-  waiting. Each fallback is logged *and* flashed: an engine silently not being
-  used would corrupt the very evaluation this exists for.
+- **Started only when a dictation is coming, released when the session ends.**
+  The weights are 1.5 GB resident — **measured: the relay alone is 56 MB, the
+  helper 2.5 GB once a transcription has run** — and the ordinary case is a relay
+  sitting in the menu bar all day with nothing bound. Two gestures bring it up,
+  and they are the two that mean he is about to talk: ⌘⌃D binding a terminal, and
+  a wheel hold on a model that is not up yet (`AppDelegate.startWhisper`).
+- **A wheel hold that has to wait for the model opens the microphone itself.** On
+  a cold model that intention was costing ten seconds of waiting followed by a
+  gesture he had to remember to repeat. `recordWhenModelReady` is set only when
+  the **hold** asked for the load: a load started by a bind is Victor pointing the
+  relay at a terminal, a different sentence, and must not open the microphone.
+- **⏳ in two places while it loads.** The chip beside the cursor shows
+  `⏳ folder@branch`, taking the slot ⏸️ uses and outranking it for those seconds;
+  the menu bar shows `⏳🤖`, which is the half that survives him typing, since
+  macOS hides the pointer then and the chip goes with it.
+  `AppDelegate.setEngineLoading` drives both from one call so they cannot
+  disagree, and `StatusItem.refreshGlyph` arbitrates the glyph because pause and
+  loading are set from different places and both own it.
+- **A failure has to be loud**, because there is nothing else to transcribe with:
+  no `mlx_whisper`, most likely, and then `⚠️ Whisper unavailable — …` sits on
+  screen for twelve seconds and the log says why.
 - **The confidence floor is −0.6 and is measured, not chosen.** Over 442 real
   dictations, a gate on the worst segment's `avg_logprob` at −0.6 caught 7 of
   the 11 semantically broken outputs and falsely rejected **0 of 40** good ones;
@@ -1338,18 +1244,19 @@ a `POST /test/transcript` replays.
   fluent inventions — `Nu uitați să vă abonați la revedere!` for a sentence
   about an invoice — which is the one failure an agent cannot defend against,
   because nothing about the text looks wrong. Nearly all are clips under 5s.
-- **The corpus is collected under both engines**, deliberately: it is Wispr's
-  audio either way, so samples keep accumulating while the local model is on
-  trial and switching back and forth does not punch holes in the record.
-- `POST /test/transcript {"id": …}` replays a real Wispr row through this whole
-  path. `/test/dictation` enters *below* it with a fabricated string and no
-  recording behind it, so it can say nothing about which recogniser is in use.
+- **A low score does not swallow the dictation.** There is one reading and
+  nothing to fall back on, so it goes out with a warning on the panel: silence is
+  the one outcome Victor cannot notice and correct. The message an agent receives
+  says so too, in `dictatedHint`.
+- `GET /engine` reports which model is loaded and whether it is ready — enough
+  for a test to wait out a ten-second load. `POST /test/dictation` enters *below*
+  the recogniser with a fabricated string, so it says nothing about it.
 
 ### What the local model is actually worth, measured
 
 442 dictations, 163 minutes, `mlx-community/whisper-large-v3-turbo`, scored
-against Wispr as the reference — a **disagreement** rate, not an error rate,
-since there is no ground truth here (see the `editedText` note above).
+against the transcripts the relay was receiving at the time as the reference — a
+**disagreement** rate, not an error rate, since there is no ground truth here.
 
 | | all | ro | en |
 |---|---|---|---|
@@ -1357,8 +1264,8 @@ since there is no ground truth here (see the `editedText` note above).
 | rare-word recall | 87.1% | 84.2% | 94.9% |
 | WER | 19.4% | 21.1% | 12.8% |
 
-86.0% of transcripts land semantically equivalent (>0.85), 11.5% degraded, 2.5%
-broken. **The broken ones are almost all short**: 13.6% of clips under 5s
+86.0% of transcripts land semantically equivalent to the reference (>0.85),
+11.5% degraded, 2.5% broken. **The broken ones are almost all short**: 13.6% of clips under 5s
 against ~1% of everything longer. Median speed 0.105× realtime.
 
 Two things that sound true and are not: the Romanian errors are **not** mostly
@@ -1371,28 +1278,29 @@ everything and is what rare-word recall is there to measure.
 
 ### The menu says what the model costs
 
-While the helper is up, the Local Whisper row reads `Local Whisper — 1.6 GB`,
-read when the menu opens (like the header) rather than pushed on a timer.
+While the helper is up, the `Local Whisper` row reads `Local Whisper — 1.6 GB RAM`,
+read when the menu opens (like the header) rather than pushed on a timer. The row
+is **disabled**: it is a readout, not a switch — there is one recogniser and
+nothing to pick between.
 
 The number is `ri_phys_footprint` from `proc_pid_rusage` — Activity Monitor's
 "Memory", not `ps`'s RSS, because MLX puts its weights in unified memory and the
 two disagree on the same process. The question being answered is "what am I
 paying for this?", which is Activity Monitor's question.
 
-**It is shown where the choice is made.** The weights being 1.5 GB resident is
-the whole argument for starting the helper only when the engine is selected and
-killing it the moment it is not — and until now that cost was a number in a
-comment, which is exactly where a fact nobody can check belongs. Beside the row
-that turns it on, it is also proof the helper is alive: a dead one has no
-footprint and the row goes back to its bare name.
+**It is shown because the weights are the whole argument** for starting the
+helper only when a dictation is coming and letting it go at the end of the
+session — and until this row existed that cost was a number in a comment, which
+is exactly where a fact nobody can check belongs. It doubles as proof the helper
+is alive: a dead one has no footprint and the row goes back to its bare name.
 
-### The wheel is the relay's; mouse 5 is Wispr's, whole
+### The wheel is the relay's; mouse 5 is nobody's
 
-Until 2026-08-29 the relay took **mouse 5** on Local Whisper — the same button
-Wispr Flow uses for push-to-talk — so every dictation began with the question of
-which of the two was armed. Victor's call: mouse 5 goes back to Wispr alone (the
-tap only *observes* it, `onDictationStarted`), and the relay drives `MicRecorder`
-from the **wheel**.
+Until 2026-08-29 the relay took **mouse 5** — the same button the dictation app
+it then depended on used for push-to-talk — so every dictation began with the
+question of which of the two was armed. Victor's call: mouse 5 goes back
+untouched (only a *double* click still means anything to this app: bind), and the
+relay drives `MicRecorder` from the **wheel**.
 
 **The wheel says three things, and the length of the press separates them:**
 
@@ -1451,72 +1359,44 @@ window (`wheelReplayUntil`) rather than by a tag on the event: a tag that failed
 to survive posting would be an infinite loop, where a window that fails is one
 click let through.
 
-**A toggle, not a push-to-talk.** Wispr's button is held down for the length of
-the sentence, which is right for a sentence; a dictation aimed at an agent runs
-to a minute or more, and a mouse button held for a minute is a hand that cannot
-take the screenshots (mouse 4, F3) the same minute exists for.
+**A toggle, not a push-to-talk.** A button held down for the length of the
+sentence is right for a sentence; a dictation aimed at an agent runs to a minute
+or more, and a mouse button held for a minute is a hand that cannot take the
+screenshots (mouse 4, F3) the same minute exists for.
 
 `MicRecorder` opens the input device at its native rate and converts to 16 kHz
 mono 16-bit through `AVAudioConverter` — the format Whisper resamples to anyway
 and the format every existing corpus sample is in. Anything under 0.35s is
-dropped as a misfire. The microphone is asked for **when the engine is picked**,
-not at the first press: the grant dialog is modal and a refusal costs a trip
-through System Settings, and mid-sentence with an agent waiting is the wrong
-moment to find out.
+dropped as a misfire. The microphone is asked for **while the model loads**, not
+at the first press: the grant dialog is modal and a refusal costs a trip through
+System Settings, and mid-sentence with an agent waiting is the wrong moment to
+find out.
 
-**A local recording is sent even below the confidence floor**, unlike the
-Wispr-recorded path, and the difference is not an oversight. There, a low
-`avg_logprob` meant falling back to Wispr's own reading of the same audio; here
-Wispr never heard the sentence, so the alternative to a shaky transcript is
-silence — and silence is the one outcome Victor cannot notice and correct. The
-banner says the score instead.
+**A recording is sent even below the confidence floor.** There is one reading of
+the audio and no second opinion to fall back on, so the alternative to a shaky
+transcript is silence — and silence is the one outcome Victor cannot notice and
+correct. The banner says the score instead, and the panel holds it long enough to
+fix or cancel.
 
 **The menu can start, end and cancel one.** `Start Dictation` / `End Dictation` /
 `Cancel Dictation` sit under Disconnect and
-calls the same `stopLocalRecording()` a second mouse 5 does — the transcript is
-made and sent exactly as if the button had ended it. It exists because mouse 5 is
-a thumb button on one specific mouse, and a dictation started at the desk has to
-be closable from the trackpad or after that mouse's battery has gone; recording
-is the one state where not reaching the button costs the dictation *and* leaves
-the microphone open.
+calls the same `stopLocalRecording()` a wheel tap does — the transcript is made
+and sent exactly as if the wheel had ended it. It exists because the wheel is one
+button on one specific mouse, and a dictation started at the desk has to be
+closable from the trackpad or after that mouse's battery has gone; recording is
+the one state where not reaching the button costs the dictation *and* leaves the
+microphone open.
 
-The row is **hidden outright on the Wispr engine**, not greyed: there the
-recording is Wispr's, started and ended on Wispr's own button, so a row claiming
-to stop it would be a promise the app cannot keep. On Local Whisper it is always
-visible and merely disabled while nothing is being recorded — the way Disconnect
-is while nothing is bound — since it is then the only line in the menu that says
-whether the microphone is open at all. Both answers are read when the menu opens
-(`StatusItem.isRecording`), like the footprint above, because the flag flips on
-every dictation.
+The rows are always visible and merely disabled while nothing is being recorded —
+the way Disconnect is while nothing is bound — since they are then the only lines
+in the menu that say whether the microphone is open at all. The answers are read
+when the menu opens (`StatusItem.isRecording`), like the footprint above, because
+the flag flips on every dictation.
 
-The corpus keeps growing in this mode (`VoiceCorpus.captureLocal`), stamped
-`engine: "whisper-local"` and with **no `asr` field**: there is one reading and no
-second opinion, and a manifest that duplicated the text into both fields would
-read as a comparison that never happened.
-
-### Wispr's paste is swallowed
-
-Wispr drops its transcript wherever the caret is. The relay has always taken the
-words from Wispr's database instead, which made that injection pure damage: a
-sentence about a page he is reading, typed into the document, the search field,
-the terminal.
-
-`HotkeyTap.blockInjection` drops every keyboard event **posted by Wispr Flow's
-own process** — matched by source pid, the same discriminator that tells a
-LinearMouse Return from a typed one, and cached per pid because it runs on the
-tap for every key of a transcript. All three keyboard event types are covered:
-half a synthetic ⌘V is worse than all of it, since the target app would be left
-holding a ⌘ that was never released.
-
-**Off while paused**, and that is what pause has always meant: pausing is what
-Victor does *in order to* dictate into an app, so the app getting the text is
-then exactly the point.
-
-Each burst logs one line (`🛑 swallowed Wispr injection — …`) with the first
-event's keycode, flags and unicode payload, then a tally. That line is also the
-measurement: if Wispr ever stops going through posted events — if it starts
-writing the text through the Accessibility API — nothing will be logged, because
-no event tap can see that, and this block will silently stop working.
+Every dictation is filed in the corpus (`VoiceCorpus.captureLocal`), stamped
+`engine: "whisper-local"` and with **no second reference transcript**: there is
+one reading and no second opinion, and a manifest that duplicated the text into
+two fields would read as a comparison that never happened.
 
 ## Size: minimal, per state
 
@@ -1573,7 +1453,7 @@ something he entered on purpose. It stays a chip: `⏸️ 🤖 folder@branch`, a
 **Dictating is not a panel state.** It was, and that put a half-screen window
 over his work for the entire time he talked, to report a state he had just
 entered on purpose. The panel is now for the one thing he must actually read:
-what Wispr heard, while Cancel can still stop it. That is also why the F3 receipt
+what the model heard, while Cancel can still stop it. That is also why the F3 receipt
 is a number in the recording row and not a `flash(_:)` — a flash is a panel, and
 taking a picture mid-dictation must not throw one across the screen.
 

@@ -3,7 +3,7 @@ import AppKit
 /// There is never more than one overlay on screen.
 ///
 /// Two overlays would be actively harmful, not just untidy: both would tap the
-/// same shortcuts, both would poll Wispr and forward the *same* dictation, and
+/// same shortcuts, both would open the microphone on the same gesture, and
 /// they would relay into different sessions' outboxes — so Victor could not tell
 /// which agent was listening. The newest launch always wins, because it is the
 /// one whose session is actually watching.
