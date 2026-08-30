@@ -128,8 +128,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// True while the local Whisper model is loading — see `titleText`.
     private var engineLoading = false
     private var listening = false
-    /// Which model is loaded — `mlx-community/whisper-large-v3-turbo` — shown in
-    /// full while it is the one listening.
     private var hovering = false
 
     private var followTimer: Timer?
@@ -1972,10 +1970,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Take a banner down early — for one that was a promise ("transcribing…")
     /// rather than a notice, and has now been kept. Without this the promise
     /// outlives the thing it promised by however long its timer had left.
-    func clearFlash() {
+    ///
+    /// `animated: false` is for `OverlayStates`, which photographs one state per
+    /// beat and cannot wait out a 0.45s dissolve: a shot taken during one catches
+    /// the row it is clearing, at alpha zero, still holding its height.
+    func clearFlash(animated: Bool = true) {
         // Through the same dissolve as a flash that ran its course: a promise
         // being kept early is still a message leaving, and it leaves the same way.
         guard let message = flashMessage else { return }
+        guard animated else { return endFlash(message) }
         fadeOutFlash(message)
     }
 
@@ -2122,7 +2125,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the mis-transcription. It restarts, whole, when he leaves the field —
     /// clicking away means "that's right now", and the new text deserves the same
     /// read-through the old one got.
-    fileprivate func beginPromptEdit() {
+    /// Internal rather than fileprivate so `OverlayStates` can photograph the
+    /// editing panel; the only caller in the app is still the click below.
+    func beginPromptEdit() {
         guard !editingPrompt, sentPrompt != nil, let words = promptWords else { return }
         editingPrompt = true
 
@@ -2297,24 +2302,30 @@ private let frontLabel = NSTextField(labelWithString: "")
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             hintLabel.animator().alphaValue = 0
             root.blur?.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            guard let self = self, self.flashMessage == message else { return }
-            self.flashMessage = nil
-            // Reset before the relayout, not after: the same two views carry the
-            // next flash, and one that inherited a zero alpha would never appear.
-            self.hintLabel.alphaValue = 1
-            self.root.blur?.alphaValue = 1
-            self.layoutContent()
-            self.reposition()
-            self.refreshOpacity()
-        })
+        }, completionHandler: { [weak self] in self?.endFlash(message) })
+    }
+
+    /// The other end of the dissolve, on its own so it can also be reached
+    /// without one.
+    private func endFlash(_ message: String) {
+        guard flashMessage == message else { return }
+        flashMessage = nil
+        // Reset before the relayout, not after: the same two views carry the
+        // next flash, and one that inherited a zero alpha would never appear.
+        hintLabel.alphaValue = 1
+        root.blur?.alphaValue = 1
+        layoutContent()
+        reposition()
+        refreshOpacity()
     }
 
     /// Long enough to read as a dissolve rather than as a blink, short enough
     /// that a message he has finished reading is not still going.
     private static let flashFade: TimeInterval = 0.45
 
-    fileprivate func setHovering(_ value: Bool) {
+    /// Internal for the same reason `beginPromptEdit` is: the ✕ is a state, and
+    /// a state that cannot be reached from `OverlayStates` cannot be documented.
+    func setHovering(_ value: Bool) {
         guard hovering != value else { return }
         hovering = value
         // No ✕ while it is trailing the cursor. There it is a label, not a

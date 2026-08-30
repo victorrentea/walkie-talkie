@@ -38,6 +38,37 @@ The first two are **not on screen at the moment**: `showsGestureHints` is off, s
 the rows are built and never shown. They still have to be English when the flag
 goes back.
 
+## The overlay's states are photographed, and the page is part of the change
+
+`docs/overlay-states.html` shows **every state the chip and the panel can be in** —
+31 of them — each with the moment it appears and why it looks the way it does. It
+is generated: the catalogue, the order, the sections and every word of prose live
+in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
+drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
+only lays them out.
+
+**The rule: no change to the overlay is finished until that page is rebuilt.**
+
+```sh
+./docs/shoot-overlay-states.sh      # shoots all 31 states, regenerates the HTML
+```
+
+That covers a new row, a reworded string, a changed glyph, a different colour, a
+state that starts or stops existing — anything Victor could see. A new state also
+means a new `Shot` in `OverlayStates.swift`; a state that goes away means deleting
+one. **Never edit `docs/overlay-states.html` by hand** — it is overwritten on the
+next run, and a hand-edit is a lie that survives exactly until then.
+
+Why it is worth the machinery: this window is invisible to every screen capture,
+half its states last two seconds, and several of them (`⚠️ Whisper unavailable`, a
+transcript the confidence gate flagged, the refused shell prompt) cannot be
+reached on demand at all. Before this, reviewing a layout change meant standing
+behind Victor, or `kill -USR1` at the right instant. A page that regenerates in
+twenty seconds is what makes "look at all of it" a thing anyone can actually do.
+
+The script stands the installed app down (`SingleInstance`) and puts it back when
+it is finished.
+
 ## Bound to a terminal: the second destination
 
 Since 2026-08-15 the relay can be **pointed at a terminal**, and every dictation
@@ -1713,10 +1744,14 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `kill -USR1 <pid>` → `<home>/snapshot.png`, the view drawing itself. This is
-  how `docs/*.png` are made: `RELAY_DEMO=1` for the content, USR1 at each state,
-  composite onto a dark backdrop. A panel's blur is missing from the shot (the
-  window server draws it, not the view); the chip comes out exactly as he sees it.
+- `./docs/shoot-overlay-states.sh` → all 31 states at once, and the page that
+  shows them. This is the one to reach for; the rule that comes with it is at the
+  top of this file. A panel's blur is missing from the shot (the window server
+  draws it, not the view) and so is the window's alpha, which the page reapplies
+  in CSS; the chip comes out exactly as he sees it.
+- `kill -USR1 <pid>` → `<home>/snapshot.png`, the same drawing, for one state that
+  is already on screen. Still the fastest way to look at something mid-session,
+  and how `docs/idle.png` and friends were made before the harness existed.
 - `CGWindowListCopyWindowInfo` for geometry: the bounds say which rows are up,
   and comparing the origin to the cursor says whether it is still anchored.
 

@@ -389,6 +389,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
+        // Photograph every state and quit — see `OverlayStates`, and
+        // `docs/shoot-overlay-states.sh`, which is what actually runs this.
+        if let dir = ProcessInfo.processInfo.environment["RELAY_SHOOT"] {
+            OverlayStates.shoot(overlay: overlay, into: dir)
+        }
     }
 
     /// **A wheel hold is waiting on the model**, and the microphone opens the
