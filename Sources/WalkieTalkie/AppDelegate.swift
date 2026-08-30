@@ -163,6 +163,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Read off `TerminalBinding`, which locks, so this is safe from any thread.
     private var isBound: Bool { terminal.target != nil }
 
+    /// **The dictation being spoken right now is going to open its own
+    /// terminal** — ⇧ + the wheel. Set at the press that starts it and carried
+    /// on the `Message`, so a prompt held on screen for five seconds cannot be
+    /// overtaken by whatever the flag has become by the time it commits.
+    ///
+    /// It is the second half of *Unbound is inert*: every gate there asks "is
+    /// there anywhere for these words to go", and until now a binding was the
+    /// only way to answer yes. A spawn is the other way — the destination does
+    /// not exist yet, but it is going to, which is the same answer for every
+    /// purpose those gates have.
+    private var spawnPending = false
+
+    /// Where that new session will be started, resolved **at the press** rather
+    /// than at the end: the folder is context, like the cursor and the frontmost
+    /// window, and by the time a minute of dictation is over Victor may well be
+    /// looking at something else entirely.
+    private var spawnDirectory: String?
+
+    /// Somewhere for this dictation to go: a terminal already bound, or one it
+    /// is about to open for itself.
+    private var hasDestination: Bool { isBound || spawnPending }
+
     /// A dictation is running. Main thread only, and kept here rather than read
     /// back off the overlay because it is half of what decides whether mouse 4 and
     /// ⌘-click belong to the relay or to the software they were borrowed from
@@ -202,6 +224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var sources: [String: String] = [:]
         let app: String?
         let elements: [ElementPick]
+        /// This one opens its own terminal instead of being typed into a bound
+        /// one. Carried here rather than read off `spawnPending` at delivery,
+        /// because the two are seconds apart — the panel holds every prompt — and
+        /// the next dictation may have started by then.
+        var spawn: Bool = false
+        /// …and where. Travels with the flag for the same reason.
+        var spawnDirectory: String?
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -276,6 +305,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleLocalRecording() }
         }
+        // ⇧ + the wheel. **Ending is the same call as ever** — the destination
+        // belongs to the press that opened the microphone, not to the one that
+        // closes it — so the shift only means anything when nothing is running.
+        hotkeys.onSpawnToggle = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if self.localRecording { self.stopLocalRecording() }
+                else { self.startLocalRecording(spawn: true) }
+            }
+        }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
         // The same call the loopback route makes, from the key Victor actually
@@ -310,6 +349,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestDictation = { [weak self] text in
             self?.send(kind: "dictation", text: text, app: "test")
+        }
+        // The spawn's transcript, entering where a spoken one does — with the
+        // destination armed first, exactly as the ⇧-wheel press arms it.
+        picker.onTestSpawn = { [weak self] text in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.spawnPending = true
+                self.resolveSpawnDestination()
+                // A beat for the folder to resolve, so the test exercises the
+                // real destination rather than the fallback — the same wait a
+                // spoken sentence provides for free.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self.send(kind: "dictation", text: text, app: "test")
+                }
+            }
         }
         picker.describeEngine = { [weak self] in
             ["engine": "whisper", "ready": self?.whisper.ready ?? false]
@@ -408,7 +462,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // whatever its timer had left.
                     self.overlay.clearFlash()
                     Log.info("model up after a press that had to wait — opening the microphone")
-                    self.startLocalRecording()
+                    // **The gesture is kept whole, ⇧ included.** A spawn that had
+                    // to wait ten seconds for the weights is still a spawn; going
+                    // back through the bare path would have started a dictation
+                    // with nowhere to go and then dropped it at `send`.
+                    self.startLocalRecording(spawn: self.spawnPending)
                     return
                 }
                 // **Nothing is said.** This used to flash "local Whisper ready —
@@ -447,12 +505,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if localRecording { stopLocalRecording() } else { startLocalRecording() }
     }
 
-    private func startLocalRecording() {
-        // Unreachable in practice — the wheel is only the relay's while
+    /// `spawn` is ⇧ + the wheel: this dictation carries its own destination, so
+    /// it is allowed through the one gate a bare one is not — having a binding.
+    private func startLocalRecording(spawn: Bool = false) {
+        // Set before the gate below and before anything reads `hasDestination`:
+        // it *is* the answer for a spawn, and `captureContext` a few lines down
+        // asks the same question about the screenshot it is deciding to take.
+        spawnPending = spawn
+        // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
         // repeated here for the same reason `paused` is: this is the path that
         // opens the microphone.
-        guard isBound, !paused else { return }
+        guard hasDestination, !paused else { return }
+        if spawn { resolveSpawnDestination() }
         guard whisper.ready else {
             // Not an error, since the helper is deliberately down until something
             // says a dictation is coming — this press is one of the two things
@@ -510,6 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cancelLocalRecording() {
         guard localRecording else { return }
         localRecording = false
+        clearSpawn()
         localRecordingApp = nil
         let recording = mic.stop()
 
@@ -554,6 +620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let (wav, duration) = recording else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
+            clearSpawn()
             return
         }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
@@ -564,6 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let r = result, !r.text.isEmpty else {
                 DispatchQueue.main.async {
                     self.overlay.setTranscribing(false)
+                    self.clearSpawn()
                     self.overlay.flash("⚠️ the model returned nothing — that dictation is lost", duration: 8)
                 }
                 Log.error("local recording produced no transcript")
@@ -725,8 +793,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func captureContext() {
         // Nothing bound is the same answer as paused, one step earlier: a
         // picture of the screen at the moment he starts talking is only worth
-        // taking when there is somebody it is being taken *for*.
-        guard isBound, !paused else { return }
+        // taking when there is somebody it is being taken *for*. A spawn counts
+        // as somebody — the session it is about to open reads the same line.
+        guard hasDestination, !paused else { return }
 
         // Where he was pointing when he started talking. Taken here and carried
         // down: by the time the capture actually runs, a clipboard probe and a
@@ -870,7 +939,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// One switch for both, so the recording row can never be on screen advertising
     /// a gesture that is no longer live, or off while one still is. Main thread only.
     private func syncBorrowedGestures() {
-        let live = isBound && listening && !paused
+        let live = hasDestination && listening && !paused
         hotkeys.dictating = live
         picker.dictating = live
         // The music is pausing for the same window and for the same reason: it
@@ -1115,6 +1184,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let title = target.title { obj["title"] = title }
         return obj
     }
+
+    /// **Open the destination and hand it the words in one gesture.** ⇧ + the
+    /// wheel ends here: a new Terminal window, an interactive Claude Code in the
+    /// folder that was current when he started talking, and the dictation as its
+    /// first prompt.
+    ///
+    /// **The prompt goes in `argv`, not through the keyboard.** Every other
+    /// delivery in this app types into a session that already exists and has to
+    /// prove first that a shell is not sitting at the prompt (`wouldRunAsShell`).
+    /// Here there is nothing to prove and nothing to wait for — the words are an
+    /// argument to the process being started, so they cannot be executed by a
+    /// shell, cannot land in an editor window, and cannot arrive before the agent
+    /// is ready to read them. That is also why this does not wait for the session
+    /// to come up before reporting: there is no readiness to wait for.
+    ///
+    /// **And the relay follows him into it.** The new window is the destination
+    /// he just named, so the binding moves there — otherwise the obvious next
+    /// sentence, said at the session he just started, would go to the terminal he
+    /// had been pointing at before, or nowhere at all.
+    private func spawnClaude(_ m: Message) {
+        let line = Self.terminalLine(m)
+        guard !line.isEmpty else { return clearSpawn() }
+        let directory = m.spawnDirectory ?? Self.defaultSpawnDirectory
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: directory)
+            DispatchQueue.main.async {
+                self.clearSpawn()
+                switch outcome {
+                case .opened(let tty):
+                    self.showBound(self.terminal.bindSpawned(tty: tty, directory: directory))
+                case .failed(let why):
+                    // The outbox already has the line — `commit` wrote it before
+                    // this ran — so what is lost is the delivery, and this is the
+                    // only place he would learn that.
+                    Log.error("✨ spawn failed: \(why)")
+                    self.overlay.flash("⚠️ \(why)", duration: 8)
+                }
+            }
+        }
+    }
+
+    /// Which folder the session about to be opened should start in.
+    ///
+    /// The bound target first — it is the context the chip has been showing all
+    /// along, and a second session is nearly always a second session on the same
+    /// work. Then the terminal in front, which is the honest answer with nothing
+    /// bound, since that is the state this gesture exists for. Then home.
+    ///
+    /// Off the main thread and reported back to the chip when it lands: reading
+    /// it is `ps`, `lsof` and an `osascript` round trip, and this runs at the
+    /// instant the microphone opens — the one moment in this app where a
+    /// blocked main thread is a chip that stops following the cursor while he
+    /// is already talking.
+    private func resolveSpawnDestination() {
+        overlay.setSpawnDestination("new Claude Code")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let dir = self.terminal.currentDirectory()
+                ?? TerminalBinding.frontTerminalDirectory()
+                ?? Self.defaultSpawnDirectory
+            let label = TerminalBinding.label(forDirectory: dir)
+            DispatchQueue.main.async {
+                // A dictation that ended (or was thrown away) while this was
+                // resolving has already cleared the flag; putting a destination
+                // back on the chip now would name a session nobody is opening.
+                guard self.spawnPending else { return }
+                self.spawnDirectory = dir
+                self.overlay.setSpawnDestination("✨ \(label)")
+            }
+        }
+    }
+
+    /// The dictation that was going to open a terminal is over — delivered,
+    /// cancelled, or never transcribed. Main thread only: it draws.
+    private func clearSpawn() {
+        spawnPending = false
+        spawnDirectory = nil
+        overlay.setSpawnDestination(nil)
+    }
+
+    /// Where a spawn goes when nothing else can be read. Home would be the
+    /// literal answer and `~/workspace` is the useful one: every repo Victor
+    /// works in is a folder inside it, so a Claude Code started there can still
+    /// be told which one — started in `~`, it is looking at his whole Mac.
+    private static let defaultSpawnDirectory = FileManager.default
+        .homeDirectoryForCurrentUser.appendingPathComponent("workspace").path
 
     /// Type a message into the bound terminal, if there is one.
     ///
@@ -1442,7 +1599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
     private func plusOneShot(cursor: NSPoint) {
-        guard isBound, !paused else { return }
+        guard hasDestination, !paused else { return }
         // Sampled at the gesture, like the cursor and for the same reason: by the
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
@@ -1719,7 +1876,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // means inert, and `/relay` gets its destination by binding like
         // everything else. `session_end` is unaffected: it goes to `Outbox`
         // directly, not through here.
-        guard isBound else {
+        // Taken here and cleared here, so the flag never outlives the dictation
+        // that set it: from this point the destination travels on the `Message`.
+        //
+        // **Only a dictation may claim it.** `flushOrphaned` comes through here
+        // with a bag of screenshots when no transcript arrived — and, since its
+        // timer is armed at the start of the dictation rather than at the end of
+        // it, also in the middle of a sentence that has run past two minutes. A
+        // spawn consumed there would open a session holding nothing but pictures
+        // and leave the words that were still being spoken with nowhere to go.
+        let spawn = spawnPending && kind == "dictation"
+        let spawnDir = spawnDirectory
+        if kind == "dictation" { spawnPending = false }
+        guard isBound || spawn else {
             Log.info("unbound — dropped \(kind)")
             return
         }
@@ -1773,7 +1942,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks)
+                              app: app, elements: picks,
+                              spawn: spawn, spawnDirectory: spawnDir)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -1846,6 +2016,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     },
                     app: m.app, elements: m.elements.map { $0.json })
         guard m.kind != "session_end" else { return }
+        guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)
     }
 
@@ -1882,6 +2053,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 stateLock.unlock()
                 publishPicks()
             }
+            if m.spawn { clearSpawn() }
             overlay.flash("✕ cancelled", duration: 2.0)
             return
         }

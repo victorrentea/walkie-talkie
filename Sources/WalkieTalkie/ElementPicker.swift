@@ -122,6 +122,8 @@ final class ElementPicker {
 
     /// A fabricated transcript, entering where a real one does.
     var onTestDictation: ((String) -> Void)?
+    /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
+    var onTestSpawn: ((String) -> Void)?
 
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
@@ -274,6 +276,21 @@ final class ElementPicker {
         case ("POST", "/test/dictation/start"):
             onTestDictationStart?()
             respond(conn, 200, ["ok": true, "listening": true])
+
+        // The ⇧-wheel gesture's transcript, entering where a spoken one does.
+        //
+        // It needs a route of its own precisely because `/test/dictation` is
+        // gated on a binding and this gesture is the one that is not — a spawn
+        // is unreachable at a desk otherwise, and it is the path that opens a
+        // window and starts a process.
+        case ("POST", "/test/spawn"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let text = (body?["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let text = text, !text.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"text\": \"…\"}"])
+            }
+            onTestSpawn?(text)
+            respond(conn, 200, ["ok": true, "text": text])
 
         case ("POST", "/test/dictation"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]

@@ -472,6 +472,7 @@ port scheme for a caller to guess between, and buys nothing.
 | `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
+| `POST /test/spawn` | the same for ⇧ + the wheel — opens the window and starts the session |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero to count from |
 | `GET /engine` | which model is loaded, and whether it is ready |
 
@@ -574,6 +575,15 @@ Since 2026-08-27, `AppDelegate.isBound` (`terminal.target != nil`) gates every
 path that pause gates, plus `syncLocalCapture`, which is what lets the wheel open
 the microphone.
 
+**One gesture is outside it, since 2026-08-30**: ⇧ + the wheel starts a dictation
+whose destination is a terminal that does not exist yet (*⇧ + the wheel: the
+destination that does not exist yet*). The four gates below now ask
+`hasDestination` — `isBound || spawnPending` — because the reason for the rule is
+that there is nowhere for these words to go, and a spawn is a yes to that
+question, just not yet. `syncLocalCapture` is deliberately **not** widened: the
+bare wheel's claim on the microphone still needs a binding, and the shifted press
+bypasses that flag in the tap rather than pretending to set it.
+
 | gate | unbound | paused |
 |---|---|---|
 | `captureContext` — flash, selection probe, screen capture | off | off |
@@ -613,8 +623,9 @@ under it must hand the wheel and the microphone back at that moment, not at the
 next deliberate gesture.
 
 **`/test/dictation` is gated too**, which makes it useless at a desk with nothing
-bound. That is the right reading of a route whose whole claim is that it enters
-exactly where a real transcript does — bind something first, which is what the
+bound — and is why the spawn needed a route of its own, for the one gesture
+defined by not needing a binding. That is the right reading of a route whose
+whole claim is that it enters exactly where a real transcript does — bind something first, which is what the
 path under test needs anyway.
 
 ## What pause is (and is not)
@@ -1394,6 +1405,7 @@ held. The third is a chord with the left button.**
 | bound, not dictating | **click** | start a dictation |
 | dictating | **click** | end it — transcribe and send |
 | dictating | hold **2s** | **cancel** it — throw the audio away |
+| **any state, bound or not** | **⇧ + click** | start a dictation **at a session that does not exist yet** — see *⇧ + the wheel* |
 | anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃D, toggle included |
 | nothing bound, no chord | click | passed straight through |
 
@@ -1487,6 +1499,88 @@ Every dictation is filed in the corpus (`VoiceCorpus.captureLocal`), stamped
 `engine: "whisper-local"` and with **no second reference transcript**: there is
 one reading and no second opinion, and a manifest that duplicated the text into
 two fields would read as a comparison that never happened.
+
+### ⇧ + the wheel: the destination that does not exist yet
+
+**Since 2026-08-30 a dictation can be aimed at a session that has not been
+started.** ⇧ + the wheel opens the microphone exactly as a bare click does; when
+the sentence ends, a new Terminal window appears with an interactive Claude Code
+in it and the words as its first prompt, and the relay binds to that window.
+
+**Why it had to exist.** Every other destination in this app has to be *pointed
+at* — ⌘⌃D, the mouse-5 double click, the left-plus-wheel chord all say "that
+terminal, the one already on screen". None of them can express the way most
+sessions actually begin: Victor has a thought and there is no window for it yet.
+Opening a terminal, `cd`-ing somewhere, typing `claude` and waiting for it to
+come up are four steps in front of a sentence he already has in his head, and by
+the fourth the sentence has changed.
+
+**It is the one gesture *Unbound is inert* does not reach.** That rule gates
+everything on `isBound`, and the argument under it is that a dictation with
+nowhere to go is a room taped for nobody. This one *carries* its destination, so
+the argument does not apply and the gesture is live for as long as the app is —
+which is exactly what Victor asked for: the moment it is most useful is the
+moment there is no session yet. In the code that is `hasDestination`
+(`isBound || spawnPending`), and it is what the four gates ask now.
+
+**The prompt travels in `argv`, not through the keyboard.** `claude "<prompt>"`
+starts the interactive session with that prompt already submitted, and that
+removes the entire class of bug this file guards against twice over: there is no
+window to wait for, no caret to land in, no shell prompt to be executed at, and
+no race between "the process is up" and "the process can read". The words are in
+the process's arguments before it has drawn a frame — verified end to end on
+2026-08-30, `claude raspunde…` visible in `ps` on the spawned tty and the answer
+on screen.
+
+**Two files on disk instead of two levels of escaping.** The transcript is Victor
+speaking freely — quotes, apostrophes, `$`, backticks, semicolons — and it would
+otherwise have to survive AppleScript's string literals *and* a shell command
+line, which is the exact place a dictation turns into a command. So AppleScript
+is handed nothing but a path this app generated, and the shell reads the words
+from a file with `"$(cat …)"`. Measured with a prompt containing all four: it
+arrives byte-identical.
+
+**The folder is resolved at the press**, like the cursor and the frontmost
+window, and for the same reason — a minute of dictation later he is looking at
+something else. Bound target first (it is the context the chip has been showing
+all along, and a second session is nearly always a second session on the same
+work), then the terminal in front, then `~/workspace`. `~` would be the literal
+fallback and is the wrong one: every repo is a folder inside `~/workspace`, so an
+agent started there can still be told which, while one started in `~` is looking
+at the whole Mac.
+
+**The relay follows him into the new window.** It binds it — from the tty
+`do script` hands back, not by asking which window is in front a moment later,
+which by then is whichever one he has clicked on. Otherwise the obvious next
+sentence, said at the session he has just started, would go to the terminal he
+was pointing at before, or nowhere at all.
+
+**The chip says the destination that does not exist yet**, and it outranks the
+bound one for the length of that sentence (`RelayWindow.spawnLabel`): the words
+are not going where the chip has been saying they go, and this line's whole job
+is to get that right. Unbound it is also what puts the overlay on screen at all.
+
+**Ending a dictation is never a spawn.** The destination belongs to the press
+that opened the microphone, so a shifted click while one is running just ends it,
+and a 2s shifted hold still cancels. `HotkeyTap.wheelSpawn` is read off the
+**press** rather than off the flags at the release, because ⇧ is very often let
+go before the button is.
+
+**The price:** ⇧-middle-click — open a link in a new tab and switch to it —
+belongs to this app whenever it is running, not merely while something is bound.
+That is the deliberate reading of *"cât timp e pornit walkie"*, and it is a
+strictly larger claim than the bare wheel's.
+
+**Claude Code's own trust prompt still happens.** A folder it has not seen before
+asks "do you trust this folder" and runs the dictation once that is answered —
+measured in `~/workspace/walkie-talkie`, which had never been entered directly
+because Victor always starts in `~/workspace`. Nothing is done about it: the
+alternative is passing a flag that turns off a safety gate, which is not this
+app's decision to make.
+
+`POST /test/spawn` is the route that exercises all of it from a desk, and it
+needs one of its own because `/test/dictation` is gated on a binding — the one
+condition this gesture is defined by not needing.
 
 ## Size: minimal, per state
 

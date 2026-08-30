@@ -315,6 +315,61 @@ final class TerminalBinding {
         }
     }
 
+    /// **Where a session spawned right now should start.** The path behind the
+    /// chip's label, for the shift-wheel destination that has to `cd` before it
+    /// can run anything.
+    ///
+    /// The *bound* target answers it, not whatever is in front: the binding is
+    /// the relay's declared context — it is the thing the chip has been saying
+    /// all along — and a second session is nearly always a second session on the
+    /// same work. A blind-paste target has no directory to give and says so, the
+    /// same `nil` it gives the chip.
+    func currentDirectory() -> String? {
+        guard let target = target else { return nil }
+        switch target.handle {
+        case .terminalApp(let tty):     return Self.sessionDirectory(onTTY: tty)
+        case .tmux(let pane, _):        return Self.tmuxPaneDirectory(pane)
+        case .ide(let handle):          return handle.shellPID.flatMap { Self.workingDirectory(ofPID: $0) }
+                                            ?? handle.cwd ?? IDEBridge.currentDirectory(of: handle)
+        case .keystroke:                return nil
+        }
+    }
+
+    /// The directory of the Terminal.app tab in front, for a spawn made with
+    /// nothing bound — which is the state this gesture exists for. Falls back to
+    /// nothing rather than to a guess: the caller has a home directory to use and
+    /// it is a better answer than some other window's folder.
+    static func frontTerminalDirectory() -> String? {
+        guard let front = frontTerminalTab() else { return nil }
+        if let pane = tmuxPane(clientTTY: front.tty) { return tmuxPaneDirectory(pane) }
+        return sessionDirectory(onTTY: front.tty)
+    }
+
+    /// Point the relay at a window **this app just opened**, without going back
+    /// out to Terminal to ask which one is in front.
+    ///
+    /// The ordinary bind reads the frontmost app and interrogates it; here both
+    /// answers are already known — `do script` handed back the tty, and the
+    /// directory is the one we told it to start in — and asking again would be
+    /// slower *and* less certain, since the window that answers "in front" a
+    /// moment later is whichever one Victor has clicked on since.
+    ///
+    /// No `sourceFrame`: there is no flight to draw. The window appearing is
+    /// itself the animation, and a rectangle flying from it to the chip would be
+    /// announcing something that just announced itself.
+    @discardableResult
+    func bindSpawned(tty: String, directory: String) -> Target {
+        let target = Target(handle: .terminalApp(tty: tty),
+                            label: Self.label(forDirectory: directory),
+                            address: (tty as NSString).lastPathComponent,
+                            appName: "Terminal", bundleID: "com.apple.Terminal",
+                            folder: Self.label(forDirectory: directory), title: nil,
+                            sourceFrame: nil, boundAt: Date())
+        lock.lock(); current = target; lock.unlock()
+        Log.info("📍 bound to the session just spawned — \(target.label) (\(target.address))")
+        return target
+    }
+
     func unbind() {
         lock.lock()
         let had = current
@@ -683,9 +738,15 @@ final class TerminalBinding {
     }
 
     private static func tmuxPaneLabel(_ pane: String) -> String? {
+        tmuxPaneDirectory(pane).map { label(forDirectory: $0) }
+    }
+
+    /// The pane's path, for the one caller that needs somewhere to `cd` rather
+    /// than something to show.
+    private static func tmuxPaneDirectory(_ pane: String) -> String? {
         guard let dir = tmux(["display-message", "-p", "-t", pane, "#{pane_current_path}"]),
               !dir.isEmpty else { return nil }
-        return label(forDirectory: dir)
+        return dir
     }
 
     /// `-l` sends the text **literally**, so a dictation containing the word
@@ -887,6 +948,13 @@ final class TerminalBinding {
     }
 
     private static func sessionLabel(onTTY tty: String) -> String? {
+        sessionDirectory(onTTY: tty).map { label(forDirectory: $0) }
+    }
+
+    /// The same answer as `sessionLabel`, one step earlier: the **path** rather
+    /// than the `folder@branch` made out of it. Split out for the spawned
+    /// session, which has to `cd` somewhere and cannot do that with a label.
+    private static func sessionDirectory(onTTY tty: String) -> String? {
         let device = (tty as NSString).lastPathComponent
 
         // **The session's directory first, and only from a file that provably
@@ -930,12 +998,12 @@ final class TerminalBinding {
         // sitting behind it did. Whichever pid on this tty owns a `.last-` file
         // *is* the agent, and its answer is the session directory.
         if let dir = publishedDirectory(onTTY: device) {
-            return label(forDirectory: dir)
+            return dir
         }
         if let (pid, _) = live, let dir = workingDirectory(ofPID: pid) {
-            return label(forDirectory: dir)
+            return dir
         }
-        return publishedDirectory(forTTY: device).map { label(forDirectory: $0) }
+        return publishedDirectory(forTTY: device)
     }
 
     /// The session directory the status line last published *for this process*,

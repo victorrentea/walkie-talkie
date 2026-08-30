@@ -179,6 +179,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and an icon is the one way to carry it in a chip this narrow: it costs the
     /// space the pin was already taking and is read without being read.
     private var boundIcon: NSImage?
+    /// Where *this* dictation is going when the answer is a terminal that does
+    /// not exist yet — ⇧ + the wheel. Set for the length of one sentence and
+    /// taken down when it is delivered; while it is up it is what the chip says,
+    /// bound or not.
+    private var spawnLabel: String?
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -1042,7 +1047,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // directory of a login item, which is what got the whole chip taken off
         // the pointer at rest. Now the chip stays, carrying the one row that says
         // how to end that state.
-        if boundLabel != nil || paused || engineLoading || sentPrompt != nil || listening {
+        if boundLabel != nil || spawnLabel != nil || paused || engineLoading || sentPrompt != nil || listening {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))
@@ -1704,6 +1709,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// because it rides beside the cursor over whatever he is reading and a
     /// title is the one part of this with no length anybody controls.
     private var identity: String {
+        // **A destination that does not exist yet still outranks one that does.**
+        // ⇧ + the wheel sends this dictation to a session it is about to open,
+        // and for the length of that sentence the bound terminal is not where the
+        // words are going — so a chip still naming it would be saying the one
+        // thing this line exists to get right, wrongly.
+        if let spawn = spawnLabel { return spawn }
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
         // `walkie-talkie@main` — the working directory of the session the words are
         // going to, with its branch when that directory is a repo. The icon beside
@@ -1833,6 +1844,20 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// Relayouts because the title drives the chip's width, and a bound label is
     /// a different length from the launch-directory one it replaces.
+    /// A dictation is being spoken at a session that does not exist yet — the
+    /// ⇧-wheel spawn — and this is what the chip says while it does.
+    ///
+    /// It is not a binding and deliberately does not go through `setBound`:
+    /// nothing is bound, there is no app icon to show and no target to lose, and
+    /// the state lasts exactly as long as one sentence. `nil` puts the chip back
+    /// to whatever it was actually saying.
+    func setSpawnDestination(_ label: String?) {
+        guard spawnLabel != label else { return }
+        spawnLabel = label
+        refreshTitle()
+        layoutContent()
+    }
+
     func setBound(label: String?, folder: String? = nil, icon: NSImage? = nil) {
         guard boundLabel != label || boundFolder != folder || boundIcon !== icon else { return }
         boundLabel = label

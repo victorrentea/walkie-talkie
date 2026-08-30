@@ -150,6 +150,24 @@ The overlay's chip then names the session it is aimed at — `📍 petclinic@mai
 itself. Binding also draws a translucent blue rectangle over the window it just
 captured, which shrinks and flies to your cursor: that window is now this chip.
 
+### Spoken at a session that does not exist yet
+
+**⇧ + the wheel** starts a dictation with no target on screen. When it ends, the
+relay opens a new Terminal window, starts an interactive Claude Code in it, and
+hands over what you said as the session's first prompt — then points itself at
+that window, so the next thing you say goes to the agent you have just started.
+
+It runs whenever the app does, bound or not: everything else here has to be
+*pointed* at a terminal, and the one thing that cannot express is the way most
+sessions actually begin — you have a thought and there is no window for it yet.
+
+The folder is the one the relay is already aimed at, or the terminal in front
+when nothing is bound, or `~/workspace`. The prompt is passed as an **argument**
+to `claude`, never typed: it cannot be executed by a shell, cannot land in an
+editor, and cannot arrive before the agent is ready to read it. The first session
+in a folder Claude Code has not seen before still asks its own "do you trust this
+folder" question, and runs the prompt once you answer it.
+
 ### The outbox
 
 While bound, the overlay *also* appends JSON lines to
@@ -195,6 +213,7 @@ once, each taking one):
 | `POST /unbind` | stop — the relay goes inert until something is bound again |
 | `GET /target` | what it is currently aimed at |
 | `POST /test/dictation` | `{"text":"…"}` — put a sentence through the whole path without speaking one |
+| `POST /test/spawn` | the same, for ⇧ + the wheel: opens the window and starts the session |
 | `GET /engine` | which recogniser is loaded, and whether it is ready |
 
 ## Input
@@ -202,6 +221,7 @@ once, each taking one):
 | input | effect |
 |---|---|
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
+| **⇧ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound — this one needs no destination, it brings one |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃D |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |

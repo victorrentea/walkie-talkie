@@ -49,6 +49,30 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
+    /// **⇧ + the wheel — talk at a session that does not exist yet.** Start a
+    /// dictation whose destination is a Terminal window this app has not opened
+    /// yet: at the end of it, a new one appears with an interactive Claude Code
+    /// in it and the words as its first prompt.
+    ///
+    /// **It ignores every gate the bare wheel obeys.** A binding is the bare
+    /// wheel's on switch (*Unbound is inert*) precisely because a dictation with
+    /// nowhere to go is a room taped for nobody — and that argument does not
+    /// reach this gesture, which *carries* its destination. So it acts whenever
+    /// the app is running, bound or not, which is exactly what Victor asked for:
+    /// the moment this is most useful is the moment there is no session yet.
+    ///
+    /// **Mid-dictation it is just the wheel.** The destination is decided at the
+    /// press that opened the microphone and cannot be changed halfway through a
+    /// sentence, so a shifted click while one is running ends it like any other,
+    /// and it goes wherever it was already going.
+    ///
+    /// The price: ⇧-middle-click — open a link in a new tab and switch to it —
+    /// belongs to this app for as long as it is running, not merely while
+    /// something is bound. That is the deliberate reading of *"cât timp e pornit
+    /// walkie"*.
+    var onSpawnToggle: (() -> Void)?
+
+    /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
     /// at the window in front. Same call ⌘⌃D makes, including its toggle: made on
     /// the terminal already bound, it lets go.
@@ -162,6 +186,10 @@ final class HotkeyTap {
     private var wheelArmed = false
     /// A press we swallowed and have not yet judged.
     private var wheelDown = false
+    /// …and whether ⇧ was down when we took it. Read at the release, because
+    /// that is where a tap is told from a hold — and remembered rather than
+    /// re-read, since the modifier may well be let go before the button is.
+    private var wheelSpawn = false
     private var wheelHold: DispatchWorkItem?
 
     private let stateLock = NSLock()
@@ -245,6 +273,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
             let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
+            // **⇧ and nothing else.** Deliberately not folded into `bare`: every
+            // branch below that asks for `bare` means "the gesture with no
+            // destination of its own", and this one carries one.
+            let shifted = event.flags.contains(.maskShift)
+                    && !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
+                    && !event.flags.contains(.maskAlternate)
 
             // Mouse 4 mid-dictation → a picture, and the Return it would have
             // become never happens. Both halves of the click are swallowed:
@@ -350,11 +384,24 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // what is left — a press we took and nothing acted on — is the tap.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
                 let tapped = wheelDown && !wheelArmed
+                // Read off the **press**, not off the flags now: ⇧ is very often
+                // let go before the button is, and a gesture that changed its
+                // mind between the two halves of one click would be the least
+                // predictable thing in this file.
+                let spawn = wheelSpawn
                 wheelArmed = false
                 wheelDown = false
+                wheelSpawn = false
                 wheelHold?.cancel()
                 wheelHold = nil
-                if tapped && (localCapture || dictating) {
+                if tapped && spawn {
+                    // Ending one is ending one, whichever gesture it started
+                    // with — the destination was decided at the press that
+                    // opened the microphone.
+                    Log.info(dictating ? "🎙️ ⇧wheel tapped — ending the dictation"
+                                       : "✨ ⇧wheel tapped — dictating at a new Claude Code")
+                    DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+                } else if tapped && (localCapture || dictating) {
                     Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
                                        : "🎙️ wheel tapped — starting a dictation")
                     DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
@@ -388,9 +435,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Swallowed on the press and judged at the release above, because a
             // tap and a two-second hold are the same event until the finger
             // lifts.
-            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare
-                && (localCapture || dictating) {
+            // **⇧ makes the same press mean "and open somewhere to put it".**
+            // It joins this branch rather than getting one of its own because
+            // everything from here down is identical — the press is swallowed,
+            // a hold still cancels a running dictation, and the tap is judged at
+            // the release. The only difference is which callback the release
+            // makes, and that is what `wheelSpawn` carries.
+            //
+            // Note what it does *not* consult: `localCapture`. The bare wheel is
+            // inert with nothing bound because its words would have nowhere to
+            // go; these words bring their own destination, so the gesture is
+            // live for as long as the app is.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown
+                && ((bare && (localCapture || dictating)) || shifted) {
                 wheelDown = true
+                wheelSpawn = shifted
                 // Only a running dictation has a second meaning for a long press.
                 // Idle, the press is a tap however long it lasts — there is
                 // nothing left for a hold to mean.
