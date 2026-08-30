@@ -88,11 +88,22 @@ async function deliver(pick) {
 // resume must still land on exactly the tabs that were paused.
 
 const MUSIC_PORT = 8920;
-const RECONNECT_MIN_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
+
+// **Why the socket is gated on a probe, and not simply retried.** A refused
+// WebSocket is a runtime error Chrome files on the extension's Errors page — one
+// entry per attempt, forever, for what is the ordinary state of the world: the
+// relay is started and killed per agent session, so most of the day there is
+// nothing on 8920 to talk to. A refused *fetch* is caught here and stays silent,
+// and the app opens the picker's HTTP port in the same breath as this socket
+// (`picker.start(); music.start()`), so a probe that answers is proof the bridge
+// is up. No answer, no socket, no error.
+const MUSIC_RETRY_ALARM = 'walkie-music-retry';
+// Chrome's floor for a periodic alarm, and therefore the worst case between the
+// app coming up and the music being pausable again. Cheap: three loopback
+// fetches that fail instantly while nothing is listening.
+const MUSIC_RETRY_MINUTES = 0.5;
 
 let musicSocket = null;
-let musicReconnectDelay = RECONNECT_MIN_MS;
 
 // --- the two halves of the job, injected into the page ---------------------
 
@@ -156,13 +167,19 @@ async function resumeWhatWePaused() {
   console.log('[walkie-music] resumed', (pausedTabs || []).length, 'tab(s)');
 }
 
-function connectMusic() {
+// The only way in. Connects if — and only if — the app answers on one of the
+// picker's ports; otherwise it leaves the field empty and waits for the alarm.
+async function ensureMusic() {
   if (musicSocket &&
       (musicSocket.readyState === WebSocket.OPEN || musicSocket.readyState === WebSocket.CONNECTING)) return;
+  const { ports } = await probe();
+  if (ports.length) openMusicSocket();
+}
+
+function openMusicSocket() {
   musicSocket = new WebSocket(`ws://127.0.0.1:${MUSIC_PORT}`);
 
   musicSocket.onopen = () => {
-    musicReconnectDelay = RECONNECT_MIN_MS;
     console.log('[walkie-music] connected to the relay');
   };
 
@@ -177,27 +194,36 @@ function connectMusic() {
       .catch((e) => console.log('[walkie-music] failed', e));
   };
 
-  const retry = () => {
+  const dropped = () => {
     musicSocket = null;
     // **A dead socket resumes.** The relay is started and killed per agent
     // session, far more often than it is left running, and a relay that goes
     // away mid-sentence would otherwise leave the music off with nothing left
     // alive to turn it back on. A blip that is only a blip costs a stutter: the
-    // reconnect replays active:true and pauses again.
+    // next probe reconnects and the replayed active:true pauses again.
     resumeWhatWePaused().catch(() => {});
-    setTimeout(connectMusic, musicReconnectDelay);
-    musicReconnectDelay = Math.min(musicReconnectDelay * 2, RECONNECT_MAX_MS);
   };
-  musicSocket.onclose = retry;
+  musicSocket.onclose = dropped;
   musicSocket.onerror = () => { try { musicSocket.close(); } catch {} };
 }
 
-chrome.runtime.onStartup.addListener(connectMusic);
-chrome.runtime.onInstalled.addListener(connectMusic);
-connectMusic();
+// A periodic alarm rather than a setTimeout chain: with no socket open there is
+// nothing keeping this worker alive, and a timer scheduled by a worker that is
+// then torn down never fires. An alarm wakes it.
+chrome.alarms.create(MUSIC_RETRY_ALARM, { periodInMinutes: MUSIC_RETRY_MINUTES });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === MUSIC_RETRY_ALARM) ensureMusic();
+});
+
+chrome.runtime.onStartup.addListener(ensureMusic);
+chrome.runtime.onInstalled.addListener(ensureMusic);
+ensureMusic();
 
 chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   if (msg?.type === 'probe') {
+    // Free reconnect: a hold that finds the picker alive has just proved the
+    // music bridge is too, without waiting for the alarm.
+    ensureMusic();
     probe().then((c) => respond({ live: c.ports.length > 0, sessions: c.sessions }));
     return true;      // the answer comes later
   }

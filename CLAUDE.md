@@ -884,6 +884,21 @@ resumes only its own marks, and an element the other already stopped is skipped
 as "not playing". They cannot share a listener, so this sits just past
 `ElementPicker`'s 8917–8919.
 
+**The socket is gated on a probe, and never blindly retried.** A refused
+WebSocket is a runtime error Chrome files on the extension's *Errors* page, one
+entry per attempt — and with the relay started and killed per agent session,
+"nothing on 8920" is the ordinary state of the world, so a plain reconnect loop
+turns that page into a wall of `ERR_CONNECTION_REFUSED`. A refused `fetch` is
+caught in `ask()` and stays silent, and `AppDelegate` opens the picker's HTTP
+port in the same breath as the bridge (`picker.start(); music.start()`), so a
+probe that answers is proof 8920 is there to connect to. The retry is a
+`chrome.alarms` period of 30 s (Chrome's floor, and also the worst case between
+the app coming up and the music being pausable again) rather than a
+`setTimeout` chain — with no socket open nothing keeps the worker alive, and a
+timer scheduled by a worker that is then torn down never fires. A ⌘⇧ hold that
+finds the picker alive reconnects immediately, for free. This is why the
+extension also asks for the **`alarms`** permission.
+
 **A dead socket resumes**, which is a deliberate departure from Victor Addons.
 That app runs from login and is rarely killed; the relay is started and killed
 *per agent session*, so a relay that goes away mid-sentence would otherwise leave
