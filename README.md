@@ -154,19 +154,21 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 
 **⇧ + the wheel** starts a dictation with no target on screen. When it ends, the
 relay opens a new Terminal window, starts an interactive Claude Code in it, and
-hands over what you said as the session's first prompt — then points itself at
-that window, so the next thing you say goes to the agent you have just started.
+hands over what you said as the session's first prompt.
+
+**The binding does not move**: whatever the relay was pointed at before is where
+your next ordinary dictation still goes. A spawn is a one-shot destination, not a
+way of acquiring one.
 
 It runs whenever the app does, bound or not: everything else here has to be
 *pointed* at a terminal, and the one thing that cannot express is the way most
 sessions actually begin — you have a thought and there is no window for it yet.
 
-The folder is the one the relay is already aimed at, or the terminal in front
-when nothing is bound, or `~/workspace`. The prompt is passed as an **argument**
-to `claude`, never typed: it cannot be executed by a shell, cannot land in an
-editor, and cannot arrive before the agent is ready to read it. The first session
-in a folder Claude Code has not seen before still asks its own "do you trust this
-folder" question, and runs the prompt once you answer it.
+The session always starts in **`~/workspace`** — a fixed destination you never
+have to check before you start talking, and the one folder Claude Code already
+trusts. The prompt is passed as an **argument** to `claude`, never typed: it
+cannot be executed by a shell, cannot land in an editor, and cannot arrive before
+the agent is ready to read it.
 
 ### The outbox
 
@@ -221,7 +223,7 @@ once, each taking one):
 | input | effect |
 |---|---|
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
-| **⇧ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound — this one needs no destination, it brings one |
+| **⇧ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃D |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |

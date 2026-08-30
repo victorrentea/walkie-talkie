@@ -175,12 +175,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// purpose those gates have.
     private var spawnPending = false
 
-    /// Where that new session will be started, resolved **at the press** rather
-    /// than at the end: the folder is context, like the cursor and the frontmost
-    /// window, and by the time a minute of dictation is over Victor may well be
-    /// looking at something else entirely.
-    private var spawnDirectory: String?
-
     /// Somewhere for this dictation to go: a terminal already bound, or one it
     /// is about to open for itself.
     private var hasDestination: Bool { isBound || spawnPending }
@@ -229,8 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// because the two are seconds apart — the panel holds every prompt — and
         /// the next dictation may have started by then.
         var spawn: Bool = false
-        /// …and where. Travels with the flag for the same reason.
-        var spawnDirectory: String?
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -356,13 +348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.spawnPending = true
-                self.resolveSpawnDestination()
-                // A beat for the folder to resolve, so the test exercises the
-                // real destination rather than the fallback — the same wait a
-                // spoken sentence provides for free.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    self.send(kind: "dictation", text: text, app: "test")
-                }
+                self.send(kind: "dictation", text: text, app: "test")
             }
         }
         picker.describeEngine = { [weak self] in
@@ -517,7 +503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // repeated here for the same reason `paused` is: this is the path that
         // opens the microphone.
         guard hasDestination, !paused else { return }
-        if spawn { resolveSpawnDestination() }
+        if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)") }
         guard whisper.ready else {
             // Not an error, since the helper is deliberately down until something
             // says a dictation is coming — this press is one of the two things
@@ -1199,23 +1185,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is ready to read them. That is also why this does not wait for the session
     /// to come up before reporting: there is no readiness to wait for.
     ///
-    /// **And the relay follows him into it.** The new window is the destination
-    /// he just named, so the binding moves there — otherwise the obvious next
-    /// sentence, said at the session he just started, would go to the terminal he
-    /// had been pointing at before, or nowhere at all.
+    /// **The binding does not move.** The new window is where *this* sentence
+    /// went, not where the relay now lives: Victor asked for it explicitly, and
+    /// the reason holds on its own — the wheel is a gesture he makes dozens of
+    /// times a day at the session he is working in, and a spawn silently
+    /// re-pointing it would mean the next ordinary dictation lands in a session
+    /// that has existed for four seconds. Two more spawns in a row still each
+    /// get their own window, and the terminal he was aimed at is still the one
+    /// he is aimed at. Unbound, it stays unbound — a spawn is a one-shot
+    /// destination, not a way of acquiring one.
     private func spawnClaude(_ m: Message) {
         let line = Self.terminalLine(m)
         guard !line.isEmpty else { return clearSpawn() }
-        let directory = m.spawnDirectory ?? Self.defaultSpawnDirectory
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: directory)
+            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: Self.spawnDirectory)
             DispatchQueue.main.async {
                 self.clearSpawn()
                 switch outcome {
-                case .opened(let tty):
-                    self.showBound(self.terminal.bindSpawned(tty: tty, directory: directory))
+                // **Silent**, like every other delivery that landed: the window
+                // is in front with the session running in it, which is a whole
+                // screen of evidence, and a flash would be a panel thrown over
+                // his work to repeat what it already shows.
+                case .opened:
+                    break
                 case .failed(let why):
                     // The outbox already has the line — `commit` wrote it before
                     // this ran — so what is lost is the delivery, and this is the
@@ -1227,51 +1221,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Which folder the session about to be opened should start in.
-    ///
-    /// The bound target first — it is the context the chip has been showing all
-    /// along, and a second session is nearly always a second session on the same
-    /// work. Then the terminal in front, which is the honest answer with nothing
-    /// bound, since that is the state this gesture exists for. Then home.
-    ///
-    /// Off the main thread and reported back to the chip when it lands: reading
-    /// it is `ps`, `lsof` and an `osascript` round trip, and this runs at the
-    /// instant the microphone opens — the one moment in this app where a
-    /// blocked main thread is a chip that stops following the cursor while he
-    /// is already talking.
-    private func resolveSpawnDestination() {
-        overlay.setSpawnDestination("new Claude Code")
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let dir = self.terminal.currentDirectory()
-                ?? TerminalBinding.frontTerminalDirectory()
-                ?? Self.defaultSpawnDirectory
-            let label = TerminalBinding.label(forDirectory: dir)
-            DispatchQueue.main.async {
-                // A dictation that ended (or was thrown away) while this was
-                // resolving has already cleared the flag; putting a destination
-                // back on the chip now would name a session nobody is opening.
-                guard self.spawnPending else { return }
-                self.spawnDirectory = dir
-                self.overlay.setSpawnDestination("✨ \(label)")
-            }
-        }
-    }
-
     /// The dictation that was going to open a terminal is over — delivered,
     /// cancelled, or never transcribed. Main thread only: it draws.
     private func clearSpawn() {
         spawnPending = false
-        spawnDirectory = nil
         overlay.setSpawnDestination(nil)
     }
 
-    /// Where a spawn goes when nothing else can be read. Home would be the
-    /// literal answer and `~/workspace` is the useful one: every repo Victor
-    /// works in is a folder inside it, so a Claude Code started there can still
-    /// be told which one — started in `~`, it is looking at his whole Mac.
-    private static let defaultSpawnDirectory = FileManager.default
+    /// **Always `~/workspace`, and nothing is inferred.** Victor's call, and the
+    /// three reasons line up behind it: it is where he starts every session by
+    /// hand, so it is the one folder Claude Code already trusts — a spawn into a
+    /// sub-repo stops on the "do you trust this folder" question instead of
+    /// working — every repo he has is a folder inside it, so the agent can still
+    /// be told which one, and a destination that is always the same is one he
+    /// never has to check before he starts talking.
+    ///
+    /// The alternative was resolving it from the bound target or the terminal in
+    /// front. It was written, and it is what surfaced the trust prompt: an answer
+    /// that is right four times out of five is worse here than one that is fixed,
+    /// because the fifth is only discovered after the sentence is spoken.
+    private static let spawnDirectory = FileManager.default
         .homeDirectoryForCurrentUser.appendingPathComponent("workspace").path
+
+    /// What the chip calls that folder while he is talking at it.
+    private static let spawnFolderName = (spawnDirectory as NSString).lastPathComponent
 
     /// Type a message into the bound terminal, if there is one.
     ///
@@ -1886,7 +1859,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // spawn consumed there would open a session holding nothing but pictures
         // and leave the words that were still being spoken with nowhere to go.
         let spawn = spawnPending && kind == "dictation"
-        let spawnDir = spawnDirectory
         if kind == "dictation" { spawnPending = false }
         guard isBound || spawn else {
             Log.info("unbound — dropped \(kind)")
@@ -1942,8 +1914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks,
-                              spawn: spawn, spawnDirectory: spawnDir)
+                              app: app, elements: picks, spawn: spawn)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.

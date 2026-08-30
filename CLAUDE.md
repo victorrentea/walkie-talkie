@@ -1504,8 +1504,9 @@ two fields would read as a comparison that never happened.
 
 **Since 2026-08-30 a dictation can be aimed at a session that has not been
 started.** ⇧ + the wheel opens the microphone exactly as a bare click does; when
-the sentence ends, a new Terminal window appears with an interactive Claude Code
-in it and the words as its first prompt, and the relay binds to that window.
+the sentence ends, a new Terminal window appears in `~/workspace` with an
+interactive Claude Code in it and the words as its first prompt. The binding does
+not move.
 
 **Why it had to exist.** Every other destination in this app has to be *pointed
 at* — ⌘⌃D, the mouse-5 double click, the left-plus-wheel chord all say "that
@@ -1540,20 +1541,28 @@ is handed nothing but a path this app generated, and the shell reads the words
 from a file with `"$(cat …)"`. Measured with a prompt containing all four: it
 arrives byte-identical.
 
-**The folder is resolved at the press**, like the cursor and the frontmost
-window, and for the same reason — a minute of dictation later he is looking at
-something else. Bound target first (it is the context the chip has been showing
-all along, and a second session is nearly always a second session on the same
-work), then the terminal in front, then `~/workspace`. `~` would be the literal
-fallback and is the wrong one: every repo is a folder inside `~/workspace`, so an
-agent started there can still be told which, while one started in `~` is looking
-at the whole Mac.
+**The folder is always `~/workspace`, and nothing is inferred.** Victor's call,
+and three reasons line up behind it: it is where he starts every session by hand,
+so it is the one folder Claude Code already trusts; every repo he has is a folder
+inside it, so the agent can still be told which one; and a destination that never
+changes is one he does not have to check before he starts talking.
 
-**The relay follows him into the new window.** It binds it — from the tty
-`do script` hands back, not by asking which window is in front a moment later,
-which by then is whichever one he has clicked on. Otherwise the obvious next
-sentence, said at the session he has just started, would go to the terminal he
-was pointing at before, or nowhere at all.
+Resolving it — bound target, else the terminal in front, else `~/workspace` — was
+written first and is what surfaced the trust prompt: spawned into
+`~/workspace/walkie-talkie`, Claude Code stopped on *"do you trust this folder"*
+instead of working, because he has only ever started it from the parent. An
+answer that is right four times in five is worse here than a fixed one, since the
+fifth is only discovered after the sentence has been spoken.
+
+**The binding does not move.** The new window is where *this* sentence went, not
+where the relay now lives. Victor asked for that explicitly and the reason holds
+on its own: the wheel is a gesture he makes dozens of times a day at the session
+he is working in, and a spawn that silently re-pointed it would put the next
+ordinary dictation into a session four seconds old. Two spawns in a row each get
+their own window and the terminal he was aimed at is still the one he is aimed at;
+unbound, he stays unbound. A spawn is a one-shot destination, not a way of
+acquiring one — which is also why nothing is flashed on success: the window is in
+front with the session running in it, and that is the whole message.
 
 **The chip says the destination that does not exist yet**, and it outranks the
 bound one for the length of that sentence (`RelayWindow.spawnLabel`): the words
@@ -1570,13 +1579,6 @@ go before the button is.
 belongs to this app whenever it is running, not merely while something is bound.
 That is the deliberate reading of *"cât timp e pornit walkie"*, and it is a
 strictly larger claim than the bare wheel's.
-
-**Claude Code's own trust prompt still happens.** A folder it has not seen before
-asks "do you trust this folder" and runs the dictation once that is answered —
-measured in `~/workspace/walkie-talkie`, which had never been entered directly
-because Victor always starts in `~/workspace`. Nothing is done about it: the
-alternative is passing a flag that turns off a safety gate, which is not this
-app's decision to make.
 
 `POST /test/spawn` is the route that exercises all of it from a desk, and it
 needs one of its own because `/test/dictation` is gated on a binding — the one
