@@ -242,6 +242,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // on the bound target.
         status.onDisconnect = { [weak self] in self?.unbindTerminal() }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
+        // The id the overlay used to carry beside the pulse. Same shape as the
+        // footprint: asked when the menu opens, because that is the one moment
+        // its answer has to be right.
+        status.whisperModel = { [weak self] in self?.whisper.modelName }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
@@ -554,7 +558,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listening = true
         syncBorrowedGestures()
         overlay.setListening(true)
-        overlay.setListeningModel(whisper.modelName)
         publishShotCount()
         publishPicks()
     }

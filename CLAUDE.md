@@ -19,7 +19,8 @@ he spoke.
 
 Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
-  and `engineText` beside the pulsing 🔴 (`Listening with <model id>`)
+  and `engineText` beside the pulsing 🔴 (`Listening…` — the model id it used to
+  carry now lives only in the menu's engine row, see `applyWhisperTitle`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
@@ -1616,11 +1617,24 @@ condition this gesture is defined by not needing.
 
 ## The chip teaches nothing; the menu does
 
+**A setting is not an event.** The same argument that took the gesture hints off
+the chip took the model id off it on 2026-08-30: the engine row read `Listening
+with mlx-community/whisper-large-v3-turbo`, which is the right fact — the id is
+what a comparison between recognisers is written down against — in the wrong
+place. A comparison is written down at leisure; that row is read mid-sentence,
+beside the cursor, and it stretched the panel to the width of its longest
+possible value in order to restate something that does not change from one
+dictation to the next. It now says `Listening…` and nothing else, and the id
+appears in the menu's engine row beside the RAM the model is holding
+(`StatusItem.applyWhisperTitle`), which is where the rest of the engine's facts
+already were.
+
+
 **Since 2026-08-30 the overlay advertises no gesture at all** — with one
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening with …`, `transcribing…`, `preparing`, the picks he has
+the pulse, `Listening…`, `transcribing…`, `preparing`, the picks he has
 actually made, the destination.
 
 **The exception is `⌘⇧🖱️`, shown while dictating *and* with Chrome in front.**

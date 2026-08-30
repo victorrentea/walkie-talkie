@@ -44,11 +44,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// says the same seconds as an offer — and it is a button, so the wait can be
     /// skipped whenever he already knows the text is right.
     private let sendButton = PillButton(frame: NSRect(x: 0, y: 0, width: 128, height: 28))
-    /// The engine row: a slowly pulsing 🔴 and the name of the model listening.
+    /// The engine row: a slowly pulsing 🔴 and `Listening…` beside it.
     ///
-    /// The pulse says *recording* and the name says *which recogniser is about to
-    /// be believed*; before this they were one glyph saying only the first half,
-    /// at a time when there was nothing else it could have meant.
+    /// The pulse says *now* and the word says *what is happening*; before this
+    /// they were one glyph saying only the first half, at a time when there was
+    /// nothing else it could have meant. (The word was once `Listening with
+    /// <model id>` — see `engineText` for why the id moved to the menu.)
     private let engineRow = NSView()
     /// What to press, while it is bound and nothing is happening. A glyph row
     /// like the ones below rather than an emoji inside a sentence: as text the
@@ -129,7 +130,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var listening = false
     /// Which model is loaded — `mlx-community/whisper-large-v3-turbo` — shown in
     /// full while it is the one listening.
-    private var localModel: String?
     private var hovering = false
 
     private var followTimer: Timer?
@@ -200,7 +200,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **Explicitly temporary**, hence a flag rather than five deletions: the
     /// rows are still built, still measured and still laid out, so putting them
     /// back is this one word. What stays on the chip is everything that reports
-    /// *state* — the pulse, `Listening with …`, `transcribing…`, `preparing`, the
+    /// *state* — the pulse, `Listening…`, `transcribing…`, `preparing`, the
     /// picks he has actually made — because none of that is teaching him
     /// anything, it is telling him what is happening.
     private static let showsGestureHints = false
@@ -246,7 +246,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// which made the chip read as two things stacked rather than one card. They
     /// are one face now, and it is the **system** face: unifying them on the
     /// monospaced one was tried first and Victor rejected it on sight — this
-    /// panel is prose (`Listening with …`, a dictated sentence, `started in
+    /// panel is prose (`Listening…`, a dictated sentence, `started in
     /// petclinic`), and a terminal face makes prose look like output. The one
     /// row with a real claim to monospace is the ⌘-pick selector, and a
     /// selector reads fine in the system face at this size; four rows agreeing
@@ -477,7 +477,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var recordText: String? {
         guard listening, !paused else { return nil }
         // The count went first and the hint went second, which leaves the row
-        // with nothing of its own to say — the pulse and `Listening with …`
+        // with nothing of its own to say — the pulse and `Listening…`
         // directly above it carry the whole of "a dictation is open".
         guard Self.showsGestureHints else { return nil }
         return ""   // the row is drawn from `shotHintText`; see `layoutContent`
@@ -498,18 +498,20 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// file; listening is what the other end of a conversation does, and this
     /// row is on screen precisely while Victor is talking *to* something.
     ///
-    /// The engine is still spelled out rather than abbreviated: it answers the
-    /// question the whole engine switch exists for — which of the two recognisers
-    /// is about to be believed. The local one is on trial, and it is the one whose
-    /// transcript nothing else can double-check.
+    /// **The model's name is not here — it is in the menu.** The row used to read
+    /// `Listening with mlx-community/whisper-large-v3-turbo`, on the reading that
+    /// the id is what a comparison between recognisers is written down against.
+    /// It is; but a comparison is written down at leisure, and this row is read
+    /// mid-sentence, beside the cursor, while Victor is talking. Which model is
+    /// loaded does not change from one sentence to the next — it is a *setting*,
+    /// and a setting that is restated in the corner of the screen all day is
+    /// paying rent at every moment in order to be read twice a month. The whole
+    /// id also stretched the panel to the width of its longest possible value.
+    /// `StatusItem.applyWhisperTitle` says it, beside the RAM the model is
+    /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening, !paused else { return nil }
-        // **The model's own id, in full.** `Local Whisper` names a category, and
-        // the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
-        // the model, and the whole reason the row exists is to say which
-        // recogniser is about to be believed. The id is what a comparison is
-        // written down against.
-        return "Listening with " + (localModel ?? "Local Whisper")
+        return "Listening…"
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -1965,15 +1967,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         refreshTitle()
         layoutContent()          // pausing mid-dictation retracts the recording row
         reposition()             // …and parks the panel back in its corner
-    }
-
-    /// Which model is doing the listening, for the row beside the pulse. Set
-    /// around `setListening`, which stays the one switch for everything else the
-    /// dictation turns on — the pulse, the row, the borrowed gestures.
-    func setListeningModel(_ model: String?) {
-        guard model != localModel else { return }
-        localModel = model
-        layoutContent()
     }
 
     /// Take a banner down early — for one that was a promise ("transcribing…")

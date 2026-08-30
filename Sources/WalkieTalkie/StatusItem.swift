@@ -31,6 +31,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// moment the answer has to be right.
     var whisperFootprint: (() -> UInt64?)?
 
+    /// Which model the helper actually loaded — `RELAY_WHISPER_MODEL`, or the
+    /// default it fell back to — nil while it is not up. Asked when the menu
+    /// opens, like the footprint beside it.
+    ///
+    /// **This is the only place the id is written.** It used to ride the overlay,
+    /// beside the pulse, all through every dictation; but the model is a setting,
+    /// not an event, and the row beside the cursor is read mid-sentence. A menu
+    /// is where a setting is looked up on purpose — and this row is already the
+    /// engine's row, so the id lands beside the RAM it is costing.
+    var whisperModel: (() -> String?)?
+
     /// Whether the relay's own microphone is open right now. Asked when the menu
     /// opens, for the same reason the footprint is: it is a fact that changes
     /// with every dictation, and the one moment it has to be right is the moment
@@ -301,7 +312,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         refreshGlyph()
     }
 
-    /// `Local Whisper — 1.6 GB RAM` while the model is up.
+    /// `Local Whisper (mlx-community/whisper-large-v3-turbo) — 1.6 GB RAM` while
+    /// the model is up.
     ///
     /// **The cost is shown, because the weights are the whole argument** for
     /// starting the helper only when a dictation is coming and letting it go
@@ -318,7 +330,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
     /// `LocalWhisper.footprintBytes` for why not RSS.
     private func applyWhisperTitle() {
-        let name = "Local Whisper"
+        // **The id in parentheses, in full.** `Local Whisper` names a category and
+        // the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
+        // the model, and the id is what a comparison between recognisers is
+        // written down against. It is parenthetical rather than a second dashed
+        // clause so that the row still reads as `<engine> — <cost>`.
+        let name = whisperModel?().map { "Local Whisper (\($0))" } ?? "Local Whisper"
         if engineLoading {
             whisperItem.title = "\(name) — loading…"
         } else if let bytes = whisperFootprint?() {
