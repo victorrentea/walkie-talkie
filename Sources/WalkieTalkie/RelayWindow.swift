@@ -184,6 +184,26 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// taken down when it is delivered; while it is up it is what the chip says,
     /// bound or not.
     private var spawnLabel: String?
+
+    /// **The chip advertises no gesture at all, since 2026-08-30.** Every row
+    /// whose job was to teach an input — `ReBind` and `dictate` at rest, `send`
+    /// while editing, the shutter beside the pulse, the `⌘⇧🖱️` invitation before
+    /// the first pick — is off, and the menu bar is the only place they are
+    /// written down now.
+    ///
+    /// Victor's call, and the same argument that took the `bind` row off the
+    /// unbound chip a build earlier: *"mă încurcă, mă enervează"*. The chip rides
+    /// over his actual work all day, and a legend is read once and then paid for
+    /// forever. He is learning the gestures one at a time from the menu, which is
+    /// where they are read *while reaching for the thing they do*.
+    ///
+    /// **Explicitly temporary**, hence a flag rather than five deletions: the
+    /// rows are still built, still measured and still laid out, so putting them
+    /// back is this one word. What stays on the chip is everything that reports
+    /// *state* — the pulse, `Listening with …`, `transcribing…`, `preparing`, the
+    /// picks he has actually made — because none of that is teaching him
+    /// anything, it is telling him what is happening.
+    private static let showsGestureHints = false
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -387,7 +407,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         // hand is on the mouse, having just clicked the words to open the field.
         // The button beside the transcript already says `⏎ Send`; this says the
         // other way, which is the one he cannot see from the keyboard.
-        if editingPrompt { return [(Self.mouseWheelGlyph, plain("send"), iconInk)] }
+        if editingPrompt {
+            return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
+        }
         guard !paused, sentPrompt == nil else { return [] }
         if transcribing { return [(Self.waitGlyph, plain("transcribing…"), iconInk)] }
         if engineLoading { return [(Self.waitGlyph, plain("preparing"), iconInk)] }
@@ -400,6 +422,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // pointer was won back from. He said so within the hour, in the plainest
         // terms available: *"mă încurcă, mă enervează"*.
         if boundLabel == nil { return [] }
+        guard Self.showsGestureHints else { return [] }
         // **Rebind first, dictate second** — the order they are needed in. The
         // card is read at the moment the relay is pointed somewhere; the question
         // that brings his eyes to it is *is this still the right terminal*, and
@@ -435,6 +458,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// when the button is handed back to LinearMouse and types Return again.
     private var recordText: String? {
         guard listening, !paused else { return nil }
+        // The count went first and the hint went second, which leaves the row
+        // with nothing of its own to say — the pulse and `Listening with …`
+        // directly above it carry the whole of "a dictation is open".
+        guard Self.showsGestureHints else { return nil }
         return ""   // the row is drawn from `shotHintText`; see `layoutContent`
     }
 
@@ -506,7 +533,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// otherwise is a lie about which gestures are live.
     private var pickText: NSAttributedString? {
         guard listening, !paused else { return nil }
-        guard pickCount > 0 else { return Self.pickHint(font: hintFont) }
+        guard pickCount > 0 else { return Self.showsGestureHints ? Self.pickHint(font: hintFont) : nil }
         guard let newest = pickNewest, !newest.isEmpty else { return plain("×\(pickCount)") }
         return plain("×\(pickCount) \(Self.fit(newest, 34))")
     }

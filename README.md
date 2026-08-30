@@ -152,7 +152,7 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 
 ### Spoken at a session that does not exist yet
 
-**⇧ + the wheel** starts a dictation with no target on screen. When it ends, the
+**⌘ + the wheel** starts a dictation with no target on screen. When it ends, the
 relay opens a new Terminal window, starts an interactive Claude Code in it, and
 hands over what you said as the session's first prompt.
 
@@ -223,7 +223,7 @@ once, each taking one):
 | input | effect |
 |---|---|
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
-| **⇧ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
+| **⌘ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃D |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
@@ -233,7 +233,11 @@ once, each taking one):
 | **Cancel** | Stops the displayed prompt from ever being written |
 | click | On a prompt: send it now. Otherwise: pause / resume forwarding |
 | hover | Reveals the ✕ that ends the session (panel states only) |
-| menu bar 🤖 | Always there while the app runs — shows which session it is, plus **Pause/Resume** and **Quit** |
+| menu bar 🤖 | Always there while the app runs — shows which session it is, and **every action with the gesture that performs it**. Rows grey out when they cannot act right now; they never disappear |
+
+**The chip itself teaches nothing.** It carries state — the pulse, what is being
+recorded, where the words go — and no legend of gestures; those live in the menu
+bar, which is read while reaching for the thing it does.
 
 Paused, the chip reads `⏸️ 🤖 folder@branch` at 0.30 opacity and the menu bar
 icon becomes ⏸️🤖. The point of pausing is to get the mouse and the keyboard

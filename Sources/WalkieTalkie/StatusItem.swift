@@ -14,10 +14,14 @@ import AppKit
 /// two identical 🤖 in the menu bar say nothing about which session a click is
 /// about to end, and nothing at all about which terminal is receiving sentences.
 ///
-/// Two commands: **Pause/Resume** and **Quit**. Pause is here and not only on the
-/// chip because the chip is a moving target — it rides the cursor and disappears
-/// while he types — and pausing is something he does *on his way into another
-/// app*, i.e. exactly when he has no patience to chase a label around.
+/// **Since 2026-08-30 it is also the only place the gestures are written down.**
+/// The chip beside the cursor used to carry a legend — `ReBind`, `dictate`, the
+/// shutter, `⌘⇧🖱️` — and Victor had it taken off: it rides over his actual work
+/// all day, and a legend is read once and paid for forever. So every action this
+/// app has now has a row here, **always visible**, naming the mouse or key that
+/// performs it. A row greys out when it cannot act *right now*; it never
+/// disappears, because a menu that hid what he cannot do this second would be
+/// useless for learning what he can do at all.
 final class StatusItem: NSObject, NSMenuDelegate {
 
     var onExit: (() -> Void)?
@@ -57,6 +61,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord make.
     var onBind: (() -> Void)?
 
+    /// Picked from **New Claude Code** — open the microphone with the spawn
+    /// destination armed, exactly as ⌘ + the wheel does.
+    var onNewSession: (() -> Void)?
+
+    /// Picked from **One More Screenshot** — the same picture F3 and the back
+    /// button take.
+    var onShot: (() -> Void)?
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// **The menu is where the gestures are written down.** Every one of these
@@ -81,6 +93,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let stopRecording = NSMenuItem(title: "End Dictation — click the wheel", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
+    /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
+    /// exist yet. Spelled with the folder in it because that is the one thing
+    /// about it he cannot see beforehand — the window opens after he has spoken.
+    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + click the wheel", action: nil, keyEquivalent: "")
+    /// The shutter. Both routes are named: F3 works whenever there is a
+    /// destination, the back button only while a dictation is running — which is
+    /// also the only window in which it stops typing Return.
+    private let shot = NSMenuItem(title: "One More Screenshot — F3, or the back button while dictating", action: nil, keyEquivalent: "")
+    /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
+    /// happens inside Chrome, in a page this app cannot reach from a menu — but
+    /// it is a gesture the relay takes over, it used to be advertised on the chip
+    /// while dictating, and with the chip silent there is nowhere else it could
+    /// be said. Permanently disabled, which is the honest rendering of "this is
+    /// something you do, not something you pick".
+    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome — ⌘⇧ + click, while dictating", action: nil, keyEquivalent: "")
+    /// Hand the mouse and the microphone back — the same toggle a click on the
+    /// chip makes. **Back in the menu since 2026-08-30**: it was taken out when
+    /// Disconnect turned out to be the row he reached for, and the argument
+    /// against it (two commands that both mean "stop relaying") is outranked by
+    /// the new rule that every action has to be listed somewhere. The chip is
+    /// still the fast way, and the row is where that is written down.
+    private let pause = NSMenuItem(title: "Pause — click the chip", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     private var isPaused = false
@@ -192,7 +226,29 @@ final class StatusItem: NSObject, NSMenuDelegate {
         cancelDictation.isEnabled = false
         menu.addItem(cancelDictation)
 
+        // **Under the three that end a dictation, because it starts one.** It
+        // sits with them rather than beside Bind — which is where a reader
+        // looking for "how do I get a session" would expect it — because what it
+        // actually does is open the microphone; the window is what happens when
+        // the sentence is over. Enabled whether or not anything is bound: that is
+        // the whole point of the gesture.
+        newSession.action = #selector(newSessionClicked)
+        newSession.target = self
+        menu.addItem(newSession)
+
+        shot.action = #selector(shotClicked)
+        shot.target = self
+        shot.isEnabled = false
+        menu.addItem(shot)
+
+        pickLegend.isEnabled = false
+        menu.addItem(pickLegend)
+
         menu.addItem(.separator())
+
+        pause.action = #selector(pauseClicked)
+        pause.target = self
+        menu.addItem(pause)
 
         // **One row, and it is a readout rather than a switch.** There used to be
         // two — Wispr Flow and Local Whisper, ticked — from the months the relay
@@ -292,6 +348,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         startDictation.isEnabled = isBound && !recording
         stopRecording.isEnabled = recording
         cancelDictation.isEnabled = recording
+        // The one row that does not ask about a binding — it brings its own
+        // destination. Only a dictation already running takes it away, and then
+        // only because ⌘ + the wheel would end that one rather than start this.
+        newSession.isEnabled = !recording
+        // The same gate `plusOneShot` applies: a picture is worth taking when
+        // there is somewhere for it to go.
+        shot.isEnabled = (isBound || recording) && !isPaused
     }
 
     private func refreshGlyph() {
@@ -365,6 +428,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// menu he opens for one second should say what the click will do.
     func setPaused(_ value: Bool) {
         isPaused = value
+        // Worded as the verb the click performs, not as the state it reports —
+        // a menu open for one second should say what happens next.
+        pause.title = value ? "Resume — click the chip" : "Pause — click the chip"
         // Same order as the chip: ⏸️ in front of the robot, never instead of it.
         // Routed through `refreshGlyph` so it cannot stomp on a ⏳ that is up —
         // the two states are set from different places and both own this glyph.
@@ -401,6 +467,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func cancelDictationClicked() { onCancelDictation?() }
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }
+    @objc private func newSessionClicked() { onNewSession?() }
+    @objc private func shotClicked() { onShot?() }
 
     private var destination: String?
 

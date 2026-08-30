@@ -262,6 +262,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.cancelLocalRecording() }
         }
         hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal() != nil }
+        // The menu's copy of ⌘ + the wheel. The same call, so the window it opens
+        // and the destination it arms cannot drift from the gesture's.
+        status.onNewSession = { [weak self] in
+            DispatchQueue.main.async { self?.startLocalRecording(spawn: true) }
+        }
+        // The menu's copy of F3. **After a beat**, because the menu is dismissed
+        // by AppKit and the screen redrawn a frame or two later — a capture fired
+        // on the click would photograph the menu that ordered it.
+        status.onShot = { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                self?.plusOneShot(cursor: NSEvent.mouseLocation)
+            }
+        }
         status.onBind = { [weak self] in
             // Off the main thread: `bindFrontmostTerminal` asks it for the front
             // app with `main.sync`, and a menu action arrives already on main.

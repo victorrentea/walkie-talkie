@@ -26,8 +26,16 @@ Current strings live in `RelayWindow.swift`:
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
 - `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
-- `StatusItem.swift` — the menu bar item's `Pause` / `Resume` / `Disconnect` /
-  `Stop Recording` / `Quit`, plus the `Local Whisper` readout row
+- `StatusItem.swift` — **now the longest of these**, since the menu is where
+  every gesture is written down (*The chip teaches nothing; the menu does*):
+  `Bind This Window — or hold left, click the wheel`, the three dictation rows,
+  `New Claude Code in ~/workspace — ⌘ + click the wheel`, `One More Screenshot`,
+  the `Pick an Element in Chrome` legend, `Pause` / `Resume`, `Disconnect`,
+  `Quit`, and the `Local Whisper` readout
+
+The first two are **not on screen at the moment**: `showsGestureHints` is off, so
+the rows are built and never shown. They still have to be English when the flag
+goes back.
 
 ## Bound to a terminal: the second destination
 
@@ -472,7 +480,7 @@ port scheme for a caller to guess between, and buys nothing.
 | `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
-| `POST /test/spawn` | the same for ⇧ + the wheel — opens the window and starts the session |
+| `POST /test/spawn` | the same for ⌘ + the wheel — opens the window and starts the session |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero to count from |
 | `GET /engine` | which model is loaded, and whether it is ready |
 
@@ -575,8 +583,8 @@ Since 2026-08-27, `AppDelegate.isBound` (`terminal.target != nil`) gates every
 path that pause gates, plus `syncLocalCapture`, which is what lets the wheel open
 the microphone.
 
-**One gesture is outside it, since 2026-08-30**: ⇧ + the wheel starts a dictation
-whose destination is a terminal that does not exist yet (*⇧ + the wheel: the
+**One gesture is outside it, since 2026-08-30**: ⌘ + the wheel starts a dictation
+whose destination is a terminal that does not exist yet (*⌘ + the wheel: the
 destination that does not exist yet*). The four gates below now ask
 `hasDestination` — `isBound || spawnPending` — because the reason for the rule is
 that there is nowhere for these words to go, and a spawn is a yes to that
@@ -1405,7 +1413,7 @@ held. The third is a chord with the left button.**
 | bound, not dictating | **click** | start a dictation |
 | dictating | **click** | end it — transcribe and send |
 | dictating | hold **2s** | **cancel** it — throw the audio away |
-| **any state, bound or not** | **⇧ + click** | start a dictation **at a session that does not exist yet** — see *⇧ + the wheel* |
+| **any state, bound or not** | **⌘ + click** | start a dictation **at a session that does not exist yet** — see *⌘ + the wheel* |
 | anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃D, toggle included |
 | nothing bound, no chord | click | passed straight through |
 
@@ -1500,10 +1508,10 @@ Every dictation is filed in the corpus (`VoiceCorpus.captureLocal`), stamped
 one reading and no second opinion, and a manifest that duplicated the text into
 two fields would read as a comparison that never happened.
 
-### ⇧ + the wheel: the destination that does not exist yet
+### ⌘ + the wheel: the destination that does not exist yet
 
 **Since 2026-08-30 a dictation can be aimed at a session that has not been
-started.** ⇧ + the wheel opens the microphone exactly as a bare click does; when
+started.** ⌘ + the wheel opens the microphone exactly as a bare click does; when
 the sentence ends, a new Terminal window appears in `~/workspace` with an
 interactive Claude Code in it and the words as its first prompt. The binding does
 not move.
@@ -1570,19 +1578,71 @@ are not going where the chip has been saying they go, and this line's whole job
 is to get that right. Unbound it is also what puts the overlay on screen at all.
 
 **Ending a dictation is never a spawn.** The destination belongs to the press
-that opened the microphone, so a shifted click while one is running just ends it,
-and a 2s shifted hold still cancels. `HotkeyTap.wheelSpawn` is read off the
-**press** rather than off the flags at the release, because ⇧ is very often let
-go before the button is.
+that opened the microphone, so a ⌘ click while one is running just ends it, and a
+2s ⌘ hold still cancels. `HotkeyTap.wheelSpawn` is read off the **press** rather
+than off the flags at the release, because ⌘ is very often let go before the
+button is.
 
-**The price:** ⇧-middle-click — open a link in a new tab and switch to it —
-belongs to this app whenever it is running, not merely while something is bound.
-That is the deliberate reading of *"cât timp e pornit walkie"*, and it is a
-strictly larger claim than the bare wheel's.
+**⌘ and not ⇧, from 2026-08-30** — it was ⇧ for one build. ⌘-middle-click in a
+browser is redundant with a bare middle click (both open a link in a background
+tab), where ⇧-middle-click is a gesture of its own: new tab *and* switch to it.
+⇧ was also already spoken for on this very wheel — `linearmouse.json` maps ⇧ +
+vertical scroll to horizontal scroll, so holding it to press the button put a
+sideways scroll one twitch away.
+
+**The price** stands whichever modifier it is: it belongs to this app whenever it
+is running, not merely while something is bound. That is the deliberate reading
+of *"cât timp e pornit walkie"*, and it is a strictly larger claim than the bare
+wheel's.
 
 `POST /test/spawn` is the route that exercises all of it from a desk, and it
 needs one of its own because `/test/dictation` is gated on a binding — the one
 condition this gesture is defined by not needing.
+
+## The chip teaches nothing; the menu does
+
+**Since 2026-08-30 the overlay advertises no gesture at all.** Every row whose
+job was to name an input is off — `ReBind` and `dictate` at rest, `send` while
+editing the transcript, the shutter beside the pulse, the `⌘⇧🖱️` invitation
+before the first pick. What is left on the chip is everything that reports
+*state*: the pulse, `Listening with …`, `transcribing…`, `preparing`, the picks
+he has actually made, the destination.
+
+It is the same argument that took the `bind` row off the unbound chip a build
+earlier — *"mă încurcă, mă enervează"* — carried to its end. The chip rides over
+Victor's real work all day; a legend is read once and paid for forever, and the
+inputs it was teaching are ones he makes dozens of times a day and now knows.
+He asked to learn the remaining ones *"ușor-ușor"*, from the menu.
+
+**`RelayWindow.showsGestureHints` is one word, and the rows are still built.**
+Nothing was deleted: `shotHintText`, `pickHint`, `rebindText` and their glyphs
+are all still there and still measured, so this is reversible by flipping the
+flag. Victor said *temporar*, and a change described as temporary that deletes
+its own way back is not one.
+
+**The menu bar becomes the only legend, and therefore has to be complete.**
+Every action the app has is a row, **always visible**, naming the mouse or key
+that performs it — `New Claude Code in ~/workspace — ⌘ + click the wheel`,
+`Cancel Dictation — hold the wheel 2s`, `One More Screenshot — F3, or the back
+button while dictating`. A row greys out when it cannot act *this second*; it
+never disappears, because a menu that hid what he cannot do right now would be
+useless for learning what he can do at all. That is what *"indiferent de starea
+în care sunt acum"* asks for.
+
+Two rows exist because of this rule rather than despite it. **Pause came back**,
+having been removed when Disconnect turned out to be the row he reached for: it
+is an action, it has a gesture (click the chip), and the chip no longer says so.
+And **`Pick an Element in Chrome — ⌘⇧ + click`** is a legend, permanently
+disabled — the gesture happens inside a page this app cannot reach from a menu,
+but the relay takes the input over, so with the chip silent there is nowhere else
+it could be written. A disabled row is the honest rendering of *this is something
+you do, not something you pick*.
+
+The two new commands are the same calls their gestures make, not quieter
+variants: `New Claude Code` is `startLocalRecording(spawn: true)`, and
+`One More Screenshot` is `plusOneShot` — the latter **after a 0.35s beat**,
+because AppKit dismisses the menu and the screen redraws a frame or two later,
+so a capture fired on the click would photograph the menu that ordered it.
 
 ## Size: minimal, per state
 
