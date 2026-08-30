@@ -968,10 +968,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Pushed on every activation rather than polled: app switches are rare and
     /// the notification is exact, where a poll would be a timer running all day
     /// to answer a question that changes a few dozen times.
+    /// The browser the pick extension lives in. One id, deliberately: the
+    /// extension is loaded in Victor's Chrome and nowhere else, and a list of
+    /// Chromium bundle ids would be a row promising a gesture that no extension
+    /// is there to serve.
+    private static let chromeBundleID = "com.google.Chrome"
+
     private func startWatchingFrontApp() {
         let update: (NSRunningApplication?) -> Void = { [weak self] app in
             let bundle = app?.bundleIdentifier ?? ""
             self?.hotkeys.frontIsBindable = TerminalBinding.isBindable(bundleID: bundle)
+            // …and whether the ⌘⇧-pick row has a page to be about. The same
+            // notification answers both questions, and it is the only place
+            // either is asked — see `RelayWindow.chromeFront`.
+            self?.overlay.setChromeFront(bundle == Self.chromeBundleID)
         }
         update(NSWorkspace.shared.frontmostApplication)
         NSWorkspace.shared.notificationCenter.addObserver(

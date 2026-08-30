@@ -204,6 +204,24 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// picks he has actually made — because none of that is teaching him
     /// anything, it is telling him what is happening.
     private static let showsGestureHints = false
+
+    /// **Chrome is the frontmost app right now.** The one exception to the rule
+    /// above, and Victor asked for it back by name: while he is dictating *at a
+    /// page*, the `⌘⇧🖱️` row is shown again.
+    ///
+    /// The condition is what makes it worth its pixels. The other hints were paid
+    /// for at every moment of every day to be read once; this one appears only in
+    /// the two conditions that make it actionable at all — a dictation is open
+    /// and he is looking at the browser — so it costs nothing in the hours it is
+    /// not true. It is also the gesture with the strongest claim to being said
+    /// out loud, because the relay *takes it away from Chrome* while it is up:
+    /// ⌘⇧-click normally opens a link in a new tab and jumps to it, and a browser
+    /// that silently stopped doing that reads as broken.
+    ///
+    /// Pushed from `AppDelegate`'s front-app watcher rather than asked for here:
+    /// `NSWorkspace` is a main-thread question and this is read from `layoutContent`,
+    /// which runs while the chip is following the cursor.
+    private var chromeFront = false
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -533,7 +551,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// otherwise is a lie about which gestures are live.
     private var pickText: NSAttributedString? {
         guard listening, !paused else { return nil }
-        guard pickCount > 0 else { return Self.showsGestureHints ? Self.pickHint(font: hintFont) : nil }
+        // The invitation, but only with Chrome in front — see `chromeFront`.
+        // Once he has picked something the row belongs to the picks and stays
+        // whatever app he has switched to: they are travelling with this
+        // dictation, and that is a fact about the message, not about the window.
+        guard pickCount > 0 else { return chromeFront ? Self.pickHint(font: hintFont) : nil }
         guard let newest = pickNewest, !newest.isEmpty else { return plain("×\(pickCount)") }
         return plain("×\(pickCount) \(Self.fit(newest, 34))")
     }
@@ -1878,6 +1900,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// nothing is bound, there is no app icon to show and no target to lose, and
     /// the state lasts exactly as long as one sentence. `nil` puts the chip back
     /// to whatever it was actually saying.
+    /// Chrome came to the front, or left it. Relayouts only while a dictation is
+    /// open, since that is the only state the row can appear in — outside it the
+    /// flag is recorded and nothing moves, which matters because this fires on
+    /// every app switch all day.
+    func setChromeFront(_ value: Bool) {
+        guard chromeFront != value else { return }
+        chromeFront = value
+        guard listening, !paused, pickCount == 0 else { return }
+        layoutContent()
+    }
+
     func setSpawnDestination(_ label: String?) {
         guard spawnLabel != label else { return }
         spawnLabel = label

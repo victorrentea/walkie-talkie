@@ -1601,12 +1601,29 @@ condition this gesture is defined by not needing.
 
 ## The chip teaches nothing; the menu does
 
-**Since 2026-08-30 the overlay advertises no gesture at all.** Every row whose
-job was to name an input is off — `ReBind` and `dictate` at rest, `send` while
-editing the transcript, the shutter beside the pulse, the `⌘⇧🖱️` invitation
-before the first pick. What is left on the chip is everything that reports
-*state*: the pulse, `Listening with …`, `transcribing…`, `preparing`, the picks
-he has actually made, the destination.
+**Since 2026-08-30 the overlay advertises no gesture at all** — with one
+condition-gated exception below. Every row whose job was to name an input is off:
+`ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
+beside the pulse. What is left on the chip is everything that reports *state*:
+the pulse, `Listening with …`, `transcribing…`, `preparing`, the picks he has
+actually made, the destination.
+
+**The exception is `⌘⇧🖱️`, shown while dictating *and* with Chrome in front.**
+Victor asked for that one back the same day, and the two conditions are what earn
+it the pixels. The hints that were removed were paid for at every moment of every
+day in order to be read once; this one is on screen only when it is actionable —
+a dictation is open and he is looking at the page he would be pointing into — so
+it costs nothing in the hours it is not true. It also has the strongest claim of
+any of them to being said out loud, because the relay **takes the gesture away
+from Chrome** while it is up: ⌘⇧-click normally opens a link in a new tab and
+jumps to it, and a browser that silently stopped doing that reads as broken.
+
+Once he has actually picked something the row belongs to the picks and stays
+whatever app he switches to — they are travelling with this dictation, which is a
+fact about the message rather than about the front window. `chromeFront` is
+pushed from `AppDelegate`'s existing front-app watcher, the one that already
+answers `frontIsBindable`: `NSWorkspace` is a main-thread question and this is
+read from `layoutContent`, which runs while the chip follows the cursor.
 
 It is the same argument that took the `bind` row off the unbound chip a build
 earlier — *"mă încurcă, mă enervează"* — carried to its end. The chip rides over
