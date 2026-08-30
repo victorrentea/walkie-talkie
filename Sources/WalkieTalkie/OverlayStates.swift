@@ -8,7 +8,7 @@ import AppKit
 /// macOS 15). The only way to see it is `RelayWindow.snapshot`, the view drawing
 /// itself — which until now was fired by hand with `kill -USR1` while the state
 /// happened to be on screen. That is fine for one picture and hopeless for the
-/// thirty-one states below: half of them last a second and a half of *those*
+/// thirty-two states below: half of them last a second and a half of *those*
 /// cannot be reached on demand at all (`⚠️ Whisper unavailable`, a transcript the
 /// confidence gate flagged).
 ///
@@ -221,6 +221,14 @@ enum OverlayStates {
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.flash("⚠️ Whisper unavailable — no module named mlx_whisper", duration: 60)
+            },
+
+            Shot(slug: "flash-nothing-to-paste", group: "Flashes", title: "Flash — nothing to paste yet",
+                 when: "⌘⌃P, or the menu row, before anything has been dictated this session.",
+                 note: "The only thing ⌘⌃P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.flash("⚠️ nothing dictated yet", duration: 60)
             },
 
             Shot(slug: "flash-accessibility", group: "Flashes", title: "Flash — permissions missing",

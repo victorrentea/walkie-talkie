@@ -14,7 +14,7 @@ until it turned out to work with all of them).
 It is **one-way and non-interactive** by design. The agent gets your words; it
 cannot ask you anything back, because you are not reading the terminal.
 
-Every state the overlay can be in — all 31 of them, with the moment each appears —
+Every state the overlay can be in — all 32 of them, with the moment each appears —
 is photographed in **[docs/overlay-states.html](docs/overlay-states.html)**,
 regenerated from the code by `./docs/shoot-overlay-states.sh`.
 

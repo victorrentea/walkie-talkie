@@ -754,6 +754,13 @@ final class TerminalBinding {
         pasteboard.setString(text, forType: .string)
     }
 
+    /// ⌘V into whatever has the caret right now — no activation, no Return.
+    ///
+    /// Internal because ⌘⌃P makes the same press for a different reason (*the
+    /// last dictation, again, at the caret*), and one implementation of "press a
+    /// key at the frontmost app" is enough.
+    static func pressPaste() { tap(key: 0x09, command: true) }
+
     private static func tap(key: CGKeyCode, command: Bool) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)

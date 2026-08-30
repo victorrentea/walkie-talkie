@@ -123,6 +123,12 @@ final class HotkeyTap {
     /// bind. Now that the relay starts at login there is nothing to launch, and
     /// the key belongs to the app it acts on.
     var onBindHotkey: (() -> Void)?
+    /// ⌘⌃P — the last dictation, again: onto the clipboard and pasted at the
+    /// caret. It sits beside ⌘⌃D because it is the same kind of key — a global
+    /// one this app owns outright — and on P because the neighbouring ⌃⌥P is
+    /// already the shutter, so the two things Victor reaches for after a
+    /// sentence share a letter and differ by which modifier the hand is holding.
+    var onPasteLast: (() -> Void)?
 
     /// ⏎ while the overlay is holding a prompt: send it now instead of waiting
     /// out the countdown. The Send button has read `⏎ Send 3s` since it was
@@ -556,6 +562,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         if keyCode == VK_D && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
             DispatchQueue.global().async { [weak self] in self?.onBindHotkey?() }
+            return nil
+        }
+
+        // Autorepeat swallowed for the same reason ⌘⌃D swallows it: a key held a
+        // moment too long would paste the sentence four times into whatever he
+        // is typing in, and unlike a bind that is not undone by pressing it
+        // again. The event is eaten either way — it shadows nothing standard.
+        if keyCode == VK_P && cmd && ctrl && !opt {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            DispatchQueue.global().async { [weak self] in self?.onPasteLast?() }
             return nil
         }
 

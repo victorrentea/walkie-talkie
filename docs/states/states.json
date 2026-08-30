@@ -236,6 +236,18 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
+    "height" : 69,
+    "image" : "flash-nothing-to-paste.png",
+    "note" : "The only thing ⌘⌃P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
+    "shape" : "flash",
+    "slug" : "flash-nothing-to-paste",
+    "title" : "Flash — nothing to paste yet",
+    "when" : "⌘⌃P, or the menu row, before anything has been dictated this session.",
+    "width" : 204
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
     "height" : 46,
     "image" : "flash-accessibility.png",
     "note" : "The state that proves flashes must survive the unbound case: there is no title row above it, because nothing is bound yet, and this is the whole window.",

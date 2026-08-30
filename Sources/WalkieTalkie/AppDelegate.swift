@@ -250,6 +250,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
         status.isRecording = { [weak self] in self?.localRecording ?? false }
+        status.hasLastDictation = { [weak self] in self?.lastDictation?.isEmpty == false }
+        status.onPasteLast = { [weak self] in self?.pasteLastDictation(fromMenu: true) }
         // Deliberately the *same* call mouse 5 makes rather than a quieter variant:
         // a recording ended from the menu is still a dictation, and it is
         // transcribed and sent exactly as if the button had ended it.
@@ -331,6 +333,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which this needs: it spends several subprocesses working out what it
         // is looking at.
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
+        hotkeys.onPasteLast = { [weak self] in
+            DispatchQueue.main.async { self?.pasteLastDictation() }
+        }
         hotkeys.onMouse5Double = { [weak self] in
             guard let self = self else { return }
             // The first click of the pair has already opened the microphone if
@@ -1169,6 +1174,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A target with no readable directory (a blind-paste app) says its own
         // name instead. That is the one case where the icon is not enough on its
         // own — there is nothing else on the line to give it a subject.
+        // **A bind mid-sentence changes the recipient.** Rebinding from one
+        // terminal to another already did: the delivery asks `terminal.target`
+        // when the panel resolves, not when the microphone opened, so the words
+        // go where the relay is pointing when the sentence ends. A spawn did not
+        // — `spawnPending` was set at the press and nothing took it back — so
+        // ⌘ + the wheel followed by the left-plus-wheel chord opened a new
+        // session anyway and left the terminal he had just pointed at empty.
+        //
+        // The chord is Victor answering the same question with a destination
+        // that exists. Taking the spawn back here rather than at delivery keeps
+        // the chip honest too: it stops saying `✨ workspace` the moment it
+        // stops being true.
+        if spawnPending, localRecording {
+            Log.info("✨ spawn dropped — bound mid-sentence, the words go to \(target.label)")
+            clearSpawn()
+        }
         let line = target.folder ?? target.appName
         overlay.setBound(label: target.label, folder: line,
                          icon: Self.appIcon(target.bundleID, height: 18))
@@ -2007,7 +2028,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `session_end` is the exception: it is addressed to a watcher, and there
     /// is nothing for a terminal to do with "the user closed the relay".
+    /// What ⌘⌃P pastes: the words of the last dictation that actually went out.
+    ///
+    /// **The words, not the line the terminal got.** The delivered line carries
+    /// `📸 ×2 0:38`, the quoted selection and the picked selectors — an envelope
+    /// addressed to an agent, which is noise in a commit message or a chat. What
+    /// he is reaching for is the sentence he spoke.
+    ///
+    /// Set at `commit`, so a cancelled prompt does not overwrite the last thing
+    /// that did go out, and after the edit has been folded in — the corrected
+    /// words are the ones that were sent.
+    private var lastDictation: String?
+
     private func commit(_ m: Message) {
+        if m.kind == "dictation", let text = m.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            lastDictation = text
+        }
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selections: m.extraSelections.map {
                         ["at": Self.stamp($0.at), "text": $0.text]
@@ -2020,6 +2057,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)
+    }
+
+    /// **⌘⌃P — the last dictation, again, wherever the caret is.**
+    ///
+    /// Dictating is how Victor writes, and the agent is not the only place his
+    /// words belong: the same sentence is often wanted in a commit message, a
+    /// chat or a form a minute later. Saying it twice is worse than saying it
+    /// once — the second take is never the same sentence, and it costs another
+    /// model run.
+    ///
+    /// **Both halves are the feature.** The clipboard keeps it, so it can be
+    /// pasted again anywhere; the ⌘V is so he does not have to think about the
+    /// clipboard at all when the caret is already where he wants the words. The
+    /// clipboard is deliberately **not** restored afterwards, unlike the blind
+    /// paste in `TerminalBinding` — there the relay is borrowing it behind his
+    /// back, here he asked for it.
+    ///
+    /// **Silent on success**, like every delivery that landed: the words appear
+    /// at the caret, which is the whole of the evidence. Only the empty case has
+    /// anything to say.
+    ///
+    /// `fromMenu` buys a beat: AppKit dismisses the menu and the app underneath
+    /// gets the caret back a frame or two later, so a ⌘V posted on the click
+    /// would land in whatever had focus while the menu was still up. Same
+    /// hazard the menu-driven screenshot has.
+    private func pasteLastDictation(fromMenu: Bool = false) {
+        guard let text = lastDictation, !text.isEmpty else {
+            overlay.flash("⚠️ nothing dictated yet", duration: 3)
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        Log.info("📋 last dictation on the clipboard — \(text.count) chars, pasting at the caret")
+        DispatchQueue.main.asyncAfter(deadline: .now() + (fromMenu ? 0.25 : 0.0)) {
+            TerminalBinding.pressPaste()
+        }
     }
 
     /// The countdown ran out (or he clicked the overlay away) → write it. He hit

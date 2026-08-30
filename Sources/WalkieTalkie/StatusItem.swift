@@ -48,6 +48,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the row that ends it is on screen.
     var isRecording: (() -> Bool)?
 
+    /// ⌘⌃P from the menu, and whether there is anything to paste. Asked when the
+    /// menu opens, like the two above: it becomes true with the first dictation
+    /// of the session and never goes back, but the moment it has to be right is
+    /// the moment the row is on screen.
+    var onPasteLast: (() -> Void)?
+    var hasLastDictation: (() -> Bool)?
+
     /// Whether the frontmost app is one the relay could bind. Asked when the menu
     /// opens, like the rest — it changes with every app switch, and the moment it
     /// has to be right is the moment the row is on screen.
@@ -111,6 +118,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The shutter. Both routes are named: F3 works whenever there is a
     /// destination, the back button only while a dictation is running — which is
     /// also the only window in which it stops typing Return.
+    /// The last dictation, again — see `AppDelegate.pasteLastDictation`. Greyed
+    /// until there is one, like every other row that cannot act right now.
+    private let pasteLast = NSMenuItem(title: "Paste the Last Dictation — at the caret, and onto the clipboard",
+                                       action: nil, keyEquivalent: "p")
     private let shot = NSMenuItem(title: "One More Screenshot — F3, or the back button while dictating", action: nil, keyEquivalent: "")
     /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
     /// happens inside Chrome, in a page this app cannot reach from a menu — but
@@ -246,6 +257,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
         menu.addItem(newSession)
+
+        // **Under the dictation commands, because it is about the last one.**
+        // Not a gesture that happens *during* a sentence like the two rows below,
+        // and not a destination like the rows above: it is what he reaches for
+        // once the words have landed somewhere and he wants them somewhere else
+        // too — a commit message, a chat, a form.
+        pasteLast.keyEquivalentModifierMask = [.command, .control]
+        pasteLast.action = #selector(pasteLastClicked)
+        pasteLast.target = self
+        pasteLast.isEnabled = false
+        menu.addItem(pasteLast)
 
         shot.action = #selector(shotClicked)
         shot.target = self
@@ -486,6 +508,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func bindClicked() { onBind?() }
     @objc private func newSessionClicked() { onNewSession?() }
     @objc private func shotClicked() { onShot?() }
+    @objc private func pasteLastClicked() { onPasteLast?() }
 
     private var destination: String?
 
@@ -497,6 +520,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyHeader()
         applyWhisperTitle()
         applyStopRecording()
+        pasteLast.isEnabled = hasLastDictation?() ?? false
     }
 
     /// **`Bound to: petclinic@main`**, not the bare line the chip shows.

@@ -41,7 +41,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-31 of them — each with the moment it appears and why it looks the way it does. It
+32 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -50,7 +50,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 31 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 32 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -1646,6 +1646,52 @@ wheel's.
 needs one of its own because `/test/dictation` is gated on a binding — the one
 condition this gesture is defined by not needing.
 
+## A bind mid-sentence changes the recipient
+
+The left-plus-wheel chord works **while a dictation is running**, and it
+redirects the sentence being spoken. The tap sees the chord before it sees the
+wheel's own meaning (`leftIsHeld` is checked above the dictation branch), the
+press is swallowed and the release fires nothing, so the recording is not
+touched — only where it is going.
+
+For a bound → bound rebind this was always true and by accident of a good
+design: `deliverToTerminal` asks `terminal.target` when the panel resolves, not
+when the microphone opened. **A spawn was the exception**, and since 2026-08-31
+is not: ⌘ + the wheel sets `spawnPending` at the press, and `showBound` now takes
+it back when a bind lands mid-recording (`spawnPending && localRecording`). Before
+that, ⌘ + the wheel followed by the chord opened a new session in `~/workspace`
+anyway and left the terminal he had just pointed at with nothing.
+
+The chip stops saying `✨ workspace` at the same moment, because `clearSpawn`
+does both — a destination line that is no longer true is worse than none.
+
+**The window is the recording, not the panel.** Once the transcript is on screen
+the destination is already on the `Message` (that is what `Message.spawn` is
+for), and a bind during the hold changes nothing about the sentence in front of
+him. The seconds are few and the rule is the simpler one to hold: *the recipient
+is whoever the relay is pointed at when the microphone closes.*
+
+## ⌘⌃P pastes the last dictation
+
+The last dictation that **went out** — its words, not the line the terminal got —
+onto the clipboard and pasted at the caret, from `⌘⌃P` or the menu row. `📸 ×2
+0:38`, the quoted selection and the picked selectors stay behind: that envelope is
+addressed to an agent, and this is for the commit message, the chat or the form
+where the same sentence is wanted a minute later. Saying it twice is worse than
+saying it once — the second take is never the same sentence, and it costs another
+model run.
+
+Both halves are the feature: the clipboard keeps it so it can be pasted again,
+the ⌘V is so he does not have to think about the clipboard when the caret is
+already where the words go. **The clipboard is not restored** afterwards, unlike
+`TerminalBinding`'s blind paste — there the relay borrows it behind his back,
+here he asked for it.
+
+Recorded at `commit`, so a cancelled prompt does not overwrite the last thing
+that did go out, and after an edit is folded in. Silent on success; the one thing
+it says out loud is `⚠️ nothing dictated yet`. From the menu the ⌘V waits a beat,
+because AppKit gives the caret back a frame or two after the row is clicked.
+
 ## The chip teaches nothing; the menu does
 
 **A setting is not an event.** The same argument that took the gesture hints off
@@ -1744,7 +1790,7 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `./docs/shoot-overlay-states.sh` → all 31 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 32 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies
