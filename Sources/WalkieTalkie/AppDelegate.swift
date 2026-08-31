@@ -1015,6 +1015,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        // **The answer to this key is drawn where the pointer is, so the pointer
+        // has to be there.** ⌘⌃B is pressed mid-typing, in the very terminal it
+        // is about to bind — which means macOS has hidden the pointer and the
+        // chip has faded out with it, and both of the things this key draws land
+        // on empty screen: the flight shrinks onto a label that is not visible,
+        // and the unbind burst goes off beside a cursor that is not either.
+        // Waking here rather than in each branch is deliberate — it is one key
+        // with one problem, and both of its outcomes have it. (See
+        // `RelayWindow.wakePointer`.)
+        DispatchQueue.main.async { [weak self] in self?.overlay.wakePointer() }
+
         // **⌘⌃B on the target it is already pointed at lets go of it.**
         //
         // The key had no off. Starting the relay is a keystroke and stopping it

@@ -915,6 +915,40 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
     }
 
+    /// Bring the pointer — and with it the chip — back, because the gesture that
+    /// just fired answers itself *at the pointer*.
+    ///
+    /// ⌘⌃B is a **keystroke**, and a keystroke is exactly what sends the chip
+    /// away up there: he presses it in the middle of typing in the terminal he
+    /// wants bound, so macOS has hidden the pointer and `typing` has faded the
+    /// chip to zero. The receipt is then drawn into that emptiness — the window
+    /// flies across the screen and shrinks onto a label that is not on screen and
+    /// a cursor that is not either, which reads as the overlay zooming in on
+    /// nothing. The one press guaranteed to be made with the pointer hidden is
+    /// the one press whose whole answer lives beside it.
+    ///
+    /// **Both halves have to come back, and they are two different mechanisms.**
+    /// The chip is ours: end the typing state and the opacity follows. The
+    /// pointer is not — it is hidden by whatever app he is typing in, through
+    /// `setHiddenUntilMouseMoves`, whose only off switch is that app receiving a
+    /// mouse-moved event. So we post one, *at the position the pointer is already
+    /// at*: nothing moves a pixel, it just stops being hidden. (`CGDisplayShowCursor`
+    /// only balances our own hides, and a warp generates no event, so neither
+    /// does anything here.)
+    func wakePointer() {
+        if typing {
+            typing = false
+            refreshOpacity()
+        }
+        // `CGEvent(source:)` reports the location already in the flipped display
+        // coordinates the posted event needs, so nothing is converted and nothing
+        // can drift by a screen height.
+        guard let here = CGEvent(source: nil)?.location,
+              let nudge = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                                  mouseCursorPosition: here, mouseButton: .left) else { return }
+        nudge.post(tap: .cghidEventTap)
+    }
+
     private func startFollowingMouse() {
         // 60 Hz: while engaged this is a window move per frame, which is what
         // "follows the mouse" costs. Settled, it is two point comparisons.

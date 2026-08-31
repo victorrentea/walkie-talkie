@@ -183,7 +183,7 @@
         </header>
         <div class="shot empty"><span>no window on screen</span></div>
         <p class="when">Any keystroke, while the chip is on screen and not listening.</p>
-        <p class="note">Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. <strong>Except while dictating</strong>, which is the one state where the chip is the only evidence the microphone is open.</p>
+        <p class="note">Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. <strong>Except while dictating</strong>, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.</p>
         <code class="slug">typing</code>
       </section>
       <section class="card" id="preparing">
@@ -242,9 +242,9 @@
       <section class="card" id="listening-selection-multi">
         <header>
           <h3>Dictating, several highlights</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">267×114 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">267×90 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-selection-multi.png" width="267" height="114" style="opacity:0.8" alt="Dictating, several highlights"></div>
+        <div class="shot"><img src="states/listening-selection-multi.png" width="267" height="90" style="opacity:0.8" alt="Dictating, several highlights"></div>
         <p class="when">A second and third selection stashed with the side button during one sentence.</p>
         <p class="note"><code>↪ ×3</code> — the count is the only thing that changes, because the newest one is the one he can still see in his editor.</p>
         <code class="slug">listening-selection-multi</code>
@@ -458,16 +458,16 @@
       <section class="card" id="prompt-editing">
         <header>
           <h3>Correcting the transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×98 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-editing.png" width="369" height="98" style="opacity:1" alt="Correcting the transcript"></div>
+        <div class="shot"><img src="states/prompt-editing.png" width="369" height="117" style="opacity:1" alt="Correcting the transcript"></div>
         <p class="when">He clicked the words — one wrong word in forty is not worth saying again.</p>
         <p class="note">The clock stops (<code>⏎ Send</code> with no seconds) and the field holds <em>only his words</em>: the <code>📸</code> and <code>↪</code> decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.</p>
         <code class="slug">prompt-editing</code>
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at e62006a · 31 Aug 2026 · built 31 Aug 2026, 17:51
+  Generated from <code>OverlayStates.swift</code> · repo at 797554e · 01 Sep 2026 · built 01 Sep 2026, 01:01
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

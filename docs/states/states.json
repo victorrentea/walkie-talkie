@@ -59,7 +59,7 @@
   {
     "alpha" : 0,
     "group" : "At rest",
-    "note" : "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open.",
+    "note" : "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
     "shape" : "none",
     "slug" : "typing",
     "title" : "He started typing",
@@ -128,7 +128,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 114,
+    "height" : 90,
     "image" : "listening-selection-multi.png",
     "note" : "`↪ ×3` — the count is the only thing that changes, because the newest one is the one he can still see in his editor.",
     "shape" : "chip",
@@ -380,7 +380,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 98,
+    "height" : 117,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

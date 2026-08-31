@@ -99,7 +99,7 @@ enum OverlayStates {
 
             Shot(slug: "typing", group: "At rest", title: "He started typing",
                  when: "Any keystroke, while the chip is on screen and not listening.",
-                 note: "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open.",
+                 note: "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "preparing", group: "At rest", title: "The model is coming up",
