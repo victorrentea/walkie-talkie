@@ -139,21 +139,21 @@
       <section class="card" id="bound-idle">
         <header>
           <h3>Bound, standing by</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">175×45 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">48×45 pt</span></div>
         </header>
-        <div class="shot"><img src="states/bound-idle.png" width="175" height="45" style="opacity:0.8" alt="Bound, standing by"></div>
+        <div class="shot"><img src="states/bound-idle.png" width="48" height="45" style="opacity:0.8" alt="Bound, standing by"></div>
         <p class="when">From ⌘⌃B (or the wheel chord) until something happens.</p>
-        <p class="note">The whole chip: the destination app&#x27;s icon, and the folder@branch of the terminal the words will be typed into. No state word — standing by is what he can infer from nothing happening; which agent this is, is what he cannot.</p>
+        <p class="note">The icon of the app it is pointed at, and nothing else. The <code>folder@branch</code> it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. The icon stays because bound and unbound have to stay different at a glance, and the name is a menu away.</p>
         <code class="slug">bound-idle</code>
       </section>
       <section class="card" id="bound-blind">
         <header>
           <h3>Bound to an app with no directory</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">204×45 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">48×45 pt</span></div>
         </header>
-        <div class="shot"><img src="states/bound-blind.png" width="204" height="45" style="opacity:0.8" alt="Bound to an app with no directory"></div>
+        <div class="shot"><img src="states/bound-blind.png" width="48" height="45" style="opacity:0.8" alt="Bound to an app with no directory"></div>
         <p class="when">Bound to VS Code or IntelliJ — a target the relay pastes into blind.</p>
-        <p class="note">No tty to read a folder from, so the app&#x27;s own name takes the line rather than a folder being invented. The icon is doing the same job it always does.</p>
+        <p class="note">Standing by, this is the same square as every other bound chip — the icon carries it. What differs is the name that appears once he starts talking: no tty to read a folder from, so the app&#x27;s own name takes the line rather than a folder being invented.</p>
         <code class="slug">bound-blind</code>
       </section>
       <section class="card" id="spawn">
@@ -169,11 +169,11 @@
       <section class="card" id="paused">
         <header>
           <h3>Paused</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.30</span><span class="tag">202×45 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.30</span><span class="tag">76×45 pt</span></div>
         </header>
-        <div class="shot"><img src="states/paused.png" width="202" height="45" style="opacity:0.3" alt="Paused"></div>
+        <div class="shot"><img src="states/paused.png" width="76" height="45" style="opacity:0.3" alt="Paused"></div>
         <p class="when">He clicked the chip, or Pause in the menu — dictation goes to some other app now.</p>
-        <p class="note">⏸️ ahead of the name (a modifier on <em>which agent</em>, not a different thing) and the window at 0.30. Fading is the message: the relay is off and the overlay looks switched off. Still a chip, never a panel.</p>
+        <p class="note">⏸️ beside the icon and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is an icon — but the glyph stays: fading alone says <em>something is off</em>, and this says which. Still a chip, never a panel.</p>
         <code class="slug">paused</code>
       </section>
       <section class="card" id="typing">
@@ -189,11 +189,11 @@
       <section class="card" id="preparing">
         <header>
           <h3>The model is coming up</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">175×69 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">127×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/preparing.png" width="175" height="69" style="opacity:0.8" alt="The model is coming up"></div>
+        <div class="shot"><img src="states/preparing.png" width="127" height="69" style="opacity:0.8" alt="The model is coming up"></div>
         <p class="when">The ~10 s after a bind, or after the wheel if the weights are not resident.</p>
-        <p class="note"><code>preparing</code> in the row under the destination. The title stays put — an hourglass on the folder said the same thing twice and made the one line that never changes during a session change.</p>
+        <p class="note"><code>preparing</code> in the row under the icon. It is a row and not a mark on the title, which is doubly true now that the title is only the icon: an hourglass hung on the destination said the same thing twice, and there is no longer a line for it to hang on.</p>
         <code class="slug">preparing</code>
       </section>
     </div>
@@ -206,7 +206,7 @@
         </header>
         <div class="shot"><img src="states/listening.png" width="175" height="69" style="opacity:0.8" alt="Dictating"></div>
         <p class="when">From the wheel click until he clicks it again — the bulk of every dictation.</p>
-        <p class="note">The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.</p>
+        <p class="note"><strong>The destination is named here</strong>, and only here — the chip has been an icon all day, and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.</p>
         <code class="slug">listening</code>
       </section>
       <section class="card" id="listening-chrome">
@@ -295,9 +295,9 @@
       <section class="card" id="flash-sent">
         <header>
           <h3>Flash — sent</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">175×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">141×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-sent.png" width="175" height="69" style="opacity:0.8" alt="Flash — sent"></div>
+        <div class="shot"><img src="states/flash-sent.png" width="141" height="69" style="opacity:0.8" alt="Flash — sent"></div>
         <p class="when">Two seconds, the moment a dictation reaches the agent.</p>
         <p class="note">A flash is a panel: blur, rounded rect, shadow — riding beside the pointer like the chip. It dissolves rather than cutting out, because a window vanishing under his hand is an event and <code>🎙️ sent</code> is not.</p>
         <code class="slug">flash-sent</code>
@@ -305,9 +305,9 @@
       <section class="card" id="flash-unguarded">
         <header>
           <h3>Flash — bound to an unguarded shell</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">175×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">159×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-unguarded.png" width="175" height="69" style="opacity:0.8" alt="Flash — bound to an unguarded shell"></div>
+        <div class="shot"><img src="states/flash-unguarded.png" width="159" height="69" style="opacity:0.8" alt="Flash — bound to an unguarded shell"></div>
         <p class="when">At bind, when the target has no shell guard: the flight lands into this.</p>
         <p class="note">The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.</p>
         <code class="slug">flash-unguarded</code>
@@ -458,16 +458,16 @@
       <section class="card" id="prompt-editing">
         <header>
           <h3>Correcting the transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×117 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×98 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-editing.png" width="369" height="117" style="opacity:1" alt="Correcting the transcript"></div>
+        <div class="shot"><img src="states/prompt-editing.png" width="369" height="98" style="opacity:1" alt="Correcting the transcript"></div>
         <p class="when">He clicked the words — one wrong word in forty is not worth saying again.</p>
         <p class="note">The clock stops (<code>⏎ Send</code> with no seconds) and the field holds <em>only his words</em>: the <code>📸</code> and <code>↪</code> decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.</p>
         <code class="slug">prompt-editing</code>
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 797554e · 01 Sep 2026 · built 01 Sep 2026, 01:01
+  Generated from <code>OverlayStates.swift</code> · repo at 041e977 · 01 Sep 2026 · built 01 Sep 2026, 01:06
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

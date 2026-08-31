@@ -13,24 +13,24 @@
     "group" : "At rest",
     "height" : 45,
     "image" : "bound-idle.png",
-    "note" : "The whole chip: the destination app's icon, and the folder@branch of the terminal the words will be typed into. No state word — standing by is what he can infer from nothing happening; which agent this is, is what he cannot.",
+    "note" : "The icon of the app it is pointed at, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. The icon stays because bound and unbound have to stay different at a glance, and the name is a menu away.",
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
     "when" : "From ⌘⌃B (or the wheel chord) until something happens.",
-    "width" : 175
+    "width" : 48
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
     "height" : 45,
     "image" : "bound-blind.png",
-    "note" : "No tty to read a folder from, so the app's own name takes the line rather than a folder being invented. The icon is doing the same job it always does.",
+    "note" : "Standing by, this is the same square as every other bound chip — the icon carries it. What differs is the name that appears once he starts talking: no tty to read a folder from, so the app's own name takes the line rather than a folder being invented.",
     "shape" : "chip",
     "slug" : "bound-blind",
     "title" : "Bound to an app with no directory",
     "when" : "Bound to VS Code or IntelliJ — a target the relay pastes into blind.",
-    "width" : 204
+    "width" : 48
   },
   {
     "alpha" : 0.80000000000000004,
@@ -49,12 +49,12 @@
     "group" : "At rest",
     "height" : 45,
     "image" : "paused.png",
-    "note" : "⏸️ ahead of the name (a modifier on *which agent*, not a different thing) and the window at 0.30. Fading is the message: the relay is off and the overlay looks switched off. Still a chip, never a panel.",
+    "note" : "⏸️ beside the icon and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is an icon — but the glyph stays: fading alone says *something is off*, and this says which. Still a chip, never a panel.",
     "shape" : "chip",
     "slug" : "paused",
     "title" : "Paused",
     "when" : "He clicked the chip, or Pause in the menu — dictation goes to some other app now.",
-    "width" : 202
+    "width" : 76
   },
   {
     "alpha" : 0,
@@ -70,19 +70,19 @@
     "group" : "At rest",
     "height" : 69,
     "image" : "preparing.png",
-    "note" : "`preparing` in the row under the destination. The title stays put — an hourglass on the folder said the same thing twice and made the one line that never changes during a session change.",
+    "note" : "`preparing` in the row under the icon. It is a row and not a mark on the title, which is doubly true now that the title is only the icon: an hourglass hung on the destination said the same thing twice, and there is no longer a line for it to hang on.",
     "shape" : "chip",
     "slug" : "preparing",
     "title" : "The model is coming up",
     "when" : "The ~10 s after a bind, or after the wheel if the weights are not resident.",
-    "width" : 175
+    "width" : 127
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
     "height" : 69,
     "image" : "listening.png",
-    "note" : "The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
+    "note" : "**The destination is named here**, and only here — the chip has been an icon all day, and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
     "shape" : "chip",
     "slug" : "listening",
     "title" : "Dictating",
@@ -195,7 +195,7 @@
     "slug" : "flash-sent",
     "title" : "Flash — sent",
     "when" : "Two seconds, the moment a dictation reaches the agent.",
-    "width" : 175
+    "width" : 141
   },
   {
     "alpha" : 0.80000000000000004,
@@ -207,7 +207,7 @@
     "slug" : "flash-unguarded",
     "title" : "Flash — bound to an unguarded shell",
     "when" : "At bind, when the target has no shell guard: the flight lands into this.",
-    "width" : 175
+    "width" : 159
   },
   {
     "alpha" : 0.80000000000000004,
@@ -380,7 +380,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 117,
+    "height" : 98,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

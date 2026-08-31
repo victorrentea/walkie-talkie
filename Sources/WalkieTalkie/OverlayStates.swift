@@ -69,14 +69,14 @@ enum OverlayStates {
 
             Shot(slug: "bound-idle", group: "At rest", title: "Bound, standing by",
                  when: "From ⌘⌃B (or the wheel chord) until something happens.",
-                 note: "The whole chip: the destination app's icon, and the folder@branch of the terminal the words will be typed into. No state word — standing by is what he can infer from nothing happening; which agent this is, is what he cannot.",
+                 note: "The icon of the app it is pointed at, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. The icon stays because bound and unbound have to stay different at a glance, and the name is a menu away.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
             },
 
             Shot(slug: "bound-blind", group: "At rest", title: "Bound to an app with no directory",
                  when: "Bound to VS Code or IntelliJ — a target the relay pastes into blind.",
-                 note: "No tty to read a folder from, so the app's own name takes the line rather than a folder being invented. The icon is doing the same job it always does.",
+                 note: "Standing by, this is the same square as every other bound chip — the icon carries it. What differs is the name that appears once he starts talking: no tty to read a folder from, so the app's own name takes the line rather than a folder being invented.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "Visual Studio Code", folder: "Visual Studio Code", icon: code)
             },
@@ -91,7 +91,7 @@ enum OverlayStates {
 
             Shot(slug: "paused", group: "At rest", title: "Paused",
                  when: "He clicked the chip, or Pause in the menu — dictation goes to some other app now.",
-                 note: "⏸️ ahead of the name (a modifier on *which agent*, not a different thing) and the window at 0.30. Fading is the message: the relay is off and the overlay looks switched off. Still a chip, never a panel.",
+                 note: "⏸️ beside the icon and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is an icon — but the glyph stays: fading alone says *something is off*, and this says which. Still a chip, never a panel.",
                  shape: "chip", alpha: 0.30) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setPaused(true)
@@ -104,7 +104,7 @@ enum OverlayStates {
 
             Shot(slug: "preparing", group: "At rest", title: "The model is coming up",
                  when: "The ~10 s after a bind, or after the wheel if the weights are not resident.",
-                 note: "`preparing` in the row under the destination. The title stays put — an hourglass on the folder said the same thing twice and made the one line that never changes during a session change.",
+                 note: "`preparing` in the row under the icon. It is a row and not a mark on the title, which is doubly true now that the title is only the icon: an hourglass hung on the destination said the same thing twice, and there is no longer a line for it to hang on.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setEngineLoading(true)
@@ -112,7 +112,7 @@ enum OverlayStates {
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From the wheel click until he clicks it again — the bulk of every dictation.",
-                 note: "The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
+                 note: "**The destination is named here**, and only here — the chip has been an icon all day, and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

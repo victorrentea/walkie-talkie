@@ -831,9 +831,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func positionInitially() { reposition() }
 
     /// At rest the overlay is an **anchor**, not a panel: nothing is happening, so
-    /// the only thing worth saying is *which agent this is* — 🤖 folder@branch —
-    /// and the only place worth saying it is wherever Victor is already looking,
-    /// which is wherever his cursor is. Parked in a corner it was either unseen
+    /// the only thing worth saying is *that the relay is pointed somewhere* — the
+    /// destination app's icon, the name behind it kept back until a dictation
+    /// asks for it (`collapsed`) — and the only place worth saying it is wherever
+    /// Victor is already looking, which is wherever his cursor is. Parked in a corner it was either unseen
     /// or pointless; here it is a label on the work in front of him.
     ///
     /// A prompt or a warning still turns it into the panel, in its corner. **A
@@ -1077,7 +1078,11 @@ private let frontLabel = NSTextField(labelWithString: "")
         titleLabel.stringValue = titleText
         titleLabel.sizeToFit()
         // The pin sits in its own box ahead of the text, so it counts too.
-        let titleWidth = ceil(titleLabel.frame.width) + (boundLabel != nil ? glyphColumn + recordDotGap : 0)
+        // The gap belongs to the text, not to the icon: collapsed there is
+        // nothing on its right, and reserving 5pt for it would leave the chip
+        // visibly off-centre around its own icon.
+        let titleWidth = ceil(titleLabel.frame.width)
+            + (boundLabel != nil ? glyphColumn + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -1816,6 +1821,26 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// is the fact that does not change, and the row below it now carries both the
     /// sign of life (the pulsing 🔴) and everything that does change.
     private var titleText: String {
+        // **At rest the destination is the icon alone.** The name is the one
+        // thing the chip was built to say, and saying it for hours is what makes
+        // it a label parked over his work: `petclinic@main` beside the pointer,
+        // in every window, all day, answering a question nobody is asking yet.
+        // It is only asked at one moment — when he opens his mouth — and that is
+        // the moment it now appears.
+        //
+        // **The icon stays**, because the state still has to be legible: a bound
+        // relay and an unbound one are different situations (unbound, the chip is
+        // not on screen at all), and the app icon says "pointed at a terminal"
+        // without spelling out which. Which one it is survives in the menu bar,
+        // where it can be asked for rather than pushed.
+        //
+        // **Nothing is lost by finding out late.** Victor's own argument: the
+        // destination can be changed *mid-sentence* — ⌘⌃B on another terminal
+        // while the microphone is open re-points the words, and `showBound` even
+        // takes a pending spawn back when it happens. So the name arriving with
+        // the dictation is early enough to act on, and a chip that carried it the
+        // rest of the time was buying nothing with the space.
+        if collapsed { return paused ? "⏸️" : "" }
         // **Loading outranks every other state, including paused**, and it is the
         // only state here that is about the *near future* rather than the present.
         // The model takes ten seconds to come up and a dictation started inside
@@ -1872,6 +1897,24 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// a chip carrying it also says the session is alive. Truncated hard,
     /// because it rides beside the cursor over whatever he is reading and a
     /// title is the one part of this with no length anybody controls.
+    /// The chip is bound, and has nothing in flight to name a destination for —
+    /// so it shows the icon and no text.
+    ///
+    /// **Asked of the sentence, not of the state list.** Anything that means a
+    /// dictation is on its way to that terminal makes the name matter again: the
+    /// microphone open, the model chewing on what it heard, the review panel with
+    /// the words in it, or a spawn that has replaced the destination for one
+    /// sentence. Everything else — bound and waiting, paused, the engine coming
+    /// up — is the chip at rest.
+    ///
+    /// Unbound is deliberately **not** collapsed: there is no icon there to stand
+    /// in for the text (`titleGlyph` is hidden), so hiding the line would leave an
+    /// empty row.
+    private var collapsed: Bool {
+        boundLabel != nil && spawnLabel == nil
+            && !listening && !transcribing && sentPrompt == nil
+    }
+
     private var identity: String {
         // **A destination that does not exist yet still outranks one that does.**
         // ⇧ + the wheel sends this dictation to a session it is about to open,
@@ -1896,14 +1939,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Fully opaque whenever it has something to say. The idle chip sits at 0.80:
     /// it now rides along near the cursor, over Victor's actual work, so it has
     /// to read as an overlay rather than as part of the page — but not so faint
-    /// that the one thing it carries (which session it is) is hard to read.
+    /// that the icon it carries is hard to make out, and not so faint that the
+    /// name, on the one occasion it appears, is hard to read.
     ///
     /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
     /// the overlay looking switched off is the point.
     /// **Unbound and idle, the overlay is not on screen at all.**
     ///
     /// The chip's one job at rest is to say *where the words go*. Bound, that is
-    /// a real answer — `petclinic@main`, the terminal it will type into. Unbound
+    /// a real answer — an icon standing for the terminal it will type into, which
+    /// spells itself out the moment he starts dictating. Unbound
     /// it was `🤖 ` plus whatever folder the app happened to be launched from,
     /// and since Walkie Talkie became a login item that folder is `/`: a robot
     /// and a slash, riding beside the pointer all day, naming nothing. Victor
