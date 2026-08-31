@@ -155,6 +155,14 @@ enum CaptureFlash {
     /// motion that makes it noticeable, and the whole event is over in half a
     /// second — which is all it has to be, since what it answers ("did that catch
     /// where I was pointing?") is answered by the first frame.
+    ///
+    /// **And it turns a quarter as it goes** (`markerSpin`), because a scope
+    /// coming down on a spot is not only getting bigger. The bloom alone is a
+    /// shape growing straight out of the pointer, which on a busy screen — a
+    /// terminal repainting, a page scrolling under the shot he just took — is
+    /// the one kind of motion the eye is worst at picking out; a rotation is
+    /// not, and it costs no extra pixels and no extra time. It ends on the
+    /// mark's own orientation, so nothing is left tilted (see `markerSpin`).
     static func markCursor(at point: NSPoint, duration: CFTimeInterval = markerDuration) {
         let reticle = CursorMarker.makeLayer(box: reticleBox)
         let side = reticle.bounds.width
@@ -186,9 +194,18 @@ enum CaptureFlash {
         activePanels.append(panel)
 
         reticle.transform = CATransform3DMakeScale(markerEndScale, markerEndScale, 1)
-        let zoom = CABasicAnimation(keyPath: "transform.scale")
-        zoom.fromValue = markerStartScale
-        zoom.toValue = markerEndScale
+        // **One animation on `transform`, not one per component.** The spin and
+        // the bloom are two readings of the same matrix, and `transform.scale`
+        // beside `transform.rotation.z` is two animations each computing the
+        // whole matrix from the model value — they overwrite each other rather
+        // than compose. Core Animation interpolates a `CATransform3D` by
+        // decomposing it, so a rotate-and-scale pair travels as a rotate and a
+        // scale and never shears.
+        let zoom = CABasicAnimation(keyPath: "transform")
+        zoom.fromValue = CATransform3DConcat(
+            CATransform3DMakeScale(markerStartScale, markerStartScale, 1),
+            CATransform3DMakeRotation(-markerSpin, 0, 0, 1))
+        zoom.toValue = CATransform3DMakeScale(markerEndScale, markerEndScale, 1)
         zoom.duration = duration
         // Fast out of the gate and slow at the edge: a bloom decelerating as it
         // spreads reads as something released, where a linear one reads as
@@ -231,6 +248,18 @@ enum CaptureFlash {
     /// ~4× the old resting 0.9×, which is what Victor asked for.
     private static let markerStartScale: CGFloat = 0.5
     private static let markerEndScale: CGFloat = 3.6
+    /// A **quarter turn**, spent entirely on the way out — Victor's number.
+    ///
+    /// 90° is the one angle this shape can be turned by and still be itself: a
+    /// ring, four arms and a dot are four-fold symmetric, so the mark lands
+    /// exactly on its own drawing and nothing is left sitting askew over his
+    /// work. It is therefore read as *motion* and never as *orientation* — the
+    /// spin makes the target catch the eye while it is happening and says
+    /// nothing once it is over, which is the same bargain the bloom strikes.
+    ///
+    /// It runs backwards, from −90° to 0, so the resting transform stays the
+    /// plain scale it always was.
+    private static let markerSpin: CGFloat = .pi / 2
 
     private static func screen(containing point: NSPoint) -> NSScreen? {
         NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main

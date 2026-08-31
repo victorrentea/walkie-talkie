@@ -1326,6 +1326,20 @@ where I was pointing?" — is answered by the first frame. The panel is sized to
 the mark at its **largest**, or the bloom is clipped by its own window a third of
 the way out.
 
+**It also turns a quarter as it blooms**, since 2026-08-31, on Victor's request.
+90° is the only angle available: the mark is a ring, four arms and a dot, i.e.
+four-fold symmetric, so a quarter turn lands exactly on its own drawing and
+leaves nothing tilted behind — the spin is read as motion while it happens and
+says nothing once it is over. Growing straight out of the pointer is the one kind
+of movement that is easiest to miss on a screen already repainting; a rotation is
+not, and it costs no extra pixels and no extra time. The scale and the rotation
+travel as **one animation on `transform`**, not as `transform.scale` beside
+`transform.rotation.z` — those are two animations each rebuilding the whole matrix
+from the model value, so they overwrite rather than compose. Core Animation
+interpolates a `CATransform3D` by decomposition, so the pair never shears. It
+runs from −90° to 0, which keeps the resting transform the plain scale it has
+always been.
+
 `sharingType = .none`, like the vignette — the relay photographs the screen
 milliseconds later and the confirmation must never be inside the capture it
 confirms. **Which also means it cannot be verified with a screenshot**; the only
