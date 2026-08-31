@@ -831,9 +831,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func positionInitially() { reposition() }
 
     /// At rest the overlay is an **anchor**, not a panel: nothing is happening, so
-    /// the only thing worth saying is *that the relay is pointed somewhere* — the
-    /// destination app's icon, the name behind it kept back until a dictation
-    /// asks for it (`collapsed`) — and the only place worth saying it is wherever
+    /// the only thing worth saying is *that the relay is armed* — a microphone,
+    /// with the destination and its own icon kept back until a dictation asks for
+    /// them (`collapsed`) — and the only place worth saying it is wherever
     /// Victor is already looking, which is wherever his cursor is. Parked in a corner it was either unseen
     /// or pointless; here it is a label on the work in front of him.
     ///
@@ -1494,6 +1494,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
     private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
+    /// The bound chip at rest (`collapsed`). **One glyph for every destination**,
+    /// on purpose: standing by, the question is not *which* terminal — that is
+    /// what starting to talk asks, and what the name answers — it is whether the
+    /// relay is armed at all. A microphone is the one shape that says it, and a
+    /// chip that never changes shape at rest is a chip he stops having to read.
+    ///
+    /// The destination's own icon comes back with the name the moment a
+    /// dictation is in flight, which is when *which app* becomes a real question
+    /// again.
+    private static let micGlyph = Glyphs.emoji("🎙️", ink: iconInk)
 
     /// **The mouse is drawn, not typed** — `Glyphs.mouse`, one image per gesture
     /// the card names, with the buttons that gesture presses filled in red.
@@ -1637,6 +1647,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func layoutTitleRow(width: CGFloat) {
         let bound = boundLabel != nil
         titleGlyph.isHidden = !bound
+        // **Here rather than in `setBound`**, because the glyph is no longer a
+        // property of the binding: it depends on whether a sentence is in flight,
+        // which changes several times per dictation and never passes through
+        // `setBound` at all. This method runs on every layout, which is every
+        // state change there is.
+        titleGlyph.image = collapsed ? Self.micGlyph : (boundIcon ?? Self.pinGlyph)
         titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
         let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
@@ -1828,10 +1844,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         // It is only asked at one moment — when he opens his mouth — and that is
         // the moment it now appears.
         //
-        // **The icon stays**, because the state still has to be legible: a bound
+        // **An icon stays**, because the state still has to be legible: a bound
         // relay and an unbound one are different situations (unbound, the chip is
-        // not on screen at all), and the app icon says "pointed at a terminal"
-        // without spelling out which. Which one it is survives in the menu bar,
+        // not on screen at all). It is a microphone rather than the destination's
+        // own icon — at rest the honest reading is "armed, say something", and a
+        // shape that changes with the binding invites him to read a distinction
+        // he has no use for yet. Which terminal it is survives in the menu bar,
         // where it can be asked for rather than pushed.
         //
         // **Nothing is lost by finding out late.** Victor's own argument: the
@@ -1898,7 +1916,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// because it rides beside the cursor over whatever he is reading and a
     /// title is the one part of this with no length anybody controls.
     /// The chip is bound, and has nothing in flight to name a destination for —
-    /// so it shows the icon and no text.
+    /// so it is a microphone and nothing else (`micGlyph`).
     ///
     /// **Asked of the sentence, not of the state list.** Anything that means a
     /// dictation is on its way to that terminal makes the name matter again: the
@@ -1946,9 +1964,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the overlay looking switched off is the point.
     /// **Unbound and idle, the overlay is not on screen at all.**
     ///
-    /// The chip's one job at rest is to say *where the words go*. Bound, that is
-    /// a real answer — an icon standing for the terminal it will type into, which
-    /// spells itself out the moment he starts dictating. Unbound
+    /// The chip's one job at rest is to say *that there is somewhere for the
+    /// words to go* — a microphone, which spells out the terminal and wears its
+    /// icon the moment he starts dictating. Unbound
     /// it was `🤖 ` plus whatever folder the app happened to be launched from,
     /// and since Walkie Talkie became a login item that folder is `/`: a robot
     /// and a slash, riding beside the pointer all day, naming nothing. Victor
@@ -2111,7 +2129,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         boundLabel = label
         boundFolder = label == nil ? nil : folder
         boundIcon = label == nil ? nil : icon
-        titleGlyph.image = boundIcon ?? Self.pinGlyph
         refreshTitle()
         layoutContent()
     }
