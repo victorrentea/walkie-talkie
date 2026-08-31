@@ -21,7 +21,7 @@ Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
   and `engineText` beside the pulsing 🔴 (`Listening…` — the model id it used to
   carry now lives only in the menu's engine row, see `applyWhisperTitle`)
-- `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`select element ⌘⇧🖱️`, then
+- `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`⌘⇧`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
@@ -41,7 +41,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-32 of them — each with the moment it appears and why it looks the way it does. It
+33 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -50,7 +50,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 32 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 33 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -1179,12 +1179,46 @@ previous extra. The one exception is a dictation that opened with **nothing**
 highlighted: the first thing he highlights mid-sentence fills the frozen slot
 instead, because that is the subject arriving late.
 
-**Accessibility only** (`SelectionCapture.readQuiet`), never the clipboard
-fallback. `read()` posts a synthetic ⌘C and polls the pasteboard for up to
-400ms; paying that once per dictation is a bargain, paying it on every shutter
-press into whatever app is under his hand is a side effect the gesture never
-promised. No AX selection reads as "he did not highlight anything new", which is
-true far more often than not.
+**It reads the selection the same way the opening one is read** —
+`SelectionCapture.read()`: Accessibility, then a synthetic ⌘C with the clipboard
+snapshotted and restored. It was AX-only (`readQuiet`) until 2026-08-31, on the
+reasoning that a keystroke posted into whatever app is under his hand, several
+times a sentence, is a side effect the gesture never promised. The reasoning was
+sound and the result was that the feature did not work **where he actually uses
+it**: a highlight in a Chrome *page* is exactly the case AX cannot see, so every
+shot Victor took over one filed nothing at all, silently. A shutter press is a
+deliberate act with a deliberate subject; the ⌘C is a price he asked to pay, and
+with nothing selected the probe is a no-op nothing notices. `readQuiet` is gone —
+it had no other caller.
+
+**The chip says `↪ selecting <his own words>` for 2.5s** and then settles to
+`↪ ×N …`. The row was already going to carry the highlight for the rest of the
+sentence, which answers *is it still there* but not the question he has at the
+instant he presses — *did this catch the thing I meant?* A picture is taken
+silently and a selection is read silently, so without the verb the only
+confirmation the shutter grabbed the right paragraph arrived in the terminal, a
+sentence too late to reselect.
+
+**It is deliberately not a `flash(_:)`.** A flash is a *panel*, and the rule that
+keeps the F3 receipt out of one — taking a picture mid-sentence must not throw a
+window across the work being photographed — applies with equal force to the
+highlight caught by the same press. So the receipt goes on the row that was going
+to carry the text anyway.
+
+**And that row was invisible.** `refreshChrome` turns every row white with a halo
+for the bare chip and `selectionLabel` was the one it never listed, so it kept
+`secondaryLabelColor` — half-transparent dark grey, on a chip that spends its life
+over dark terminals and editors. The highlight *was* being carried and *was* on
+the row; it looked exactly like a shutter that had failed to read it. Fixed at the
+same time, and it is why "the selection does not show up" and "the selection is
+not captured in Chrome" were one report.
+
+**The row is measured into the chip's width now**, clamped to 34 characters from
+the **head** (`fitHead` — a highlight reads forwards, unlike a selector, whose tail
+is the part that identifies it). Left out of the width it truncated to whatever
+the other rows happened to make the chip, which beside a short folder name came
+out as `selecting public O…`. Left unclamped it would be as wide as a file. Same
+bargain the ⌘-pick row above it already strikes.
 
 It rides the outbox as **`selections`** — `[{at: "0:31", text: …}]` — while
 `selection` keeps carrying the first one, so nothing reading the queue has to
@@ -1714,7 +1748,7 @@ beside the pulse. What is left on the chip is everything that reports *state*:
 the pulse, `Listening…`, `transcribing…`, `preparing`, the picks he has
 actually made, the destination.
 
-**The exception is `⌘⇧🖱️`, shown while dictating *and* with Chrome in front.**
+**The exception is `⌘⇧`, shown while dictating *and* with Chrome in front.**
 Victor asked for that one back the same day, and the two conditions are what earn
 it the pixels. The hints that were removed were paid for at every moment of every
 day in order to be read once; this one is on screen only when it is actionable —
@@ -1790,7 +1824,7 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `./docs/shoot-overlay-states.sh` → all 32 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 33 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies
@@ -2145,18 +2179,22 @@ now flips every time he starts and stops talking, rather than once a session.
 
 ### The hint is the row, and the row is beside the cursor
 
-While dictating and before he has picked anything, the row reads `select element
-⌘⇧🖱️`. After the first pick it gives way to `×2 div#cart > span.price`, because
-the question changes: before, the only thing worth saying is *that this is
-possible*; after, he knows the gesture, and what he cannot check without a name is
-whether the click caught the button or the div wrapped around it.
+While dictating and before he has picked anything, the row is Chrome's icon and
+`⌘⇧`, nothing else. After the first pick it gives way to `×2 div#cart >
+span.price`, because the question changes: before, the only thing worth saying is
+*that this is possible*; after, he knows the gesture, and what he cannot check
+without a name is whether the click caught the button or the div wrapped around
+it.
 
-**The row leads with the outcome, not the mechanic.** It read `hold ⌘⇧🖱️` for a
-while, on the argument that the gesture arms only after 400ms and a bare `⌘⇧🖱️`
-would describe a click that does nothing. But a hint whose first word is *hold*
-spends the only words it has on how to press the keys and never says what
-pressing them is for; `select element` says the thing that is not guessable, and
-the delay stays discoverable by trying it once.
+It has been stripped twice, both times on the same argument. It read `hold ⌘⇧🖱️`
+and then `select element ⌘⇧🖱️`: the words went because the row is not read by
+somebody discovering the feature, it is glanced at by somebody who knows it —
+what he needs is the *keys*, which are the half borrowed from Chrome. **And the
+mouse went on 2026-08-31**, at Victor's request: a hand already holding two
+modifiers down over a page is not in any doubt about which button clicks, so the
+drawn left button was the one glyph on the row he could not act on, drawn at a
+size and baseline of its own, taking a third of the width to restate the obvious.
+It is also the only thing that ever made this row need `glyphRowWidth`.
 
 **The glyph is Chrome's own icon**, `NSWorkspace.icon(forFile:)` on whatever
 `com.google.Chrome` resolves to — looked up, never shipped, so no version of the

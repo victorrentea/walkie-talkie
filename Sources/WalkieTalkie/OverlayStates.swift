@@ -120,7 +120,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-chrome", group: "Dictating", title: "Dictating, at a page",
                  when: "Dictating *and* Chrome is the frontmost app.",
-                 note: "The one gesture hint the chip still shows. It is worth its pixels because it is only on screen when it is actionable — and because the relay takes ⌘⇧-click *away* from Chrome while it is up, so a browser that silently stopped opening links would read as broken.",
+                 note: "The one gesture hint the chip still shows. It is worth its pixels because it is only on screen when it is actionable — and because the relay takes ⌘⇧-click *away* from Chrome while it is up, so a browser that silently stopped opening links would read as broken. The keys and nothing else, since 2026-08-31: the drawn left button that used to follow them was the one glyph on the row he could not act on.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
@@ -154,6 +154,15 @@ enum OverlayStates {
                 o.setSelection(selection, count: 3)
             },
 
+            Shot(slug: "listening-selection-caught", group: "Dictating", title: "The shutter caught a highlight",
+                 when: "For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
+                 note: "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to `↪ ×N` after 2.5s, and it truncates to whatever width the rows above already gave the chip.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setListening(true)
+                o.setSelection(selection, count: 2, announced: true)
+            },
+
             Shot(slug: "listening-everything", group: "Dictating", title: "Dictating, everything at once",
                  when: "Rare, and the widest the chip ever gets: browser in front, picks made, a highlight riding along.",
                  note: "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover.",
@@ -167,7 +176,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-flash", group: "Dictating", title: "Something went wrong mid-sentence",
                  when: "A shot that failed, or any flash raised while he is still talking.",
-                 note: "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The F3 receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen.",
+                 note: "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The F3 receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen, which is why the highlight it catches is announced on the chip's own row instead.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

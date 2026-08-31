@@ -1586,11 +1586,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// new); and the same text as the previous extra, for shots taken in quick
     /// succession over one highlight.
     ///
-    /// Accessibility only (`readQuiet`) — the clipboard fallback posts a ⌘C into
-    /// whatever app is under his hand, and doing that on every shutter press is
-    /// a bill the gesture never agreed to pay.
+    /// **Read the same way the opening selection is** — AX first, then the ⌘C
+    /// probe. It was AX-only, to keep a synthetic keystroke out of an app he is
+    /// pointing at several times a sentence, and the consequence was that the
+    /// feature was missing precisely where he uses it: a highlight in a Chrome
+    /// page is not a highlight AX can see, so every shot he took over one filed
+    /// nothing at all, without saying so. See `SelectionCapture.read`.
     private func stashExtraSelection(at offset: TimeInterval) {
-        guard let text = SelectionCapture.readQuiet(), !text.isEmpty else { return }
+        guard let text = SelectionCapture.read(), !text.isEmpty else { return }
 
         stateLock.lock()
         let isFrozen = pendingSelection == text
@@ -1611,7 +1614,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard novel else { return }
         Log.info("↪ selection at \(Self.stamp(offset)) — \(text.count) chars (\(total) in this dictation)")
-        DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text, count: total) }
+        // **Said back, in his own words, for a beat.** The row carries this
+        // highlight for the rest of the dictation either way, which answers "is
+        // it still there" but not the question he has at the instant he presses:
+        // *did this catch the thing I meant?* A picture is taken silently and a
+        // selection is read silently, so without the verb the only confirmation
+        // that the shutter grabbed the right paragraph arrived in the terminal,
+        // a sentence too late to reselect.
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.setSelection(text, count: total, announced: true)
+        }
     }
 
     /// `m:ss`, the one clock this app measures anything in.

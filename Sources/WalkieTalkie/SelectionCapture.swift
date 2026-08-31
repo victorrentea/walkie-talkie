@@ -13,24 +13,20 @@ import ApplicationServices
 enum SelectionCapture {
 
     /// Runs on a background thread: strategy 2 blocks briefly polling the pasteboard.
+    ///
+    /// **The shutter uses this too, since 2026-08-31.** It used to call a
+    /// `readQuiet()` that stopped after strategy 1, on the reasoning that a
+    /// synthetic ⌘C posted into whatever app is under his hand, several times
+    /// per sentence, is a side effect the gesture never promised. The reasoning
+    /// was sound and the result was that the gesture did not work where he
+    /// actually uses it: a highlight in a Chrome *page* is exactly the case AX
+    /// does not see, so every shot taken over one recorded nothing, silently.
+    /// A shutter press is a deliberate act with a deliberate subject; the ⌘C is
+    /// a price Victor asked to pay, and with nothing selected the probe is a
+    /// no-op the app never notices.
     static func read() -> String? {
         if let ax = readViaAccessibility(), !ax.isEmpty { return ax }
         return readViaClipboardProbe()
-    }
-
-    /// Accessibility only — **no ⌘C is injected**, and nothing is waited on.
-    ///
-    /// This is what the shutter uses. `read()` fires once per dictation, at the
-    /// moment Victor starts talking, and paying a synthetic ⌘C plus up to 400ms
-    /// of polling for it is a bargain there. A shot is different: he takes
-    /// several across one sentence, at moments he chooses, into whatever app is
-    /// under his hand — and a keystroke posted into that app on every press is
-    /// a side effect the gesture never promised. The failure mode is also the
-    /// right one: no AX selection reads as "he did not highlight anything new",
-    /// which is true far more often than not.
-    static func readQuiet() -> String? {
-        guard let ax = readViaAccessibility(), !ax.isEmpty else { return nil }
-        return ax
     }
 
     static func frontmostAppName() -> String? {

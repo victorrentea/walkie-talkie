@@ -124,6 +124,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// How many highlights the dictation is carrying, frozen one included. Zero
     /// when there is no selection row at all.
     private var selectionCount = 0
+    /// The selection row is announcing a highlight the shutter just caught, and
+    /// says `selecting` instead of the count for a couple of seconds.
+    private var selectionAnnounced = false
+    private var selectionAnnounceWork: DispatchWorkItem?
     private var paused = false
     /// True while the local Whisper model is loading — see `titleText`.
     private var engineLoading = false
@@ -185,7 +189,7 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     /// **The chip advertises no gesture at all, since 2026-08-30.** Every row
     /// whose job was to teach an input — `ReBind` and `dictate` at rest, `send`
-    /// while editing, the shutter beside the pulse, the `⌘⇧🖱️` invitation before
+    /// while editing, the shutter beside the pulse, the `⌘⇧` invitation before
     /// the first pick — is off, and the menu bar is the only place they are
     /// written down now.
     ///
@@ -531,10 +535,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// (`— ⌘⇧+click to select element`), which is the wrong order for a row read
     /// at a glance mid-sentence: the keys are the part he has to *do*, and they
     /// are what the eye can match against the hand already on the keyboard.
+    ///
+    /// **The mouse is gone from it too, since 2026-08-31.** The row was `⌘⇧` plus
+    /// a drawn left button, and the button was the one glyph on it Victor could
+    /// not act on: a hand already holding two modifiers down over a page is not
+    /// in any doubt about which button clicks. What the row is for is the
+    /// *keys* — they are the half borrowed from Chrome, and the half he has to
+    /// remember — and a picture of hardware beside them spends a third of the row
+    /// restating the obvious. It also drew at a size and baseline of its own,
+    /// which is the only reason this row ever needed `glyphRowWidth`.
     private static func pickHint(font: NSFont) -> NSAttributedString {
-        let a = NSMutableAttributedString(string: "⌘⇧", attributes: [.font: font])
-        a.append(inline(mouseLeftGlyph, font: font))
-        return a
+        NSAttributedString(string: "⌘⇧", attributes: [.font: font])
     }
 
     /// The picked-elements row: the gesture until he has used it, the newest thing
@@ -564,6 +575,22 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// first steps are the page, which he is looking at.
     private static func fit(_ s: String, _ limit: Int) -> String {
         s.count <= limit ? s : "…" + String(s.suffix(limit - 1))
+    }
+
+    /// The other way round, for a highlight: what he selected reads forwards, so
+    /// the opening words are the ones that identify it. Cut at a word boundary
+    /// when there is a word worth keeping — a phrase that stops between words is
+    /// one the eye finishes by itself, one that stops mid-word is one it
+    /// re-reads — and mid-token otherwise, since a single 40-character
+    /// identifier must not come back as a bare ellipsis.
+    private static func fitHead(_ s: String, _ limit: Int) -> String {
+        guard s.count > limit else { return s }
+        let head = String(s.prefix(limit))
+        if let space = head.lastIndex(of: " "),
+           head.distance(from: head.startIndex, to: space) > limit / 3 {
+            return String(head[..<space]) + "…"
+        }
+        return head + "…"
     }
 
     private var screenWidth: CGFloat {
@@ -1036,6 +1063,34 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordWidth = glyphColumn + recordDotGap + ceil(recordInfo.frame.width)
         }
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
+        // **Written here, not with the rows below.** The row is measured into the
+        // chip now, and a label measured before it is written reports the
+        // previous dictation's highlight.
+        //
+        // `selecting` for the first beat after the shutter caught it, the count
+        // from then on. The two answer different questions: at the press he is
+        // asking *did this catch the thing I meant*, and the verb plus his own
+        // words back is the whole answer; a second later the only open question
+        // is whether any of them fell out, which is what `×N` is for.
+        //
+        // **Clamped by characters, then measured** — the same bargain the
+        // ⌘-pick row strikes one row up. Left out of the width, this row
+        // truncated to whatever the *other* rows happened to make the chip, so a
+        // highlight beside a short folder name came out as `selecting public
+        // O…`: three words short of saying anything. Left unclamped it would be
+        // the width of a whole file. A fixed budget of characters is what "as
+        // much as fits comfortably" means in a row that has to stay a receipt.
+        var selectionWidth: CGFloat = 0
+        if let selection = selection {
+            let head = selectionAnnounced ? "↪ selecting "
+                     : (selectionCount > 1 ? "↪ ×\(selectionCount) " : "↪ ")
+            selectionLabel.stringValue = head + Self.fitHead(singleLine(selection), 34)
+            // Off the label rather than the font: the row leads with `↪`, which
+            // the system font's metrics for the rest of the line know nothing
+            // about.
+            selectionLabel.sizeToFit()
+            selectionWidth = ceil(selectionLabel.frame.width)
+        }
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
         // The two buttons are a row like any other and have to be measured like
@@ -1046,7 +1101,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
-                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, pickWidth))))))) + pad * 2
+                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(pickWidth, selectionWidth)))))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -1169,8 +1224,8 @@ private let frontLabel = NSTextField(labelWithString: "")
             pickRow.isHidden = true
         }
 
-        if let selection = selection {
-            selectionLabel.stringValue = (selectionCount > 1 ? "↪ ×\(selectionCount) " : "↪ ") + singleLine(selection)
+        if selection != nil {
+            // `stringValue` was written with the widths above.
             selectionLabel.frame.size = NSSize(width: innerWidth, height: 19)
             selectionLabel.isHidden = false
             rows.append((selectionLabel, 19))
@@ -1394,7 +1449,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// of the mouse* — but it cannot say **this button while that one is held**,
     /// which is what rebinding now is. A drawing can, and it is also his own
     /// mouse rather than whichever one Apple ships this year.
-    private static let mouseLeftGlyph = Glyphs.mouse(height: iconInk, pressed: .left)
     private static let mouseWheelGlyph = Glyphs.mouse(height: iconInk, pressed: .wheel)
     private static let mouseBackGlyph = Glyphs.mouse(height: iconInk, pressed: .back)
 
@@ -1631,6 +1685,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         engineInfo.wantsLayer = true
         shotGlyph.wantsLayer = true
         pickInfo.wantsLayer = true
+        selectionLabel.wantsLayer = true
         if bare {
             titleLabel.shadow = Self.halo()
             // Same reasoning as the title, and the recording row now spends its
@@ -1643,6 +1698,15 @@ private let frontLabel = NSTextField(labelWithString: "")
             // recording one: it is up between messages, which is most of the day.
             pickInfo.shadow = Self.halo()
             pickInfo.textColor = .white
+            // **The one row that was left out, and it read as the feature not
+            // working.** Every other row was turned white for the bare chip and
+            // this one kept `secondaryLabelColor` — a half-transparent dark grey
+            // with no halo, i.e. invisible on the dark terminals and editors the
+            // chip spends its life over. So a highlight *was* being carried and
+            // *was* on the row, and Victor could not see it: it looked exactly
+            // like a shutter that had failed to read the selection.
+            selectionLabel.shadow = Self.halo()
+            selectionLabel.textColor = .white
         } else {
             titleLabel.shadow = nil
             recordInfo.shadow = nil
@@ -1651,6 +1715,8 @@ private let frontLabel = NSTextField(labelWithString: "")
             engineInfo.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
+            selectionLabel.shadow = nil
+            selectionLabel.textColor = .secondaryLabelColor
         }
     }
 
@@ -1881,11 +1947,39 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// gesture landed, and the running total is what says none of the earlier
     /// ones fell out. The row stays one line; a stack of them would push the
     /// chip over the work it is riding on.
-    func setSelection(_ text: String?, count: Int = 1) {
+    ///
+    /// `announced` is the shutter saying it just read this one off the screen.
+    /// It is **not** a flash: a flash is a panel, and the rule that keeps the
+    /// F3 receipt out of one — taking a picture mid-sentence must not throw a
+    /// window across his work — applies with equal force to a highlight caught
+    /// by the same press. So the receipt goes on the row that was going to
+    /// carry the text anyway, and the row is what changes for a beat. It also
+    /// costs no width: this row is laid out to the panel and never measured
+    /// into it, so `selecting` plus his own words truncates at whatever the
+    /// rows above it already made the chip, which is exactly as much of the
+    /// highlight as fits without the chip growing over what he is reading.
+    func setSelection(_ text: String?, count: Int = 1, announced: Bool = false) {
         selection = (text?.isEmpty == false) ? text : nil
         selectionCount = selection == nil ? 0 : max(1, count)
+
+        selectionAnnounceWork?.cancel()
+        selectionAnnounceWork = nil
+        selectionAnnounced = announced && selection != nil
+        if selectionAnnounced {
+            let settle = DispatchWorkItem { [weak self] in
+                guard let self = self, self.selectionAnnounced else { return }
+                self.selectionAnnounced = false
+                self.layoutContent()
+            }
+            selectionAnnounceWork = settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.selectionAnnounceHold, execute: settle)
+        }
         layoutContent()
     }
+
+    /// Long enough to read a phrase beside a moving cursor, short enough that it
+    /// is gone before the next shot of the same sentence.
+    private static let selectionAnnounceHold: TimeInterval = 2.5
 
     func clearSelection() { setSelection(nil, count: 0) }
 
