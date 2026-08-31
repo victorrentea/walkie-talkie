@@ -465,7 +465,35 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // Only a running dictation has a second meaning for a long press.
                 // Idle, the press is a tap however long it lasts — there is
                 // nothing left for a hold to mean.
-                guard dictating else { return nil }
+                //
+                // **So idle it fires on the press, not on the release.** Waiting
+                // for the lift was inherited from the days when a hold meant
+                // something here, and what it cost was the one thing this gesture
+                // has to give: Victor could not tell whether the microphone had
+                // opened until he let go, so he kept holding the button "for a
+                // second" to be sure — the wait the tap was supposed to have
+                // removed, put back by hand because nothing on screen said
+                // otherwise. Reported 2026-08-31: *"nu mai știam dacă trebuie să
+                // țin apăsat butonul o secundă ca să înceapă să mă asculte"*.
+                // With no second meaning to disambiguate, there is nothing to
+                // wait for and the chip appears under his finger.
+                //
+                // `wheelArmed` is what keeps the release honest: it still belongs
+                // to us and is still swallowed — the app underneath must never see
+                // a middle-up it never saw a middle-down for — but `tapped` is
+                // then false, so the release fires nothing and cannot immediately
+                // end the dictation the press just started.
+                guard dictating else {
+                    wheelArmed = true
+                    if wheelSpawn {
+                        Log.info("✨ ⌘wheel pressed — dictating at a new Claude Code")
+                        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+                    } else {
+                        Log.info("🎙️ wheel pressed — starting a dictation")
+                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                    }
+                    return nil
+                }
                 let work = DispatchWorkItem { [weak self] in
                     guard let self = self, self.wheelDown else { return }
                     // The state at the press picked this timer and the state at

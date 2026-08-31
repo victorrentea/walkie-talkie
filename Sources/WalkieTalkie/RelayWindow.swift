@@ -813,6 +813,12 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     // MARK: - Placement
 
+    /// Where the next animated layout should put the panel's **top-left corner**,
+    /// instead of keeping the one it has. Set for exactly one layout — the prompt
+    /// unfolding — and consumed by it, so every other relayout still anchors the
+    /// top edge where it already is.
+    private var unfoldOrigin: NSPoint?
+
     private func moveToTopLeft(of screen: NSScreen) {
         let area = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(
@@ -1342,8 +1348,17 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         // Anchor the TOP edge: the overlay sits in the top-left corner, so it
         // grows downward into empty screen rather than up under the menu bar.
-        let oldTop = panel.frame.maxY
-        let frame = NSRect(x: panel.frame.minX, y: oldTop - height, width: width, height: height)
+        //
+        // `unfoldOrigin`, when a prompt has just set it, moves that anchor to the
+        // corner the panel is heading for — so the animation below carries the
+        // origin as well as the size and the panel swells out of the cursor
+        // instead of appearing in the corner already grown. Consumed here: one
+        // layout owns it, and every later relayout stays where it is.
+        let corner = unfoldOrigin
+        unfoldOrigin = nil
+        let oldTop = corner?.y ?? panel.frame.maxY
+        let frame = NSRect(x: corner?.x ?? panel.frame.minX, y: oldTop - height,
+                           width: width, height: height)
         if animated {
             // The jump from a one-line "Listening…" to a half-screen prompt is the
             // biggest thing this window ever does, and done instantly it reads as
@@ -2179,9 +2194,28 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the same selection, quoted and at the top, and two of them is one too
         // many.
         self.selection = nil
-        // Park first, then unfold: repositioning after an animated resize would
-        // snap the window to its destination and eat the animation.
-        reposition()
+        // **It unfolds out of the cursor, not out of the corner.** Parking at the
+        // top-left first and then growing there put the panel somewhere Victor was
+        // not looking, with nothing linking it to the gesture that produced it —
+        // the words arrived in a corner of the screen as if some other app had
+        // opened a window. Leaving it where the chip already is — under his hand,
+        // where he has been watching the recording row — and handing the
+        // destination to the animation instead makes the corner the place it
+        // *arrives*: it swells out of the pointer and settles top-left.
+        //
+        // Same argument as the bind flight, run backwards. There the travel says
+        // *that window is now this chip*; here it says *what you just said is now
+        // this panel*.
+        //
+        // The origin is handed over rather than applied, because the destination's
+        // y depends on a height only `layoutContent` knows: what is stored is the
+        // top-left **corner**, and the frame is built from it once the rows have
+        // been measured.
+        if let screen = Self.screenUnderMouse() ?? NSScreen.main {
+            let area = screen.visibleFrame
+            unfoldOrigin = NSPoint(x: area.minX + margin, y: area.maxY - margin)
+            homeScreen = screen
+        }
         layoutContent(animated: true)
         refreshOpacity()
 
