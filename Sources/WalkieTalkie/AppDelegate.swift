@@ -238,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
         status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
         // The same call `POST /unbind` makes: the words go back to the outbox and
-        // the relay keeps running, which is the difference between this and ⌘⌃D
+        // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.
         status.onDisconnect = { [weak self] in self?.unbindTerminal() }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
@@ -294,14 +294,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // It used to be, on the argument that loading it lazily would cost ten
         // seconds mid-sentence. That argument was made when the relay was started
-        // per session by ⌘⌃D and lived for as long as Victor was dictating.
+        // per session by ⌘⌃B and lived for as long as Victor was dictating.
         // Since 2026-08-26 it starts at **login** and sits there all day, so
         // eager loading means 2.5 GB of unified memory held from breakfast for a
         // dictation that may not come until the afternoon — on a Mac whose GPU
         // memory is also what the training demos run in.
         //
         // The ten seconds are not paid mid-sentence either: the load is kicked
-        // off by the two gestures that mean a dictation is coming — ⌘⌃D binding a
+        // off by the two gestures that mean a dictation is coming — ⌘⌃B binding a
         // terminal, and mouse 5 on an engine that is not up yet — and both say
         // ⏳ while it happens.
         Log.info("the model stays down until a session starts")
@@ -404,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A wheel hold is waiting on the model**, and the microphone opens the
     /// instant it is up. See where it is set, in `startLocalRecording`.
     ///
-    /// It used to be the *bind* that set this, on the reading that ⌘⌃D means "I
+    /// It used to be the *bind* that set this, on the reading that ⌘⌃B means "I
     /// am about to talk to this agent". It does not: binding is how Victor points
     /// the relay at a terminal on his way into a session, often several minutes
     /// before he says anything, and a bind that opened the microphone by itself
@@ -698,7 +698,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Register the app as a login item, once, quietly.
     ///
-    /// **The relay has to be up before Victor starts talking**, and since ⌘⌃D
+    /// **The relay has to be up before Victor starts talking**, and since ⌘⌃B
     /// moved into this app there is nothing else left to launch it: the key that
     /// starts a session is served by the very process that has to be running to
     /// hear it. A login item is the whole of what that requires — the app is an
@@ -965,7 +965,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - The bound terminal
 
-    /// ⌘⌃D, arriving over loopback from Victor Addons: point the relay at the
+    /// ⌘⌃B, arriving over loopback from Victor Addons: point the relay at the
     /// terminal in front and type every later dictation straight into it.
     ///
     /// **Runs on the listener queue** — `TerminalBinding.bind` spends a couple
@@ -1015,7 +1015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        // **⌘⌃D on the target it is already pointed at lets go of it.**
+        // **⌘⌃B on the target it is already pointed at lets go of it.**
         //
         // The key had no off. Starting the relay is a keystroke and stopping it
         // was a trip to the menu bar — and the menu bar is a moving target when
@@ -1030,10 +1030,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // application.
         //
         // **It unbinds; it does not quit.** It used to quit, and the argument was
-        // that ⌘⌃D is what *starts* the relay, so its off switch should not leave
+        // that ⌘⌃B is what *starts* the relay, so its off switch should not leave
         // a process running. That argument died with the two changes underneath
         // it: the app now **starts at login** and is up all day whether or not
-        // anything is bound (*⌘⌃D is this app's own key*), and *unbound is inert*
+        // anything is bound (*⌘⌃B is this app's own key*), and *unbound is inert*
         // made an idle relay cost nothing — it touches no dictation at all. So
         // quitting no longer undoes a launch, it undoes a **binding** plus a
         // login item, and the second half has to be put back by hand before the
@@ -1045,7 +1045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let previous = previous, previous == bound.handle {
             DispatchQueue.main.async { [weak self] in
                 BindFlight.cancel()
-                Log.info("⌘⌃D on the bound target — unbinding")
+                Log.info("⌘⌃B on the bound target — unbinding")
                 self?.unbindTerminal()
             }
             return ["unbound": true, "label": bound.label, "address": bound.address]
@@ -1162,7 +1162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showBound(_ target: TerminalBinding.Target?) {
         // Binding is also the switch that decides whether the relay touches a
         // dictation at all, and this is the one place every route into it passes
-        // through — ⌘⌃D, `/unbind`, and a target found gone at delivery. Doing it
+        // through — ⌘⌃B, `/unbind`, and a target found gone at delivery. Doing it
         // here is what keeps a relay that lost its terminal mid-session from
         // going on holding the wheel and the microphone.
         defer { syncLocalCapture(); syncBorrowedGestures() }

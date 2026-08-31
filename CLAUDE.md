@@ -73,7 +73,7 @@ it is finished.
 
 Since 2026-08-15 the relay can be **pointed at a terminal**, and every dictation
 from then on is typed into that session and submitted — no `/relay`, no skill, no
-`Monitor` armed on the outbox, no label filter to get right. `⌘⌃D` (this app's own key since 2026-08-26, see below) binds whatever
+`Monitor` armed on the outbox, no label filter to get right. `⌘⌃B` (this app's own key since 2026-08-26, see below) binds whatever
 terminal is in front.
 
 **The outbox is still written whenever a message goes out.** A binding is a
@@ -87,7 +87,7 @@ longer such a thing as a relay that writes the outbox with nothing bound.
 
 ### IDE terminals go through the editor's own extension
 
-`⌘⌃D` on VS Code or IntelliJ no longer pastes. The relay finds a loopback
+`⌘⌃B` on VS Code or IntelliJ no longer pastes. The relay finds a loopback
 listener published by Victor's own extensions — `victor-vsc`'s
 `relay-terminal.js` and the `live-coding` plugin's `RelayTerminalService` — under
 `~/.walkie-talkie/ide/`, asks it which terminal is selected, and hands it every
@@ -119,7 +119,7 @@ relay *pushes*, so the editor listens.
 - **The focused window is what disambiguates.** Two VS Code windows are two
   extension hosts and two listeners. `/ping` answers `focused`, and the relay
   takes the one that says yes; with a single candidate it is believed without
-  the flag, since ⌘⌃D can land a beat before the answer settles. Matching on the
+  the flag, since ⌘⌃B can land a beat before the answer settles. Matching on the
   process tree was the alternative and is worse: it identifies the
   *application*, which is exactly the granularity that was never the problem.
 - **A per-run secret gates it**, unlike the Chrome endpoint. That one hands over
@@ -162,7 +162,7 @@ relay *pushes*, so the editor listens.
 ### Only terminals get bound
 
 `bind` used to send **every** non-Terminal app down the paste path — there was
-no whitelist at all — so ⌘⌃D pressed while looking at Chrome bound Chrome and
+no whitelist at all — so ⌘⌃B pressed while looking at Chrome bound Chrome and
 typed the next dictation into whatever field held the caret. Proven, with the
 screen locked, by binding `loginwindow`. Anything that is neither Terminal.app
 nor an editor `IDEBridge` recognises is now refused outright.
@@ -265,7 +265,7 @@ Binding takes a **picture of the window it just captured**, lays it exactly over
 that window, then shrinks it and flies it to the cursor over 1s, arriving under
 it at the chip's size and fading out (`BindFlight.swift`).
 
-⌘⌃D is pressed while looking at a terminal and answered by a chip that lives next
+⌘⌃B is pressed while looking at a terminal and answered by a chip that lives next
 to the *cursor* — two places, with nothing connecting them. A blink over the
 window would confirm the capture and leave the chip unexplained; a blink at the
 cursor would confirm the chip and never say which window. **The travel is the
@@ -403,7 +403,7 @@ Four further decisions behind where that folder comes from:
   **The tty is the key because it is the only handle both sides hold.**
   `TERM_SESSION_ID` was the obvious cheaper choice and is unusable: macOS shows a
   process's environment only to its own descendants, so the relay — launched
-  separately by ⌘⌃D — reads nothing back (measured: 2926 bytes of environment for
+  separately by ⌘⌃B — reads nothing back (measured: 2926 bytes of environment for
   a process in the caller's ancestry, 4 for an unrelated terminal's). The status
   line publishes under its **parent's** tty, since Claude Code spawns it with no
   controlling terminal of its own but keeps one itself.
@@ -463,7 +463,7 @@ The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
 `unbound — nothing is relayed now` at release. They are text rows, so the only pin
 available to them is the pushpin emoji the drawn one exists to avoid.
 
-### ⌘⌃D again on the same target lets go of it
+### ⌘⌃B again on the same target lets go of it
 
 The key had no off. Starting the relay is a keystroke and stopping it was a trip
 to the menu bar — and the menu bar is a moving target precisely when the reason
@@ -476,7 +476,7 @@ quick presses bind it and then let it go.
   pressing in a different tab re-points rather than stops. What is bound is a
   session, not an application.
 - **It unbinds; it does not quit** — since 2026-08-28. It quit until then, and
-  the argument was that ⌘⌃D is what *starts* the relay, so an off switch leaving
+  the argument was that ⌘⌃B is what *starts* the relay, so an off switch leaving
   the process running would not be the opposite of the gesture that made one.
   That argument died with the two changes underneath it: the app **starts at
   login** now and is up all day regardless (*⌘⌃D is this app's own key*), and
@@ -489,7 +489,7 @@ quick presses bind it and then let it go.
 - **No `session_end` goes out on this any more**, precisely because it is the
   Disconnect route and not the Quit route. An agent watching the outbox is left
   waiting rather than told to stop — which is the correct reading now: the relay
-  is still there and a second ⌘⌃D can point it back at that terminal, whereas a
+  is still there and a second ⌘⌃B can point it back at that terminal, whereas a
   `session_end` says the overlay is gone. Quitting (✕, menu **Quit**) still
   announces itself.
 - **Autorepeat is swallowed** in this app's tap (`HotkeyTap`). With two presses meaning
@@ -524,6 +524,33 @@ and a bind that only worked mid-sentence would be one he could never make.
 prompt, the countdown, the outbox line, the delivery — was otherwise reachable
 only by talking into a microphone, which made the one part of this app that types
 into a live session the one part nobody could test at a desk.
+
+### ⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)
+
+The two global keys this app owns, on the letters they spell:
+
+| key | call | note |
+|---|---|---|
+| **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
+| **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | new — the wheel's click, from the keyboard |
+
+⌘⌃D was the bind key from the day Addons handed it over (see the section below,
+which is about that handover and still says D throughout — it was true then).
+Moving bind to **B** freed the letter that actually spells *dictate*, and
+dictation had until then no keyboard route at all: it was the mouse wheel or
+nothing, on one specific mouse.
+
+Both are swallowed unconditionally, autorepeat included — a held ⌘⌃D would open
+the microphone and shut it again on the next repeat, the same mistake the bind
+branch has always guarded against. ⌘⌃D is **ungated**: `startLocalRecording`
+already refuses without `hasDestination`, so a press with nothing bound costs
+nothing, and a key that sometimes falls through to macOS's "look up in
+dictionary" would be worse than one that never does. ⌘⌃⌥D is still Victor
+Addons' dark-mode toggle, told apart by ⌥ alone.
+
+Both ride the menu as real key equivalents (`StatusItem`): ⌘⌃B on **Bind This
+Window**, ⌘⌃D on **Start Dictation** *and* **End Dictation** — only one of the
+two rows is ever enabled, so the shared key reads as the toggle it is.
 
 ### ⌘⌃D is this app's own key (since 2026-08-26)
 
@@ -656,7 +683,7 @@ what the local model is being judged on, and one dropped because he happened to
 be dictating into a browser cannot be taken again.
 
 **`showBound` is where the switch is thrown**, since it is the one place every
-route into and out of a binding passes through — ⌘⌃D, `POST /unbind`, and a
+route into and out of a binding passes through — ⌘⌃B, `POST /unbind`, and a
 target discovered gone at delivery time (`report(.targetGone)`). That last one is
 why it lives there and not in the two callers: a relay whose terminal was closed
 under it must hand the wheel and the microphone back at that moment, not at the
@@ -1438,7 +1465,7 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   The weights are 1.5 GB resident — **measured: the relay alone is 56 MB, the
   helper 2.5 GB once a transcription has run** — and the ordinary case is a relay
   sitting in the menu bar all day with nothing bound. Two gestures bring it up,
-  and they are the two that mean he is about to talk: ⌘⌃D binding a terminal, and
+  and they are the two that mean he is about to talk: ⌘⌃B binding a terminal, and
   a wheel hold on a model that is not up yet (`AppDelegate.startWhisper`).
 - **A wheel hold that has to wait for the model opens the microphone itself.** On
   a cold model that intention was costing ten seconds of waiting followed by a
@@ -1529,7 +1556,7 @@ held. The third is a chord with the left button.**
 | dictating | **click** | end it — transcribe and send |
 | dictating | hold **2s** | **cancel** it — throw the audio away |
 | **any state, bound or not** | **⌘ + click** | start a dictation **at a session that does not exist yet** — see *⌘ + the wheel* |
-| anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃D, toggle included |
+| anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃B, toggle included |
 | nothing bound, no chord | click | passed straight through |
 
 **Rebinding moved off the wheel and onto the chord on 2026-08-29**, and the two
@@ -1632,7 +1659,7 @@ interactive Claude Code in it and the words as its first prompt. The binding doe
 not move.
 
 **Why it had to exist.** Every other destination in this app has to be *pointed
-at* — ⌘⌃D, the mouse-5 double click, the left-plus-wheel chord all say "that
+at* — ⌘⌃B, the mouse-5 double click, the left-plus-wheel chord all say "that
 terminal, the one already on screen". None of them can express the way most
 sessions actually begin: Victor has a thought and there is no window for it yet.
 Opening a terminal, `cd`-ing somewhere, typing `claude` and waiting for it to

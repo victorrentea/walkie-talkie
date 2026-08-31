@@ -37,8 +37,8 @@ final class HotkeyTap {
     /// The cursor at the instant of the gesture — what he was pointing at.
     var onScreenshot: ((NSPoint) -> Void)?
 
-    /// The wheel, clicked on its own: start the recording, or end the one that is
-    /// open. A toggle and not a push-to-talk — a dictation at an agent runs to a
+    /// The wheel, clicked on its own — **or ⌘⌃D**: start the recording, or end
+    /// the one that is open. A toggle and not a push-to-talk — a dictation at an agent runs to a
     /// minute or more, and a button held for a minute is a hand that cannot do
     /// anything else, including take the screenshots the same minute is for.
     var onLocalToggle: (() -> Void)?
@@ -80,7 +80,7 @@ final class HotkeyTap {
 
     /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
-    /// at the window in front. Same call ⌘⌃D makes, including its toggle: made on
+    /// at the window in front. Same call ⌘⌃B makes, including its toggle: made on
     /// the terminal already bound, it lets go.
     ///
     /// Still returns whether anything was bound, and the return is now only
@@ -104,7 +104,7 @@ final class HotkeyTap {
     }
     private var frontIsBindableFlag = false
 
-    /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃D does.** The keyboard
+    /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃B does.** The keyboard
     /// shortcut asks for both hands at the moment his pointing hand is already
     /// on the terminal he means; the button is where the hand already is.
     ///
@@ -117,14 +117,17 @@ final class HotkeyTap {
     /// is under `MicRecorder.minimumDuration` and is thrown away by the guard
     /// that already exists for a slipped click.
     var onMouse5Double: (() -> Void)?
-    /// ⌘⌃D — point the relay at the terminal in front, or end the session when it
-    /// is already pointed there. Owned here since 2026-08-26; it used to live in
+    /// ⌘⌃B — point the relay at the terminal in front, or end the session when it
+    /// is already pointed there. On **B for bind** since 2026-09-01, having been
+    /// ⌘⌃D before that: D is now the key that dictates.
+    ///
+    /// Owned here since 2026-08-26; it used to live in
     /// Victor Addons, which had to launch this app before it could ask it to
     /// bind. Now that the relay starts at login there is nothing to launch, and
     /// the key belongs to the app it acts on.
     var onBindHotkey: (() -> Void)?
     /// ⌘⌃P — the last dictation, again: onto the clipboard and pasted at the
-    /// caret. It sits beside ⌘⌃D because it is the same kind of key — a global
+    /// caret. It sits beside ⌘⌃B because it is the same kind of key — a global
     /// one this app owns outright — and on P because the neighbouring ⌃⌥P is
     /// already the shutter, so the two things Victor reaches for after a
     /// sentence share a letter and differ by which modifier the hand is holding.
@@ -206,6 +209,7 @@ final class HotkeyTap {
 
     private let stateLock = NSLock()
 
+    private let VK_B: CGKeyCode = 0x0B
     private let VK_D: CGKeyCode = 0x02
 private let VK_P: CGKeyCode = 0x23
     private let VK_F3: CGKeyCode = 0x63
@@ -322,7 +326,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         lastMouse5DownAt = 0
                         swallowMouse5Up = true
                         Log.info("🎯 mouse 5 ×2 — binding")
-                        // **Global, not main** — the same queue ⌘⌃D uses, and for
+                        // **Global, not main** — the same queue ⌘⌃B uses, and for
                         // the reason it uses it: `bindFrontmostTerminal` asks the
                         // main thread for the frontmost app with `main.sync`, so
                         // arriving there already on main is a wait for a queue
@@ -434,7 +438,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && leftIsHeld {
                 wheelArmed = true    // the release is ours too
                 Log.info("🎯 left held + wheel — binding")
-                // **Global, not main** — the same queue ⌘⌃D uses, and for the
+                // **Global, not main** — the same queue ⌘⌃B uses, and for the
                 // reason it uses it: `bindFrontmostTerminal` asks the main thread
                 // for the frontmost app with `main.sync`, so arriving there
                 // already on main is a wait for a queue that is waiting for you.
@@ -578,22 +582,42 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return nil
         }
 
-        // ⌘⌃D, and not ⌘⌃⌥D — that one is Victor Addons' dark-mode toggle, and
-        // the two are told apart by ⌥ alone.
+        // ⌘⌃B — **bind**, on B for bind since 2026-09-01. It was ⌘⌃D until then,
+        // and D moved one branch down to the thing it spells: dictate.
         //
         // **Autorepeat is swallowed, not acted on.** A second press on the target
         // already bound *ends the session*, so a key held a moment too long would
         // otherwise bind and immediately stop the session it just started — the
         // one input mistake this gesture cannot afford. The event is eaten either
-        // way, so nothing downstream sees the repeat (it shadows the system-wide
-        // ⌘⌃D "look up in dictionary", which is deliberate and long-standing).
-        if keyCode == VK_D && cmd && ctrl && !opt {
+        // way, so nothing downstream sees the repeat.
+        if keyCode == VK_B && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
             DispatchQueue.global().async { [weak self] in self?.onBindHotkey?() }
             return nil
         }
 
-        // Autorepeat swallowed for the same reason ⌘⌃D swallows it: a key held a
+        // ⌘⌃D — **dictate**: the wheel's click, from the keyboard. Same call, so
+        // it is the same toggle, and a dictation started with the key can be
+        // ended with the wheel and the other way round.
+        //
+        // Not ⌘⌃⌥D — that one is Victor Addons' dark-mode toggle, and the two are
+        // told apart by ⌥ alone. It shadows the system-wide ⌘⌃D "look up in
+        // dictionary", which it inherited from the bind it replaced.
+        //
+        // Ungated on purpose, unlike the bare wheel: `startLocalRecording` keeps
+        // the `hasDestination` guard, so a press with nothing bound costs
+        // nothing, and the key is swallowed either way rather than sometimes
+        // falling through to the dictionary.
+        //
+        // Autorepeat swallowed for the same reason as above — a held key would
+        // open the microphone and close it again on the next repeat.
+        if keyCode == VK_D && cmd && ctrl && !opt {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+            return nil
+        }
+
+        // Autorepeat swallowed for the same reason ⌘⌃B swallows it: a key held a
         // moment too long would paste the sentence four times into whatever he
         // is typing in, and unlike a bind that is not undone by pressing it
         // again. The event is eaten either way — it shadows nothing standard.

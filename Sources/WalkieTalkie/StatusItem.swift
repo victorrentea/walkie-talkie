@@ -75,7 +75,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only one way in.
     var onStartDictation: (() -> Void)?
 
-    /// Picked from **Bind This Window** — the same call ⌘⌃D and the left-plus-wheel
+    /// Picked from **Bind This Window** — the same call ⌘⌃B and the left-plus-wheel
     /// chord make.
     var onBind: (() -> Void)?
 
@@ -91,24 +91,26 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// **The menu is where the gestures are written down.** Every one of these
     /// commands also has a mouse or keyboard route, and none of those routes
-    /// announces itself anywhere else: ⌘⌃D shadows a system shortcut, and the
+    /// announces itself anywhere else: ⌘⌃B shadows a system shortcut, and the
     /// wheel means one thing alone, another held, and a third with the left
     /// button already down — none of which anybody guesses. A menu row is read
     /// while reaching for the thing it does, which makes it the one place a
     /// gesture can be learned without being taught.
     ///
-    /// ⌘⌃D rides as a real key equivalent so macOS right-aligns it; the wheel
+    /// ⌘⌃B rides as a real key equivalent so macOS right-aligns it; the wheel
     /// gestures have no key equivalent to be, so they are said in the title.
-    private let bind = NSMenuItem(title: "Bind This Window — or hold left, click the wheel", action: nil, keyEquivalent: "d")
+    private let bind = NSMenuItem(title: "Bind This Window — or hold left, click the wheel", action: nil, keyEquivalent: "b")
 
     /// Let go of the terminal without ending the session — the menu's answer to
-    /// ⌘⌃D pressed on the bound target, minus the quitting.
+    /// ⌘⌃B pressed on the bound target, minus the quitting.
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
-    /// Opens the microphone from the menu — see `onStartDictation`.
-    private let startDictation = NSMenuItem(title: "Start Dictation — click the wheel", action: nil, keyEquivalent: "")
-    private let stopRecording = NSMenuItem(title: "End Dictation — click the wheel", action: nil, keyEquivalent: "")
+    /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it
+    /// as a real key equivalent, the same way ⌘⌃B rides **Bind This Window**; the
+    /// wheel has no key equivalent to be, so it stays in the title beside it.
+    private let startDictation = NSMenuItem(title: "Start Dictation — or click the wheel", action: nil, keyEquivalent: "d")
+    private let stopRecording = NSMenuItem(title: "End Dictation — or click the wheel", action: nil, keyEquivalent: "d")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
     /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
@@ -200,7 +202,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // **Under Pause, because it is the other half of the same question.**
         // Pause stops the words going *anywhere*; this one stops them going to
         // *that terminal* and hands them back to the outbox, which is what the
-        // relay does when nothing is bound. ⌘⌃D on the bound target already
+        // relay does when nothing is bound. ⌘⌃B on the bound target already
         // does something adjacent and stronger — it ends the session — and there
         // was no way to simply let go of a tab: he had to quit the relay and
         // start it again somewhere else. Disabled while nothing is bound, since
@@ -227,11 +229,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // could not begin. Enabled only while something is bound: unbound the
         // relay is inert and `startLocalRecording` would refuse anyway, and a row
         // that silently does nothing is worse than one that says it cannot.
+        startDictation.keyEquivalentModifierMask = [.command, .control]
         startDictation.action = #selector(startDictationClicked)
         startDictation.target = self
         startDictation.isEnabled = false
         menu.addItem(startDictation)
 
+        // The same ⌘⌃D on both rows: only one of the two is ever enabled, so the
+        // key reads as the toggle it is rather than as a clash.
+        stopRecording.keyEquivalentModifierMask = [.command, .control]
         stopRecording.action = #selector(stopRecordingClicked)
         stopRecording.target = self
         stopRecording.isEnabled = false

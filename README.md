@@ -133,7 +133,7 @@ Two ways, and they are not alternatives — the second is layered on the first.
 
 ### Typed straight into a terminal
 
-Press **⌘⌃D** while looking at a terminal and the relay is pointed at it: every
+Press **⌘⌃B** while looking at a terminal and the relay is pointed at it: every
 dictation from then on is typed into that session and submitted, wherever your
 cursor happens to be when you speak. No command to run in the terminal first,
 nothing to arm, nothing watching a file.
@@ -226,10 +226,12 @@ once, each taking one):
 
 | input | effect |
 |---|---|
+| **⌘⌃B** | Points the relay at the terminal in front — or ends the session when it is already pointed there |
+| **⌘⌃D** | Starts a dictation, and ends the open one — the wheel's click from the keyboard |
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
 | **⌘ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
-| **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃D |
+| **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃B |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |

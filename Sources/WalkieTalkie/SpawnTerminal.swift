@@ -5,7 +5,7 @@ import Foundation
 /// the dictation as its first prompt.
 ///
 /// It exists because every other destination in this app has to be *pointed at*:
-/// ⌘⌃D, the mouse-5 double click and the left-plus-wheel chord all say "that
+/// ⌘⌃B, the mouse-5 double click and the left-plus-wheel chord all say "that
 /// terminal, the one already on screen". The one thing they cannot express is
 /// the most common way a session actually begins — Victor has a thought, and
 /// there is no window for it yet. Making him open a terminal, `cd` somewhere,

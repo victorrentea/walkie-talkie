@@ -17,7 +17,7 @@
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
-    "when" : "From ⌘⌃D (or the wheel chord) until something happens.",
+    "when" : "From ⌘⌃B (or the wheel chord) until something happens.",
     "width" : 175
   },
   {

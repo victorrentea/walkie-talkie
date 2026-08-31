@@ -186,7 +186,7 @@ final class TerminalBinding {
                 // here would land in whatever the window *does* hold, which is a
                 // source file. Refusing sends the same message the banner
                 // already knows how to say: click into a terminal first.
-                Log.error("⌘⌃D on \(name) — that window has no terminal open, not binding")
+                Log.error("⌘⌃B on \(name) — that window has no terminal open, not binding")
                 bound = nil
             case .bound(let handle):
                 bound = Target(handle: .ide(handle),
@@ -212,12 +212,12 @@ final class TerminalBinding {
             }
         } else {
             // **Not a terminal, and no longer bound as if it were.** Every
-            // non-Terminal app used to fall through to the paste path, so ⌘⌃D
+            // non-Terminal app used to fall through to the paste path, so ⌘⌃B
             // pressed while looking at Chrome bound Chrome and typed the next
             // dictation into whatever field held the caret. Proven, with the
             // screen locked, by binding `loginwindow`. A refusal is the only
             // correct answer: there is no terminal here to deliver to.
-            Log.error("⌘⌃D on \(name) — not a terminal, not binding")
+            Log.error("⌘⌃B on \(name) — not a terminal, not binding")
             bound = nil
         }
 
@@ -838,7 +838,7 @@ final class TerminalBinding {
     ///
     /// Neither is the agent's own shell any help: it has **no controlling
     /// terminal** (so `ps -t` cannot see it) and it is spawned per command, so
-    /// most of the time — including the moment ⌘⌃D is pressed — it does not
+    /// most of the time — including the moment ⌘⌃B is pressed — it does not
     /// exist at all.
     ///
     /// So the session directory is *published* rather than inferred, and keyed by

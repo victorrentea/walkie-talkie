@@ -5,7 +5,7 @@ import QuartzCore
 /// which appears exactly over that window, then shrinks and flies to the cursor,
 /// arriving under it at the size of the chip and vanishing.
 ///
-/// **Why a flight and not a flash.** ⌘⌃D is pressed while looking at a terminal
+/// **Why a flight and not a flash.** ⌘⌃B is pressed while looking at a terminal
 /// and answered by a chip that lives next to the *cursor* — two places, and
 /// nothing connecting them. A blink over the window would confirm the capture
 /// but leave the chip unexplained; a blink at the cursor would confirm the chip

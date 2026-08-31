@@ -44,7 +44,7 @@ enum IDEBridge {
     /// **Read for as long as an un-reloaded editor can still exist.** The relay
     /// updates itself the moment it is restarted; a VS Code extension host and an
     /// IntelliJ plugin do not — they keep running the code loaded when the window
-    /// opened, which may be yesterday's. Ignoring this folder would mean ⌘⌃D in
+    /// opened, which may be yesterday's. Ignoring this folder would mean ⌘⌃B in
     /// those windows quietly falling back to a blind paste, which is precisely the
     /// failure the extensions exist to prevent, for a reason no one could guess
     /// from the symptom. It costs one extra directory listing per bind.
@@ -89,7 +89,7 @@ enum IDEBridge {
     /// Which editor a bundle identifier is, or nil for everything else.
     ///
     /// **A whitelist, and that is the point.** `bind` used to send every
-    /// non-Terminal app down the paste path, so ⌘⌃D pressed while looking at
+    /// non-Terminal app down the paste path, so ⌘⌃B pressed while looking at
     /// Chrome bound Chrome and typed the next dictation into whatever field had
     /// the caret. Proven, with the screen locked: it bound `loginwindow`.
     static func kind(bundleID: String) -> String? {
@@ -134,7 +134,7 @@ enum IDEBridge {
             return endpoint
         }
         // A single editor window that reports itself unfocused a beat after
-        // ⌘⌃D — the key is pressed while it *is* in front, and `activate` on
+        // ⌘⌃B — the key is pressed while it *is* in front, and `activate` on
         // the relay's own side can land in between. With nothing to
         // disambiguate, the only candidate is the answer.
         return candidates.count == 1 ? candidates[0] : nil
@@ -149,7 +149,7 @@ enum IDEBridge {
     /// because it is that or nothing. `noTerminal` means the extension answered
     /// and said this window has no terminal in it: there is nothing to type into,
     /// and the paste lands in whatever the window *does* have, which is a source
-    /// file. Measured — ⌘⌃D in a VS Code window holding notes.txt typed the next
+    /// file. Measured — ⌘⌃B in a VS Code window holding notes.txt typed the next
     /// dictation into line 23 of the notes.
     enum BindResult {
         case bound(Handle)

@@ -68,7 +68,7 @@ enum OverlayStates {
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "bound-idle", group: "At rest", title: "Bound, standing by",
-                 when: "From ⌘⌃D (or the wheel chord) until something happens.",
+                 when: "From ⌘⌃B (or the wheel chord) until something happens.",
                  note: "The whole chip: the destination app's icon, and the folder@branch of the terminal the words will be typed into. No state word — standing by is what he can infer from nothing happening; which agent this is, is what he cannot.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
