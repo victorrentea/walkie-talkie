@@ -875,6 +875,22 @@ The `send` row, the shot-hint row (`.back`) and the ⌘⇧-pick hint (`.left`) u
 same drawings at icon size: those rows say what they mean in words, so the picture
 only has to identify the device.
 
+## The shutter and the ⌘⇧ pick are two gestures, and they cannot collide
+
+They are borrowed from the same dictation and they arrive in the same message,
+so it is worth writing down that nothing routes one into the other. The shutter
+(mouse 4, or F3) takes a **picture plus whatever is highlighted at that moment**;
+⌘⇧-click in Chrome takes a **path to a DOM element** and no picture. Neither is a
+fallback for the other, and Victor asked for them to stay that way.
+
+**The ⌘C probe cannot poison an armed pick**, which is the one interaction the
+two could have had since the shutter started paying for the clipboard fallback.
+`inspect.js` treats any keydown during a ⌘⇧ hold as proof the chord is a
+shortcut and abandons the arm — but **both shutter routes require no modifiers
+at all**: mouse 4 asks for `bare` and F3 for `!ctrl && !opt && !cmd && !shift`
+(`HotkeyTap`). With ⌘⇧ held, neither fires, so there is no press that could post
+a ⌘C into a hold. Do not relax either gate without re-reading this.
+
 ## Two gestures are borrowed, and only while dictating
 
 Mouse 4 and ⌘⇧-click in Chrome both belong to other software the rest of the time,
@@ -1192,7 +1208,11 @@ with nothing selected the probe is a no-op nothing notices. `readQuiet` is gone 
 it had no other caller.
 
 **The chip says `↪ selecting <his own words>` for 2.5s** and then settles to
-`↪ ×N …`. The row was already going to carry the highlight for the rest of the
+`↪ ×N …`. **The receipt is not behind the novelty test, the filing is**: two of
+the three skipped cases are presses that *did* catch a highlight — the frozen one
+he never let go of, the same one shot twice — and a shutter that says nothing
+there reads as one that missed, which is the failure the row exists to rule out.
+The message still carries each highlight exactly once. The row was already going to carry the highlight for the rest of the
 sentence, which answers *is it still there* but not the question he has at the
 instant he presses — *did this catch the thing I meant?* A picture is taken
 silently and a selection is read silently, so without the verb the only

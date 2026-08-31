@@ -1612,8 +1612,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
         stateLock.unlock()
 
-        guard novel else { return }
-        Log.info("↪ selection at \(Self.stamp(offset)) — \(text.count) chars (\(total) in this dictation)")
+        // **The receipt is not behind `novel`, the filing is.** Three reads are
+        // skipped as noise — nothing highlighted, the text the frozen slot
+        // already holds, the same text as the last extra — and for two of those
+        // the press still *caught* something: he had a highlight on screen and
+        // pressed the shutter over it. A shutter that says nothing in that case
+        // reads as one that missed, which is exactly the failure the row was
+        // added to rule out. So the chip confirms every press that read a
+        // selection, and the message still carries each highlight once.
+        if novel {
+            Log.info("↪ selection at \(Self.stamp(offset)) — \(text.count) chars (\(total) in this dictation)")
+        } else {
+            Log.info("↪ selection at \(Self.stamp(offset)) — already carried, not filed again")
+        }
         // **Said back, in his own words, for a beat.** The row carries this
         // highlight for the rest of the dictation either way, which answers "is
         // it still there" but not the question he has at the instant he presses:
