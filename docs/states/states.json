@@ -68,9 +68,9 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 69,
+    "height" : 46,
     "image" : "preparing.png",
-    "note" : "`preparing` in the row under the microphone. It is a row and not a mark on the title, which is doubly true now that the title is one glyph: an hourglass hung on the destination said the same thing twice, and there is no longer a line for it to hang on.",
+    "note" : "One row, and the 🎙️ is not on it. The microphone *is* the readiness, so showing it above a line that says `preparing` was the chip contradicting itself — and a wheel pressed on the strength of the top line loses the first seconds of the sentence to an engine that is not up. The hourglass is the whole chip until it is; then the microphone appears, and means it.",
     "shape" : "chip",
     "slug" : "preparing",
     "title" : "The model is coming up",
@@ -380,7 +380,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 117,
+    "height" : 98,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

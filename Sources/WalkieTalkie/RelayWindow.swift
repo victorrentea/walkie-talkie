@@ -1196,7 +1196,19 @@ private let frontLabel = NSTextField(labelWithString: "")
         // directory of a login item, which is what got the whole chip taken off
         // the pointer at rest. Now the chip stays, carrying the one row that says
         // how to end that state.
-        if boundLabel != nil || spawnLabel != nil || paused || engineLoading || sentPrompt != nil || listening {
+        //
+        // **Nor while the model is still coming up.** Standing by, the chip is a
+        // microphone and the microphone *is* the readiness — so putting it on
+        // screen above a row that says `preparing` is the chip contradicting
+        // itself in two lines, and the wheel pressed on the strength of the top
+        // one loses the first seconds of the sentence to an engine that is not
+        // there yet. While it loads, the ⏳ row is the whole chip; the 🎙️ appears
+        // when it means something, which is when he can talk.
+        //
+        // Only in the collapsed case: with a dictation in flight the title is the
+        // destination, and that is true whatever the engine is doing.
+        let names = boundLabel != nil || spawnLabel != nil || paused || engineLoading || sentPrompt != nil || listening
+        if names, !(collapsed && engineLoading) {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))

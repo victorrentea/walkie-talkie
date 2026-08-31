@@ -104,7 +104,7 @@ enum OverlayStates {
 
             Shot(slug: "preparing", group: "At rest", title: "The model is coming up",
                  when: "The ~10 s after a bind, or after the wheel if the weights are not resident.",
-                 note: "`preparing` in the row under the microphone. It is a row and not a mark on the title, which is doubly true now that the title is one glyph: an hourglass hung on the destination said the same thing twice, and there is no longer a line for it to hang on.",
+                 note: "One row, and the 🎙️ is not on it. The microphone *is* the readiness, so showing it above a line that says `preparing` was the chip contradicting itself — and a wheel pressed on the strength of the top line loses the first seconds of the sentence to an engine that is not up. The hourglass is the whole chip until it is; then the microphone appears, and means it.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setEngineLoading(true)
