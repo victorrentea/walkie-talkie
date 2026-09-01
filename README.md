@@ -233,6 +233,7 @@ once, each taking one):
 | **hold left, click the wheel** | Points the relay at the window in front — the same call as ⌘⌃B, minus the toggle: made twice on the same terminal it binds twice rather than letting go |
 | **hold left, hold the wheel 1s** | The same bind, **and** it starts the dictation at it — one gesture instead of the chord followed by a second click |
 | **hold right, click the wheel** | Lets the binding go — the same call as the menu's **Disconnect**. Outranks every other meaning the wheel has, so it works mid-dictation too |
+| **hold right, hold the wheel 1s** | The same **new session** ⌘ + the wheel opens — without the keyboard, for when you are across the room with only the mouse |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |

@@ -366,6 +366,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         NSAttributedString(string: words, attributes: [.font: hintFont])
     }
 
+    /// `preparing` / `transcribing…` — bigger and heavier than any other row's
+    /// words, because they are the only ones that mean *wait*. See `statusLines`.
+    private func waitText(_ words: String) -> NSAttributedString {
+        NSAttributedString(string: words,
+                           attributes: [.font: NSFont.systemFont(ofSize: 20, weight: .semibold)])
+    }
+
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
     /// changes instead of being a separate line of instructions.
@@ -431,8 +438,20 @@ private let frontLabel = NSTextField(labelWithString: "")
             return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
         }
         guard sentPrompt == nil else { return [] }
-        if transcribing { return [(Self.waitGlyph, plain("transcribing…"), iconInk)] }
-        if engineLoading { return [(Self.waitGlyph, plain("preparing"), iconInk)] }
+        // **The two waits are drawn big**, at `hintInk` rather than icon size,
+        // and in a heavier face than every other row. They are the only states in
+        // which Victor is *waiting on this app* — the model coming up, the model
+        // chewing — and the answer to "is it still doing something?" has to be
+        // readable from where he has already looked away to. At icon size, in
+        // `secondaryLabelColor`, on a bare chip over a dark terminal, it was a
+        // grey smudge beside the pointer; he asked for it to be visible, and the
+        // hourglass is the half that carries the meaning without being read.
+        //
+        // They are also the one pair of states where the chip has nothing else on
+        // it: the title row is suppressed while the engine loads, so the row can
+        // afford the height the mouse hints take.
+        if transcribing { return [(Self.waitGlyphBig, waitText("transcribing…"), Self.hintInk)] }
+        if engineLoading { return [(Self.waitGlyphBig, waitText("preparing"), Self.hintInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -1504,6 +1523,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
     private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
+    /// The same hourglass at hint size — see `statusLines` for why the waits are
+    /// the two rows that get it.
+    private static let waitGlyphBig = Glyphs.emoji("⏳", ink: hintInk)
     /// The bound chip at rest (`collapsed`). **One glyph for every destination**,
     /// on purpose: standing by, the question is not *which* terminal — that is
     /// what starting to talk asks, and what the name answers — it is whether the
@@ -1802,7 +1824,21 @@ private let frontLabel = NSTextField(labelWithString: "")
             // like a shutter that had failed to read the selection.
             selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .white
+            // **The same row the selection was, and left out for the same
+            // reason.** `preparing`, `transcribing…` and the mouse hints all
+            // live here, and they kept `secondaryLabelColor` on a chip that
+            // spends its life over dark terminals — half-transparent dark grey
+            // with no halo, i.e. exactly the "I cannot see it" Victor reported.
+            for hint in hintRows {
+                hint.label.wantsLayer = true
+                hint.label.shadow = Self.halo()
+                hint.label.textColor = .white
+            }
         } else {
+            for hint in hintRows {
+                hint.label.shadow = nil
+                hint.label.textColor = .secondaryLabelColor
+            }
             hintLabel.shadow = nil
             titleLabel.shadow = nil
             recordInfo.shadow = nil

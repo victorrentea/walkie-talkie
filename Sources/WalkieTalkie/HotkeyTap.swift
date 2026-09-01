@@ -245,6 +245,11 @@ final class HotkeyTap {
     /// that is where a tap is told from a hold — and remembered rather than
     /// re-read, since the modifier may well be let go before the button is.
     private var wheelSpawn = false
+    /// …and whether the **right** button was the one held when we took it. The
+    /// right chord means two things — disconnect on a tap, a new session on a
+    /// hold — so the press cannot decide, and the release has to know which
+    /// branch swallowed it.
+    private var wheelRightChord = false
     private var wheelHold: DispatchWorkItem?
 
     private let stateLock = NSLock()
@@ -409,6 +414,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //     wheel              → bind: point the relay at the window in front
             //   left held, then
             //     wheel held 1s      → …and start the dictation at it
+            //   right held, then
+            //     wheel              → disconnect: let the binding go
+            //   right held, then
+            //     wheel held 1s      → dictate at a terminal that does not exist
+            //                          yet — ⌘ + the wheel, without the keyboard
             //
             // **Starting used to cost a one-second hold and now costs a tap.**
             // The hold was buying one thing: a bare middle click could still be
@@ -446,15 +456,44 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //
             // Nothing bound is nothing to disconnect, and the branch is skipped
             // so the click stays available to whatever is underneath.
-            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && rightIsHeld && bound {
-                wheelArmed = true    // the release is ours too
+            //
+            // **And held, it opens a session instead of closing one.** ⌘ + the
+            // wheel already spawns, and ⌘ is a key — which is exactly what
+            // Victor does not have to hand when he is across the room from the
+            // laptop with only the mouse. So the right chord carries both
+            // readings, the same way the left one does: tap to disconnect, hold
+            // to start a dictation at a terminal that does not exist yet.
+            //
+            // The pairing is not arbitrary. The left chord is *point at
+            // something that exists*; the right one is now *let this one go* /
+            // *make a new one*, which are the two things you do when the session
+            // in front of you is not the one you want.
+            //
+            // **The disconnect therefore moves to the release**, where it can be
+            // told from a hold. Firing it at the press and spawning a second
+            // later would do both — and the spawn is documented to leave the
+            // binding exactly where it was.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && rightIsHeld {
                 // A hold timer from a press we are now overriding must not fire
                 // on the dictation this click is ending.
-                wheelDown = false
                 wheelHold?.cancel()
                 wheelHold = nil
-                Log.info("🔌 right held + wheel — disconnecting")
-                DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
+                wheelDown = true
+                wheelArmed = false
+                wheelRightChord = true
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self = self, self.wheelDown, self.wheelRightChord else { return }
+                    self.wheelDown = false
+                    self.wheelArmed = true
+                    self.wheelRightChord = false
+                    // Ending a dictation is ending one, whichever gesture opened
+                    // it — the destination belongs to the press that started it.
+                    Log.info(self.dictating ? "🎙️ right held + wheel held — ending the dictation"
+                                            : "✨ right held + wheel held — dictating at a new Claude Code")
+                    DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+                }
+                wheelHold = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordDictateSeconds, execute: work)
                 return nil
             }
 
@@ -477,6 +516,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     wheelArmed = false
                     wheelDown = false
                     wheelSpawn = false
+                    wheelRightChord = false
                     wheelHold?.cancel()
                     wheelHold = nil
                 }
@@ -496,6 +536,24 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // what is left — a press we took and nothing acted on — is the tap.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
                 let tapped = wheelDown && !wheelArmed
+                // **The right chord, let go before the hold fired: disconnect.**
+                // Judged here rather than at the press because that is the only
+                // place a tap can be told from the hold that spawns — see the
+                // branch below. Nothing bound is nothing to disconnect, and the
+                // press has already been swallowed, so the click simply does
+                // nothing rather than reaching the app underneath late.
+                if wheelRightChord {
+                    wheelRightChord = false
+                    wheelArmed = false
+                    wheelDown = false
+                    wheelHold?.cancel()
+                    wheelHold = nil
+                    if tapped && bound {
+                        Log.info("🔌 right held + wheel — disconnecting")
+                        DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
+                    }
+                    return nil
+                }
                 // Read off the **press**, not off the flags now: ⌘ is very often
                 // let go before the button is, and a gesture that changed its
                 // mind between the two halves of one click would be the least

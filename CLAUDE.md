@@ -828,6 +828,28 @@ three forms: `🖱️/F3`, then the words `— mouse/F3 for more shots`, then �
 🔽 kerned underneath. The last was a rebus — it needed a legend, and the legend was
 the thing the row was supposed to be. A drawing of the actual button does not.
 
+## The two waits are drawn big
+
+`preparing` (the model coming up) and `transcribing…` (the model chewing) are the
+only two states in which Victor is **waiting on this app**, and since 2026-09-01
+they are the only rows drawn at `hintInk` — a 30pt hourglass and a semibold 20
+beside it, where every other row is a 16pt glyph and a 17pt regular.
+
+They were icon-sized, in `secondaryLabelColor`, on a bare chip: half-transparent
+dark grey with no halo, over the dark terminals and editors the chip spends its
+life on. **Exactly the bug the selection row had** — the row was there and could
+not be seen — and this time it was two states where the question being asked is
+*is it still doing something?*, asked from wherever he has already looked away to.
+
+The fix has two halves and both were needed: the size, and adding the hint rows'
+labels to `refreshChrome`'s white-plus-halo list. That list is the one place a row
+becomes legible on a bare chip, and it is the third time a row has been left off
+it.
+
+They can afford the height: the title row is suppressed while the engine loads
+(`layoutContent`), so the hourglass is the whole chip until the microphone means
+something.
+
 ## The mouse is drawn, and the buttons the gesture presses are red
 
 **Rule, from Victor, 2026-08-29: wherever the UI has to show the mouse, draw his
@@ -1593,6 +1615,7 @@ held. The third is a chord with the left button.**
 | anywhere, any state | **left button held ≥0.3s, then click the wheel** | **bind** — same call as ⌘⌃B, **without the toggle** |
 | anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
 | bound, any state | **right button held ≥0.3s, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
+| anywhere, any state | **right button held ≥0.3s, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
 | nothing bound, no chord | click | passed straight through |
 
 **The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
@@ -1643,7 +1666,25 @@ reverses the bargain the previous build was written to protect; if it grates, th
 cheap fix is to hand the click back when the frontmost app is a browser, not to
 put the hold back.
 
-**Right held, then the wheel, lets the binding go** — since 2026-09-01. It is
+**Right held, then the wheel held, opens a session instead of closing one** —
+since 2026-09-01, the same day the left chord grew its own hold. ⌘ + the wheel
+already spawns, and ⌘ is a *key*, which is exactly what Victor does not have to
+hand when he is across the room from the laptop with only the mouse on it. So the
+right chord carries both readings the way the left one does: **tap to disconnect,
+hold a second to start a dictation at a terminal that does not exist yet.**
+
+The pairing is not arbitrary. Left is *point at something that exists*; right is
+now *let this one go* / *make a new one* — the two things to do when the session
+in front of you is not the one you want.
+
+**The disconnect therefore moved to the release.** It fired at the press, and
+firing at the press then spawning a second later would do both — and the spawn is
+documented to leave the binding exactly where it was. `wheelRightChord` is what
+the release reads to know which branch swallowed the press; the spawn half is
+**not** gated on `bound`, since the one moment a new session is most wanted is
+when there is no session at all.
+
+**Right held, then the wheel, lets the binding go** — also since 2026-09-01. It is
 deliberately the *mirror* of the rebind chord: one button held as a modifier, the
 wheel clicked on top, judged at the press, with the same `chordHoldSeconds`
 telling a chord from two buttons that overlapped. Left points the relay at
