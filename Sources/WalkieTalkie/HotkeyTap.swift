@@ -250,7 +250,33 @@ final class HotkeyTap {
     /// hold — so the press cannot decide, and the release has to know which
     /// branch swallowed it.
     private var wheelRightChord = false
+    /// The same, for the left chord. There the release has nothing to do — the
+    /// bind fired at the press — but it still has to be told apart from a bare
+    /// wheel, whose release is the whole gesture.
+    private var wheelLeftChord = false
     private var wheelHold: DispatchWorkItem?
+
+    /// **Take the undecided press, if it is still going.** Every gesture with a
+    /// hold has two claimants racing for one press: the timer, which runs on the
+    /// main queue, and the release, which arrives on the tap thread. They both
+    /// used to read `wheelDown` and then act on it, so a button let go in the
+    /// same millisecond the timer fired ran **both** halves — a disconnect *and*
+    /// a spawn, or a dictation opened twice, which is `mic.start` called twice.
+    ///
+    /// Whoever gets here first acts; the loser finds it already taken.
+    ///
+    /// `wheelArmed` is set **before** `wheelDown` is cleared, and both inside the
+    /// lock: the release's own swallow test reads `wheelArmed || wheelDown`, and
+    /// a window in which neither is true is a middle-up handed to an app that
+    /// never saw the middle-down — the orphan-event bug this file guards against
+    /// everywhere else.
+    private func claimWheelPress() -> Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard wheelDown else { return false }
+        wheelArmed = true
+        wheelDown = false
+        return true
+    }
 
     private let stateLock = NSLock()
 
@@ -481,11 +507,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 wheelDown = true
                 wheelArmed = false
                 wheelRightChord = true
+                wheelLeftChord = false
                 let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.wheelDown, self.wheelRightChord else { return }
-                    self.wheelDown = false
-                    self.wheelArmed = true
-                    self.wheelRightChord = false
+                    guard let self = self, self.claimWheelPress() else { return }
                     // Ending a dictation is ending one, whichever gesture opened
                     // it — the destination belongs to the press that started it.
                     Log.info(self.dictating ? "🎙️ right held + wheel held — ending the dictation"
@@ -517,6 +541,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     wheelDown = false
                     wheelSpawn = false
                     wheelRightChord = false
+                    wheelLeftChord = false
                     wheelHold?.cancel()
                     wheelHold = nil
                 }
@@ -535,43 +560,46 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // means something already fired on the press or during the hold, so
             // what is left — a press we took and nothing acted on — is the tap.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
-                let tapped = wheelDown && !wheelArmed
-                // **The right chord, let go before the hold fired: disconnect.**
-                // Judged here rather than at the press because that is the only
-                // place a tap can be told from the hold that spawns — see the
-                // branch below. Nothing bound is nothing to disconnect, and the
-                // press has already been swallowed, so the click simply does
-                // nothing rather than reaching the app underneath late.
-                if wheelRightChord {
-                    wheelRightChord = false
-                    wheelArmed = false
-                    wheelDown = false
-                    wheelHold?.cancel()
-                    wheelHold = nil
-                    if tapped && bound {
-                        Log.info("🔌 right held + wheel — disconnecting")
-                        DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
-                    }
-                    return nil
-                }
                 // Read off the **press**, not off the flags now: ⌘ is very often
                 // let go before the button is, and a gesture that changed its
                 // mind between the two halves of one click would be the least
                 // predictable thing in this file.
                 let spawn = wheelSpawn
+                let right = wheelRightChord
+                let left = wheelLeftChord
+                // **The one place a tap is decided**, and it is a claim rather
+                // than a test: the hold timer is racing this release for the same
+                // press, and both acting is one gesture doing two things. See
+                // `claimWheelPress`.
+                let tapped = claimWheelPress()
                 wheelArmed = false
-                wheelDown = false
                 wheelSpawn = false
+                wheelRightChord = false
+                wheelLeftChord = false
                 wheelHold?.cancel()
                 wheelHold = nil
-                if tapped && spawn {
+                guard tapped else { return nil }
+                if right {
+                    // **Let go before the hold fired: disconnect.** Judged here
+                    // rather than at the press because this is the only place it
+                    // can be told from the hold that opens a session. Nothing
+                    // bound is nothing to disconnect, and the press is already
+                    // swallowed, so the click does nothing rather than reaching
+                    // the app underneath late.
+                    guard bound else { return nil }
+                    Log.info("🔌 right held + wheel — disconnecting")
+                    DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
+                } else if left {
+                    // Nothing: the bind fired at the press, and the hold that
+                    // would also have started a dictation did not last.
+                } else if spawn {
                     // Ending one is ending one, whichever gesture it started
                     // with — the destination was decided at the press that
                     // opened the microphone.
                     Log.info(dictating ? "🎙️ ⌘wheel tapped — ending the dictation"
                                        : "✨ ⌘wheel tapped — dictating at a new Claude Code")
                     DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
-                } else if tapped && (localCapture || dictating) {
+                } else if localCapture || dictating {
                     Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
                                        : "🎙️ wheel tapped — starting a dictation")
                     DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
@@ -616,9 +644,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // — nothing here is destructive — it is a deliberate wait, and it
                 // has to be short enough that the hand does not let go first.
                 wheelDown = true
+                wheelLeftChord = true
+                wheelRightChord = false
                 let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.wheelDown else { return }
-                    self.wheelDown = false
+                    guard let self = self, self.claimWheelPress() else { return }
                     // A dictation that started some other way while he was still
                     // holding must not be ended by this timer.
                     guard !self.dictating else { return }
@@ -649,6 +678,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 && ((bare && (localCapture || dictating)) || commanded) {
                 wheelDown = true
                 wheelSpawn = commanded
+                wheelLeftChord = false
+                wheelRightChord = false
                 // Only a running dictation has a second meaning for a long press.
                 // Idle, the press is a tap however long it lasts — there is
                 // nothing left for a hold to mean.
@@ -672,6 +703,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // end the dictation the press just started.
                 guard dictating else {
                     wheelArmed = true
+                    // **Decided here, so the release has nothing left to claim.**
+                    // `wheelDown` means *swallowed and not yet judged*; leaving it
+                    // set would let the release fire this same toggle a second
+                    // time, which is `startLocalRecording` twice and a microphone
+                    // opened on top of itself.
+                    wheelDown = false
                     if wheelSpawn {
                         Log.info("✨ ⌘wheel pressed — dictating at a new Claude Code")
                         DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
@@ -682,13 +719,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     return nil
                 }
                 let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.wheelDown else { return }
                     // The state at the press picked this timer and the state at
                     // the fire has to still agree — a dictation that ended under
                     // his finger must not have its cancel land on the next one.
-                    guard self.dictating else { return }
-                    self.wheelDown = false
-                    self.wheelArmed = true
+                    guard let self = self, self.dictating, self.claimWheelPress() else { return }
                     Log.info("🗑️ wheel held while dictating — cancelling it")
                     DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
                 }

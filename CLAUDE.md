@@ -1433,6 +1433,20 @@ it; otherwise through the system's default input.
 - **A device is always set, even when it is the default one.** The input audio
   unit keeps whatever device it was last told about, so a recording made after the
   receiver was unplugged would otherwise still be aimed at a device that is gone.
+- **The tap's format comes from `inputFormat(forBus: 0)`, never
+  `outputFormat`** — and getting this wrong aborts the app rather than failing to
+  record. `outputFormat` is the node's own cached idea of what it hands
+  downstream and it does **not** refresh when
+  `kAudioOutputUnitProperty_CurrentDevice` is set under it; `inputFormat` is the
+  hardware talking. Measured with the receiver plugged in: after selecting it,
+  `outputFormat` still said **1ch 44100** (the built-in it had come from) while
+  `inputFormat` said **2ch 48000** (the receiver). `installTap` compares what it
+  is given against the hardware and throws
+  `Input HW format and tap format not matching` — an **NSException**, which Swift
+  cannot catch, so the process aborted the instant a dictation started
+  (`SIGABRT`, three crash reports, 2026-09-01 18:28). Only reachable when the
+  chosen device's format differs from the previous one's, which is why it arrived
+  with the receiver and not with the commit before it.
 - **Nothing about this is on screen.** The chip has no room for a device name and
   the choice is not a state Victor acts on; the log line
   (`mic: recording through Wireless Mic Rx — 48000Hz × 1ch`) is where it is
@@ -1533,7 +1547,12 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   the menu bar shows `⏳🤖`, which is the half that survives him typing, since
   macOS hides the pointer then and the chip goes with it.
   `AppDelegate.setEngineLoading` drives both from one call so they cannot
-  disagree. `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is now
+  disagree. **The row is the only place the word appears**: `startWhisper` used to
+  also flash `⏳ preparing` when nothing was bound, on the reading that the row is
+  only shown bound — which `statusLines` never did, since it answers
+  `engineLoading` above its `boundLabel == nil` check. So the two appeared
+  together the moment the right-held chord made it possible to load the model
+  unbound: *"2 mesaje de preparing, unul mare unul mai mic"*. The flash is gone. `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is now
   the only badge that ever claims it — ⏸️ shared the slot until pause was removed.
 - **A failure has to be loud**, because there is nothing else to transcribe with:
   no `mlx_whisper`, most likely, and then `⚠️ Whisper unavailable — …` sits on
@@ -1727,6 +1746,18 @@ still agree, so a dictation that ended under his finger cannot have its cancel
 land on the next one. It is the same verdict as the menu's `Cancel Dictation` and
 as pressing Cancel on the panel a moment later, without waiting for the model to
 transcribe something already known to be unwanted.
+
+**A press with a hold on it is *claimed*, not tested.** Every gesture whose press
+means one thing tapped and another held has two claimants racing for it: the
+timer, which runs on the main queue, and the release, which arrives on the tap
+thread. They both read `wheelDown` and then acted, so a button let go in the same
+millisecond the timer fired ran **both** halves — a disconnect *and* a spawn, or
+a dictation opened twice, which is `mic.start` called twice.
+`HotkeyTap.claimWheelPress()` takes it under `stateLock` and whoever loses finds
+it already taken; it sets `wheelArmed` **before** clearing `wheelDown`, because
+the release's own swallow test reads `wheelArmed || wheelDown` and a window in
+which neither is true is an orphan middle-up. `AppDelegate.startLocalRecording`
+refuses re-entry as the second net.
 
 **Nothing is replayed any more.** `replayMiddleClick` and its `wheelReplayUntil`
 window are gone: the wheel is now either the relay's (and always acts) or nobody

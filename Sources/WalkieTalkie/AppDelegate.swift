@@ -444,17 +444,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !whisper.ready, !engineLoading else { return }
 
         setEngineLoading(true)
-        // No duration: it ends when the model does, not when a timer says so.
-        // A banner that expires after twelve seconds on a load that took
-        // fourteen is worse than none — it says "ready" by disappearing.
-        // **Only when there is no chip to say it.** Bound, the state sits in the
-        // status row under the destination, where every other "what is happening
-        // now" lives; flashing it as well would put the same hourglass twice on
-        // one small panel. Unbound — the model brought up from the menu — there
-        // is no row, and this is the only thing that would say anything at all.
-        if !isBound {
-            overlay.flash("⏳ preparing", duration: 600)
-        }
+        // **No flash.** There was one here, gated on `!isBound` — "bound, the
+        // status row already says it; unbound there is no row". The second half
+        // was never true: `RelayWindow.statusLines` answers `engineLoading`
+        // **above** its `boundLabel == nil` check, so the row is up either way,
+        // and the flash put a second `⏳ preparing` under the first. Victor saw
+        // exactly that — *"2 mesaje de preparing, unul mare unul mai mic"* — the
+        // moment the right-held chord gave him a way to load the model with
+        // nothing bound.
+        //
+        // One place says it, and it is the row: it ends when the model does
+        // rather than when a timer says so, which is the property a flash had to
+        // fake with `duration: 600`.
         whisper.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -540,6 +541,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `spawn` is ⇧ + the wheel: this dictation carries its own destination, so
     /// it is allowed through the one gate a bare one is not — having a binding.
     private func startLocalRecording(spawn: Bool = false) {
+        // **Never twice.** Every caller is a gesture that means "start", and two
+        // of them arriving in one turn — a hold timer and a release racing for
+        // the same press, the menu row clicked on a session already opening —
+        // used to reach `mic.start` twice. `MicRecorder` refuses the second, so
+        // the damage is not the recording; it is everything around it, which
+        // would run again against a dictation already in flight.
+        guard !localRecording else { return }
         // Set before the gate below and before anything reads `hasDestination`:
         // it *is* the answer for a spawn, and `captureContext` a few lines down
         // asks the same question about the screenshot it is deciding to take.

@@ -67,7 +67,27 @@ final class MicRecorder {
         // the answer is the device's, and reading it first would describe the
         // one we are about to leave.
         let device = InputDevice.select(on: input)
-        let inFormat = input.outputFormat(forBus: 0)
+        // **`inputFormat`, not `outputFormat` — and this is what a tap is checked
+        // against.** They are two different questions and they disagree the
+        // moment a device is chosen by hand: `outputFormat(forBus: 0)` is the
+        // node's own cached idea of what it will hand downstream and it does
+        // *not* refresh when `kAudioOutputUnitProperty_CurrentDevice` is set
+        // under it, while `inputFormat(forBus: 0)` is the hardware talking.
+        //
+        // Measured on Victor's desk with the DJI receiver plugged in: after
+        // selecting it, `outputFormat` still said **1ch 44100** (the built-in
+        // microphone it had come from) and `inputFormat` said **2ch 48000** (the
+        // receiver). `installTap` compares the format it is given against the
+        // hardware and throws `Input HW format and tap format not matching` —
+        // an **NSException**, which Swift cannot catch, so the app did not fail
+        // to record: it aborted, every time, the instant a dictation started.
+        //
+        // The bug arrived with the receiver (it is only reachable when the
+        // chosen device's format differs from the last one's) and it is exactly
+        // the class of failure `InputDevice` was written to remove, so the fix
+        // belongs here rather than in a guard: ask the hardware what it speaks,
+        // and hand that same answer to the tap and to the converter.
+        let inFormat = input.inputFormat(forBus: 0)
         // A device that reports zero channels is one that is not really there —
         // a Bluetooth headset mid-handoff, or no input selected at all. Starting
         // the engine on it throws from deep inside CoreAudio.
@@ -90,6 +110,9 @@ final class MicRecorder {
         outputFormat = outFormat
         url = destination
 
+        // Belt and braces: a second tap on one bus is the other way this call
+        // throws, and `removeTap` on a bus with none is a no-op.
+        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
             self?.append(buffer)
         }
