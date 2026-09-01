@@ -112,7 +112,7 @@ final class HotkeyTap {
     ///
     /// The wheel no longer consults it — rebinding is the left-plus-wheel chord
     /// and it acts wherever it is made, letting `bindFrontmostTerminal` refuse.
-    /// It survives because the menu's **Bind This Window** row greys itself out
+    /// It survives because the menu's **Connect Window** row greys itself out
     /// with it, and this is where the answer is already kept up to date.
     var frontIsBindable: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return frontIsBindableFlag }
@@ -187,8 +187,9 @@ final class HotkeyTap {
 
     /// There is a destination, **whether or not the relay is forwarding to it** —
     /// the only state in which the unbind chord means anything. Deliberately not
-    /// `localCapture`: that one goes false on pause, and a paused relay is still
-    /// pointed at a terminal, so letting go of it is still a thing to do.
+    /// `localCapture`: the two say the same thing today, and the flag meaning
+    /// *there is a binding to let go of* must not be the one meaning *the wheel
+    /// may open the microphone*.
     /// Written from the main thread by `AppDelegate.syncLocalCapture`.
     var bound: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return boundFlag }
@@ -217,6 +218,13 @@ final class HotkeyTap {
     /// happened to overlap. Short on purpose: nobody holds the left button a
     /// third of a second by accident while reaching for the wheel.
     private static let chordHoldSeconds: CFTimeInterval = 0.3
+
+    /// How long the **wheel** then has to stay down for the same chord to also
+    /// open the microphone. One second, and it is a wait rather than a
+    /// confirmation — nothing it leads to is destructive, so it only has to be
+    /// long enough that a bind meant as a bind is not read as a dictation, and
+    /// short enough that the hand has not let go by then.
+    private static let chordDictateSeconds: TimeInterval = 1.0
 
     /// When the left button went down, or 0 while it is up. Written and read only
     /// from the tap callback, which is one thread.
@@ -398,7 +406,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //   wheel, dictating,
             //     held two seconds   → cancel it: throw the audio away
             //   left held, then
-            //     wheel              → rebind: point the relay at the window in front
+            //     wheel              → bind: point the relay at the window in front
+            //   left held, then
+            //     wheel held 1s      → …and start the dictation at it
             //
             // **Starting used to cost a one-second hold and now costs a tap.**
             // The hold was buying one thing: a bare middle click could still be
@@ -530,6 +540,35 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // already on main is a wait for a queue that is waiting for you.
                 // libdispatch does not deadlock on that, it traps.
                 DispatchQueue.global().async { [weak self] in _ = self?.onWheelBind?() }
+
+                // **…and keeping the wheel down starts the dictation.** The two
+                // halves of *point at that terminal and start talking to it* were
+                // two separate gestures made a second apart at the same window —
+                // the chord, then the wheel again — and the second one is the tax
+                // on the first. Now the chord is the whole thing: press and let go
+                // to bind, keep pressing to bind and start.
+                //
+                // **The bind still fires at the press**, above, so the flight
+                // plays the instant the signal arrives rather than a second later
+                // when the verdict on the hold is in. Nothing about it is
+                // conditional on how long he goes on holding, which is what makes
+                // the two readings of the same press one gesture instead of two.
+                //
+                // A second, not `cancelHoldSeconds`: this is not a confirmation
+                // — nothing here is destructive — it is a deliberate wait, and it
+                // has to be short enough that the hand does not let go first.
+                wheelDown = true
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self = self, self.wheelDown else { return }
+                    self.wheelDown = false
+                    // A dictation that started some other way while he was still
+                    // holding must not be ended by this timer.
+                    guard !self.dictating else { return }
+                    Log.info("🎙️ left held + wheel held — bound, now dictating")
+                    DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                }
+                wheelHold = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordDictateSeconds, execute: work)
                 return nil
             }
 

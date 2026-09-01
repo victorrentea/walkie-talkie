@@ -166,16 +166,6 @@
         <p class="note">A destination that does not exist yet outranks the bound one — for the length of that one sentence the chip must not name the terminal the words are <em>not</em> going to.</p>
         <code class="slug">spawn</code>
       </section>
-      <section class="card" id="paused">
-        <header>
-          <h3>Paused</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.30</span><span class="tag">76×45 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/paused.png" width="76" height="45" style="opacity:0.3" alt="Paused"></div>
-        <p class="when">He clicked the chip, or Pause in the menu — dictation goes to some other app now.</p>
-        <p class="note">⏸️ beside the microphone and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is one glyph — but the ⏸️ stays: fading alone says <em>something is off</em>, and this says what. Still a chip, never a panel.</p>
-        <code class="slug">paused</code>
-      </section>
       <section class="card" id="typing">
         <header>
           <h3>He started typing</h3>
@@ -324,12 +314,12 @@
       </section>
       <section class="card" id="flash-cancelled">
         <header>
-          <h3>Flash — dictation cancelled</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">195×69 pt</span></div>
+          <h3>Dictation cancelled</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">195×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-cancelled.png" width="195" height="69" style="opacity:0.8" alt="Flash — dictation cancelled"></div>
-        <p class="when">Three seconds after holding the wheel 2 s mid-sentence.</p>
-        <p class="note">🗑️ and nothing else. The audio is gone; there is nothing to offer him and nothing to undo.</p>
+        <div class="shot"><img src="states/flash-cancelled.png" width="195" height="69" style="opacity:0.8" alt="Dictation cancelled"></div>
+        <p class="when">The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.</p>
+        <p class="note">🗑️ and nothing else, and <strong>bare</strong>: no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row <code>Listening…</code> was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an <em>event</em> rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.</p>
         <code class="slug">flash-cancelled</code>
       </section>
       <section class="card" id="flash-model-failed">
@@ -374,6 +364,16 @@
         <p class="when">The seconds between the model answering and the words reaching the agent.</p>
         <p class="note">The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work.</p>
         <code class="slug">prompt</code>
+      </section>
+      <section class="card" id="prompt-autosend">
+        <header>
+          <h3>The prompt, under Autosend</h3>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×68 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/prompt-autosend.png" width="369" height="68" style="opacity:1" alt="The prompt, under Autosend"></div>
+        <p class="when">The same moment, with <strong>Autosend</strong> ticked in the menu — one second, then it is gone.</p>
+        <p class="note">No Send and no Cancel, and the row they sat on goes with them: two buttons up for one second are two buttons nobody can reach, an invitation to press something that will not be there when the hand arrives. What is left is the receipt — a dictation that vanished into a terminal with nothing shown is the one state where a delivery cannot be told from a drop.</p>
+        <code class="slug">prompt-autosend</code>
       </section>
       <section class="card" id="prompt-shots">
         <header>
@@ -428,9 +428,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -467,7 +467,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 9048943 · 01 Sep 2026 · built 01 Sep 2026, 01:40
+  Generated from <code>OverlayStates.swift</code> · repo at 6d7c0e9 · 01 Sep 2026 · built 01 Sep 2026, 18:17
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

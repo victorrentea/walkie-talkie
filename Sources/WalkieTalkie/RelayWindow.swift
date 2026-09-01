@@ -8,8 +8,8 @@ import AppKit
 ///
 /// Interaction is therefore minimal:
 ///   drag           move it
-///   single click   pause / resume forwarding
-///   hover          reveal the ✕ (ends the session) and go opaque
+///   single click   while a prompt is up, send it now; at rest, nothing
+///   hover          reveal the ✕ (ends the session) — panel only, never the chip
 ///
 /// Because it never takes keyboard focus, `canBecomeKey` stays false: the overlay
 /// must never steal the caret from whatever Victor is actually working in.
@@ -112,7 +112,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// over Victor's work. Split, each row is short and the eye picks the one it
     /// came for.
 
-    var onTogglePause: (() -> Void)?
     var onEndSession: (() -> Void)?
     /// How a displayed prompt ended: `true` — release it to the agent (the hold
     /// ran out, or he clicked the overlay away), `false` — he pressed Cancel and
@@ -128,7 +127,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// says `selecting` instead of the count for a couple of seconds.
     private var selectionAnnounced = false
     private var selectionAnnounceWork: DispatchWorkItem?
-    private var paused = false
     /// True while the local Whisper model is loading — see `titleText`.
     private var engineLoading = false
     private var listening = false
@@ -164,6 +162,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var countdownTimer: Timer?
     /// Transient status occupying the subtitle row; nil = no flash in progress.
     private var flashMessage: String?
+    /// Whether the flash on screen keeps the chip bare — see `flash(_:duration:bare:)`.
+    private var flashIsBare = false
     /// The terminal dictations are being typed into — `folder@branch` of the
     /// bound session, or nil while the relay is only writing the outbox.
     private var boundLabel: String?
@@ -430,7 +430,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         if editingPrompt {
             return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
         }
-        guard !paused, sentPrompt == nil else { return [] }
+        guard sentPrompt == nil else { return [] }
         if transcribing { return [(Self.waitGlyph, plain("transcribing…"), iconInk)] }
         if engineLoading { return [(Self.waitGlyph, plain("preparing"), iconInk)] }
         guard !listening else { return [] }
@@ -471,13 +471,11 @@ private let frontLabel = NSTextField(labelWithString: "")
         return a
     }
 
-    /// The recording row shows **only while dictating and not paused** — the one
-    /// window in which there is a recording to report and in which F3 and the
-    /// back button do anything. Advertising them while forwarding is off would be
-    /// a lie — and for the mouse it would be worse than a lie: paused is exactly
-    /// when the button is handed back to LinearMouse and types Return again.
+    /// The recording row shows **only while dictating** — the one window in which
+    /// there is a recording to report and in which F3 and the back button do
+    /// anything.
     private var recordText: String? {
-        guard listening, !paused else { return nil }
+        guard listening else { return nil }
         // The count went first and the hint went second, which leaves the row
         // with nothing of its own to say — the pulse and `Listening…`
         // directly above it carry the whole of "a dictation is open".
@@ -512,7 +510,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// `StatusItem.applyWhisperTitle` says it, beside the RAM the model is
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
-        guard listening, !paused else { return nil }
+        guard listening else { return nil }
         return "Listening…"
     }
 
@@ -557,11 +555,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// whether the click caught the button or the div wrapped around it. A count
     /// alone (`×3`) only tells him something he already believes.
     ///
-    /// Gated on `listening` like the recording row above it, and hidden while
-    /// paused for the same reason: with ⌘⇧ handed back to Chrome, a row saying
-    /// otherwise is a lie about which gestures are live.
+    /// Gated on `listening` like the recording row above it: outside a dictation
+    /// ⌘⇧ belongs to Chrome again, and a row saying otherwise is a lie about which
+    /// gestures are live.
     private var pickText: NSAttributedString? {
-        guard listening, !paused else { return nil }
+        guard listening else { return nil }
         // The invitation, but only with Chrome in front — see `chromeFront`.
         // Once he has picked something the row belongs to the picks and stays
         // whatever app he has switched to: they are travelling with this
@@ -845,13 +843,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// where he is already looking. The panel is now kept for the one thing he
     /// must actually read: the prompt about to be sent.
     ///
-    /// **Paused is anchored too.** It used to become a panel in the corner, on the
-    /// argument that pausing was the only route to a ✕ at rest. The menu bar item
-    /// now carries both Pause/Resume and Quit, so that argument is gone — and what
-    /// is left is the fact that pause is a state he stays in for minutes at a time
-    /// while dictating into other apps. A half-screen panel parked over his work
-    /// for all of it says nothing he doesn't already know. The chip says it where
-    /// he is looking: ⏸️ in front of the robot, at 0.30.
     /// **A flash is anchored too, since 2026-08-26.** It used to throw the panel
     /// into the top-left corner — `⏳ loading the local model`, `🎙️ ready`, every
     /// warning — which put the overlay's words in two different places depending
@@ -1142,7 +1133,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // one. With only Cancel on it that was survivable; Send beside it is
         // 252pt of control, which a short dictation's panel is narrower than —
         // and a button laid out past the left edge is a button he cannot press.
-        let buttonsWidth = sentPrompt == nil ? 0
+        let buttonsWidth = (sentPrompt == nil || !promptButtons) ? 0
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
@@ -1207,7 +1198,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         //
         // Only in the collapsed case: with a dictation in flight the title is the
         // destination, and that is true whatever the engine is doing.
-        let names = boundLabel != nil || spawnLabel != nil || paused || engineLoading || sentPrompt != nil || listening
+        let names = boundLabel != nil || spawnLabel != nil || engineLoading || sentPrompt != nil || listening
         if names, !(collapsed && engineLoading) {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
@@ -1375,18 +1366,25 @@ private let frontLabel = NSTextField(labelWithString: "")
         // Its own row rather than an overlay in a corner: the prompt can be many
         // lines long, and a button floating over the last one is a button that
         // sometimes sits on top of a word.
-        if sentPrompt != nil {
+        if sentPrompt != nil, promptButtons {
             cancelButton.isHidden = false
             sendButton.isHidden = false
             rows.append((cancelButton, cancelButton.frame.height))
         } else {
+            // **Autosend takes the row out, not just the labels.** A second of
+            // panel with two buttons on it is two buttons nobody can reach in a
+            // second — an invitation to press something that will be gone before
+            // the hand arrives. What is left is the receipt, which is the half of
+            // this panel that still means something when there is no decision to
+            // make.
             cancelButton.isHidden = true
             sendButton.isHidden = true
         }
 
         if let hint = hintText {
             hintLabel.stringValue = hint
-            hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor : .labelColor
+            hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor
+                                : (anchored && flashIsBare) ? .white : .labelColor
             hintLabel.frame.size = NSSize(width: innerWidth, height: 22)
             hintLabel.isHidden = false
             rows.append((hintLabel, 22))
@@ -1748,7 +1746,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         // words. The chip at rest is bare — a label on his work. A flash is a
         // sentence he has to read once, often over a busy screen, so it keeps
         // the blur and the shadow while riding the pointer like everything else.
-        let bare = anchored && flashMessage == nil
+        // **A bare flash is still bare.** `🗑️ dictation cancelled` is a word
+        // replacing a word — it lands in the row `Listening…` just left, beside
+        // the pointer — and wrapping a blurred, shadowed, rounded window around
+        // it for a second and a half made the chip *become a panel* and go back,
+        // which reads as something opening rather than as a state changing.
+        let bare = anchored && (flashMessage == nil || flashIsBare)
         root.blur?.isHidden = bare
         root.layer?.cornerRadius = bare ? 0 : 14
         if panel.hasShadow != !bare {
@@ -1758,7 +1761,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // Enforced here and not only on hover: leaving a panel state while the
         // cursor happens to be over the overlay would otherwise strand a ✕ on the
         // chip, since nothing re-enters `setHovering` on the way out.
-        closeButton.isHidden = bare || !hovering
+        // **Never on the chip, in any state.** It was `bare || !hovering`, so a
+        // flash — which rides the pointer like everything else anchored — put a ✕
+        // beside the cursor for the length of its message. There is nothing to
+        // press there: the thing moves with the hand reaching for it, which is the
+        // same argument that has always kept a ✕ off the idle chip. The panel is
+        // parked in a corner and holds still, so it keeps its own.
+        closeButton.isHidden = anchored || !hovering
 
         // White glyphs need something to separate them from a white page. A
         // *layer* shadow, since the string-attribute route doesn't render here.
@@ -1768,7 +1777,11 @@ private let frontLabel = NSTextField(labelWithString: "")
         shotGlyph.wantsLayer = true
         pickInfo.wantsLayer = true
         selectionLabel.wantsLayer = true
+        // The flash row joins them whenever it is drawn bare — with no blur under
+        // it, `labelColor` is the same invisible dark grey the selection row was.
+        hintLabel.wantsLayer = true
         if bare {
+            hintLabel.shadow = Self.halo()
             titleLabel.shadow = Self.halo()
             // Same reasoning as the title, and the recording row now spends its
             // whole life on the chip, over his editor rather than over the blur.
@@ -1790,6 +1803,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .white
         } else {
+            hintLabel.shadow = nil
             titleLabel.shadow = nil
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
@@ -1826,7 +1840,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // photograph. A dynamic `labelColor` resolves to black in light mode and
         // disappears on a dark terminal, which is exactly what it did.
         titleLabel.textColor = anchored ? .white
-                                        : ((paused || !listening) ? .secondaryLabelColor : .labelColor)
+                                        : (listening ? .labelColor : .secondaryLabelColor)
         refreshOpacity()
     }
 
@@ -1870,27 +1884,20 @@ private let frontLabel = NSTextField(labelWithString: "")
         // takes a pending spawn back when it happens. So the name arriving with
         // the dictation is early enough to act on, and a chip that carried it the
         // rest of the time was buying nothing with the space.
-        if collapsed { return paused ? "⏸️" : "" }
-        // **Loading outranks every other state, including paused**, and it is the
-        // only state here that is about the *near future* rather than the present.
+        if collapsed { return "" }
+        // **Loading outranks every other state**, and it is the only state here
+        // that is about the *near future* rather than the present.
         // The model takes ten seconds to come up and a dictation started inside
         // that window is silently handed to the other engine — so the one thing
         // worth saying while it loads is "not yet", and saying it beside the
         // cursor is saying it where he is already looking. It disappears on its
-        // own, which is why it can afford to shout over ⏸️ for those seconds.
+        // own, which is why it can afford to shout for those seconds.
         // **No ⏳ on the name.** The state has a row of its own now, directly
         // under this line, and an hourglass in front of the folder said the same
         // thing a second time — while also making the one line that never changes
         // during a session change. What the chip *is* stays put; what it is
         // *doing* is the row below.
         if engineLoading { return identity }
-        // Paused prefixes the robot rather than replacing it: the chip's job is
-        // still to say *which agent this is*, and pause is a modifier on that, not
-        // a different thing. Reading ⏸️ ahead of 🤖 is also the same order as the
-        // menu bar item, which is the other place the state is shown. No ": Paused"
-        // word any more — the glyph plus the fade to 0.30 is the whole message, and
-        // the chip rides beside his cursor now, where every character costs room.
-        if paused { return "⏸️ \(identity)" }
         // No state word at all. "Stand by" is the one thing he can infer from the
         // fact that nothing is happening; what he cannot infer, and what this chip
         // exists to tell him, is which agent is sitting there waiting.
@@ -1934,8 +1941,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// dictation is on its way to that terminal makes the name matter again: the
     /// microphone open, the model chewing on what it heard, the review panel with
     /// the words in it, or a spawn that has replaced the destination for one
-    /// sentence. Everything else — bound and waiting, paused, the engine coming
-    /// up — is the chip at rest.
+    /// sentence. Everything else — bound and waiting, the engine coming up — is
+    /// the chip at rest.
     ///
     /// Unbound is deliberately **not** collapsed: there is no icon there to stand
     /// in for the text (`titleGlyph` is hidden), so hiding the line would leave an
@@ -1972,8 +1979,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// that the icon it carries is hard to make out, and not so faint that the
     /// name, on the one occasion it appears, is hard to read.
     ///
-    /// Paused keeps its 0.30: there, fading is the message. The relay is off, and
-    /// the overlay looking switched off is the point.
     /// **Unbound and idle, the overlay is not on screen at all.**
     ///
     /// The chip's one job at rest is to say *that there is somewhere for the
@@ -1995,8 +2000,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// to say — the dictation in progress, a held prompt, a flash, a picked
     /// element, a frozen selection — is a row, so a layout that produced only
     /// the title row is by construction an overlay with nothing to say. The
-    /// three states that change the *title* instead of adding a row are the ones
-    /// that have to be named here: bound, paused, and the model coming up. A row
+    /// two states that change the *title* instead of adding a row are the ones
+    /// that have to be named here: bound, and the model coming up. A row
     /// added later keeps the chip on screen without anyone remembering to come
     /// back and edit this.
     private func refreshPresence(rowCount: Int) {
@@ -2005,7 +2010,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the title, i.e. nothing. The title is now absent when unbound, so the
         // single row left is the invitation to bind, and it is the whole reason
         // the chip is there.
-        let wanted = rowCount > 0 || paused || engineLoading
+        let wanted = rowCount > 0 || engineLoading
         guard panel.isVisible != wanted else { return }
         guard wanted else { return panel.orderOut(nil) }
         // It may have been away for hours, so it lands where the pointer is now
@@ -2026,7 +2031,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         // speaking, not pointing, so the pointer's absence says nothing about
         // whether this is still worth showing.
         let target: CGFloat = (anchored && typing && !listening) ? 0.0
-                            : paused ? 0.30
                             : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
@@ -2125,7 +2129,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     func setChromeFront(_ value: Bool) {
         guard chromeFront != value else { return }
         chromeFront = value
-        guard listening, !paused, pickCount == 0 else { return }
+        guard listening, pickCount == 0 else { return }
         layoutContent()
     }
 
@@ -2175,13 +2179,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             }
         }
         layoutContent()
-    }
-
-    func setPaused(_ value: Bool) {
-        paused = value
-        refreshTitle()
-        layoutContent()          // pausing mid-dictation retracts the recording row
-        reposition()             // …and parks the panel back in its corner
     }
 
     /// Take a banner down early — for one that was a promise ("transcribing…")
@@ -2250,7 +2247,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     @discardableResult
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
                         selection: String? = nil, front: String? = nil,
-                        words: String? = nil, warning: String? = nil) -> Bool {
+                        words: String? = nil, warning: String? = nil,
+                        buttons: Bool = true) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // **A selection with no words is still worth holding.** It stopped being
@@ -2290,6 +2288,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             promptExtras = ""
         }
         promptHold = hold
+        promptButtons = buttons
         promptShots = shots
         promptSelection = quoted
         promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -2344,6 +2343,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// countdown rather than resuming it: what is on screen after an edit is not
     /// the text the clock was started for.
     private var promptHold: TimeInterval = 0
+    /// Whether this prompt has a Send and a Cancel on it — false under Autosend,
+    /// where the panel is a receipt rather than a decision. See the row's layout.
+    private var promptButtons = true
     private var editingPrompt = false
 
     /// Click on the words → they become a text field, and the countdown stops
@@ -2504,8 +2506,14 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     /// Transient status in the subtitle row — which it also *summons*, since at
     /// rest that row is not on screen at all.
-    func flash(_ message: String, duration: TimeInterval = 2.0) {
+    ///
+    /// `bare` keeps the chip a chip: the message replaces a row instead of
+    /// summoning a window around it. For a notice that answers a gesture he just
+    /// made — the cancelled dictation — that is the whole difference between *a
+    /// word changed* and *something opened and closed beside my hand*.
+    func flash(_ message: String, duration: TimeInterval = 2.0, bare: Bool = false) {
         flashMessage = message
+        flashIsBare = bare
         // A previous flash may still be halfway through its fade; whatever it
         // faded has to be opaque again before this one is drawn into it.
         hintLabel.alphaValue = 1
@@ -2546,6 +2554,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func endFlash(_ message: String) {
         guard flashMessage == message else { return }
         flashMessage = nil
+        flashIsBare = false
         // Reset before the relayout, not after: the same two views carry the
         // next flash, and one that inherited a zero alpha would never appear.
         hintLabel.alphaValue = 1
@@ -2557,7 +2566,9 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     /// Long enough to read as a dissolve rather than as a blink, short enough
     /// that a message he has finished reading is not still going.
-    private static let flashFade: TimeInterval = 0.45
+    /// Half a second, on Victor's ask for the cancelled-dictation notice — near
+    /// enough to the 0.45 it was that the other messages read the same.
+    private static let flashFade: TimeInterval = 0.5
 
     /// Internal for the same reason `beginPromptEdit` is: the ✕ is a state, and
     /// a state that cannot be reached from `OverlayStates` cannot be documented.
@@ -2607,10 +2618,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// go" — it releases the message immediately instead of waiting out the
     /// countdown, and gets the wide panel off his work. The one place where a
     /// click means *no* is the Cancel button, which swallows its own clicks.
-    /// Toggling pause here would be the mistake he would never notice.
-    /// A click on the panel body. `onWords` is true when it landed on the
-    /// transcript itself, which is the one part of the panel that means something
-    /// other than "yes, send it".
+    ///
+    /// **At rest a click does nothing at all**, and that is the whole of it since
+    /// pause was taken out: the chip is a label on his work, not a switch, and it
+    /// rides the pointer — a control that moves away as you reach for it was never
+    /// a control. `onWords` is true when the click landed on the transcript
+    /// itself, which is the one part of the panel that means something other than
+    /// "yes, send it".
     fileprivate func handleClick(onWords: Bool = false) {
         if sentPrompt != nil {
             // Inside the field while editing: the field handles its own clicks,
@@ -2625,7 +2639,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             resolvePrompt(send: true)
             return
         }
-        onTogglePause?()
     }
 
     /// ⏎ while a prompt is up. It is what the Send button has always said it
@@ -2755,7 +2768,7 @@ final class CloseButton: NSView {
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent)  { hot = false; needsDisplay = true }
 
-    // Swallow the whole click so it never reaches RelayView's pause handling.
+    // Swallow the whole click so it never reaches RelayView's own click handling.
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }
 }

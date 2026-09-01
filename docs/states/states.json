@@ -45,18 +45,6 @@
     "width" : 167
   },
   {
-    "alpha" : 0.29999999999999999,
-    "group" : "At rest",
-    "height" : 45,
-    "image" : "paused.png",
-    "note" : "⏸️ beside the microphone and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is one glyph — but the ⏸️ stays: fading alone says *something is off*, and this says what. Still a chip, never a panel.",
-    "shape" : "chip",
-    "slug" : "paused",
-    "title" : "Paused",
-    "when" : "He clicked the chip, or Pause in the menu — dictation goes to some other app now.",
-    "width" : 76
-  },
-  {
     "alpha" : 0,
     "group" : "At rest",
     "note" : "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
@@ -226,11 +214,11 @@
     "group" : "Flashes",
     "height" : 69,
     "image" : "flash-cancelled.png",
-    "note" : "🗑️ and nothing else. The audio is gone; there is nothing to offer him and nothing to undo.",
-    "shape" : "flash",
+    "note" : "🗑️ and nothing else, and **bare**: no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
+    "shape" : "chip",
     "slug" : "flash-cancelled",
-    "title" : "Flash — dictation cancelled",
-    "when" : "Three seconds after holding the wheel 2 s mid-sentence.",
+    "title" : "Dictation cancelled",
+    "when" : "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
     "width" : 195
   },
   {
@@ -279,6 +267,18 @@
     "slug" : "prompt",
     "title" : "The held prompt",
     "when" : "The seconds between the model answering and the words reaching the agent.",
+    "width" : 369
+  },
+  {
+    "alpha" : 1,
+    "group" : "The held prompt",
+    "height" : 68,
+    "image" : "prompt-autosend.png",
+    "note" : "No Send and no Cancel, and the row they sat on goes with them: two buttons up for one second are two buttons nobody can reach, an invitation to press something that will not be there when the hand arrives. What is left is the receipt — a dictation that vanished into a terminal with nothing shown is the one state where a delivery cannot be told from a drop.",
+    "shape" : "panel",
+    "slug" : "prompt-autosend",
+    "title" : "The prompt, under Autosend",
+    "when" : "The same moment, with **Autosend** ticked in the menu — one second, then it is gone.",
     "width" : 369
   },
   {
@@ -351,7 +351,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,

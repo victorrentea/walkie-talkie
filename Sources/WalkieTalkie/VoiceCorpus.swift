@@ -28,13 +28,13 @@ import Foundation
 /// Day folders because he dictates 40–90 times a day (measured over the fortnight
 /// this was written in), and a flat folder stops being listable within a week.
 ///
-/// ## Everything the microphone hears, paused included
+/// ## Everything the microphone hears, whatever the relay then does with it
 ///
-/// Pause stops the relay *acting* on a dictation — it is documented as touching
-/// exactly four places and this is not one of them. A paused dictation is still
-/// Victor's voice with the model's reading of it, which is the only thing this
-/// collects, and the corpus is a file on his own disk rather than something sent
-/// anywhere.
+/// Filing a recording is not *acting* on a dictation, so nothing that stops a
+/// delivery stops this: a dictation refused at a shell prompt is still Victor's
+/// voice with the model's reading of it, which is the only thing this collects,
+/// and the corpus is a file on his own disk rather than something sent anywhere.
+/// It is what kept this running through pause for as long as pause existed.
 final class VoiceCorpus {
 
     /// Beside the outbox, and moved by `--home` with it.

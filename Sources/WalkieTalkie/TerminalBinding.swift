@@ -477,7 +477,11 @@ final class TerminalBinding {
     /// The **window**, not the tab: a tab has no geometry of its own, and the
     /// window is what Victor can actually recognise on screen — which is the
     /// whole job of the rectangle drawn from it.
-    private static func terminalWindowFrame(tty: String) -> CGRect? {
+    ///
+    /// Not private since 2026-09-01: a spawned session flies the same rectangle
+    /// without going through a bind, and it knows its window only by the tty
+    /// `do script` handed back.
+    static func terminalWindowFrame(tty: String) -> CGRect? {
         let script = """
         tell application "Terminal"
             repeat with w in windows

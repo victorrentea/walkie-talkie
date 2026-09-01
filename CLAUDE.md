@@ -25,14 +25,13 @@ Current strings live in `RelayWindow.swift`:
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
   (`⚠ no relay session took it`) and the toolbar title in `relay.js`
-- `titleText` — `🤖 <label>` / `⏸️ 🤖 <label>`
+- `titleText` — `🤖 <label>`
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Bind This Window — or hold left, click the wheel`,
-  `Disconnect — or hold right, click the wheel`, the three dictation rows,
-  `New Claude Code in ~/workspace — ⌘ + click the wheel`, `One More Screenshot`,
-  the `Pick an Element in Chrome` legend, `Pause` / `Resume`,
+  `Connect Window — hold ⬅️ + 🛞`, `Disconnect — hold ➡️ + 🛞`, the three
+  dictation rows, `New Claude Code in ~/workspace — ⌘ + 🛞`,
+  `One More Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
   `Quit`, and the `Local Whisper` readout
 
 The first two are **not on screen at the moment**: `showsGestureHints` is off, so
@@ -464,7 +463,7 @@ The flashes carry **no pin at all** — `→ petclinic@main · ttys004` at bind,
 `unbound — nothing is relayed now` at release. They are text rows, so the only pin
 available to them is the pushpin emoji the drawn one exists to avoid.
 
-### ⌘⌃B again on the same target lets go of it
+### ⌘⌃B again on the same target lets go of it — the chord does not
 
 The key had no off. Starting the relay is a keystroke and stopping it was a trip
 to the menu bar — and the menu bar is a moving target precisely when the reason
@@ -476,6 +475,9 @@ quick presses bind it and then let it go.
 - **Compared by handle, not by app.** Two tabs of Terminal are two ttys, so
   pressing in a different tab re-points rather than stops. What is bound is a
   session, not an application.
+- **The left-plus-wheel chord is exempt**, since 2026-09-01 — see *The wheel is
+  the relay's* for why. `bindFrontmostTerminal(toggle:)` carries the difference;
+  ⌘⌃B and `POST /bind` keep the toggle, the chord does not.
 - **It unbinds; it does not quit** — since 2026-08-28. It quit until then, and
   the argument was that ⌘⌃B is what *starts* the relay, so an off switch leaving
   the process running would not be the opposite of the gesture that made one.
@@ -549,7 +551,7 @@ nothing, and a key that sometimes falls through to macOS's "look up in
 dictionary" would be worse than one that never does. ⌘⌃⌥D is still Victor
 Addons' dark-mode toggle, told apart by ⌥ alone.
 
-Both ride the menu as real key equivalents (`StatusItem`): ⌘⌃B on **Bind This
+Both ride the menu as real key equivalents (`StatusItem`): ⌘⌃B on **Connect
 Window**, ⌘⌃D on **Start Dictation** *and* **End Dictation** — only one of the
 two rows is ever enabled, so the shared key reads as the toggle it is.
 
@@ -640,7 +642,7 @@ moves to the target and straight back.
 **With no terminal bound, the app does nothing at all.** No dictation can be
 started, no picture is taken, no mouse button is borrowed, no line is written.
 Since 2026-08-27, `AppDelegate.isBound` (`terminal.target != nil`) gates every
-path that pause gates, plus `syncLocalCapture`, which is what lets the wheel open
+path that could deliver, plus `syncLocalCapture`, which is what lets the wheel open
 the microphone.
 
 **One gesture is outside it, since 2026-08-30**: ⌘ + the wheel starts a dictation
@@ -652,14 +654,17 @@ question, just not yet. `syncLocalCapture` is deliberately **not** widened: the
 bare wheel's claim on the microphone still needs a binding, and the shifted press
 bypasses that flag in the tap rather than pretending to set it.
 
-| gate | unbound | paused |
-|---|---|---|
-| `captureContext` — flash, selection probe, screen capture | off | off |
-| `plusOneShot` — F3 / mouse 4 | off | off |
-| `send` — the outbox line and the delivery | off | off |
-| `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off | off |
-| `syncLocalCapture` — the wheel's claim on the microphone | **off** | off |
-| `corpus.captureLocal` | **on** | on |
+| gate | unbound |
+|---|---|
+| `captureContext` — flash, selection probe, screen capture | off |
+| `plusOneShot` — F3 / mouse 4 | off |
+| `send` — the outbox line and the delivery | off |
+| `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off |
+| `syncLocalCapture` — the wheel's claim on the microphone | off |
+| `corpus.captureLocal` | **on** |
+
+**It is the only such gate now.** Pause used to bail out of the same four places
+and is gone (*Pause is gone*, below).
 
 Why it had to change. The relay used to be started per session by `/relay` and
 live only as long as Victor was dictating at an agent, so "running" and "aimed at
@@ -668,7 +673,8 @@ is a **login item** and sits there all day — so every sentence he spoke into a
 browser, a chat or a commit message was getting a screenshot taken of it and was
 losing him mouse 4 and ⌘⇧-click, with nowhere for the words to go. Pause existed
 to stop exactly that, and he was having to press it against an app that had no
-destination anyway.
+destination anyway — which is why, once this rule was in, pause had nothing left
+to do and went (*Pause is gone*).
 
 **The outbox goes quiet too, and that is a deliberate loss.** The `/relay` skill's
 original mode was an unbound relay appending to a queue with an agent watching
@@ -678,10 +684,9 @@ usually not there is not a feature, it is a log of his private dictation. A
 `/relay` session gets its destination the way everything else does now, by
 binding.
 
-**The corpus is the one thing that keeps running**, on the argument it was always
-kept running through pause: it is a file on Victor's own disk, the samples are
-what the local model is being judged on, and one dropped because he happened to
-be dictating into a browser cannot be taken again.
+**The corpus is the one thing that keeps running**: it is a file on Victor's own
+disk, the samples are what the local model is being judged on, and one dropped
+because he happened to be dictating into a browser cannot be taken again.
 
 **`showBound` is where the switch is thrown**, since it is the one place every
 route into and out of a binding passes through — ⌘⌃B, `POST /unbind`, and a
@@ -696,22 +701,29 @@ defined by not needing a binding. That is the right reading of a route whose
 whole claim is that it enters exactly where a real transcript does — bind something first, which is what the
 path under test needs anyway.
 
-## What pause is (and is not)
+## Pause is gone
 
-Pause **hands the machine back**. Victor pauses so the wheel goes to the app
-underneath, the back button types Return again, and nothing he says is recorded
-or relayed — which is what he wants while dictating into a browser, a chat or a
-commit message with some other tool.
+**Since 2026-09-01 there is no pause.** Not the menu row, not the chip click that
+toggled it, not the ⏸️ badge on the menu bar item or in front of the chip's
+folder, not the 0.30 opacity state, and not the `paused` flag any of them were
+about. Victor's call, in one line: *"nu mai vreau să am conceptul de pauză"*.
 
-Concretely, `paused` bails out of four places and nowhere else — the same four
-`isBound` gates (see *Unbound is inert*): `captureContext`
-(no flash, no selection probe, no screen capture), `plusOneShot` (F3 does
-nothing), `send` (nothing reaches the outbox), and `syncBorrowedGestures` — which
-hands mouse 4 back to LinearMouse *and* ⌘⇧-click back to Chrome. That last one is
-load-bearing rather than tidy: dictating into a browser is the reason he paused,
-and an inspector still eating his ⌘⇧-clicks would be the one thing pause was
-supposed to stop. `recordText` also hides the recording row while paused —
-advertising F3 in a state where it does nothing would be a lie.
+It was written when the relay was aimed at nothing in particular and running all
+day, and *Unbound is inert* took its job away — an unbound relay already touches
+no dictation, borrows no button and writes no line, which is everything pause
+did. What was left was a second switch for a state the app reaches on its own,
+and two ways to say "stop relaying" is one question the menu should not have been
+asking. Disconnect is the answer when there is a binding to let go of; nothing is
+the answer when there is not.
+
+**Do not reintroduce it.** If a "hand the mouse back for a minute" gesture is ever
+wanted again, it is Disconnect — which already exists, is reachable from the
+right-held chord and the menu, and says *which* terminal it let go of.
+
+A click on the chip is therefore no longer a control: at rest it does nothing.
+That was the only thing pause could be toggled with beside the menu, and a
+control that rides the pointer and moves away as you reach for it was never one —
+the same argument that has always kept the ✕ off the chip.
 
 ## Title states
 
@@ -728,16 +740,9 @@ from the working directory (inherited from the session, since `/relay` launches
 | idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound* |
 | idle, bound | the destination app's icon + `petclinic@main` — no state word: "standing by" is what he can already infer from nothing happening |
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
-| paused (chip click, or the menu bar) | `⏸️ 🤖 ai@master` — the ⏸️ goes **in front of** the robot, never instead of it |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| bound **and** paused | `⏸️` still prefixes the identity |
-
-Paused prefixes rather than replaces, and carries no state word. The chip's job
-is still to say *which agent this is*; pause is a modifier on that, not a
-different thing — and it is the same order as the menu bar item (`⏸️🤖`), which
-is the other place the state shows. The old form was `⏹️ ai@master: Paused`, from
-when paused was a panel in the corner with room for a word.
+| the dictation was cancelled | `🗑️ dictation cancelled` in the row `Listening…` was in, **bare** — 1.5 s, then half a second of dissolve back to the chip at rest |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -749,13 +754,10 @@ The liveness those animations provided is still load-bearing, and is now the
 pulsing 🔴: a frozen recording row is indistinguishable from a hung app, and the
 entire point of the state is reassurance that speech is being captured.
 
-Paused wears ⏹️ because it is the one state that has to be readable from across a
-room. Opacity separates it further (1.00 vs 0.30).
-
 ## The recording rows
 
-While dictating and not paused, three rows sit directly under the title, one
-glyph column and one text column:
+While dictating, three rows sit directly under the title, one glyph column and
+one text column:
 
 ```
 🤖 ai@master
@@ -984,7 +986,7 @@ costs a stutter — the reconnect replays `active:true` and pauses again.
 so rather than relying on the net.
 
 **Gated on `live`, not on `listening`.** A dictation nobody is relaying (unbound,
-or forwarding paused) is Victor talking into some other app, and silencing his
+or unbound) is Victor talking into some other app, and silencing his
 music for that would be the relay reaching outside its own session.
 
 **The extension needs `tabs`, `scripting`, `storage` and `<all_urls>`** — new
@@ -1008,9 +1010,9 @@ attach a picture put the one thing he does mid-sentence back on the keyboard.
 
 Three rules keep the theft honest:
 
-- **Gated on `listening && !paused`**, pushed to the tap by
+- **Gated on `listening`**, pushed to the tap by
   `AppDelegate.syncBorrowedGestures()` from both edges that can change the answer
-  (a dictation starting/stopping, pause toggling). At rest and while paused the button
+  (a dictation starting, a dictation ending). At rest the button
   is untouched and still types Return. That one method sets **both** borrowed
   gestures — this button and ⌘⇧-click in Chrome — from a single expression, so the
   recording row can never advertise one of them in a state where it is dead.
@@ -1454,12 +1456,12 @@ be collected retroactively.
   correction is not one either: the relay once had access to a "what the user
   edited afterwards" column and it turned out to record where the text had been
   pasted, not what the recogniser got wrong.
-- **Everything the microphone hears, paused included.** Pause is documented as
-  bailing out of exactly four places and this is deliberately not a fifth: it
-  stops the relay *acting* on a dictation, and filing the recording is not acting
-  on it — nothing is sent anywhere, the file is on his own disk either way.
-  `captureLocal` is therefore called from `stopLocalRecording` beside `send`,
-  never through it.
+- **Everything the microphone hears, whatever the relay then does with it.**
+  Filing the recording is not *acting* on a dictation — nothing is sent anywhere,
+  the file is on his own disk either way — so `captureLocal` is called from
+  `stopLocalRecording` beside `send`, never through it. That is what kept it
+  running through pause while pause existed, and it is what keeps it running for
+  a delivery that is refused at a shell prompt.
 - **The bytes are read on the caller's thread**, before the queue hop: the staged
   WAV is deleted as soon as `captureLocal` returns, and a copy queued for later
   would race it.
@@ -1509,8 +1511,8 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   the menu bar shows `⏳🤖`, which is the half that survives him typing, since
   macOS hides the pointer then and the chip goes with it.
   `AppDelegate.setEngineLoading` drives both from one call so they cannot
-  disagree, and `StatusItem.refreshGlyph` arbitrates the glyph because pause and
-  loading are set from different places and both own it.
+  disagree. `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is now
+  the only badge that ever claims it — ⏸️ shared the slot until pause was removed.
 - **A failure has to be loud**, because there is nothing else to transcribe with:
   no `mlx_whisper`, most likely, and then `⚠️ Whisper unavailable — …` sits on
   screen for twelve seconds and the log says why.
@@ -1588,9 +1590,34 @@ held. The third is a chord with the left button.**
 | dictating | **click** | end it — transcribe and send |
 | dictating | hold **2s** | **cancel** it — throw the audio away |
 | **any state, bound or not** | **⌘ + click** | start a dictation **at a session that does not exist yet** — see *⌘ + the wheel* |
-| anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃B, toggle included |
+| anywhere, any state | **left button held ≥0.3s, then click the wheel** | **bind** — same call as ⌘⌃B, **without the toggle** |
+| anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
 | bound, any state | **right button held ≥0.3s, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
 | nothing bound, no chord | click | passed straight through |
+
+**The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
+lets go of it (below) and the chord used to do the same, because both go through
+`bindFrontmostTerminal` — so the gesture Victor makes *while pointing at the
+terminal he means* answered a second press by unbinding it. The ordinary reason
+to make it twice is not being sure the first one landed, and the answer he wants
+there is the flight again. `bindFrontmostTerminal(toggle:)` is the switch; only
+the chord passes `false`. His argument, and it is the whole of it: letting go
+already has two routes that mean nothing else — the right-held chord, and the
+menu's Disconnect. A toggle earns its keep on a key with no off switch; it is a
+trap on a gesture that has two.
+
+**Keeping the wheel down turns the same chord into a dictation**, since the same
+day. Press and let go binds; hold the wheel a further second
+(`chordDictateSeconds`) and the microphone opens at the terminal that was just
+bound. *Point at that terminal and start talking to it* was two gestures made a
+second apart at the same window, and the second one was pure tax on the first.
+
+The **bind still fires at the press**, so the flight plays the instant the signal
+arrives rather than a second later once the verdict on the hold is in — nothing
+about it is conditional on how long he goes on holding, which is what makes the
+two readings of one press one gesture instead of two. A second rather than
+`cancelHoldSeconds`: this is a deliberate wait, not a confirmation — nothing it
+leads to is destructive.
 
 **Rebinding moved off the wheel and onto the chord on 2026-08-29**, and the two
 halves of that are one decision. Starting a dictation used to cost a **1s hold**,
@@ -1637,10 +1664,11 @@ would be a poor one if it first needed the sentence to be over. A press it takes
 mid-dictation cancels the pending 2s hold timer, so the cancel cannot land on
 whatever comes next.
 
-**Gated on `HotkeyTap.bound`, which is deliberately not `localCapture`**: that
-flag goes false on pause, and a paused relay is still pointed at a terminal, so
-letting go of it is still a thing to do. With nothing bound the branch is skipped
-entirely and the click stays available to whatever is underneath.
+**Gated on `HotkeyTap.bound`, which is deliberately not `localCapture`**: the two
+say the same thing today, and the flag that means *there is a binding to let go
+of* must not be the one that means *the wheel may open the microphone*. With
+nothing bound the branch is skipped entirely and the click stays available to
+whatever is underneath.
 
 **The right button is watched and never taken**, on exactly the terms the left
 one is — a swallowed right click is a context menu that never opened.
@@ -1671,7 +1699,7 @@ guards against twice already, written a third time.
 `HotkeyTap.frontIsBindable` survives the change but the wheel no longer consults
 it: the chord acts wherever it is made and lets `bindFrontmostTerminal` refuse.
 It is still pushed from `AppDelegate` on every app activation, because the menu's
-**Bind This Window** row greys itself out with it.
+**Connect Window** row greys itself out with it.
 
 **A toggle, not a push-to-talk.** A button held down for the length of the
 sentence is right for a sentence; a dictation aimed at an agent runs to a minute
@@ -1765,6 +1793,23 @@ written first and is what surfaced the trust prompt: spawned into
 instead of working, because he has only ever started it from the parent. An
 answer that is right four times in five is worse here than a fixed one, since the
 fifth is only discovered after the sentence has been spoken.
+
+**The window flies into the chip, 2.5s after it opens** — the same `BindFlight`
+every bind plays (`AppDelegate.flySpawnedWindow`). A spawn is the one destination
+Victor never pointed at: the window appears on its own, somewhere he was not
+looking, while his hand is still on the mouse. Every other way a session becomes
+a destination answers itself with a picture of that window travelling to the
+chip; this one answered with nothing, and the sentence went somewhere he had to
+go and find.
+
+**It flies without binding**, which is not an oversight — see the paragraph
+below. The flight is played for the reason the flight exists (*which window did
+that go to?*), not for the claim that comes with it. 2.5s because `do script`
+returns as soon as Terminal has a window: the shell is still starting, `claude`
+has not drawn a frame, and a picture taken then is a picture of an empty prompt.
+The frame comes from `TerminalBinding.terminalWindowFrame(tty:)` — not private
+since this, because a spawn knows its window only by the tty `do script` handed
+back.
 
 **The binding does not move.** The new window is where *this* sentence went, not
 where the relay now lives. Victor asked for that explicitly and the reason holds
@@ -1902,17 +1947,15 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `New Claude Code in ~/workspace — ⌘ + click the wheel`,
-`Cancel Dictation — hold the wheel 2s`, `One More Screenshot — F3, or the back
+that performs it — `New Claude Code in ~/workspace — ⌘ + 🛞`,
+`Cancel Dictation — hold 🛞 2s`, `One More Screenshot — F3, or the back
 button while dictating`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
 în care sunt acum"* asks for.
 
-Two rows exist because of this rule rather than despite it. **Pause came back**,
-having been removed when Disconnect turned out to be the row he reached for: it
-is an action, it has a gesture (click the chip), and the chip no longer says so.
-And **`Pick an Element in Chrome — ⌘⇧ + click`** is a legend, permanently
+One row exists because of this rule rather than despite it:
+**`Pick an Element in Chrome — ⌘⇧ + 🖱️`** is a legend, permanently
 disabled — the gesture happens inside a page this app cannot reach from a menu,
 but the relay takes the input over, so with the chip silent there is nowhere else
 it could be written. A disabled row is the honest rendering of *this is something
@@ -1972,13 +2015,17 @@ you reach for it means nothing. (The menu bar item is the ✕ that stays put.)
 
 **Panel (the message, and only the message)** — what the overlay has always been,
 top-left of the current screen, with the blur, the ✕ on hover, and full opacity.
-Entered by a prompt and by a flash. **Nothing else.**
+Entered by a prompt. **Nothing else** — a flash is a chip that borrows the blur
+without leaving the pointer, and since 2026-09-01 the cancelled-dictation one does
+not borrow it at all.
 
-**Paused is not a panel state.** It was, on the argument that pausing was the
-only route to a ✕ at rest. The menu bar now carries Pause/Resume *and* Quit, so
-that argument is gone — and what was left was a half-screen panel parked over his
-work for the whole time he dictates into other apps, which is minutes, saying
-something he entered on purpose. It stays a chip: `⏸️ 🤖 folder@branch`, at 0.30.
+**There is never a ✕ beside the pointer, in any state.** The rule was
+`bare || !hovering`, which meant a flash — anchored, riding the cursor like
+everything else — put one there for the length of its message. There is nothing
+to press: the thing moves with the hand reaching for it, which is the argument
+that has always kept a ✕ off the idle chip. It is now `anchored || !hovering`, so
+only the panel parked in a corner has one. Victor, reporting it: *"n-am cum să
+apăs pe el din moment ce acel tooltip se plimbă cu mouse-ul"*.
 
 **Dictating is not a panel state.** It was, and that put a half-screen window
 over his work for the entire time he talked, to report a state he had just
@@ -2032,7 +2079,7 @@ a row: the dictation in progress, a held prompt, a flash, a ⌘-picked element, 
 frozen selection. So a layout that produced *only* the title row is by
 construction an overlay with nothing to say, and `layoutContent` hands its row
 count straight to `refreshPresence`. The three states that change the *title*
-instead of adding a row have to be named there explicitly: bound, paused, and
+instead of adding a row have to be named there explicitly: bound, and
 the model coming up. A row added later keeps the chip on screen without anyone
 remembering to come back and edit that condition.
 
@@ -2044,12 +2091,14 @@ parked.
 
 `StatusItem.swift` puts a 🤖 in the menu bar for the whole life of the process,
 with **where the words go** as a disabled header — the destination app's icon
-beside `Bound to: folder@branch` of the bound session — and two commands:
-**Pause/Resume** and **Quit**, plus the two engine rows.
+beside `Bound to: folder@branch` of the bound session — then every command the
+app has (*The chip teaches nothing; the menu does*), the **Autosend** checkbox,
+the engine readout and **Quit**.
 
 The chip shows the same line **without** the `Bound to:` prefix, and that is not
 a drift between them. Beside the cursor a folder name has nothing else it could
-be naming; in the menu it sits above `Pause` / `Disconnect` / `Stop Recording`,
+be naming; in the menu it sits above `Connect Window` / `Disconnect` /
+`End Dictation`,
 where a bare name between an icon and a stack of commands reads as a section
 title — as what the commands are *for* — rather than as a destination. Only the
 bound form is prefixed: unbound the row falls back to the launch label, and
@@ -2063,23 +2112,69 @@ with some agent watching it.
 
 It exists because neither shape is a dependable place to find the app. The chip
 belongs to the pointer and hides while he types; the panel comes and goes with
-what is happening; and the ✕ lives only on the panel, so ending a session at rest
-meant pausing first just to make a panel to close. The menu bar is the one place
-that is always in the same pixels.
+what is happening; and the ✕ lives only on the panel, which at rest is not on
+screen at all. The menu bar is the one place that is always in the same pixels.
 
 The label is read in `menuWillOpen`, not pushed on a timer — with two overlays up,
 two identical 🤖 say nothing about which session a click is about to end, and the
 only moment the answer has to be right is the moment he is looking at it.
 
-**Pause is here and not only on the chip** because the chip is a moving target —
-it rides the cursor and vanishes while he types — and pausing is something he
-does *on his way into another app*, i.e. precisely when he has no patience to
-chase a label around. The item is worded as the verb it performs (`Pause` while
-running, `Resume` while paused), not as a checkbox of the current state, and the
-menu bar glyph becomes `⏸️🤖` — the same order as the chip. That glyph matters:
-while he is typing the chip is hidden, so the menu bar is then the only thing on
-screen saying forwarding is off. `AppDelegate.togglePause(reason:)` is the single
-switch behind both routes, so the two can never disagree.
+### Every row has an icon, and two alphabets share the column
+
+Since 2026-09-01 each command carries a picture in the menu's icon column.
+
+| row | icon | gesture in the title |
+|---|---|---|
+| `Connect Window` | `mappin`, in Google Maps red | `hold ⬅️ + 🛞` (⌘⌃B rides the shortcut column) |
+| `Disconnect` | `mappin.slash` | `hold ➡️ + 🛞` |
+| `Start Dictation` | `mic` | `🛞` (⌘⌃D in the shortcut column) |
+| `End Dictation` | `mic.slash` | `🛞` |
+| `Cancel Dictation` | 🗑️ | `hold 🛞 2s` |
+| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞` |
+| `Paste the Last Dictation` | 📋 | ⌘⌃P |
+| `One More Screenshot` | 📷 | `F3, or the back button while dictating` |
+| `Pick an Element in Chrome` | ✋ | `⌘⇧ + 🖱️, while dictating` |
+
+**Two sources, and the split is forced rather than aesthetic.** Emoji are what
+Victor asked for and they carry their own colour — but Unicode has no crossed-out
+map pin and no crossed-out microphone, and both of those rows are the *off* half
+of a pair. A pair whose halves come from two different alphabets reads as two
+unrelated rows, so **Connect/Disconnect and Start/End are SF Symbols on both
+sides**, where the slash is drawn by the same hand as the thing it crosses.
+Everything with no off state is an emoji, rendered into an image of the same size
+(`StatusItem.emojiIcon`) so the column lines up.
+
+📍 is not the pin. It is `ROUND PUSHPIN` — a thumbtack stuck in at an angle, not
+the teardrop marker everybody means by a pin on a map; `mappin` is the marker.
+Same objection `Glyphs.pin` was drawn to answer, one column over, and Victor
+raised it again by name here.
+
+**The gestures are drawn, not spelled.** `— or hold left, click the wheel` is six
+words describing two objects, read in a menu open for a second; `— hold ⬅️ + 🛞`
+is the same sentence in the shape of the mouse it is about. Right-aligning them
+into the shortcut column was the first ask and `NSMenuItem` does not offer it —
+that column belongs to `keyEquivalent`, and a wheel is not a key — so they stay in
+the title, after the em dash, where the words they replace already were.
+
+### Autosend
+
+A checkbox, **off at every launch and deliberately not persisted**. Ticked, the
+pre-send panel opens for one second (`AppDelegate.autosendHold`) **with no Send
+and no Cancel on it**, and then the message goes.
+
+- **The panel still opens.** It is the receipt, and a dictation that vanished into
+  a terminal with nothing shown is the one state where a delivery cannot be told
+  from a drop.
+- **The buttons' row goes with them**, not just their labels: two buttons up for
+  one second are two buttons nobody can reach — an invitation to press something
+  that will not be there when the hand arrives.
+- **Not remembered across launches**, and that is the point. The panel is what
+  catches a transcript the model got fluently wrong; a checkbox that survived a
+  restart would quietly take that away weeks later, in a session where he had
+  forgotten it was ticked.
+- The state lives on the menu item (`StatusItem.autosend.state`) and is pushed to
+  `AppDelegate.autosend` through `onToggleAutosend`, so the tick and the behaviour
+  cannot disagree.
 
 Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:
@@ -2090,7 +2185,7 @@ shortcut that does nothing outside the open menu.
 
 `NSStatusItem` appears in exactly one menu bar: the display that currently has
 the keyboard focus. Victor works across three, and the state that glyph carries —
-paused, model loading — is precisely what he needs while looking at one of the
+the model loading — is precisely what he needs while looking at one of the
 other two, since the chip is hidden the moment he starts typing.
 
 `MenuBarMirror` draws the rest: one borderless, click-through panel per screen at
@@ -2216,15 +2311,31 @@ using them is enough — no appearance observers needed.
 
 | state | alpha |
 |---|---|
-| paused | 0.30 |
 | idle chip | 0.80 |
 | every panel state | 1.00 |
 
 The chip is translucent because it now rides over his actual work and has to read
-as an overlay; the panels are opaque because each of them exists to be read.
+as an overlay; the panels are opaque because each of them exists to be read. The
+0.30 that used to belong to paused went with it.
 
-Paused keeps 0.30, because there the fade *is* the message: forwarding is off,
-and the overlay should look switched off.
+## A flash can be bare
+
+`flash(_:duration:bare:)`. A flash normally summons the chip's blur, rounded rect
+and shadow for the length of its message — a sentence read once, often over a busy
+screen, earns a surface. **`bare: true` keeps the chip a chip**: the message
+replaces a row and nothing is drawn around it.
+
+One caller so far, and it is what the option was written for: `🗑️ dictation
+cancelled`, 1.5s then half a second of dissolve. It lands in the row `Listening…`
+was occupying a moment earlier, beside the pointer, and wrapping a window round it
+for a second and a half made cancelling read as something *opening* rather than as
+a state changing back to nothing. Victor's words: *"fără border… înlocuiești
+Listening cu dictation cancelled"*.
+
+`refreshChrome` asks `anchored && (flashMessage == nil || flashIsBare)`, and the
+hint row joins the labels that get the white-plus-halo treatment when bare — with
+no blur under it, `labelColor` is the same invisible dark grey the selection row
+used to be.
 
 ## Placement
 
@@ -2251,8 +2362,8 @@ in the shot it is confirming.
 
 ## Picking elements in Chrome
 
-Hold ⌘⇧ over a page **while dictating**, the element under the cursor is outlined
-and named; ⌘⇧-click and its selector joins that dictation. It resolves the demonstratives — "make
+Hold ⌘⇧ over a page **while dictating**, the cursor becomes a `grab` hand, the
+element under it is outlined and named; ⌘⇧-click and its selector joins that dictation. It resolves the demonstratives — "make
 *this* button blue" is not actionable, and a CSS path is the same sentence with
 the pronoun filled in.
 
@@ -2285,7 +2396,7 @@ loadUnpacked` over CDP works, but only for a browser started with
 
 ### It lives only while the recording row does
 
-`ElementPicker.dictating` is set from the same `listening && !paused` as mouse 4,
+`ElementPicker.dictating` is set from the same `listening` as mouse 4,
 by the same `syncBorrowedGestures()`. Outside that window `/ping` answers 503 and
 the extension reads a refusal exactly like no relay at all, so ⌘⇧ in Chrome goes
 straight back to opening links in new tabs.
@@ -2327,6 +2438,16 @@ therefore an `NSImageView` and not a label, and `pickGlyphWidth` is the constant
 It replaced a 🎯, which said "aim at something" — which is what the words beside
 it already say — where the browser the gesture only works in was said nowhere.
 
+### The cursor is a hand, not a crosshair
+
+`inspect.js` puts `cursor: grab !important` on the page's own elements while the
+outline is up (it cannot live in the shadow root, so it goes up and comes down
+with it). It was `crosshair` until 2026-09-01, and Victor was right about it: a
+crosshair is the cursor for choosing a **point** — a colour picker, a region
+dragged out — and this gesture picks up the thing under it whole. `grab` is what
+every browser already uses for *this is something you can take*, so it says what
+the outline is showing, in the one place the eye is guaranteed to be.
+
 ### ⌘⇧ has to be *held*
 
 400ms, alone, with any other keypress abandoning the hold (`HOLD_MS`,
@@ -2344,8 +2465,8 @@ halfway through.
 
 Two more gates on top: with **no relay session running** the extension never arms
 (it probes `/ping` first, so the gesture in a browser with no agent behind it
-means exactly what Chrome says it means), and the same refusal covers **paused**
-and **not currently dictating**, which is now the common case.
+means exactly what Chrome says it means), and the same refusal covers **not
+currently dictating**, which is now the common case.
 
 Verified 2026-08-15, driving a test Chrome over CDP: plain click → page sees it;
 chord-click under the gate → page sees it; chord held past the gate → swallowed

@@ -173,10 +173,17 @@
       </style>
       <div class="wrap hidden"><div class="box"></div><div class="tag"></div></div>`;
 
-    // The crosshair has to be on the page's own elements, so it cannot live in
-    // the shadow root. It goes up with the outline and comes down with it.
+    // The cursor has to be on the page's own elements, so it cannot live in the
+    // shadow root. It goes up with the outline and comes down with it.
+    //
+    // **A hand, not a crosshair.** A crosshair is the cursor for choosing a
+    // *point* — a colour picker, a region to drag out — and what this gesture
+    // does is pick up the thing under it whole. `grab` is the pointer every
+    // browser already uses for "this is something you can take", so it says what
+    // the outline round the element is already showing, in the one place the eye
+    // is guaranteed to be.
     const cursor = document.createElement('style');
-    cursor.textContent = 'html, html * { cursor: crosshair !important; }';
+    cursor.textContent = 'html, html * { cursor: grab !important; }';
 
     (document.documentElement || document.body).appendChild(host);
     return {

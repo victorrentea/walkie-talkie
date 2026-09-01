@@ -4,7 +4,7 @@ import AppKit
 ///
 /// `NSStatusItem` lives in **one** menu bar: the one on the display that has the
 /// keyboard focus. Victor works across three, and the state the glyph carries —
-/// paused, loading, listening — is exactly the state he needs while looking at
+/// loading, listening — is exactly the state he needs while looking at
 /// the *other* two, since the chip is hidden the moment he starts typing and the
 /// real status item has followed the focus somewhere he is not.
 ///

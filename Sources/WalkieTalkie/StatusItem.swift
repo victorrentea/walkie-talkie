@@ -5,8 +5,8 @@ import AppKit
 /// The chip belongs to the pointer and hides when there is none; the panel comes
 /// and goes with what is happening. Neither is a reliable answer to "is this
 /// thing still running, and how do I stop it?" — the ✕ only exists on the panel,
-/// which at rest means pausing first just to reach it. A menu bar item sits in
-/// the same pixels for the whole life of the process.
+/// which at rest is not on screen at all. A menu bar item sits in the same pixels
+/// for the whole life of the process.
 ///
 /// It carries **where the words go** as a disabled header — the bound session's
 /// `folder@branch` behind the destination app's icon, or the launch label while
@@ -25,7 +25,10 @@ import AppKit
 final class StatusItem: NSObject, NSMenuDelegate {
 
     var onExit: (() -> Void)?
-    var onTogglePause: (() -> Void)?
+
+    /// Picked from **Autosend** — the checkbox that takes the pre-send panel out
+    /// of the way. See the row's construction for what it actually changes.
+    var onToggleAutosend: ((Bool) -> Void)?
     /// What the local model is holding right now, in bytes — nil while it is not
     /// up. Asked when the menu opens, like the header, because that is the only
     /// moment the answer has to be right.
@@ -75,7 +78,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only one way in.
     var onStartDictation: (() -> Void)?
 
-    /// Picked from **Bind This Window** — the same call ⌘⌃B and the left-plus-wheel
+    /// Picked from **Connect Window** — the same call ⌘⌃B and the left-plus-wheel
     /// chord make.
     var onBind: (() -> Void)?
 
@@ -99,30 +102,39 @@ final class StatusItem: NSObject, NSMenuDelegate {
     ///
     /// ⌘⌃B rides as a real key equivalent so macOS right-aligns it; the wheel
     /// gestures have no key equivalent to be, so they are said in the title.
-    private let bind = NSMenuItem(title: "Bind This Window — or hold left, click the wheel", action: nil, keyEquivalent: "b")
+    ///
+    /// **The gestures are drawn, not spelled.** `hold left, click the wheel` is
+    /// six words describing two objects, and it was read in a menu opened for a
+    /// second: `hold ⬅️ + 🛞` is the same sentence in the shape of the mouse it is
+    /// about. Right-aligning them into the shortcut column was the first ask and
+    /// is not something `NSMenuItem` offers — the column belongs to
+    /// `keyEquivalent`, and a wheel is not a key — so they stay in the title,
+    /// after the em dash, where the words they replace already were.
+    private let bind = NSMenuItem(title: "Connect Window — hold ⬅️ + 🛞", action: nil, keyEquivalent: "b")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
     ///
-    /// The gesture is in the title for the reason **Bind This Window** carries
+    /// The gesture is in the title for the reason **Connect Window** carries
     /// its own: a wheel chord has no key equivalent to be right-aligned as, and
     /// the menu is now the only place any gesture is written down. Right mirrors
     /// left the way disconnecting mirrors binding — that is the whole of what has
-    /// to be remembered.
-    private let disconnect = NSMenuItem(title: "Disconnect — or hold right, click the wheel", action: nil, keyEquivalent: "")
+    /// to be remembered, and drawn as `➡️` against `⬅️` it is the whole of what
+    /// has to be read.
+    private let disconnect = NSMenuItem(title: "Disconnect — hold ➡️ + 🛞", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it
-    /// as a real key equivalent, the same way ⌘⌃B rides **Bind This Window**; the
+    /// as a real key equivalent, the same way ⌘⌃B rides **Connect Window**; the
     /// wheel has no key equivalent to be, so it stays in the title beside it.
-    private let startDictation = NSMenuItem(title: "Start Dictation — or click the wheel", action: nil, keyEquivalent: "d")
-    private let stopRecording = NSMenuItem(title: "End Dictation — or click the wheel", action: nil, keyEquivalent: "d")
+    private let startDictation = NSMenuItem(title: "Start Dictation — 🛞", action: nil, keyEquivalent: "d")
+    private let stopRecording = NSMenuItem(title: "End Dictation — 🛞", action: nil, keyEquivalent: "d")
     /// Same row, opposite verdict — see `onCancelDictation`.
-    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold the wheel 2s", action: nil, keyEquivalent: "")
+    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold 🛞 2s", action: nil, keyEquivalent: "")
     /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
     /// exist yet. Spelled with the folder in it because that is the one thing
     /// about it he cannot see beforehand — the window opens after he has spoken.
-    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + click the wheel", action: nil, keyEquivalent: "")
+    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + 🛞", action: nil, keyEquivalent: "")
     /// The shutter. Both routes are named: F3 works whenever there is a
     /// destination, the back button only while a dictation is running — which is
     /// also the only window in which it stops typing Return.
@@ -137,17 +149,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// while dictating, and with the chip silent there is nowhere else it could
     /// be said. Permanently disabled, which is the honest rendering of "this is
     /// something you do, not something you pick".
-    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome — ⌘⇧ + click, while dictating", action: nil, keyEquivalent: "")
-    /// Hand the mouse and the microphone back — the same toggle a click on the
-    /// chip makes. **Back in the menu since 2026-08-30**: it was taken out when
-    /// Disconnect turned out to be the row he reached for, and the argument
-    /// against it (two commands that both mean "stop relaying") is outranked by
-    /// the new rule that every action has to be listed somewhere. The chip is
-    /// still the fast way, and the row is where that is written down.
-    private let pause = NSMenuItem(title: "Pause — click the chip", action: nil, keyEquivalent: "")
+    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome — ⌘⇧ + 🖱️, while dictating", action: nil, keyEquivalent: "")
+    /// **Send without asking.** Off at every launch, and deliberately not
+    /// remembered: the panel is the thing that catches a transcript the model got
+    /// wrong, and a checkbox that survived a restart would quietly take that
+    /// safety net away weeks after it was ticked, in a session where he had
+    /// forgotten it existed.
+    ///
+    /// Ticked, the panel still opens — it is the receipt, and a dictation that
+    /// vanished into a terminal with nothing shown would be the one state where
+    /// he cannot tell a delivery from a drop — but it opens for a second, with no
+    /// buttons on it. A flash, then it goes.
+    private let autosend = NSMenuItem(title: "Autosend — no buttons, gone in a second", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
-    private var isPaused = false
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
     /// distinguish. Set from the same `setDestination` the header uses, so the
@@ -192,27 +207,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
+        bind.image = Self.symbolIcon("mappin", tint: Self.pinRed)
         bind.keyEquivalentModifierMask = [.command, .control]
         bind.action = #selector(bindClicked)
         bind.target = self
         menu.addItem(bind)
 
-        // **No Pause row.** It was the first command in the menu on the reading
-        // that pausing is what he does whenever he wants to dictate into
-        // something other than the agent. Disconnect turned out to be the thing
-        // he actually reaches for — it says which terminal, where pause says only
-        // "not now" — and two commands that both mean "stop relaying" are one
-        // question the menu should not be asking. The state itself is still
-        // there, and clicking the chip still toggles it.
-
-        // **Under Pause, because it is the other half of the same question.**
-        // Pause stops the words going *anywhere*; this one stops them going to
-        // *that terminal* and hands them back to the outbox, which is what the
-        // relay does when nothing is bound. ⌘⌃B on the bound target already
-        // does something adjacent and stronger — it ends the session — and there
-        // was no way to simply let go of a tab: he had to quit the relay and
-        // start it again somewhere else. Disabled while nothing is bound, since
-        // it would then be a command with nothing to act on.
+        // **Directly under Connect, because it is the same question answered the
+        // other way.** It stops the words going to *that terminal* and hands them
+        // back to the outbox, which is what the relay does when nothing is bound.
+        // ⌘⌃B on the bound target already does something adjacent and stronger —
+        // it ends the session — and there was no way to simply let go of a tab:
+        // he had to quit the relay and start it again somewhere else. Disabled
+        // while nothing is bound, since it would then be a command with nothing
+        // to act on.
+        disconnect.image = Self.symbolIcon("mappin.slash", tint: Self.pinRed)
         disconnect.action = #selector(disconnectClicked)
         disconnect.target = self
         disconnect.isEnabled = false
@@ -235,6 +244,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // could not begin. Enabled only while something is bound: unbound the
         // relay is inert and `startLocalRecording` would refuse anyway, and a row
         // that silently does nothing is worse than one that says it cannot.
+        startDictation.image = Self.symbolIcon("mic")
         startDictation.keyEquivalentModifierMask = [.command, .control]
         startDictation.action = #selector(startDictationClicked)
         startDictation.target = self
@@ -243,6 +253,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         // The same ⌘⌃D on both rows: only one of the two is ever enabled, so the
         // key reads as the toggle it is rather than as a clash.
+        stopRecording.image = Self.symbolIcon("mic.slash")
         stopRecording.keyEquivalentModifierMask = [.command, .control]
         stopRecording.action = #selector(stopRecordingClicked)
         stopRecording.target = self
@@ -255,6 +266,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // by accident. Without it the only way out of a bad recording was to
         // stop it, watch it transcribe, and cancel the panel — three steps and a
         // model run for something he already knew he did not want.
+        cancelDictation.image = Self.emojiIcon("🗑️")
         cancelDictation.action = #selector(cancelDictationClicked)
         cancelDictation.target = self
         cancelDictation.isEnabled = false
@@ -266,6 +278,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // actually does is open the microphone; the window is what happens when
         // the sentence is over. Enabled whether or not anything is bound: that is
         // the whole point of the gesture.
+        newSession.image = Self.emojiIcon("✨")
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
         menu.addItem(newSession)
@@ -275,25 +288,29 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // and not a destination like the rows above: it is what he reaches for
         // once the words have landed somewhere and he wants them somewhere else
         // too — a commit message, a chat, a form.
+        pasteLast.image = Self.emojiIcon("📋")
         pasteLast.keyEquivalentModifierMask = [.command, .control]
         pasteLast.action = #selector(pasteLastClicked)
         pasteLast.target = self
         pasteLast.isEnabled = false
         menu.addItem(pasteLast)
 
+        shot.image = Self.emojiIcon("📷")
         shot.action = #selector(shotClicked)
         shot.target = self
         shot.isEnabled = false
         menu.addItem(shot)
 
+        pickLegend.image = Self.emojiIcon("✋")
         pickLegend.isEnabled = false
         menu.addItem(pickLegend)
 
         menu.addItem(.separator())
 
-        pause.action = #selector(pauseClicked)
-        pause.target = self
-        menu.addItem(pause)
+        autosend.action = #selector(autosendClicked)
+        autosend.target = self
+        autosend.state = .off
+        menu.addItem(autosend)
 
         // **One row, and it is a readout rather than a switch.** There used to be
         // two — Wispr Flow and Local Whisper, ticked — from the months the relay
@@ -337,9 +354,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// he types, since the chip rides the pointer and macOS hides the pointer
     /// while typing.
     ///
-    /// ⏳ takes the same slot as ⏸️ and outranks it for the ten seconds it is up:
-    /// paused is a state he chose and can read at leisure, while this one is
-    /// about whether the *next* sentence has a recogniser to reach.
+    /// ⏳ is the only badge that ever rides the glyph — ⏸️ shared the slot until
+    /// pause was removed — and it is up for ten seconds at a time, saying whether
+    /// the *next* sentence will have a recogniser to reach.
     func setEngineLoading(_ loading: Bool) {
         engineLoading = loading
         applyWhisperTitle()
@@ -405,18 +422,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
         newSession.isEnabled = !recording
         // The same gate `plusOneShot` applies: a picture is worth taking when
         // there is somewhere for it to go.
-        shot.isEnabled = (isBound || recording) && !isPaused
+        shot.isEnabled = isBound || recording
     }
 
     private func refreshGlyph() {
-        // The picture says bound; the badge in front of it says the two states
-        // that are *not* about where the words go. ⏳ outranks ⏸️ for the ten
-        // seconds it is up, since "will the next sentence have a recogniser" is
-        // the more urgent of the two questions.
-        let badge: String
-        if engineLoading      { badge = "⏳" }
-        else if isPaused      { badge = "⏸️" }
-        else                  { badge = "" }
+        // The picture says bound; the badge in front of it says the one state
+        // that is *not* about where the words go — whether the next sentence will
+        // have a recogniser to reach. ⏸️ used to share this slot; there is no
+        // pause any more.
+        let badge = engineLoading ? "⏳" : ""
         let icon = isBound ? Self.boundIcon : Self.idleIcon
         item.button?.image = icon
         item.button?.title = badge
@@ -452,6 +466,54 @@ final class StatusItem: NSObject, NSMenuDelegate {
         return f.string(from: date ?? Date())
     }()
 
+    /// Google Maps' own marker red, because that is the picture Victor named when
+    /// he asked for the pin — and a red pin among a column of monochrome symbols
+    /// is also the one row the eye finds without reading.
+    private static let pinRed = NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1)
+
+    /// **The icon column, and why it has two sources.**
+    ///
+    /// Emoji are what was asked for and they carry their own colour, but Unicode
+    /// has no crossed-out map pin and no crossed-out microphone. Both of those are
+    /// the *off* half of a pair, and a pair whose halves come from two different
+    /// alphabets reads as two unrelated rows — so **Connect/Disconnect and
+    /// Start/End are SF Symbols on both sides**, where the slash exists and is
+    /// drawn by the same hand as the thing it crosses, and every row without an
+    /// off state is an emoji.
+    ///
+    /// 📍 in particular is `ROUND PUSHPIN` — a thumbtack stuck in at an angle, not
+    /// the teardrop marker everybody means by a pin on a map. `mappin` is the
+    /// marker. Same objection `Glyphs.pin` was drawn to answer, one column over.
+    private static func symbolIcon(_ name: String, tint: NSColor? = nil) -> NSImage? {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
+        var config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        if let tint = tint {
+            config = config.applying(NSImage.SymbolConfiguration(paletteColors: [tint]))
+        }
+        let sized = image.withSymbolConfiguration(config) ?? image
+        // A tinted symbol has to stop being a template, or AppKit paints it in the
+        // menu's own text colour and the palette is thrown away.
+        sized.isTemplate = tint == nil
+        return sized
+    }
+
+    /// An emoji drawn into the same box the symbols land in, so the two sources
+    /// share one column rather than one row's glyph sitting a few points off the
+    /// next one's.
+    private static func emojiIcon(_ emoji: String) -> NSImage {
+        let size = NSSize(width: 18, height: 16)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13)]
+        let text = emoji as NSString
+        let ink = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: ((size.width - ink.width) / 2).rounded(),
+                              y: ((size.height - ink.height) / 2).rounded()),
+                  withAttributes: attrs)
+        image.unlockFocus()
+        return image
+    }
+
     private static let idleIcon = loadIcon("walkie-idle")
     private static let boundIcon = loadIcon("walkie-bound")
 
@@ -467,25 +529,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         image.draw(in: NSRect(origin: .zero, size: size))
         scaled.unlockFocus()
         return scaled
-    }
-
-    /// Kept in step with the app's state by `AppDelegate`, not read on demand: the
-    /// menu bar glyph has to be right *before* the menu is opened, since while he
-    /// is typing the chip is hidden (macOS hides the pointer, so the chip goes with
-    /// it) and this is then the only thing on screen saying forwarding is off.
-    ///
-    /// The item is worded as the verb it performs — "Pause" while running,
-    /// "Resume" while paused — rather than as a checkbox of the current state. A
-    /// menu he opens for one second should say what the click will do.
-    func setPaused(_ value: Bool) {
-        isPaused = value
-        // Worded as the verb the click performs, not as the state it reports —
-        // a menu open for one second should say what happens next.
-        pause.title = value ? "Resume — click the chip" : "Pause — click the chip"
-        // Same order as the chip: ⏸️ in front of the robot, never instead of it.
-        // Routed through `refreshGlyph` so it cannot stomp on a ⏳ that is up —
-        // the two states are set from different places and both own this glyph.
-        refreshGlyph()
     }
 
     /// Where the words are going: the bound session's `folder@branch`, behind the
@@ -539,8 +582,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     ///
     /// The chip can afford to be bare: it rides the cursor, it appears when a
     /// binding does, and beside a pointer there is nothing else it could be
-    /// naming. In the menu the same line sits above `Pause` / `Disconnect` /
-    /// `Stop Recording`, and a folder name on its own between an icon and a
+    /// naming. In the menu the same line sits above `Connect Window` /
+    /// `Disconnect` / `End Dictation`, and a folder name on its own between an icon and a
     /// stack of commands reads as the title of a section — i.e. as what the
     /// commands are *for*, rather than as where the words are going. The two
     /// words say which of the two it is.
@@ -557,8 +600,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         onExit?()
     }
 
-    @objc private func pauseClicked() {
-        onTogglePause?()
+    /// **The state lives here, not in `AppDelegate`.** It is a property of the
+    /// checkbox — nothing else in the app has any use for it except the one call
+    /// that reads it back — and keeping it on the row is what makes the tick and
+    /// the behaviour impossible to disagree about.
+    @objc private func autosendClicked() {
+        autosend.state = autosend.state == .on ? .off : .on
+        onToggleAutosend?(autosend.state == .on)
     }
 
 }

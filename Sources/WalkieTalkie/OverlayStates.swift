@@ -89,14 +89,6 @@ enum OverlayStates {
                 o.setSpawnDestination("✨ workspace")
             },
 
-            Shot(slug: "paused", group: "At rest", title: "Paused",
-                 when: "He clicked the chip, or Pause in the menu — dictation goes to some other app now.",
-                 note: "⏸️ beside the microphone and the window at 0.30. There is no name behind it any more — pause is a state of the chip at rest, and the chip at rest is one glyph — but the ⏸️ stays: fading alone says *something is off*, and this says what. Still a chip, never a panel.",
-                 shape: "chip", alpha: 0.30) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setPaused(true)
-            },
-
             Shot(slug: "typing", group: "At rest", title: "He started typing",
                  when: "Any keystroke, while the chip is on screen and not listening.",
                  note: "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
@@ -216,12 +208,12 @@ enum OverlayStates {
                 o.flash("⛔️ zsh is at the prompt — not sent", duration: 60)
             },
 
-            Shot(slug: "flash-cancelled", group: "Flashes", title: "Flash — dictation cancelled",
-                 when: "Three seconds after holding the wheel 2 s mid-sentence.",
-                 note: "🗑️ and nothing else. The audio is gone; there is nothing to offer him and nothing to undo.",
-                 shape: "flash", alpha: 0.80) { o in
+            Shot(slug: "flash-cancelled", group: "Flashes", title: "Dictation cancelled",
+                 when: "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
+                 note: "🗑️ and nothing else, and **bare**: no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
+                 shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.flash("🗑️ dictation cancelled", duration: 60)
+                o.flash("🗑️ dictation cancelled", duration: 60, bare: true)
             },
 
             Shot(slug: "flash-model-failed", group: "Flashes", title: "Flash — the recogniser is not there",
@@ -254,6 +246,14 @@ enum OverlayStates {
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript)
+            },
+
+            Shot(slug: "prompt-autosend", group: "The held prompt", title: "The prompt, under Autosend",
+                 when: "The same moment, with **Autosend** ticked in the menu — one second, then it is gone.",
+                 note: "No Send and no Cancel, and the row they sat on goes with them: two buttons up for one second are two buttons nobody can reach, an invitation to press something that will not be there when the hand arrives. What is left is the receipt — a dictation that vanished into a terminal with nothing shown is the one state where a delivery cannot be told from a drop.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, buttons: false)
             },
 
             Shot(slug: "prompt-shots", group: "The held prompt", title: "The prompt, with its frames",
@@ -393,7 +393,6 @@ enum OverlayStates {
         o.setListening(false)
         o.setTranscribing(false)
         o.setEngineLoading(false)
-        o.setPaused(false)
         o.setPicks(count: 0, newest: nil)
         o.setShotCount(0)
         o.clearSelection()

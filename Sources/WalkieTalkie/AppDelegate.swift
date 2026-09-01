@@ -135,30 +135,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// they are released as a message of their own.
     private let orphanTimeout: TimeInterval = 120
 
-    /// Forwarding is off. Pause is what Victor presses when he wants the mouse
-    /// and the keyboard back — the wheel goes to the app underneath, mouse 4
-    /// types Return again, and no dictation can be started. The relay stops
-    /// acting on everything: no context capture, no screenshots, no outbox lines
-    /// (`captureContext`, `plusOneShot`, `send` all bail).
-    private var paused = false
+    /// **Send the transcript without asking.** Off at every launch, held here and
+    /// nowhere else, and deliberately not persisted — see the menu row it comes
+    /// from (`StatusItem.autosend`).
+    ///
+    /// The panel still opens; it opens for `autosendHold` with no buttons on it.
+    /// The receipt is the half of it that survives, because a dictation that
+    /// vanished into a terminal with nothing shown would be the one state where he
+    /// cannot tell a delivery from a drop.
+    private var autosend = false
     private var endAnnounced = false
 
     /// **There is a destination, so a dictation is the relay's business.**
     ///
     /// Unbound the app does nothing at all: no dictation can be started, mouse 4
     /// and mouse 5 and ⌘⇧-click stay with the software they belong to, no picture
-    /// is taken, and no line is written. It bails out of exactly the places
-    /// `paused` does — `captureContext`, `plusOneShot`, `send`,
-    /// `syncBorrowedGestures` — plus `syncLocalCapture`, which is where the
-    /// microphone's claim on the wheel lives.
+    /// is taken, and no line is written. It bails out of `captureContext`,
+    /// `plusOneShot`, `send` and `syncBorrowedGestures` — plus `syncLocalCapture`,
+    /// which is where the microphone's claim on the wheel lives. **It is the only
+    /// such gate now**: pause used to bail out of the same four and is gone.
     ///
     /// Why this became necessary: the relay was started per session and lived
     /// only as long as Victor was dictating at an agent, so "running" and "aimed
     /// at something" were the same fact. Since 2026-08-26 it is a login item and
     /// sits there all day — and every one of those behaviours was being applied
     /// to every sentence he spoke into a browser, a chat or a commit message,
-    /// with nowhere for the words to go. That is what pause exists to stop, and
-    /// he was having to press it against an app that had no destination anyway.
+    /// with nowhere for the words to go. That is what pause existed to stop, and
+    /// he was having to press it against an app that had no destination anyway —
+    /// which is why, once this gate was in, pause had nothing left to do.
     ///
     /// Read off `TerminalBinding`, which locks, so this is safe from any thread.
     private var isBound: Bool { terminal.target != nil }
@@ -197,6 +201,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let minHold: TimeInterval = 4.0
     private static let maxHold: TimeInterval = 7.0
 
+    /// What Autosend leaves of that: one second, flat, and not scaled by length —
+    /// it is not there to be read to the end, it is there so a delivery is
+    /// something he saw happen.
+    private static let autosendHold: TimeInterval = 1.0
+
     /// Everything one outbox line is made of, kept together so it can be held
     /// back, released, or dropped as a unit.
     private struct Message {
@@ -231,12 +240,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Outbox.prepare()
         overlay = RelayWindow()
 
-        overlay.onTogglePause = { [weak self] in self?.togglePause(reason: "chip click") }
         overlay.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
-        status.onTogglePause = { [weak self] in self?.togglePause(reason: "menu bar") }
+        status.onToggleAutosend = { [weak self] on in
+            self?.autosend = on
+            Log.info(on ? "autosend on — the panel is a one-second receipt, no buttons"
+                        : "autosend off — the panel waits for Send or the countdown")
+        }
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.
@@ -267,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalCancel = { [weak self] in
             DispatchQueue.main.async { self?.cancelLocalRecording() }
         }
-        hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal() != nil }
+        hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal(toggle: false) != nil }
         // Right held + the wheel. **The same call the menu's Disconnect row
         // makes**, so the gesture cannot end up meaning something subtly other
         // than the row that documents it — including the chip's burst, which is
@@ -310,7 +322,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // terminal, and mouse 5 on an engine that is not up yet — and both say
         // ⏳ while it happens.
         Log.info("the model stays down until a session starts")
-        status.setPaused(paused)
         syncLocalCapture()
         overlay.onPromptResolved = { [weak self] send, edited in
             self?.releaseHeld(send: send, edited: edited)
@@ -507,13 +518,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// **Off while nothing is bound**, and that is the whole of it: with no
     /// destination there is nowhere for a transcript to go, so a recording would
-    /// be a room taped for nobody. Off while paused too — pause is what Victor
-    /// presses to hand the mouse back to the app underneath.
+    /// be a room taped for nobody.
     private func syncLocalCapture() {
-        hotkeys.localCapture = isBound && !paused
-        // Not gated on `paused`: the unbind chord is the one gesture that still
-        // applies to a relay that is not listening, because what it acts on is
-        // the binding rather than the microphone.
+        hotkeys.localCapture = isBound
+        // Deliberately its own flag: the unbind chord is the one gesture that
+        // still applies to a relay that is not listening, because what it acts on
+        // is the binding rather than the microphone.
         hotkeys.bound = isBound
     }
 
@@ -536,9 +546,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spawnPending = spawn
         // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
-        // repeated here for the same reason `paused` is: this is the path that
-        // opens the microphone.
-        guard hasDestination, !paused else { return }
+        // repeated here because this is the path that opens the microphone.
+        guard hasDestination else { return }
         if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)") }
         guard whisper.ready else {
             // Not an error, since the helper is deliberately down until something
@@ -626,7 +635,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         publishShotCount()
         publishPicks()
-        overlay.flash("🗑️ dictation cancelled", duration: 3)
+        // **Bare, and short.** It replaces `Listening…` in the row it was just
+        // occupying, beside the pointer, and then dissolves back to the chip at
+        // rest. Three seconds inside a blurred panel made cancelling look like
+        // something *opening*; a second and a half of plain text reads as the one
+        // thing that actually happened, which is a word changing.
+        overlay.flash("🗑️ dictation cancelled", duration: 1.5, bare: true)
     }
 
     private func stopLocalRecording() {
@@ -812,11 +826,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// harmless — but the screen is only captured once per dictation, since a
     /// second capture would cost a megabyte for an identical frame.
     private func captureContext() {
-        // Nothing bound is the same answer as paused, one step earlier: a
-        // picture of the screen at the moment he starts talking is only worth
+        // A picture of the screen at the moment he starts talking is only worth
         // taking when there is somebody it is being taken *for*. A spawn counts
         // as somebody — the session it is about to open reads the same line.
-        guard hasDestination, !paused else { return }
+        guard hasDestination else { return }
 
         // Where he was pointing when he started talking. Taken here and carried
         // down: by the time the capture actually runs, a clipboard probe and a
@@ -926,48 +939,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
-    /// The single switch behind both routes into pause — a click on the chip and
-    /// the menu bar item — so the two can never disagree about the state, and so
-    /// every display of it is updated in one place.
-    ///
-    /// Main thread only, which is where both callers already are: `paused` is read
-    /// without the lock from the capture paths.
-    private func togglePause(reason: String) {
-        paused.toggle()
-        // Pausing mid-recording finishes it rather than abandoning it: he said
-        // the words, and the ordinary reason to pause here is that he is done
-        // and on his way into another app.
-        if paused && localRecording { stopLocalRecording() }
-        overlay.setPaused(paused)
-        status.setPaused(paused)
-        syncBorrowedGestures()
-        syncLocalCapture()
-        Log.info(paused ? "paused via \(reason) — nothing is recorded or relayed"
-                        : "resumed via \(reason)")
-    }
-
     /// The two gestures the relay **borrows from other software**, handed over and
     /// handed back together.
     ///
     /// Mouse 4 is Victor's Return key (LinearMouse types one with it) and ⌘-click
     /// is how a link opens in a new tab; the relay takes both **only while there is
     /// a dictation for them to add to**. Outside that window — at rest, the whole
-    /// time forwarding is paused, and the whole time nothing is bound — they must
+    /// time nothing is bound — they must
     /// go back to doing what every other app expects, so this is called from all
     /// three edges that can change the answer: a dictation starting or stopping,
-    /// pause being toggled, and a binding appearing or going away (`showBound`).
+    /// a binding appearing or going away (`showBound`).
     ///
     /// One switch for both, so the recording row can never be on screen advertising
     /// a gesture that is no longer live, or off while one still is. Main thread only.
     private func syncBorrowedGestures() {
-        let live = hasDestination && listening && !paused
+        let live = hasDestination && listening
         hotkeys.dictating = live
         picker.dictating = live
         // The music is pausing for the same window and for the same reason: it
         // is the span in which Victor is talking rather than using the machine.
         // Hanging it here rather than off `listening` alone is deliberate — a
         // dictation that is not being relayed anywhere (unbound, or forwarding
-        // paused) is Victor talking into some other app, and silencing his music
+        // unbound) is Victor talking into some other app, and silencing his music
         // for that would be the relay reaching outside its own session.
         music.setActive(live)
     }
@@ -1013,7 +1006,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func bindFrontmostTerminal() -> [String: Any]? {
+    /// `toggle` is what makes a second press on the target already bound *let go*
+    /// of it. ⌘⌃B and `POST /bind` keep it; **the left-plus-wheel chord does
+    /// not**, since 2026-09-01.
+    ///
+    /// The chord is made while pointing at the terminal, and the ordinary reason
+    /// to make it twice is that Victor is not sure the first one landed — so the
+    /// answer he wants there is the flight again, not a session let go. Letting go
+    /// already has two routes of its own that say nothing else: the right-held
+    /// chord and the menu's Disconnect. A toggle is worth having on a key that has
+    /// no off switch; it is a trap on a gesture that has two.
+    private func bindFrontmostTerminal(toggle: Bool = true) -> [String: Any]? {
         var front: NSRunningApplication?
         DispatchQueue.main.sync { front = NSWorkspace.shared.frontmostApplication }
         // Read before binding: `bind` replaces the target, and what decides
@@ -1062,7 +1065,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // call `POST /unbind` and the menu's Disconnect make, so all three routes
         // out of a binding now end in the same state instead of two of them
         // leaving the app running and one killing it.
-        if let previous = previous, previous == bound.handle {
+        if toggle, let previous = previous, previous == bound.handle {
             DispatchQueue.main.async { [weak self] in
                 BindFlight.cancel()
                 Log.info("⌘⌃B on the bound target — unbinding")
@@ -1280,8 +1283,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // is in front with the session running in it, which is a whole
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
-                case .opened:
-                    break
+                case .opened(let tty):
+                    self.flySpawnedWindow(tty: tty)
                 case .failed(let why):
                     // The outbox already has the line — `commit` wrote it before
                     // this ran — so what is lost is the delivery, and this is the
@@ -1289,6 +1292,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.error("✨ spawn failed: \(why)")
                     self.overlay.flash("⚠️ \(why)", duration: 8)
                 }
+            }
+        }
+    }
+
+    /// **The spawned window gets the bind flight, a beat after it appears.**
+    ///
+    /// A spawn is the one destination Victor never pointed at: the window opens
+    /// on its own, somewhere he was not looking, while his hand is still on the
+    /// mouse. Every other way a session becomes a destination answers itself with
+    /// a picture of that window flying into the chip (*The bind flight*), and this
+    /// one answered with nothing — the sentence went somewhere he had to go and
+    /// find. The flight is what connects the gesture to the window it produced.
+    ///
+    /// **It does not bind, and that is deliberate.** *⌘ + the wheel* is a
+    /// one-shot destination on Victor's explicit instruction — the relay stays
+    /// pointed where it was — so this plays the same animation for the reason the
+    /// animation exists (which window did that go to?) without the claim that
+    /// comes with it. The flight lands where the chip is; what the chip *says* is
+    /// unchanged, and the words went to the window that just flew.
+    ///
+    /// **2.5s**, because `do script` returns as soon as Terminal has a window: the
+    /// shell is still starting, `claude` has not drawn a frame, and a picture
+    /// taken then is a picture of an empty prompt. Late enough to catch the
+    /// session, early enough to still be about the gesture.
+    private func flySpawnedWindow(tty: String) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            // Off the main thread: the lookup is an `osascript` subprocess, like
+            // every other question this app asks Terminal.
+            guard let frame = TerminalBinding.terminalWindowFrame(tty: tty) else {
+                Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) has no frame — no flight")
+                return
+            }
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                // Same reason ⌘⌃B wakes it: macOS hides the pointer while he
+                // types, and a flight that shrinks onto a hidden chip lands on
+                // empty screen.
+                self.overlay.wakePointer()
+                BindFlight.fly(from: frame, to: { [weak self] in
+                    self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                })
             }
         }
     }
@@ -1667,7 +1711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
     private func plusOneShot(cursor: NSPoint) {
-        guard hasDestination, !paused else { return }
+        guard hasDestination else { return }
         // Sampled at the gesture, like the cursor and for the same reason: by the
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
@@ -1735,16 +1779,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Only reachable while dictating: the endpoint refuses everything else
     /// (`ElementPicker.dictating`), so by the time one gets here it is a thing he
-    /// pointed at in the middle of a sentence. The `paused` check is the same
-    /// belt-and-braces the other capture paths carry — pause is flipped on the
-    /// main thread and this runs on another.
     ///
     /// There is no flash and no panel, deliberately: the outline in the page has
     /// already turned green under his cursor, at the pixel he clicked, before this
     /// code ran. A second receipt across the screen would be the same news, later
     /// and further away. What this adds is the running total, in the chip.
     private func record(_ pick: ElementPick) {
-        guard !paused else { return }
         stateLock.lock()
         pendingPicks.append(pick)
         pruneStalePicks()
@@ -1959,10 +1999,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("unbound — dropped \(kind)")
             return
         }
-        guard !paused else {
-            Log.info("paused — dropped \(kind)")
-            return
-        }
         stateLock.lock()
         let selection = pendingSelection
         pendingSelection = nil
@@ -2037,7 +2073,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let warning = self.pendingPromptWarning
             self.pendingPromptWarning = nil
             let words = shown.split(whereSeparator: { $0.isWhitespace }).count
-            let hold = min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
+            // **Autosend is a flash, not a shorter countdown.** The hold is
+            // normally scaled to how much there is to read, because the panel is
+            // there to be read *before* deciding; with the decision taken in
+            // advance there is nothing to scale to, and what is left is a receipt
+            // — long enough to see that something went, short enough not to be a
+            // window opening over his work.
+            let hold = self.autosend ? Self.autosendHold
+                     : min(max(Self.minHold, Double(words) / 3.0), Self.maxHold)
             // Oldest first, context frame included — it is picture one of the
             // enumeration far more often than it is a spare, and a strip that
             // skipped it would disagree with the count in the row above.
@@ -2048,7 +2091,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            // What he said, apart from what the
                                            // preview adds to it — the panel needs
                                            // the seam to know what is editable.
-                                           words: text, warning: warning) {
+                                           words: text, warning: warning,
+                                           buttons: !self.autosend) {
                 self.held = message
                 self.hotkeys.promptHeld = true
             } else {

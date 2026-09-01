@@ -122,9 +122,8 @@ here. The relay pushes the window over a second loopback socket
 (`ws://127.0.0.1:8920`) rather than being polled, so the pause lands with the
 recording row instead of up to a poll interval later.
 
-It follows the *relayed* dictation, not the microphone: unbound, or with
-forwarding paused, you are talking into some other app and your music is none of
-the relay's business. If the relay dies mid-sentence the extension resumes on the
+It follows the *relayed* dictation, not the microphone: unbound, you are talking
+into some other app and your music is none of the relay's business. If the relay dies mid-sentence the extension resumes on the
 dead socket, so the music can never be left off with nothing alive to restore it.
 
 ## How it reaches the agent
@@ -231,36 +230,38 @@ once, each taking one):
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
 | **⌘ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
-| **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃B |
+| **hold left, click the wheel** | Points the relay at the window in front — the same call as ⌘⌃B, minus the toggle: made twice on the same terminal it binds twice rather than letting go |
+| **hold left, hold the wheel 1s** | The same bind, **and** it starts the dictation at it — one gesture instead of the chord followed by a second click |
 | **hold right, click the wheel** | Lets the binding go — the same call as the menu's **Disconnect**. Outranks every other meaning the wheel has, so it works mid-dictation too |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
 | **⌘⇧-click in Chrome** | Adds that element's selector, page URL and text to the message; the page never sees the click |
 | **Cancel** | Stops the displayed prompt from ever being written |
-| click | On a prompt: send it now. Otherwise: pause / resume forwarding |
-| hover | Reveals the ✕ that ends the session (panel states only) |
+| click | On a prompt: send it now. Otherwise: nothing — the chip is a label, not a switch |
+| hover | Reveals the ✕ that ends the session — **panel only**, never on the chip beside the pointer |
+| menu bar **Autosend** | Off at every launch. Ticked, the pre-send panel opens for one second with no Send and no Cancel on it, and the message goes |
 | menu bar 🤖 | Always there while the app runs — shows which session it is, and **every action with the gesture that performs it**. Rows grey out when they cannot act right now; they never disappear |
 
 **The chip itself teaches nothing.** It carries state — the pulse, what is being
 recorded, where the words go — and no legend of gestures; those live in the menu
 bar, which is read while reaching for the thing it does.
 
-Paused, the chip reads `⏸️ 🤖 folder@branch` at 0.30 opacity and the menu bar
-icon becomes ⏸️🤖. The point of pausing is to get the mouse and the keyboard
-back — the wheel goes to the app underneath, the back button types Return again,
-and no dictation can be started. The relay stops acting on everything: no context
-capture, no screenshots, nothing written to the outbox.
+**There is no pause.** With nothing bound the relay already touches no dictation,
+borrows no button and writes no line, which is everything pause used to do — so
+the switch went, along with the ⏸️ badge and the chip click that toggled it.
+Letting go of a terminal is **Disconnect**: the right-held chord, or the menu.
 
 ## How dictation is captured
 
 The relay owns the whole path. **Click the mouse wheel** while a terminal is bound
 and it opens the microphone itself; **click it again** to end the recording, or
-hold it for two seconds to throw the dictation away. Rebinding is the wheel with
+hold it for two seconds to throw the dictation away. Binding is the wheel with
 the **left button already held** — a chord, so that a bare click is free to mean
-the thing it means dozens of times a day; letting go of the binding is the same
-chord with the **right button**, which is the mirror gesture for the mirror
-action. The WAV goes to a Whisper
+the thing it means dozens of times a day — and **keeping the wheel down for a
+second** binds *and* starts talking to it in one gesture. Letting go of the
+binding is the same chord with the **right button**, which is the mirror gesture
+for the mirror action. The WAV goes to a Whisper
 running on this Mac, and the transcript goes to the agent — nothing is ever typed
 or pasted into whatever holds the caret.
 
