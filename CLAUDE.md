@@ -828,12 +828,33 @@ three forms: `🖱️/F3`, then the words `— mouse/F3 for more shots`, then �
 🔽 kerned underneath. The last was a rebus — it needed a legend, and the legend was
 the thing the row was supposed to be. A drawing of the actual button does not.
 
-## The two waits are drawn big
+## One face, one size, one weight — everywhere on the chip
+
+**Victor's rule, 2026-09-01:** *"toate textele care apar în tooltipul de lângă
+maus trebuie să aibă aceeași mărime de font și font face"*. Every word on the
+chip is `hintFont` — system 17, regular. Three rows were not, and all three are
+now: the **title** (was semibold), the **selection** row (was 14, the one row
+still set from the old ×1.3 table's bottom rung — its box goes 19 → 22 to match),
+and the two **waits** (were a semibold 20, given to them a build earlier to make
+them visible).
+
+The chip is one card an inch from the pointer, read at a glance and never
+studied. Type hierarchy is for a page with a structure to explain; here it only
+made a five-row chip look like five different things.
+
+**Emphasis on the chip is the glyph column's job.** That is what the waits keep —
+see below — and it is the better half anyway: a picture is recognised rather than
+read, so it costs the prose nothing.
+
+The panel is outside the rule (`promptFont`, the quote mark, the front line): it
+parks in a corner and is read whole.
+
+## The two waits are drawn big — the hourglass, not the words
 
 `preparing` (the model coming up) and `transcribing…` (the model chewing) are the
 only two states in which Victor is **waiting on this app**, and since 2026-09-01
-they are the only rows drawn at `hintInk` — a 30pt hourglass and a semibold 20
-beside it, where every other row is a 16pt glyph and a 17pt regular.
+they are the only rows whose *glyph* is drawn at `hintInk` — a 30pt hourglass
+where every other row's is 16.
 
 They were icon-sized, in `secondaryLabelColor`, on a bare chip: half-transparent
 dark grey with no halo, over the dark terminals and editors the chip spends its
@@ -841,8 +862,8 @@ life on. **Exactly the bug the selection row had** — the row was there and cou
 not be seen — and this time it was two states where the question being asked is
 *is it still doing something?*, asked from wherever he has already looked away to.
 
-The fix has two halves and both were needed: the size, and adding the hint rows'
-labels to `refreshChrome`'s white-plus-halo list. That list is the one place a row
+The fix that mattered was **colour**, not size: adding the hint rows' labels to
+`refreshChrome`'s white-plus-halo list. That list is the one place a row
 becomes legible on a bare chip, and it is the third time a row has been left off
 it.
 

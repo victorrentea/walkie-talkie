@@ -258,7 +258,24 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// from the screen: 13 → 17, 12 → 16, 11 → 14. Every box the text sits in is
     /// scaled with it (`recordRowHeight`, `titleRowHeight`, the glyph sizes), or
     /// the letters grow into a row that clips them.
-    private let titleFont = NSFont.systemFont(ofSize: 17, weight: .semibold)
+    ///
+    /// **And one weight, since 2026-09-01: every word on the chip is
+    /// `hintFont`.** Victor's rule, in his words — *"toate textele care apar în
+    /// tooltipul de lângă maus trebuie să aibă aceeași mărime de font și font
+    /// face"*. The three that were not: the title at semibold, the selection row
+    /// at 14, and `preparing` / `transcribing…` at a semibold 20 they had been
+    /// given a build earlier to make them visible.
+    ///
+    /// The chip is one card an inch from the pointer, read at a glance and never
+    /// studied; type hierarchy is for a page with a structure to explain. Here it
+    /// only made a five-row chip look like five different things. **Emphasis on
+    /// the chip is carried by the glyph column instead** — which is why the two
+    /// waits keep their oversized hourglass and lose their oversized words: the
+    /// picture is what makes a row findable, and it costs the prose nothing.
+    ///
+    /// `promptFont` and the panel's own rows are outside the rule: the panel is
+    /// parked in a corner and is read whole, not glanced at.
+    private let titleFont = NSFont.systemFont(ofSize: 17)
     private let promptFont = NSFont.systemFont(ofSize: 16)
     private let hintFont = NSFont.systemFont(ofSize: 17)
 
@@ -366,13 +383,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         NSAttributedString(string: words, attributes: [.font: hintFont])
     }
 
-    /// `preparing` / `transcribing…` — bigger and heavier than any other row's
-    /// words, because they are the only ones that mean *wait*. See `statusLines`.
-    private func waitText(_ words: String) -> NSAttributedString {
-        NSAttributedString(string: words,
-                           attributes: [.font: NSFont.systemFont(ofSize: 20, weight: .semibold)])
-    }
-
     /// The subtitle row is now flashes only. The shortcut legend used to live here
     /// and has moved into the recording row, where it sits beside the number it
     /// changes instead of being a separate line of instructions.
@@ -438,20 +448,23 @@ private let frontLabel = NSTextField(labelWithString: "")
             return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
         }
         guard sentPrompt == nil else { return [] }
-        // **The two waits are drawn big**, at `hintInk` rather than icon size,
-        // and in a heavier face than every other row. They are the only states in
-        // which Victor is *waiting on this app* — the model coming up, the model
-        // chewing — and the answer to "is it still doing something?" has to be
-        // readable from where he has already looked away to. At icon size, in
-        // `secondaryLabelColor`, on a bare chip over a dark terminal, it was a
-        // grey smudge beside the pointer; he asked for it to be visible, and the
-        // hourglass is the half that carries the meaning without being read.
+        // **The two waits are drawn big — the hourglass, not the words.** They
+        // are the only states in which Victor is *waiting on this app*, and the
+        // answer to "is it still doing something?" has to be readable from where
+        // he has already looked away to. At icon size, in `secondaryLabelColor`,
+        // on a bare chip over a dark terminal, it was a grey smudge beside the
+        // pointer.
+        //
+        // The text was briefly enlarged with it and is back to `hintFont`: every
+        // word on this chip is one size and one weight (`titleFont`), so emphasis
+        // here is the glyph column's job — which is the half that is recognised
+        // rather than read, and therefore the half that was worth the pixels.
         //
         // They are also the one pair of states where the chip has nothing else on
         // it: the title row is suppressed while the engine loads, so the row can
         // afford the height the mouse hints take.
-        if transcribing { return [(Self.waitGlyphBig, waitText("transcribing…"), Self.hintInk)] }
-        if engineLoading { return [(Self.waitGlyphBig, waitText("preparing"), Self.hintInk)] }
+        if transcribing { return [(Self.waitGlyphBig, plain("transcribing…"), Self.hintInk)] }
+        if engineLoading { return [(Self.waitGlyphBig, plain("preparing"), Self.hintInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -769,7 +782,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         pickRow.isHidden = true
         root.addSubview(pickRow)
 
-        selectionLabel.font = .systemFont(ofSize: 14)
+        // `hintFont` like every other word on the chip — it was 14, the one row
+        // set from the old ×1.3 table's bottom rung. See `titleFont`.
+        selectionLabel.font = hintFont
         selectionLabel.textColor = .secondaryLabelColor
         selectionLabel.lineBreakMode = .byTruncatingTail
         selectionLabel.maximumNumberOfLines = 1
@@ -1292,10 +1307,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
 
         if selection != nil {
-            // `stringValue` was written with the widths above.
-            selectionLabel.frame.size = NSSize(width: innerWidth, height: 19)
+            // `stringValue` was written with the widths above. The box is the
+            // rows' own height now that the text in it is the rows' own size —
+            // 19 was cut for a 14pt font and clips a 17.
+            selectionLabel.frame.size = NSSize(width: innerWidth, height: recordRowHeight)
             selectionLabel.isHidden = false
-            rows.append((selectionLabel, 19))
+            rows.append((selectionLabel, recordRowHeight))
         } else {
             selectionLabel.isHidden = true
         }
