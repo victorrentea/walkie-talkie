@@ -41,6 +41,7 @@ from datetime import datetime, timezone
 HOME = os.path.expanduser("~")
 CORPUS = os.environ.get("VOICE_CORPUS_DIR", os.path.join(HOME, ".walkie-talkie/voice-corpus"))
 CORPUS_DB = os.path.join(CORPUS, "corpus.db")
+BASELINE = os.path.join(CORPUS, "baseline.json")
 ENV_FILE = os.path.join(HOME, ".claude/agentmail.env")
 
 REPORT_EVERY_DAYS = 14
@@ -68,6 +69,40 @@ def env(key):
     except OSError:
         pass
     return os.environ.get(key)
+
+
+def recognition_quality():
+    """The last measured gap between the local recogniser and Wispr.
+
+    Written by `corpus_baseline.py`, which is run by hand rather than on a
+    timer — the number only moves when a model or a decoding flag changes, and
+    re-scoring an hour of audio to watch a constant is not worth the fans.
+    Reported here so the fortnightly mail is the only thing worth opening.
+
+    Clips scoring above 1.0 produced more wrong words than the reference holds:
+    that is a collapse, not a bad transcript, so they are counted rather than
+    averaged in, where a single one would swamp sixty good clips.
+    """
+    try:
+        with open(BASELINE) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    samples = data.get("samples") or []
+    if not samples:
+        return None
+    conds = [k for k, v in samples[0].items() if isinstance(v, dict) and "wer" in v]
+    when = datetime.utcfromtimestamp(os.path.getmtime(BASELINE)).strftime("%Y-%m-%d")
+    rows = []
+    for c in conds:
+        vals = sorted(s[c]["wer"] or 0 for s in samples)
+        ok = [s for s in samples if (s[c]["wer"] or 0) <= 1.0]
+        words = sum(s[c]["words"] for s in ok) or 1
+        rows.append((c,
+                     100 * sum(s[c]["wer"] * s[c]["words"] for s in ok) / words,
+                     100 * vals[len(vals) // 2],
+                     len(samples) - len(ok)))
+    return dict(when=when, n=len(samples), rows=rows)
 
 
 def stats(db, since=None):
@@ -178,6 +213,16 @@ def build(db):
         L.append("  %s%2dh  %-24s %s" % (">" if is_target else " ", h, name, when))
         L.append("        %s" % why)
     L.append("")
+    rq = recognition_quality()
+    if rq:
+        L.append("Local recogniser vs Wispr  (%d clips, measured %s)" % (rq["n"], rq["when"]))
+        L.append("-" * 60)
+        for name, wer, med, collapses in rq["rows"]:
+            L.append("  %-12s WER %5.1f%%   median %5.1f%%   collapses %d"
+                     % (name, wer, med, collapses))
+        L.append("  Lower is closer to Wispr. Re-measure with:")
+        L.append("    python3 walkie-talkie/helpers/corpus_baseline.py")
+        L.append("")
     L.append("The label problem")
     L.append("-" * 60)
     L.append("  Human-corrected labels: %d of %d samples (%s)."

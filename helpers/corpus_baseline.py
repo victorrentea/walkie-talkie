@@ -9,12 +9,16 @@ The reference is Wispr's `asrText` — its *raw* recogniser output, not the
 `formattedText` an LLM punctuated afterwards. Scoring a raw transcript against a
 formatted one measures the formatter, which is not what is being asked.
 
-Two conditions, because the cheap one might be enough:
-  plain    — the local model as the relay runs it today
-  prompted — the same model, handed Victor's 67-word Wispr dictionary as an
-             `initial_prompt`. Whisper conditions on that text, so names it has
-             never heard ("Rentea", "JPQL", "agentmail") stop being guessed
-             phonetically. This costs no training at all.
+Every condition is measured **at parity with the relay**, which is the lesson
+the first version of this script taught the hard way: it left
+`condition_on_previous_text` at the library default of True, where
+`whisper_helper.py` has always set it False. Two clips in sixty collapsed into a
+repetition loop and dragged the corpus figure from 20% to 42% — a defect of the
+measurement, not of anything Victor runs. A benchmark that does not match
+production measures the benchmark.
+
+The conditions are the levers that cost no training: which model, and the
+decoding thresholds that decide when Whisper retries a segment it is unsure of.
 """
 
 import json
@@ -27,8 +31,19 @@ import unicodedata
 CORPUS = os.path.expanduser("~/.walkie-talkie/voice-corpus")
 DB = os.path.join(CORPUS, "corpus.db")
 WISPR = os.path.expanduser("~/Library/Application Support/Wispr Flow/flow.sqlite")
-MODEL = os.environ.get("RELAY_WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 N = int(os.environ.get("BASELINE_N", "60"))
+
+TURBO = "mlx-community/whisper-large-v3-turbo"   # what the relay runs today
+LARGE = "mlx-community/whisper-large-v3-mlx"     # slower, better on non-English
+
+# How the relay actually calls it. Anything measured against something else is
+# measuring a program Victor does not run.
+RELAY = dict(language=None, verbose=False, condition_on_previous_text=False)
+
+CONDITIONS = [
+    ("turbo", TURBO, RELAY),
+    ("large-v3", LARGE, RELAY),
+]
 
 
 def norm(s):
@@ -60,39 +75,43 @@ def main():
         " WHERE source='wispr' AND asr_text IS NOT NULL AND length(trim(asr_text)) > 40"
         "   AND seconds BETWEEN 4 AND 30"
         " ORDER BY id LIMIT ?", (N,)).fetchall()
-    print("scoring %d samples against Wispr's raw ASR, model=%s" % (len(rows), MODEL), flush=True)
-
-    w = sqlite3.connect("file:%s?mode=ro" % WISPR, uri=True)
-    terms = [r[0] for r in w.execute(
-        "SELECT phrase FROM Dictionary WHERE isDeleted=0 ORDER BY frequencyUsed DESC LIMIT 60")]
-    prompt = ", ".join(terms)
-    print("dictionary prompt: %d terms\n" % len(terms), flush=True)
+    print("scoring %d samples against Wispr's raw ASR" % len(rows), flush=True)
 
     import mlx_whisper
     out = []
     for i, (sid, wav, ref, secs, lang) in enumerate(rows, 1):
         path = os.path.join(CORPUS, wav)
         rec = {"id": sid, "seconds": secs, "language": lang}
-        for cond, kw in (("plain", {}), ("prompted", {"initial_prompt": prompt})):
+        for cond, model, kw in CONDITIONS:
             try:
-                txt = mlx_whisper.transcribe(path, path_or_hf_repo=MODEL, **kw)["text"]
-            except Exception as e:
-                print("  %s failed on %s: %s" % (cond, sid[:8], e), flush=True)
+                txt = mlx_whisper.transcribe(path, path_or_hf_repo=model, **kw)["text"]
+            except Exception as exc:
+                print("  %s failed on %s: %s" % (cond, sid[:8], exc), flush=True)
                 txt = ""
             e, n = wer(ref, txt)
             rec[cond] = {"wer": e, "words": n, "text": txt}
-        print("%3d/%d  %-8s plain=%.3f prompted=%.3f" %
-              (i, len(rows), sid[:8], rec["plain"]["wer"] or 0, rec["prompted"]["wer"] or 0),
+        print("%3d/%d  %-8s  %s" % (i, len(rows), sid[:8],
+              "  ".join("%s=%.3f" % (c, rec[c]["wer"] or 0) for c, _, _ in CONDITIONS)),
               flush=True)
         out.append(rec)
 
     with open(os.path.join(CORPUS, "baseline.json"), "w") as f:
-        json.dump({"model": MODEL, "n": len(out), "samples": out}, f, ensure_ascii=False, indent=1)
+        json.dump({"n": len(out), "samples": out}, f, ensure_ascii=False, indent=1)
 
-    for cond in ("plain", "prompted"):
+    print("")
+    for cond, model, _ in CONDITIONS:
+        vals = sorted(r[cond]["wer"] or 0 for r in out)
         errs = sum((r[cond]["wer"] or 0) * r[cond]["words"] for r in out)
         words = sum(r[cond]["words"] for r in out)
-        print("\n%-9s corpus WER = %.1f%%  (%d reference words)" % (cond, 100 * errs / words, words))
+        # A clip scoring above 1.0 produced more wrong words than the reference
+        # has: that is a collapse, not a bad transcript, and it is reported
+        # separately rather than allowed to swamp the average.
+        ok = [r for r in out if (r[cond]["wer"] or 0) <= 1.0]
+        oke = sum(r[cond]["wer"] * r[cond]["words"] for r in ok)
+        okw = sum(r[cond]["words"] for r in ok)
+        print("%-10s WER %.1f%%  median %.1f%%  p90 %.1f%%  collapses %d/%d"
+              % (cond, 100 * oke / okw, 100 * vals[len(vals) // 2],
+                 100 * vals[int(0.9 * len(vals))], len(out) - len(ok), len(out)))
 
 
 if __name__ == "__main__":
