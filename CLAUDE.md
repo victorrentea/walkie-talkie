@@ -1383,6 +1383,37 @@ Only the dot animates; the count must stay readable at every instant.
 `flash(_:)` message summons it in any state, because the Accessibility warning
 fires at launch, long before a dictation.
 
+## The DJI receiver is the microphone whenever it is plugged in
+
+`InputDevice.swift`, called from `MicRecorder.start` once per dictation. If a
+device whose name or manufacturer says DJI is present, the recording goes through
+it; otherwise through the system's default input.
+
+- **Why not just follow the system default.** macOS points the default input at
+  whatever arrived last, and this Mac has four virtual input devices on it
+  (Loopback's `🎙️TO Zoom`, Wave Link, Iriun, Teams) plus every headset that ever
+  pairs. Any of them can quietly become the default between two dictations, and a
+  relay that followed it would record a sentence through a silent loopback and
+  hand back an empty transcript. Measured side by side on the same room: peak
+  amplitude 16552 through the receiver against 855 through the built-in
+  microphone — the built-in is across a desk, in a room with a projector fan and
+  an audience, which is exactly the audio Whisper is worst at.
+- **The receiver does not say "DJI"** — its USB product name is `Wireless Mic Rx`.
+  The brand is in the *manufacturer* string (`DJI Technology Co., Ltd.`), so the
+  match is over name **and** manufacturer, which is also what keeps it working
+  across the Mic 2 / Mic Mini line.
+- **Chosen per recording, never cached.** The `AudioDeviceID` is reassigned every
+  time the receiver is plugged back in, so nothing is remembered between
+  dictations — which is also what makes unplugging it mid-workshop fall back to
+  the built-in microphone instead of failing.
+- **A device is always set, even when it is the default one.** The input audio
+  unit keeps whatever device it was last told about, so a recording made after the
+  receiver was unplugged would otherwise still be aimed at a device that is gone.
+- **Nothing about this is on screen.** The chip has no room for a device name and
+  the choice is not a state Victor acts on; the log line
+  (`mic: recording through Wireless Mic Rx — 48000Hz × 1ch`) is where it is
+  answered, and it is also the only evidence if the switch ever fails.
+
 ## The voice corpus: audio kept beside the transcript, forever
 
 **`~/.walkie-talkie/voice-corpus/`** — `VoiceCorpus.swift`. Every dictation the

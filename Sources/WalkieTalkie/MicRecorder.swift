@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 
 /// The relay's own microphone — the only one in the loop.
 ///
@@ -15,8 +16,10 @@ import AVFoundation
 /// Whisper resamples to 16 kHz internally and `History.audio` is 16 kHz mono
 /// PCM, so writing anything richer would only be thrown away twice — once by the
 /// model and once by a corpus whose every existing sample is that format. The
-/// input device is whatever the system has selected and is read at its native
-/// rate; `AVAudioConverter` does the resampling on the audio thread's buffers.
+/// input device is picked by `InputDevice` (the DJI receiver when it is plugged
+/// in, the system's own choice otherwise) and is read at its native rate;
+/// `AVAudioConverter` does the resampling on the audio thread's buffers, and
+/// downmixes the receiver's two channels to the one Whisper wants.
 final class MicRecorder {
 
     /// Shorter than this and it was a misfire — a click he did not mean, or a
@@ -60,6 +63,10 @@ final class MicRecorder {
         guard !isRecording else { return nil }
 
         let input = engine.inputNode
+        // Point the engine at a device *before* asking what format it speaks —
+        // the answer is the device's, and reading it first would describe the
+        // one we are about to leave.
+        let device = InputDevice.select(on: input)
         let inFormat = input.outputFormat(forBus: 0)
         // A device that reports zero channels is one that is not really there —
         // a Bluetooth headset mid-handoff, or no input selected at all. Starting
@@ -95,6 +102,7 @@ final class MicRecorder {
 
         startedAt = Date()
         isRecording = true
+        Log.info("mic: recording through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
     }
 

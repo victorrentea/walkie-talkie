@@ -264,6 +264,11 @@ action. The WAV goes to a Whisper
 running on this Mac, and the transcript goes to the agent — nothing is ever typed
 or pasted into whatever holds the caret.
 
+It records through a **DJI wireless receiver** whenever one is plugged in, and
+through the system's default input when it is not — a lavalier on your collar
+beats a laptop microphone across the desk, and the choice is made per recording
+rather than following whatever macOS last pointed the default at.
+
 The selection is read via Accessibility (`kAXSelectedTextAttribute`), falling
 back to a simulated ⌘C for apps that don't expose it — with the full clipboard,
 every representation, snapshotted and restored around the probe.
