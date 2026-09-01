@@ -103,7 +103,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
-    private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
+    ///
+    /// The gesture is in the title for the reason **Bind This Window** carries
+    /// its own: a wheel chord has no key equivalent to be right-aligned as, and
+    /// the menu is now the only place any gesture is written down. Right mirrors
+    /// left the way disconnecting mirrors binding — that is the whole of what has
+    /// to be remembered.
+    private let disconnect = NSMenuItem(title: "Disconnect — or hold right, click the wheel", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it

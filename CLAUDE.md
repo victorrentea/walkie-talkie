@@ -29,9 +29,10 @@ Current strings live in `RelayWindow.swift`:
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Bind This Window — or hold left, click the wheel`, the three dictation rows,
+  `Bind This Window — or hold left, click the wheel`,
+  `Disconnect — or hold right, click the wheel`, the three dictation rows,
   `New Claude Code in ~/workspace — ⌘ + click the wheel`, `One More Screenshot`,
-  the `Pick an Element in Chrome` legend, `Pause` / `Resume`, `Disconnect`,
+  the `Pick an Element in Chrome` legend, `Pause` / `Resume`,
   `Quit`, and the `Local Whisper` readout
 
 The first two are **not on screen at the moment**: `showsGestureHints` is off, so
@@ -1557,6 +1558,7 @@ held. The third is a chord with the left button.**
 | dictating | hold **2s** | **cancel** it — throw the audio away |
 | **any state, bound or not** | **⌘ + click** | start a dictation **at a session that does not exist yet** — see *⌘ + the wheel* |
 | anywhere, any state | **left button held ≥0.3s, then click the wheel** | **rebind** — same call as ⌘⌃B, toggle included |
+| bound, any state | **right button held ≥0.3s, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
 | nothing bound, no chord | click | passed straight through |
 
 **Rebinding moved off the wheel and onto the chord on 2026-08-29**, and the two
@@ -1582,6 +1584,35 @@ or close them until the session ends. That was Victor's explicit call and it
 reverses the bargain the previous build was written to protect; if it grates, the
 cheap fix is to hand the click back when the frontmost app is a browser, not to
 put the hold back.
+
+**Right held, then the wheel, lets the binding go** — since 2026-09-01. It is
+deliberately the *mirror* of the rebind chord: one button held as a modifier, the
+wheel clicked on top, judged at the press, with the same `chordHoldSeconds`
+telling a chord from two buttons that overlapped. Left points the relay at
+something; right takes it back. Nothing has to be learned twice.
+
+Disconnecting was in the menu and nowhere else, and the menu bar is the one place
+the hand on the mouse is not — every other thing the wheel does (bind, dictate,
+cancel, spawn) is reachable without leaving the pointer, and the gesture that
+*ends* a binding was the exception. It calls the same `unbindTerminal` the menu's
+**Disconnect** row calls, so both routes land in one state and the chip comes
+apart where it stood (`UnbindPop`), which is the only thing on screen that says
+it happened.
+
+**It outranks every other meaning the wheel has**, including a held prompt and a
+running dictation, and it is the first middle-button branch in `handle` for that
+reason. It is the answer to *stop, this is going to the wrong place*, and it
+would be a poor one if it first needed the sentence to be over. A press it takes
+mid-dictation cancels the pending 2s hold timer, so the cancel cannot land on
+whatever comes next.
+
+**Gated on `HotkeyTap.bound`, which is deliberately not `localCapture`**: that
+flag goes false on pause, and a paused relay is still pointed at a terminal, so
+letting go of it is still a thing to do. With nothing bound the branch is skipped
+entirely and the click stays available to whatever is underneath.
+
+**The right button is watched and never taken**, on exactly the terms the left
+one is — a swallowed right click is a context menu that never opened.
 
 **The left button is watched and never taken.** `HotkeyTap` adds `.leftMouseDown`
 / `.leftMouseUp` to the tap only to record *when* the button went down, and both

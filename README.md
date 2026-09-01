@@ -232,6 +232,7 @@ once, each taking one):
 | **⌘ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **hold left, click the wheel** | Re-points the relay at the window in front — the same call as ⌘⌃B |
+| **hold right, click the wheel** | Lets the binding go — the same call as the menu's **Disconnect**. Outranks every other meaning the wheel has, so it works mid-dictation too |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
@@ -257,7 +258,9 @@ The relay owns the whole path. **Click the mouse wheel** while a terminal is bou
 and it opens the microphone itself; **click it again** to end the recording, or
 hold it for two seconds to throw the dictation away. Rebinding is the wheel with
 the **left button already held** — a chord, so that a bare click is free to mean
-the thing it means dozens of times a day. The WAV goes to a Whisper
+the thing it means dozens of times a day; letting go of the binding is the same
+chord with the **right button**, which is the mirror gesture for the mirror
+action. The WAV goes to a Whisper
 running on this Mac, and the transcript goes to the agent — nothing is ever typed
 or pasted into whatever holds the caret.
 

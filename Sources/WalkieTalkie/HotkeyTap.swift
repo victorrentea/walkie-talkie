@@ -89,6 +89,22 @@ final class HotkeyTap {
     /// whatever drag or selection that button is in.
     var onWheelBind: (() -> Bool)?
 
+    /// The wheel clicked **with the right button already held** — let the
+    /// binding go. The same call the menu's `Disconnect` row makes, so the
+    /// gesture and the row cannot drift apart.
+    ///
+    /// **The mirror of the rebind chord, and deliberately shaped like it**: one
+    /// button held as a modifier, the wheel clicked on top, judged at the press.
+    /// Left points the relay somewhere; right takes it back. Nothing else in
+    /// this app has to be learned twice to know both.
+    ///
+    /// Why it needed a gesture at all: disconnecting was only ever in the menu,
+    /// which means going to the menu bar — the one place the hand on the mouse
+    /// is not. Every other thing the wheel does (bind, dictate, cancel, spawn)
+    /// is reachable without leaving the pointer, and the one that *ends* the
+    /// session was the exception.
+    var onWheelUnbind: (() -> Void)?
+
     /// Whether the frontmost app is one `bind` would take. Pushed from
     /// `AppDelegate` on every app switch rather than asked here: the answer needs
     /// `NSWorkspace`, which is a main-thread question, and an event tap that
@@ -169,6 +185,17 @@ final class HotkeyTap {
     }
     private var localCaptureFlag = false
 
+    /// There is a destination, **whether or not the relay is forwarding to it** —
+    /// the only state in which the unbind chord means anything. Deliberately not
+    /// `localCapture`: that one goes false on pause, and a paused relay is still
+    /// pointed at a terminal, so letting go of it is still a thing to do.
+    /// Written from the main thread by `AppDelegate.syncLocalCapture`.
+    var bound: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return boundFlag }
+        set { stateLock.lock(); boundFlag = newValue; stateLock.unlock() }
+    }
+    private var boundFlag = false
+
     /// When mouse 5 last went down, for the double-click test. Touched only from
     /// the tap callback, which is one thread, so it needs no lock — unlike the
     /// flags above, which the main thread writes.
@@ -195,6 +222,11 @@ final class HotkeyTap {
     /// from the tap callback, which is one thread.
     private var leftDownAt: CFTimeInterval = 0
     private var leftIsHeld: Bool { leftDownAt > 0 && CACurrentMediaTime() - leftDownAt >= Self.chordHoldSeconds }
+
+    /// When the right button went down, or 0 while it is up — the mirror of
+    /// `leftDownAt`, and read against the same threshold. Same thread, so no lock.
+    private var rightDownAt: CFTimeInterval = 0
+    private var rightIsHeld: Bool { rightDownAt > 0 && CACurrentMediaTime() - rightDownAt >= Self.chordHoldSeconds }
 
     /// The hold fired (or the chord was taken) — the matching release is ours
     /// too, or the app underneath is left holding a button that was never let go.
@@ -240,6 +272,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                  // through — see the branch at the top of `handle`.
                  | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.leftMouseUp.rawValue)
+                 // The right button, for the same reason and on the same terms:
+                 // held, it is the modifier that turns a wheel click into
+                 // "disconnect". Watched, never taken — a context menu is not
+                 // something this app may eat.
+                 | CGEventMask(1 << CGEventType.rightMouseDown.rawValue)
+                 | CGEventMask(1 << CGEventType.rightMouseUp.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -282,6 +320,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         if type == .leftMouseUp {
             leftDownAt = 0
+            return Unmanaged.passUnretained(event)
+        }
+
+        // **The right button, watched on exactly the same terms.** It is the
+        // other half of the unbind chord and nothing else here; every press and
+        // release goes straight back out, because a swallowed right click is a
+        // context menu that never opened.
+        if type == .rightMouseDown {
+            rightDownAt = CACurrentMediaTime()
+            return Unmanaged.passUnretained(event)
+        }
+        if type == .rightMouseUp {
+            rightDownAt = 0
             return Unmanaged.passUnretained(event)
         }
 
@@ -374,6 +425,29 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // which is the orphan-event bug this file already guards against
             // twice, pointing the other way.
 
+            // **The other chord: right held + wheel → let the binding go.**
+            // Judged at the press like the bind above, and placed **before**
+            // both it and the dictation branch, because it is the one gesture
+            // here that has to work in every state — including mid-dictation,
+            // where the wheel already means "cancel" if held and "end it" if
+            // tapped. Disconnect outranks both: it is the answer to *stop, this
+            // is going to the wrong place*, and it would be a poor one if it
+            // first needed the sentence to be over.
+            //
+            // Nothing bound is nothing to disconnect, and the branch is skipped
+            // so the click stays available to whatever is underneath.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && rightIsHeld && bound {
+                wheelArmed = true    // the release is ours too
+                // A hold timer from a press we are now overriding must not fire
+                // on the dictation this click is ending.
+                wheelDown = false
+                wheelHold?.cancel()
+                wheelHold = nil
+                Log.info("🔌 right held + wheel — disconnecting")
+                DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
+                return nil
+            }
+
             // **A prompt on screen outranks everything else the wheel means.**
             // It is the same verdict a click on the panel already gives and the
             // same one ⏎ gives; what it adds is that the hand which just clicked
@@ -383,6 +457,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if button == MOUSE_BUTTON_MIDDLE && bare && promptHeld {
                 if type == .otherMouseDown {
                     DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
+                } else {
+                    // **This release consumes whatever the press armed**, since
+                    // it is swallowed here instead of at the branch below that
+                    // normally clears the flags. Left set, `wheelArmed` would
+                    // swallow the release of the *next* press — one this file
+                    // passed through — which is precisely the orphan-event bug
+                    // the branch below exists to prevent.
+                    wheelArmed = false
+                    wheelDown = false
+                    wheelSpawn = false
+                    wheelHold?.cancel()
+                    wheelHold = nil
                 }
                 return nil
             }

@@ -268,6 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.cancelLocalRecording() }
         }
         hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal() != nil }
+        // Right held + the wheel. **The same call the menu's Disconnect row
+        // makes**, so the gesture cannot end up meaning something subtly other
+        // than the row that documents it — including the chip's burst, which is
+        // the only thing on screen that says it happened.
+        hotkeys.onWheelUnbind = { [weak self] in self?.unbindTerminal() }
         // The menu's copy of ⌘ + the wheel. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
@@ -506,6 +511,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// presses to hand the mouse back to the app underneath.
     private func syncLocalCapture() {
         hotkeys.localCapture = isBound && !paused
+        // Not gated on `paused`: the unbind chord is the one gesture that still
+        // applies to a relay that is not listening, because what it acts on is
+        // the binding rather than the microphone.
+        hotkeys.bound = isBound
     }
 
     /// Start recording, or finish the one that is open.
