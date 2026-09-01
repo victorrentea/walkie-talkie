@@ -327,6 +327,40 @@ Nothing prunes this folder — it is meant to accumulate, at roughly 35 MB a day
 of speech. Delete it if you don't want it; the relay recreates only what arrives
 after that.
 
+#### Wispr Flow's dictations end up here too
+
+The relay only records what *it* was asked to take, which is a fraction of a day's
+speech. The rest goes through Wispr Flow, and Wispr keeps its own recordings —
+briefly. Measured on 2026-09-01 its database held **12,186 transcripts going back
+to January and 185 recordings**, none older than six days: the text is kept, the
+audio is pruned after about a week.
+
+`helpers/corpus_harvest.py` copies each pair out before that happens, into the
+same folders, and into a `corpus.db` beside the manifest that this and the
+relay's own samples both live in:
+
+```bash
+/usr/bin/python3 helpers/corpus_harvest.py    # ~1.5s, idempotent, no model involved
+sqlite3 ~/.walkie-talkie/voice-corpus/corpus.db 'SELECT COUNT(*), SUM(seconds)/3600 FROM samples'
+```
+
+A LaunchAgent (`ro.victorrentea.voice-corpus-harvest`) runs it every two hours —
+far inside the week of margin, so a shut lid never costs a recording. It opens
+`flow.sqlite` **read-only** and writes nothing back to it, ever.
+
+It also comes back to rows it has already taken. `editedText` is the column where
+Wispr records what you *fixed by hand* after it got a word wrong, and it fills
+that in later, by watching what you type over the pasted text — so a row taken
+the minute it appeared has no correction in it yet. Every run re-reads the last
+fortnight and updates the transcript if it has moved. That column is the only
+label in the corpus that Wispr did not write itself, which makes it the only one
+that could ever teach a model to *beat* Wispr rather than imitate it.
+
+`helpers/corpus_report.py` runs daily, mails a summary every fourteenth day —
+minutes collected, dictations, rate per day, and how far the corpus is from the
+ten hours that a single-speaker fine-tune wants — and does nothing on the other
+thirteen.
+
 ## Build
 
 ```bash
