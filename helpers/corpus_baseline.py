@@ -42,7 +42,7 @@ RELAY = dict(language=None, verbose=False, condition_on_previous_text=False)
 
 CONDITIONS = [
     ("turbo", TURBO, RELAY),
-    ("large-v3", LARGE, RELAY),
+    ("turbo-ro", TURBO, dict(RELAY, language="ro")),
 ]
 
 
@@ -112,6 +112,17 @@ def main():
         print("%-10s WER %.1f%%  median %.1f%%  p90 %.1f%%  collapses %d/%d"
               % (cond, 100 * oke / okw, 100 * vals[len(vals) // 2],
                  100 * vals[int(0.9 * len(vals))], len(out) - len(ok), len(out)))
+        # Forcing a language helps the language it forces and can wreck the
+        # other one, so the average is the wrong place to look.
+        for lang in ("ro", "en"):
+            sub = [r for r in ok if r["language"] == lang]
+            if not sub:
+                continue
+            w2 = sum(r[cond]["words"] for r in sub) or 1
+            coll = len([r for r in out if r["language"] == lang]) - len(sub)
+            print("             %s: WER %.1f%%  (%d clips, %d collapses)"
+                  % (lang, 100 * sum(r[cond]["wer"] * r[cond]["words"] for r in sub) / w2,
+                     len(sub), coll))
 
 
 if __name__ == "__main__":

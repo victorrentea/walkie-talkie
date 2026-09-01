@@ -358,6 +358,37 @@ fortnight and updates the transcript if it has moved. That column is the only
 label in the corpus that Wispr did not write itself, which makes it the only one
 that could ever teach a model to *beat* Wispr rather than imitate it.
 
+#### What the local recogniser costs, and what does not fix it
+
+`helpers/corpus_baseline.py` scores the local model against Wispr's raw
+`asrText` over the same WAVs — raw, not the formatted text, since scoring a
+transcript against a punctuated one measures the formatter. Measured on 60
+clips, 2026-09-01, at parity with what `whisper_helper.py` actually calls:
+
+```
+turbo (production)   WER 19.7%   ro 22.7%   en 7.1%   median 17.4%
+```
+
+**The error is almost entirely Romanian**, which is 81% of the corpus. English
+is already close to Wispr; Romanian is three times worse. That asymmetry is the
+case for fine-tuning, and it is also why every cheap alternative was tried
+first. All three lost:
+
+| tried | result |
+|---|---|
+| `large-v3` instead of turbo | WER 24.0%, p90 73% — **worse**, despite being the bigger model |
+| forcing `language="ro"` | ro 22.7 → 23.0% (flat), en 7.1 → 17.1% — **worse** |
+| the 67-term Wispr dictionary as `initial_prompt` | 19.6 → 21.0% on clips that did not collapse — **worse** |
+
+`condition_on_previous_text=False` was already set and stays. Note that it does
+**not** prevent collapses: 2–3 clips in 60 still fail, and the cause is language
+detection, not repetition — on a short Romanian clip turbo sometimes decides it
+is hearing English and writes fluent invented English. `large-v3` is better at
+that one thing (1 collapse instead of 3) and worse at everything else.
+
+So there is no free win left. The remaining path is a LoRA fine-tune, which is
+what the corpus is for.
+
 `helpers/corpus_report.py` runs daily, mails a summary every fourteenth day —
 minutes collected, dictations, rate per day, and how far the corpus is from the
 ten hours that a single-speaker fine-tune wants — and does nothing on the other
