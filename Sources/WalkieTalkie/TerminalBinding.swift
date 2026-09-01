@@ -228,6 +228,24 @@ final class TerminalBinding {
         return bound
     }
 
+    /// **Bind a Terminal.app session by its tty**, for the one destination that
+    /// was never pointed at: `SpawnTerminal` has just opened the window and
+    /// `do script` handed back the device it landed on, so there is nothing to
+    /// ask about "the tab in front" — the answer is already in hand, and asking
+    /// again would be guessing at a window Victor's focus may already have left.
+    ///
+    /// Runs subprocesses — call it off the main thread, like every other bind.
+    @discardableResult
+    func bind(tty: String) -> Target? {
+        guard let bound = terminalTarget(tty: tty, title: Self.title(forTTY: tty),
+                                         fallbackName: "Terminal", bundleID: "com.apple.Terminal")
+        else { return nil }
+        lock.lock(); current = bound; lock.unlock()
+        let where_ = bound.sourceFrame.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" } ?? "frame unknown"
+        Log.info("📍 bound to \(bound.label) (\(bound.address)) — window at \(where_)")
+        return bound
+    }
+
     /// Terminal.app: ask it for the tty of the tab in front, then find out what
     /// is actually running there.
     private func bindTerminalApp(fallbackName: String, bundleID: String) -> Target? {
@@ -235,8 +253,15 @@ final class TerminalBinding {
             Log.error("bind: Terminal.app would not name its front tab's tty")
             return nil
         }
-        let tty = front.tty
+        return terminalTarget(tty: front.tty, title: front.title,
+                              fallbackName: fallbackName, bundleID: bundleID)
+    }
 
+    /// Everything a Terminal.app binding is, once the tty is known — shared by
+    /// the two ways of arriving at one: the tab in front, and the session this
+    /// app just spawned.
+    private func terminalTarget(tty: String, title: String?,
+                                fallbackName: String, bundleID: String) -> Target? {
         // tmux first: the tty is the *client's*, and everything typed at it goes
         // to whichever pane happens to be active. Pinning the pane at bind time
         // is the only way the binding means what Victor pointed at.
@@ -256,7 +281,7 @@ final class TerminalBinding {
         let folder = Self.sessionLabel(onTTY: tty)
         return Target(handle: .terminalApp(tty: tty), label: folder ?? fallbackName,
                       address: short, appName: Self.display(fallbackName), bundleID: bundleID,
-                      folder: folder, title: front.title,
+                      folder: folder, title: title,
                       sourceFrame: frame, boundAt: Date())
     }
 

@@ -1718,8 +1718,9 @@ now *let this one go* / *make a new one* — the two things to do when the sessi
 in front of you is not the one you want.
 
 **The disconnect therefore moved to the release.** It fired at the press, and
-firing at the press then spawning a second later would do both — and the spawn is
-documented to leave the binding exactly where it was. `wheelRightChord` is what
+firing at the press then spawning a second later would do both — an unbind burst
+going off over a binding the spawn is about to replace anyway, which is one
+gesture read out loud as two. `wheelRightChord` is what
 the release reads to know which branch swallowed the press; the spawn half is
 **not** gated on `bound`, since the one moment a new session is most wanted is
 when there is no session at all.
@@ -1838,8 +1839,8 @@ two fields would read as a comparison that never happened.
 **Since 2026-08-30 a dictation can be aimed at a session that has not been
 started.** ⌘ + the wheel opens the microphone exactly as a bare click does; when
 the sentence ends, a new Terminal window appears in `~/workspace` with an
-interactive Claude Code in it and the words as its first prompt. The binding does
-not move.
+interactive Claude Code in it and the words as its first prompt, and the relay
+binds it.
 
 **Why it had to exist.** Every other destination in this app has to be *pointed
 at* — ⌘⌃B, the mouse-5 double click, the left-plus-wheel chord all say "that
@@ -1895,24 +1896,45 @@ a destination answers itself with a picture of that window travelling to the
 chip; this one answered with nothing, and the sentence went somewhere he had to
 go and find.
 
-**It flies without binding**, which is not an oversight — see the paragraph
-below. The flight is played for the reason the flight exists (*which window did
-that go to?*), not for the claim that comes with it. 2.5s because `do script`
+**And the flight is now a real bind flight** — see the paragraph below. It used
+to be played for the reason the flight exists (*which window did that go to?*)
+without the claim that comes with it; the claim is true since 2026-09-01. 2.5s because `do script`
 returns as soon as Terminal has a window: the shell is still starting, `claude`
 has not drawn a frame, and a picture taken then is a picture of an empty prompt.
 The frame comes from `TerminalBinding.terminalWindowFrame(tty:)` — not private
 since this, because a spawn knows its window only by the tty `do script` handed
 back.
 
-**The binding does not move.** The new window is where *this* sentence went, not
-where the relay now lives. Victor asked for that explicitly and the reason holds
-on its own: the wheel is a gesture he makes dozens of times a day at the session
-he is working in, and a spawn that silently re-pointed it would put the next
-ordinary dictation into a session four seconds old. Two spawns in a row each get
-their own window and the terminal he was aimed at is still the one he is aimed at;
-unbound, he stays unbound. A spawn is a one-shot destination, not a way of
-acquiring one — which is also why nothing is flashed on success: the window is in
-front with the session running in it, and that is the whole message.
+**The binding moves to the new window (since 2026-09-01).** For its first two
+days it did not: a spawn was a one-shot destination, on Victor's explicit
+instruction, because the wheel is a gesture he makes dozens of times a day at the
+session he is working in and a spawn that silently re-pointed it would put the
+next ordinary dictation into a session four seconds old.
+
+What killed that rule is the commonest path through the gesture, not an edge of
+it: the app starts unbound, the right chord opens a session, the words land — and
+the relay is still pointing at nothing, so the wheel is inert (*Unbound is
+inert*) and the second sentence of the conversation he has just started has
+nowhere to go. He has to bind the window by hand, which is the pointing this
+gesture exists to remove. Reported 2026-09-01: *"nu s-a autolegat de acel
+terminal … a rămas idle"*, with the log showing the manual `left + wheel` bind a
+minute later.
+
+**Always, not only when nothing was bound** — his call, asked and answered the
+same day. A spawn is him saying the session he wants does not exist yet, which is
+the same sentence as *the one I am pointed at is not it* — literally what the
+right chord means (*let this one go / make a new one*). Two spawns in a row each
+still get their own window; the relay ends up on the second, which is the one he
+is talking to.
+
+`AppDelegate.adoptSpawnedWindow` is where it happens, on the same 2.5s beat as
+the flight and for a second reason of its own: the chip's label is read off the
+process on that tty, and at `do script`'s return there is not one yet. It binds
+by tty (`TerminalBinding.bind(tty:)`) rather than by "the tab in front" — the
+window was never pointed at, the device is already in hand, and by then Victor's
+focus may have moved on. Nothing is flashed on success: the window is in front
+with the session running in it, and the chip now names it, which is the whole
+message.
 
 **The chip says the destination that does not exist yet**, and it outranks the
 bound one for the length of that sentence (`RelayWindow.spawnLabel`): the words

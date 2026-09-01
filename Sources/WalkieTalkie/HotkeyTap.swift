@@ -497,8 +497,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //
             // **The disconnect therefore moves to the release**, where it can be
             // told from a hold. Firing it at the press and spawning a second
-            // later would do both — and the spawn is documented to leave the
-            // binding exactly where it was.
+            // later would do both: an unbind burst going off over a binding the
+            // spawn is about to replace anyway, which is one gesture read out
+            // loud as two.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && rightIsHeld {
                 // A hold timer from a press we are now overriding must not fire
                 // on the dictation this click is ending.

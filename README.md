@@ -159,9 +159,10 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 relay opens a new Terminal window, starts an interactive Claude Code in it, and
 hands over what you said as the session's first prompt.
 
-**The binding does not move**: whatever the relay was pointed at before is where
-your next ordinary dictation still goes. A spawn is a one-shot destination, not a
-way of acquiring one.
+**The relay then binds that window**: the session you just created is where your
+next ordinary dictation goes too, so the conversation you started by talking can
+be continued by talking. The blue rectangle flies from it into the chip, the same
+answer any other bind gives.
 
 It runs whenever the app does, bound or not: everything else here has to be
 *pointed* at a terminal, and the one thing that cannot express is the way most

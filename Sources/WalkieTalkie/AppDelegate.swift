@@ -1268,15 +1268,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is ready to read them. That is also why this does not wait for the session
     /// to come up before reporting: there is no readiness to wait for.
     ///
-    /// **The binding does not move.** The new window is where *this* sentence
-    /// went, not where the relay now lives: Victor asked for it explicitly, and
-    /// the reason holds on its own — the wheel is a gesture he makes dozens of
-    /// times a day at the session he is working in, and a spawn silently
-    /// re-pointing it would mean the next ordinary dictation lands in a session
-    /// that has existed for four seconds. Two more spawns in a row still each
-    /// get their own window, and the terminal he was aimed at is still the one
-    /// he is aimed at. Unbound, it stays unbound — a spawn is a one-shot
-    /// destination, not a way of acquiring one.
+    /// **The binding moves to the new window, since 2026-09-01.** It used to
+    /// stay where it was — a spawn was a one-shot destination — and the case
+    /// that killed that rule is the commonest one there is: the app starts
+    /// unbound, the right chord opens a session, the words land, and the relay
+    /// is still pointing at nothing, so the next sentence has nowhere to go and
+    /// the wheel is inert (*Unbound is inert*). Reported 2026-09-01: *"nu s-a
+    /// autolegat de acel terminal … a rămas idle"*.
+    ///
+    /// Always, not only when unbound — Victor's call. A spawn is him saying the
+    /// session he wants does not exist yet, which is the same sentence as "the
+    /// one I am pointed at is not it"; that is literally what the right chord
+    /// means (*let this one go / make a new one*). Two spawns in a row still
+    /// each get their own window; the relay ends up on the second, which is the
+    /// one he is talking to.
     private func spawnClaude(_ m: Message) {
         let line = Self.terminalLine(m)
         guard !line.isEmpty else { return clearSpawn() }
@@ -1292,7 +1297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
                 case .opened(let tty):
-                    self.flySpawnedWindow(tty: tty)
+                    self.adoptSpawnedWindow(tty: tty)
                 case .failed(let why):
                     // The outbox already has the line — `commit` wrote it before
                     // this ran — so what is lost is the delivery, and this is the
@@ -1304,7 +1309,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// **The spawned window gets the bind flight, a beat after it appears.**
+    /// **The spawned window becomes the binding, a beat after it appears** — and
+    /// gets the bind flight that says so.
     ///
     /// A spawn is the one destination Victor never pointed at: the window opens
     /// on its own, somewhere he was not looking, while his hand is still on the
@@ -1313,31 +1319,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// one answered with nothing — the sentence went somewhere he had to go and
     /// find. The flight is what connects the gesture to the window it produced.
     ///
-    /// **It does not bind, and that is deliberate.** *⌘ + the wheel* is a
-    /// one-shot destination on Victor's explicit instruction — the relay stays
-    /// pointed where it was — so this plays the same animation for the reason the
-    /// animation exists (which window did that go to?) without the claim that
-    /// comes with it. The flight lands where the chip is; what the chip *says* is
-    /// unchanged, and the words went to the window that just flew.
+    /// **It binds, since 2026-09-01** — see `spawnClaude`. The flight was already
+    /// the bind animation played without the claim behind it; now the claim is
+    /// true, and the chip names the session that just opened.
     ///
     /// **2.5s**, because `do script` returns as soon as Terminal has a window: the
     /// shell is still starting, `claude` has not drawn a frame, and a picture
     /// taken then is a picture of an empty prompt. Late enough to catch the
-    /// session, early enough to still be about the gesture.
-    private func flySpawnedWindow(tty: String) {
+    /// session, early enough to still be about the gesture — and it is what the
+    /// bind needs too, since the label comes from the process on that tty and
+    /// there is not one yet at `do script`'s return.
+    private func adoptSpawnedWindow(tty: String) {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.5) { [weak self] in
-            // Off the main thread: the lookup is an `osascript` subprocess, like
-            // every other question this app asks Terminal.
-            guard let frame = TerminalBinding.terminalWindowFrame(tty: tty) else {
+            guard let self = self else { return }
+            // Off the main thread: the bind is `osascript` and `ps` subprocesses
+            // all the way down, like every other question this app asks Terminal.
+            //
+            // A window this app opened four seconds ago that Terminal will not
+            // name is a bind that cannot be made — but the sentence still landed
+            // there, so the flight is still worth playing on its own.
+            let bound = self.terminal.bind(tty: tty)
+            guard let frame = bound?.sourceFrame ?? TerminalBinding.terminalWindowFrame(tty: tty) else {
                 Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) has no frame — no flight")
                 return
             }
             DispatchQueue.main.async {
-                guard let self = self else { return }
                 // Same reason ⌘⌃B wakes it: macOS hides the pointer while he
                 // types, and a flight that shrinks onto a hidden chip lands on
                 // empty screen.
                 self.overlay.wakePointer()
+                // The chip is set first and the rectangle flies into it, exactly
+                // as ⌘⌃B does it: the flight has to have something to land on,
+                // and the window that was captured *is* that label.
+                if let bound = bound { self.showBound(bound) }
                 BindFlight.fly(from: frame, to: { [weak self] in
                     self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
                 })
