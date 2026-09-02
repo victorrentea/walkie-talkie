@@ -384,14 +384,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // and AppKit lays its own ⌘⌃ column out to the right of the text — so the
         // two end up as neighbours, which is all that was ever wanted.
         gestureRows = [
-            (bind, "hold ⬅️ + 🛞"),
-            (disconnect, "hold ➡️ + 🛞"),
-            (startDictation, "🛞"),
-            (stopRecording, "🛞"),
-            (cancelDictation, "hold 🛞 2s"),
-            (newSession, "⌘ + 🛞, or hold ➡️ + 🛞 1s"),
-            (shot, "F3, or the back button while dictating"),
-            (pickLegend, "⌘⇧ + 🖱️, while dictating"),
+            (bind, bind.title, "hold ⬅️ + 🛞"),
+            (disconnect, disconnect.title, "hold ➡️ + 🛞"),
+            (startDictation, startDictation.title, "🛞"),
+            (stopRecording, stopRecording.title, "🛞"),
+            (cancelDictation, cancelDictation.title, "hold 🛞 2s"),
+            (newSession, newSession.title, "⌘ + 🛞, or hold ➡️ + 🛞 1s"),
+            (shot, shot.title, "F3, or the back button while dictating"),
+            (pickLegend, pickLegend.title, "⌘⇧ + 🖱️, while dictating"),
         ]
         layOutGestures(in: menu)
 
@@ -399,8 +399,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
         mirror.start()
     }
 
-    /// The item and the chord it is performed with — the right-hand column.
-    private var gestureRows: [(item: NSMenuItem, gesture: String)] = []
+    /// The item, **its label**, and the chord it is performed with.
+    ///
+    /// **The label is stored and not read back off the item**, which is the bug
+    /// that shipped: setting `attributedTitle` also rewrites `title`, so the
+    /// second pass built `label \t chord \t chord` out of a title that already
+    /// carried one, and every gesture row in the menu printed its chord twice on
+    /// two lines. `restyleGestures` runs on every `menuWillOpen`, so it was the
+    /// second open that broke it, not the first.
+    private var gestureRows: [(item: NSMenuItem, label: String, gesture: String)] = []
     /// Where that column's right edge sits, measured once from the widest row.
     private var gestureTab: CGFloat = 0
 
@@ -419,7 +426,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let gap: CGFloat = 28
         var tab: CGFloat = 0
         for item in menu.items where !item.isSeparatorItem { tab = max(tab, width(item.title)) }
-        for row in gestureRows { tab = max(tab, width(row.item.title) + gap + width(row.gesture)) }
+        for row in gestureRows { tab = max(tab, width(row.label) + gap + width(row.gesture)) }
         gestureTab = tab
         restyleGestures()
     }
@@ -438,7 +445,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         for row in gestureRows {
             let ink: NSColor = row.item.isEnabled ? .labelColor : .disabledControlTextColor
             row.item.attributedTitle = NSAttributedString(
-                string: "\(row.item.title)\t\(row.gesture)",
+                string: "\(row.label)\t\(row.gesture)",
                 attributes: [.font: font, .foregroundColor: ink, .paragraphStyle: style])
         }
     }

@@ -72,11 +72,19 @@ final class TerminalBinding {
         /// Terminal tab and not the pty the agent is on, so it simply fails to
         /// match rather than matching the wrong session. `.keystroke` has no tty
         /// at all — that is the case that could not be guarded either.
+        /// **Bare `ttysNNN`, never `/dev/ttysNNN`.** The two spellings are both
+        /// in this file — the handle keeps the device path because that is what
+        /// AppleScript compares a tab's `tty` against, and `address` keeps the
+        /// short form because that is what a human reads. The consumer here is
+        /// the status line, which resolves its own with `ps -o tty=` and gets
+        /// the short one; publishing the path meant a marker that could never
+        /// match, and matched nothing silently.
         var tty: String? {
+            let short: (String) -> String = { ($0 as NSString).lastPathComponent }
             switch self {
-            case .terminalApp(let tty):   return tty
-            case .tmux(_, let tty):       return tty
-            case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }
+            case .terminalApp(let tty):   return short(tty)
+            case .tmux(_, let tty):       return short(tty)
+            case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }.map(short)
             case .keystroke:              return nil
             }
         }
