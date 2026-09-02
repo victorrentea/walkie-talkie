@@ -618,7 +618,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
         // repeated here because this is the path that opens the microphone.
         guard hasDestination else { return }
-        if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)") }
+        if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨") }
         // **The chip says the caret, and it outranks the bound terminal** — the
         // same slot, and the same argument, a spawn uses: for the length of this
         // sentence the words are not going where the chip has been saying they
@@ -732,7 +732,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // about, on the one message that means the microphone just threw
         // everything away. A glyph that has to be decoded is worse than none on a
         // row that is up for a second and a half.
-        overlay.flash("dictation cancelled", duration: 1.5)
+        // **🗑️ back in front of it**, on Victor's ask (2026-09-02). It led with
+        // one until the flash row was still being drawn under a lone 🎙️ title —
+        // Apple draws the wastebasket with its lid flying off above the bin, so
+        // beside the microphone it read as a second glyph on a two-glyph line.
+        // That title row is gone from flashes now (*A flash replaces the
+        // collapsed chip*), so the bin is the row's only picture and says what
+        // every other flash's leading emoji says: which kind of thing this is.
+        overlay.flash("🗑️ dictation cancelled", duration: 1.5)
     }
 
     private func stopLocalRecording() {
@@ -761,6 +768,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it is working — see `RelayWindow.setTranscribing`.
         overlay.setTranscribing(true, audio: duration)
 
+        // What this decode actually costs, against the audio it was handed —
+        // the pair `DecodeRate` learns the countdown's factor from. Started
+        // here rather than inside `LocalWhisper`, because what the row promised
+        // covers the whole round trip: the JSON out, the helper's answer, and
+        // the queue hop back.
+        let decodeStartedAt = Date()
         whisper.transcribe(wav: wav.path) { [weak self] result in
             guard let self = self else { return }
             guard let r = result, !r.text.isEmpty else {
@@ -775,6 +788,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
                             r.language ?? "?", r.avgLogprob, r.text.count))
+            // Filed on the success path only: a decode that returned nothing
+            // says nothing about how long a decode takes, and a failure that
+            // came back instantly would pull the estimate down for the next
+            // twenty dictations.
+            DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt))
             // **Sent even below the confidence floor.** There is one reading of
             // this audio and no second opinion to fall back on, so the
             // alternative to a shaky transcript is silence — and silence is the

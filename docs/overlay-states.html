@@ -123,7 +123,7 @@
     by hand.
   </div>
 </header>
-<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a></nav>
+<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a></nav>
     <h2 id="At rest">At rest</h2>
     <div class="grid">
       <section class="card" id="unbound-idle">
@@ -156,16 +156,22 @@
         <p class="note">Standing by this is the same 🎙️ as every other bound chip — the destination is not what the resting state is about. What differs is what appears once he starts talking: no tty to read a folder from, so the app&#x27;s own name takes the line rather than a folder being invented, behind its own icon.</p>
         <code class="slug">bound-blind</code>
       </section>
+    </div>
+    <h2 id="Dictating">Dictating</h2>
+    <div class="grid">
       <section class="card" id="spawn">
         <header>
           <h3>This sentence opens a new session</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">163×45 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">163×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/spawn.png" width="163" height="45" style="opacity:0.8" alt="This sentence opens a new session"></div>
-        <p class="when">⇧ + the wheel: the dictation goes to a terminal that does not exist yet.</p>
-        <p class="note">A destination that does not exist yet outranks the bound one — for the length of that one sentence the chip must not name the terminal the words are <em>not</em> going to.</p>
+        <div class="shot"><img src="states/spawn.png" width="163" height="46" style="opacity:0.8" alt="This sentence opens a new session"></div>
+        <p class="when">⌘ + the wheel, or the right-held chord: the dictation goes to a terminal that does not exist yet.</p>
+        <p class="note"><strong>One row, and the ✨ is all that is left of the destination.</strong> It had a title row of its own — Terminal&#x27;s icon, ✨, <code>workspace</code> — and Victor took it off on 2026-09-02: the folder is <em>always</em> <code>~/workspace</code>, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of <code>Listening…</code> and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.</p>
         <code class="slug">spawn</code>
       </section>
+    </div>
+    <h2 id="At rest">At rest</h2>
+    <div class="grid">
       <section class="card" id="replace-wispr">
         <header>
           <h3>Replace Wispr — this one goes to the caret</h3>
@@ -232,9 +238,9 @@
       <section class="card" id="listening-selection">
         <header>
           <h3>Dictating, carrying a highlight</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">280×99 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">289×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-selection.png" width="280" height="99" style="opacity:0.8" alt="Dictating, carrying a highlight"></div>
+        <div class="shot"><img src="states/listening-selection.png" width="289" height="93" style="opacity:0.8" alt="Dictating, carrying a highlight"></div>
         <p class="when">He had text selected when he started talking, or F3&#x27;d with a selection.</p>
         <p class="note"><code>↪</code> and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading.</p>
         <code class="slug">listening-selection</code>
@@ -242,9 +248,9 @@
       <section class="card" id="listening-selection-multi">
         <header>
           <h3>Dictating, several highlights</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">305×99 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">314×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-selection-multi.png" width="305" height="99" style="opacity:0.8" alt="Dictating, several highlights"></div>
+        <div class="shot"><img src="states/listening-selection-multi.png" width="314" height="93" style="opacity:0.8" alt="Dictating, several highlights"></div>
         <p class="when">A second and third selection stashed with the side button during one sentence.</p>
         <p class="note"><code>↪ ×3</code> — the count is the only thing that changes, because the newest one is the one he can still see in his editor.</p>
         <code class="slug">listening-selection-multi</code>
@@ -252,9 +258,9 @@
       <section class="card" id="listening-selection-caught">
         <header>
           <h3>The shutter caught a highlight</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">353×99 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">362×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-selection-caught.png" width="353" height="99" style="opacity:0.8" alt="The shutter caught a highlight"></div>
+        <div class="shot"><img src="states/listening-selection-caught.png" width="362" height="93" style="opacity:0.8" alt="The shutter caught a highlight"></div>
         <p class="when">For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.</p>
         <p class="note">The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to <code>↪ ×N</code> after 2.5s, and it truncates to whatever width the rows above already gave the chip.</p>
         <code class="slug">listening-selection-caught</code>
@@ -262,9 +268,9 @@
       <section class="card" id="listening-everything">
         <header>
           <h3>Dictating, everything at once</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">337×123 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">337×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-everything.png" width="337" height="123" style="opacity:0.8" alt="Dictating, everything at once"></div>
+        <div class="shot"><img src="states/listening-everything.png" width="337" height="117" style="opacity:0.8" alt="Dictating, everything at once"></div>
         <p class="when">Rare, and the widest the chip ever gets: browser in front, picks made, a highlight riding along.</p>
         <p class="note">Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover.</p>
         <code class="slug">listening-everything</code>
@@ -325,9 +331,9 @@
       <section class="card" id="flash-cancelled">
         <header>
           <h3>Dictation cancelled</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">168×46 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">195×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-cancelled.png" width="168" height="46" style="opacity:0.8" alt="Dictation cancelled"></div>
+        <div class="shot"><img src="states/flash-cancelled.png" width="195" height="46" style="opacity:0.8" alt="Dictation cancelled"></div>
         <p class="when">The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.</p>
         <p class="note"><strong>Words and nothing else</strong>, and <strong>bare</strong>: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row <code>Listening…</code> was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an <em>event</em> rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.</p>
         <code class="slug">flash-cancelled</code>
@@ -398,9 +404,9 @@
       <section class="card" id="prompt-selection">
         <header>
           <h3>The prompt, with a quoted highlight</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×138 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×146 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-selection.png" width="369" height="138" style="opacity:1" alt="The prompt, with a quoted highlight"></div>
+        <div class="shot"><img src="states/prompt-selection.png" width="369" height="146" style="opacity:1" alt="The prompt, with a quoted highlight"></div>
         <p class="when">The dictation carried a selection.</p>
         <p class="note">Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.</p>
         <code class="slug">prompt-selection</code>
@@ -428,9 +434,9 @@
       <section class="card" id="prompt-everything">
         <header>
           <h3>The prompt, everything at once</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×244 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">369×252 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-everything.png" width="369" height="244" style="opacity:1" alt="The prompt, everything at once"></div>
+        <div class="shot"><img src="states/prompt-everything.png" width="369" height="252" style="opacity:1" alt="The prompt, everything at once"></div>
         <p class="when">A pointed dictation: highlight, several frames, a named window, a shaky transcript.</p>
         <p class="note">The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was — then the two buttons.</p>
         <code class="slug">prompt-everything</code>
@@ -438,9 +444,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -448,9 +454,9 @@
       <section class="card" id="prompt-selection-only">
         <header>
           <h3>A highlight with nothing said</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">315×115 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">315×123 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-selection-only.png" width="315" height="115" style="opacity:1" alt="A highlight with nothing said"></div>
+        <div class="shot"><img src="states/prompt-selection-only.png" width="315" height="123" style="opacity:1" alt="A highlight with nothing said"></div>
         <p class="when">He stashed a selection and said nothing at all.</p>
         <p class="note">There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.</p>
         <code class="slug">prompt-selection-only</code>
@@ -477,7 +483,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at b21116b · 02 Sep 2026 · built 02 Sep 2026, 18:01
+  Generated from <code>OverlayStates.swift</code> · repo at 833f77e · 02 Sep 2026 · built 02 Sep 2026, 18:55
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

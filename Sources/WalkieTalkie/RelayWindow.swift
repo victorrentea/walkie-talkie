@@ -20,6 +20,10 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let warningLabel = NSTextField(labelWithString: "")
+    /// The frozen selection, as a row with a glyph column like every other row on
+    /// the chip: the quotation mark in the column, his own words beside it.
+    private let selectionRow = NSView()
+    private let selectionGlyph = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
@@ -184,6 +188,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// taken down when it is delivered; while it is up it is what the chip says,
     /// bound or not.
     private var spawnLabel: String?
+    /// See `spawnCollapsed` — the ✨, kept apart from the label so the row can be
+    /// dropped without the mark going with it.
+    private var spawnMark: String?
 
     /// **The chip advertises no gesture at all, since 2026-08-30.** Every row
     /// whose job was to teach an input — `ReBind` and `dictate` at rest, `send`
@@ -311,6 +318,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// cursor, not a passage laid out to be read — and it is the row's **glyph**
     /// rather than a second size of text, which is what keeps it inside the
     /// one-face-one-size rule the rest of the chip follows.
+    ///
+    /// **And since 2026-09-02 it is the glyph literally**, in the icon column the
+    /// pulse, the camera and Chrome's icon already share, rather than a run
+    /// inside the text label with a `-6` baseline offset. Two things were wrong
+    /// with the inline form and Victor named both: the offset lengthened the
+    /// line box, which is why the row had to stand 28 tall where its neighbours
+    /// are 22 — *"rândurile trebuie să aibă distanță egală între ele în
+    /// tooltip"*, and unequal heights are what made the gap above it read as
+    /// deliberate air. And the mark took the place of the icon column, so this
+    /// row's words started several points left of every other row's.
     private let chipQuoteFont = NSFont.systemFont(ofSize: 26, weight: .bold)
     private var selectionHead = ""
     private var selectionBody = ""
@@ -323,15 +340,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and the ink is read off the label at the moment of building.
     private func applySelectionText() {
         let ink = selectionLabel.textColor ?? .secondaryLabelColor
-        let out = NSMutableAttributedString(
+        selectionGlyph.attributedStringValue = NSAttributedString(
             string: "“",
             attributes: [.font: chipQuoteFont,
-                         .foregroundColor: ink.withAlphaComponent(0.55),
-                         .baselineOffset: -6])
-        out.append(NSAttributedString(
-            string: " " + selectionHead + selectionBody,
-            attributes: [.font: hintFont, .foregroundColor: ink]))
-        selectionLabel.attributedStringValue = out
+                         .foregroundColor: ink.withAlphaComponent(0.55)])
+        selectionLabel.attributedStringValue = NSAttributedString(
+            string: selectionHead + selectionBody,
+            attributes: [.font: hintFont, .foregroundColor: ink])
     }
 
     private func measure(_ s: String, font: NSFont) -> CGFloat {
@@ -579,7 +594,35 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening else { return nil }
-        return "Listening…"
+        return spawnCollapsed ? "\(spawnMark ?? "") Listening…" : "Listening…"
+    }
+
+    /// **The mark of a destination that does not exist yet, moved onto the row
+    /// that reports the dictation.**
+    ///
+    /// ⌘ + the wheel opens a session in `~/workspace` and the chip said so in a
+    /// title row of its own — Terminal's icon, ✨, and the folder. Victor's read,
+    /// 2026-09-02: the folder is *always* `~/workspace` (that is the whole point
+    /// of the gesture — nothing is inferred), the icon names an app he is not
+    /// looking at yet, and the row therefore spent a line beside his cursor
+    /// saying one thing he already knew. *"Pune doar steluțe în fața butonului de
+    /// listening și nu mai afișa primul rând."*
+    ///
+    /// So the ✨ rides in front of `Listening…` and the row above it goes. The
+    /// pulse keeps the glyph column — a frozen recording row is indistinguishable
+    /// from a hung app, which is the one thing the 🔴 is here to rule out, and it
+    /// cannot be given up for a mark that never moves.
+    ///
+    /// **Only while the chip is reporting the dictation.** The held panel keeps
+    /// its title row: it is parked in a corner, read whole, and *where these words
+    /// are about to go* is exactly what a panel with a Cancel button on it has to
+    /// say out loud.
+    ///
+    /// **And only for the spawn.** Replace Wispr's `⌨️ at the caret` is not the
+    /// same kind of fact — it names a destination that genuinely varies — so it
+    /// keeps its row.
+    private var spawnCollapsed: Bool {
+        spawnMark != nil && sentPrompt == nil && (listening || transcribing)
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -825,8 +868,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         selectionLabel.lineBreakMode = .byTruncatingTail
         selectionLabel.maximumNumberOfLines = 1
         selectionLabel.cell?.truncatesLastVisibleLine = true
-        selectionLabel.isHidden = true
-        root.addSubview(selectionLabel)
+        selectionGlyph.font = chipQuoteFont
+        selectionGlyph.alignment = .center
+        selectionRow.addSubview(selectionGlyph)
+        selectionRow.addSubview(selectionLabel)
+        selectionRow.isHidden = true
+        selectionLabel.isHidden = false
+        root.addSubview(selectionRow)
 
         // Both truncate rather than wrap: they are context for the words below,
         // and a two-line answer to "where was I" pushes the thing he actually has
@@ -1192,11 +1240,12 @@ private let frontLabel = NSTextField(labelWithString: "")
                           : (selectionCount > 1 ? "×\(selectionCount) " : "")
             selectionBody = Self.fitHead(singleLine(selection), 34)
             applySelectionText()
-            // Off the label rather than the font: the row leads with a 19pt
-            // quotation mark, which the system font's metrics for the rest of
-            // the line know nothing about.
+            // Off the label rather than the font: the mark is in the icon column
+            // now, so the text is plain `hintFont` — but it is set as an
+            // attributed string, and asking the label is what every other
+            // attributed row here does.
             selectionLabel.sizeToFit()
-            selectionWidth = ceil(selectionLabel.frame.width)
+            selectionWidth = glyphColumn + recordDotGap + ceil(selectionLabel.frame.width)
         }
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
         let reserve = anchored ? 0 : closeReserve
@@ -1283,7 +1332,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // line is still the honest answer to *where do the words go*.
         let names = boundLabel != nil || spawnLabel != nil || engineLoading || sentPrompt != nil || listening
         let mutedByFlash = collapsed && flashMessage != nil
-        if names, !(collapsed && engineLoading), !mutedByFlash {
+        if names, !(collapsed && engineLoading), !mutedByFlash, !spawnCollapsed {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))
@@ -1357,19 +1406,18 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
 
         if selection != nil {
-            // `stringValue` was written with the widths above. The box is the
-            // rows' own height now that the text in it is the rows' own size —
-            // 19 was cut for a 14pt font and clips a 17.
-            // Six taller than its neighbours: 22 was cut for a row of plain
-            // 17pt text, and the quotation mark is 26 bold sitting 6 below the
-            // baseline. A clipped quote mark is the one thing this change was
-            // made to avoid — and at 19 it read as a superscript rather than as
-            // the panel's mark, which was the whole point of putting it here.
-            selectionLabel.frame.size = NSSize(width: innerWidth, height: selectionRowHeight)
-            selectionLabel.isHidden = false
-            rows.append((selectionLabel, selectionRowHeight))
+            // The strings were written with the widths above. **The row is the
+            // same 22 as its neighbours**, and the 26pt mark simply overhangs
+            // its box the way the 30pt mice overhang theirs — nothing here
+            // clips. That equality is the whole point: an extra six points of
+            // height read as deliberate air above the quotation, in the one
+            // shape that is meant to be a flat stack of one-line facts.
+            layoutGlyphRow(selectionRow, glyph: selectionGlyph, label: selectionLabel,
+                           width: innerWidth)
+            selectionRow.isHidden = false
+            rows.append((selectionRow, selectionRowHeight))
         } else {
-            selectionLabel.isHidden = true
+            selectionRow.isHidden = true
         }
 
         if let prompt = sentPrompt, !prompt.isEmpty {
@@ -1487,13 +1535,23 @@ private let frontLabel = NSTextField(labelWithString: "")
             hintLabel.isHidden = true
         }
 
-        // **The quotation gets air under it.** Every row on this panel is two
-        // pixels from the next, which is right for a stack of one-line facts and
-        // wrong for the seam between what Victor *highlighted* and what he
-        // *said*: glued at the same gap the two read as one block, and the
-        // quotation stops looking quoted. The extra space is the punctuation
-        // that separates the two halves of the message.
-        let gapBelow: (NSView) -> CGFloat = { [quoteLabel, rowGap] in $0 === quoteLabel ? rowGap + 8 : rowGap }
+        // **The quotation gets air under it — on the panel, and only there.**
+        // Every row is two pixels from the next, which is right for a stack of
+        // one-line facts and wrong for the seam between what Victor
+        // *highlighted* and what he *said*: glued at the same gap the two read
+        // as one block, and the quotation stops looking quoted.
+        //
+        // It was `rowGap + 8` and that was not enough to be seen — the mark's
+        // `-7` baseline offset lengthens the quote row's line box downward, so
+        // most of those points were spent inside the row rather than under it,
+        // and Victor read the panel as having no seam at all. 16 is measured
+        // against the render, not chosen.
+        //
+        // **The chip has no such seam**, deliberately: its rows are a flat stack
+        // and its selection row is now exactly as tall as its neighbours. The
+        // air he saw beside the pointer was never this — it was the old 28pt
+        // row — and he asked for it here instead.
+        let gapBelow: (NSView) -> CGFloat = { [quoteLabel, rowGap] in $0 === quoteLabel ? rowGap + 16 : rowGap }
         let contentHeight = rows.reduce(0) { $0 + $1.height }
         let height = contentHeight + rows.dropLast().reduce(0) { $0 + gapBelow($1.view) } + pad * 2
 
@@ -1561,8 +1619,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// message being assembled, and a row that stood a pixel taller than its
     /// neighbour would read as a different kind of thing.
     private let pickRowHeight: CGFloat = 22
-    /// See the row's layout: the quotation mark needs the two extra points.
-    private let selectionRowHeight: CGFloat = 28
+    /// **The same as every other row on the chip**, since the quotation mark
+    /// moved into the glyph column and stopped lengthening the label's line box.
+    /// It stood at 28 while the mark was a run of text inside the row, and those
+    /// six points were the "big space" Victor read as intentional.
+    private let selectionRowHeight: CGFloat = 22
     /// Between the dot and the text. Wide enough that the pulsing dot reads as its
     /// own indicator rather than as punctuation in front of the count.
     private let recordDotGap: CGFloat = 5
@@ -1911,6 +1972,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         shotGlyph.wantsLayer = true
         pickInfo.wantsLayer = true
         selectionLabel.wantsLayer = true
+        // The mark is its own label now, in the icon column, so it needs the
+        // halo on its own account — it used to inherit it as a run inside the
+        // text label.
+        selectionGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
         // it, `labelColor` is the same invisible dark grey the selection row was.
         hintLabel.wantsLayer = true
@@ -1936,6 +2001,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // like a shutter that had failed to read the selection.
             selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .white
+            selectionGlyph.shadow = Self.halo()
             applySelectionText()
             // **The same row the selection was, and left out for the same
             // reason.** `preparing`, `transcribing…` and the mouse hints all
@@ -1962,6 +2028,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             pickInfo.textColor = .secondaryLabelColor
             selectionLabel.shadow = nil
             selectionLabel.textColor = .secondaryLabelColor
+            selectionGlyph.shadow = nil
             applySelectionText()
         }
     }
@@ -2283,9 +2350,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    func setSpawnDestination(_ label: String?) {
-        guard spawnLabel != label else { return }
+    /// `mark` is the one character of the label that survives the row being
+    /// dropped — see `spawnCollapsed`. Passing none keeps the old behaviour: a
+    /// title row of its own, which is what Replace Wispr wants.
+    func setSpawnDestination(_ label: String?, mark: String? = nil) {
+        guard spawnLabel != label || spawnMark != mark else { return }
         spawnLabel = label
+        spawnMark = label == nil ? nil : mark
         refreshTitle()
         layoutContent()
     }
@@ -2315,20 +2386,26 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// the only question he actually has — *do I wait or do I look away* —
     /// unanswered for a decode that is a second on a short sentence and ten on a
     /// long one. The audio's own length is the answer: the model runs at
-    /// **0.105× realtime** median, measured over 442 real dictations (see the
-    /// recogniser's numbers in `CLAUDE.md`), so a minute of speech is about six
-    /// seconds of waiting and the estimate is that arithmetic done out loud.
+    /// **~0.1× realtime**, so a minute of speech is about six seconds of waiting
+    /// and the estimate is that arithmetic done out loud.
+    ///
+    /// **The factor is learned, not written down** — `DecodeRate`, the 80th
+    /// percentile of the last twenty decodes on this Mac, falling back to the
+    /// 0.12 measured over 442 dictations until there are enough of them. A
+    /// constant is right until the model, the machine or the thermals move under
+    /// it, and none of those announce themselves.
     ///
     /// It is deliberately an **estimate that runs out rather than one that
     /// stalls**: at zero the seconds simply stop being shown and the row goes
     /// back to `Transcribing…`. A counter that sat at `0s` — or worse, counted
-    /// up — would be the app insisting on a promise it has already broken.
-    /// 0.12 rather than 0.105 for the same reason: over is a pleasant surprise,
-    /// under is the number being wrong every second it is on screen.
+    /// up — would be the app insisting on a promise it has already broken. The
+    /// percentile rather than the median is the same bargain: over is a pleasant
+    /// surprise, under is the number being wrong every second it is on screen.
     private var transcribeText: String {
-        guard let deadline = transcribeDeadline else { return "Transcribing…" }
+        let mark = spawnCollapsed ? "\(spawnMark ?? "") " : ""
+        guard let deadline = transcribeDeadline else { return mark + "Transcribing…" }
         let left = Int(ceil(deadline.timeIntervalSinceNow))
-        return left > 0 ? "Transcribing… \(left)s" : "Transcribing…"
+        return left > 0 ? mark + "Transcribing… \(left)s" : mark + "Transcribing…"
     }
     private var transcribeDeadline: Date?
     private var transcribeTicker: Timer?
@@ -2347,7 +2424,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         transcribeTicker = nil
         transcribeDeadline = nil
         if value, audio > 0 {
-            transcribeDeadline = Date().addingTimeInterval(max(1, (audio * 0.12).rounded()))
+            transcribeDeadline = Date().addingTimeInterval(max(1, (audio * DecodeRate.factor).rounded()))
             // Four ticks a second, like the panel's countdown and for its reason:
             // a number that jumps reads as a number nobody is watching.
             let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in

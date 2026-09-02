@@ -34,14 +34,14 @@
   },
   {
     "alpha" : 0.80000000000000004,
-    "group" : "At rest",
-    "height" : 45,
+    "group" : "Dictating",
+    "height" : 46,
     "image" : "spawn.png",
-    "note" : "A destination that does not exist yet outranks the bound one — for the length of that one sentence the chip must not name the terminal the words are *not* going to.",
+    "note" : "**One row, and the ✨ is all that is left of the destination.** It had a title row of its own — Terminal's icon, ✨, `workspace` — and Victor took it off on 2026-09-02: the folder is *always* `~\/workspace`, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of `Listening…` and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.",
     "shape" : "chip",
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
-    "when" : "⇧ + the wheel: the dictation goes to a terminal that does not exist yet.",
+    "when" : "⌘ + the wheel, or the right-held chord: the dictation goes to a terminal that does not exist yet.",
     "width" : 163
   },
   {
@@ -116,43 +116,43 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 99,
+    "height" : 93,
     "image" : "listening-selection.png",
     "note" : "`↪` and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading.",
     "shape" : "chip",
     "slug" : "listening-selection",
     "title" : "Dictating, carrying a highlight",
     "when" : "He had text selected when he started talking, or F3'd with a selection.",
-    "width" : 280
+    "width" : 289
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 99,
+    "height" : 93,
     "image" : "listening-selection-multi.png",
     "note" : "`↪ ×3` — the count is the only thing that changes, because the newest one is the one he can still see in his editor.",
     "shape" : "chip",
     "slug" : "listening-selection-multi",
     "title" : "Dictating, several highlights",
     "when" : "A second and third selection stashed with the side button during one sentence.",
-    "width" : 305
+    "width" : 314
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 99,
+    "height" : 93,
     "image" : "listening-selection-caught.png",
     "note" : "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to `↪ ×N` after 2.5s, and it truncates to whatever width the rows above already gave the chip.",
     "shape" : "chip",
     "slug" : "listening-selection-caught",
     "title" : "The shutter caught a highlight",
     "when" : "For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
-    "width" : 353
+    "width" : 362
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 123,
+    "height" : 117,
     "image" : "listening-everything.png",
     "note" : "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover.",
     "shape" : "chip",
@@ -231,7 +231,7 @@
     "slug" : "flash-cancelled",
     "title" : "Dictation cancelled",
     "when" : "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
-    "width" : 168
+    "width" : 195
   },
   {
     "alpha" : 0.80000000000000004,
@@ -308,7 +308,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 138,
+    "height" : 146,
     "image" : "prompt-selection.png",
     "note" : "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",
     "shape" : "panel",
@@ -344,7 +344,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 244,
+    "height" : 252,
     "image" : "prompt-everything.png",
     "note" : "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was — then the two buttons.",
     "shape" : "panel",
@@ -363,12 +363,12 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 640
+    "width" : 576
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 115,
+    "height" : 123,
     "image" : "prompt-selection-only.png",
     "note" : "There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.",
     "shape" : "panel",

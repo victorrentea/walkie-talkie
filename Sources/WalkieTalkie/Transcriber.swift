@@ -225,6 +225,9 @@ final class LocalWhisper {
             self.toHelper = nil
             self.fromHelper = nil
             self.buffer = Data()
+            // The next helper's first decode pays for cold weights again, and
+            // that sample must not go into the window — see `DecodeRate`.
+            DecodeRate.engineStopped()
             Log.info("whisper helper stopped")
         }
     }

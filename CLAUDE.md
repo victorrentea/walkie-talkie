@@ -746,7 +746,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `dictation cancelled` in the row `Listening…` was in, **bare and glyphless** — 1.5 s, then half a second of dissolve back to the chip at rest |
+| the dictation was cancelled | `🗑️ dictation cancelled` in the row `Listening…` was in — 1.5 s, then half a second of dissolve back to the chip at rest. The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | the destination app's icon + `⌨️ at the caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
@@ -1595,10 +1595,33 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   the **hold** asked for the load: a load started by a bind is Victor pointing the
   relay at a terminal, a different sentence, and must not open the microphone.
 - **The wait says how long, not only that it is waiting** (since 2026-09-02).
-  `Transcribing… 4s` counts down from the audio's own length × **0.12** — the
-  model runs at 0.105× realtime median over the 442 dictations measured below,
-  and the rounding up is deliberate: over is a pleasant surprise, under is a
-  number that is wrong every second it is on screen. At zero the seconds stop
+  `Transcribing… 4s` counts down from the audio's own length × a factor, and the
+  rounding up is deliberate: over is a pleasant surprise, under is a number that
+  is wrong every second it is on screen.
+
+  **The factor is learned, not written down** (`DecodeRate.swift`, same day).
+  Every decode files what it actually cost against the audio it was handed, and
+  the estimate is the **80th percentile of the last twenty** — the value four
+  decodes in five come in under, which is where the padding that used to be a
+  hand-rounded 0.105 → 0.12 now comes from. A constant measured once is right
+  until the model (`RELAY_WHISPER_MODEL`), the machine's load or its thermals
+  move under it, and none of those announce themselves; what they produce is a
+  countdown that is quietly wrong for weeks. **0.12 is still the fallback**,
+  used until there are five samples.
+  - **The window is on disk**, `~/.walkie-talkie/decode-rate.json`, beside the
+    outbox and not in Caches. Twenty dictations is more than one launch: an
+    in-memory window would spend most of its life under the minimum and the
+    learning would never take.
+  - **The first decode after the helper starts is not filed.** The helper warms
+    up on a second of silence, but the first real decode still pays for weights
+    the allocator has not touched — 2.8s against 1.3s warm — and one cold sample
+    in a window of twenty drags every estimate after it. `LocalWhisper.stop()`
+    resets the counter, so the next helper's first is cold again.
+  - **Ratios outside 0.04…0.60 are dropped, not clamped.** A reading that far
+    out is evidence about something other than the model's speed, and letting it
+    in would move the estimate for the next twenty dictations.
+  - Filed on the **success path only**: a decode that returned nothing says
+    nothing about how long a decode takes. At zero the seconds stop
   being shown rather than sitting at `0s` or counting up, which would be the app
   insisting on a promise it has already broken. `Preparing…` has no estimate: a
   model load is not proportional to anything the app knows.
@@ -1984,6 +2007,24 @@ bound one for the length of that sentence (`RelayWindow.spawnLabel`): the words
 are not going where the chip has been saying they go, and this line's whole job
 is to get that right. Unbound it is also what puts the overlay on screen at all.
 
+**It is one mark on the recording row, not a row of its own** (since 2026-09-02).
+It was a title row — Terminal's icon, ✨, `workspace` — and Victor took it off:
+the folder is *always* `~/workspace`, which is the whole point of the gesture, and
+the icon names an app he is not looking at yet, so the row spent a line beside his
+cursor saying one thing he already knew. *"Pune doar steluțe în fața butonului de
+listening și nu mai afișa primul rând."* The ✨ now rides in front of `Listening…`
+(and `Transcribing… 4s`), and `RelayWindow.spawnCollapsed` is the switch.
+
+- **The 🔴 keeps the glyph column.** A frozen recording row is indistinguishable
+  from a hung app, which is the one thing the pulse is here to rule out, and it
+  cannot be given up for a mark that never moves.
+- **The held panel keeps its title row.** It is parked in a corner, read whole,
+  and *where these words are about to go* is exactly what a panel with a Cancel
+  button on it has to say out loud.
+- **Only the spawn.** Replace Wispr's `⌨️ at the caret` names a destination that
+  genuinely varies, so it keeps its row — which is why the mark is passed in
+  (`setSpawnDestination(_:mark:)`) rather than sliced off the label.
+
 **Ending a dictation is never a spawn.** The destination belongs to the press
 that opened the microphone, so a ⌘ click while one is running just ends it, and a
 2s ⌘ hold still cancels. `HotkeyTap.wheelSpawn` is read off the **press** rather
@@ -2207,10 +2248,19 @@ empty space the whole time.
 Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
-Row heights, for checking a layout change without seeing it: title 16, engine row
-17, shots row 17, ⌘⇧-picked row 17, selection 28 (the quotation mark), `rowGap` 6
-between them — 8 more under the panel's quote row, which is the seam between what
-he highlighted and what he said — `pad` 12 all round. So the idle chip is 40 tall — bound is the same, since the folder
+Row heights, for checking a layout change without seeing it: title 21, and every
+other row on the chip — engine, shots, ⌘⇧-picked and the selection — 22, with
+`rowGap` 2 between them. **The chip's rows are all the same height on purpose**:
+the selection row stood at 28 until 2026-09-02, to hold a 26pt quotation mark
+sitting 6 below the baseline inside its text label, and those six points read as
+deliberate air in a shape meant to be a flat stack of one-line facts (*"rândurile
+trebuie să aibă distanță egală între ele în tooltip"*). The mark is in the **icon
+column** now, like every other row's glyph — which also puts the selection's words
+in the same text column as the rest, where they never were. 16 more under the
+**panel's** quote row, which is the seam between what he highlighted and what he
+said; it was 8 and could not be seen, because the mark's own baseline offset
+lengthens that row's line box downward and spent most of them inside the row.
+`pad` 12 all round. So the idle chip is 40 tall — bound is the same, since the folder
 moved *into* the title row — and dictating is 40 + 3 × 23 for the three rows and
 their gaps, plus 21 more with a selection.
 

@@ -81,12 +81,13 @@ enum OverlayStates {
                 o.setBound(label: "Visual Studio Code", folder: "Visual Studio Code", icon: code)
             },
 
-            Shot(slug: "spawn", group: "At rest", title: "This sentence opens a new session",
-                 when: "⇧ + the wheel: the dictation goes to a terminal that does not exist yet.",
-                 note: "A destination that does not exist yet outranks the bound one — for the length of that one sentence the chip must not name the terminal the words are *not* going to.",
+            Shot(slug: "spawn", group: "Dictating", title: "This sentence opens a new session",
+                 when: "⌘ + the wheel, or the right-held chord: the dictation goes to a terminal that does not exist yet.",
+                 note: "**One row, and the ✨ is all that is left of the destination.** It had a title row of its own — Terminal's icon, ✨, `workspace` — and Victor took it off on 2026-09-02: the folder is *always* `~/workspace`, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of `Listening…` and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setSpawnDestination("✨ workspace")
+                o.setSpawnDestination("✨ workspace", mark: "✨")
+                o.setListening(true)
             },
 
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
@@ -222,7 +223,7 @@ enum OverlayStates {
                  note: "**Words and nothing else**, and **bare**: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.flash("dictation cancelled", duration: 60)
+                o.flash("🗑️ dictation cancelled", duration: 60)
             },
 
             Shot(slug: "flash-model-failed", group: "Flashes", title: "Flash — the recogniser is not there",
