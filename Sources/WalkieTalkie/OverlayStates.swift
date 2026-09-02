@@ -210,10 +210,10 @@ enum OverlayStates {
 
             Shot(slug: "flash-cancelled", group: "Flashes", title: "Dictation cancelled",
                  when: "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
-                 note: "🗑️ and nothing else, and **bare**: no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
+                 note: "**Words and nothing else**, and **bare**: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.flash("🗑️ dictation cancelled", duration: 60, bare: true)
+                o.flash("dictation cancelled", duration: 60, bare: true)
             },
 
             Shot(slug: "flash-model-failed", group: "Flashes", title: "Flash — the recogniser is not there",

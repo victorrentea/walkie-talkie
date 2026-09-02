@@ -648,7 +648,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // rest. Three seconds inside a blurred panel made cancelling look like
         // something *opening*; a second and a half of plain text reads as the one
         // thing that actually happened, which is a word changing.
-        overlay.flash("🗑️ dictation cancelled", duration: 1.5, bare: true)
+        //
+        // **And no glyph, since 2026-09-02.** It led with 🗑️, drawn at 30pt in
+        // the icon column — Apple's wastebasket has its lid flying off above the
+        // bin, and at that size, in grey, beside the pointer, Victor read it as a
+        // *microphone*: the one object this row must not appear to be talking
+        // about, on the one message that means the microphone just threw
+        // everything away. A glyph that has to be decoded is worse than none on a
+        // row that is up for a second and a half.
+        overlay.flash("dictation cancelled", duration: 1.5, bare: true)
     }
 
     private func stopLocalRecording() {

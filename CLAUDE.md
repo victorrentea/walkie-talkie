@@ -30,7 +30,7 @@ Current strings live in `RelayWindow.swift`:
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
   `Connect Window — hold ⬅️ + 🛞`, `Disconnect — hold ➡️ + 🛞`, the three
-  dictation rows, `New Claude Code in ~/workspace — ⌘ + 🛞`,
+  dictation rows, `New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s`,
   `One More Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
   `Quit`, and the `Local Whisper` readout
 
@@ -742,7 +742,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `🗑️ dictation cancelled` in the row `Listening…` was in, **bare** — 1.5 s, then half a second of dissolve back to the chip at rest |
+| the dictation was cancelled | `dictation cancelled` in the row `Listening…` was in, **bare and glyphless** — 1.5 s, then half a second of dissolve back to the chip at rest |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -2062,7 +2062,7 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `New Claude Code in ~/workspace — ⌘ + 🛞`,
+that performs it — `New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s`,
 `Cancel Dictation — hold 🛞 2s`, `One More Screenshot — F3, or the back
 button while dictating`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
@@ -2245,7 +2245,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Start Dictation` | `mic` | `🛞` (⌘⌃D in the shortcut column) |
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `hold 🛞 2s` |
-| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞` |
+| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞, or hold ➡️ + 🛞 1s` |
 | `Paste the Last Dictation` | 📋 | ⌘⌃P |
 | `One More Screenshot` | 📷 | `F3, or the back button while dictating` |
 | `Pick an Element in Chrome` | ✋ | `⌘⇧ + 🖱️, while dictating` |
@@ -2440,12 +2440,28 @@ and shadow for the length of its message — a sentence read once, often over a 
 screen, earns a surface. **`bare: true` keeps the chip a chip**: the message
 replaces a row and nothing is drawn around it.
 
-One caller so far, and it is what the option was written for: `🗑️ dictation
+One caller so far, and it is what the option was written for: `dictation
 cancelled`, 1.5s then half a second of dissolve. It lands in the row `Listening…`
 was occupying a moment earlier, beside the pointer, and wrapping a window round it
 for a second and a half made cancelling read as something *opening* rather than as
 a state changing back to nothing. Victor's words: *"fără border… înlocuiești
 Listening cu dictation cancelled"*.
+
+**And nothing is drawn above it either, since 2026-09-02.** Two glyphs were:
+the 🗑️ the message itself led with, and — one row up — the lone 🎙️ a *collapsed*
+chip is (bound, nothing in flight, so the title row is a microphone with no words
+beside it). Both are gone from this state. Victor's report was about the pair,
+read as one thing: *"să nu se arate și microfonul acela mic, ci doar dictation
+cancelled"* — and he is right twice over, because Apple's wastebasket has its lid
+flying off above the bin, so at chip size, in grey, it reads as a second
+microphone. A microphone with a caption is the worst available rendering of the
+one message whose whole content is that the microphone just threw everything
+away.
+
+`layoutContent` drops the title row while a bare flash is up **and** the chip is
+collapsed — the case where that row has no folder name in it and the glyph is
+therefore a message rather than a line's icon. That is what *bare* was always
+supposed to mean: the flash **replaces** a row instead of sitting under one.
 
 `refreshChrome` asks `anchored && (flashMessage == nil || flashIsBare)`, and the
 hint row joins the labels that get the white-plus-halo treatment when bare — with

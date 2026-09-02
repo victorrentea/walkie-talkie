@@ -212,14 +212,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-cancelled.png",
-    "note" : "🗑️ and nothing else, and **bare**: no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
+    "note" : "**Words and nothing else**, and **bare**: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
     "shape" : "chip",
     "slug" : "flash-cancelled",
     "title" : "Dictation cancelled",
     "when" : "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
-    "width" : 195
+    "width" : 168
   },
   {
     "alpha" : 0.80000000000000004,

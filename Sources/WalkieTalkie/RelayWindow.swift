@@ -1232,8 +1232,21 @@ private let frontLabel = NSTextField(labelWithString: "")
         //
         // Only in the collapsed case: with a dictation in flight the title is the
         // destination, and that is true whatever the engine is doing.
+        // **Nor under a bare flash.** Collapsed, this row is a lone 🎙️ with no
+        // words beside it — the chip *being* a microphone is the whole sentence,
+        // and it is a fine one at rest. Over `dictation cancelled` it is not: the
+        // one message that means the microphone just threw everything away came
+        // out as a microphone with a caption, and Victor read the glyph as part
+        // of the message rather than as the state behind it — *"să nu se arate și
+        // microfonul acela mic, ci doar dictation cancelled"*. A bare flash was
+        // always meant to **replace** a row rather than sit under one; this is
+        // the half of that promise the collapsed chip was not keeping.
+        //
+        // Only when there is nothing else to say: with a folder name in the row
+        // the glyph is that line's icon, not a message competing with the flash.
         let names = boundLabel != nil || spawnLabel != nil || engineLoading || sentPrompt != nil || listening
-        if names, !(collapsed && engineLoading) {
+        let mutedByFlash = collapsed && flashIsBare && flashMessage != nil
+        if names, !(collapsed && engineLoading), !mutedByFlash {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))
@@ -1785,7 +1798,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // words. The chip at rest is bare — a label on his work. A flash is a
         // sentence he has to read once, often over a busy screen, so it keeps
         // the blur and the shadow while riding the pointer like everything else.
-        // **A bare flash is still bare.** `🗑️ dictation cancelled` is a word
+        // **A bare flash is still bare.** `dictation cancelled` is a word
         // replacing a word — it lands in the row `Listening…` just left, beside
         // the pointer — and wrapping a blurred, shadowed, rounded window around
         // it for a second and a half made the chip *become a panel* and go back,

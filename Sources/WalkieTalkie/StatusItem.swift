@@ -134,7 +134,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
     /// exist yet. Spelled with the folder in it because that is the one thing
     /// about it he cannot see beforehand — the window opens after he has spoken.
-    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + 🛞", action: nil, keyEquivalent: "")
+    ///
+    /// **Both routes are named, and the second is the one worth the width.** ⌘ is
+    /// a key, and the moment this gesture is most useful is the moment Victor is
+    /// across the room from the laptop with nothing but the mouse — which is what
+    /// the right-held chord is for. It went unwritten here for a day and he asked
+    /// for the gesture to be built, not knowing it already existed: a command
+    /// reachable two ways, with only the way that needs a keyboard written down,
+    /// is a command with a missing half.
+    ///
+    /// `1s` distinguishes it from **Disconnect**, which is the same two buttons
+    /// tapped rather than held — the same idiom `Cancel Dictation — hold 🛞 2s`
+    /// already uses, and the only thing that separates the two readings of one
+    /// chord.
+    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s", action: nil, keyEquivalent: "")
     /// The shutter. Both routes are named: F3 works whenever there is a
     /// destination, the back button only while a dictation is running — which is
     /// also the only window in which it stops typing Return.
