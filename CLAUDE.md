@@ -2393,6 +2393,13 @@ lays its own ⌘⌃ column out to the right of the text, so the two end up neigh
 widest of (longest plain row) and (label + 28 + chord) — so the chords line up
 with each other instead of each floating at the end of its own label.
 
+**`attributedTitle` also rewrites `title`, and that shipped as a bug.**
+`restyleGestures` built its string from `row.item.title`, so the second pass
+concatenated the chord onto a title that already carried one — every gesture row
+printed its chord twice, on two lines. It runs from `menuWillOpen`, so the menu
+looked right the first time it was opened and wrong every time after. The label
+is stored in `gestureRows` now and never read back off the item.
+
 **The cost is that an attributed title stops AppKit dimming a disabled row.** A
 menu greys a title only while it is drawing it itself; handed a string, the
 colours in that string are the last word, and a disabled `End Dictation` came out
@@ -2464,7 +2471,13 @@ answered it, rides the pointer and is hidden the moment he types.
 - **The tty is the only handle both sides hold** — the same argument
   `~/.claude/cwd/<ttysNNN>` already makes in the other direction, and the reason
   that publisher exists. `Handle.tty` answers for a Terminal tab directly and for
-  an IDE target through `tty(ofPID:)` on the shell pid. A tmux pane answers with
+  an IDE target through `tty(ofPID:)` on the shell pid — as bare `ttysNNN`,
+  **never `/dev/ttysNNN`**. Both spellings live in `TerminalBinding`: the handle
+  keeps the device path because that is what AppleScript compares a tab's `tty`
+  against, `address` keeps the short form because that is what a human reads.
+  Publishing the path shipped once and matched nothing, silently — which is the
+  failure mode a marker like this has by construction: no error, only a badge
+  that never appears. A tmux pane answers with
   the **client's** tty, which is the outer Terminal tab and not the pty the agent
   is on, so it fails to match rather than matching the wrong session;
   `.keystroke` has no tty at all, which is the case that could not be guarded
