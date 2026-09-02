@@ -1432,19 +1432,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the bind animation played without the claim behind it; now the claim is
     /// true, and the chip names the session that just opened.
     ///
-    /// **2.5s**, because `do script` returns as soon as Terminal has a window: the
-    /// shell is still starting, `claude` has not drawn a frame, and a picture
+    /// **1.25s**, because `do script` returns as soon as Terminal has a window:
+    /// the shell is still starting, `claude` has not drawn a frame, and a picture
     /// taken then is a picture of an empty prompt. Late enough to catch the
     /// session, early enough to still be about the gesture — and it is what the
     /// bind needs too, since the label comes from the process on that tty and
-    /// there is not one yet at `do script`'s return.
+    /// there is not one yet at `do script`'s return. **It was 2.5s** and the wait
+    /// read as the app having missed the gesture entirely; halving it keeps the
+    /// flight tied to the press that caused it.
     private func adoptSpawnedWindow(tty: String) {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.5) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.25) { [weak self] in
             guard let self = self else { return }
             // Off the main thread: the bind is `osascript` and `ps` subprocesses
             // all the way down, like every other question this app asks Terminal.
             //
-            // A window this app opened four seconds ago that Terminal will not
+            // A window this app opened a second ago that Terminal will not
             // name is a bind that cannot be made — but the sentence still landed
             // there, so the flight is still worth playing on its own.
             let bound = self.terminal.bind(tty: tty)
