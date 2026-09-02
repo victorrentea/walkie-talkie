@@ -124,6 +124,11 @@ final class ElementPicker {
     var onTestDictation: ((String) -> Void)?
     /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
     var onTestSpawn: ((String) -> Void)?
+    /// `POST /test/replace-wispr` — turn the mode on or off from a script. The
+    /// mode is otherwise reachable only by clicking a menu row, which is the one
+    /// input nothing at a desk can produce; without this, the whole
+    /// forward-button path is untestable.
+    var onTestReplaceWispr: ((Bool) -> Void)?
 
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
@@ -276,6 +281,13 @@ final class ElementPicker {
         case ("POST", "/test/dictation/start"):
             onTestDictationStart?()
             respond(conn, 200, ["ok": true, "listening": true])
+
+        // The mode behind the forward button — see `onTestReplaceWispr`.
+        case ("POST", "/test/replace-wispr"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let on = body?["on"] as? Bool ?? true
+            onTestReplaceWispr?(on)
+            respond(conn, 200, ["ok": true, "replaceWispr": on])
 
         // The ⇧-wheel gesture's transcript, entering where a spoken one does.
         //

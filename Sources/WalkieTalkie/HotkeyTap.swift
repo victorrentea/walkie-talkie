@@ -24,6 +24,15 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
 /// binds the window under the pointer. So does the left button, always — it is
 /// watched only so the wheel can tell a rebind chord from a plain click.
 ///
+/// **In Replace Wispr mode the two side buttons swap jobs**: the forward one is
+/// the microphone (`onPasteToggle`) and the back one is left entirely alone, so
+/// LinearMouse goes on typing Return with it — which is what Victor asked for
+/// (*"pe butonul de Back să dea Enter"*) and what that button already does
+/// everywhere else. The relay does **not** synthesise the Return itself: the
+/// event is passed through untouched and LinearMouse, which is downstream of
+/// this tap, produces it. Posting one here as well would be two Returns for one
+/// press.
+///
 /// **Mouse 4 (the back side button) is the same shot, without the keyboard.**
 /// LinearMouse turns that button into a Return (`~/.config/linearmouse/`), which
 /// is what Victor submits with all day — so it is borrowed only for the few
@@ -42,6 +51,16 @@ final class HotkeyTap {
     /// minute or more, and a button held for a minute is a hand that cannot do
     /// anything else, including take the screenshots the same minute is for.
     var onLocalToggle: (() -> Void)?
+
+    /// **The forward side button, in Replace Wispr mode** — open the microphone,
+    /// or close the one that is open and paste what was said at the caret. See
+    /// `AppDelegate.replaceWispr`: it is the mode in which the relay stops being
+    /// a way to talk to an agent and becomes a way to type.
+    ///
+    /// It consults **only** the mode flag — not `localCapture`, not `bound`. A
+    /// dictation that is going to the caret carries its own destination, exactly
+    /// as ⌘ + the wheel does, so *Unbound is inert* has nothing to say about it.
+    var onPasteToggle: (() -> Void)?
 
     /// The wheel held down **while a dictation is running** — throw it away.
     /// Same verdict as the menu's Cancel Dictation, and the same verdict as
@@ -196,6 +215,15 @@ final class HotkeyTap {
         set { stateLock.lock(); boundFlag = newValue; stateLock.unlock() }
     }
     private var boundFlag = false
+
+    /// **Replace Wispr is on** — the forward button is the microphone and the
+    /// back button is left alone. Written from the main thread by
+    /// `AppDelegate`, read from the tap thread, hence the lock.
+    var replaceWispr: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return replaceWisprFlag }
+        set { stateLock.lock(); replaceWisprFlag = newValue; stateLock.unlock() }
+    }
+    private var replaceWisprFlag = false
 
     /// When mouse 5 last went down, for the double-click test. Touched only from
     /// the tap callback, which is one thread, so it needs no lock — unlike the
@@ -396,6 +424,37 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                 }
+                return nil
+            }
+
+            // **Replace Wispr: the forward button opens the microphone.**
+            //
+            // The mode exists because dictating into an agent and dictating into
+            // *the machine* are two different jobs, and Victor already had a tool
+            // for the second one. This is that job, on this app's recogniser: press
+            // to start, press to stop, and the words appear at the caret.
+            //
+            // **The forward button and not the wheel**, deliberately. The wheel is
+            // the relay's whole vocabulary — dictate, cancel, bind, disconnect,
+            // spawn — and every one of those meanings is about a *terminal*. A
+            // mode that types into whatever is in front has no business colliding
+            // with them, and the hand can hold this one without learning a chord.
+            //
+            // **It outranks the double click below.** That gesture binds a window,
+            // which is the one thing this mode is not about; and the two cannot be
+            // told apart at the press anyway — a first click that had to wait out
+            // the double-click interval before opening the microphone is exactly
+            // the wait Victor had removed from the wheel. `lastMouse5DownAt` is
+            // zeroed so a second press is a second dictation rather than half a
+            // bind.
+            //
+            // The release is swallowed by the branch below, on `swallowMouse5Up`:
+            // LinearMouse sits downstream and must never be handed an orphan.
+            if button == MOUSE_BUTTON_5 && bare && replaceWispr && type == .otherMouseDown {
+                swallowMouse5Up = true
+                lastMouse5DownAt = 0
+                Log.info("🎙️ forward button — Replace Wispr")
+                DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
                 return nil
             }
 

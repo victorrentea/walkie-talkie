@@ -32,7 +32,7 @@ def inline(text):
 
 SHAPES = {
     "chip": ("chip", "bare text beside the cursor — no blur, no shadow, no ✕"),
-    "flash": ("flash", "a chip that borrowed the blur for a few seconds, still beside the cursor"),
+    "flash": ("flash", "a message in the chip for a few seconds — bare like the chip, no blur, no border"),
     "panel": ("panel", "top-left of the screen, blurred, full opacity, ✕ on hover"),
     "none": ("no window", "nothing on screen"),
 }

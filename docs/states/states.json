@@ -45,6 +45,18 @@
     "width" : 163
   },
   {
+    "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 69,
+    "image" : "replace-wispr.png",
+    "note" : "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
+    "shape" : "chip",
+    "slug" : "replace-wispr",
+    "title" : "Replace Wispr — this one goes to the caret",
+    "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
+    "width" : 168
+  },
+  {
     "alpha" : 0,
     "group" : "At rest",
     "note" : "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
@@ -176,7 +188,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-sent.png",
     "note" : "A flash is a panel: blur, rounded rect, shadow — riding beside the pointer like the chip. It dissolves rather than cutting out, because a window vanishing under his hand is an event and `🎙️ sent` is not.",
     "shape" : "flash",
@@ -188,7 +200,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-unguarded.png",
     "note" : "The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.",
     "shape" : "flash",
@@ -200,7 +212,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-refused.png",
     "note" : "⛔️, not ⚠️: nothing was typed, and the sentence is still in the outbox. The distinction matters — this is the one failure that protects him rather than losing his words.",
     "shape" : "flash",
@@ -224,7 +236,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-model-failed.png",
     "note" : "The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.",
     "shape" : "flash",
@@ -236,7 +248,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 69,
+    "height" : 46,
     "image" : "flash-nothing-to-paste.png",
     "note" : "The only thing ⌘⌃P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
     "shape" : "flash",
@@ -351,7 +363,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 640
+    "width" : 576
   },
   {
     "alpha" : 1,

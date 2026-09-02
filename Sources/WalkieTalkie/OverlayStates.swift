@@ -89,6 +89,15 @@ enum OverlayStates {
                 o.setSpawnDestination("✨ workspace")
             },
 
+            Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
+                 when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
+                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setSpawnDestination("⌨️ at the caret")
+                o.setListening(true)
+            },
+
             Shot(slug: "typing", group: "At rest", title: "He started typing",
                  when: "Any keystroke, while the chip is on screen and not listening.",
                  note: "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
@@ -213,7 +222,7 @@ enum OverlayStates {
                  note: "**Words and nothing else**, and **bare**: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.flash("dictation cancelled", duration: 60, bare: true)
+                o.flash("dictation cancelled", duration: 60)
             },
 
             Shot(slug: "flash-model-failed", group: "Flashes", title: "Flash — the recogniser is not there",

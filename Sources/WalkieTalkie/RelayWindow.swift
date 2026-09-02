@@ -162,8 +162,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var countdownTimer: Timer?
     /// Transient status occupying the subtitle row; nil = no flash in progress.
     private var flashMessage: String?
-    /// Whether the flash on screen keeps the chip bare — see `flash(_:duration:bare:)`.
-    private var flashIsBare = false
     /// The terminal dictations are being typed into — `folder@branch` of the
     /// bound session, or nil while the relay is only writing the outbox.
     private var boundLabel: String?
@@ -1232,20 +1230,20 @@ private let frontLabel = NSTextField(labelWithString: "")
         //
         // Only in the collapsed case: with a dictation in flight the title is the
         // destination, and that is true whatever the engine is doing.
-        // **Nor under a bare flash.** Collapsed, this row is a lone 🎙️ with no
-        // words beside it — the chip *being* a microphone is the whole sentence,
-        // and it is a fine one at rest. Over `dictation cancelled` it is not: the
-        // one message that means the microphone just threw everything away came
-        // out as a microphone with a caption, and Victor read the glyph as part
-        // of the message rather than as the state behind it — *"să nu se arate și
-        // microfonul acela mic, ci doar dictation cancelled"*. A bare flash was
-        // always meant to **replace** a row rather than sit under one; this is
-        // the half of that promise the collapsed chip was not keeping.
+        // **Nor under a flash.** Collapsed, this row is a lone 🎙️ with no words
+        // beside it — the chip *being* a microphone is the whole sentence, and it
+        // is a fine one at rest. Over a message it is not: `dictation cancelled`
+        // came out as a microphone with a caption, and Victor read the glyph as
+        // part of the message rather than as the state behind it — *"să nu se
+        // arate și microfonul acela mic, ci doar dictation cancelled"*. `🎙️ sent
+        // + 2 📸` was worse, two microphones stacked, one of them punctuation.
         //
-        // Only when there is nothing else to say: with a folder name in the row
-        // the glyph is that line's icon, not a message competing with the flash.
+        // A message beside the pointer is a message: it **replaces** the chip
+        // rather than being appended to it. Only in the collapsed case, though —
+        // with a folder name in the row the glyph is that line's icon, and the
+        // line is still the honest answer to *where do the words go*.
         let names = boundLabel != nil || spawnLabel != nil || engineLoading || sentPrompt != nil || listening
-        let mutedByFlash = collapsed && flashIsBare && flashMessage != nil
+        let mutedByFlash = collapsed && flashMessage != nil
         if names, !(collapsed && engineLoading), !mutedByFlash {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
@@ -1432,8 +1430,12 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         if let hint = hintText {
             hintLabel.stringValue = hint
+            // White with a halo wherever there is no blur behind it, which
+            // beside the pointer is now always — see `refreshChrome`. Parked in a
+            // corner the panel still has its surface, and `labelColor` is right
+            // on it.
             hintLabel.textColor = flashMessage == nil ? .secondaryLabelColor
-                                : (anchored && flashIsBare) ? .white : .labelColor
+                                : anchored ? .white : .labelColor
             hintLabel.frame.size = NSSize(width: innerWidth, height: 22)
             hintLabel.isHidden = false
             rows.append((hintLabel, 22))
@@ -1803,7 +1805,26 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the pointer — and wrapping a blurred, shadowed, rounded window around
         // it for a second and a half made the chip *become a panel* and go back,
         // which reads as something opening rather than as a state changing.
-        let bare = anchored && (flashMessage == nil || flashIsBare)
+        //
+        // **And since 2026-09-02 that is true of every flash**, not only the one
+        // that asked for it: `anchored` is now the whole test. Victor's rule —
+        // *"toate tooltip-urile din jurul mouse-ului… niciunul nu mai trebuie să
+        // aibă border în jur"* — and the argument that won it for the cancel
+        // notice never had anything to do with *which* message it was. Anything
+        // beside the pointer is a label on his work; a blurred rounded rectangle
+        // there is a window opening on top of it, and it opened and closed for
+        // every `⚠️`, every `🎙️ sent + 2 📸`, every bind receipt, dozens of times
+        // a day, over the thing he was reading.
+        //
+        // What paid for the surface was legibility, and that bill is already
+        // settled below: bare means white text with a halo, which is what makes a
+        // row readable over a dark terminal *and* a white page without anything
+        // drawn behind it.
+        //
+        // `bare:` is gone from `flash(_:duration:)` with this: it was the one
+        // caller's way of asking for what everything now gets, and a parameter
+        // whose only value is the default is a question nobody is being asked.
+        let bare = anchored
         root.blur?.isHidden = bare
         root.layer?.cornerRadius = bare ? 0 : 14
         if panel.hasShadow != !bare {
@@ -2573,13 +2594,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Transient status in the subtitle row — which it also *summons*, since at
     /// rest that row is not on screen at all.
     ///
-    /// `bare` keeps the chip a chip: the message replaces a row instead of
-    /// summoning a window around it. For a notice that answers a gesture he just
-    /// made — the cancelled dictation — that is the whole difference between *a
-    /// word changed* and *something opened and closed beside my hand*.
-    func flash(_ message: String, duration: TimeInterval = 2.0, bare: Bool = false) {
+    /// **Every flash is bare** — see `refreshChrome`. It replaces a row on the
+    /// chip rather than summoning a window around it, which is the difference
+    /// between *a word changed* and *something opened and closed beside my hand*.
+    /// It had a `bare:` parameter and one caller passing `true`; Victor's rule of
+    /// 2026-09-02 made that the only behaviour there is.
+    func flash(_ message: String, duration: TimeInterval = 2.0) {
         flashMessage = message
-        flashIsBare = bare
         // A previous flash may still be halfway through its fade; whatever it
         // faded has to be opaque again before this one is drawn into it.
         hintLabel.alphaValue = 1
@@ -2620,7 +2641,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func endFlash(_ message: String) {
         guard flashMessage == message else { return }
         flashMessage = nil
-        flashIsBare = false
         // Reset before the relayout, not after: the same two views carry the
         // next flash, and one that inherited a zero alpha would never appear.
         hintLabel.alphaValue = 1

@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 33 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 34 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -165,6 +165,16 @@
         <p class="when">⇧ + the wheel: the dictation goes to a terminal that does not exist yet.</p>
         <p class="note">A destination that does not exist yet outranks the bound one — for the length of that one sentence the chip must not name the terminal the words are <em>not</em> going to.</p>
         <code class="slug">spawn</code>
+      </section>
+      <section class="card" id="replace-wispr">
+        <header>
+          <h3>Replace Wispr — this one goes to the caret</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">168×69 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/replace-wispr.png" width="168" height="69" style="opacity:0.8" alt="Replace Wispr — this one goes to the caret"></div>
+        <p class="when">The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.</p>
+        <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.</p>
+        <code class="slug">replace-wispr</code>
       </section>
       <section class="card" id="typing">
         <header>
@@ -262,7 +272,7 @@
       <section class="card" id="listening-flash">
         <header>
           <h3>Something went wrong mid-sentence</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">182×93 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">182×93 pt</span></div>
         </header>
         <div class="shot"><img src="states/listening-flash.png" width="182" height="93" style="opacity:0.8" alt="Something went wrong mid-sentence"></div>
         <p class="when">A shot that failed, or any flash raised while he is still talking.</p>
@@ -285,9 +295,9 @@
       <section class="card" id="flash-sent">
         <header>
           <h3>Flash — sent</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">141×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">141×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-sent.png" width="141" height="69" style="opacity:0.8" alt="Flash — sent"></div>
+        <div class="shot"><img src="states/flash-sent.png" width="141" height="46" style="opacity:0.8" alt="Flash — sent"></div>
         <p class="when">Two seconds, the moment a dictation reaches the agent.</p>
         <p class="note">A flash is a panel: blur, rounded rect, shadow — riding beside the pointer like the chip. It dissolves rather than cutting out, because a window vanishing under his hand is an event and <code>🎙️ sent</code> is not.</p>
         <code class="slug">flash-sent</code>
@@ -295,9 +305,9 @@
       <section class="card" id="flash-unguarded">
         <header>
           <h3>Flash — bound to an unguarded shell</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">159×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">159×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-unguarded.png" width="159" height="69" style="opacity:0.8" alt="Flash — bound to an unguarded shell"></div>
+        <div class="shot"><img src="states/flash-unguarded.png" width="159" height="46" style="opacity:0.8" alt="Flash — bound to an unguarded shell"></div>
         <p class="when">At bind, when the target has no shell guard: the flight lands into this.</p>
         <p class="note">The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.</p>
         <code class="slug">flash-unguarded</code>
@@ -305,9 +315,9 @@
       <section class="card" id="flash-refused">
         <header>
           <h3>Flash — refused at the prompt</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">288×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">288×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-refused.png" width="288" height="69" style="opacity:0.8" alt="Flash — refused at the prompt"></div>
+        <div class="shot"><img src="states/flash-refused.png" width="288" height="46" style="opacity:0.8" alt="Flash — refused at the prompt"></div>
         <p class="when">Delivery time, when the bound terminal turns out to be sitting at a shell prompt.</p>
         <p class="note">⛔️, not ⚠️: nothing was typed, and the sentence is still in the outbox. The distinction matters — this is the one failure that protects him rather than losing his words.</p>
         <code class="slug">flash-refused</code>
@@ -325,9 +335,9 @@
       <section class="card" id="flash-model-failed">
         <header>
           <h3>Flash — the recogniser is not there</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">463×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">463×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-model-failed.png" width="463" height="69" style="opacity:0.8" alt="Flash — the recogniser is not there"></div>
+        <div class="shot"><img src="states/flash-model-failed.png" width="463" height="46" style="opacity:0.8" alt="Flash — the recogniser is not there"></div>
         <p class="when">Twelve seconds, when Whisper fails to load — a missing <code>mlx_whisper</code>, most often.</p>
         <p class="note">The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.</p>
         <code class="slug">flash-model-failed</code>
@@ -335,9 +345,9 @@
       <section class="card" id="flash-nothing-to-paste">
         <header>
           <h3>Flash — nothing to paste yet</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">204×69 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">204×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-nothing-to-paste.png" width="204" height="69" style="opacity:0.8" alt="Flash — nothing to paste yet"></div>
+        <div class="shot"><img src="states/flash-nothing-to-paste.png" width="204" height="46" style="opacity:0.8" alt="Flash — nothing to paste yet"></div>
         <p class="when">⌘⌃P, or the menu row, before anything has been dictated this session.</p>
         <p class="note">The only thing ⌘⌃P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.</p>
         <code class="slug">flash-nothing-to-paste</code>
@@ -345,7 +355,7 @@
       <section class="card" id="flash-accessibility">
         <header>
           <h3>Flash — permissions missing</h3>
-          <div class="tags"><span class="tag tag-flash" title="a chip that borrowed the blur for a few seconds, still beside the cursor">flash</span><span class="tag">alpha 0.80</span><span class="tag">312×46 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">312×46 pt</span></div>
         </header>
         <div class="shot"><img src="states/flash-accessibility.png" width="312" height="46" style="opacity:0.8" alt="Flash — permissions missing"></div>
         <p class="when">Fifteen seconds at launch, before anything is bound.</p>
@@ -428,9 +438,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -467,7 +477,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at e2c64e8 · 01 Sep 2026 · built 02 Sep 2026, 09:26
+  Generated from <code>OverlayStates.swift</code> · repo at 47ee23f · 02 Sep 2026 · built 02 Sep 2026, 09:39
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

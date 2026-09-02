@@ -14,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// resumes exactly that afterwards. Driven from `syncBorrowedGestures`, the
     /// one place that already knows when the window opens and closes.
     private let music = MusicBridge()
+    /// The 🎙️ in the top-right corner of every screen while a dictation is
+    /// running — see `RecordingBeacon`. The chip says the same thing beside the
+    /// cursor, which is the one place he is not looking while he talks.
+    private let beacon = RecordingBeacon()
 
     /// Keeps every dictation's **recording** beside the model's reading of it,
     /// so a recogniser can be measured on Victor's own voice later. It changes
@@ -179,9 +183,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// purpose those gates have.
     private var spawnPending = false
 
-    /// Somewhere for this dictation to go: a terminal already bound, or one it
-    /// is about to open for itself.
-    private var hasDestination: Bool { isBound || spawnPending }
+    /// **Replace Wispr — the relay as a way to type, not a way to talk to an
+    /// agent.** Ticked in the menu, the forward side button opens the microphone
+    /// and closes it, and what was said is pasted at the caret: no outbox line,
+    /// no terminal, no screenshots, no picked elements, no prompt panel. The back
+    /// button is handed back to LinearMouse, which types Return with it.
+    ///
+    /// It is named after the app it replaces. Victor dictates into chats, commit
+    /// messages and forms all day through Wispr Flow, and this app already has
+    /// the two expensive halves of that — a warm local Whisper and a mouse button
+    /// — pointed at agents only.
+    ///
+    /// **Off at every launch and deliberately not persisted**, the same call
+    /// `autosend` makes. It changes where every sentence lands, and a tick that
+    /// survived a restart would send a dictation meant for a bound agent into
+    /// whatever field happened to have the caret, weeks after he had forgotten it
+    /// was on. The menu row is where the answer is, and it is one click away.
+    private var replaceWispr = false
+
+    /// The one place the mode is written, so the tick in the menu, the flag the
+    /// tap reads and the flash on screen cannot say three different things.
+    private func setReplaceWispr(_ on: Bool, fromMenu: Bool = true) {
+        replaceWispr = on
+        hotkeys.replaceWispr = on
+        if !fromMenu { status.setReplaceWispr(on) }
+        Log.info("Replace Wispr \(on ? "on — the forward button dictates at the caret" : "off")")
+        overlay.flash(on ? "Replace Wispr on — forward button dictates at the caret"
+                         : "Replace Wispr off", duration: 2.5)
+    }
+
+    /// This dictation is going to the caret — decided at the press that opened
+    /// the microphone, like `spawnPending`, and for the same reason: the mode may
+    /// be switched off while a sentence is still being spoken, and the
+    /// destination must not change halfway through.
+    private var pasteMode = false
+
+    /// Somewhere for this dictation to go: a terminal already bound, one it is
+    /// about to open for itself, or the caret.
+    private var hasDestination: Bool { isBound || spawnPending || pasteMode }
 
     /// A dictation is running. Main thread only, and kept here rather than read
     /// back off the overlay because it is half of what decides whether mouse 4 and
@@ -244,6 +283,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
+        // **Replace Wispr.** One flag, pushed to the tap in the same breath, so
+        // the mode and the button that performs it cannot disagree — and flashed,
+        // because it is the one setting that changes where every sentence lands.
+        status.onToggleReplaceWispr = { [weak self] on in self?.setReplaceWispr(on) }
         status.onToggleAutosend = { [weak self] on in
             self?.autosend = on
             Log.info(on ? "autosend on — the panel is a one-second receipt, no buttons"
@@ -342,6 +385,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 else { self.startLocalRecording(spawn: true) }
             }
         }
+        // The forward side button, in Replace Wispr mode — shaped exactly like
+        // the spawn above, and ending the same way: whichever gesture opened the
+        // microphone, closing it is closing it, and the destination was decided
+        // at the press.
+        hotkeys.onPasteToggle = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if self.localRecording { self.stopLocalRecording() }
+                else { self.startLocalRecording(paste: true) }
+            }
+        }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
         // The same call the loopback route makes, from the key Victor actually
@@ -389,6 +443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.send(kind: "dictation", text: text, app: "test")
             }
         }
+        picker.onTestReplaceWispr = { [weak self] on in
+            DispatchQueue.main.async { self?.setReplaceWispr(on, fromMenu: false) }
+        }
         picker.describeEngine = { [weak self] in
             ["engine": "whisper", "ready": self?.whisper.ready ?? false]
         }
@@ -405,6 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         picker.start()
         music.start()
+        beacon.start()
 
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
@@ -496,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // to wait ten seconds for the weights is still a spawn; going
                     // back through the bare path would have started a dictation
                     // with nowhere to go and then dropped it at `send`.
-                    self.startLocalRecording(spawn: self.spawnPending)
+                    self.startLocalRecording(spawn: self.spawnPending, paste: self.pasteMode)
                     return
                 }
                 // **Nothing is said.** This used to flash "local Whisper ready —
@@ -540,7 +598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `spawn` is ⇧ + the wheel: this dictation carries its own destination, so
     /// it is allowed through the one gate a bare one is not — having a binding.
-    private func startLocalRecording(spawn: Bool = false) {
+    private func startLocalRecording(spawn: Bool = false, paste: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -552,11 +610,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it *is* the answer for a spawn, and `captureContext` a few lines down
         // asks the same question about the screenshot it is deciding to take.
         spawnPending = spawn
+        pasteMode = paste
         // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
         // repeated here because this is the path that opens the microphone.
         guard hasDestination else { return }
         if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)") }
+        // **The chip says the caret, and it outranks the bound terminal** — the
+        // same slot, and the same argument, a spawn uses: for the length of this
+        // sentence the words are not going where the chip has been saying they
+        // go, and this line's whole job is to get that right.
+        if paste { overlay.setSpawnDestination("⌨️ at the caret") }
         guard whisper.ready else {
             // Not an error, since the helper is deliberately down until something
             // says a dictation is coming — this press is one of the two things
@@ -590,7 +654,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The context shot is booked synchronously first, because
         // `setListening(true)` zeroes the count the shot has to appear in.
-        captureContext()
+        //
+        // **Except in Replace Wispr**, which takes no picture at all. A frame of
+        // the screen exists to be *read by an agent* alongside the words; here
+        // there is no agent and no message — there is a string and a caret. The
+        // saving is not the point, though it is real (a subprocess and a
+        // clipboard probe on every press): the ⌘C probe posts a keystroke into
+        // whatever field he is about to dictate into, and this is the one mode
+        // where that field is the whole subject.
+        if !paste { captureContext() }
         listening = true
         syncBorrowedGestures()
         overlay.setListening(true)
@@ -613,6 +685,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cancelLocalRecording() {
         guard localRecording else { return }
         localRecording = false
+        pasteMode = false
         clearSpawn()
         localRecordingApp = nil
         let recording = mic.stop()
@@ -656,11 +729,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // about, on the one message that means the microphone just threw
         // everything away. A glyph that has to be decoded is worse than none on a
         // row that is up for a second and a half.
-        overlay.flash("dictation cancelled", duration: 1.5, bare: true)
+        overlay.flash("dictation cancelled", duration: 1.5)
     }
 
     private func stopLocalRecording() {
         localRecording = false
+        // **Read and consumed here**, so the async transcript that lands a second
+        // later goes where the *press* said it would, whatever the menu has been
+        // clicked into since. Same rule `Message.spawn` follows.
+        let paste = pasteMode
+        pasteMode = false
+        if paste { overlay.setSpawnDestination(nil) }
         let app = localRecordingApp
         localRecordingApp = nil
         let recording = mic.stop()
@@ -716,6 +795,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
                                      duration: duration, app: app)
             try? FileManager.default.removeItem(at: wav)
+            // **Replace Wispr stops here.** No outbox line, no terminal, no
+            // prompt panel to read and no countdown to wait out: the words are
+            // wanted *in the field he is looking at*, and a panel between the
+            // sentence and the caret is exactly the ceremony this mode exists to
+            // remove. The transcript is on the clipboard either way, which is the
+            // safety net if the caret has moved on.
+            guard !paste else {
+                DispatchQueue.main.async { self.pasteText(r.text) }
+                return
+            }
             self.send(kind: "dictation", text: r.text, app: app)
         }
     }
@@ -970,8 +1059,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a gesture that is no longer live, or off while one still is. Main thread only.
     private func syncBorrowedGestures() {
         let live = hasDestination && listening
-        hotkeys.dictating = live
-        picker.dictating = live
+        // **Nothing is borrowed for a dictation going to the caret.** Both of
+        // these buttons are taken from other software for the length of a
+        // sentence, and both are taken to *add to a message* — a screenshot,
+        // an element in a page. This mode has no message: there is one string and
+        // it goes where the caret is. Leaving mouse 4 alone is also the whole of
+        // "the back button gives Enter": untouched, LinearMouse types Return with
+        // it, which is what it does every other minute of the day.
+        hotkeys.dictating = live && !pasteMode
+        picker.dictating = live && !pasteMode
+        // **The corner beacon rides the same switch**, and deliberately on
+        // `listening` rather than on `live`: it answers *is it hearing me?*, and
+        // the microphone is either open or it is not — where the words then go
+        // is the chip's question, not this one.
+        beacon.setRecording(listening)
         // The music is pausing for the same window and for the same reason: it
         // is the span in which Victor is talking rather than using the machine.
         // Hanging it here rather than off `listening` alone is deliberate — a
@@ -1998,6 +2099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Chrome silent. The extension also resumes on a dead socket, but that is
         // the safety net for a crash, not the way an orderly quit should look.
         music.stop()
+        beacon.stop()
         guard !SingleInstance.beingReplaced() else {
             Log.info("terminating to make way for a new instance — no session_end")
             return
@@ -2204,12 +2306,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("⚠️ nothing dictated yet", duration: 3)
             return
         }
+        pasteText(text, after: fromMenu ? 0.25 : 0.0)
+    }
+
+    /// **Words onto the clipboard, then ⌘V at the caret.** The one delivery this
+    /// app makes that is not addressed to a terminal, and the only one it has for
+    /// Replace Wispr — which is why it lives here rather than inside
+    /// `pasteLastDictation`, its first caller.
+    ///
+    /// The clipboard is deliberately **not** restored, unlike the blind paste in
+    /// `TerminalBinding`: there the relay borrows it behind Victor's back, here
+    /// he asked for the words, and keeping them is what makes a paste that landed
+    /// somewhere unhelpful recoverable with one ⌘V of his own.
+    ///
+    /// **Silent on success**, like every delivery that lands: the words appear
+    /// where he was looking, which is the whole of the evidence.
+    private func pasteText(_ text: String, after delay: TimeInterval = 0) {
+        // So ⌘⌃P can say it again — a Replace Wispr dictation is a dictation that
+        // went out, and it is exactly the kind he wants twice: the same sentence
+        // into a second field.
+        lastDictation = text
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-        Log.info("📋 last dictation on the clipboard — \(text.count) chars, pasting at the caret")
-        DispatchQueue.main.asyncAfter(deadline: .now() + (fromMenu ? 0.25 : 0.0)) {
+        Log.info("📋 \(text.count) chars on the clipboard — pasting at the caret")
+        if delay == 0 {
             TerminalBinding.pressPaste()
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { TerminalBinding.pressPaste() }
         }
     }
 

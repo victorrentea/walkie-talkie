@@ -29,6 +29,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Picked from **Autosend** — the checkbox that takes the pre-send panel out
     /// of the way. See the row's construction for what it actually changes.
     var onToggleAutosend: ((Bool) -> Void)?
+    /// **Replace Wispr** — see `AppDelegate.replaceWispr`. A mode, not a command:
+    /// the forward side button becomes the microphone and every dictation is
+    /// pasted at the caret instead of being typed at an agent.
+    var onToggleReplaceWispr: ((Bool) -> Void)?
     /// What the local model is holding right now, in bytes — nil while it is not
     /// up. Asked when the menu opens, like the header, because that is the only
     /// moment the answer has to be right.
@@ -174,6 +178,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// he cannot tell a delivery from a drop — but it opens for a second, with no
     /// buttons on it. A flash, then it goes.
     private let autosend = NSMenuItem(title: "Autosend — no buttons, gone in a second", action: nil, keyEquivalent: "")
+    /// **The mode row.** It sits beside `Autosend` because the two are the only
+    /// switches in this menu — everything above them is something that happens
+    /// once, when clicked.
+    ///
+    /// The title names both halves of what changes, because both are surprising:
+    /// a button that did nothing for this app starts recording, and the words
+    /// stop going to the terminal the header above still names. `⌨️` is the icon
+    /// for the same reason it is the chip's label in this mode — the destination
+    /// is *wherever the caret is*, which is the one thing the row has to say.
+    private let replaceWispr = NSMenuItem(title: "Replace Wispr — forward button dictates, pasted at the caret",
+                                          action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     private var engineLoading = false
@@ -319,6 +334,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(pickLegend)
 
         menu.addItem(.separator())
+
+        replaceWispr.image = Self.emojiIcon("⌨️")
+        replaceWispr.action = #selector(replaceWisprClicked)
+        replaceWispr.target = self
+        replaceWispr.state = .off
+        menu.addItem(replaceWispr)
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
@@ -617,6 +638,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// checkbox — nothing else in the app has any use for it except the one call
     /// that reads it back — and keeping it on the row is what makes the tick and
     /// the behaviour impossible to disagree about.
+    /// Push the mode in from outside — the loopback test route. The tick is the
+    /// only place Victor can read the answer, so anything that changes the mode
+    /// has to come through here.
+    func setReplaceWispr(_ on: Bool) {
+        replaceWispr.state = on ? .on : .off
+    }
+
+    @objc private func replaceWisprClicked() {
+        replaceWispr.state = replaceWispr.state == .on ? .off : .on
+        onToggleReplaceWispr?(replaceWispr.state == .on)
+    }
+
     @objc private func autosendClicked() {
         autosend.state = autosend.state == .on ? .off : .on
         onToggleAutosend?(autosend.state == .on)

@@ -31,6 +31,7 @@ Current strings live in `RelayWindow.swift`:
   every gesture is written down (*The chip teaches nothing; the menu does*):
   `Connect Window — hold ⬅️ + 🛞`, `Disconnect — hold ➡️ + 🛞`, the three
   dictation rows, `New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s`,
+  `Replace Wispr — forward button dictates, pasted at the caret`,
   `One More Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
   `Quit`, and the `Local Whisper` readout
 
@@ -516,6 +517,7 @@ port scheme for a caller to guess between, and buys nothing.
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
 | `POST /test/spawn` | the same for ⌘ + the wheel — opens the window and starts the session |
+| `POST /test/replace-wispr` | `{"on": true}` — the mode behind the forward button, otherwise reachable only from the menu |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero to count from |
 | `GET /engine` | which model is loaded, and whether it is ready |
 
@@ -648,7 +650,8 @@ the microphone.
 **One gesture is outside it, since 2026-08-30**: ⌘ + the wheel starts a dictation
 whose destination is a terminal that does not exist yet (*⌘ + the wheel: the
 destination that does not exist yet*). The four gates below now ask
-`hasDestination` — `isBound || spawnPending` — because the reason for the rule is
+`hasDestination` — `isBound || spawnPending || pasteMode` (the third since
+2026-09-02, see *Replace Wispr*) — because the reason for the rule is
 that there is nowhere for these words to go, and a spawn is a yes to that
 question, just not yet. `syncLocalCapture` is deliberately **not** widened: the
 bare wheel's claim on the microphone still needs a binding, and the shifted press
@@ -743,6 +746,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
 | the dictation was cancelled | `dictation cancelled` in the row `Listening…` was in, **bare and glyphless** — 1.5 s, then half a second of dissolve back to the chip at rest |
+| dictating in Replace Wispr | the destination app's icon + `⌨️ at the caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -973,7 +977,14 @@ back. The two sections below are one argument applied twice.
 Since 2026-08-28 the same switch also **pauses Chrome's music** (`MusicBridge`,
 below). It is not a gesture, but it is the same window and the same argument: for
 the length of a sentence, something that belongs to the rest of the machine is
-borrowed and then handed straight back.
+borrowed and then handed straight back. Since 2026-09-02 it also raises the
+**corner beacon** — same switch, same window, and the reason it is that switch
+and not a fourth place `listening` is written down.
+
+**Neither gesture is borrowed in Replace Wispr** (`live && !pasteMode`). Both are
+taken in order to *add to a message* — a picture, an element in a page — and that
+mode has no message: there is one string and it goes where the caret is. Leaving
+mouse 4 alone is also the whole of "the back button gives Enter".
 
 ## The music pauses for the length of a dictation
 
@@ -1292,11 +1303,12 @@ silently and a selection is read silently, so without the verb the only
 confirmation the shutter grabbed the right paragraph arrived in the terminal, a
 sentence too late to reselect.
 
-**It is deliberately not a `flash(_:)`.** A flash is a *panel*, and the rule that
-keeps the F3 receipt out of one — taking a picture mid-sentence must not throw a
-window across the work being photographed — applies with equal force to the
-highlight caught by the same press. So the receipt goes on the row that was going
-to carry the text anyway.
+**It is deliberately not a `flash(_:)`.** A flash *replaces* the chip for a
+second and a half, and the receipt has to sit beside the text it is about for the
+rest of the sentence — so the row that was going to carry the highlight anyway is
+where it goes. (When this was written a flash was also a *panel*, thrown across
+the work being photographed; that half of the argument is gone since 2026-09-02,
+and the other half is enough.)
 
 **And that row was invisible.** `refreshChrome` turns every row white with a halo
 for the bare chip and `selectionLabel` was the one it never listed, so it kept
@@ -1635,13 +1647,17 @@ session — and until this row existed that cost was a number in a comment, whic
 is exactly where a fact nobody can check belongs. It doubles as proof the helper
 is alive: a dead one has no footprint and the row goes back to its bare name.
 
-### The wheel is the relay's; mouse 5 is nobody's
+### The wheel is the relay's; mouse 5 is nobody's (except in Replace Wispr)
 
 Until 2026-08-29 the relay took **mouse 5** — the same button the dictation app
 it then depended on used for push-to-talk — so every dictation began with the
 question of which of the two was armed. Victor's call: mouse 5 goes back
 untouched (only a *double* click still means anything to this app: bind), and the
 relay drives `MicRecorder` from the **wheel**.
+
+**Replace Wispr takes it back, and only while the mode is ticked** — see that
+section. The forward button is then the microphone for a dictation that goes to
+the caret, which is the one job the wheel's vocabulary has nothing to say about.
 
 **The wheel says three things — and only one of them is about how long it is
 held. The third is a chord with the left button.**
@@ -1856,7 +1872,7 @@ nowhere to go is a room taped for nobody. This one *carries* its destination, so
 the argument does not apply and the gesture is live for as long as the app is —
 which is exactly what Victor asked for: the moment it is most useful is the
 moment there is no session yet. In the code that is `hasDestination`
-(`isBound || spawnPending`), and it is what the four gates ask now.
+(`isBound || spawnPending || pasteMode`), and it is what the four gates ask now.
 
 **The prompt travels in `argv`, not through the keyboard.** `claude "<prompt>"`
 starts the interactive session with that prompt already submitted, and that
@@ -1962,6 +1978,76 @@ wheel's.
 `POST /test/spawn` is the route that exercises all of it from a desk, and it
 needs one of its own because `/test/dictation` is gated on a binding — the one
 condition this gesture is defined by not needing.
+
+## Replace Wispr: the relay as a way to type
+
+**Since 2026-09-02, one menu tick turns this app into a dictation tool for the
+machine rather than for an agent.** Ticked, the **forward side button** opens the
+microphone and closes it, and what was said is **pasted at the caret**: no outbox
+line, no terminal, no screenshots, no picked elements, no prompt panel, no
+countdown. The **back button is handed back**, so LinearMouse goes on typing
+Return with it.
+
+It is named after the app it replaces. Victor dictates into chats, commit
+messages and forms all day through Wispr Flow, and this app already had the two
+expensive halves of that job — a warm local Whisper and a mouse button — pointed
+only at agents. *"Ăsta ar fi un mod nou de lucru în care nu injectează decât
+textul transcris… în fapt, cum face Wispr Flow acum."*
+
+| | bound dictation | Replace Wispr |
+|---|---|---|
+| gesture | 🛞 | the forward side button |
+| destination | the bound terminal | wherever the caret is |
+| what travels | words, shots, selections, picks | the words |
+| review | the held prompt, 3–5 s | none — it is pasted |
+| back button | the shutter | untouched: Return |
+
+- **The forward button, and not the wheel.** The wheel is the relay's whole
+  vocabulary — dictate, cancel, bind, disconnect, spawn — and every one of those
+  meanings is about a *terminal*. A mode that types into whatever is in front has
+  no business colliding with them, and the hand can hold this one without
+  learning a chord. It **outranks the mouse-5 double click** that binds a window,
+  which is the one thing this mode is not about, and cannot be told from it at
+  the press anyway: waiting out the double-click interval before opening the
+  microphone is exactly the wait Victor had removed from the wheel.
+- **The back button is not synthesised.** *"Pe butonul de Back să dea Enter"* —
+  which it already does, from LinearMouse, every other minute of the day. The
+  relay simply stops borrowing it (`hotkeys.dictating` is false in this mode), the
+  event passes through untouched, and LinearMouse — downstream of this tap —
+  produces the Return. Posting one here as well would be two Returns for one
+  press.
+- **It carries its own destination**, so *Unbound is inert* does not reach it, the
+  same exemption ⌘ + the wheel has. `hasDestination` is `isBound || spawnPending ||
+  pasteMode`, and the tap's branch consults the mode flag and nothing else.
+- **Decided at the press, consumed at the stop.** `pasteMode` is read and cleared
+  in `stopLocalRecording`, so a transcript landing a second later goes where the
+  press said it would even if the tick has been clicked since — the rule
+  `Message.spawn` already follows.
+- **No context shot, and that is not only a saving.** The automatic frame exists
+  to be read by an agent beside the words; here there is no agent and no message.
+  The real reason is the selection probe that comes with it: it posts a ⌘C into
+  whatever field he is about to dictate into, and this is the one mode where that
+  field is the whole subject.
+- **The chip says `⌨️ at the caret`**, in the slot a spawn uses and for the
+  spawn's reason: the bound terminal is still there, and for the length of this
+  sentence the words are not going to it.
+- **Off at every launch, deliberately not persisted** — the call `Autosend`
+  makes. It changes where every sentence lands, and a tick that survived a restart
+  would put a dictation meant for a bound agent into whatever field had the caret,
+  weeks after he had forgotten it was on.
+- **The transcript is on the clipboard as well as at the caret**
+  (`pasteText`, which ⌘⌃P now shares), so a paste that landed somewhere unhelpful
+  is one ⌘V of his own away from being fixed. `lastDictation` is set too: a
+  Replace Wispr sentence is exactly the kind wanted twice, in a second field.
+- **`POST /test/replace-wispr {"on": true}`** exists because the mode is otherwise
+  reachable only by clicking a menu row — the one input nothing at a desk can
+  produce. The route and the row both go through `setReplaceWispr`, so the tick,
+  the tap's flag and the flash cannot say three different things.
+
+**The corpus keeps everything**, as it does for a delivery refused at a shell
+prompt: `captureLocal` runs before the branch. These are Victor's own words in his
+own voice, and which destination they were headed for says nothing about their
+worth as a sample.
 
 ## A bind mid-sentence changes the recipient
 
@@ -2130,9 +2216,9 @@ you reach for it means nothing. (The menu bar item is the ✕ that stays put.)
 
 **Panel (the message, and only the message)** — what the overlay has always been,
 top-left of the current screen, with the blur, the ✕ on hover, and full opacity.
-Entered by a prompt. **Nothing else** — a flash is a chip that borrows the blur
-without leaving the pointer, and since 2026-09-01 the cancelled-dictation one does
-not borrow it at all.
+Entered by a prompt, and **by nothing else since 2026-09-02**: a flash used to
+borrow the blur without leaving the pointer, and now borrows nothing. See *Nothing
+beside the pointer draws a window*.
 
 **There is never a ✕ beside the pointer, in any state.** The rule was
 `bare || !hovering`, which meant a flash — anchored, riding the cursor like
@@ -2145,9 +2231,10 @@ apăs pe el din moment ce acel tooltip se plimbă cu mouse-ul"*.
 **Dictating is not a panel state.** It was, and that put a half-screen window
 over his work for the entire time he talked, to report a state he had just
 entered on purpose. The panel is now for the one thing he must actually read:
-what the model heard, while Cancel can still stop it. That is also why the F3 receipt
-is a number in the recording row and not a `flash(_:)` — a flash is a panel, and
-taking a picture mid-dictation must not throw one across the screen.
+what the model heard, while Cancel can still stop it. That is also why the F3
+receipt is a number in the recording row and not a `flash(_:)`: a flash takes the
+chip over for a second and a half, and the count has to keep climbing while he
+talks.
 
 Tracking has two modes, and the second is what keeps the chip catchable:
 *engaged* pins it to the cursor every frame at 60 Hz (anything lazier reads as
@@ -2249,6 +2336,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Paste the Last Dictation` | 📋 | ⌘⌃P |
 | `One More Screenshot` | 📷 | `F3, or the back button while dictating` |
 | `Pick an Element in Chrome` | ✋ | `⌘⇧ + 🖱️, while dictating` |
+| `Replace Wispr` | ⌨️ | the forward side button (see *Replace Wispr*) |
 
 **Two sources, and the split is forced rather than aesthetic.** Emoji are what
 Victor asked for and they carry their own colour — but Unicode has no crossed-out
@@ -2315,6 +2403,46 @@ part of an inactive menu bar that is reliably empty. `NSScreen.main` is polled
 every 500ms rather than observed — it moves with the focus and posts nothing —
 and the panel on the active screen is hidden, since the real status item is
 already there.
+
+## The corner beacon: a microphone on every screen while it listens
+
+**Top-right of every display, a 30pt strip, a 🎙️ pulsing 1.0 → 0.15 and back over
+1.2 s each way** (`RecordingBeacon.swift`), for exactly as long as the microphone
+is open.
+
+The chip already says this — the pulsing 🔴 and `Listening…` — and it says it
+*beside the cursor*, which is the one place Victor is not looking while he talks:
+he dictates while reading something on another display, with a full-screen window
+up, and macOS hides the pointer the moment he touches the keyboard, taking the
+chip with it. The state that must never be in doubt — *is it still hearing me?* —
+had the least dependable receipt in the app. This is Wispr Flow's own answer to
+the same problem, which is what he asked for by name.
+
+- **The pulse is the point, and it is slow on purpose.** 1.2 s each way is the
+  🔴's tempo and is chosen for the 🔴's reason: anything brisker is something
+  flashing in the corner of the eye of a man trying to think, and this one is up
+  for the whole minute a dictation to an agent lasts. A frozen microphone is
+  indistinguishable from a hung app, which is the failure it is here to rule out.
+- **One panel per screen**, the shape `MenuBarMirror` has and for its reason: with
+  `com.apple.spaces spans-displays` off — the default — no window spans two
+  displays, and the display he is *not* typing on is the one this is for.
+  `.statusBar` level and `fullScreenAuxiliary`, so a full-screen window does not
+  bury it.
+- **Never in a screenshot** (`sharingType = .none`). The relay photographs the
+  screen during the very dictation this marks — the automatic frame and every F3 —
+  and a confirmation inside the thing it confirms is a fixture the agent has to
+  learn to ignore. Same rule `CaptureFlash` and `MenuBarMirror` follow. **It is
+  therefore not checkable with a screenshot**; what is checkable is the geometry,
+  through `CGWindowListCopyWindowInfo`, which is how the four panels were verified
+  sitting at the right edge of each screen under the menu bar.
+- **Just under the menu bar, not in it.** The bar's right end is the clock and
+  Control Center. `visibleFrame.maxY` is what places it, so the notch's taller bar
+  needs no number written down here.
+- **`syncBorrowedGestures` is the switch**, on `listening` rather than on `live`:
+  it answers *is it hearing me?*, and the microphone is either open or it is not —
+  where the words then go is the chip's question, not this one. Riding the one
+  method every edge of a dictation already passes through is what keeps it from
+  drifting out of step with the row on the chip.
 
 ## The prompt is held, not sent
 
@@ -2433,40 +2561,40 @@ The chip is translucent because it now rides over his actual work and has to rea
 as an overlay; the panels are opaque because each of them exists to be read. The
 0.30 that used to belong to paused went with it.
 
-## A flash can be bare
+## Nothing beside the pointer draws a window
 
-`flash(_:duration:bare:)`. A flash normally summons the chip's blur, rounded rect
-and shadow for the length of its message — a sentence read once, often over a busy
-screen, earns a surface. **`bare: true` keeps the chip a chip**: the message
-replaces a row and nothing is drawn around it.
+**Victor's rule, 2026-09-02:** *"toate tooltip-urile din jurul mouse-ului …
+niciunul nu mai trebuie să aibă border în jur"*. `refreshChrome` asks one
+question now — `let bare = anchored` — so the blur, the rounded rect, the shadow
+and the ✕ belong to the panel parked in a corner and to nothing else.
 
-One caller so far, and it is what the option was written for: `dictation
-cancelled`, 1.5s then half a second of dissolve. It lands in the row `Listening…`
-was occupying a moment earlier, beside the pointer, and wrapping a window round it
-for a second and a half made cancelling read as something *opening* rather than as
-a state changing back to nothing. Victor's words: *"fără border… înlocuiești
-Listening cu dictation cancelled"*.
+A flash used to summon all four for the length of its message, on the argument
+that a sentence read once over a busy screen earns a surface. What that actually
+did was open and close a window an inch from his hand, dozens of times a day,
+over the thing he was reading — for `⚠️`, for `🎙️ sent + 2 📸`, for every bind
+receipt. The cancelled dictation got the exemption first (*"fără border…
+înlocuiești Listening cu dictation cancelled"*, 2026-09-01) and nothing in that
+argument was ever about *which* message it was.
 
-**And nothing is drawn above it either, since 2026-09-02.** Two glyphs were:
-the 🗑️ the message itself led with, and — one row up — the lone 🎙️ a *collapsed*
-chip is (bound, nothing in flight, so the title row is a microphone with no words
-beside it). Both are gone from this state. Victor's report was about the pair,
-read as one thing: *"să nu se arate și microfonul acela mic, ci doar dictation
-cancelled"* — and he is right twice over, because Apple's wastebasket has its lid
-flying off above the bin, so at chip size, in grey, it reads as a second
-microphone. A microphone with a caption is the worst available rendering of the
-one message whose whole content is that the microphone just threw everything
-away.
+What paid for the surface was legibility, and that bill is settled by `bare`
+itself: white text with a halo, which is what makes a row readable over a dark
+terminal and over a white page with nothing drawn behind it.
 
-`layoutContent` drops the title row while a bare flash is up **and** the chip is
-collapsed — the case where that row has no folder name in it and the glyph is
-therefore a message rather than a line's icon. That is what *bare* was always
-supposed to mean: the flash **replaces** a row instead of sitting under one.
+**`flash(_:duration:bare:)` lost its parameter with this.** One caller passed
+`true`; now everyone gets it, and a parameter whose only value is the default is
+a question nobody is being asked.
 
-`refreshChrome` asks `anchored && (flashMessage == nil || flashIsBare)`, and the
-hint row joins the labels that get the white-plus-halo treatment when bare — with
-no blur under it, `labelColor` is the same invisible dark grey the selection row
-used to be.
+**A flash replaces the collapsed chip rather than sitting under it.** Bound with
+nothing in flight, the title row is a lone 🎙️ with no words beside it (`collapsed`
+— the chip *being* a microphone is the whole sentence). Under a message that row
+is noise, and twice it was worse than noise: `dictation cancelled` read as a
+microphone with a caption — Apple draws the wastebasket with its lid flying off
+above the bin, so the 🗑️ the message used to lead with was a second one — and
+`🎙️ sent + 2 📸` came out as two microphones stacked, one of them punctuation.
+Victor: *"să nu se arate și microfonul acela mic, ci doar dictation cancelled"*.
+So `layoutContent` drops the title row while a flash is up **and** the chip is
+collapsed. Only then: with a folder name in the row the glyph is that line's icon,
+and the line is still the honest answer to *where do the words go*.
 
 ## Placement
 
