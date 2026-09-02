@@ -2494,8 +2494,18 @@ already there.
 
 `~/.walkie-talkie/bound-tty` holds the tty of the bound session while there is
 one, and does not exist otherwise (`Outbox.publishBound`). Victor's status line
-reads it and puts a white-on-red 🎙️ in front of the model name when it matches
-its own tty.
+reads it and puts a 🎙️ badge in front of the model name when it matches its own
+tty — **yellow bound, red while the microphone is open**.
+
+The line carries both facts: `ttys006`, or `ttys006 listening`. A second word
+rather than a second file, because the reader is a shell loop doing one builtin
+`read` and two files would be two of them plus a state that can be half-written.
+It is written from **both** switches that own the two facts — `showBound` for the
+binding, `syncBorrowedGestures` for the microphone — since neither can answer the
+other's question.
+
+Yellow is the state that lasts hours and red the one that lasts a minute, which
+is the same split the chip draws with a folder name against a pulsing 🔴.
 
 **Same problem the corner beacon solves, at the other end of the sentence.** The
 beacon answers *is it hearing me?*; this answers *which of these twenty
@@ -2537,9 +2547,9 @@ answered it, rides the pointer and is hidden the moment he types.
 
 ## The corner beacon: a microphone on every screen while it listens
 
-**Top-right of every display, a 30pt strip, a 🎙️ pulsing 1.0 → 0.15 and back over
-1.2 s each way** (`RecordingBeacon.swift`), for exactly as long as the microphone
-is open.
+**Top-right of every display, a 150pt panel, a 🎙️ pulsing 1.0 → 0.15 and back
+over 1.2 s each way** (`RecordingBeacon.swift`), for exactly as long as the
+microphone is open — and it **flies there out of the pointer**.
 
 The chip already says this — the pulsing 🔴 and `Listening…` — and it says it
 *beside the cursor*, which is the one place Victor is not looking while he talks:
@@ -2549,6 +2559,37 @@ chip with it. The state that must never be in doubt — *is it still hearing me?
 had the least dependable receipt in the app. This is Wispr Flow's own answer to
 the same problem, which is what he asked for by name.
 
+- **Five times what it was**, since 2026-09-02 and on Victor's ask. A 30pt strip
+  with a 22pt glyph in it was a speck, and the whole argument for this thing is
+  that it answers *is it still hearing me?* from the display he is **not** typing
+  on — an indicator that has to be looked for does not. It costs the "a margin,
+  never on his work" property the strip had, deliberately: it is up only while he
+  is talking, half-faded for most of that by the pulse, and the corner it sits in
+  is the one part of a screen nothing is ever laid out against.
+- **It flies out of the pointer, 0.55 s after the microphone opens.** The corner
+  is the right place for this to *live* and the wrong place for it to *appear*: a
+  microphone materialising on the far edge of a screen he is not looking at is
+  something he finds later, if at all. The gesture happened under his hand, so
+  that is where the receipt starts — `BindFlight`'s sentence, run for a state
+  instead of a target: *what you just did now lives up there.*
+
+  The 0.55 s is `CaptureFlash.markerDuration` plus a beat, because the red cursor
+  target is blooming out of those exact pixels for the first half-second and two
+  things growing out of one point at one instant read as one confused shape. It
+  also means a dictation that ends inside that beat — under
+  `MicRecorder.minimumDuration`, i.e. a misfire — never puts anything on screen
+  at all.
+
+  **Only the screen the pointer is on flies**; the others come up in their
+  corners at the same moment, so all of them arrive together. A window belongs to
+  a single display, so a flight across two is not a thing that can be drawn — and
+  the sentence is only true of the corner on the screen the hand is on anyway.
+  `setFrame` on the animator rather than a layer transform: a 150pt window parked
+  over his work for the length of a flight is exactly what the corner exists to
+  avoid.
+
+  `flown` is what keeps a `sync` from a display change mid-sentence from flying
+  the panels out of a pointer that has long since moved.
 - **The pulse is the point, and it is slow on purpose.** 1.2 s each way is the
   🔴's tempo and is chosen for the 🔴's reason: anything brisker is something
   flashing in the corner of the eye of a man trying to think, and this one is up

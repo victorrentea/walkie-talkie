@@ -40,13 +40,22 @@ enum Outbox {
     /// binding that went with it. `AppDelegate` clears it at launch and at
     /// termination for the same reason; a stale microphone on somebody else's
     /// row is worse than none, since the whole point is that it can be trusted.
-    static func publishBound(tty: String?) {
+    /// **Two facts, one line: `ttys006` or `ttys006 listening`.** The status
+    /// line wears a yellow badge for the first and a red one for the second —
+    /// *the words would come here* against *the microphone is open right now* —
+    /// which is the same split the chip draws with a folder name against a
+    /// pulsing 🔴, said in the one place that is always on screen.
+    ///
+    /// A second word rather than a second file: the reader is a shell loop doing
+    /// one builtin `read`, and two files would be two of them plus a state that
+    /// can be half-written.
+    static func publishBound(tty: String?, listening: Bool = false) {
         guard let tty = tty else {
             try? FileManager.default.removeItem(at: boundTTYURL)
             return
         }
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        try? Data(tty.utf8).write(to: boundTTYURL)
+        try? Data((listening ? "\(tty) listening" : tty).utf8).write(to: boundTTYURL)
     }
 
     /// **Screenshots live in Caches, not next to the outbox, and not in `/tmp`.**

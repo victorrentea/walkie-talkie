@@ -35,10 +35,35 @@ import AppKit
 /// and the menu-bar mirror follow.
 final class RecordingBeacon {
 
-    /// A 30pt strip down the right edge, which is what Victor asked for, and
-    /// what makes it a *margin* rather than something sitting on his work: the
-    /// glyph is drawn inside it, at the top, and nothing else ever is.
-    private static let strip: CGFloat = 30
+    /// **Five times what it was** (2026-09-02, Victor's ask): a 30pt strip with a
+    /// 22pt glyph in it, read across a room, was a speck. The whole argument for
+    /// this thing is that it answers *is it still hearing me?* from the display
+    /// he is not typing on — an indicator that has to be looked for does not.
+    ///
+    /// It costs the "margin, never on his work" property the 30pt strip had, and
+    /// that trade is deliberate: it is up only while he is talking, it is
+    /// half-faded for most of that by the pulse, and the corner it sits in is
+    /// the one part of a screen nothing is ever laid out against.
+    private static let strip: CGFloat = 150
+    /// The glyph inside it, at the same 0.73 of the strip it has always been.
+    private static let ink: CGFloat = 110
+    /// **It flies out of the pointer**, and the beacon is where it lands.
+    ///
+    /// The corner is the right place for it to *live* and the wrong place for it
+    /// to *appear*: a microphone materialising on the far edge of a screen
+    /// Victor is not looking at is a thing he finds later, if at all. The gesture
+    /// that started the dictation happened under his hand, so that is where the
+    /// receipt starts — the same sentence `BindFlight` says about a window, run
+    /// for a state instead of a target: *what you just did now lives up there.*
+    private static let flightDuration: CFTimeInterval = 0.45
+    /// It waits out the red cursor target first (`CaptureFlash.markerDuration`),
+    /// because the two would otherwise bloom out of the same pixels at the same
+    /// instant and read as one confused shape. A beat later the pointer is
+    /// uncovered again and the microphone has somewhere to come *from*.
+    private static let leadIn: CFTimeInterval = CaptureFlash.markerDuration + 0.05
+    /// The size it leaves the pointer at — a chip beside the cursor, not a
+    /// 150pt panel dropped on his work and then dragged off it.
+    private static let takeoff: CGFloat = 34
     /// The gap under the menu bar. It hangs just below it rather than in it: the
     /// bar's right end is the clock and Control Center, and the one place a
     /// window may sit at the top-right of every screen without covering
@@ -48,6 +73,10 @@ final class RecordingBeacon {
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
     private var recording = false
     private var observer: NSObjectProtocol?
+    /// Whether this dictation's flight has already been played. A `sync` from a
+    /// display change mid-sentence must put the panels back where they belong,
+    /// not fly them out of a pointer that has long since moved.
+    private var flown = false
 
     func start() {
         // Displays come and go — a projector at a workshop, the desk monitors
@@ -73,10 +102,19 @@ final class RecordingBeacon {
     func setRecording(_ on: Bool) {
         guard recording != on else { return }
         recording = on
-        sync()
+        guard on else { flown = false; sync(); return }
+        // Nothing on screen for the length of the cursor mark. A dictation that
+        // ends inside that beat — under `MicRecorder.minimumDuration`, i.e. a
+        // misfire — never puts anything up at all, which is the correct amount
+        // of ceremony for a gesture that did not happen.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.leadIn) { [weak self] in
+            guard let self = self, self.recording, !self.flown else { return }
+            self.flown = true
+            self.sync(flyFrom: NSEvent.mouseLocation)
+        }
     }
 
-    private func sync() {
+    private func sync(flyFrom cursor: NSPoint? = nil) {
         guard recording else {
             for (_, panel) in panels { panel.orderOut(nil) }
             return
@@ -86,11 +124,49 @@ final class RecordingBeacon {
             guard let id = Self.displayID(screen) else { continue }
             live.insert(id)
             let panel = panels[id] ?? makePanel(id: id)
-            place(panel, on: screen)
-            panel.orderFront(nil)
+            // **Only the screen the pointer is on flies.** A window belongs to a
+            // single display, so a flight across two is not a thing that can be
+            // drawn — and the sentence being said is *this gesture, under your
+            // hand, now lives in that corner*, which is only true of the corner
+            // on the screen the hand is on. The others simply come up where they
+            // belong, at the same moment, so all of them arrive together.
+            if let cursor = cursor, NSMouseInRect(cursor, screen.frame, false) {
+                fly(panel, on: screen, from: cursor)
+            } else {
+                place(panel, on: screen)
+                panel.orderFront(nil)
+            }
             pulse(panel)
         }
         for (id, panel) in panels where !live.contains(id) { panel.orderOut(nil) }
+    }
+
+    /// Put the panel down at the pointer, small, then animate it whole to the
+    /// corner at full size.
+    ///
+    /// `setFrame` on the animator rather than a layer transform: the panel is
+    /// what has to end up in the corner, and animating a layer inside a window
+    /// that is already there would fly a picture across a screen the window is
+    /// invisibly covering the whole time — this thing is `ignoresMouseEvents`
+    /// but it is still a 150pt window, and one parked over his work for the
+    /// length of a flight is exactly what the corner exists to avoid.
+    private func fly(_ panel: NSPanel, on screen: NSScreen, from cursor: NSPoint) {
+        let small = Self.takeoff
+        panel.setFrame(NSRect(x: (cursor.x - small / 2).rounded(),
+                              y: (cursor.y - small / 2).rounded(),
+                              width: small, height: small), display: false)
+        panel.alphaValue = 0
+        panel.orderFront(nil)
+        let side = Self.strip
+        let target = NSRect(x: (screen.frame.maxX - side).rounded(),
+                            y: (screen.visibleFrame.maxY - side - Self.topGap).rounded(),
+                            width: side, height: side)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.flightDuration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+            panel.animator().setFrame(target, display: true)
+        }
     }
 
     private func makePanel(id: CGDirectDisplayID) -> NSPanel {
@@ -112,11 +188,15 @@ final class RecordingBeacon {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: side, height: side))
         content.wantsLayer = true
         let label = NSTextField(labelWithString: "🎙️")
-        label.font = .systemFont(ofSize: 22)
+        label.font = .systemFont(ofSize: Self.ink)
         label.alignment = .center
         label.frame = NSRect(x: 0, y: 0, width: side, height: side - 4)
         label.isBezeled = false
         label.drawsBackground = false
+        // The panel is resized through the flight, so the glyph has to follow it
+        // rather than staying the size it was built at.
+        label.autoresizingMask = [.width, .height]
+        content.autoresizesSubviews = true
         content.addSubview(label)
         panel.contentView = content
 

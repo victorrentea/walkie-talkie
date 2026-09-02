@@ -1078,6 +1078,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the microphone is either open or it is not — where the words then go
         // is the chip's question, not this one.
         beacon.setRecording(listening)
+        // The status line goes yellow → red on the same edge, and reads the same
+        // `listening` the beacon does rather than a flag of its own.
+        publishBinding(terminal.target)
         // The music is pausing for the same window and for the same reason: it
         // is the span in which Victor is talking rather than using the machine.
         // Hanging it here rather than off `listening` alone is deliberate — a
@@ -1314,7 +1317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let target = target else {
             overlay.setBound(label: nil)
             status.setDestination(nil, icon: nil)
-            Outbox.publishBound(tty: nil)
+            publishBinding(nil)
             return
         }
         // A target with no readable directory (a blind-paste app) says its own
@@ -1343,7 +1346,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Published here for the reason everything else about a binding is
         // published here: this is the one method every route into and out of one
         // passes through, so the file cannot drift from the chip.
-        Outbox.publishBound(tty: target.handle.tty)
+        publishBinding(target)
+    }
+
+    /// Write the marker the status line reads — see `Outbox.publishBound`.
+    ///
+    /// Called from the two switches that own the two facts in it: `showBound`,
+    /// which every route into and out of a binding passes through, and
+    /// `syncBorrowedGestures`, which every edge of a dictation does. Neither can
+    /// answer the other's question, which is why the file is written from both
+    /// rather than from whichever one happened to fire last.
+    private func publishBinding(_ target: TerminalBinding.Target?) {
+        Outbox.publishBound(tty: target?.handle.tty, listening: listening)
     }
 
     /// The destination app's icon, drawn down to the row height it has to sit in.
