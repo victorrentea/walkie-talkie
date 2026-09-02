@@ -2353,18 +2353,56 @@ only moment the answer has to be right is the moment he is looking at it.
 
 Since 2026-09-01 each command carries a picture in the menu's icon column.
 
-| row | icon | gesture in the title |
-|---|---|---|
-| `Connect Window` | `mappin`, in Google Maps red | `hold ⬅️ + 🛞` (⌘⌃B rides the shortcut column) |
-| `Disconnect` | `mappin.slash` | `hold ➡️ + 🛞` |
-| `Start Dictation` | `mic` | `🛞` (⌘⌃D in the shortcut column) |
-| `End Dictation` | `mic.slash` | `🛞` |
-| `Cancel Dictation` | 🗑️ | `hold 🛞 2s` |
-| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞, or hold ➡️ + 🛞 1s` |
-| `Paste the Last Dictation` | 📋 | ⌘⌃P |
-| `One More Screenshot` | 📷 | `F3, or the back button while dictating` |
-| `Pick an Element in Chrome` | ✋ | `⌘⇧ + 🖱️, while dictating` |
-| `Replace Wispr` | ⌨️ | the forward side button (see *Replace Wispr*) |
+| row | icon | chord column | key column |
+|---|---|---|---|
+| `Connect Window` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
+| `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
+| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞, or ➡️ + 🛞 1s` | |
+| `Paste the Last Dictation` | 📋 | | ⌘⌃P |
+| — separator — | | | |
+| `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
+| `End Dictation` | `mic.slash` | `🛞` | ⌘⌃D |
+| `Cancel Dictation` | 🗑️ | `🛞 2s` | |
+| `One More Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
+| `Pick an Element in Chrome` | ✋ | `⌘⇧ + ⬅️ @🎙️` | |
+| `Replace Wispr` | ⌨️ | the forward side button (see *Replace Wispr*) | |
+
+**The line groups by what a row is *for*.** Above it, everything about a
+**destination** — point at one, let it go, make a new one, paste the last
+sentence somewhere by hand. Below it, everything done **with a dictation open**,
+plus the row that opens one. They were interleaved before, in the order each was
+written, with the two gestures that are only live mid-sentence sitting three rows
+below the block they belong to. A menu that is the app's only legend has to group
+by the question its reader is asking.
+
+**`@🎙️` is "while dictating"**, and it replaced those two words. They were a
+third of the width of the longest row, said twice, to qualify a chord — and `@`
+is the right shape for it, since the marker is an *address*: this gesture lives
+at the dictation. It survives the separator because **F3 is not gated on a
+dictation at all**, so the marker is what says which half of `One More
+Screenshot` the condition belongs to.
+
+**The word `hold` is gone from every chord**, on Victor's ask. Where a hold has a
+*duration* the duration says so (`🛞 2s`, `➡️ + 🛞 1s`); where it does not, the
+chord is unambiguous without it — there is no tap-⬅️-then-🛞 meaning something
+else for it to be told apart from. It was four characters in front of the two
+rows read most often.
+
+**F3 rides the shortcut column as a real key equivalent.** It is a key, and this
+row is the one place in the menu where a keyboard route and a mouse route do the
+same thing — splitting them across the two columns is what says they are
+alternatives. Modifier-less and harmless: the app is `.accessory` and never
+becomes key, so it can only fire while the menu is open; the global F3 is
+`HotkeyTap`'s as it always was.
+
+**⌘ cannot go in the key column, and that was asked.** `keyEquivalent` needs an
+actual key to hang modifiers off — a bare ⌘ beside a wheel is not one, and AppKit
+renders nothing for it. `⌘ + 🛞` stays in the chord column, which is right beside
+it anyway.
+
+**The back button is drawn `⬇️`**, joining ⬅️ and ➡️ rather than being spelled out
+as *the back button*. The arrows in this menu are already mouse buttons; the
+thumb button is the one that had no mark and so had to be four words.
 
 **Two sources, and the split is forced rather than aesthetic.** Emoji are what
 Victor asked for and they carry their own colour — but Unicode has no crossed-out

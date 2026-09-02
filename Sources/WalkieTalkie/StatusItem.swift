@@ -279,7 +279,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         startDictation.action = #selector(startDictationClicked)
         startDictation.target = self
         startDictation.isEnabled = false
-        menu.addItem(startDictation)
 
         // The same ⌘⌃D on both rows: only one of the two is ever enabled, so the
         // key reads as the toggle it is rather than as a clash.
@@ -288,7 +287,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         stopRecording.action = #selector(stopRecordingClicked)
         stopRecording.target = self
         stopRecording.isEnabled = false
-        menu.addItem(stopRecording)
 
         // **Directly under Stop, because it is the same moment with the other
         // answer.** Stopping sends what was said; this throws it away — the
@@ -300,7 +298,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         cancelDictation.action = #selector(cancelDictationClicked)
         cancelDictation.target = self
         cancelDictation.isEnabled = false
-        menu.addItem(cancelDictation)
 
         // **Under the three that end a dictation, because it starts one.** It
         // sits with them rather than beside Bind — which is where a reader
@@ -326,13 +323,44 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(pasteLast)
 
         shot.image = Self.emojiIcon("📷")
+        // **F3 is a key, so it belongs in the key column** — Victor's ask, and
+        // the row is the one place in this menu where a keyboard route and a
+        // mouse route do the same thing, so splitting them across the two
+        // columns is what says they are alternatives rather than a sequence.
+        //
+        // Harmless as a real equivalent despite being modifier-less: the app is
+        // `.accessory` and never becomes key, so it can only fire while this
+        // menu is open. The global F3 is `HotkeyTap`'s, as it has always been.
+        shot.keyEquivalent = String(utf16CodeUnits: [unichar(NSF3FunctionKey)], count: 1)
+        shot.keyEquivalentModifierMask = []
         shot.action = #selector(shotClicked)
         shot.target = self
         shot.isEnabled = false
-        menu.addItem(shot)
-
         pickLegend.image = Self.emojiIcon("✋")
         pickLegend.isEnabled = false
+        // **A line between where the words go and what happens while they are
+        // being said.** Victor's ask, and the regrouping is the half that makes
+        // the line mean anything: the four rows above it are about a
+        // *destination* — point at one, let it go, make a new one, or paste the
+        // last sentence somewhere by hand — and every row below it is a gesture
+        // made with a dictation already open, or the one that opens it.
+        //
+        // They were interleaved before, in the order each was written: the two
+        // that are only live mid-sentence sat at the bottom, under `New Claude
+        // Code` and `Paste the Last Dictation`, three rows below the dictation
+        // block they belong to. A menu that is now the app's only legend
+        // (*The chip teaches nothing; the menu does*) has to group by what a row
+        // is *for*, since that is the question somebody reading it is asking.
+        //
+        // `Start Dictation` heads the block rather than sitting above the line.
+        // It is not itself "while dictating" — it is the door into everything
+        // that is, and a block whose first row is missing reads as four gestures
+        // with no way in.
+        menu.addItem(.separator())
+        menu.addItem(startDictation)
+        menu.addItem(stopRecording)
+        menu.addItem(cancelDictation)
+        menu.addItem(shot)
         menu.addItem(pickLegend)
 
         menu.addItem(.separator())
@@ -384,20 +412,33 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // and AppKit lays its own ⌘⌃ column out to the right of the text — so the
         // two end up as neighbours, which is all that was ever wanted.
         gestureRows = [
-            (bind, bind.title, "hold ⬅️ + 🛞"),
-            (disconnect, disconnect.title, "hold ➡️ + 🛞"),
+            (bind, bind.title, "⬅️ + 🛞"),
+            (disconnect, disconnect.title, "➡️ + 🛞"),
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
-            (cancelDictation, cancelDictation.title, "hold 🛞 2s"),
-            (newSession, newSession.title, "⌘ + 🛞, or hold ➡️ + 🛞 1s"),
-            (shot, shot.title, "F3, or the back button while dictating"),
-            (pickLegend, pickLegend.title, "⌘⇧ + 🖱️, while dictating"),
+            (cancelDictation, cancelDictation.title, "🛞 2s"),
+            (newSession, newSession.title, "⌘ + 🛞, or ➡️ + 🛞 1s"),
+            (shot, shot.title, "⬇️ \(Self.whileDictating)"),
+            (pickLegend, pickLegend.title, "⌘⇧ + ⬅️ \(Self.whileDictating)"),
         ]
         layOutGestures(in: menu)
 
         item.menu = menu
         mirror.start()
     }
+
+    /// **`@🎙️` is "while dictating"**, and it replaces those two words wherever
+    /// they appeared. They were a third of the width of the longest row, said
+    /// twice, to qualify a chord — and the qualification is the *same* fact the
+    /// microphone rows above already stand for. Read as an address, which is
+    /// what `@` is: this gesture lives at the dictation.
+    ///
+    /// The rows it qualifies now sit under a separator of their own (see the
+    /// menu's assembly), so it is a reminder rather than the only clue — worth
+    /// keeping because **One More Screenshot's other half, F3, is not gated on a
+    /// dictation at all**, and the marker is what says which of the two halves
+    /// the condition belongs to.
+    private static let whileDictating = "@🎙️"
 
     /// The item, **its label**, and the chord it is performed with.
     ///
