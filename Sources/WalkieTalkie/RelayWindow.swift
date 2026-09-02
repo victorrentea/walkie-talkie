@@ -300,6 +300,40 @@ private let frontLabel = NSTextField(labelWithString: "")
         return out
     }
 
+    /// **The chip quotes the highlight, the way the panel does.** The row led
+    /// with `↪` — an arrow, which says *this came from somewhere* and not *these
+    /// are somebody else's words*. It is the same fact the panel sets as a
+    /// quotation one state later, and Victor asked for the two to look like each
+    /// other; a reader who has seen one then recognises the other without being
+    /// told they are the same thing.
+    ///
+    /// Smaller than the panel's 30pt — this is a receipt riding beside the
+    /// cursor, not a passage laid out to be read — and it is the row's **glyph**
+    /// rather than a second size of text, which is what keeps it inside the
+    /// one-face-one-size rule the rest of the chip follows.
+    private let chipQuoteFont = NSFont.systemFont(ofSize: 26, weight: .bold)
+    private var selectionHead = ""
+    private var selectionBody = ""
+
+    /// **Built rather than assigned, because an attributed title outranks
+    /// `textColor`.** `refreshChrome` turns this row white with a halo on a bare
+    /// chip and back to `secondaryLabelColor` on a panel — a switch that does
+    /// nothing once the string carries its own colours, which is exactly how this
+    /// row came to be invisible once before. So both callers come through here
+    /// and the ink is read off the label at the moment of building.
+    private func applySelectionText() {
+        let ink = selectionLabel.textColor ?? .secondaryLabelColor
+        let out = NSMutableAttributedString(
+            string: "“",
+            attributes: [.font: chipQuoteFont,
+                         .foregroundColor: ink.withAlphaComponent(0.55),
+                         .baselineOffset: -6])
+        out.append(NSAttributedString(
+            string: " " + selectionHead + selectionBody,
+            attributes: [.font: hintFont, .foregroundColor: ink]))
+        selectionLabel.attributedStringValue = out
+    }
+
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
     }
@@ -465,8 +499,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // word on this chip is one size and one weight, so what emphasis there is
         // belongs to the glyph column — the half that is recognised rather than
         // read.
-        if transcribing { return [(Self.waitGlyph, plain("transcribing…"), Self.iconInk)] }
-        if engineLoading { return [(Self.waitGlyph, plain("preparing"), Self.iconInk)] }
+        if transcribing { return [(Self.waitGlyph, plain(transcribeText), Self.iconInk)] }
+        if engineLoading { return [(Self.waitGlyph, plain("Preparing…"), Self.iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -1154,12 +1188,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // much as fits comfortably" means in a row that has to stay a receipt.
         var selectionWidth: CGFloat = 0
         if let selection = selection {
-            let head = selectionAnnounced ? "↪ selecting "
-                     : (selectionCount > 1 ? "↪ ×\(selectionCount) " : "↪ ")
-            selectionLabel.stringValue = head + Self.fitHead(singleLine(selection), 34)
-            // Off the label rather than the font: the row leads with `↪`, which
-            // the system font's metrics for the rest of the line know nothing
-            // about.
+            selectionHead = selectionAnnounced ? "selecting "
+                          : (selectionCount > 1 ? "×\(selectionCount) " : "")
+            selectionBody = Self.fitHead(singleLine(selection), 34)
+            applySelectionText()
+            // Off the label rather than the font: the row leads with a 19pt
+            // quotation mark, which the system font's metrics for the rest of
+            // the line know nothing about.
             selectionLabel.sizeToFit()
             selectionWidth = ceil(selectionLabel.frame.width)
         }
@@ -1325,9 +1360,14 @@ private let frontLabel = NSTextField(labelWithString: "")
             // `stringValue` was written with the widths above. The box is the
             // rows' own height now that the text in it is the rows' own size —
             // 19 was cut for a 14pt font and clips a 17.
-            selectionLabel.frame.size = NSSize(width: innerWidth, height: recordRowHeight)
+            // Six taller than its neighbours: 22 was cut for a row of plain
+            // 17pt text, and the quotation mark is 26 bold sitting 6 below the
+            // baseline. A clipped quote mark is the one thing this change was
+            // made to avoid — and at 19 it read as a superscript rather than as
+            // the panel's mark, which was the whole point of putting it here.
+            selectionLabel.frame.size = NSSize(width: innerWidth, height: selectionRowHeight)
             selectionLabel.isHidden = false
-            rows.append((selectionLabel, recordRowHeight))
+            rows.append((selectionLabel, selectionRowHeight))
         } else {
             selectionLabel.isHidden = true
         }
@@ -1521,6 +1561,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// message being assembled, and a row that stood a pixel taller than its
     /// neighbour would read as a different kind of thing.
     private let pickRowHeight: CGFloat = 22
+    /// See the row's layout: the quotation mark needs the two extra points.
+    private let selectionRowHeight: CGFloat = 28
     /// Between the dot and the text. Wide enough that the pulsing dot reads as its
     /// own indicator rather than as punctuation in front of the count.
     private let recordDotGap: CGFloat = 5
@@ -1677,7 +1719,15 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") else {
             return NSImage(named: NSImage.networkName) ?? NSImage()
         }
-        return NSWorkspace.shared.icon(forFile: app.path)
+        let icon = NSWorkspace.shared.icon(forFile: app.path)
+        // **A fifth off, on Victor's ask.** The system hands these out at 32,
+        // which is half again the 20pt box every other glyph on the chip is
+        // fitted into — an app icon fills its box corner to corner where an
+        // emoji sits a bearing in from the edge, so at the same nominal size it
+        // reads as the largest thing in the column.
+        icon.size = NSSize(width: (icon.size.width * 0.8).rounded(),
+                           height: (icon.size.height * 0.8).rounded())
+        return icon
     }()
 
     /// A square the height of the row's text. Fixed rather than measured: an image
@@ -1886,6 +1936,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // like a shutter that had failed to read the selection.
             selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .white
+            applySelectionText()
             // **The same row the selection was, and left out for the same
             // reason.** `preparing`, `transcribing…` and the mouse hints all
             // live here, and they kept `secondaryLabelColor` on a chip that
@@ -1911,6 +1962,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             pickInfo.textColor = .secondaryLabelColor
             selectionLabel.shadow = nil
             selectionLabel.textColor = .secondaryLabelColor
+            applySelectionText()
         }
     }
 
@@ -2258,13 +2310,53 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
+    /// **How much longer, not merely that it is working.** The row said
+    /// `transcribing…` and nothing else, which answers *is it alive* and leaves
+    /// the only question he actually has — *do I wait or do I look away* —
+    /// unanswered for a decode that is a second on a short sentence and ten on a
+    /// long one. The audio's own length is the answer: the model runs at
+    /// **0.105× realtime** median, measured over 442 real dictations (see the
+    /// recogniser's numbers in `CLAUDE.md`), so a minute of speech is about six
+    /// seconds of waiting and the estimate is that arithmetic done out loud.
+    ///
+    /// It is deliberately an **estimate that runs out rather than one that
+    /// stalls**: at zero the seconds simply stop being shown and the row goes
+    /// back to `Transcribing…`. A counter that sat at `0s` — or worse, counted
+    /// up — would be the app insisting on a promise it has already broken.
+    /// 0.12 rather than 0.105 for the same reason: over is a pleasant surprise,
+    /// under is the number being wrong every second it is on screen.
+    private var transcribeText: String {
+        guard let deadline = transcribeDeadline else { return "Transcribing…" }
+        let left = Int(ceil(deadline.timeIntervalSinceNow))
+        return left > 0 ? "Transcribing… \(left)s" : "Transcribing…"
+    }
+    private var transcribeDeadline: Date?
+    private var transcribeTicker: Timer?
+
     /// The model is chewing on the audio. Shown where the invitation to dictate
     /// was, because it is the answer to the button he just pressed.
-    func setTranscribing(_ value: Bool) {
+    ///
+    /// `audio` is how long the recording was; zero means no estimate, which is
+    /// what every caller that has not measured one passes.
+    func setTranscribing(_ value: Bool, audio: TimeInterval = 0) {
         guard transcribing != value else { return }
         transcribing = value
         transcribeWatchdog?.invalidate()
         transcribeWatchdog = nil
+        transcribeTicker?.invalidate()
+        transcribeTicker = nil
+        transcribeDeadline = nil
+        if value, audio > 0 {
+            transcribeDeadline = Date().addingTimeInterval(max(1, (audio * 0.12).rounded()))
+            // Four ticks a second, like the panel's countdown and for its reason:
+            // a number that jumps reads as a number nobody is watching.
+            let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+                guard let self = self, self.transcribing else { return }
+                self.layoutContent()
+            }
+            RunLoop.main.add(tick, forMode: .common)
+            transcribeTicker = tick
+        }
         // **A row does not expire the way a flash did.** The banner this replaces
         // carried a 30s duration, so a helper that died holding the audio simply
         // took its promise off the screen with it. A row stays until something

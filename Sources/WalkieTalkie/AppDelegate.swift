@@ -754,7 +754,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
-        overlay.setTranscribing(true)
+        // The duration travels so the row can say how much longer, not only that
+        // it is working — see `RelayWindow.setTranscribing`.
+        overlay.setTranscribing(true, audio: duration)
 
         whisper.transcribe(wav: wav.path) { [weak self] result in
             guard let self = self else { return }

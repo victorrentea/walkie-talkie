@@ -75,7 +75,7 @@
     "slug" : "preparing",
     "title" : "The model is coming up",
     "when" : "The ~10 s after a bind, or after the wheel if the weights are not resident.",
-    "width" : 127
+    "width" : 140
   },
   {
     "alpha" : 0.80000000000000004,
@@ -116,43 +116,43 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 99,
     "image" : "listening-selection.png",
     "note" : "`↪` and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading.",
     "shape" : "chip",
     "slug" : "listening-selection",
     "title" : "Dictating, carrying a highlight",
     "when" : "He had text selected when he started talking, or F3'd with a selection.",
-    "width" : 285
+    "width" : 280
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 99,
     "image" : "listening-selection-multi.png",
     "note" : "`↪ ×3` — the count is the only thing that changes, because the newest one is the one he can still see in his editor.",
     "shape" : "chip",
     "slug" : "listening-selection-multi",
     "title" : "Dictating, several highlights",
     "when" : "A second and third selection stashed with the side button during one sentence.",
-    "width" : 310
+    "width" : 305
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 99,
     "image" : "listening-selection-caught.png",
     "note" : "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to `↪ ×N` after 2.5s, and it truncates to whatever width the rows above already gave the chip.",
     "shape" : "chip",
     "slug" : "listening-selection-caught",
     "title" : "The shutter caught a highlight",
     "when" : "For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
-    "width" : 359
+    "width" : 353
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 123,
     "image" : "listening-everything.png",
     "note" : "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover.",
     "shape" : "chip",
