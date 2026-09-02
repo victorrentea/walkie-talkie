@@ -446,23 +446,27 @@ private let frontLabel = NSTextField(labelWithString: "")
             return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
         }
         guard sentPrompt == nil else { return [] }
-        // **The two waits are drawn big — the hourglass, not the words.** They
-        // are the only states in which Victor is *waiting on this app*, and the
-        // answer to "is it still doing something?" has to be readable from where
-        // he has already looked away to. At icon size, in `secondaryLabelColor`,
-        // on a bare chip over a dark terminal, it was a grey smudge beside the
-        // pointer.
+        // **The two waits, at the size every other icon on the chip is.** They
+        // are the only states in which Victor is *waiting on this app*, and for
+        // two days that bought the hourglass 30pt — nearly twice icon size —
+        // because at icon size in `secondaryLabelColor`, on a bare chip over a
+        // dark terminal, it was a grey smudge beside the pointer.
+        //
+        // **The fix that mattered was the colour, and it was made at the same
+        // time**: these rows joined `refreshChrome`'s white-plus-halo list, which
+        // is the one place a row becomes legible on a bare chip. Once they were
+        // legible the extra 14pt was doing nothing but making one row taller than
+        // the chip it is on — *"clepsidra este prea mare comparativ cu restul de
+        // icoane din tooltip"* — so it went back to `iconInk` on his ask
+        // (2026-09-02), which is half of what it was and exactly what the 🔴, the
+        // 📸 and the destination's own icon are.
         //
         // The text was briefly enlarged with it and is back to `hintFont`: every
-        // word on this chip is one size and one weight (`titleFont`), so emphasis
-        // here is the glyph column's job — which is the half that is recognised
-        // rather than read, and therefore the half that was worth the pixels.
-        //
-        // They are also the one pair of states where the chip has nothing else on
-        // it: the title row is suppressed while the engine loads, so the row can
-        // afford the height the mouse hints take.
-        if transcribing { return [(Self.waitGlyphBig, plain("transcribing…"), Self.hintInk)] }
-        if engineLoading { return [(Self.waitGlyphBig, plain("preparing"), Self.hintInk)] }
+        // word on this chip is one size and one weight, so what emphasis there is
+        // belongs to the glyph column — the half that is recognised rather than
+        // read.
+        if transcribing { return [(Self.waitGlyph, plain("transcribing…"), Self.iconInk)] }
+        if engineLoading { return [(Self.waitGlyph, plain("preparing"), Self.iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -1554,10 +1558,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The two emoji on the card, rendered once and trimmed to their ink.
     private static let pulseGlyph = Glyphs.emoji("🔴", ink: iconInk)
     private static let cameraGlyph = Glyphs.emoji("📸", ink: iconInk)
+    /// The waits' glyph, at the size the rest of the column is — see
+    /// `statusLines`. It was drawn at `hintInk` for two days; what made it
+    /// legible was the halo, not the height.
     private static let waitGlyph = Glyphs.emoji("⏳", ink: iconInk)
-    /// The same hourglass at hint size — see `statusLines` for why the waits are
-    /// the two rows that get it.
-    private static let waitGlyphBig = Glyphs.emoji("⏳", ink: hintInk)
     /// The bound chip at rest (`collapsed`). **One glyph for every destination**,
     /// on purpose: standing by, the question is not *which* terminal — that is
     /// what starting to talk asks, and what the name answers — it is whether the

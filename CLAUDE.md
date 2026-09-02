@@ -853,12 +853,12 @@ read, so it costs the prose nothing.
 The panel is outside the rule (`promptFont`, the quote mark, the front line): it
 parks in a corner and is read whole.
 
-## The two waits are drawn big — the hourglass, not the words
+## The two waits are icon-sized, and it was the colour that mattered
 
 `preparing` (the model coming up) and `transcribing…` (the model chewing) are the
-only two states in which Victor is **waiting on this app**, and since 2026-09-01
-they are the only rows whose *glyph* is drawn at `hintInk` — a 30pt hourglass
-where every other row's is 16.
+only two states in which Victor is **waiting on this app**. For two days that
+bought their hourglass 30pt — `hintInk`, nearly twice the size of every other
+glyph on the chip.
 
 They were icon-sized, in `secondaryLabelColor`, on a bare chip: half-transparent
 dark grey with no halo, over the dark terminals and editors the chip spends its
@@ -866,14 +866,17 @@ life on. **Exactly the bug the selection row had** — the row was there and cou
 not be seen — and this time it was two states where the question being asked is
 *is it still doing something?*, asked from wherever he has already looked away to.
 
-The fix that mattered was **colour**, not size: adding the hint rows' labels to
-`refreshChrome`'s white-plus-halo list. That list is the one place a row
-becomes legible on a bare chip, and it is the third time a row has been left off
-it.
+**The fix that mattered was the colour**, and it was made in the same commit:
+these rows joined `refreshChrome`'s white-plus-halo list, which is the one place a
+row becomes legible on a bare chip. That list is the third place a row has been
+left off it.
 
-They can afford the height: the title row is suppressed while the engine loads
-(`layoutContent`), so the hourglass is the whole chip until the microphone means
-something.
+So the height was buying nothing, and on 2026-09-02 it went back to `iconInk` on
+Victor's ask — *"clepsidra este prea mare comparativ cu restul de icoane din
+tooltip"* — which is half of what it was and exactly what the 🔴, the 📸 and the
+destination's own icon are. `hintInk` survives for the two rows it was written
+for: the drawn mice that teach the rebind chord, where the picture *is* the
+sentence.
 
 ## The mouse is drawn, and the buttons the gesture presses are red
 
