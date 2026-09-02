@@ -1295,8 +1295,23 @@ deliberate act with a deliberate subject; the ⌘C is a price he asked to pay, a
 with nothing selected the probe is a no-op nothing notices. `readQuiet` is gone —
 it had no other caller.
 
-**The chip says `↪ selecting <his own words>` for 2.5s** and then settles to
-`↪ ×N …`. **The receipt is not behind the novelty test, the filing is**: two of
+**The chip says `“ selecting <his own words>` for 2.5s** and then settles to
+`“ ×N …`.
+
+**The mark is the panel's, shrunk** (since 2026-09-02, Victor's ask). The row led
+with `↪`, an arrow — *this came from somewhere*, where what has to be said is
+*these are somebody else's words*. It is the same fact the panel sets as a
+quotation one state later, so the two now look like each other: 26pt bold at
+`-6`, against the panel's 30 at `-7`, and the row is 28 tall rather than 22 to
+hold it. **19pt was tried first and read as a superscript**, which is the whole
+change failing quietly. It is the row's *glyph*, not a second size of text, which
+is what keeps it inside the one-face-one-size rule.
+
+**And it is built, never assigned.** An attributed string outranks `textColor`,
+so `refreshChrome`'s white-with-a-halo switch would do nothing to it —
+`applySelectionText` reads the ink off the label and both callers come through
+it. That is the same failure this row already had once, written down two
+paragraphs below. **The receipt is not behind the novelty test, the filing is**: two of
 the three skipped cases are presses that *did* catch a highlight — the frozen one
 he never let go of, the same one shot twice — and a shutter that says nothing
 there reads as one that missed, which is the failure the row exists to rule out.
@@ -1579,6 +1594,14 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   gesture he had to remember to repeat. `recordWhenModelReady` is set only when
   the **hold** asked for the load: a load started by a bind is Victor pointing the
   relay at a terminal, a different sentence, and must not open the microphone.
+- **The wait says how long, not only that it is waiting** (since 2026-09-02).
+  `Transcribing… 4s` counts down from the audio's own length × **0.12** — the
+  model runs at 0.105× realtime median over the 442 dictations measured below,
+  and the rounding up is deliberate: over is a pleasant surprise, under is a
+  number that is wrong every second it is on screen. At zero the seconds stop
+  being shown rather than sitting at `0s` or counting up, which would be the app
+  insisting on a promise it has already broken. `Preparing…` has no estimate: a
+  model load is not proportional to anything the app knows.
 - **⏳ in two places while it loads.** The chip beside the cursor shows
   `⏳ folder@branch`, taking the slot ⏸️ uses and outranking it for those seconds;
   the menu bar shows `⏳🤖`, which is the half that survives him typing, since
@@ -2118,7 +2141,7 @@ already were.
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening…`, `transcribing…`, `preparing`, the picks he has
+the pulse, `Listening…`, `Transcribing… 4s`, `Preparing…`, the picks he has
 actually made, the destination.
 
 **The exception is `⌘⇧`, shown while dictating *and* with Chrome in front.**
@@ -2185,8 +2208,9 @@ Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
 Row heights, for checking a layout change without seeing it: title 16, engine row
-17, shots row 17, ⌘⇧-picked row 17, selection 15, `rowGap` 6 between them, `pad`
-12 all round. So the idle chip is 40 tall — bound is the same, since the folder
+17, shots row 17, ⌘⇧-picked row 17, selection 28 (the quotation mark), `rowGap` 6
+between them — 8 more under the panel's quote row, which is the seam between what
+he highlighted and what he said — `pad` 12 all round. So the idle chip is 40 tall — bound is the same, since the folder
 moved *into* the title row — and dictating is 40 + 3 × 23 for the three rows and
 their gaps, plus 21 more with a selection.
 
@@ -2706,8 +2730,11 @@ drawn left button was the one glyph on the row he could not act on, drawn at a
 size and baseline of its own, taking a third of the width to restate the obvious.
 It is also the only thing that ever made this row need `glyphRowWidth`.
 
-**The glyph is Chrome's own icon**, `NSWorkspace.icon(forFile:)` on whatever
-`com.google.Chrome` resolves to — looked up, never shipped, so no version of the
+**The glyph is Chrome's own icon**, **at 0.8 of what the system hands out**
+(2026-09-02, Victor's ask: the system gives these at 32 against a 20pt box, and an
+app icon fills its box corner to corner where an emoji sits a bearing in from the
+edge — so at the same nominal size it was the largest thing in the column).
+`NSWorkspace.icon(forFile:)` on whatever `com.google.Chrome` resolves to — looked up, never shipped, so no version of the
 logo is frozen into the repo and a restyle arrives on its own. `pickGlyph` is
 therefore an `NSImageView` and not a label, and `pickGlyphWidth` is the constant
 `pickGlyphSize` rather than a font measurement: an image has no metrics to ask.
