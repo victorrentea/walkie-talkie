@@ -29,8 +29,9 @@ Current strings live in `RelayWindow.swift`:
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Connect Window — hold ⬅️ + 🛞`, `Disconnect — hold ➡️ + 🛞`, the three
-  dictation rows, `New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s`,
+  `Connect Window` / `Disconnect` / `New Claude Code in ~/workspace` and their
+  chords, which since 2026-09-02 ride a right-aligned column of their own, the
+  three dictation rows,
   `Replace Wispr — forward button dictates, pasted at the caret`,
   `One More Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
   `Quit`, and the `Local Whisper` readout
@@ -2356,11 +2357,24 @@ Same objection `Glyphs.pin` was drawn to answer, one column over, and Victor
 raised it again by name here.
 
 **The gestures are drawn, not spelled.** `— or hold left, click the wheel` is six
-words describing two objects, read in a menu open for a second; `— hold ⬅️ + 🛞`
-is the same sentence in the shape of the mouse it is about. Right-aligning them
-into the shortcut column was the first ask and `NSMenuItem` does not offer it —
-that column belongs to `keyEquivalent`, and a wheel is not a key — so they stay in
-the title, after the em dash, where the words they replace already were.
+words describing two objects, read in a menu open for a second; `hold ⬅️ + 🛞` is
+the same sentence in the shape of the mouse it is about.
+
+**And since 2026-09-02 they have a column, beside the key equivalents.** The note
+here used to say `NSMenuItem` does not offer it — true only of the shortcut column
+itself, which belongs to `keyEquivalent` and cannot hold a wheel. A **right tab
+stop in an attributed title** is that same right edge drawn by hand, and AppKit
+lays its own ⌘⌃ column out to the right of the text, so the two end up neighbours.
+`StatusItem.layOutGestures` measures one tab position for the whole menu — the
+widest of (longest plain row) and (label + 28 + chord) — so the chords line up
+with each other instead of each floating at the end of its own label.
+
+**The cost is that an attributed title stops AppKit dimming a disabled row.** A
+menu greys a title only while it is drawing it itself; handed a string, the
+colours in that string are the last word, and a disabled `End Dictation` came out
+as black as a live one. `restyleGestures` picks the ink off `isEnabled` and runs
+from `menuWillOpen`, which is the one moment every flag in the file is current —
+the same reason the header and the footprint are read there.
 
 ### Autosend
 

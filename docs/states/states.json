@@ -47,7 +47,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 93,
+    "height" : 69,
     "image" : "replace-wispr.png",
     "note" : "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
     "shape" : "chip",
@@ -308,7 +308,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 130,
+    "height" : 138,
     "image" : "prompt-selection.png",
     "note" : "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",
     "shape" : "panel",
@@ -344,7 +344,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 236,
+    "height" : 244,
     "image" : "prompt-everything.png",
     "note" : "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was — then the two buttons.",
     "shape" : "panel",
@@ -363,12 +363,12 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 107,
+    "height" : 115,
     "image" : "prompt-selection-only.png",
     "note" : "There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.",
     "shape" : "panel",
