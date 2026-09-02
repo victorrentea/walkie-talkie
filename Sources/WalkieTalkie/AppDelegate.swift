@@ -937,7 +937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Built by the real formatter, so a documentation shot cannot drift
             // from what the panel actually renders.
             let body = Self.promptPreview(text: "extract the tax calculation out of this method",
-                                          selection: selection, shotOffsets: [0, 38],
+                                          selection: selection,
                                           picks: picks, since: opened) ?? ""
             self?.overlay.showSentPrompt(body, hold: 25)
         }
@@ -1313,7 +1313,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard terminal.target != nil else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self, let updated = self.terminal.refreshBinding() else { return }
-            DispatchQueue.main.async { self.showBound(updated) }
+            // **Not deliberate**: this is the same binding with a fresher name
+            // on it, so it must not take a spawn's destination away.
+            DispatchQueue.main.async { self.showBound(updated, deliberate: false) }
         }
     }
 
@@ -1325,7 +1327,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// where he is looking while he talks, and the menu bar is what is left when
     /// the pointer (and with it the chip) is hidden because he started typing.
     /// Main thread only: it draws.
-    private func showBound(_ target: TerminalBinding.Target?) {
+    ///
+    /// `deliberate` is false for the 10s poll that only re-reads the name of the
+    /// binding already in place — see the spawn branch below, which is the one
+    /// thing in here that must not happen on a tick.
+    private func showBound(_ target: TerminalBinding.Target?, deliberate: Bool = true) {
         // Binding is also the switch that decides whether the relay touches a
         // dictation at all, and this is the one place every route into it passes
         // through — ⌘⌃B, `/unbind`, and a target found gone at delivery. Doing it
@@ -1353,7 +1359,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that exists. Taking the spawn back here rather than at delivery keeps
         // the chip honest too: it stops saying `✨ workspace` the moment it
         // stops being true.
-        if spawnPending, localRecording {
+        //
+        // **Only a deliberate bind, and that is the whole of this fix.** The
+        // branch used to read `spawnPending && localRecording`, and `showBound`
+        // is not only the bind route: `refreshBoundTitle` rides the overlay's 10s
+        // tick and calls it with the binding that was *already* there, to pick up
+        // a renamed window. So a spawn dictation started over an existing binding
+        // lost it to the next tick — a couple of seconds in, no button pressed,
+        // the chip quietly going from `✨ workspace` back to the terminal bound
+        // before it, and the sentence with it. Reported 2026-09-02: *"după 2-3
+        // sec de vorbit, fără să apăs niciun buton, tooltipul a arătat că s-a
+        // reconectat la unul dintre terminale"*.
+        //
+        // A poll is not Victor answering anything. The rule is about the gesture,
+        // so it is gated on the gesture.
+        if spawnPending, localRecording, deliberate {
             Log.info("✨ spawn dropped — bound mid-sentence, the words go to \(target.label)")
             clearSpawn()
         }
@@ -2033,37 +2053,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// two or three the panel is a document rather than a prompt to approve.
     private static let maxExtraSelectionLines = 3
 
-    /// The pictures line: how many are riding along, and **when each was taken**,
-    /// as m:ss from the moment he started talking.
+    /// **When each picture was taken**, as m:ss from the moment he started
+    /// talking — one stamp per frame, in the order the frames are handed over.
     ///
     /// The count alone answers "did my shots land"; it does not answer the
     /// question he actually has a few seconds later, which is *which* moments he
     /// caught. In a three-minute dictation `📸 ×4` is four indistinguishable
-    /// files, while `0:00 · 0:38 · 1:52 · 2:41` is a table of contents — and this
-    /// panel, with Cancel still running, is the last instant at which noticing a
-    /// missing one is free.
+    /// files, while `0:38`, `1:52`, `2:41` written across the frames themselves
+    /// is a table of contents — and this panel, with Cancel still running, is the
+    /// last instant at which noticing a missing one is free.
     ///
     /// Relative to the dictation, never wall-clock: the shots exist only as parts
     /// of this message, and 15:22:07 says nothing about where in it he was.
     ///
-    /// **The context shot's `0:00` is not printed.** It is the one stamp that
-    /// carries no information — the automatic capture is always at zero, by
-    /// definition — so it only pushed the stamps that do mean something one
-    /// column to the right. The count still includes it; what is listed are the
-    /// moments he chose.
-    private static func shotLine(_ offsets: [TimeInterval]) -> String? {
-        guard !offsets.isEmpty else { return nil }
-        let stamps = offsets.filter { $0 > 0 }.map { offset -> String in
-            let s = max(0, Int(offset.rounded()))
+    /// **The context shot gets no stamp**, and an empty string is what says so.
+    /// Its `0:00` is the one stamp that carries no information — the automatic
+    /// capture is always at zero, by definition — so it stays a bare frame.
+    ///
+    /// These used to be a line of text above the strip (`0:38 · 1:52 · 2:41`),
+    /// which left the reader counting columns to pair a stamp with a frame — and
+    /// counting them across a *gap*, since the unstamped context shot is in the
+    /// strip and was not in the line. Written **on** the thumbnail there is
+    /// nothing to pair: the caption is inside the picture it captions.
+    static func shotStamps(_ offsets: [TimeInterval]) -> [String] {
+        offsets.map { offset in
+            guard offset > 0 else { return "" }
+            let s = Int(offset.rounded())
             return String(format: "%d:%02d", s / 60, s % 60)
         }
-        // **No 📸 and no count.** The strip of thumbnails under this line says
-        // both, in the picture rather than in a number, and the panel is read in
-        // the few seconds the clock is running. What the strip cannot say is
-        // *when* each frame was taken, so the stamps stay — in the same order the
-        // frames are drawn, which is what lets them read as captions for it.
-        guard !stamps.isEmpty else { return nil }
-        return stamps.joined(separator: " · ")
     }
 
     /// What to render in the overlay as "this is what the agent got". Returns nil
@@ -2071,7 +2088,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?,
                                       extraSelections: [(at: TimeInterval, text: String)] = [],
-                                      shotOffsets: [TimeInterval],
                                       picks: [ElementPick], since: Date?) -> String? {
         var parts: [String] = []
         if let text = text, !text.isEmpty { parts.append(text) }
@@ -2094,7 +2110,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if extraSelections.count > maxExtraSelectionLines {
             parts.append("↪ +\(extraSelections.count - maxExtraSelectionLines) more")
         }
-        if let shots = shotLine(shotOffsets) { parts.append(shots) }
         parts.append(contentsOf: pickLines(picks, since: since))
         return parts.joined(separator: "\n")
     }
@@ -2229,7 +2244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
         let shown = Self.promptPreview(text: text, selection: selection,
-                                       extraSelections: extraSelections, shotOffsets: offsets,
+                                       extraSelections: extraSelections,
                                        picks: picks, since: since)
 
         DispatchQueue.main.async { [weak self] in
@@ -2264,7 +2279,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // enumeration far more often than it is a spare, and a strip that
             // skipped it would disagree with the count in the row above.
             let frames = ([screen] + attached).compactMap { $0 }
+            // Aligned with `frames` by construction: `offsets` is built from the
+            // same `pendingScreen` + `pendingShots` in the same order, a few lines
+            // up, which is what lets the panel write each stamp on its own frame.
+            let stamps = Self.shotStamps(offsets)
             if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
+                                           stamps: stamps,
                                            selection: selection,
                                            front: screen.flatMap { sources[$0] },
                                            // What he said, apart from what the

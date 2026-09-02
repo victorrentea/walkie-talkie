@@ -1098,7 +1098,8 @@ Both halves answer a question the sentence alone cannot. He points at things
 while he talks — "this button", "that line" — and he takes several pictures
 across a three-minute dictation, where `📸 ×4` is four indistinguishable files
 and `0:00 · 0:38 · 1:52` is a table of contents. The prompt panel already lists
-them by offset (`AppDelegate.shotLine`); the name is that same reading put where
+them by offset (`AppDelegate.shotStamps`, written across each thumbnail); the
+name is that same reading put where
 the agent meets it. They ride in the **name** rather than in new outbox fields
 because the name is already in front of the agent: the path travels in `paths`,
 so both facts arrive with the picture and nothing downstream learns a new key.
@@ -2136,6 +2137,19 @@ anyway and left the terminal he had just pointed at with nothing.
 The chip stops saying `✨ workspace` at the same moment, because `clearSpawn`
 does both — a destination line that is no longer true is worse than none.
 
+**Only a deliberate bind may do this** (fixed 2026-09-02). `showBound` is not
+only the bind route: `refreshBoundTitle` rides the overlay's 10s branch tick and
+calls it with the binding **already** in place, to pick up a window an agent has
+renamed. So the take-back fired on a *poll* — a spawn dictation started while some
+terminal was still bound lost its destination a couple of seconds in, with no
+button pressed, the chip going from `✨ workspace` back to the terminal bound
+before it and the sentence going there with it. Victor: *"după 2-3 sec de vorbit,
+fără să apăs niciun buton, tooltipul a arătat că s-a reconectat la unul dintre
+terminale"*. It reads as random because the timer's phase has nothing to do with
+the gesture, and the shutter presses it happens to land near make it look like the
+shot did it. `showBound(_:deliberate:)` carries the difference; the poll is the
+one caller that passes `false`.
+
 **The window is the recording, not the panel.** Once the transcript is on screen
 the destination is already on the `Message` (that is what `Message.spawn` is
 for), and a bind during the hold changes nothing about the sentence in front of
@@ -2678,29 +2692,39 @@ seconds, so a line already written may already be a tool call in flight. Cancel
 can only mean something while nothing has been written. Escape in the terminal
 remains the tool for work already under way.
 
-**The last line of the prompt is the pictures, with their times:**
+**The times are written on the frames themselves** (since 2026-09-02) — a dark
+pill low in each thumbnail's left corner, `0:38`, `1:52`, in the strip under the
+words. `AppDelegate.shotStamps` formats them and `RelayWindow.layoutShots` drops
+them in; the stamps are **m:ss from the moment the dictation opened**, not
+wall-clock.
 
-```
-↪ public Order placeOrder(Cart cart) {
-extract the tax calculation out of this method
-📸 ×2 0:38
-```
+The count on its own answers "did my shots land"; it does not answer the question
+he has a few seconds later, which is *which* moments he caught. In a three-minute
+dictation `📸 ×4` is four indistinguishable files, while `0:38 · 1:52 · 2:41` is a
+table of contents — and this panel, with the Cancel clock running, is the last
+instant at which noticing a missing one is free. Wall-clock would say nothing
+here: the shots exist only as parts of this message, and `15:22:07` does not
+locate a moment *inside* it.
 
-`AppDelegate.shotLine` builds it, and the stamps are **m:ss from the moment the
-dictation opened**, not wall-clock. The count on its own answers "did my shots
-land"; it does not answer the question he has a few seconds later, which is
-*which* moments he caught. In a three-minute dictation `📸 ×4` is four
-indistinguishable files, while `0:38 · 1:52 · 2:41` is a table of
-contents — and this panel, with the Cancel clock running, is the last instant at
-which noticing a missing one is free. Wall-clock would say nothing here: the
-shots exist only as parts of this message, and `15:22:07` does not locate a
-moment *inside* it.
+**They were a line of text above the strip until then**, which is a caption only
+if you count columns to match a stamp to a frame — and the count was off by one,
+since the unstamped context shot is *in* the strip and was not in the line. On the
+picture there is nothing to match: the frame says when it was taken. Victor's ask:
+*"pune timpul acela desenat, scris peste thumbnail-ul pozei"*. It also gave the
+transcript row back the line the stamps were taking, an inch from his cursor.
 
-**The context screen is counted but not stamped.** It is always at zero — he
-took it by starting to talk — so its `0:00` is the one stamp that carries no
-information, and printing it only pushed the stamps that do mean something a
-column to the right. What is listed are the moments he chose; a dictation whose
-only picture is the automatic one therefore reads `📸 ×1`, with nothing after it.
+**The context screen is counted but not stamped**, and that survives the move: it
+is always at zero — he took it by starting to talk — so its `0:00` is the one
+stamp that carries no information. The first frame in the strip is therefore bare,
+and `shotStamps` says so with an empty string rather than with a missing entry, so
+the stamps stay index-aligned with the frames the panel is handed.
+
+**A pill, not bare text over the picture.** What is behind it is a screenshot — a
+terminal, a white page, a Figma canvas — so no ink colour is legible against all
+of them; text on its own ground is, and at 10pt semibold with monospaced digits
+the ground costs about thirty pixels of the frame. The label sits in a container
+rather than being the pill itself, because `NSTextField` puts a single line where
+its cell decides and not on the box's midline.
 
 The count is built from `pendingScreen`
 plus `pendingShotOffsets`, **not** from `attached` — the screen travels in its

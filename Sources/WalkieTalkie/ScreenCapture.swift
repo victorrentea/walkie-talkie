@@ -169,8 +169,9 @@ enum ScreenCapture {
     /// as a set, and what makes one findable among them is not what o'clock it
     /// was but *how far into what he was saying* it was taken: `📸 ×4` is four
     /// indistinguishable files, `0:00 · 0:38 · 1:52` is a table of contents. The
-    /// prompt panel already lists them this way (`AppDelegate.shotLine`), and
-    /// this is the same reading put where the agent meets it — in the path.
+    /// prompt panel writes the same reading across each thumbnail
+    /// (`AppDelegate.shotStamps`), and this is it put where the agent meets it —
+    /// in the path.
     ///
     /// A shot with no dictation around it keeps a timestamp, because "elapsed
     /// since the start" of nothing is not a fact.

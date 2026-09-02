@@ -298,7 +298,7 @@
     "group" : "The held prompt",
     "height" : 165,
     "image" : "prompt-shots.png",
-    "note" : "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row.",
+    "note" : "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00.",
     "shape" : "panel",
     "slug" : "prompt-shots",
     "title" : "The prompt, with its frames",

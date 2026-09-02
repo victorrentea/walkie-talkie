@@ -147,8 +147,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
-    /// Paths of the frames riding with the held prompt, newest last.
-    private var promptShots: [String] = []
+    /// The frames riding with the held prompt, newest last — each with the m:ss
+    /// it was taken at, written across it by `layoutShots`. An empty stamp is the
+    /// automatic context shot, which is always 0:00 and so says nothing.
+    private var promptShots: [(path: String, stamp: String)] = []
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
     private var promptFront: String?
@@ -1473,7 +1475,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
 
         // The frames, in a strip under the words — oldest first, the same order
-        // the agent will read them in and the same order the offsets are listed.
+        // the agent will read them in, each stamped with when it was taken.
         if sentPrompt != nil, !promptShots.isEmpty {
             let height = layoutShots(width: innerWidth)
             if height > 0 {
@@ -1862,14 +1864,20 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The images are the **small** copies already written beside each frame
     /// (800px), so this costs a decode of something the size of a screenshot
     /// thumbnail rather than of a retina desktop.
+    ///
+    /// **The m:ss is written on the frame, not above the strip.** It used to be a
+    /// line of stamps over the row — `0:38 · 1:52 · 2:41` — which is a caption
+    /// only if you count columns to match it up, and the count was off by one
+    /// anyway, since the unstamped context shot is in the strip. On the picture
+    /// there is nothing to match: it is the frame saying when it was taken.
     private func layoutShots(width: CGFloat) -> CGFloat {
         shotViews.forEach { $0.removeFromSuperview() }
         shotViews = []
 
         let height = Self.shotThumbHeight
         var x: CGFloat = 0
-        for path in promptShots.reversed() {
-            guard let image = NSImage(contentsOfFile: path), image.size.height > 0 else { continue }
+        for shot in promptShots.reversed() {
+            guard let image = NSImage(contentsOfFile: shot.path), image.size.height > 0 else { continue }
             let w = (image.size.width / image.size.height * height).rounded()
             guard x + w <= width else { break }
             let view = NSImageView(frame: NSRect(x: 0, y: 0, width: w, height: height))
@@ -1880,6 +1888,14 @@ private let frontLabel = NSTextField(labelWithString: "")
             view.layer?.masksToBounds = true
             view.layer?.borderWidth = 1
             view.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
+            if let badge = Self.stampBadge(shot.stamp) {
+                // Bottom-left, a hair in from the corner — the corner the eye
+                // arrives at reading the strip left to right, and the one edge of
+                // a screenshot of Victor's desktop that is reliably empty.
+                badge.frame.origin = NSPoint(x: Self.stampInset,
+                                             y: Self.stampInset)
+                view.addSubview(badge)
+            }
             shotViews.append(view)
             x += w + Self.shotThumbGap
         }
@@ -1887,7 +1903,7 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         // Built newest-first so the ones that fit are the newest; drawn oldest
         // first, because that is the order they were taken in and the order the
-        // offsets under them are listed in.
+        // stamps on them climb.
         var cursor: CGFloat = 0
         for view in shotViews.reversed() {
             view.frame.origin = NSPoint(x: cursor, y: 0)
@@ -1902,6 +1918,41 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// it is worth the extra fifth of a row.
     private static let shotThumbHeight: CGFloat = 65
     private static let shotThumbGap: CGFloat = 6
+
+    /// A dark pill with the m:ss in it, to be dropped into a thumbnail's corner.
+    /// Nil for the context shot, whose stamp is empty.
+    ///
+    /// **A pill, not bare text over the picture.** What is behind it is a
+    /// screenshot — a terminal, a white page, a Figma canvas — so there is no
+    /// colour that is legible against all of them. Text over a solid ground is,
+    /// and at this size the ground costs about thirty pixels of the frame.
+    ///
+    /// The label sits in a container rather than being the pill itself:
+    /// `NSTextField` puts a single line where its cell decides, not on the box's
+    /// midline, and a stamp a point high in its own pill reads as broken.
+    private static func stampBadge(_ stamp: String) -> NSView? {
+        guard !stamp.isEmpty else { return nil }
+        let label = NSTextField(labelWithString: stamp)
+        // Monospaced digits: the strip is read as a column of times, and
+        // proportional digits make `1:11` and `2:07` different lengths.
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .white
+        label.sizeToFit()
+        let size = NSSize(width: ceil(label.frame.width) + stampPadX * 2,
+                          height: ceil(label.frame.height) + stampPadY * 2)
+        let pill = NSView(frame: NSRect(origin: .zero, size: size))
+        pill.wantsLayer = true
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.62).cgColor
+        pill.layer?.cornerRadius = 3
+        label.frame.origin = NSPoint(x: stampPadX,
+                                     y: ((size.height - label.frame.height) / 2).rounded())
+        pill.addSubview(label)
+        return pill
+    }
+
+    private static let stampPadX: CGFloat = 4
+    private static let stampPadY: CGFloat = 1
+    private static let stampInset: CGFloat = 3
 
     private func layoutPickRow(width: CGFloat) {
         pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
@@ -2513,6 +2564,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// still owns the message and must release it itself.
     @discardableResult
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
+                        stamps: [String] = [],
                         selection: String? = nil, front: String? = nil,
                         words: String? = nil, warning: String? = nil,
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
@@ -2557,7 +2609,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         promptHold = hold
         promptButtons = buttons
         promptSpawning = spawning
-        promptShots = shots
+        // Zipped here rather than taken as one list, so the caller keeps handing
+        // over the paths it already had. A short `stamps` — the documentation
+        // shots, an older call — simply leaves the tail unstamped instead of
+        // crashing on an index.
+        promptShots = shots.enumerated().map {
+            (path: $0.element, stamp: $0.offset < stamps.count ? stamps[$0.offset] : "")
+        }
         promptSelection = quoted
         promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // Handed in with the prompt rather than through a setter of its own:

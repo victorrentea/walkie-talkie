@@ -268,10 +268,11 @@ enum OverlayStates {
 
             Shot(slug: "prompt-shots", group: "The held prompt", title: "The prompt, with its frames",
                  when: "Any dictation carrying screenshots — which is most of them, since one is taken automatically.",
-                 note: "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row.",
+                 note: "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, shots: mockShots(2), words: transcript)
+                o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
+                                 stamps: ["", "0:38"], words: transcript)
             },
 
             Shot(slug: "prompt-selection", group: "The held prompt", title: "The prompt, with a quoted highlight",
@@ -304,7 +305,8 @@ enum OverlayStates {
                  note: "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was — then the two buttons.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, shots: mockShots(3), selection: selection,
+                o.showSentPrompt(transcript, hold: 6, shots: mockShots(3),
+                                 stamps: ["", "0:38", "1:52"], selection: selection,
                                  front: "OrderService.java — petclinic", words: transcript,
                                  warning: "⚠️ low confidence (0.42) — check the words before it goes")
             },
@@ -330,7 +332,8 @@ enum OverlayStates {
                  note: "The ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, shots: mockShots(2), words: transcript)
+                o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
+                                 stamps: ["", "0:38"], words: transcript)
                 o.setHovering(true)
             },
 
