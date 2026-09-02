@@ -112,9 +112,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// second: `hold ⬅️ + 🛞` is the same sentence in the shape of the mouse it is
     /// about. Right-aligning them into the shortcut column was the first ask and
     /// is not something `NSMenuItem` offers — the column belongs to
-    /// `keyEquivalent`, and a wheel is not a key — so they stay in the title,
-    /// after the em dash, where the words they replace already were.
-    private let bind = NSMenuItem(title: "Connect Window — hold ⬅️ + 🛞", action: nil, keyEquivalent: "b")
+    /// `keyEquivalent`, and a wheel is not a key — so it is drawn as one: the
+    /// chord rides in an attributed title right-aligned to a tab stop set just
+    /// left of the shortcut column, and the two columns line up. See
+    /// `layOutGestures`, and `restyleGestures` for the price it costs.
+    private let bind = NSMenuItem(title: "Connect Window", action: nil, keyEquivalent: "b")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
@@ -125,16 +127,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// left the way disconnecting mirrors binding — that is the whole of what has
     /// to be remembered, and drawn as `➡️` against `⬅️` it is the whole of what
     /// has to be read.
-    private let disconnect = NSMenuItem(title: "Disconnect — hold ➡️ + 🛞", action: nil, keyEquivalent: "")
+    private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it
     /// as a real key equivalent, the same way ⌘⌃B rides **Connect Window**; the
     /// wheel has no key equivalent to be, so it stays in the title beside it.
-    private let startDictation = NSMenuItem(title: "Start Dictation — 🛞", action: nil, keyEquivalent: "d")
-    private let stopRecording = NSMenuItem(title: "End Dictation — 🛞", action: nil, keyEquivalent: "d")
+    private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "d")
+    private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "d")
     /// Same row, opposite verdict — see `onCancelDictation`.
-    private let cancelDictation = NSMenuItem(title: "Cancel Dictation — hold 🛞 2s", action: nil, keyEquivalent: "")
+    private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
     /// exist yet. Spelled with the folder in it because that is the one thing
     /// about it he cannot see beforehand — the window opens after he has spoken.
@@ -151,7 +153,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// tapped rather than held — the same idiom `Cancel Dictation — hold 🛞 2s`
     /// already uses, and the only thing that separates the two readings of one
     /// chord.
-    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s", action: nil, keyEquivalent: "")
+    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace", action: nil, keyEquivalent: "")
     /// The shutter. Both routes are named: F3 works whenever there is a
     /// destination, the back button only while a dictation is running — which is
     /// also the only window in which it stops typing Return.
@@ -159,14 +161,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// until there is one, like every other row that cannot act right now.
     private let pasteLast = NSMenuItem(title: "Paste the Last Dictation — at the caret, and onto the clipboard",
                                        action: nil, keyEquivalent: "p")
-    private let shot = NSMenuItem(title: "One More Screenshot — F3, or the back button while dictating", action: nil, keyEquivalent: "")
+    private let shot = NSMenuItem(title: "One More Screenshot", action: nil, keyEquivalent: "")
     /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
     /// happens inside Chrome, in a page this app cannot reach from a menu — but
     /// it is a gesture the relay takes over, it used to be advertised on the chip
     /// while dictating, and with the chip silent there is nowhere else it could
     /// be said. Permanently disabled, which is the honest rendering of "this is
     /// something you do, not something you pick".
-    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome — ⌘⇧ + 🖱️, while dictating", action: nil, keyEquivalent: "")
+    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome", action: nil, keyEquivalent: "")
     /// **Send without asking.** Off at every launch, and deliberately not
     /// remembered: the panel is the thing that catches a transcript the model got
     /// wrong, and a checkbox that survived a restart would quietly take that
@@ -375,8 +377,70 @@ final class StatusItem: NSObject, NSMenuDelegate {
         exit.target = self
         menu.addItem(exit)
 
+        // **The mouse chords get a column of their own, beside the key ones.**
+        // Victor asked twice; the first answer was that `NSMenuItem` does not
+        // offer it, which is true only of the shortcut column itself. A right
+        // tab stop in an attributed title is the same right edge drawn by hand,
+        // and AppKit lays its own ⌘⌃ column out to the right of the text — so the
+        // two end up as neighbours, which is all that was ever wanted.
+        gestureRows = [
+            (bind, "hold ⬅️ + 🛞"),
+            (disconnect, "hold ➡️ + 🛞"),
+            (startDictation, "🛞"),
+            (stopRecording, "🛞"),
+            (cancelDictation, "hold 🛞 2s"),
+            (newSession, "⌘ + 🛞, or hold ➡️ + 🛞 1s"),
+            (shot, "F3, or the back button while dictating"),
+            (pickLegend, "⌘⇧ + 🖱️, while dictating"),
+        ]
+        layOutGestures(in: menu)
+
         item.menu = menu
         mirror.start()
+    }
+
+    /// The item and the chord it is performed with — the right-hand column.
+    private var gestureRows: [(item: NSMenuItem, gesture: String)] = []
+    /// Where that column's right edge sits, measured once from the widest row.
+    private var gestureTab: CGFloat = 0
+
+    /// **One tab stop for the whole menu**, so the chords line up with each other
+    /// rather than each floating at the end of its own label. It is the widest
+    /// of two things: the longest plain row in the menu, and the longest
+    /// label + gap + chord — whichever it is, no row can then need more width
+    /// than the column gives it, and none of them collide.
+    private func layOutGestures(in menu: NSMenu) {
+        let font = NSFont.menuFont(ofSize: 0)
+        func width(_ text: String) -> CGFloat {
+            ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        }
+        // Wide enough that the chord reads as a second column and not as the end
+        // of the sentence — the same distance AppKit leaves before its own.
+        let gap: CGFloat = 28
+        var tab: CGFloat = 0
+        for item in menu.items where !item.isSeparatorItem { tab = max(tab, width(item.title)) }
+        for row in gestureRows { tab = max(tab, width(row.item.title) + gap + width(row.gesture)) }
+        gestureTab = tab
+        restyleGestures()
+    }
+
+    /// **The price of an attributed title: AppKit stops dimming the row.** A
+    /// disabled item is greyed by the menu only while it is drawing the title
+    /// itself; hand it an attributed string and the colours in that string are
+    /// the last word, so a disabled `End Dictation` came out as black as a live
+    /// one. The colour is therefore chosen here, and this runs from
+    /// `menuWillOpen` — the one moment every `isEnabled` in the file is known to
+    /// be current.
+    private func restyleGestures() {
+        let font = NSFont.menuFont(ofSize: 0)
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .right, location: gestureTab)]
+        for row in gestureRows {
+            let ink: NSColor = row.item.isEnabled ? .labelColor : .disabledControlTextColor
+            row.item.attributedTitle = NSAttributedString(
+                string: "\(row.item.title)\t\(row.gesture)",
+                attributes: [.font: font, .foregroundColor: ink, .paragraphStyle: style])
+        }
     }
 
     /// Shown beside the name in the menu **and** in the menu bar itself.
@@ -610,6 +674,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyWhisperTitle()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
+        restyleGestures()
     }
 
     /// **`Bound to: petclinic@main`**, not the bare line the chip shows.

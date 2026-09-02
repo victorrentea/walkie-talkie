@@ -2226,7 +2226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            // preview adds to it — the panel needs
                                            // the seam to know what is editable.
                                            words: text, warning: warning,
-                                           buttons: !self.autosend) {
+                                           buttons: !self.autosend,
+                                           // Consumed above, so the panel is told
+                                           // rather than left to re-derive it.
+                                           spawning: spawn) {
                 self.held = message
                 self.hotkeys.promptHeld = true
             } else {

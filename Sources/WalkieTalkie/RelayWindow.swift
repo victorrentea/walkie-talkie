@@ -1447,8 +1447,15 @@ private let frontLabel = NSTextField(labelWithString: "")
             hintLabel.isHidden = true
         }
 
+        // **The quotation gets air under it.** Every row on this panel is two
+        // pixels from the next, which is right for a stack of one-line facts and
+        // wrong for the seam between what Victor *highlighted* and what he
+        // *said*: glued at the same gap the two read as one block, and the
+        // quotation stops looking quoted. The extra space is the punctuation
+        // that separates the two halves of the message.
+        let gapBelow: (NSView) -> CGFloat = { [quoteLabel, rowGap] in $0 === quoteLabel ? rowGap + 8 : rowGap }
         let contentHeight = rows.reduce(0) { $0 + $1.height }
-        let height = contentHeight + rowGap * CGFloat(rows.count - 1) + pad * 2
+        let height = contentHeight + rows.dropLast().reduce(0) { $0 + gapBelow($1.view) } + pad * 2
 
         // Anchor the TOP edge: the overlay sits in the top-left corner, so it
         // grows downward into empty screen rather than up under the menu bar.
@@ -1482,7 +1489,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         for row in rows {
             y -= row.height
             row.view.frame.origin = NSPoint(x: pad, y: y)
-            y -= rowGap
+            y -= gapBelow(row.view)
         }
 
         // Bottom-right, where Victor asked for it — and where a destructive
@@ -2339,7 +2346,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
                         selection: String? = nil, front: String? = nil,
                         words: String? = nil, warning: String? = nil,
-                        buttons: Bool = true) -> Bool {
+                        buttons: Bool = true, spawning: Bool = false) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // **A selection with no words is still worth holding.** It stopped being
@@ -2380,6 +2387,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
         promptHold = hold
         promptButtons = buttons
+        promptSpawning = spawning
         promptShots = shots
         promptSelection = quoted
         promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -2437,6 +2445,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Whether this prompt has a Send and a Cancel on it — false under Autosend,
     /// where the panel is a receipt rather than a decision. See the row's layout.
     private var promptButtons = true
+    /// Whether this dictation opens a **new** terminal instead of going to the
+    /// bound one — ⇧ + the wheel. It changes one thing on the panel, the verb on
+    /// the green button, and that is the point: `Send` and `Start New` are two
+    /// different decisions, and the button is the last place the difference can
+    /// still be seen before it is taken.
+    ///
+    /// Handed in with the prompt rather than read off `spawnLabel`, which is the
+    /// chip's business and is also what the paste-at-the-caret mode borrows.
+    private var promptSpawning = false
     private var editingPrompt = false
 
     /// Click on the words → they become a text field, and the countdown stops
@@ -2463,7 +2480,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         promptTimer?.invalidate(); promptTimer = nil
         countdownTimer?.invalidate(); countdownTimer = nil
         promptDeadline = nil
-        sendButton.title = "⏎ Send"
+        setSendTitle("⏎ \(sendVerb)")
 
         // The decorations go while he is in the field: they are not his words, so
         // they must not be in the box he is typing in, and a second read-only
@@ -2528,6 +2545,23 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
+    /// **What the green button promises.** A spawn does not send a message to a
+    /// session, it opens one — and a button that said `Send` for both was the
+    /// panel's only lie: same words, same panel, two destinations, one of which
+    /// does not exist yet.
+    private var sendVerb: String { promptSpawning ? "Start New" : "Send" }
+
+    /// Set the title and let the pill grow to hold it. The 128 was a constant
+    /// while the label was, and `Start New 25s` does not fit in it; the floor
+    /// keeps the ordinary case exactly the width it has always been, and the
+    /// layout already positions Send off its own `frame.width`.
+    private func setSendTitle(_ text: String) {
+        sendButton.title = text
+        let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        let w = ceil((text as NSString).size(withAttributes: [.font: font]).width) + 28
+        sendButton.frame.size.width = max(128, w)
+    }
+
     private func startPromptCountdown(hold: TimeInterval) {
         promptDeadline = Date().addingTimeInterval(hold)
         updateCancelTitle()
@@ -2553,7 +2587,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private func updateCancelTitle() {
         guard let deadline = promptDeadline else { return }
         let left = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
-        sendButton.title = "⏎ Send \(left)s"
+        setSendTitle("⏎ \(sendVerb) \(left)s")
         // ⎋ named on the button for the same reason ⏎ is named on Send: the key
         // works whether or not it says so, and a countdown is the worst moment
         // to be looking for the mouse.
@@ -2577,6 +2611,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         sentPrompt = nil
         promptWords = nil
         promptExtras = ""
+        promptSpawning = false
         promptShots = []
         promptSelection = nil
         promptFront = nil
