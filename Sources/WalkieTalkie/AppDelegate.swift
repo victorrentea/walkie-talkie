@@ -464,6 +464,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         music.start()
         beacon.start()
 
+        // Nothing is bound yet, and a marker left by a relay that was killed
+        // rather than quit would claim otherwise until the first bind.
+        Outbox.publishBound(tty: nil)
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
@@ -1311,6 +1314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let target = target else {
             overlay.setBound(label: nil)
             status.setDestination(nil, icon: nil)
+            Outbox.publishBound(tty: nil)
             return
         }
         // A target with no readable directory (a blind-paste app) says its own
@@ -1336,6 +1340,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setBound(label: target.label, folder: line,
                          icon: Self.appIcon(target.bundleID, height: 18))
         status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 20))
+        // Published here for the reason everything else about a binding is
+        // published here: this is the one method every route into and out of one
+        // passes through, so the file cannot drift from the chip.
+        Outbox.publishBound(tty: target.handle.tty)
     }
 
     /// The destination app's icon, drawn down to the row height it has to sit in.
@@ -2104,6 +2112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the safety net for a crash, not the way an orderly quit should look.
         music.stop()
         beacon.stop()
+        // A marker outliving the process would put a microphone on a status line
+        // with nothing behind it — see `Outbox.publishBound`.
+        Outbox.publishBound(tty: nil)
         guard !SingleInstance.beingReplaced() else {
             Log.info("terminating to make way for a new instance — no session_end")
             return

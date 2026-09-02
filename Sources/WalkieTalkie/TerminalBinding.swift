@@ -61,6 +61,25 @@ final class TerminalBinding {
         /// caret in a second terminal tab landed in the wrong terminal — both
         /// reported as `delivered`, because "⌘V was sent" is all this can see.
         case keystroke(pid: pid_t, app: String)
+
+        /// **The tty this handle delivers to, when there is one to name.**
+        /// Published to disk so the status line can put a microphone in front of
+        /// its own row — see `Outbox.publishBound`. The tty is the only handle
+        /// both sides hold, which is the argument `~/.claude/cwd/<ttysNNN>`
+        /// already runs in the other direction.
+        ///
+        /// A tmux pane answers with the **client's** tty, which is the outer
+        /// Terminal tab and not the pty the agent is on, so it simply fails to
+        /// match rather than matching the wrong session. `.keystroke` has no tty
+        /// at all — that is the case that could not be guarded either.
+        var tty: String? {
+            switch self {
+            case .terminalApp(let tty):   return tty
+            case .tmux(_, let tty):       return tty
+            case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }
+            case .keystroke:              return nil
+            }
+        }
     }
 
     struct Target {

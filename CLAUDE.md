@@ -2445,6 +2445,45 @@ every 500ms rather than observed — it moves with the focus and posts nothing �
 and the panel on the active screen is hidden, since the real status item is
 already there.
 
+## The bound tty is published, so the status line can wear a microphone
+
+`~/.walkie-talkie/bound-tty` holds the tty of the bound session while there is
+one, and does not exist otherwise (`Outbox.publishBound`). Victor's status line
+reads it and puts a white-on-red 🎙️ in front of the model name when it matches
+its own tty.
+
+**Same problem the corner beacon solves, at the other end of the sentence.** The
+beacon answers *is it hearing me?*; this answers *which of these twenty
+terminals is it aimed at?* — and the chip, which is the only thing that has ever
+answered it, rides the pointer and is hidden the moment he types.
+
+- **A file, not the `GET /target` route that already answers this.** The bar
+  re-renders every second in every open session; an HTTP call on that beat is a
+  per-second cost across every terminal on the machine. Nothing bound is a file
+  that is not there, i.e. one failed builtin `read` and no subprocess at all.
+- **The tty is the only handle both sides hold** — the same argument
+  `~/.claude/cwd/<ttysNNN>` already makes in the other direction, and the reason
+  that publisher exists. `Handle.tty` answers for a Terminal tab directly and for
+  an IDE target through `tty(ofPID:)` on the shell pid. A tmux pane answers with
+  the **client's** tty, which is the outer Terminal tab and not the pty the agent
+  is on, so it fails to match rather than matching the wrong session;
+  `.keystroke` has no tty at all, which is the case that could not be guarded
+  either.
+- **Written from `showBound` and nowhere else**, which is the one method every
+  route into and out of a binding passes through — so the file cannot drift from
+  the chip.
+- **Removed, never emptied, and cleared at launch as well as at quit.** A marker
+  outliving the process would claim a binding that went with it, and a microphone
+  on a row with nothing behind it is worse than none: the badge is only worth
+  anything if it can be trusted.
+- **A profile or a background tint on the bound tab was considered and dropped.**
+  `~/.claude/hooks/session-color.sh` already owns `background color of <tab>`,
+  keyed by the same tty, hashed on the folder, re-applied on every `CwdChanged`
+  and by a per-session watcher when macOS flips appearance. Two writers on one
+  property, and the hook has the last word — a bind colour would vanish at the
+  next `cd`. `cursor color` is the one per-tab property nothing else claims, and
+  is where that idea would have to go if the status line ever proves not enough.
+
 ## The corner beacon: a microphone on every screen while it listens
 
 **Top-right of every display, a 30pt strip, a 🎙️ pulsing 1.0 → 0.15 and back over

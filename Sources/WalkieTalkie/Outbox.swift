@@ -16,6 +16,39 @@ enum Outbox {
 
     static var outboxURL = home.appendingPathComponent("outbox.jsonl")
 
+    /// **Where the bound tty is published**, for the status line to read.
+    ///
+    /// The chip says which session the words go to, and it says it beside the
+    /// cursor — which is the one place Victor is not looking while an agent
+    /// works, and which macOS hides the moment he touches the keyboard. In a
+    /// screen of identical terminals that left *which of these is bound?* with
+    /// no answer anywhere in the window itself. The status line is the row that
+    /// is always at the bottom of the right terminal, so a microphone in front
+    /// of it is the receipt that cannot be missed.
+    ///
+    /// A file rather than the `GET /target` route that already answers this: the
+    /// bar re-renders every second in every open session, and an HTTP call on
+    /// that beat is exactly the per-second cost this repo's status line is
+    /// written to avoid. Reading a small file that is usually absent is a failed
+    /// `read`, no subprocess at all.
+    static var boundTTYURL = home.appendingPathComponent("bound-tty")
+
+    /// Write the bound tty, or take the file away when nothing is bound.
+    ///
+    /// **Removed rather than emptied**, so the reader's fast path is a file that
+    /// does not exist — and so a relay that dies leaves no marker claiming a
+    /// binding that went with it. `AppDelegate` clears it at launch and at
+    /// termination for the same reason; a stale microphone on somebody else's
+    /// row is worse than none, since the whole point is that it can be trusted.
+    static func publishBound(tty: String?) {
+        guard let tty = tty else {
+            try? FileManager.default.removeItem(at: boundTTYURL)
+            return
+        }
+        try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        try? Data(tty.utf8).write(to: boundTTYURL)
+    }
+
     /// **Screenshots live in Caches, not next to the outbox, and not in `/tmp`.**
     ///
     /// They are a staging area, never an archive: each retina JPG is a megabyte
