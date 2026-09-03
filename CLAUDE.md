@@ -2430,6 +2430,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `One More Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
 | `Pick an Element in Chrome` | ✋ | `⌘⇧ + ⬅️ @🎙️` | |
 | `Replace Wispr` | ⌨️ | the forward side button (see *Replace Wispr*) | |
+| `Message Log` | 📜 | | |
 
 **The line groups by what a row is *for*.** Above it, everything about a
 **destination** — point at one, let it go, make a new one, paste the last
@@ -2533,6 +2534,62 @@ Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:
 the app is `.accessory` and never becomes key, so the hint would advertise a
 shortcut that does nothing outside the open menu.
+
+### Message Log: the outbox read back as a page
+
+`outbox.jsonl` is the record of everything Victor has ever dictated, and until
+2026-09-03 the only way to read it was to `tail` a file of one-line JSON blobs
+with UTC stamps and absolute paths to retina JPGs in them — a format written for
+the agent watching the queue, not for the person who filled it. **Message Log**
+(`MessageLog.swift`, 📜, under the two switches) renders the **last 48 hours** of
+that same file into one self-contained HTML file and opens it in the default
+browser.
+
+**Generated on the click, never maintained.** The page is a view of a file
+appended to all day; an HTML mirror kept in step with every send would be a
+second writer on the send path for something read a few times a week. Building it
+on demand also makes "the last two days" mean two days back from *now* rather
+than from whenever a mirror was last rewritten.
+
+**It lands in Caches** —
+`~/Library/Caches/ro.victorrentea.wispr-relay/message-log.html`, beside the
+`shots` folder rather than inside it, since `ScreenCapture.prune` walks that
+directory and counts what it finds and a page is not a shot. Derived, regenerable
+in a click, and nothing is lost when the system purges it. The outbox itself
+stays in `~/.walkie-talkie`: *that* one is the log (see `Outbox.cacheRoot`).
+
+**Local time, grouped by day.** `ts` is UTC, which is right for the queue and
+useless for the only question ever asked of this page — *when did I say that?*
+Three hours off in summer is enough to make yesterday evening look like today.
+
+**Newest first, all the way down.** The page is opened for the sentence just
+said, so the day at the top is today and the row at the top of it is the last
+thing dictated. It costs the ability to read a session forwards, which is not
+what a log gets opened for.
+
+**The pictures are `stat`ed at generation time**, and a missing one becomes a
+dashed row saying the frame is no longer on disk. Shots live in Caches precisely
+so that macOS and every cleaner tool may take them, so a page built from lines
+two days old will routinely name frames that are gone — and a broken-image box
+says nothing about why.
+
+**No CDN, no script, both palettes.** The page is opened off `file://`, where a
+remote stylesheet is a request that may not answer and a failed one leaves the
+log unreadable; the thumbnails are plain links, so there is nothing that needs
+JavaScript. Colours are tokens on `:root` with a `prefers-color-scheme: dark`
+override, because Victor works in dark all day.
+
+**A bad line is skipped, never thrown.** The file is appended to by a live
+process while the page reads it, and it has survived every schema this app has
+had: one truncated tail line is not a reason to refuse to show the other five
+hundred. Lines with neither words nor pictures (`session_start` / `session_end`)
+are dropped too — a page of empty rows is what made the raw file unreadable in
+the first place. A missing outbox gives an empty page with a sentence saying so.
+
+**The row carries no callback**, unlike every other command in the menu. The
+others hand their click to `AppDelegate` because they need state only the
+delegate has; this one needs nothing but the file on disk, and a hop through the
+delegate would exist only to be consistent with rows that had a reason.
 
 ### The 🤖 on the other screens
 

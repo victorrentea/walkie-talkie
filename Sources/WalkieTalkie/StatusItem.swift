@@ -202,6 +202,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// is *wherever the caret is*, which is the one thing the row has to say.
     private let replaceWispr = NSMenuItem(title: "Replace Wispr — forward button dictates, pasted at the caret",
                                           action: nil, keyEquivalent: "")
+    /// **The outbox, read back as a page.** Renders the last two days of
+    /// `outbox.jsonl` into one self-contained HTML file and opens it in the
+    /// browser — see `MessageLog`.
+    ///
+    /// It sits under the two switches rather than with the commands at the top:
+    /// everything above the first separator is about *where the next sentence
+    /// goes*, and everything under the second is about the app itself — its
+    /// modes, its engine, its build. A log of what was already said is a fact
+    /// about the app, not a destination.
+    ///
+    /// **It carries no callback.** Every other row hands its click to
+    /// `AppDelegate` because it needs state only the delegate has; this one needs
+    /// nothing but the file on disk, and a hop through the delegate would exist
+    /// only to be consistent with rows that had a reason.
+    private let messageLog = NSMenuItem(title: "Message Log — the last 2 days, in the browser",
+                                        action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     private var engineLoading = false
@@ -397,6 +413,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Kept in the menu rather than deleted: it is the only place that says
         // the weights are resident, and the only place `— loading…` is visible
         // when the chip is not on screen.
+        messageLog.image = Self.emojiIcon("📜")
+        messageLog.action = #selector(messageLogClicked)
+        messageLog.target = self
+        menu.addItem(messageLog)
+
         whisperItem.isEnabled = false
         menu.addItem(whisperItem)
         applyWhisperTitle()
@@ -721,6 +742,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func newSessionClicked() { onNewSession?() }
     @objc private func shotClicked() { onShot?() }
     @objc private func pasteLastClicked() { onPasteLast?() }
+    @objc private func messageLogClicked() { MessageLog.openInBrowser() }
 
     private var destination: String?
 
