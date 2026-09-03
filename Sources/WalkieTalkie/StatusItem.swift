@@ -187,7 +187,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// shifting under him is a worse readout than the tick was a good one, so
     /// the state is drawn where the other rows draw their identity: `⏩` when it
     /// sends straight through, `⏸️` when the panel holds and waits.
-    private let autosend = NSMenuItem(title: "Autosend — no buttons, gone in a second", action: nil, keyEquivalent: "")
+    private let autosend = NSMenuItem(title: "Autosend", action: nil, keyEquivalent: "")
     /// Mirrors what the `autosend` row means, since the row itself no longer
     /// carries a `state` to read it back from.
     private var autosendOn = false
