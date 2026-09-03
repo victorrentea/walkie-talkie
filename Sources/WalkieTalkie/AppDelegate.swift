@@ -665,6 +665,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // clipboard probe on every press): the ⌘C probe posts a keystroke into
         // whatever field he is about to dictate into, and this is the one mode
         // where that field is the whole subject.
+        // **A new sentence never inherits the last one's subject.** The three
+        // routes above cover every way a dictation is known to end without
+        // becoming a message, but this is the boundary that cannot be argued
+        // with: the microphone just opened, so anything still pending belongs to
+        // something that is over. Replace Wispr included — it takes no selection
+        // of its own, and one left lying around must not outlive it either.
+        abandonDictation("a new dictation started")
         if !paste { captureContext() }
         listening = true
         syncBorrowedGestures()
@@ -773,6 +780,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let (wav, duration) = recording else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
             clearSpawn()
+            // The wheel double-click that binds a terminal lands here every time:
+            // it opens the microphone and closes it inside the minimum duration,
+            // after `captureContext` has already read whatever was highlighted.
+            abandonDictation("recording under the minimum duration")
             return
         }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
@@ -796,6 +807,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 Log.error("local recording produced no transcript")
                 try? FileManager.default.removeItem(at: wav)
+                self.abandonDictation("the model returned nothing")
                 return
             }
             Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
@@ -1075,6 +1087,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !shots.isEmpty else { return }
         Log.info("no transcript within \(Int(orphanTimeout))s — releasing \(shots.count) shot(s) on their own")
         send(kind: "screenshot", paths: shots)
+    }
+
+    /// A dictation ended without ever becoming a message. Let go of everything it
+    /// gathered, now, instead of waiting out the two-minute orphan timer.
+    ///
+    /// **This is what kept quoting him at himself.** The selection is read once
+    /// per dictation and frozen — `stashSelection` returns early when the slot is
+    /// already full, and `captureContext` only empties it when `dictationInFlight`
+    /// says a *new* dictation is opening. So a dictation that gathered a selection
+    /// and then never produced a transcript left both behind: the flag stayed up,
+    /// the next press was therefore not a new dictation as far as the reset was
+    /// concerned, no fresh read was taken, and the old highlight went out attached
+    /// to the next sentence — and the one after that, since every press re-armed
+    /// the orphan timer that would eventually have cleared it.
+    ///
+    /// Three routes end a dictation this way and all three now come here: audio
+    /// under `MicRecorder.minimumDuration` (which is *every* wheel double-click,
+    /// the bind gesture — the common case), a decode that returned nothing, and a
+    /// message dropped for want of a destination.
+    ///
+    /// Routed through `flushOrphaned` so deliberate shots are still released
+    /// rather than dropped; only the timer is different, and it is cancelled here.
+    private func abandonDictation(_ reason: String) {
+        stateLock.lock()
+        let carrying = dictationInFlight || pendingSelection != nil
+            || !pendingExtraSelections.isEmpty || !pendingShots.isEmpty
+        stateLock.unlock()
+        guard carrying else { return }
+        Log.info("dictation abandoned (\(reason)) — dropping what it had gathered")
+        DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
+        flushOrphaned()
     }
 
     // MARK: - Actions
@@ -2206,6 +2249,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if kind == "dictation" { spawnPending = false }
         guard isBound || spawn else {
             Log.info("unbound — dropped \(kind)")
+            // Dropped, not deferred: nothing this dictation gathered has anywhere
+            // to go, so it must not survive to be attached to the next one.
+            if kind == "dictation" { abandonDictation("nowhere to send it") }
             return
         }
         stateLock.lock()
