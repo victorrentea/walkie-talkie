@@ -179,7 +179,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// vanished into a terminal with nothing shown would be the one state where
     /// he cannot tell a delivery from a drop — but it opens for a second, with no
     /// buttons on it. A flash, then it goes.
+    ///
+    /// **The mode rides in the icon column, not in the checkmark column.** A
+    /// ticked `NSMenuItem` makes AppKit reserve the state column for the whole
+    /// menu, which pushes every other row — all of them already carrying an
+    /// emoji — sideways the moment this one row is switched on. The layout
+    /// shifting under him is a worse readout than the tick was a good one, so
+    /// the state is drawn where the other rows draw their identity: `⏩` when it
+    /// sends straight through, `⏸️` when the panel holds and waits.
     private let autosend = NSMenuItem(title: "Autosend — no buttons, gone in a second", action: nil, keyEquivalent: "")
+    /// Mirrors what the `autosend` row means, since the row itself no longer
+    /// carries a `state` to read it back from.
+    private var autosendOn = false
     /// **The mode row.** It sits beside `Autosend` because the two are the only
     /// switches in this menu — everything above them is something that happens
     /// once, when clicked.
@@ -373,7 +384,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
-        autosend.state = .off
+        applyAutosendIcon()
         menu.addItem(autosend)
 
         // **One row, and it is a readout rather than a switch.** There used to be
@@ -764,8 +775,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     }
 
     @objc private func autosendClicked() {
-        autosend.state = autosend.state == .on ? .off : .on
-        onToggleAutosend?(autosend.state == .on)
+        autosendOn.toggle()
+        applyAutosendIcon()
+        onToggleAutosend?(autosendOn)
+    }
+
+    private func applyAutosendIcon() {
+        autosend.image = Self.emojiIcon(autosendOn ? "⏩" : "⏸️")
     }
 
 }
