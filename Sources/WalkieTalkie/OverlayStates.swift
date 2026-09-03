@@ -82,7 +82,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "spawn", group: "Dictating", title: "This sentence opens a new session",
-                 when: "⌘ + the wheel, or the right-held chord: the dictation goes to a terminal that does not exist yet.",
+                 when: "the right-held chord: the dictation goes to a terminal that does not exist yet.",
                  note: "**One row, and the ✨ is all that is left of the destination.** It had a title row of its own — Terminal's icon, ✨, `workspace` — and Victor took it off on 2026-09-02: the folder is *always* `~/workspace`, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of `Listening…` and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)

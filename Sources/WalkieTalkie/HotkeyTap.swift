@@ -59,7 +59,7 @@ final class HotkeyTap {
     ///
     /// It consults **only** the mode flag — not `localCapture`, not `bound`. A
     /// dictation that is going to the caret carries its own destination, exactly
-    /// as ⌘ + the wheel does, so *Unbound is inert* has nothing to say about it.
+    /// as the spawn chord does, so *Unbound is inert* has nothing to say about it.
     var onPasteToggle: (() -> Void)?
 
     /// The wheel held down **while a dictation is running** — throw it away.
@@ -68,9 +68,9 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
-    /// **⌘ + the wheel — talk at a session that does not exist yet.** Start a
-    /// dictation whose destination is a Terminal window this app has not opened
-    /// yet: at the end of it, a new one appears with an interactive Claude Code
+    /// **➡️ + the wheel, held a second — talk at a session that does not exist
+    /// yet.** Start a dictation whose destination is a Terminal window this app
+    /// has not opened yet: at the end of it, a new one appears with an interactive Claude Code
     /// in it and the words as its first prompt.
     ///
     /// **It ignores every gate the bare wheel obeys.** A binding is the bare
@@ -82,19 +82,15 @@ final class HotkeyTap {
     ///
     /// **Mid-dictation it is just the wheel.** The destination is decided at the
     /// press that opened the microphone and cannot be changed halfway through a
-    /// sentence, so a ⌘ click while one is running ends it like any other,
+    /// sentence, so the chord made while one is running ends it like any other,
     /// and it goes wherever it was already going.
     ///
-    /// **⌘ rather than ⇧, since 2026-08-30**, and it costs less: ⌘-middle-click
-    /// in a browser is redundant with a bare middle click (both open a link in a
-    /// background tab), where ⇧-middle-click is a gesture of its own — new tab
-    /// *and* switch to it. ⇧ was also already spoken for on this very wheel:
-    /// LinearMouse maps ⇧ + vertical scroll to horizontal scroll, so holding it
-    /// to press the button put a sideways scroll one twitch away.
-    ///
-    /// The price stands either way: the modifier belongs to this app for as long
-    /// as it is running, not merely while something is bound. That is the
-    /// deliberate reading of *"cât timp e pornit walkie"*.
+    /// **⌘ + the wheel was the other way in, and is gone since 2026-09-03.** It
+    /// cost the modifier: ⌘-middle-click belonged to this app everywhere on the
+    /// machine for as long as it was running, bound or not. The chord asks for
+    /// nothing outside the mouse, which was always the better half of the pair —
+    /// the moment this gesture is most useful is the moment Victor is across the
+    /// room from the laptop with only the mouse to hand.
     var onSpawnToggle: (() -> Void)?
 
     /// The wheel clicked **with the left button already held** — point the relay
@@ -269,10 +265,6 @@ final class HotkeyTap {
     private var wheelArmed = false
     /// A press we swallowed and have not yet judged.
     private var wheelDown = false
-    /// …and whether ⌘ was down when we took it. Read at the release, because
-    /// that is where a tap is told from a hold — and remembered rather than
-    /// re-read, since the modifier may well be let go before the button is.
-    private var wheelSpawn = false
     /// …and whether the **right** button was the one held when we took it. The
     /// right chord means two things — disconnect on a tap, a new session on a
     /// hold — so the press cannot decide, and the release has to know which
@@ -407,13 +399,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
             let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
-            // **⌘ and nothing else.** Deliberately not folded into `bare`: every
-            // branch below that asks for `bare` means "the gesture with no
-            // destination of its own", and this one carries one.
-            let commanded = event.flags.contains(.maskCommand)
-                    && !event.flags.contains(.maskShift) && !event.flags.contains(.maskControl)
-                    && !event.flags.contains(.maskAlternate)
-
             // Mouse 4 mid-dictation → a picture, and the Return it would have
             // become never happens. Both halves of the click are swallowed:
             // LinearMouse is downstream of this tap and would otherwise still
@@ -503,7 +488,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //     wheel              → disconnect: let the binding go
             //   right held, then
             //     wheel held 1s      → dictate at a terminal that does not exist
-            //                          yet — ⌘ + the wheel, without the keyboard
+            //                          yet
             //
             // **Starting used to cost a one-second hold and now costs a tap.**
             // The hold was buying one thing: a bare middle click could still be
@@ -599,7 +584,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     // the branch below exists to prevent.
                     wheelArmed = false
                     wheelDown = false
-                    wheelSpawn = false
                     wheelRightChord = false
                     wheelLeftChord = false
                     wheelHold?.cancel()
@@ -620,11 +604,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // means something already fired on the press or during the hold, so
             // what is left — a press we took and nothing acted on — is the tap.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
-                // Read off the **press**, not off the flags now: ⌘ is very often
-                // let go before the button is, and a gesture that changed its
-                // mind between the two halves of one click would be the least
-                // predictable thing in this file.
-                let spawn = wheelSpawn
                 let right = wheelRightChord
                 let left = wheelLeftChord
                 // **The one place a tap is decided**, and it is a claim rather
@@ -633,7 +612,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // `claimWheelPress`.
                 let tapped = claimWheelPress()
                 wheelArmed = false
-                wheelSpawn = false
                 wheelRightChord = false
                 wheelLeftChord = false
                 wheelHold?.cancel()
@@ -652,13 +630,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 } else if left {
                     // Nothing: the bind fired at the press, and the hold that
                     // would also have started a dictation did not last.
-                } else if spawn {
-                    // Ending one is ending one, whichever gesture it started
-                    // with — the destination was decided at the press that
-                    // opened the microphone.
-                    Log.info(dictating ? "🎙️ ⌘wheel tapped — ending the dictation"
-                                       : "✨ ⌘wheel tapped — dictating at a new Claude Code")
-                    DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
                 } else if localCapture || dictating {
                     Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
                                        : "🎙️ wheel tapped — starting a dictation")
@@ -723,21 +694,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Swallowed on the press and judged at the release above, because a
             // tap and a two-second hold are the same event until the finger
             // lifts.
-            // **⌘ makes the same press mean "and open somewhere to put it".**
-            // It joins this branch rather than getting one of its own because
-            // everything from here down is identical — the press is swallowed,
-            // a hold still cancels a running dictation, and the tap is judged at
-            // the release. The only difference is which callback the release
-            // makes, and that is what `wheelSpawn` carries.
             //
-            // Note what it does *not* consult: `localCapture`. The bare wheel is
-            // inert with nothing bound because its words would have nowhere to
-            // go; these words bring their own destination, so the gesture is
-            // live for as long as the app is.
+            // **⌘ + the wheel used to ride this same branch** and mean "and open
+            // somewhere to put it" — the spawn, without the keyboard-free chord.
+            // Removed at Victor's ask 2026-09-03: the modifier belonged to this
+            // app for as long as it was running, bound or not, which cost every
+            // ⌘-middle-click everywhere else on the machine. The gesture itself
+            // is not gone — ➡️ + 🛞 held a second is the same call, and it is the
+            // one that works with the hand that only has the mouse.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown
-                && ((bare && (localCapture || dictating)) || commanded) {
+                && bare && (localCapture || dictating) {
                 wheelDown = true
-                wheelSpawn = commanded
                 wheelLeftChord = false
                 wheelRightChord = false
                 // Only a running dictation has a second meaning for a long press.
@@ -769,13 +736,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     // time, which is `startLocalRecording` twice and a microphone
                     // opened on top of itself.
                     wheelDown = false
-                    if wheelSpawn {
-                        Log.info("✨ ⌘wheel pressed — dictating at a new Claude Code")
-                        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
-                    } else {
-                        Log.info("🎙️ wheel pressed — starting a dictation")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                    }
+                    Log.info("🎙️ wheel pressed — starting a dictation")
+                    DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                     return nil
                 }
                 let work = DispatchWorkItem { [weak self] in

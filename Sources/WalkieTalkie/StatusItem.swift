@@ -86,11 +86,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord make.
     var onBind: (() -> Void)?
 
-    /// Picked from **New Claude Code** — open the microphone with the spawn
-    /// destination armed, exactly as ⌘ + the wheel does.
+    /// Picked from **Dictate to new Claude** — open the microphone with the spawn
+    /// destination armed, exactly as the right-held chord does.
     var onNewSession: (() -> Void)?
 
-    /// Picked from **One More Screenshot** — the same picture F3 and the back
+    /// Picked from **Take Screenshot** — the same picture F3 and the back
     /// button take.
     var onShot: (() -> Void)?
 
@@ -137,31 +137,29 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "d")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
-    /// ⌘ + the wheel: a dictation whose destination is a terminal that does not
-    /// exist yet. Spelled with the folder in it because that is the one thing
-    /// about it he cannot see beforehand — the window opens after he has spoken.
+    /// A dictation whose destination is a terminal that does not exist yet — it
+    /// opens in `~/workspace`, which the title no longer spells out: the folder
+    /// never varies, so it was a word the row spent on something already known,
+    /// where *what happens* is the half worth the width.
     ///
-    /// **Both routes are named, and the second is the one worth the width.** ⌘ is
-    /// a key, and the moment this gesture is most useful is the moment Victor is
-    /// across the room from the laptop with nothing but the mouse — which is what
-    /// the right-held chord is for. It went unwritten here for a day and he asked
-    /// for the gesture to be built, not knowing it already existed: a command
-    /// reachable two ways, with only the way that needs a keyboard written down,
-    /// is a command with a missing half.
+    /// **One route now, and it is the mouse's.** ⌘ + the wheel was the other, and
+    /// went on 2026-09-03 — the moment this gesture is most useful is the moment
+    /// Victor is across the room from the laptop with nothing but the mouse, and
+    /// a modifier claimed machine-wide for the whole time the app runs was a
+    /// steep price for a second way in that needs the keyboard anyway.
     ///
     /// `1s` distinguishes it from **Disconnect**, which is the same two buttons
     /// tapped rather than held — the same idiom `Cancel Dictation — hold 🛞 2s`
     /// already uses, and the only thing that separates the two readings of one
     /// chord.
-    private let newSession = NSMenuItem(title: "New Claude Code in ~/workspace", action: nil, keyEquivalent: "")
+    private let newSession = NSMenuItem(title: "Dictate to new Claude", action: nil, keyEquivalent: "")
     /// The shutter. Both routes are named: F3 works whenever there is a
     /// destination, the back button only while a dictation is running — which is
     /// also the only window in which it stops typing Return.
     /// The last dictation, again — see `AppDelegate.pasteLastDictation`. Greyed
     /// until there is one, like every other row that cannot act right now.
-    private let pasteLast = NSMenuItem(title: "Paste the Last Dictation — at the caret, and onto the clipboard",
-                                       action: nil, keyEquivalent: "p")
-    private let shot = NSMenuItem(title: "One More Screenshot", action: nil, keyEquivalent: "")
+    private let pasteLast = NSMenuItem(title: "Paste last prompt", action: nil, keyEquivalent: "p")
+    private let shot = NSMenuItem(title: "Take Screenshot", action: nil, keyEquivalent: "")
     /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
     /// happens inside Chrome, in a page this app cannot reach from a menu — but
     /// it is a gesture the relay takes over, it used to be advertised on the chip
@@ -200,8 +198,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// stop going to the terminal the header above still names. `⌨️` is the icon
     /// for the same reason it is the chip's label in this mode — the destination
     /// is *wherever the caret is*, which is the one thing the row has to say.
-    private let replaceWispr = NSMenuItem(title: "Replace Wispr — forward button dictates, pasted at the caret",
-                                          action: nil, keyEquivalent: "")
+    private let replaceWispr = NSMenuItem(title: "Replace WisprFlow", action: nil, keyEquivalent: "")
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
     /// browser — see `MessageLog`.
@@ -220,6 +217,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
                                         action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
+    /// **The app, named and dated, one row above Quit.** It carries the build
+    /// stamp Quit used to, and clicking it opens a small page with the repository
+    /// the code came from — the one fact about this app that is nowhere on the
+    /// machine it runs on.
+    private let about = NSMenuItem(title: "Victor's Walkie Talkie (\(StatusItem.buildStamp))",
+                                   action: nil, keyEquivalent: "")
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
     /// distinguish. Set from the same `setDestination` the header uses, so the
@@ -424,16 +427,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // **The build stamp moved onto About**, which is the row it was always
+        // describing: it is read once a session, when the question is "am I
+        // looking at what I just built?", and that is a question about the app
+        // rather than about quitting. Quit is left saying the one thing it does.
+        about.image = Self.emojiIcon("ℹ️")
+        about.action = #selector(aboutClicked)
+        about.target = self
+        menu.addItem(about)
+
         // No ⌘Q key equivalent: the app never becomes key, so the hint would
         // advertise a shortcut that does nothing outside the open menu.
-        //
-        // The build stamp rides on this row rather than taking a line of its own,
-        // the way Victor Addons does it: it is read once a session, when the
-        // question is "am I looking at what I just built?" — and that question is
-        // asked while reaching for Quit anyway, since the answer to "no" is to
-        // quit and relaunch.
-        let exit = NSMenuItem(title: "Quit — built \(Self.buildStamp)",
-                              action: #selector(exitClicked), keyEquivalent: "")
+        let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "")
         exit.target = self
         menu.addItem(exit)
 
@@ -449,7 +454,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            (newSession, newSession.title, "⌘ + 🛞, or ➡️ + 🛞 1s"),
+            (newSession, newSession.title, "➡️ + 🛞 1s"),
             (shot, shot.title, "⬇️ \(Self.whileDictating)"),
             (pickLegend, pickLegend.title, "⌘⇧ + ⬅️ \(Self.whileDictating)"),
         ]
@@ -564,7 +569,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // the model, and the id is what a comparison between recognisers is
         // written down against. It is parenthetical rather than a second dashed
         // clause so that the row still reads as `<engine> — <cost>`.
-        let name = whisperModel?().map { "Local Whisper (\($0))" } ?? "Local Whisper"
+        // **The bare model name, and nothing else.** `Local Whisper` named a
+        // category back when there were two recognisers to choose between; with
+        // one left, the category is the half that says nothing and the id is the
+        // half a comparison is written down against. The org prefix goes with it
+        // — `mlx-community/` is where the weights were downloaded from, not what
+        // is doing the listening.
+        let name = whisperModel?().map { $0.split(separator: "/").last.map(String.init) ?? $0 }
+            ?? "Local Whisper"
         if engineLoading {
             whisperItem.title = "\(name) — loading…"
         } else if let bytes = whisperFootprint?() {
@@ -596,7 +608,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         cancelDictation.isEnabled = recording
         // The one row that does not ask about a binding — it brings its own
         // destination. Only a dictation already running takes it away, and then
-        // only because ⌘ + the wheel would end that one rather than start this.
+        // only because the chord would end that one rather than start this.
         newSession.isEnabled = !recording
         // The same gate `plusOneShot` applies: a picture is worth taking when
         // there is somewhere for it to go.
@@ -743,6 +755,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func shotClicked() { onShot?() }
     @objc private func pasteLastClicked() { onPasteLast?() }
     @objc private func messageLogClicked() { MessageLog.openInBrowser() }
+
+    @objc private func aboutClicked() { AboutPage.openInBrowser() }
 
     private var destination: String?
 

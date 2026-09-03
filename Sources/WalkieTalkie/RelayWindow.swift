@@ -602,7 +602,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **The mark of a destination that does not exist yet, moved onto the row
     /// that reports the dictation.**
     ///
-    /// ⌘ + the wheel opens a session in `~/workspace` and the chip said so in a
+    /// The spawn chord opens a session in `~/workspace` and the chip said so in a
     /// title row of its own — Terminal's icon, ✨, and the folder. Victor's read,
     /// 2026-09-02: the folder is *always* `~/workspace` (that is the whole point
     /// of the gesture — nothing is inferred), the icon names an app he is not

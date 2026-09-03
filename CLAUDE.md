@@ -29,12 +29,11 @@ Current strings live in `RelayWindow.swift`:
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Connect Window` / `Disconnect` / `New Claude Code in ~/workspace` and their
+  `Connect Window` / `Disconnect` / `Dictate to new Claude` and their
   chords, which since 2026-09-02 ride a right-aligned column of their own, the
-  three dictation rows,
-  `Replace Wispr — forward button dictates, pasted at the caret`,
-  `One More Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
-  `Quit`, and the `Local Whisper` readout
+  three dictation rows, `Replace WisprFlow`,
+  `Take Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
+  `About`, `Quit`, and the model-name readout
 
 The first two are **not on screen at the moment**: `showsGestureHints` is off, so
 the rows are built and never shown. They still have to be English when the flag
@@ -2230,8 +2229,8 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `New Claude Code in ~/workspace — ⌘ + 🛞, or hold ➡️ + 🛞 1s`,
-`Cancel Dictation — hold 🛞 2s`, `One More Screenshot — F3, or the back
+that performs it — `Dictate to new Claude — hold ➡️ + 🛞 1s`,
+`Cancel Dictation — hold 🛞 2s`, `Take Screenshot — F3, or the back
 button while dictating`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
@@ -2245,8 +2244,8 @@ it could be written. A disabled row is the honest rendering of *this is somethin
 you do, not something you pick*.
 
 The two new commands are the same calls their gestures make, not quieter
-variants: `New Claude Code` is `startLocalRecording(spawn: true)`, and
-`One More Screenshot` is `plusOneShot` — the latter **after a 0.35s beat**,
+variants: `Dictate to new Claude` is `startLocalRecording(spawn: true)`, and
+`Take Screenshot` is `plusOneShot` — the latter **after a 0.35s beat**,
 because AppKit dismisses the menu and the screen redraws a frame or two later,
 so a capture fired on the click would photograph the menu that ordered it.
 
@@ -2421,16 +2420,17 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 |---|---|---|---|
 | `Connect Window` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
-| `New Claude Code in ~/workspace` | ✨ | `⌘ + 🛞, or ➡️ + 🛞 1s` | |
-| `Paste the Last Dictation` | 📋 | | ⌘⌃P |
+| `Dictate to new Claude` | ✨ | `➡️ + 🛞 1s` | |
+| `Paste last prompt` | 📋 | | ⌘⌃P |
 | — separator — | | | |
 | `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
 | `End Dictation` | `mic.slash` | `🛞` | ⌘⌃D |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` | |
-| `One More Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
+| `Take Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
 | `Pick an Element in Chrome` | ✋ | `⌘⇧ + ⬅️ @🎙️` | |
-| `Replace Wispr` | ⌨️ | the forward side button (see *Replace Wispr*) | |
+| `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) | |
 | `Message Log` | 📜 | | |
+| `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 
 **The line groups by what a row is *for*.** Above it, everything about a
 **destination** — point at one, let it go, make a new one, paste the last
@@ -2459,11 +2459,6 @@ same thing — splitting them across the two columns is what says they are
 alternatives. Modifier-less and harmless: the app is `.accessory` and never
 becomes key, so it can only fire while the menu is open; the global F3 is
 `HotkeyTap`'s as it always was.
-
-**⌘ cannot go in the key column, and that was asked.** `keyEquivalent` needs an
-actual key to hang modifiers off — a bare ⌘ beside a wheel is not one, and AppKit
-renders nothing for it. `⌘ + 🛞` stays in the chord column, which is right beside
-it anyway.
 
 **The back button is drawn `⬇️`**, joining ⬅️ and ➡️ rather than being spelled out
 as *the back button*. The arrows in this menu are already mouse buttons; the

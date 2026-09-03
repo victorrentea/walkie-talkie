@@ -328,7 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // than the row that documents it — including the chip's burst, which is
         // the only thing on screen that says it happened.
         hotkeys.onWheelUnbind = { [weak self] in self?.unbindTerminal() }
-        // The menu's copy of ⌘ + the wheel. The same call, so the window it opens
+        // The menu's copy of the spawn chord. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
             DispatchQueue.main.async { self?.startLocalRecording(spawn: true) }
@@ -1410,7 +1410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // when the panel resolves, not when the microphone opened, so the words
         // go where the relay is pointing when the sentence ends. A spawn did not
         // — `spawnPending` was set at the press and nothing took it back — so
-        // ⌘ + the wheel followed by the left-plus-wheel chord opened a new
+        // the spawn chord followed by the left-plus-wheel chord opened a new
         // session anyway and left the terminal he had just pointed at empty.
         //
         // The chord is Victor answering the same question with a destination
