@@ -154,16 +154,16 @@ async function resumeWhatWePaused() {
   // is still outstanding, or the next dictation would never pause anything.
   await chrome.storage.session.set({ engaged: false, pausedTabs: [] });
   if (!engaged) return;
-  for (const tabId of pausedTabs || []) {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId, allFrames: true },
-        func: resumeMarkedMedia,
-      });
-    } catch (e) {
-      console.log('[walkie-music] tab gone on resume', tabId, e.message);
-    }
-  }
+  // **All at once, unlike the pause.** Each `executeScript` is a round trip to
+  // another process, and awaited one after the other they add up to a delay
+  // Victor hears as the music lagging behind him. The pause can afford to be
+  // sequential — it is building the list it will resume from — but here the
+  // list is already known, so every tab gets its call in the same tick.
+  await Promise.all((pausedTabs || []).map((tabId) =>
+    chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: resumeMarkedMedia,
+    }).catch((e) => console.log('[walkie-music] tab gone on resume', tabId, e.message))));
   console.log('[walkie-music] resumed', (pausedTabs || []).length, 'tab(s)');
 }
 

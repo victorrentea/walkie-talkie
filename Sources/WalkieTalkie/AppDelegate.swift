@@ -691,11 +691,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
-        let recording = mic.stop()
 
+        // Ahead of `mic.stop()` for the reason `stopLocalRecording` gives: the
+        // engine teardown must not sit between Victor stopping and the music
+        // coming back.
         listening = false
         syncBorrowedGestures()
         overlay.setListening(false)
+
+        let recording = mic.stop()
 
         if let (wav, duration) = recording {
             try? FileManager.default.removeItem(at: wav)
@@ -752,11 +756,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if paste { overlay.setSpawnDestination(nil) }
         let app = localRecordingApp
         localRecordingApp = nil
-        let recording = mic.stop()
 
+        // **Before `mic.stop()`, deliberately.** Closing the input tears down an
+        // `AVAudioEngine` on this thread and that is not instant; with the
+        // resume edge behind it, the music came back a beat after Victor had
+        // stopped talking. Nothing here needs the microphone to be shut — the
+        // button is already up and the recording already disowned — so the edge
+        // that the extension, the beacon and the overlay are all waiting on goes
+        // out first, and the teardown happens after it.
         listening = false
         syncBorrowedGestures()
         overlay.setListening(false)
+
+        let recording = mic.stop()
 
         guard let (wav, duration) = recording else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
@@ -1099,13 +1111,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the beacon does rather than a flag of its own.
         publishBinding(terminal.target)
-        // The music is pausing for the same window and for the same reason: it
-        // is the span in which Victor is talking rather than using the machine.
-        // Hanging it here rather than off `listening` alone is deliberate — a
-        // dictation that is not being relayed anywhere (unbound, or forwarding
-        // unbound) is Victor talking into some other app, and silencing his music
-        // for that would be the relay reaching outside its own session.
-        music.setActive(live)
+        // **The music pauses for every dictation, and so reads `listening`, not
+        // `live`.** It hung off `live` until 2026-09-03, on the argument that an
+        // unbound dictation is Victor talking into some other app and none of the
+        // relay's business. That argument was about *where the words go*, and the
+        // music is not about where the words go — it is about the microphone
+        // being open. Unbound, forwarding unbound, Replace Wispr, a test
+        // dictation: in all of them he is speaking into this app's microphone
+        // with a track playing over it, which is the one thing the pause exists
+        // to stop. Same switch as the beacon, and for the same reason.
+        music.setActive(listening)
     }
 
     // MARK: - The bound terminal
