@@ -155,12 +155,11 @@ enum CaptureEffect: String, CaseIterable {
             dart.fillColor = NSColor.captureAccent.cgColor
             dart.strokeColor = NSColor.white.withAlphaComponent(0.9).cgColor
             dart.lineWidth = 2
-            // A glow, not just a fill — this is what keeps the dart legible
-            // over a bright window instead of blending into it.
-            dart.shadowColor = NSColor.captureAccent.cgColor
-            dart.shadowOpacity = 1.0
-            dart.shadowRadius = 14
-            dart.shadowOffset = .zero
+            // (2026-09-04, Victor's ask) No glow — a flat fill/stroke only.
+            // Also start fully invisible so the dart never sits there
+            // statically before its (jittered) animation begins; it should
+            // only ever be seen while already converging.
+            dart.opacity = 0
             dart.anchorPoint = .zero
             dart.bounds = CGRect(x: 0, y: -dartWidth / 2, width: dartLength, height: dartWidth)
             dart.position = start
@@ -185,12 +184,12 @@ enum CaptureEffect: String, CaseIterable {
             shrink.fromValue = 1.0
             shrink.toValue = 0.1
 
-            // (2026-09-04, Victor's ask) Starts partially visible (20%) and
-            // brightens to 50% — instead of invisible/80% — so each dart
-            // materializes rather than popping into existence, then holds
-            // at 50% for most of the flight and dims out at the end.
+            // (2026-09-04, Victor's ask) Starts fully invisible (0%) and
+            // brightens to 50% so the dart is only ever seen while it's
+            // already moving — never sitting there statically first — then
+            // holds at 50% for most of the flight and dims out at the end.
             let fade = CAKeyframeAnimation(keyPath: "opacity")
-            fade.values = [0.2, 0.5, 0.5, 0.0]
+            fade.values = [0.0, 0.5, 0.5, 0.0]
             fade.keyTimes = [0.0, 0.08, 0.8, 1.0]
 
             group.animations = [move, shrink, fade]
