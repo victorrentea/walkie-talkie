@@ -1772,8 +1772,26 @@ click 0.6s late at worst, and in practice the hand is off the button by then.
 - **Replace Wispr outranks all of it.** In that mode the forward button *is* the
   microphone, and its branch sits above this one in the tap.
 - **The same two-flag claim the wheel uses** (`claimMouse5Press`), because a hold
-  timer on the main queue and a release on the tap thread race for one press —
-  the bug that once ran both halves of a wheel press at the same instant.
+  timer and a release on the tap thread race for one press — the bug that once ran
+  both halves of a wheel press at the same instant.
+- **The hold runs on a queue of its own, not on `main`** (fixed 2026-09-04). It
+  was `DispatchQueue.main.asyncAfter`, and that is a dependency this gesture must
+  not have: the main queue is where the chip relayouts at 60 Hz, where `NSMenu`
+  runs its own tracking loop while the menu bar item is open, and where every
+  AppKit answer this app waits on lands. A verdict that arrives late is, from the
+  hand, indistinguishable from one that never arrives.
+
+**And every edge of this button is now written to the log**, which is the part
+that matters more than either fix. Reported 2026-09-04: *"it doesn't really work
+to keep that button hold down to start a new session"* — and the log had nothing
+at all about mouse 5 in the two hours around it, no press, no double click, no
+hold, while a synthetic press through the same code path worked first time. That
+left the one question every other explanation is downstream of — **did the event
+arrive?** — with no way to answer it. It is one line per press on a button pressed
+a few times an hour, and the release carries the duration in milliseconds and the
+verdict (`held 248ms (a click)`), because *"holding it does nothing"* has two
+readings — the press never reached the tap, or it reached it and was shorter than
+`mouse5HoldSeconds` — and they call for opposite fixes.
 
 It rides the menu beside the chord it duplicates: `Dictate to new Claude —
 ⬆️ 0.6s · ➡️ + 🛞 1s`. ⬆️ is the forward button, the pair of the ⬇️ the shutter
@@ -2049,10 +2067,12 @@ that sentence is the same five words every time.
   *he works in them by hand every day*, which is why they are the five. A folder
   that is not on disk is dropped rather than offered, since the launcher falls
   back to `$HOME` on a failed `cd` and that is the one destination nobody meant.
-- **Two seconds solid, then a second of fade** — his numbers. The fade is not
-  only a way out: something that vanishes on its own was never asking to be
-  answered, and a dictation is already running behind it. **A click still lands
-  during the fade**, so the window to answer is three seconds and not two —
+- **Three and a half seconds solid, then a second of fade** — his numbers, and
+  the first of them was two for half an hour: two is not long enough to read five
+  names, decide and travel to one while a sentence is already being spoken. The
+  fade is not only a way out: something that vanishes on its own was never asking
+  to be answered, and a dictation is already running behind it. **A click still
+  lands during the fade**, so the window to answer is four and a half seconds —
   nothing turns hit-testing off, and the panel is ordered out only once the
   animation has finished.
 - **It draws a surface, which is the one place it departs from *Nothing beside
@@ -2061,14 +2081,18 @@ that sentence is the same five words every time.
   edges to be told apart, and a target needs a ground to sit on. It is also the
   only thing this app puts near the cursor that does **not** follow it — it stays
   where the sentence started, so the hand can travel to it.
-- **Up and to the left of the pointer.** The chip hangs below-right
-  (`RelayWindow.anchorGap`), and a menu underneath a chip that is chasing the
-  same cursor cannot be clicked. Flipped right when the left edge would go off
-  screen, and clamped into the display he is actually on.
-- **After the opening picture, not before it.** Victor's ask, and the only order
-  that works anyway: `captureContext` blooms the red cursor mark out of those
-  exact pixels for half a second, and two things arriving at one point in one
-  frame read as one confused shape.
+- **Below and to the left of the pointer** — measured at 10pt on each axis. The
+  chip hangs below-*right* (`RelayWindow.anchorGap`), and a menu underneath a chip
+  chasing the same cursor cannot be clicked. It flips to the other side of the
+  pointer on either axis when the preferred one would hang off, and is then
+  clamped into the visible frame of the display the pointer is on: a menu that
+  opens near an edge opens there precisely when the hand is far from the middle.
+- **The instant the press lands**, not after the opening picture — *"be shown as
+  soon as possible"*. It moved up out of the end of `startLocalRecording` for a
+  reason that only shows on a cold model: everything below it can `return` and
+  wait seconds for the weights, and the menu was waiting with them, when its clock
+  is his reading time. The red cursor mark still blooms out of the pointer for
+  half a second, and the menu is now below-left of it rather than on it.
 - **Not an `NSMenu`.** `popUp` runs a nested tracking run loop, which would
   freeze the pulsing 🔴 and the chip's own cursor-following for as long as it is
   up, and it offers neither a timed dismissal nor a fade. The rows are drawn
@@ -2293,13 +2317,26 @@ is whoever the relay is pointed at when the microphone closes.*
 
 ## ⌘⌃P pastes the last dictation
 
-The last dictation that **went out** — its words, not the line the terminal got —
-onto the clipboard and pasted at the caret, from `⌘⌃P` or the menu row. `📸 ×2
-0:38`, the quoted selection and the picked selectors stay behind: that envelope is
-addressed to an agent, and this is for the commit message, the chat or the form
-where the same sentence is wanted a minute later. Saying it twice is worse than
-saying it once — the second take is never the same sentence, and it costs another
-model run.
+The last dictation that **went out**, onto the clipboard and pasted at the caret,
+from `⌘⌃P` or the menu row. Saying it twice is worse than saying it once — the
+second take is never the same sentence, and it costs another model run.
+
+**It is the whole line the terminal got, since 2026-09-04** — `📸 ×2 0:38`, the
+quoted selection, the picked selectors and the paths of the frames included.
+Victor: *"paste the whole text with all the image references and everything"*.
+
+It was the words alone until then, on the argument that the envelope is addressed
+to an agent and is noise in a commit message. The argument was about the wrong
+caret: where this lands is overwhelmingly **another agent** — a second session, a
+web chat, an editor's assistant — and there the screenshots and the highlight are
+the half that cannot be retyped, while a stray `📸 ×2` in a commit message is a
+word to delete. `commit` records `terminalLine(m)`, the same call
+`deliverToTerminal` and `spawnClaude` make, so what he pastes is byte for byte
+what the session received.
+
+**Replace Wispr still pastes the words**, and that is the rule rather than an
+exception to it: that mode builds no envelope, so the words *are* the whole
+message.
 
 Both halves are the feature: the clipboard keeps it so it can be pasted again,
 the ⌘V is so he does not have to think about the clipboard when the caret is
@@ -2704,11 +2741,36 @@ so that macOS and every cleaner tool may take them, so a page built from lines
 two days old will routinely name frames that are gone — and a broken-image box
 says nothing about why.
 
-**No CDN, no script, both palettes.** The page is opened off `file://`, where a
-remote stylesheet is a request that may not answer and a failed one leaves the
-log unreadable; the thumbnails are plain links, so there is nothing that needs
-JavaScript. Colours are tokens on `:root` with a `prefers-color-scheme: dark`
-override, because Victor works in dark all day.
+**No CDN, both palettes, and one inline script.** The page is opened off
+`file://`, where a remote stylesheet is a request that may not answer and a
+failed one leaves the log unreadable; nothing here is fetched. Colours are tokens
+on `:root` with a `prefers-color-scheme: dark` override, because Victor works in
+dark all day.
+
+**Every card has a Copy button, since 2026-09-04** — *"there should be a copy
+icon, visible, that would allow to copy the whole text for easy pasting"*. The
+page is read in order to *find* a sentence, and what happens next is that it gets
+pasted; until then that meant a drag-select across a card that also holds a
+timestamp, an app name and a block quote.
+
+- **It copies the whole message**, not the transcript alone: the words, then
+  `[selected: …]`, then the paths of the frames with what was in front of each.
+  Same reading, and the same day, as ⌘⌃P's change — what these words are pasted
+  into is usually another agent. `MessageLog.payload` assembles it, because the
+  outbox never carried the delivered line (`terminalLine` builds it at delivery
+  and keeps nothing).
+- **The payload rides in a hidden `<pre>`**, not in a `data-` attribute: an
+  attribute would need its quotes escaped too, and a dictation is arbitrary text.
+- **The script is the one bend in "no script", and the rule survives it.** That
+  rule is about the *network*; this is a dozen lines inline, delegated from
+  `document` rather than bound per card, and with JavaScript off the page still
+  shows every message minus a button.
+- **`document.execCommand` is the fallback and is not vestigial**: the Clipboard
+  API needs a secure context, `file://` is one in Chrome and is not guaranteed to
+  be everywhere, and the old select-and-copy trick has no such requirement.
+- **The clipboard glyph is drawn as an SVG**, not 📋 — it has to sit on a 12px
+  line beside a word and take the button's own ink in both palettes, which an
+  emoji does at whatever size and colour the font feels like.
 
 **A bad line is skipped, never thrown.** The file is appended to by a live
 process while the page reads it, and it has survived every schema this app has

@@ -215,6 +215,18 @@ enum MessageLog {
           border: 1px dashed var(--line); border-radius: 6px; padding: 8px 10px;
         }
         .empty { color: var(--dim); }
+        /* The copy button. `margin-left: auto` is what puts it at the right edge
+           of a head row whose other items are sized by their own text. */
+        .copy {
+          margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+          font: inherit; font-size: 12px; color: var(--dim);
+          background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+          padding: 3px 8px; cursor: pointer; line-height: 1;
+        }
+        .copy:hover { color: var(--ink); border-color: var(--dim); }
+        .copy.ok { color: var(--accent); border-color: var(--accent); }
+        .copy svg { width: 13px; height: 13px; flex: none; }
+        .payload { display: none; }
         </style>
         <div class="wrap">
         """
@@ -242,6 +254,7 @@ enum MessageLog {
         }
 
         out += "</div>\n"
+        out += copyScript + "\n"
         return out
     }
 
@@ -254,7 +267,19 @@ enum MessageLog {
         if !entry.kind.isEmpty, entry.kind != "dictation" {
             out += "<span class=\"kind\">\(esc(entry.kind))</span>"
         }
+        // **The copy button, and the whole message behind it.** The page is read
+        // to *find* a sentence, and what happens next is that it is pasted
+        // somewhere — which until now meant a drag-select across a card that also
+        // holds a timestamp, an app name and a block quote. Victor's ask,
+        // 2026-09-04: *"there should be a copy icon, visible, that would allow to
+        // copy the whole text for easy pasting"*.
+        out += "<button class=\"copy\" type=\"button\" title=\"Copy this message\">"
+        out += copyGlyph + "<span class=\"lbl\">Copy</span></button>"
         out += "</div>\n"
+        // The payload rides in a hidden element rather than in a `data-`
+        // attribute, so that `esc` is enough: an attribute would also need its
+        // quotes escaped, and a dictation is arbitrary text.
+        out += "<pre class=\"payload\">\(esc(payload(entry)))</pre>\n"
 
         if !entry.text.isEmpty {
             out += "<div class=\"text\">\(esc(entry.text))</div>\n"
@@ -290,6 +315,96 @@ enum MessageLog {
         out += "</div>\n"
         return out
     }
+
+    /// **What Copy puts on the clipboard: everything the card is carrying.**
+    ///
+    /// Not the transcript alone. The same day this button was asked for, ⌘⌃P was
+    /// changed to paste the whole delivered line, for the same reason — what
+    /// these words are pasted *into* is overwhelmingly another agent, and there
+    /// the highlight and the paths of the frames are the half that cannot be
+    /// retyped.
+    ///
+    /// It is assembled here rather than read back off the outbox because the
+    /// outbox never carried the assembled line: `AppDelegate.terminalLine` builds
+    /// it at delivery and keeps nothing. The shapes are deliberately the ones
+    /// that line uses, so a reader who has seen one recognises the other.
+    private static func payload(_ entry: Entry) -> String {
+        var parts: [String] = []
+        if !entry.text.isEmpty { parts.append(entry.text) }
+        if let selection = entry.selection, !selection.isEmpty {
+            parts.append("[selected: \(selection)]")
+        }
+        if !entry.shots.isEmpty {
+            let listed = entry.shots.map { path -> String in
+                let name = (path as NSString).lastPathComponent
+                if let source = entry.sources[name] { return "\(path) = \(source)" }
+                return path
+            }
+            parts.append("[the shots I took:\n \(listed.joined(separator: ";\n "))]")
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// A clipboard, drawn rather than an emoji: 📋 renders at whatever size and
+    /// colour Apple Color Emoji feels like, and this one has to sit on a 12px
+    /// line beside a word and take the button's own ink in both palettes.
+    private static let copyGlyph = """
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" \
+    stroke-linejoin="round" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" \
+    height="9.3" rx="1.6"/><path d="M10.8 5.2V3.1a1.6 1.6 0 0 0-1.6-1.6H4.1a1.6 \
+    1.6 0 0 0-1.6 1.6v6.2a1.6 1.6 0 0 0 1.6 1.6h1.1"/></svg>
+    """
+
+    /// **The one script on the page, and the rule it bends.** Everything else
+    /// here is deliberately static — no CDN, no framework — because the page is
+    /// opened off `file://`, where a request that does not answer leaves the log
+    /// unreadable. That argument is about the *network*, and this is a dozen
+    /// lines inline: nothing is fetched, and with JavaScript off the page still
+    /// shows every message, minus a button.
+    ///
+    /// **Delegated from `document`** rather than bound per card — there are
+    /// hundreds of these across a busy two days.
+    ///
+    /// **`execCommand` is the fallback and is not vestigial.** The Clipboard API
+    /// needs a secure context; a `file://` page is one in Chrome and is not
+    /// guaranteed to be in every browser this might be opened in. The old
+    /// select-and-copy trick has no such requirement.
+    private static let copyScript = """
+    <script>
+    document.addEventListener('click', function (event) {
+      var button = event.target.closest('.copy');
+      if (!button) return;
+      var card = button.closest('.msg');
+      var payload = card ? card.querySelector('.payload') : null;
+      var text = payload ? payload.textContent : '';
+      var label = button.querySelector('.lbl');
+      function done() {
+        button.classList.add('ok');
+        label.textContent = 'Copied';
+        setTimeout(function () {
+          button.classList.remove('ok');
+          label.textContent = 'Copy';
+        }, 1300);
+      }
+      function legacy() {
+        var box = document.createElement('textarea');
+        box.value = text;
+        box.setAttribute('readonly', '');
+        box.style.position = 'fixed';
+        box.style.opacity = '0';
+        document.body.appendChild(box);
+        box.select();
+        try { document.execCommand('copy'); done(); } catch (error) { /* nothing left to try */ }
+        document.body.removeChild(box);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, legacy);
+      } else {
+        legacy();
+      }
+    });
+    </script>
+    """
 
     /// Dictation is arbitrary text and so is a screen selection — the same reason
     /// `Outbox.send` never interpolates JSON. `&` goes first or it re-escapes the

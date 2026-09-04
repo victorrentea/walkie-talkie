@@ -646,7 +646,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
         // repeated here because this is the path that opens the microphone.
         guard hasDestination else { return }
-        if spawn { overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨") }
+        if spawn {
+            overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+            // **As early as the press allows** — Victor's ask, 2026-09-04, and it
+            // moved up here from the end of this method for a reason that only
+            // shows on a cold model: everything below can `return` and wait
+            // seconds for the weights, and the menu was waiting with it. Its
+            // clock is his reading time, which starts now, and the seconds a
+            // model load costs are seconds he could have been choosing in.
+            //
+            // It no longer waits for the opening picture either. The red cursor
+            // mark blooms out of the pointer for half a second and the menu is
+            // now *below-left* of it rather than on it, so the two no longer
+            // arrive in the same pixels.
+            offerSpawnFolders()
+        }
         // **The chip says the caret, and it outranks the bound terminal** — the
         // same slot, and the same argument, a spawn uses: for the length of this
         // sentence the words are not going where the chip has been saying they
@@ -706,13 +720,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setListening(true)
         publishShotCount()
         publishPicks()
-        // **Last, so the chip is already saying `✨ workspace` behind it.** The
-        // menu is an offer to change an answer that is already on screen, and it
-        // is put up after the opening picture rather than before it — Victor's
-        // ask, and also the only order that works: `captureContext` fires the red
-        // cursor mark at the pointer, and two things arriving in those pixels in
-        // the same frame read as one confused shape.
-        if spawn { offerSpawnFolders() }
     }
 
     /// **Ask which folder, without making it a question he has to answer.**
@@ -2531,12 +2538,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `session_end` is the exception: it is addressed to a watcher, and there
     /// is nothing for a terminal to do with "the user closed the relay".
-    /// What ⌘⌃P pastes: the words of the last dictation that actually went out.
+    /// What ⌘⌃P pastes: the last dictation that actually went out — **the whole
+    /// line the terminal got**, not just the words.
     ///
-    /// **The words, not the line the terminal got.** The delivered line carries
-    /// `📸 ×2 0:38`, the quoted selection and the picked selectors — an envelope
-    /// addressed to an agent, which is noise in a commit message or a chat. What
-    /// he is reaching for is the sentence he spoke.
+    /// It was the words alone until 2026-09-04, on the argument that the
+    /// envelope — `📸 ×2 0:38`, the quoted selection, the picked selectors, the
+    /// paths of the frames — is addressed to an agent and is noise in a commit
+    /// message. Victor reversed it: *"paste the whole text with all the image
+    /// references and everything"*. The argument was about the wrong caret. The
+    /// place this lands is overwhelmingly **another agent** — a second session, a
+    /// web chat, an editor's assistant — and there the screenshots and the
+    /// highlight are the half that cannot be retyped, while a stray `📸 ×2` in a
+    /// commit message is a word to delete.
+    ///
+    /// **Replace Wispr still pastes the words**, and that is not an exception to
+    /// the rule but the rule itself: that mode builds no envelope at all, so the
+    /// words *are* the whole message. `pasteText` sets this for it.
     ///
     /// Set at `commit`, so a cancelled prompt does not overwrite the last thing
     /// that did go out, and after the edit has been folded in — the corrected
@@ -2546,7 +2563,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func commit(_ m: Message) {
         if m.kind == "dictation", let text = m.text?.trimmingCharacters(in: .whitespacesAndNewlines),
            !text.isEmpty {
-            lastDictation = text
+            // The assembled line, and assembled from `m` — the same call
+            // `deliverToTerminal` and `spawnClaude` make, so what he pastes is
+            // byte for byte what the session received.
+            lastDictation = Self.terminalLine(m)
         }
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selections: m.extraSelections.map {

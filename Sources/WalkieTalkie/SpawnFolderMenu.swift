@@ -10,13 +10,13 @@ import AppKit
 /// `cd` into it. Victor's ask, 2026-09-04: *"vreau să-mi arăt un modal în care
 /// să pot să aleg în ce folder pornesc dictarea"*.
 ///
-/// So: right after the picture that opens a spawn dictation, a small menu
-/// appears **where the mouse was when he started talking**, naming the five
+/// So: the instant a spawn dictation opens, a small menu appears **below and to
+/// the left of where the mouse was when he started talking**, naming the five
 /// folders he actually starts sessions in. A click picks one and is remembered
 /// for that dictation; **no click means `~/workspace`**, exactly as before. It
-/// stays solid for two seconds and then fades out over a third, because a
-/// dictation is already running behind it and a menu that waits to be dismissed
-/// is a menu in the way of the sentence being spoken.
+/// stays solid for three and a half seconds and then fades out over one, because
+/// a dictation is already running behind it and a menu that waits to be
+/// dismissed is a menu in the way of the sentence being spoken.
 ///
 /// **It is a menu, not a tooltip, so it draws a surface.** *Nothing beside the
 /// pointer draws a window* is about the chip and the flashes — things that are
@@ -62,14 +62,17 @@ enum SpawnFolderMenu {
             .appendingPathComponent("workspace").path
     }
 
-    /// **Two seconds solid, then a second of fade.** Victor's numbers. The fade
-    /// is not only a way out — it is the part that says the menu was optional:
-    /// something that vanishes on its own was never asking to be answered.
+    /// **Three and a half seconds solid, then a second of fade.** Victor's
+    /// numbers — it was two, and two is not long enough to read five names,
+    /// decide and travel to one while a sentence is already being spoken. The
+    /// fade is not only a way out: it is the part that says the menu was
+    /// optional, since something that vanishes on its own was never asking to be
+    /// answered.
     ///
-    /// **A click still lands during the fade**, so the window to answer is three
-    /// seconds and not two. Nothing turns hit-testing off; the panel is ordered
+    /// **A click still lands during the fade**, so the window to answer is four
+    /// and a half seconds. Nothing turns hit-testing off; the panel is ordered
     /// out only once the animation has run to the end.
-    static let solidSeconds: TimeInterval = 2
+    static let solidSeconds: TimeInterval = 3.5
     static let fadeSeconds: TimeInterval = 1
 
     // MARK: - Geometry
@@ -219,23 +222,32 @@ enum SpawnFolderMenu {
         return root
     }
 
-    /// **Up and to the left of the pointer**, which is the one quadrant the chip
-    /// is never in: it hangs below-right (`RelayWindow.anchorGap`), and a menu
-    /// underneath a chip that is following the same cursor cannot be clicked.
-    /// Flipped to the right when there is no room on the left, and clamped into
-    /// the screen he is actually on rather than the main one.
+    /// **Down and to the left of the pointer** — Victor's ask, 2026-09-04. It is
+    /// also the one quadrant the chip is never in: that hangs below-*right*
+    /// (`RelayWindow.anchorGap`), and a menu underneath a chip following the
+    /// same cursor cannot be clicked.
+    ///
+    /// **It is always wholly on screen**, which is the half worth saying out
+    /// loud: a menu that opens near an edge opens there precisely when the hand
+    /// is far from the middle. So it flips to the other side of the pointer when
+    /// the preferred one would hang off, and is then clamped into the visible
+    /// frame of **the screen the pointer is on** rather than the main one. At a
+    /// corner the clamp can slide it under the pointer; a menu three rows from
+    /// the cursor is answerable and one half off the edge is not.
     private static func origin(for size: NSSize, at point: CGPoint) -> NSPoint {
         let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
             ?? NSScreen.main ?? NSScreen.screens.first
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: size.width, height: size.height)
 
+        // Right edge just left of the pointer; flipped right if it would hang off.
         var x = point.x - gap - size.width
         if x < visible.minX { x = point.x + gap }
         x = max(visible.minX, min(x, visible.maxX - size.width))
 
-        // The top edge sits a hair above the pointer, so the first row is at the
-        // height the hand is already at.
-        var y = point.y + gap - size.height
+        // Top edge just below the pointer; flipped above it if the rows would
+        // run off the bottom of the screen.
+        var y = point.y - gap - size.height
+        if y < visible.minY { y = point.y + gap }
         y = max(visible.minY, min(y, visible.maxY - size.height))
 
         return NSPoint(x: x, y: y)

@@ -353,8 +353,21 @@ final class HotkeyTap {
     /// so the wait is the shortest one that cannot be made by accident.
     private static let mouse5HoldSeconds: TimeInterval = 0.6
 
+    /// **The hold runs on a queue of its own, not on `main`.** It was
+    /// `DispatchQueue.main.asyncAfter` for a day and that is a dependency this
+    /// gesture must not have: the main queue is where the chip relayouts at
+    /// 60 Hz, where `NSMenu` runs its own tracking loop while the menu bar item
+    /// is open, and where every AppKit answer this app waits on lands. A verdict
+    /// on a button that has to be given 0.6 s after the press is not something to
+    /// put behind any of that — and a verdict that arrives late is
+    /// indistinguishable, from the hand, from one that never arrives.
+    private let holdQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.hold")
+
     /// The same two-flag dance the wheel does, for the same reason — a hold timer
-    /// on the main queue and a release on the tap thread racing for one press.
+    /// and a release on the tap thread racing for one press.
+    /// When the current press went down, for the log line at its release.
+    private var mouse5PressedAt: CFTimeInterval = 0
+
     private var mouse5Down = false
     private var mouse5Armed = false
     private var mouse5Hold: DispatchWorkItem?
@@ -556,6 +569,31 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return nil
             }
 
+            // **Every forward-button edge this tap sees, written down.**
+            //
+            // Reported 2026-09-04: holding it did not open a session. The log had
+            // nothing at all about mouse 5 in the two hours around it — no press,
+            // no double click, no hold — while a synthetic press through the same
+            // code path worked first time. That is the one diagnosis this app
+            // could not make: *did the event arrive?* is the question every other
+            // explanation is downstream of, and nothing was recording the answer.
+            // It is one line per press on a button pressed a few times an hour.
+            if button == MOUSE_BUTTON_5 {
+                if type == .otherMouseDown {
+                    mouse5PressedAt = CACurrentMediaTime()
+                    Log.info("🖱️ mouse 5 down — bare=\(bare) replaceWispr=\(replaceWispr)")
+                } else {
+                    // **The duration is the whole diagnosis.** "Holding it does
+                    // nothing" has two readings — the press never reached this
+                    // tap, or it reached it and was shorter than
+                    // `mouse5HoldSeconds` — and they call for opposite fixes. A
+                    // number in milliseconds tells them apart on the first press
+                    // after the report, which nothing else here could.
+                    let ms = Int((CACurrentMediaTime() - mouse5PressedAt) * 1000)
+                    Log.info("🖱️ mouse 5 up — held \(ms)ms (\(ms >= Int(Self.mouse5HoldSeconds * 1000) ? "a hold" : "a click"))")
+                }
+            }
+
             // **The forward button says two things, and the press is taken away
             // from the machine until it is known which.**
             //
@@ -628,7 +666,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
                     }
                     mouse5Hold = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.mouse5HoldSeconds, execute: work)
+                    holdQueue.asyncAfter(deadline: .now() + Self.mouse5HoldSeconds, execute: work)
                     return nil
                 }
             }
