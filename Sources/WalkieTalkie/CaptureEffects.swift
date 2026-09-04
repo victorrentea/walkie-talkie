@@ -128,8 +128,10 @@ enum CaptureEffect: String, CaseIterable {
     /// actually starts rather than assigned to it.
     private static func playSpikes(into root: CALayer, target: CGPoint, size: CGSize, speed: Double = 1.0) {
         let count = 52
-        let duration: CFTimeInterval = 0.95 * speed
-        let jitter: Double = 0.25 * speed
+        // (2026-09-04, Victor's ask) 1.2x faster than the previous baseline —
+        // the caller's `speed` multiplier still applies on top of that.
+        let duration: CFTimeInterval = (0.95 / 1.2) * speed
+        let jitter: Double = (0.25 / 1.2) * speed
         let now = CACurrentMediaTime()
 
         for _ in 0..<count {
@@ -183,12 +185,13 @@ enum CaptureEffect: String, CaseIterable {
             shrink.fromValue = 1.0
             shrink.toValue = 0.1
 
-            // Full brightness for most of the flight — only the last fifth
-            // dims, right as it reaches the point, so it never looks like it
-            // is guttering out along the way.
+            // (2026-09-04, Victor's ask) A brief fade-in from invisible up to
+            // 80% opacity — instead of snapping to full brightness — so each
+            // dart materializes rather than popping into existence, then
+            // holds at 80% for most of the flight and dims out at the end.
             let fade = CAKeyframeAnimation(keyPath: "opacity")
-            fade.values = [1.0, 1.0, 0.0]
-            fade.keyTimes = [0.0, 0.8, 1.0]
+            fade.values = [0.0, 0.8, 0.8, 0.0]
+            fade.keyTimes = [0.0, 0.08, 0.8, 1.0]
 
             group.animations = [move, shrink, fade]
             dart.add(group, forKey: "converge")
