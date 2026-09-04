@@ -118,13 +118,13 @@ enum CaptureFlash {
     ///
     /// `cycleMarker` (2026-09-04, Victor's ask): a live A/B/C playtest of the
     /// two `CaptureEffects` prototypes he's been tuning this session (spikes,
-    /// tap ripple) against the classic red reticle — every real dictation
-    /// start round-robins through all three so he can compare them in actual
-    /// daily use, not just the demo harness, and pick a favourite next week.
-    /// Only the true dictation-start call (`captureContext`) opts in; the
-    /// mid-dictation "one more shot" marker (`plusOneShot`) always stays the
-    /// plain reticle, since that one is a deliberate, separate gesture, not
-    /// the moment being playtested.
+    /// tap ripple) against the classic red reticle — every real capture
+    /// marker round-robins through all three so he can compare them in
+    /// actual daily use, not just the demo harness, and pick a favourite next
+    /// week. Both callers opt in — the dictation-start call (`captureContext`)
+    /// and the mid-dictation "one more shot" call (`plusOneShot`) — sharing
+    /// one rotation index, so the sequence keeps advancing across both kinds
+    /// of capture rather than each restarting its own cycle.
     ///
     /// Synchronous when already on the main thread. Callers use this *before*
     /// their slow work (AX probe, screencapture) precisely so the panel is on

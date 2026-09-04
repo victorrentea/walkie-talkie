@@ -2231,7 +2231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let source = WindowContext.describe()
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
-        CaptureFlash.announce(cursor: cursor)
+        CaptureFlash.announce(cursor: cursor, cycleMarker: true)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
