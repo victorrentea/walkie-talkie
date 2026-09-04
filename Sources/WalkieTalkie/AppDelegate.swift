@@ -183,6 +183,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// purpose those gates have.
     private var spawnPending = false
 
+    /// **Which folder that new session opens in, if he said.** Nil is the whole
+    /// of the old behaviour — `spawnDirectory`, i.e. `~/workspace`.
+    ///
+    /// Set by a click on `SpawnFolderMenu`, which is up for the first three
+    /// seconds of a spawn dictation, and read exactly once: `send` moves it onto
+    /// the `Message` beside `spawn` itself and clears it, for that flag's reason
+    /// — the panel holds a prompt for seconds, and the next dictation may have
+    /// started by the time this one is delivered.
+    private var spawnFolder: String?
+
     /// **Replace Wispr — the relay as a way to type, not a way to talk to an
     /// agent.** Ticked in the menu, the forward side button opens the microphone
     /// and closes it, and what was said is pasted at the caret: no outbox line,
@@ -271,6 +281,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// because the two are seconds apart — the panel holds every prompt — and
         /// the next dictation may have started by then.
         var spawn: Bool = false
+        /// Where that terminal opens. Carried for `spawn`'s reason and not read
+        /// off `spawnFolder` at delivery: the menu that sets it is long gone by
+        /// then, and a second dictation may have chosen differently since.
+        var directory: String = AppDelegate.spawnDirectory
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -443,6 +457,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.send(kind: "dictation", text: text, app: "test")
             }
         }
+        // The folder menu on its own — the one stretch of the spawn gesture no
+        // fabricated transcript passes through. `spawnPending` is armed with it,
+        // since the pick is refused without it and refusing is exactly what is
+        // being checked here.
+        picker.onTestSpawnFolders = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.spawnPending = true
+                self.offerSpawnFolders()
+            }
+        }
         picker.onTestReplaceWispr = { [weak self] on in
             DispatchQueue.main.async { self?.setReplaceWispr(on, fromMenu: false) }
         }
@@ -613,6 +638,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it *is* the answer for a spawn, and `captureContext` a few lines down
         // asks the same question about the screenshot it is deciding to take.
         spawnPending = spawn
+        // A folder chosen for a previous sentence must never ride this one: the
+        // menu is offered again below, and not answering it means `~/workspace`.
+        spawnFolder = nil
         pasteMode = paste
         // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
@@ -678,6 +706,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setListening(true)
         publishShotCount()
         publishPicks()
+        // **Last, so the chip is already saying `✨ workspace` behind it.** The
+        // menu is an offer to change an answer that is already on screen, and it
+        // is put up after the opening picture rather than before it — Victor's
+        // ask, and also the only order that works: `captureContext` fires the red
+        // cursor mark at the pointer, and two things arriving in those pixels in
+        // the same frame read as one confused shape.
+        if spawn { offerSpawnFolders() }
+    }
+
+    /// **Ask which folder, without making it a question he has to answer.**
+    ///
+    /// The menu appears where the mouse was when he started talking, names the
+    /// five repos he starts sessions in, and takes itself off screen three
+    /// seconds later. Not answering it is the ordinary case and costs nothing:
+    /// the spawn opens in `~/workspace`, which is what it has always done.
+    ///
+    /// **The pick is only taken while the spawn is still pending.** The menu
+    /// outlives short sentences — three seconds is longer than some dictations —
+    /// and `send` consumes the destination on its way onto the `Message`. A click
+    /// after that belongs to nothing: the words are already in flight, and
+    /// silently moving a folder under them would be worse than ignoring it.
+    private func offerSpawnFolders() {
+        SpawnFolderMenu.show(at: NSEvent.mouseLocation) { [weak self] choice in
+            guard let self = self, self.spawnPending else { return }
+            self.spawnFolder = choice.path
+            self.overlay.setSpawnDestination("✨ \(choice.name)", mark: "✨")
+            Log.info("✨ spawn folder chosen — \(choice.path)")
+        }
     }
 
     /// End the open dictation and throw it away — no decode, nothing delivered.
@@ -1529,7 +1585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: Self.spawnDirectory)
+            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory)
             DispatchQueue.main.async {
                 self.clearSpawn()
                 switch outcome {
@@ -1564,52 +1620,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the bind animation played without the claim behind it; now the claim is
     /// true, and the chip names the session that just opened.
     ///
-    /// **1.25s**, because `do script` returns as soon as Terminal has a window:
-    /// the shell is still starting, `claude` has not drawn a frame, and a picture
-    /// taken then is a picture of an empty prompt. Late enough to catch the
-    /// session, early enough to still be about the gesture — and it is what the
-    /// bind needs too, since the label comes from the process on that tty and
-    /// there is not one yet at `do script`'s return. **It was 2.5s** and the wait
-    /// read as the app having missed the gesture entirely; halving it keeps the
-    /// flight tied to the press that caused it.
+    /// **The flight runs backwards, and starts when the window is on screen.**
+    /// Both on Victor's ask, 2026-09-04: *"the animation should be backwards,
+    /// from the mouse going to the terminal, and should start as soon as the
+    /// terminal window is displayed. Faster a bit."*
+    ///
+    /// Backwards is the honest direction here. A bind is *that window is now this
+    /// chip* — he pointed at something and the chip is the answer. A spawn is the
+    /// reverse sentence: the words are already spoken, and what he does not know
+    /// is **where they went**. A rectangle leaving the pointer and arriving on a
+    /// window he has not looked at yet is a direction to look in; the same
+    /// rectangle flying the other way is an answer to a question nobody asked.
+    ///
+    /// **It used to wait a flat 1.25s** — `do script` returns as soon as Terminal
+    /// has a window, so the shell is still starting and a picture taken then is a
+    /// picture of nothing. A fixed beat is the wrong instrument for that: it is
+    /// too long when the window is up in 300ms and too short when the machine is
+    /// busy. So the window is polled for instead and the flight goes the moment
+    /// it exists, which is also the moment it has finished being tiled.
+    ///
+    /// **The bind is made after the flight is launched, not before.** It needs
+    /// the process on that tty and there may not be one yet; waiting for it is
+    /// what put the flight a second late. The chip is renamed when the answer
+    /// comes, which lands under the flight rather than ahead of it — and in this
+    /// direction the chip is where the rectangle *leaves* from, so nothing is
+    /// waiting on the label.
     private func adoptSpawnedWindow(tty: String) {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.25) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            // Off the main thread: the bind is `osascript` and `ps` subprocesses
-            // all the way down, like every other question this app asks Terminal.
-            //
-            // A window this app opened a second ago that Terminal will not
-            // name is a bind that cannot be made — but the sentence still landed
-            // there, so the flight is still worth playing on its own.
-            let bound = self.terminal.bind(tty: tty)
-            guard let frame = bound?.sourceFrame ?? TerminalBinding.terminalWindowFrame(tty: tty) else {
-                Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) has no frame — no flight")
-                return
+            // Off the main thread: this is `osascript` and `ps` subprocesses all
+            // the way down, like every other question this app asks Terminal.
+            var frame: CGRect?
+            let deadline = Date().addingTimeInterval(Self.spawnWindowWait)
+            while Date() < deadline {
+                if let found = TerminalBinding.terminalWindowFrame(tty: tty) { frame = found; break }
+                Thread.sleep(forTimeInterval: 0.08)
             }
-            DispatchQueue.main.async {
-                // Same reason ⌘⌃B wakes it: macOS hides the pointer while he
-                // types, and a flight that shrinks onto a hidden chip lands on
-                // empty screen.
-                self.overlay.wakePointer()
-                // The chip is set first and the rectangle flies into it, exactly
-                // as ⌘⌃B does it: the flight has to have something to land on,
-                // and the window that was captured *is* that label.
-                if let bound = bound { self.showBound(bound) }
-                BindFlight.fly(from: frame, to: { [weak self] in
-                    self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
-                })
+            if let frame = frame {
+                DispatchQueue.main.async {
+                    // Same reason ⌘⌃B wakes it: macOS hides the pointer while he
+                    // types, and a flight that leaves a hidden chip leaves from
+                    // empty screen.
+                    self.overlay.wakePointer()
+                    BindFlight.fly(from: frame, to: { [weak self] in
+                        self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                    }, seconds: Self.spawnFlightSeconds, reversed: true)
+                }
+            } else {
+                Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) never appeared — no flight")
             }
         }
+        // **The bind keeps the beat it always had, on a queue of its own.**
+        // Asking for it the instant the window exists does not make the answer
+        // come any sooner — it waits on `claude` appearing as the foreground
+        // process either way — and measured, asking early made it *later*: 6s
+        // against the 3s the old fixed wait produced, which is 3s more of the
+        // chip naming the session the words did **not** go to. So the flight is
+        // early and the label is not: the two were only ever sequential because
+        // the flight used to need the chip to aim at, and flying the other way
+        // it does not.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.25) { [weak self] in
+            guard let self = self else { return }
+            // A window this app opened that Terminal will not name is a bind that
+            // cannot be made — but the sentence still landed there, so the flight
+            // is still worth playing on its own.
+            let bound = self.terminal.bind(tty: tty)
+            DispatchQueue.main.async { if let bound = bound { self.showBound(bound) } }
+        }
     }
+
+    /// How long to keep asking Terminal for the new window before giving up on
+    /// the flight. Generous, because it costs nothing when the window is up in
+    /// 300ms — the loop exits on the first answer, not on the clock.
+    private static let spawnWindowWait: TimeInterval = 4
+
+    /// **A shorter second.** The bind's flight is the answer to a press and is
+    /// watched; this one plays while the eye is still travelling to a window that
+    /// has just appeared somewhere else, and at a full second it was still going
+    /// when he got there.
+    private static let spawnFlightSeconds: CFTimeInterval = 0.7
 
     /// The dictation that was going to open a terminal is over — delivered,
     /// cancelled, or never transcribed. Main thread only: it draws.
     private func clearSpawn() {
         spawnPending = false
+        spawnFolder = nil
+        // It is normally long gone — three seconds against a sentence — but a
+        // dictation cancelled inside those three seconds must not leave a menu
+        // on screen offering a folder to a session nobody is going to open.
+        SpawnFolderMenu.hide()
         overlay.setSpawnDestination(nil)
     }
 
-    /// **Always `~/workspace`, and nothing is inferred.** Victor's call, and the
+    /// **The default, and nothing is inferred.** Victor's call, and the
     /// three reasons line up behind it: it is where he starts every session by
     /// hand, so it is the one folder Claude Code already trusts — a spawn into a
     /// sub-repo stops on the "do you trust this folder" question instead of
@@ -1621,6 +1724,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// front. It was written, and it is what surfaced the trust prompt: an answer
     /// that is right four times out of five is worse here than one that is fixed,
     /// because the fifth is only discovered after the sentence is spoken.
+    ///
+    /// **Since 2026-09-04 it can be overridden, but only by him saying so**, in
+    /// the three seconds `SpawnFolderMenu` is on screen. That does not reopen the
+    /// argument above: the alternative it beat was *guessing*, and a click is not
+    /// a guess. Every folder on that menu is one Claude Code already trusts, so
+    /// the failure this constant exists to prevent cannot happen there either.
     private static let spawnDirectory = FileManager.default
         .homeDirectoryForCurrentUser.appendingPathComponent("workspace").path
 
@@ -2285,7 +2394,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // spawn consumed there would open a session holding nothing but pictures
         // and leave the words that were still being spoken with nowhere to go.
         let spawn = spawnPending && kind == "dictation"
-        if kind == "dictation" { spawnPending = false }
+        // Taken and cleared in the same breath as the flag it belongs to — from
+        // here the folder travels on the `Message`. Nil is the default it has
+        // always had, so a dictation that never saw the menu is unchanged.
+        let directory = spawnFolder ?? Self.spawnDirectory
+        if kind == "dictation" { spawnPending = false; spawnFolder = nil }
         guard isBound || spawn else {
             Log.info("unbound — dropped \(kind)")
             // Dropped, not deferred: nothing this dictation gathered has anywhere
@@ -2339,7 +2452,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks, spawn: spawn)
+                              app: app, elements: picks, spawn: spawn,
+                              directory: directory)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.

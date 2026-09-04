@@ -124,6 +124,15 @@ final class ElementPicker {
     var onTestDictation: ((String) -> Void)?
     /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
     var onTestSpawn: ((String) -> Void)?
+    /// `POST /test/spawn-folders` — put the folder menu up on its own.
+    ///
+    /// It cannot ride `/test/spawn`, which enters *below* the microphone with a
+    /// finished transcript: the menu belongs to the three seconds after a spawn
+    /// dictation opens, and that is a stretch of time no fabricated transcript
+    /// passes through. Without this the menu is reachable only by holding a
+    /// mouse button — so its geometry, its fade and the fact that a row can be
+    /// clicked at all are unverifiable at a desk.
+    var onTestSpawnFolders: (() -> Void)?
     /// `POST /test/replace-wispr` — turn the mode on or off from a script. The
     /// mode is otherwise reachable only by clicking a menu row, which is the one
     /// input nothing at a desk can produce; without this, the whole
@@ -303,6 +312,12 @@ final class ElementPicker {
             }
             onTestSpawn?(text)
             respond(conn, 200, ["ok": true, "text": text])
+
+        // The three seconds of that gesture nothing else can reach — see
+        // `onTestSpawnFolders`.
+        case ("POST", "/test/spawn-folders"):
+            onTestSpawnFolders?()
+            respond(conn, 200, ["ok": true, "shown": true])
 
         case ("POST", "/test/dictation"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]

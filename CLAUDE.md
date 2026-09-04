@@ -517,6 +517,7 @@ port scheme for a caller to guess between, and buys nothing.
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
 | `POST /test/spawn` | the same for ⌘ + the wheel — opens the window and starts the session |
+| `POST /test/spawn-folders` | put the folder menu up on its own — the three seconds of that gesture no fabricated transcript passes through |
 | `POST /test/replace-wispr` | `{"on": true}` — the mode behind the forward button, otherwise reachable only from the menu |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero to count from |
 | `GET /engine` | which model is loaded, and whether it is ready |
@@ -1703,7 +1704,9 @@ Until 2026-08-29 the relay took **mouse 5** — the same button the dictation ap
 it then depended on used for push-to-talk — so every dictation began with the
 question of which of the two was armed. Victor's call: mouse 5 goes back
 untouched (only a *double* click still means anything to this app: bind), and the
-relay drives `MicRecorder` from the **wheel**.
+relay drives `MicRecorder` from the **wheel**. **A 0.6s hold on it means a new
+session, since 2026-09-04** — see below; a plain click is still nobody's, and is
+handed back.
 
 **Replace Wispr takes it back, and only while the mode is ticked** — see that
 section. The forward button is then the microphone for a dictation that goes to
@@ -1722,6 +1725,7 @@ held. The third is a chord with the left button.**
 | anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
 | bound, any state | **right button down, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
 | anywhere, any state | **right button down, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
+| any state | the **forward side button held 0.6s** | the same thing again, with one button and no chord |
 | nothing bound, no chord | click | passed straight through |
 
 **The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
@@ -1734,6 +1738,47 @@ the chord passes `false`. His argument, and it is the whole of it: letting go
 already has two routes that mean nothing else — the right-held chord, and the
 menu's Disconnect. A toggle earns its keep on a key with no off switch; it is a
 trap on a gesture that has two.
+
+### The forward button, held, is the third way to a new session (2026-09-04)
+
+⌘ + the wheel needs a key; the right chord needs two buttons in order. Victor
+asked for one that needs neither — **hold the forward side button for 0.6s and a
+dictation opens at a session that does not exist yet**, the same
+`onSpawnToggle` the chord's hold calls, ending the same way whichever gesture
+opened the microphone.
+
+**The press is taken away from the machine while it is being judged, and given
+back if it turns out to be a click.** He asked how long a hold could last before
+something downstream took the button over; the honest answer is *none* — a
+push-to-talk fires at the press, and waiting is exactly what hands it over. So
+`HotkeyTap` swallows the press, and `replayMouse5Click()` posts it again at the
+HID tap if the button comes up before the timer. From downstream that is the same
+click 0.6s late at worst, and in practice the hand is off the button by then.
+
+- **What cannot be given back is a *hold*.** Anything downstream that reads a long
+  press on this button now sees a click. That is the price of the gesture, and it
+  is deliberate; `mouse5HoldSeconds` and the branch that swallows are the one
+  place to change it.
+- **The replay is tagged** (`replayTag`, "WALK", in the event source's user data)
+  and recognised at the top of the tap. Without that, the posted press is judged
+  as a fresh one, arms another hold and is swallowed again — the gesture eating
+  itself.
+- **0.6s: longer than a click, shorter than the wheel chords' second.** Those
+  have a *second reading* to be told apart from; this one has only a click, so
+  the wait is the shortest that cannot be made by accident.
+- **The double click still binds**, and it comes first — a second press inside
+  the interval cancels the hold rather than arming a new one, and is not
+  replayed, because that one is ours.
+- **Replace Wispr outranks all of it.** In that mode the forward button *is* the
+  microphone, and its branch sits above this one in the tap.
+- **The same two-flag claim the wheel uses** (`claimMouse5Press`), because a hold
+  timer on the main queue and a release on the tap thread race for one press —
+  the bug that once ran both halves of a wheel press at the same instant.
+
+It rides the menu beside the chord it duplicates: `Dictate to new Claude —
+⬆️ 0.6s · ➡️ + 🛞 1s`. ⬆️ is the forward button, the pair of the ⬇️ the shutter
+row already draws for the back one, and the duration is what tells it from the
+click this app otherwise hands straight back.
 
 **Keeping the wheel down turns the same chord into a dictation**, since the same
 day. Press and let go binds; hold the wheel a further second
@@ -1966,11 +2011,12 @@ is handed nothing but a path this app generated, and the shell reads the words
 from a file with `"$(cat …)"`. Measured with a prompt containing all four: it
 arrives byte-identical.
 
-**The folder is always `~/workspace`, and nothing is inferred.** Victor's call,
-and three reasons line up behind it: it is where he starts every session by hand,
-so it is the one folder Claude Code already trusts; every repo he has is a folder
-inside it, so the agent can still be told which one; and a destination that never
-changes is one he does not have to check before he starts talking.
+**The folder is `~/workspace` unless he says otherwise, and nothing is
+inferred.** Victor's call, and three reasons line up behind it: it is where he
+starts every session by hand, so it is the one folder Claude Code already trusts;
+every repo he has is a folder inside it, so the agent can still be told which
+one; and a destination that never changes is one he does not have to check before
+he starts talking.
 
 Resolving it — bound target, else the terminal in front, else `~/workspace` — was
 written first and is what surfaced the trust prompt: spawned into
@@ -1978,6 +2024,66 @@ written first and is what surfaced the trust prompt: spawned into
 instead of working, because he has only ever started it from the parent. An
 answer that is right four times in five is worse here than a fixed one, since the
 fifth is only discovered after the sentence has been spoken.
+
+**Saying otherwise is a click, and only ever a click** — see *The folder menu*
+below. That does not reopen the argument above, which is about *guessing*: what
+beat the fixed answer was inference, and a folder he pointed at is not inferred.
+
+### The folder menu (2026-09-04)
+
+**Three seconds after a spawn dictation opens, a small menu sits where the mouse
+was when he started talking, naming the five repos he starts sessions in.** A
+click on one is where that session opens; not clicking is `~/workspace`, exactly
+as before. `SpawnFolderMenu.swift`, put up by `AppDelegate.offerSpawnFolders`.
+
+Victor's ask: *"vreau să-mi arăt un modal în care să pot să aleg în ce folder
+pornesc dictarea"*. The fixed destination costs the first sentence of every new
+session — said out loud, to name the repo, so the agent can `cd` into it — and
+that sentence is the same five words every time.
+
+- **The five are hardcoded, and the trust prompt does not reach them.**
+  `~/workspace` holds ~150 directories, nearly all of them course material, so a
+  listing is not a menu. `victor-macos-addons`, `training-assistant`,
+  `walkie-talkie`, `victor-vsc`, `petclinic` — checked, not assumed: all five
+  carry `hasTrustDialogAccepted` in `~/.claude.json`, which is the same fact as
+  *he works in them by hand every day*, which is why they are the five. A folder
+  that is not on disk is dropped rather than offered, since the launcher falls
+  back to `$HOME` on a failed `cd` and that is the one destination nobody meant.
+- **Two seconds solid, then a second of fade** — his numbers. The fade is not
+  only a way out: something that vanishes on its own was never asking to be
+  answered, and a dictation is already running behind it. **A click still lands
+  during the fade**, so the window to answer is three seconds and not two —
+  nothing turns hit-testing off, and the panel is ordered out only once the
+  animation has finished.
+- **It draws a surface, which is the one place it departs from *Nothing beside
+  the pointer draws a window*.** That rule is about the chip and the flashes,
+  which are read and never touched. This one has to be *aimed at*: rows need
+  edges to be told apart, and a target needs a ground to sit on. It is also the
+  only thing this app puts near the cursor that does **not** follow it — it stays
+  where the sentence started, so the hand can travel to it.
+- **Up and to the left of the pointer.** The chip hangs below-right
+  (`RelayWindow.anchorGap`), and a menu underneath a chip that is chasing the
+  same cursor cannot be clicked. Flipped right when the left edge would go off
+  screen, and clamped into the display he is actually on.
+- **After the opening picture, not before it.** Victor's ask, and the only order
+  that works anyway: `captureContext` blooms the red cursor mark out of those
+  exact pixels for half a second, and two things arriving at one point in one
+  frame read as one confused shape.
+- **Not an `NSMenu`.** `popUp` runs a nested tracking run loop, which would
+  freeze the pulsing 🔴 and the chip's own cursor-following for as long as it is
+  up, and it offers neither a timed dismissal nor a fade. The rows are drawn
+  `NSView`s for the reason `PillButton` and the ✕ are: this panel never becomes
+  key, and standard controls in a non-activating panel look permanently disabled
+  and eat the first click. `acceptsFirstMouse` is what makes that first click
+  count — the app is `.accessory` and never active, so *every* click is one.
+- **The choice rides the `Message`**, like `spawn` itself and for its reason: the
+  panel holds a prompt for seconds and the next dictation may have started by
+  then. `send` moves `spawnFolder` onto `Message.directory` and clears it, and a
+  pick arriving after that is refused — the words are already in flight, and
+  moving a folder under them silently is worse than ignoring a late click.
+- **The chip says which folder**, `✨ petclinic` in the slot that said
+  `✨ workspace` a moment earlier. It is the same state, not a new one, so
+  `docs/overlay-states.html` is unaffected.
 
 **The window flies into the chip, 2.5s after it opens** — the same `BindFlight`
 every bind plays (`AppDelegate.flySpawnedWindow`). A spawn is the one destination
@@ -2070,7 +2176,12 @@ wheel's.
 
 `POST /test/spawn` is the route that exercises all of it from a desk, and it
 needs one of its own because `/test/dictation` is gated on a binding — the one
-condition this gesture is defined by not needing.
+condition this gesture is defined by not needing. `POST /test/spawn-folders`
+is the second half of that: `/test/spawn` enters *below* the microphone with a
+finished transcript, and the folder menu belongs to the three seconds after a
+dictation opens — a stretch no fabricated transcript passes through, so without
+its own route the menu's geometry, its fade and the fact that a row can be
+clicked at all are unverifiable at a desk.
 
 ## Replace Wispr: the relay as a way to type
 
@@ -2254,7 +2365,7 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `Dictate to new Claude — hold ➡️ + 🛞 1s`,
+that performs it — `Dictate to new Claude — ⬆️ 0.6s · ➡️ + 🛞 1s`,
 `Cancel Dictation — hold 🛞 2s`, `Take Screenshot — F3, or the back
 button while dictating`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
@@ -2445,7 +2556,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 |---|---|---|---|
 | `Connect Window` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
-| `Dictate to new Claude` | ✨ | `➡️ + 🛞 1s` | |
+| `Dictate to new Claude` | ✨ | `⬆️ 0.6s · ➡️ + 🛞 1s` | |
 | `Paste last prompt` | 📋 | | ⌘⌃P |
 | — separator — | | | |
 | `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
@@ -2454,7 +2565,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Take Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
 | `Pick an Element in Chrome` | ✋ | `⌘⇧ + ⬅️ @🎙️` | |
 | `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) | |
-| `Message Log` | 📜 | | |
+| `Message log of last 2 days` | 📜 | | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 
 **The line groups by what a row is *for*.** Above it, everything about a
@@ -3154,11 +3265,13 @@ is no current dictation."* Two independent leaks, both fixed:
 A spawn is by definition the one window Victor never pointed at: it appears on its
 own while his eyes are somewhere else. It used to `activate` and land wherever
 Terminal felt like, which in practice is on top of whatever he is reading on the
-built-in Retina display. `SpawnTerminal.elsewhere()` decides instead:
+built-in Retina display. `SpawnTerminal.board()` and `slot(for:on:avoiding:)`
+decide instead:
 
-- **an external display attached** → the window is moved onto the roomiest
-  non-Retina screen, centred, keeping the size Terminal gave it, and Terminal is
-  brought forward — on a screen he is not working on, that costs him nothing.
+- **an external display attached** → the window is **tiled** across every
+  non-Retina screen, left to right, and Terminal is brought forward — on screens
+  he is not working on, that costs him nothing. *"tile them somehow so that they
+  don't overlap with others… use all the monitors you have around"*.
 - **nothing but the Retina display** → there is nowhere to move it to, so it opens
   **behind** instead. Nothing activates Terminal; if `do script` launched it from
   cold and it took the front anyway, the app that *was* frontmost is put back a
@@ -3166,10 +3279,55 @@ built-in Retina display. `SpawnTerminal.elsewhere()` decides instead:
   binds it a beat later — delivery goes through `do script … in <tab>`, which does
   not need the window in front.
 
+**The tiling is a grid of the window's own size, scored rather than filtered.**
+Each display is cut into cells as big as the window Terminal just made — two
+columns of a 905pt terminal on a 1920pt monitor — with the grid centred in
+whatever the cells did not use, so a single-column screen does not park the
+window against its left edge. Every cell on every display is scored by how many
+square points of *other* Terminal windows it would sit on, and the first cell
+with the lowest score wins. Scoring rather than filtering is what makes it
+degrade instead of fail: with every slot taken — six terminals across three
+monitors — the answer is the least-covered cell rather than no answer, and
+reading left to right is what lands a second spawn beside the first instead of
+on it.
+
+**Only Terminal's own windows are avoided**, and they arrive in the same
+`osascript` round trip that opened the window: the slot is chosen by what is
+already there, and a second launch of the interpreter to ask for a list the
+first one was holding is a launch for nothing. Asking the window server about
+every app's windows would price a browser off the monitors that are there to
+hold browsers.
+
 "Retina" is `backingScaleFactor >= 2` — the same test the `come-back-when-done`
-skill uses, and deliberately not a size or a name. The rectangle is flipped into
-AppleScript's coordinates (origin top-left of the primary screen, y downwards)
-inside `elsewhere()`, because that is the only place it is used.
+skill uses, and deliberately not a size or a name. Everything below `board()`
+speaks **AppleScript's** coordinates (origin top-left of the primary screen, y
+downwards), because the only thing any of it is for is `set bounds of window`.
+
+### The spawn's flight runs backwards
+
+*"the animation should be backwards, from the mouse going to the terminal, and
+should start as soon as the terminal window is displayed. Faster a bit."* —
+Victor, 2026-09-04.
+
+Backwards is the honest direction for a spawn. A bind says *that window is now
+this chip*, so the picture travels window → cursor. A spawn says the opposite —
+*what you just said is now that window over there* — about a window he has not
+looked at yet and does not know the position of, so the picture leaves the chip
+under his hand and arrives **on** the window, growing instead of shrinking and
+going from half opacity to full.
+
+It is **one flipped `t`** and not a second animation (`BindFlight.fly`'s
+`reversed:`), so the two can never drift: the hold that opens a bind — standing
+still over the window — becomes the beat a spawn *ends* on, resting on the window
+it has just filled, and the fade that ends a bind becomes the spawn's fade **in**
+out of the pointer. `source` is still the window and `destination` still the chip
+in both directions; only which of them it starts at changes.
+
+**And it starts when the window is on screen**, not on a fixed 2.5s beat.
+`seconds:` is the other half: `AppDelegate.spawnFlightSeconds` is 0.7 against the
+bind's second, because this flight is a hand-off rather than an answer to a press
+and it plays while the eye is still travelling to a window that has just
+appeared somewhere else.
 
 ## A stale bundle in /Applications is three bugs at once
 
