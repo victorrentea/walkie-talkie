@@ -82,7 +82,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only one way in.
     var onStartDictation: (() -> Void)?
 
-    /// Picked from **Connect Window** — the same call ⌘⌃B and the left-plus-wheel
+    /// Picked from **Connect Terminal** — the same call ⌘⌃B and the left-plus-wheel
     /// chord make.
     var onBind: (() -> Void)?
 
@@ -90,8 +90,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// destination armed, exactly as the right-held chord does.
     var onNewSession: (() -> Void)?
 
-    /// Picked from **Take Screenshot** — the same picture F3 and the back
-    /// button take.
+    /// Picked from **Take Screenshot** — the same picture the back button
+    /// takes while dictating. The row is a disabled legend, so this is
+    /// unreachable in practice; kept so the row is wired like the rest.
     var onShot: (() -> Void)?
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -116,12 +117,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord rides in an attributed title right-aligned to a tab stop set just
     /// left of the shortcut column, and the two columns line up. See
     /// `layOutGestures`, and `restyleGestures` for the price it costs.
-    private let bind = NSMenuItem(title: "Connect Window", action: nil, keyEquivalent: "b")
+    private let bind = NSMenuItem(title: "Connect Terminal", action: nil, keyEquivalent: "b")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
     ///
-    /// The gesture is in the title for the reason **Connect Window** carries
+    /// The gesture is in the title for the reason **Connect Terminal** carries
     /// its own: a wheel chord has no key equivalent to be right-aligned as, and
     /// the menu is now the only place any gesture is written down. Right mirrors
     /// left the way disconnecting mirrors binding — that is the whole of what has
@@ -131,7 +132,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
     /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it
-    /// as a real key equivalent, the same way ⌘⌃B rides **Connect Window**; the
+    /// as a real key equivalent, the same way ⌘⌃B rides **Connect Terminal**; the
     /// wheel has no key equivalent to be, so it stays in the title beside it.
     private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "d")
     private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "d")
@@ -153,9 +154,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// already uses, and the only thing that separates the two readings of one
     /// chord.
     private let newSession = NSMenuItem(title: "Dictate to new Claude", action: nil, keyEquivalent: "")
-    /// The shutter. Both routes are named: F3 works whenever there is a
-    /// destination, the back button only while a dictation is running — which is
-    /// also the only window in which it stops typing Return.
+    /// The shutter. Its one route is named: the back button, only while a dictation
+    /// is running — which is also the only window in which it stops typing
+    /// Return.
     /// The last dictation, again — see `AppDelegate.pasteLastDictation`. Greyed
     /// until there is one, like every other row that cannot act right now.
     private let pasteLast = NSMenuItem(title: "Paste last prompt", action: nil, keyEquivalent: "p")
@@ -166,7 +167,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// while dictating, and with the chip silent there is nowhere else it could
     /// be said. Permanently disabled, which is the honest rendering of "this is
     /// something you do, not something you pick".
-    private let pickLegend = NSMenuItem(title: "Pick an Element in Chrome", action: nil, keyEquivalent: "")
+    private let pickLegend = NSMenuItem(title: "Pick Element in Chrome", action: nil, keyEquivalent: "")
     /// **Send without asking.** Off at every launch, and deliberately not
     /// remembered: the panel is the thing that catches a transcript the model got
     /// wrong, and a checkbox that survived a restart would quietly take that
@@ -352,16 +353,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(pasteLast)
 
         shot.image = Self.emojiIcon("📷")
-        // **F3 is a key, so it belongs in the key column** — Victor's ask, and
-        // the row is the one place in this menu where a keyboard route and a
-        // mouse route do the same thing, so splitting them across the two
-        // columns is what says they are alternatives rather than a sequence.
-        //
-        // Harmless as a real equivalent despite being modifier-less: the app is
-        // `.accessory` and never becomes key, so it can only fire while this
-        // menu is open. The global F3 is `HotkeyTap`'s, as it has always been.
-        shot.keyEquivalent = String(utf16CodeUnits: [unichar(NSF3FunctionKey)], count: 1)
-        shot.keyEquivalentModifierMask = []
+        // **A legend, not a command — permanently disabled** (Victor, 2026-09-04),
+        // the same rendering `pickLegend` uses for "this is something you do, not
+        // something you pick". The shutter itself lives on the back button while
+        // dictating; F3, its keyboard route, was never pressed and is gone.
         shot.action = #selector(shotClicked)
         shot.target = self
         shot.isEnabled = false
@@ -389,6 +384,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(startDictation)
         menu.addItem(stopRecording)
         menu.addItem(cancelDictation)
+        // **A line between the verbs that end a dictation and the two legends.**
+        // Take Screenshot and Pick Element are both disabled rows now — gestures
+        // written down, not commands — so they sit apart from the three rows
+        // above that actually do something when clicked (Victor, 2026-09-04).
+        menu.addItem(.separator())
         menu.addItem(shot)
         menu.addItem(pickLegend)
 
@@ -438,6 +438,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // No ⌘Q key equivalent: the app never becomes key, so the hint would
         // advertise a shortcut that does nothing outside the open menu.
         let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "")
+        exit.image = Self.symbolIcon("power")
         exit.target = self
         menu.addItem(exit)
 
@@ -453,11 +454,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            // **Two ways in, and the chord-free one first.** ⬆️ is the forward
-            // side button, the pair of the ⬇️ the shutter row already draws for
-            // the back one; `0.6s` is what tells it from an ordinary click on a
-            // button this app otherwise hands straight back.
-            (newSession, newSession.title, "⬆️ 0.6s · ➡️ + 🛞 1s"),
+            // **Two ways in, and the chord-free one first.** ⬇️ is the back
+            // side button, the shutter's button at rest; `0.6s` is what tells
+            // it from an ordinary click — the Return LinearMouse types with it.
+            // It was ⬆️ (the forward button) for one day, until that button
+            // proved to arrive as an instant pair however long it is held.
+            (newSession, newSession.title, "⬇️ 0.6s · ➡️ + 🛞 1s"),
             (shot, shot.title, "⬇️ \(Self.whileDictating)"),
             (pickLegend, pickLegend.title, "⌘⇧ + ⬅️ \(Self.whileDictating)"),
         ]
@@ -467,18 +469,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         mirror.start()
     }
 
-    /// **`@🎙️` is "while dictating"**, and it replaces those two words wherever
-    /// they appeared. They were a third of the width of the longest row, said
-    /// twice, to qualify a chord — and the qualification is the *same* fact the
-    /// microphone rows above already stand for. Read as an address, which is
-    /// what `@` is: this gesture lives at the dictation.
-    ///
-    /// The rows it qualifies now sit under a separator of their own (see the
-    /// menu's assembly), so it is a reminder rather than the only clue — worth
-    /// keeping because **One More Screenshot's other half, F3, is not gated on a
-    /// dictation at all**, and the marker is what says which of the two halves
-    /// the condition belongs to.
-    private static let whileDictating = "@🎙️"
+    /// **`while dictating` qualifies the two legend chords.** It used to be the
+    /// marker `@🎙️` — an address, "this gesture lives at the dictation" — until
+    /// Victor had the microphone emoji out of the menu (2026-09-04). The words
+    /// cost the width the marker was invented to save, and that is accepted:
+    /// both rows it qualifies are disabled legends now, read at leisure.
+    private static let whileDictating = "while dictating"
 
     /// The item, **its label**, and the chord it is performed with.
     ///
@@ -613,9 +609,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // destination. Only a dictation already running takes it away, and then
         // only because the chord would end that one rather than start this.
         newSession.isEnabled = !recording
-        // The same gate `plusOneShot` applies: a picture is worth taking when
-        // there is somewhere for it to go.
-        shot.isEnabled = isBound || recording
+        // Take Screenshot is a legend now (disabled at construction), so there
+        // is nothing to re-enable here.
     }
 
     private func refreshGlyph() {
@@ -779,7 +774,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     ///
     /// The chip can afford to be bare: it rides the cursor, it appears when a
     /// binding does, and beside a pointer there is nothing else it could be
-    /// naming. In the menu the same line sits above `Connect Window` /
+    /// naming. In the menu the same line sits above `Connect Terminal` /
     /// `Disconnect` / `End Dictation`, and a folder name on its own between an icon and a
     /// stack of commands reads as the title of a section — i.e. as what the
     /// commands are *for*, rather than as where the words are going. The two

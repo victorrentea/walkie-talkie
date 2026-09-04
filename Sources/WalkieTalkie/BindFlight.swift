@@ -163,10 +163,16 @@ enum BindFlight {
     /// `seconds` is the whole flight. The default is the bind's second; a spawn
     /// asks for less, because its flight is a hand-off rather than an answer to a
     /// press and it plays while the eye is still travelling to the new window.
+    ///
+    /// `carrying` replaces the screen grab with a picture the caller already
+    /// has. The send flight needs it: the prompt panel is invisible to screen
+    /// capture (`sharingType = .none`), so the only picture of it in existence
+    /// is the one its own view just drew.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
                     seconds: CFTimeInterval = duration,
                     reversed: Bool = false,
+                    carrying picture: CGImage? = nil,
                     landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
@@ -177,7 +183,7 @@ enum BindFlight {
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
         // actually on it.
-        let picture = grab(source)
+        let picture = picture ?? grab(source)
         hasPicture = picture != nil
 
         panes = NSScreen.screens.map { screen in

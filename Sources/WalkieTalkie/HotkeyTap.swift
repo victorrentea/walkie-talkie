@@ -7,18 +7,10 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return tap.handle(type: type, event: event)
 }
 
-/// The overlay's global shortcut for "plus one shot": screenshot the display
-/// under the cursor and add it to the dictation in progress (or send it on its
-/// own if none is).
-///
-/// **F3** is the one to use. A chord needs a hand on three keys, and the moment
-/// it is needed is the moment both hands are busy and a sentence is already
-/// half-spoken; a bare function key can be hit blind, mid-dictation, without
-/// looking. F3 does nothing else on Victor's machine.
-///
-/// ⌃⌥P still works, since it is what the muscle memory and the older notes say.
-/// It was chosen to not collide with anything Victor Addons claims (⌃P, ⌃⇧P, ⌃W,
-/// ⌃⌥C, ⌃⌥V, ⌘⌃C, ⌘⌥C, ⌘⌃A, ⌘⌃V, ⌘⌃⌥C, ⌘⌃⌥D).
+/// The overlay's "plus one shot" is the **back side button** while a dictation
+/// is running: screenshot the display under the cursor and add it to the
+/// dictation in progress (or send it on its own if none is). F3 used to be its
+/// keyboard route and is gone (2026-09-04): never pressed in a year of use.
 ///
 /// Mouse 5 is passed through untouched apart from a **double** click, which
 /// binds the window under the pointer. So does the left button, always — it is
@@ -127,7 +119,7 @@ final class HotkeyTap {
     ///
     /// The wheel no longer consults it — rebinding is the left-plus-wheel chord
     /// and it acts wherever it is made, letting `bindFrontmostTerminal` refuse.
-    /// It survives because the menu's **Connect Window** row greys itself out
+    /// It survives because the menu's **Connect Terminal** row greys itself out
     /// with it, and this is where the answer is already kept up to date.
     var frontIsBindable: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return frontIsBindableFlag }
@@ -337,21 +329,27 @@ final class HotkeyTap {
         return true
     }
 
-    /// **How long the forward side button has to be held to mean *a new
-    /// session*.** Added 2026-09-04 at Victor's ask, as a second way in to the
-    /// spawn that needs no chord at all — one button, one hand position.
+    /// **How long the back side button has to be held to mean *a new session*.**
+    /// Added 2026-09-04 on the forward button and moved here the same day: the
+    /// forward button reaches this tap as an ~20ms down-and-up pair however long
+    /// it is held — and the window server's own button state agrees — so a hold
+    /// of it can never be judged (measured on Victor's deliberate holds; see the
+    /// log lines on the mouse-5 branch). Wispr Flow's push-to-talk lives on that
+    /// button, which is the prime suspect for the swallowing, so the hold moved
+    /// to the one side button that is *not* intercepted at rest — the back one,
+    /// which at rest is only LinearMouse's Return.
     ///
     /// **0.6s, and the press is taken away from everything downstream while it is
-    /// judged.** He asked how long a hold could last before Wispr Flow took the
-    /// button over; the honest answer is *none*, because a push-to-talk fires at
-    /// the press and waiting is precisely what hands it over. So the press is
-    /// swallowed at the tap instead, and replayed by `replayMouse5Click()` if it
-    /// turns out to have been a click — see the note there for what that costs.
+    /// judged.** A push-to-talk fires at the press and waiting is precisely what
+    /// hands it over. So the press is swallowed at the tap instead, and replayed
+    /// by `replayMouse4Click()` if it turns out to have been a click — from
+    /// downstream it is the same click a beat late, and LinearMouse types its
+    /// Return off the replay exactly as off the real one.
     ///
     /// Longer than a click and shorter than the wheel chords' second: those have
     /// a *second reading* to be told apart from, and this one has only a click,
     /// so the wait is the shortest one that cannot be made by accident.
-    private static let mouse5HoldSeconds: TimeInterval = 0.6
+    private static let backHoldSeconds: TimeInterval = 0.6
 
     /// **The hold runs on a queue of its own, not on `main`.** It was
     /// `DispatchQueue.main.asyncAfter` for a day and that is a dependency this
@@ -385,103 +383,106 @@ final class HotkeyTap {
     /// enum and takes any raw value, which is what makes the two side buttons
     /// askable at all.
     private static let forwardButton = CGMouseButton(rawValue: 4) ?? .center
+    private static let backButton = CGMouseButton(rawValue: 3) ?? .center
 
     static func mouse5IsPhysicallyDown() -> Bool {
         CGEventSource.buttonState(.hidSystemState, button: forwardButton)
             || CGEventSource.buttonState(.combinedSessionState, button: forwardButton)
     }
 
+    /// Same read for the back button — the one the hold judges now. Whether
+    /// *its* physical state survives a hold is the open question this gesture's
+    /// first real use answers; the log lines on the branch record it.
+    static func mouse4IsPhysicallyDown() -> Bool {
+        CGEventSource.buttonState(.hidSystemState, button: backButton)
+            || CGEventSource.buttonState(.combinedSessionState, button: backButton)
+    }
+
     /// Set when a release was refused because the button was still physically
-    /// down — i.e. this press will get no second event, and `judgeMouse5Press`
+    /// down — i.e. this press will get no second event, and `judgeBackPress`
     /// owns both endings.
-    private var mouse5UpIgnored = false
+    private var mouse4UpIgnored = false
 
     /// When the current press went down, for the log line at its release.
+    private var mouse4PressedAt: CFTimeInterval = 0
     private var mouse5PressedAt: CFTimeInterval = 0
 
-    private var mouse5Down = false
-    private var mouse5Armed = false
-    private var mouse5Hold: DispatchWorkItem?
+    private var mouse4Down = false
+    private var mouse4Armed = false
+    private var mouse4Hold: DispatchWorkItem?
 
-    /// See `claimWheelPress`, of which this is the mouse-5 copy.
-    private func claimMouse5Press() -> Bool {
+    /// See `claimWheelPress`, of which this is the back-button copy.
+    private func claimMouse4Press() -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }
-        guard mouse5Down else { return false }
-        mouse5Armed = true
-        mouse5Down = false
+        guard mouse4Down else { return false }
+        mouse4Armed = true
+        mouse4Down = false
         return true
+    }
+
+    /// **The verdict on one press, watched rather than timed.**
+    ///
+    /// It was a single `asyncAfter` at `backHoldSeconds`, and that only works
+    /// where a press and its release are two events. On the forward button they
+    /// were not — the pair arrived inside 18ms whatever the finger did — so the
+    /// release has to be *ignored* while the button is still physically down,
+    /// and once it is ignored, there is no second event left to say when the
+    /// finger lifted. A timer alone would then fire on every plain click.
+    ///
+    /// So the physical state is watched, on this gesture's own queue and for at
+    /// most `backHoldSeconds`: the finger coming off before the deadline is a
+    /// click, and the deadline arriving with the button still down is a hold.
+    /// **40ms**, which is inside the interval a click is over in and is 15 polls
+    /// for a gesture made a few times an hour.
+    ///
+    /// **A press whose release this tap took normally never reaches the loop's
+    /// end** — the release claims it, and `claimMouse4Press` fails here. That is
+    /// what keeps every other mouse working exactly as before, and what makes
+    /// this fail safe where the button state cannot be read at all: `physical` is
+    /// then false, the up is never ignored, and this is the old timer again.
+    private func judgeBackPress() {
+        let deadline = CACurrentMediaTime() + Self.backHoldSeconds
+        while CACurrentMediaTime() < deadline {
+            Thread.sleep(forTimeInterval: 0.04)
+            stateLock.lock()
+            let pending = mouse4Down
+            let ignored = mouse4UpIgnored
+            stateLock.unlock()
+            // The release got there first: an ordinary click, already replayed.
+            guard pending else { return }
+            // The finger came off, and the only release this gesture was ever
+            // going to see was swallowed. Hand the click back now.
+            if ignored, !Self.mouse4IsPhysicallyDown() {
+                if claimMouse4Press() {
+                    Log.info("🖱️ mouse 4 — a click after all, handing it back")
+                    replayMouse4Click()
+                }
+                return
+            }
+        }
+        guard claimMouse4Press() else { return }
+        Log.info("✨ mouse 4 held — dictating at a new Claude Code")
+        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
     }
 
     /// **The click this tap swallowed, handed back to the machine.**
     ///
-    /// The forward button is not this app's — *mouse 5 is nobody's* — and taking
-    /// it away for good to buy one hold would be the trade Victor already
-    /// reversed once, on 2026-08-29. So a press that turns out to be a *click* is
-    /// posted again, at the HID tap, where LinearMouse and Wispr Flow are: from
-    /// downstream it is the same click 0.6s late at worst, and in practice the
-    /// hand is off the button by then anyway.
+    /// At rest the back button is LinearMouse's Return and nothing of ours, so a
+    /// press that turns out to be a *click* is posted again, at the HID tap,
+    /// where LinearMouse sits: from downstream it is the same click 0.6s late at
+    /// worst, and in practice the hand is off the button by then anyway.
     ///
     /// **What it cannot give back is a *hold*.** Anything downstream that reads a
-    /// long press on this button — Wispr Flow's push-to-talk, if it is ever moved
-    /// here from the back button — now sees a click instead. That is the price of
+    /// long press on this button now sees a click instead. That is the price of
     /// the gesture and it is deliberate; the one line to change is
-    /// `mouse5HoldSeconds` and the branch that swallows.
+    /// `backHoldSeconds` and the branch that swallows.
     ///
     /// The replay is tagged so this tap knows its own handiwork on the way past.
     /// Without that, the posted press would be judged as a fresh one, arm another
     /// hold, and be swallowed again — a gesture eating itself.
     private static let replayTag: Int64 = 0x57414C4B    // "WALK"
 
-    /// **The verdict on one press, watched rather than timed.**
-    ///
-    /// It was a single `asyncAfter` at `mouse5HoldSeconds`, and that only works
-    /// where a press and its release are two events. On this mouse they are not:
-    /// the pair arrives inside 18ms whatever the finger does, so the release has
-    /// to be *ignored* while the button is still physically down — and once it is
-    /// ignored, there is no second event left to say when the finger lifted. A
-    /// timer alone would then fire on every plain click.
-    ///
-    /// So the physical state is watched, on this gesture's own queue and for at
-    /// most `mouse5HoldSeconds`: the finger coming off before the deadline is a
-    /// click, and the deadline arriving with the button still down is a hold.
-    /// **40ms**, which is inside the interval a click is over in and is 15 polls
-    /// for a gesture made a few times an hour.
-    ///
-    /// **A press whose release this tap took normally never reaches the loop's
-    /// end** — the release claims it, and `claimMouse5Press` fails here. That is
-    /// what keeps every other mouse working exactly as before, and what makes
-    /// this fail safe where the button state cannot be read at all: `physical` is
-    /// then false, the up is never ignored, and this is the old timer again.
-    private func judgeMouse5Press() {
-        let deadline = CACurrentMediaTime() + Self.mouse5HoldSeconds
-        while CACurrentMediaTime() < deadline {
-            Thread.sleep(forTimeInterval: 0.04)
-            stateLock.lock()
-            let pending = mouse5Down
-            let ignored = mouse5UpIgnored
-            stateLock.unlock()
-            // The release got there first: an ordinary click, already replayed.
-            guard pending else { return }
-            // The finger came off, and the only release this gesture was ever
-            // going to see was swallowed. Hand the click back now.
-            if ignored, !Self.mouse5IsPhysicallyDown() {
-                if claimMouse5Press() {
-                    Log.info("🖱️ mouse 5 — a click after all, handing it back")
-                    replayMouse5Click()
-                }
-                return
-            }
-        }
-        guard claimMouse5Press() else { return }
-        // Ending a dictation is ending one, whichever gesture opened it — the
-        // destination belongs to the press that started it, exactly as in the
-        // right chord.
-        Log.info(dictating ? "🎙️ mouse 5 held — ending the dictation"
-                           : "✨ mouse 5 held — dictating at a new Claude Code")
-        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
-    }
-
-    private func replayMouse5Click() {
+    private func replayMouse4Click() {
         let point = CGEvent(source: nil)?.location ?? .zero
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         source.userData = Self.replayTag
@@ -490,7 +491,7 @@ final class HotkeyTap {
                                       mouseType: down ? .otherMouseDown : .otherMouseUp,
                                       mouseCursorPosition: point,
                                       mouseButton: .center) else { continue }
-            event.setIntegerValueField(.mouseEventButtonNumber, value: MOUSE_BUTTON_5)
+            event.setIntegerValueField(.mouseEventButtonNumber, value: MOUSE_BUTTON_4)
             event.setIntegerValueField(.mouseEventClickState, value: 1)
             event.post(tap: .cghidEventTap)
         }
@@ -501,7 +502,6 @@ final class HotkeyTap {
     private let VK_B: CGKeyCode = 0x0B
     private let VK_D: CGKeyCode = 0x02
 private let VK_P: CGKeyCode = 0x23
-    private let VK_F3: CGKeyCode = 0x63
     private let VK_RETURN: CGKeyCode = 0x24        // Return
     private let VK_KEYPAD_ENTER: CGKeyCode = 0x4C  // Enter (keypad / Fn-Return)
 private let VK_ESCAPE: CGKeyCode = 0x35        // esc
@@ -596,7 +596,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         if type == .otherMouseDown || type == .otherMouseUp {
             // **Our own replayed click, on its way to whatever is downstream.**
             // Judged a second time it would arm another hold and be swallowed
-            // again, which is this gesture eating itself. See `replayMouse5Click`.
+            // again, which is this gesture eating itself. See `replayMouse4Click`.
             if event.getIntegerValueField(.eventSourceUserData) == Self.replayTag {
                 return Unmanaged.passUnretained(event)
             }
@@ -605,6 +605,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
             let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
+            // **Every back-button edge, written down** — the same diagnosis the
+            // forward button needed on 2026-09-04 (*did the event arrive, and how
+            // long did it last?*), now in advance: the hold below stands or falls
+            // by whether this button's `physical` survives a finger staying on
+            // it, which is exactly what these two lines record.
+            if button == MOUSE_BUTTON_4 {
+                let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
+                if type == .otherMouseDown {
+                    mouse4PressedAt = CACurrentMediaTime()
+                    Log.info("🖱️ mouse 4 down — bare=\(bare) pid \(pid) physical=\(Self.mouse4IsPhysicallyDown())")
+                } else {
+                    let ms = Int((CACurrentMediaTime() - mouse4PressedAt) * 1000)
+                    Log.info("🖱️ mouse 4 up — held \(ms)ms, pid \(pid) physical=\(Self.mouse4IsPhysicallyDown())")
+                }
+            }
+
             // Mouse 4 mid-dictation → a picture, and the Return it would have
             // become never happens. Both halves of the click are swallowed:
             // LinearMouse is downstream of this tap and would otherwise still
@@ -616,6 +632,54 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                 }
                 return nil
+            }
+
+            // **At rest, the back button held 0.6s is a dictation at a session
+            // that does not exist yet** — the gesture that lived on the forward
+            // button for one day, moved here because that button arrives as an
+            // ~20ms pair however long it is held (Wispr Flow's push-to-talk is
+            // the suspect), while this one is only LinearMouse's Return. The
+            // press is swallowed while it is judged and replayed if it was a
+            // click, so the Return Victor submits with all day still lands —
+            // one poll interval late at worst.
+            //
+            // Not in Replace Wispr: there the back button is deliberately left
+            // alone, so the mode's Return keeps working.
+            if button == MOUSE_BUTTON_4 && bare && !replaceWispr {
+                if type == .otherMouseUp {
+                    // **A release while the button is still physically down is
+                    // not a release.** It is the second half of an instant pair
+                    // something upstream emitted; the finger is still on it.
+                    if Self.mouse4IsPhysicallyDown() {
+                        stateLock.lock(); mouse4UpIgnored = true; stateLock.unlock()
+                        Log.info("🖱️ mouse 4 up ignored — the button is still down")
+                        return nil
+                    }
+                    // **Any release whose press we took is ours**, whatever the
+                    // state has become since: nothing downstream may be handed
+                    // an up it never saw a down for.
+                    mouse4Hold?.cancel()
+                    mouse4Hold = nil
+                    let armed = mouse4Armed
+                    // A press still unjudged at the release is the click.
+                    let tapped = claimMouse4Press()
+                    mouse4Armed = false
+                    if tapped { replayMouse4Click() }
+                    return (tapped || armed) ? nil : Unmanaged.passUnretained(event)
+                }
+                if type == .otherMouseDown {
+                    // **Swallowed, and judged when it is let go or when the hold
+                    // runs out.** The alternative — pass it through and act at
+                    // 0.6s — cannot work: LinearMouse's Return has already fired
+                    // by then.
+                    mouse4Down = true
+                    mouse4Armed = false
+                    stateLock.lock(); mouse4UpIgnored = false; stateLock.unlock()
+                    let work = DispatchWorkItem { [weak self] in self?.judgeBackPress() }
+                    mouse4Hold = work
+                    holdQueue.async(execute: work)
+                    return nil
+                }
             }
 
             // **Replace Wispr: the forward button opens the microphone.**
@@ -677,54 +741,28 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 }
             }
 
-            // **The forward button says two things, and the press is taken away
-            // from the machine until it is known which.**
-            //
-            //   click        → nothing of ours; replayed downstream untouched
-            //   click ×2     → bind: point the relay at the window in front
-            //   held 0.6s    → a dictation at a session that does not exist yet,
-            //                  the same call ➡️ + 🛞 held makes
+            // **The forward button is a pass-through again, apart from the
+            // double click.** The 0.6s hold it carried for a day moved to the
+            // back button: this one arrives as an ~20ms down-and-up pair however
+            // long it is held — and `CGEventSourceButtonState` agrees — so a
+            // hold of it can never be judged. Measured 2026-09-04 on Victor's
+            // deliberate holds; Wispr Flow's push-to-talk, which lives on this
+            // button, is the suspect. The swallow-and-judge machinery went with
+            // the gesture, so a plain click no longer pays the replay's latency.
             //
             // The double-click test comes first, and applies whether or not
             // anything is bound: binding by pointing is most useful precisely
             // when nothing is bound yet.
             if button == MOUSE_BUTTON_5 && bare {
                 if type == .otherMouseUp {
-                    // **A release while the button is still physically down is
-                    // not a release.** It is the second half of the instant pair
-                    // something upstream emits for this button; the finger is
-                    // still on it. Taking it at face value is what made a hold
-                    // impossible — the verdict was cancelled 18ms after it was
-                    // armed, every time. So the press is left standing and the
-                    // timer left running, and the *real* end of the gesture is
-                    // whichever comes first: the verdict, or a later up with the
-                    // button genuinely released.
-                    //
-                    // Nothing is replayed here either, for the same reason: the
-                    // click has not happened yet. It is replayed at the genuine
-                    // release, or never, if the press turned out to be a hold.
-                    //
-                    // **Fail-safe.** Where the state cannot be read the answer is
-                    // false, which is exactly the behaviour this replaces.
-                    if Self.mouse5IsPhysicallyDown() {
-                        stateLock.lock(); mouse5UpIgnored = true; stateLock.unlock()
-                        Log.info("🖱️ mouse 5 up ignored — the button is still down")
+                    // **Any release whose press we took is ours**: a double
+                    // click's second half, or a Replace Wispr press. Nothing
+                    // downstream may be handed an up it never saw a down for.
+                    if swallowMouse5Up {
+                        swallowMouse5Up = false
                         return nil
                     }
-                    // **Any release whose press we took is ours**, whatever the
-                    // state has become since — the same rule the wheel's release
-                    // follows, and for the same reason: nothing downstream may be
-                    // handed an up it never saw a down for.
-                    mouse5Hold?.cancel()
-                    mouse5Hold = nil
-                    let armed = mouse5Armed
-                    // A press still unjudged at the release is the click.
-                    let tapped = claimMouse5Press()
-                    mouse5Armed = false
-                    let swallowed = swallowMouse5Up
-                    swallowMouse5Up = false
-                    if tapped { replayMouse5Click() }
-                    return (tapped || armed || swallowed) ? nil : Unmanaged.passUnretained(event)
+                    return Unmanaged.passUnretained(event)
                 }
                 if type == .otherMouseDown {
                     let now = CACurrentMediaTime()
@@ -733,13 +771,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // fresh pair instead of binding again on every press.
                         lastMouse5DownAt = 0
                         swallowMouse5Up = true
-                        // The first click's own press was swallowed and replayed
-                        // at its release; this one is not replayed, because it is
-                        // ours.
-                        mouse5Hold?.cancel()
-                        mouse5Hold = nil
-                        mouse5Down = false
-                        mouse5Armed = true
                         Log.info("🎯 mouse 5 ×2 — binding")
                         // **Global, not main** — the same queue ⌘⌃B uses, and for
                         // the reason it uses it: `bindFrontmostTerminal` asks the
@@ -752,19 +783,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         return nil
                     }
                     lastMouse5DownAt = now
-
-                    // **Swallowed, and judged when it is let go or when the hold
-                    // runs out.** The alternative — pass it through and act at
-                    // 0.6s — is what Victor asked about and what cannot work:
-                    // whatever downstream does with this button has already done
-                    // it by then.
-                    mouse5Down = true
-                    mouse5Armed = false
-                    stateLock.lock(); mouse5UpIgnored = false; stateLock.unlock()
-                    let work = DispatchWorkItem { [weak self] in self?.judgeMouse5Press() }
-                    mouse5Hold = work
-                    holdQueue.async(execute: work)
-                    return nil
+                    // A plain click is handed straight through — mouse 5 is
+                    // nobody's (and Wispr Flow's).
                 }
             }
 
@@ -1107,14 +1127,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                 return nil   // swallow: the Enter it would have been is not wanted mid-dictation
             }
-        }
-
-        // F3 on its own. Swallowed like any other binding, so whatever the key is
-        // nominally wired to cannot fire behind the screenshot.
-        if keyCode == VK_F3 && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
-            let cursor = NSEvent.mouseLocation
-            DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
-            return nil
         }
 
         // ⌘⌃B — **bind**, on B for bind since 2026-09-01. It was ⌘⌃D until then,

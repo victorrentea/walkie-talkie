@@ -369,8 +369,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// rather than in a legend of its own: while dictating they are the only
     /// inputs that do anything, and they belong next to the count they increment.
     ///
-    /// **The mouse comes first because it is the one that needs saying.** F3 has
-    /// been there all along; the back button being borrowed mid-dictation is new,
+    /// **The mouse comes first because it is the one that needs saying.** The
+    /// back button being borrowed mid-dictation was the change,
     /// it lasts only as long as the recording row is up, and unadvertised it
     /// would read as the Return key having broken. Naming it here means the row
     /// and the behaviour appear and disappear together.
@@ -557,7 +557,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     /// The recording row shows **only while dictating** — the one window in which
-    /// there is a recording to report and in which F3 and the back button do
+    /// there is a recording to report and in which the back button does
     /// anything.
     private var recordText: String? {
         guard listening else { return nil }
@@ -2826,6 +2826,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// it. Fires once — every later call finds `sentPrompt` already nil.
     private func resolvePrompt(send: Bool) {
         guard sentPrompt != nil else { return }
+        // **The send flight's raw material, taken a breath before the state is
+        // cleared.** The panel is invisible to screen capture (`sharingType`),
+        // so the only picture of it is the one it draws of itself, here, at the
+        // frame it was just read at. `releaseHeld` flies it to the terminal the
+        // words were sent to. A cancel leaves nothing behind to fly.
+        promptFarewell = send ? (frame: panel.frame, image: panelImage()) : nil
         // Leave the field before anything else: it owns the text being resolved,
         // and it is holding the keyboard.
         endPromptEdit()
@@ -2939,6 +2945,20 @@ private let frontLabel = NSTextField(labelWithString: "")
             closeButton.needsDisplay = true
         }
         refreshOpacity()
+    }
+
+    /// The panel's contents and the frame it sat at, captured in
+    /// `resolvePrompt` the instant a prompt is released for sending — the send
+    /// flight's raw material. Read and cleared by `AppDelegate.releaseHeld`.
+    var promptFarewell: (frame: CGRect, image: CGImage?)?
+
+    /// The panel drawn by its own view, as an image — the only picture of it
+    /// there is, since the window is excluded from every screen capture
+    /// (`sharingType`). Same trick `snapshot(to:)` uses, without the PNG.
+    func panelImage() -> CGImage? {
+        guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return nil }
+        root.cacheDisplay(in: root.bounds, to: rep)
+        return rep.cgImage
     }
 
     /// Draw the overlay into a PNG — the only way left to *see* it.

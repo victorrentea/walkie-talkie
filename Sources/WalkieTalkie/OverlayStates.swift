@@ -139,7 +139,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "listening-selection", group: "Dictating", title: "Dictating, carrying a highlight",
-                 when: "He had text selected when he started talking, or F3'd with a selection.",
+                 when: "He had text selected when he started talking, or took a shot with a selection.",
                  note: "`↪` and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -157,7 +157,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "listening-selection-caught", group: "Dictating", title: "The shutter caught a highlight",
-                 when: "For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
+                 when: "For a beat after every side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
                  note: "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to `↪ ×N` after 2.5s, and it truncates to whatever width the rows above already gave the chip.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -178,7 +178,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-flash", group: "Dictating", title: "Something went wrong mid-sentence",
                  when: "A shot that failed, or any flash raised while he is still talking.",
-                 note: "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The F3 receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen, which is why the highlight it catches is announced on the chip's own row instead.",
+                 note: "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The shot receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen, which is why the highlight it catches is announced on the chip's own row instead.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

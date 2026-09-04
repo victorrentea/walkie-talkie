@@ -18,7 +18,7 @@ are unaffected, and the dictation content itself is obviously whatever language
 he spoke.
 
 Current strings live in `RelayWindow.swift`:
-- `Self.shotHint` + `recordText` — the shots row (`📸 2 — mouse/F3 for more shots`)
+- `Self.shotHint` + `recordText` — the shots row (the drawn back button, then `+ selection`)
   and `engineText` beside the pulsing 🔴 (`Listening…` — the model id it used to
   carry now lives only in the menu's engine row, see `applyWhisperTitle`)
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`⌘⇧`, then
@@ -29,10 +29,10 @@ Current strings live in `RelayWindow.swift`:
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Connect Window` / `Disconnect` / `Dictate to new Claude` and their
+  `Connect Terminal` / `Disconnect` / `Dictate to new Claude` and their
   chords, which since 2026-09-02 ride a right-aligned column of their own, the
   three dictation rows, `Replace WisprFlow`,
-  `Take Screenshot`, the `Pick an Element in Chrome` legend, `Autosend`,
+  the `Take Screenshot` and `Pick Element in Chrome` legends, `Autosend`,
   `About`, `Quit`, and the model-name readout
 
 The first two are **not on screen at the moment**: `showsGestureHints` is off, so
@@ -661,7 +661,7 @@ bypasses that flag in the tap rather than pretending to set it.
 | gate | unbound |
 |---|---|
 | `captureContext` — flash, selection probe, screen capture | off |
-| `plusOneShot` — F3 / mouse 4 | off |
+| `plusOneShot` — mouse 4 | off |
 | `send` — the outbox line and the delivery | off |
 | `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off |
 | `syncLocalCapture` — the wheel's claim on the microphone | off |
@@ -960,7 +960,7 @@ only has to identify the device.
 
 They are borrowed from the same dictation and they arrive in the same message,
 so it is worth writing down that nothing routes one into the other. The shutter
-(mouse 4, or F3) takes a **picture plus whatever is highlighted at that moment**;
+(mouse 4 while dictating) takes a **picture plus whatever is highlighted at that moment**;
 ⌘⇧-click in Chrome takes a **path to a DOM element** and no picture. Neither is a
 fallback for the other, and Victor asked for them to stay that way.
 
@@ -968,9 +968,10 @@ fallback for the other, and Victor asked for them to stay that way.
 two could have had since the shutter started paying for the clipboard fallback.
 `inspect.js` treats any keydown during a ⌘⇧ hold as proof the chord is a
 shortcut and abandons the arm — but **both shutter routes require no modifiers
-at all**: mouse 4 asks for `bare` and F3 for `!ctrl && !opt && !cmd && !shift`
-(`HotkeyTap`). With ⌘⇧ held, neither fires, so there is no press that could post
-a ⌘C into a hold. Do not relax either gate without re-reading this.
+at all**: mouse 4 asks for `bare` (`HotkeyTap`). With ⌘⇧ held, it never fires,
+so there is no press that could post a ⌘C into a hold. Do not relax that gate
+without re-reading this. (F3 was the shutter's keyboard route until 2026-09-04,
+when it went unused one year too many.)
 
 ## Two gestures are borrowed, and only while dictating
 
@@ -1063,8 +1064,8 @@ That button is Victor's Return key: LinearMouse
 which is what he submits with all day. Borrowing it is only defensible because
 of how narrow the window is — during a dictation an Enter lands in whatever
 happens to have focus, which is never what he meant, and the point of the whole
-overlay is that he is *away from the keyboard*. Asking him to reach for F3 to
-attach a picture put the one thing he does mid-sentence back on the keyboard.
+overlay is that he is *away from the keyboard*. F3, the keyboard route this
+button replaced, was removed on 2026-09-04 — never pressed in a year of use.
 
 Three rules keep the theft honest:
 
@@ -1105,7 +1106,7 @@ because the name is already in front of the agent: the path travels in `paths`,
 so both facts arrive with the picture and nothing downstream learns a new key.
 
 **`00:00` is the automatic context shot**, by definition — he took it by starting
-to talk. A shot with no dictation around it (bare F3) keeps a timestamp instead:
+to talk. A shot with no dictation around it keeps a timestamp instead:
 "elapsed since the start" of nothing is not a fact.
 
 **The colon is legal and the Finder lies about it.** POSIX filenames on APFS take
@@ -1270,7 +1271,7 @@ shutter path is not a bug anyone would enjoy finding later.
 
 ## The shutter also takes the selection
 
-F3, or mouse 4 while dictating, records **what is highlighted at that moment**, stamped with the
+Mouse 4 while dictating records **what is highlighted at that moment**, stamped with the
 offset it was taken at, beside the picture (`stashExtraSelection`). A screenshot
 shows a line of code; the selection *is* the line of code, in characters
 something can grep for, and until now only the first one of a dictation survived.
@@ -1399,8 +1400,8 @@ runs, a clipboard probe and a subprocess later, the hand has moved on.
 ### The cursor mark is on the screen, never in the picture
 
 `CaptureFlash.markCursor` drops the red target on the desktop where the pointer
-was, for ~2s — on the automatic capture that opens a dictation and on every F3
-alike, since both go through `announce(cursor:)`. **`CursorMarker` no longer
+was, for ~2s — on the automatic capture that opens a dictation and on every
+back-button shot alike, since both go through `announce(cursor:)`. **`CursorMarker` no longer
 touches the file.**
 
 It used to be burned into the saved JPEG, on the argument that the file name
@@ -1415,7 +1416,7 @@ The screen flash answers the same need at a better moment. The vignette says
 *what* was captured, this says *where he was pointing while he said it* — and
 unlike a mark in a file, which is something you find afterwards, it lands while
 the sentence is still being spoken, so a shot aimed at the wrong thing can be
-retaken with F3 on the spot.
+retaken on the spot.
 
 Dropping the burn-in also dropped a second JPEG pass over a frame `screencapture`
 had already encoded: ~100ms, and at quality 1.0 the file came back *larger*.
@@ -1602,15 +1603,21 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
 
   **The factor is learned, not written down** (`DecodeRate.swift`, same day).
   Every decode files what it actually cost against the audio it was handed, and
-  the estimate is the **80th percentile of the last twenty** — the value four
-  decodes in five come in under, which is where the padding that used to be a
-  hand-rounded 0.105 → 0.12 now comes from. A constant measured once is right
+  the estimate is the **mean of the last fifty** — since 2026-09-04, on
+  Victor's call: the 80th percentile of twenty it replaced was measured
+  promising 33s for decodes that landed in 3 (the window's p80 sat at 0.225×
+  while real decodes came in at 0.09–0.11×), and a countdown wrong by an order
+  of magnitude in the "safe" direction is still wrong every second it is on
+  screen. The bigger window is what a mean needs: one slow decode moves it by
+  its own ÷50 instead of sitting at a rank of twenty for an afternoon. GPU load
+  is not sampled separately — the ratio of the most recent decodes already *is*
+  the load on whatever resource the model uses, measured end to end. A constant measured once is right
   until the model (`RELAY_WHISPER_MODEL`), the machine's load or its thermals
   move under it, and none of those announce themselves; what they produce is a
   countdown that is quietly wrong for weeks. **0.12 is still the fallback**,
   used until there are five samples.
   - **The window is on disk**, `~/.walkie-talkie/decode-rate.json`, beside the
-    outbox and not in Caches. Twenty dictations is more than one launch: an
+    outbox and not in Caches. Fifty dictations is more than one launch: an
     in-memory window would spend most of its life under the minimum and the
     learning would never take.
   - **The first decode after the helper starts is not filed.** The helper warms
@@ -1725,7 +1732,7 @@ held. The third is a chord with the left button.**
 | anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
 | bound, any state | **right button down, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
 | anywhere, any state | **right button down, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
-| any state | the **forward side button held 0.6s** | the same thing again, with one button and no chord |
+| any state, not dictating | the **back side button held 0.6s** | the same thing again, with one button and no chord |
 | nothing bound, no chord | click | passed straight through |
 
 **The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
@@ -1739,96 +1746,69 @@ already has two routes that mean nothing else — the right-held chord, and the
 menu's Disconnect. A toggle earns its keep on a key with no off switch; it is a
 trap on a gesture that has two.
 
-### The forward button, held, is the third way to a new session (2026-09-04)
+### The back button, held, is the third way to a new session (2026-09-04)
 
 ⌘ + the wheel needs a key; the right chord needs two buttons in order. Victor
-asked for one that needs neither — **hold the forward side button for 0.6s and a
+asked for one that needs neither — **hold a side button for 0.6s and a
 dictation opens at a session that does not exist yet**, the same
 `onSpawnToggle` the chord's hold calls, ending the same way whichever gesture
 opened the microphone.
 
-**The press is taken away from the machine while it is being judged, and given
-back if it turns out to be a click.** He asked how long a hold could last before
-something downstream took the button over; the honest answer is *none* — a
-push-to-talk fires at the press, and waiting is exactly what hands it over. So
-`HotkeyTap` swallows the press, and `replayMouse5Click()` posts it again at the
-HID tap if the button comes up before the timer. From downstream that is the same
-click 0.6s late at worst, and in practice the hand is off the button by then.
+**It lived on the forward button for exactly one day.** Measured on presses
+Victor was deliberately holding: the button reaches the tap as an ~18ms
+down-and-up pair however long the finger stays on it — and
+`CGEventSourceButtonState`, asked directly, *agrees*: `physical=true` at the
+down, `physical=false` at the up 20ms later, finger still down. Something
+between the mouse and this tap — the Bolt receiver, Logi's agent, or Wispr
+Flow's push-to-talk, which lives on that button and is the prime suspect —
+throws the duration away at the hardware's own layer. A gesture defined by
+duration cannot be built on a stream that has thrown the duration away, not by
+watching events and not by watching state. So the hold moved to the **back**
+button — the one side button nothing intercepts at rest, where it is only
+LinearMouse's Return. Victor's call, and his hypothesis: *"not button 5, the
+other one for long press — perhaps we can avoid the whisper flow intercepting
+us."*
 
-- **What cannot be given back is a *hold*.** Anything downstream that reads a long
-  press on this button now sees a click. That is the price of the gesture, and it
-  is deliberate; `mouse5HoldSeconds` and the branch that swallows are the one
-  place to change it.
-- **The replay is tagged** (`replayTag`, "WALK", in the event source's user data)
-  and recognised at the top of the tap. Without that, the posted press is judged
-  as a fresh one, arms another hold and is swallowed again — the gesture eating
-  itself.
-- **0.6s: longer than a click, shorter than the wheel chords' second.** Those
-  have a *second reading* to be told apart from; this one has only a click, so
-  the wait is the shortest that cannot be made by accident.
-- **The double click still binds**, and it comes first — a second press inside
-  the interval cancels the hold rather than arming a new one, and is not
-  replayed, because that one is ours.
-- **Replace Wispr outranks all of it.** In that mode the forward button *is* the
-  microphone, and its branch sits above this one in the tap.
-- **The same two-flag claim the wheel uses** (`claimMouse5Press`), because a hold
-  timer and a release on the tap thread race for one press — the bug that once ran
-  both halves of a wheel press at the same instant.
-- **The hold runs on a queue of its own, not on `main`** (fixed 2026-09-04). It
-  was `DispatchQueue.main.asyncAfter`, and that is a dependency this gesture must
-  not have: the main queue is where the chip relayouts at 60 Hz, where `NSMenu`
-  runs its own tracking loop while the menu bar item is open, and where every
-  AppKit answer this app waits on lands. A verdict that arrives late is, from the
-  hand, indistinguishable from one that never arrives.
+**The press is taken away from the machine while it is judged, and given back
+if it turns out to be a click.** A push-to-talk fires at the press, and waiting
+is exactly what hands the button over. So `HotkeyTap` swallows the press, and
+`replayMouse4Click()` posts it again at the HID tap if the button comes up
+before the deadline — from downstream that is the same Return a poll interval
+late, and LinearMouse types it off the replay exactly as off the real one.
 
-### The forward button has no hold, as far as the event stream is concerned
-
-**Measured 2026-09-04, on a press Victor was deliberately holding: 18ms.**
-Something between the mouse and this tap — the Bolt receiver, Logi's agent, or
-LinearMouse, which already rewrites the *back* button into a Return — hands the
-forward button over as an instantaneous down-and-up pair however long the finger
-is on it. A gesture defined by duration cannot be built on a stream that has
-thrown the duration away, and no threshold of any length would ever have been
-met.
-
-**So the physical button is watched instead of the events being timed.**
-`CGEventSourceButtonState` answers for button 4 — `CGMouseButton(rawValue: 4)` is
-not nil, the type comes from a C enum and takes any raw value — and it is the
-same instrument `rightIsHeld` already reaches for when a press this tap never saw
-leaves its bookkeeping stale. Both state IDs are asked: `.hidSystemState` is the
-hardware, `.combinedSessionState` includes what has been synthesized on top of
-it, and a button down in either is down.
-
-- **A release while the button is still physically down is not a release.** It is
-  the second half of that instant pair, and taking it at face value is precisely
-  what cancelled the verdict 18ms after arming it, every time. The press is left
-  standing and nothing is replayed, because the click has not happened yet.
-- **Once an up has been ignored there is no second event left**, so a timer alone
-  would fire on every plain click. `judgeMouse5Press` therefore *watches*: 40ms
-  polls for at most `mouse5HoldSeconds`, the finger coming off before the
-  deadline being a click — handed back then — and the deadline arriving with the
-  button still down being a hold.
-- **It fails safe.** Where the button state cannot be read the answer is false,
-  the up is never ignored, the release claims the press as it always did, and
-  this is the old timer again. Every other mouse is unaffected for the same
-  reason: a release the tap takes normally never reaches the loop's end.
-
-**And every edge of this button is now written to the log**, which is the part
-that matters more than either fix. Reported 2026-09-04: *"it doesn't really work
-to keep that button hold down to start a new session"* — and the log had nothing
-at all about mouse 5 in the two hours around it, no press, no double click, no
-hold, while a synthetic press through the same code path worked first time. That
-left the one question every other explanation is downstream of — **did the event
-arrive?** — with no way to answer it. It is one line per press on a button pressed
-a few times an hour, and the release carries the duration in milliseconds and the
-verdict (`held 248ms (a click)`), because *"holding it does nothing"* has two
-readings — the press never reached the tap, or it reached it and was shorter than
-`mouse5HoldSeconds` — and they call for opposite fixes.
+- **0.6s: longer than a click, shorter than the wheel chords' second**
+  (`backHoldSeconds`). Those have a *second reading* to be told apart from;
+  this one has only a click, so the wait is the shortest that cannot be made by
+  accident.
+- **At rest only.** While a dictation is running the back button is the shutter
+  and stays it; in Replace Wispr it is deliberately untouched, so the mode's
+  Return keeps working. The branch asks `bare && !replaceWispr` after the
+  shutter branch has had its say.
+- **The replay is tagged** (`replayTag`, "WALK", in the event source's user
+  data) and recognised at the top of the tap. Without that, the posted press is
+  judged as a fresh one, arms another hold and is swallowed again — the gesture
+  eating itself.
+- **A release while the button is still physically down is not a release**, and
+  once an up has been ignored there is no second event left — so
+  `judgeBackPress` *watches* rather than times: 40ms polls for at most
+  `backHoldSeconds`, the finger coming off before the deadline being a click —
+  handed back then — and the deadline arriving with the button still down being
+  a hold. It fails safe: where the state cannot be read the up is never ignored
+  and the release claims the press as it always did.
+- **The hold runs on a queue of its own, not on `main`** — the main queue is
+  where the chip relayouts at 60 Hz and where `NSMenu` runs its own tracking
+  loop; a verdict that arrives late is, from the hand, indistinguishable from
+  one that never arrives.
+- **Whether it works at all is the open question the log now answers.** If this
+  button's physical state also collapses inside 20ms, the same two lines per
+  press (`mouse 4 down — … physical=…` / `up — held Nms …`) say so, and the
+  click still works through the fail-safe. The forward button keeps its own
+  edge logging, its double click (which binds), and its Replace Wispr
+  microphone — only the hold left it.
 
 It rides the menu beside the chord it duplicates: `Dictate to new Claude —
-⬆️ 0.6s · ➡️ + 🛞 1s`. ⬆️ is the forward button, the pair of the ⬇️ the shutter
-row already draws for the back one, and the duration is what tells it from the
-click this app otherwise hands straight back.
+⬇️ 0.6s · ➡️ + 🛞 1s`, the duration being what tells it from the click that
+types Return.
 
 **Keeping the wheel down turns the same chord into a dictation**, since the same
 day. Press and let go binds; hold the wheel a further second
@@ -1979,12 +1959,12 @@ guards against twice already, written a third time.
 `HotkeyTap.frontIsBindable` survives the change but the wheel no longer consults
 it: the chord acts wherever it is made and lets `bindFrontmostTerminal` refuse.
 It is still pushed from `AppDelegate` on every app activation, because the menu's
-**Connect Window** row greys itself out with it.
+**Connect Terminal** row greys itself out with it.
 
 **A toggle, not a push-to-talk.** A button held down for the length of the
 sentence is right for a sentence; a dictation aimed at an agent runs to a minute
 or more, and a mouse button held for a minute is a hand that cannot take the
-screenshots (mouse 4, F3) the same minute exists for.
+screenshots (mouse 4) the same minute exists for.
 
 `MicRecorder` opens the input device at its native rate and converts to 16 kHz
 mono 16-bit through `AVAudioConverter` — the format Whisper resamples to anyway
@@ -2435,14 +2415,13 @@ its own way back is not one.
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
 that performs it — `Dictate to new Claude — ⬆️ 0.6s · ➡️ + 🛞 1s`,
-`Cancel Dictation — hold 🛞 2s`, `Take Screenshot — F3, or the back
-button while dictating`. A row greys out when it cannot act *this second*; it
+`Cancel Dictation — 🛞 2s`, `Take Screenshot — ⬇️ while dictating`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
 în care sunt acum"* asks for.
 
 One row exists because of this rule rather than despite it:
-**`Pick an Element in Chrome — ⌘⇧ + 🖱️`** is a legend, permanently
+**`Pick Element in Chrome — ⌘⇧ + ⬅️ while dictating`** is a legend, permanently
 disabled — the gesture happens inside a page this app cannot reach from a menu,
 but the relay takes the input over, so with the chip silent there is nowhere else
 it could be written. A disabled row is the honest rendering of *this is something
@@ -2595,7 +2574,7 @@ the engine readout and **Quit**.
 
 The chip shows the same line **without** the `Bound to:` prefix, and that is not
 a drift between them. Beside the cursor a folder name has nothing else it could
-be naming; in the menu it sits above `Connect Window` / `Disconnect` /
+be naming; in the menu it sits above `Connect Terminal` / `Disconnect` /
 `End Dictation`,
 where a bare name between an icon and a stack of commands reads as a section
 title — as what the commands are *for* — rather than as a destination. Only the
@@ -2623,19 +2602,20 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 
 | row | icon | chord column | key column |
 |---|---|---|---|
-| `Connect Window` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
+| `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
-| `Dictate to new Claude` | ✨ | `⬆️ 0.6s · ➡️ + 🛞 1s` | |
+| `Dictate to new Claude` | ✨ | `⬇️ 0.6s · ➡️ + 🛞 1s` | |
 | `Paste last prompt` | 📋 | | ⌘⌃P |
 | — separator — | | | |
 | `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
 | `End Dictation` | `mic.slash` | `🛞` | ⌘⌃D |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` | |
-| `Take Screenshot` | 📷 | `⬇️ @🎙️` | F3 |
-| `Pick an Element in Chrome` | ✋ | `⌘⇧ + ⬅️ @🎙️` | |
+| `Take Screenshot` | 📷 | `⬇️ while dictating` | — |
+| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️ while dictating` | |
 | `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) | |
 | `Message log of last 2 days` | 📜 | | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
+| `Quit` | `power` | | |
 
 **The line groups by what a row is *for*.** Above it, everything about a
 **destination** — point at one, let it go, make a new one, paste the last
@@ -2645,12 +2625,11 @@ written, with the two gestures that are only live mid-sentence sitting three row
 below the block they belong to. A menu that is the app's only legend has to group
 by the question its reader is asking.
 
-**`@🎙️` is "while dictating"**, and it replaced those two words. They were a
-third of the width of the longest row, said twice, to qualify a chord — and `@`
-is the right shape for it, since the marker is an *address*: this gesture lives
-at the dictation. It survives the separator because **F3 is not gated on a
-dictation at all**, so the marker is what says which half of `One More
-Screenshot` the condition belongs to.
+**`while dictating` is spelled out, in words.** It was the marker `@🎙️` for two
+days — an address, *this gesture lives at the dictation* — until Victor had the
+microphone emoji out of the menu (2026-09-04). The words cost the width the
+marker was invented to save, and that is accepted: the two rows it qualifies
+are disabled legends now, read at leisure rather than mid-gesture.
 
 **The word `hold` is gone from every chord**, on Victor's ask. Where a hold has a
 *duration* the duration says so (`🛞 2s`, `➡️ + 🛞 1s`); where it does not, the
@@ -2658,12 +2637,13 @@ chord is unambiguous without it — there is no tap-⬅️-then-🛞 meaning som
 else for it to be told apart from. It was four characters in front of the two
 rows read most often.
 
-**F3 rides the shortcut column as a real key equivalent.** It is a key, and this
-row is the one place in the menu where a keyboard route and a mouse route do the
-same thing — splitting them across the two columns is what says they are
-alternatives. Modifier-less and harmless: the app is `.accessory` and never
-becomes key, so it can only fire while the menu is open; the global F3 is
-`HotkeyTap`'s as it always was.
+**Take Screenshot is a legend, not a command** — permanently disabled since
+2026-09-04, the same rendering the ⌘⇧-pick row already used for "this is
+something you do, not something you pick". F3, its keyboard route, was never
+pressed and went the same day — the key equivalent, the global branch in
+`HotkeyTap`, all of it. The two legend rows sit under a separator of their own,
+below the three rows that end a dictation and actually do something when
+clicked.
 
 **The back button is drawn `⬇️`**, joining ⬅️ and ➡️ rather than being spelled out
 as *the back button*. The arrows in this menu are already mouse buttons; the
@@ -2785,12 +2765,13 @@ page is read in order to *find* a sentence, and what happens next is that it get
 pasted; until then that meant a drag-select across a card that also holds a
 timestamp, an app name and a block quote.
 
-- **It copies the whole message**, not the transcript alone: the words, then
-  `[selected: …]`, then the paths of the frames with what was in front of each.
-  Same reading, and the same day, as ⌘⌃P's change — what these words are pasted
-  into is usually another agent. `MessageLog.payload` assembles it, because the
-  outbox never carried the delivered line (`terminalLine` builds it at delivery
-  and keeps nothing).
+- **It copies the exact prompt ⌘⌃P would paste**, byte for byte — Victor's ask
+  the day after the button landed: the same words, the dictated-aloud hint,
+  every quoted selection, the focused window, the frames' paths and the picked
+  elements. Since then the outbox carries the delivered envelope itself:
+  `commit` writes `line` (the `terminalLine` the delivery used) into the JSON,
+  and Copy reads it back. Lines from before that day have no `line`, so
+  `MessageLog.payload` re-assembles those from the parts — close, not identical.
 - **The payload rides in a hidden `<pre>`**, not in a `data-` attribute: an
   attribute would need its quotes escaped too, and a dictation is arbitrary text.
 - **The script is the one bend in "no script", and the rule survives it.** That
@@ -2947,7 +2928,8 @@ the same problem, which is what he asked for by name.
   `.statusBar` level and `fullScreenAuxiliary`, so a full-screen window does not
   bury it.
 - **Never in a screenshot** (`sharingType = .none`). The relay photographs the
-  screen during the very dictation this marks — the automatic frame and every F3 —
+  screen during the very dictation this marks — the automatic frame and every
+  back-button shot —
   and a confirmation inside the thing it confirms is a fixture the agent has to
   learn to ignore. Same rule `CaptureFlash` and `MenuBarMirror` follow. **It is
   therefore not checkable with a screenshot**; what is checkable is the geometry,
@@ -3020,6 +3002,34 @@ second of drift is a whole sentence.
 
 Ordering is preserved: a second dictation arriving mid-countdown releases the
 first one before displaying itself.
+
+### The send flight (2026-09-04)
+
+**When a held prompt is released — the countdown running out, ⏎, a click, the
+Send button, or autosend's one-second beat — the panel flies to the terminal the
+words were sent to.** Victor's ask: *"once the timer expires or it sends to the
+terminal I would love it to pan and increase the size until it reaches that
+terminal"*. A picture of the panel leaves its corner and grows until it fills
+the bound window's frame, then dissolves. The receipt for *it went there*, in
+the bind flight's own language and through the same `BindFlight` machinery —
+which is what guarantees the two can never drift.
+
+- **The picture is the panel's own drawing of itself**, captured in
+  `resolvePrompt` a breath before the state clears (`promptFarewell`). The
+  overlay is invisible to screen capture (`sharingType = .none`), so
+  `BindFlight`'s usual screen grab would carry the desktop *behind* the panel;
+  `carrying:` is the parameter that exists for this.
+- **The destination is re-resolved, not remembered.** `Target.sourceFrame` went
+  stale the moment Victor dragged anything after binding; the flight asks
+  Terminal for the window showing the bound tty *now* — the same
+  `terminalWindowFrame(tty:)` the spawn flight uses. tmux bindings aim at the
+  client's window by the same call.
+- **IDE and keystroke targets get no flight.** Nothing outside those apps can
+  name their window's frame honestly, and a flight toward a guessed rectangle
+  is worse than none.
+- **A spawn and a cancel have their own grammar already** — the spawn's
+  backwards flight, the cancel's 🗑️ row — so neither flies. Replace Wispr holds
+  no prompt at all, so there is nothing to fly.
 
 ### ⏎ sends it, and clicking the words edits them
 

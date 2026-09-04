@@ -62,6 +62,10 @@ enum MessageLog {
         var app: String?
         var selection: String?
         var kind: String
+        /// The envelope exactly as delivered (`AppDelegate.terminalLine`),
+        /// stored in the outbox since 2026-09-04. What Copy puts on the
+        /// clipboard; nil on older lines, where `payload` re-assembles it.
+        var line: String?
         /// Deliberate shots first, then the automatic frame of the screen he was
         /// looking at — the same order of intent `Outbox.send` documents.
         var shots: [String]
@@ -103,6 +107,8 @@ enum MessageLog {
                                  app: obj["app"] as? String,
                                  selection: selection,
                                  kind: (obj["kind"] as? String) ?? "",
+                                 line: (obj["line"] as? String)?.isEmpty == false
+                                     ? (obj["line"] as? String) : nil,
                                  shots: shots,
                                  sources: (obj["sources"] as? [String: String]) ?? [:]))
         }
@@ -316,19 +322,19 @@ enum MessageLog {
         return out
     }
 
-    /// **What Copy puts on the clipboard: everything the card is carrying.**
+    /// **What Copy puts on the clipboard: the exact prompt ⌘⌃P would paste.**
     ///
-    /// Not the transcript alone. The same day this button was asked for, ⌘⌃P was
-    /// changed to paste the whole delivered line, for the same reason — what
-    /// these words are pasted *into* is overwhelmingly another agent, and there
-    /// the highlight and the paths of the frames are the half that cannot be
-    /// retyped.
+    /// Since 2026-09-04 the outbox carries the delivered envelope itself (`line`),
+    /// written by `commit` from the same `terminalLine` call the delivery made —
+    /// so a copied message is byte for byte what the session received: the words,
+    /// the dictated-aloud hint, every quoted selection, the focused window, the
+    /// frames' paths with what was in front of each, and the picked elements.
     ///
-    /// It is assembled here rather than read back off the outbox because the
-    /// outbox never carried the assembled line: `AppDelegate.terminalLine` builds
-    /// it at delivery and keeps nothing. The shapes are deliberately the ones
-    /// that line uses, so a reader who has seen one recognises the other.
+    /// Lines older than that have no `line`, so the parts are re-assembled here
+    /// in the shapes that line uses — close, but not the same string: the clamps
+    /// and the hint are the reconstruction's own.
     private static func payload(_ entry: Entry) -> String {
+        if let line = entry.line { return line }
         var parts: [String] = []
         if !entry.text.isEmpty { parts.append(entry.text) }
         if let selection = entry.selection, !selection.isEmpty {

@@ -41,7 +41,7 @@
     "shape" : "chip",
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
-    "when" : "⌘ + the wheel, or the right-held chord: the dictation goes to a terminal that does not exist yet.",
+    "when" : "the right-held chord: the dictation goes to a terminal that does not exist yet.",
     "width" : 163
   },
   {
@@ -122,7 +122,7 @@
     "shape" : "chip",
     "slug" : "listening-selection",
     "title" : "Dictating, carrying a highlight",
-    "when" : "He had text selected when he started talking, or F3'd with a selection.",
+    "when" : "He had text selected when he started talking, or took a shot with a selection.",
     "width" : 289
   },
   {
@@ -146,7 +146,7 @@
     "shape" : "chip",
     "slug" : "listening-selection-caught",
     "title" : "The shutter caught a highlight",
-    "when" : "For a beat after every F3 or side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
+    "when" : "For a beat after every side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
     "width" : 362
   },
   {
@@ -166,7 +166,7 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "listening-flash.png",
-    "note" : "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The F3 receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen, which is why the highlight it catches is announced on the chip's own row instead.",
+    "note" : "The flash takes the last row and the dictation rows stay above it — the chip grows the blur without losing what it was saying. The shot receipt is deliberately *not* one of these: taking a picture mid-dictation must not throw a panel across the screen, which is why the highlight it catches is announced on the chip's own row instead.",
     "shape" : "flash",
     "slug" : "listening-flash",
     "title" : "Something went wrong mid-sentence",
@@ -363,7 +363,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,

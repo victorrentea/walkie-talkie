@@ -130,7 +130,7 @@ enum SpawnFolderMenu {
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         // The relay photographs the screen during the very dictation this menu
-        // opens — the automatic frame and every F3. Same rule `CaptureFlash`,
+        // opens — the automatic frame and every back-button shot. Same rule `CaptureFlash`,
         // `RecordingBeacon` and the chip itself follow.
         p.sharingType = .none
         p.contentView = root

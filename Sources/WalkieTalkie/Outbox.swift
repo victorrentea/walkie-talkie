@@ -255,7 +255,13 @@ enum Outbox {
                      /// line to say nothing new.
                      sources: [String: String] = [:],
                      app: String? = nil,
-                     elements: [[String: Any]] = []) {
+                     elements: [[String: Any]] = [],
+                     /// The assembled envelope exactly as it was delivered to the
+                     /// terminal — `AppDelegate.terminalLine`. Carried since
+                     /// 2026-09-04 so the Message Log's Copy button can put *the
+                     /// same string* ⌘⌃P would paste on the clipboard, byte for
+                     /// byte, rather than re-assembling it from the parts.
+                     line: String? = nil) {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
@@ -275,6 +281,7 @@ enum Outbox {
         if !sources.isEmpty { obj["sources"] = sources }
         if let app = app, !app.isEmpty { obj["app"] = app }
         if !elements.isEmpty { obj["elements"] = elements }
+        if let line = line, !line.isEmpty { obj["line"] = line }
 
         queue.async {
             // JSONSerialization (never string interpolation): dictated text and

@@ -106,7 +106,7 @@ enum CaptureFlash {
     /// name for the agent — and both of those are things you find *afterwards*.
     /// This is the same fact at the only moment it can still be corrected: if
     /// the target lands somewhere he did not mean, the sentence is still being
-    /// spoken and he can point again with F3.
+    /// spoken and he can point again with the back button.
     ///
     /// It is the mark Victor Addons drops after every ⌃P, and deliberately so —
     /// that desktop already means "here" by it, so there is nothing to learn.

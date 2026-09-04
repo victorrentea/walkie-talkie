@@ -347,7 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onNewSession = { [weak self] in
             DispatchQueue.main.async { self?.startLocalRecording(spawn: true) }
         }
-        // The menu's copy of F3. **After a beat**, because the menu is dismissed
+        // The menu's shutter row. **After a beat**, because the menu is dismissed
         // by AppKit and the screen redrawn a frame or two later — a capture fired
         // on the click would photograph the menu that ordered it.
         status.onShot = { [weak self] in
@@ -618,7 +618,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// A **toggle**, not a push-to-talk: the dictations that go to an agent run
     /// to a minute or more, and a mouse button held for a minute is a hand that
-    /// cannot do anything else — including take the screenshots (mouse 4, F3)
+    /// cannot do anything else — including take the screenshots (mouse 4)
     /// that the same minute is for.
     private func toggleLocalRecording() {
         if localRecording { stopLocalRecording() } else { startLocalRecording() }
@@ -1022,7 +1022,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in
             self?.overlay.setPicks(count: 2, newest: picks[1].short)
         }
-        // The automatic context shot, then one taken with F3 — the two ways the
+        // The automatic context shot, then one taken with the back button — the two ways the
         // count moves in a real dictation.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             self?.overlay.setShotCount(1)
@@ -2115,7 +2115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 
-    /// F3, or mouse 4 while dictating — one more shot for the dictation in
+    /// Mouse 4 while dictating — one more shot for the dictation in
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
     private func plusOneShot(cursor: NSPoint) {
@@ -2561,12 +2561,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastDictation: String?
 
     private func commit(_ m: Message) {
+        // The assembled line, and assembled from `m` — the same call
+        // `deliverToTerminal` and `spawnClaude` make, so what he pastes (and
+        // what the Message Log's Copy puts on the clipboard, via the outbox's
+        // `line`) is byte for byte what the session received.
+        let line = Self.terminalLine(m)
         if m.kind == "dictation", let text = m.text?.trimmingCharacters(in: .whitespacesAndNewlines),
            !text.isEmpty {
-            // The assembled line, and assembled from `m` — the same call
-            // `deliverToTerminal` and `spawnClaude` make, so what he pastes is
-            // byte for byte what the session received.
-            lastDictation = Self.terminalLine(m)
+            lastDictation = line
         }
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selections: m.extraSelections.map {
@@ -2576,7 +2578,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     sources: m.sources.reduce(into: [String: String]()) { out, pair in
                         out[(pair.key as NSString).lastPathComponent] = pair.value
                     },
-                    app: m.app, elements: m.elements.map { $0.json })
+                    app: m.app, elements: m.elements.map { $0.json },
+                    line: line)
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)
@@ -2679,5 +2682,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         commit(m)
+        // **The send flight** (Victor, 2026-09-04): the panel the prompt was
+        // just read on flies to the terminal the words were sent to, growing
+        // into that window's frame — *"once the timer expires or it sends to
+        // the terminal I would love it to pan and increase the size until it
+        // reaches that terminal"*. The receipt for *it went there*, said in
+        // the bind flight's own language, and played whether the panel had
+        // buttons (the countdown, ⏎, a click) or not (autosend). A spawn has
+        // its own flight already; a cancelled prompt has nowhere to fly.
+        if !m.spawn, let farewell = overlay.promptFarewell {
+            overlay.promptFarewell = nil
+            sendFlight(from: farewell.frame, carrying: farewell.image)
+        }
+    }
+
+    /// Fly the just-sent panel to the bound terminal's window, growing until it
+    /// fills it. Silent no-op when there is no honest frame to aim at — IDE and
+    /// keystroke targets have no window this app can name, and a flight toward
+    /// a guessed rectangle is worse than none.
+    private func sendFlight(from frame: CGRect, carrying image: CGImage?) {
+        guard let target = terminal.target else { return }
+        let tty: String?
+        switch target.handle {
+        case .terminalApp(let t): tty = t
+        case .tmux(_, let t): tty = t
+        case .ide, .keystroke: tty = nil
+        }
+        guard let tty = tty else { return }
+        // AppleScript, so off the main thread — the same discipline
+        // `deliverToTerminal` keeps.
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let destination = TerminalBinding.terminalWindowFrame(tty: tty) else { return }
+            DispatchQueue.main.async {
+                BindFlight.fly(from: frame, to: { destination },
+                               seconds: Self.spawnFlightSeconds, carrying: image)
+            }
+        }
     }
 }
