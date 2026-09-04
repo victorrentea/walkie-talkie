@@ -454,12 +454,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            // **Two ways in, and the chord-free one first.** ⬇️ is the back
-            // side button, the shutter's button at rest; `0.6s` is what tells
-            // it from an ordinary click — the Return LinearMouse types with it.
-            // It was ⬆️ (the forward button) for one day, until that button
-            // proved to arrive as an instant pair however long it is held.
-            (newSession, newSession.title, "⬇️ 0.6s · ➡️ + 🛞 1s"),
+            // **Two ways in, and the chord-free one first.** `🛞 2s` is the bare
+            // wheel kept down past the dictation it just started — Victor's
+            // replacement (2026-09-04) for the side-button holds the mouse
+            // hardware never delivered. The right chord is the unbound route.
+            (newSession, newSession.title, "🛞 2s · ➡️ + 🛞 1s"),
             // **Bare chords — no qualifier.** Both legends said "while
             // dictating" until Victor had the words out (2026-09-04, minutes
             // after they replaced the @🎙️ marker he had out first); the two

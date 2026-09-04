@@ -131,6 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// wrong in the one moment he looks at the row. It drops back to zero if the
     /// capture actually fails, which is the only case where zero is the truth.
     private var contextShotPending = false
+    /// The bare-wheel dictation whose context shot is taken at the wheel's
+    /// release rather than at the press (`startLocalRecording(deferContext:)`,
+    /// consumed by `onWheelRelease`).
+    private var contextAtWheelRelease = false
 
     private let stateLock = NSLock()
 
@@ -389,6 +393,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleLocalRecording() }
         }
+        // **The bare wheel at rest** — distinct from the toggle above because it
+        // is the one gesture with a hold on it: the context shot waits for the
+        // release (`onWheelRelease`), so the two seconds in which a hold can
+        // still turn the dictation into a spawn are not announced by a vignette
+        // and a cursor mark for a screen the sentence may not be about.
+        hotkeys.onWheelDictate = { [weak self] in
+            DispatchQueue.main.async { self?.startLocalRecording(deferContext: true) }
+        }
+        // **The wheel still down 2s after it started a dictation: convert it to
+        // a spawn.** Same recording, same words — only the destination changes:
+        // the terminal it opens in does not exist yet, so the folder menu is
+        // offered exactly as at a fresh spawn press.
+        hotkeys.onWheelHoldSpawn = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard self.localRecording, !self.spawnPending, !self.pasteMode else { return }
+                self.spawnPending = true
+                self.spawnFolder = nil
+                self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+                self.offerSpawnFolders()
+            }
+        }
+        // The deferred context shot's cue — see `onWheelDictate`.
+        hotkeys.onWheelRelease = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self, self.contextAtWheelRelease else { return }
+                self.contextAtWheelRelease = false
+                // Ended under the finger (menu, ⌘⌃D) — no sentence, no picture.
+                guard self.localRecording else { return }
+                self.captureContext()
+            }
+        }
         // ⇧ + the wheel. **Ending is the same call as ever** — the destination
         // belongs to the press that opened the microphone, not to the one that
         // closes it — so the shift only means anything when nothing is running.
@@ -639,7 +675,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ten seconds in — flickering it under the hovering hand, restarting its
     /// clock, and, if he had already clicked, **wiping the folder he chose**
     /// with the `spawnFolder = nil` below and popping the menu back up.
-    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false) {
+    ///
+    /// `deferContext` is the bare wheel at rest: its context shot is taken at
+    /// the **release**, not the press, because the press's two seconds of hold
+    /// may still turn this dictation into a spawn — and the vignette and cursor
+    /// mark would otherwise announce a picture of a screen the sentence may not
+    /// be about (Victor, 2026-09-04).
+    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
+                                     deferContext: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -734,7 +777,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // something that is over. Replace Wispr included — it takes no selection
         // of its own, and one left lying around must not outlive it either.
         abandonDictation("a new dictation started")
-        if !paste { captureContext() }
+        if !paste {
+            if deferContext {
+                // The audio's zero stays the press — shot offsets count from
+                // where the listening started — but the picture itself waits
+                // for the wheel's release: see `onWheelDictate`.
+                stateLock.lock()
+                dictationStartedAt = Date()
+                stateLock.unlock()
+                contextAtWheelRelease = true
+            } else {
+                captureContext()
+            }
+        }
         listening = true
         syncBorrowedGestures()
         overlay.setListening(true)
@@ -809,6 +864,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingScreen = nil
         dictationInFlight = false
         contextShotPending = false
+        contextAtWheelRelease = false
         stateLock.unlock()
 
         publishShotCount()
@@ -1098,12 +1154,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingSelection = nil
             pendingExtraSelections = []
             contextShotPending = true
-            // The zero of every offset in this dictation. Set here because this
-            // is the moment the context shot is booked, and that shot has to come
-            // out at 0:00 exactly.
-            dictationStartedAt = Date()
-            pendingShotOffsets = []
+            // The zero of every offset in this dictation. The bare wheel sets it
+            // at the *press* already (its shot defers to the release, the audio
+            // does not — see `startLocalRecording(deferContext:)`); everyone else
+            // takes it now, the moment the context shot is booked.
+            if dictationStartedAt == nil {
+                dictationStartedAt = Date()
+                pendingShotOffsets = []
+            }
         }
+        // How far into the sentence this frame is taken: 0 for every path that
+        // captures at the press, the hold's length for a wheel that was still
+        // being judged when it was let go.
+        let offset = dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         stateLock.unlock()
 
         // Say `📸 ×1` now, not when the subprocess returns.
@@ -1125,8 +1188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.stashSelection()
 
             guard !alreadyOpen else { return }
-            // 0:00 by definition — he took this one by starting to talk.
-            let path = ScreenCapture.grab(cursor: cursor, offset: 0)
+            // Named by its offset — 0:00 for a capture at the press, the hold's
+            // length when the wheel path deferred it to the release.
+            let path = ScreenCapture.grab(cursor: cursor, offset: offset)
             self.stateLock.lock()
             self.pendingScreen = path
             if let path = path, let source = source { self.shotSources[path] = source }
