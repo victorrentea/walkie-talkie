@@ -2,7 +2,7 @@ import AppKit
 import QuartzCore
 import CoreImage
 
-/// Prototype "the screen was just captured, right here" effects — six
+/// Prototype "the screen was just captured, right here" effects — seven
 /// different visual answers to the same brief: converge on the pointer the
 /// way `CaptureFlash.markCursor` already does, but bigger and busier, so
 /// Victor can watch them side by side and pick one. **Nothing here is wired
@@ -16,6 +16,7 @@ enum CaptureEffect: String, CaseIterable {
     case pinch
     case iris
     case wireRings
+    case tapRipple
 
     var label: String {
         switch self {
@@ -25,6 +26,7 @@ enum CaptureEffect: String, CaseIterable {
         case .pinch: return "Pinch / vortex"
         case .iris: return "Iris shutter"
         case .wireRings: return "Converging wire rings"
+        case .tapRipple: return "Tap ripple (Android emulator style)"
         }
     }
 
@@ -38,6 +40,7 @@ enum CaptureEffect: String, CaseIterable {
         case .pinch: return 0.75
         case .iris: return 0.7
         case .wireRings: return 1.0
+        case .tapRipple: return 0.6
         }
     }
 
@@ -62,6 +65,7 @@ enum CaptureEffect: String, CaseIterable {
         case .pinch: Self.playPinch(into: root, target: target, size: size)
         case .iris: Self.playIris(into: root, target: target, size: size)
         case .wireRings: Self.playWireRings(into: root, target: target, size: size)
+        case .tapRipple: Self.playTapRipple(into: root, target: target)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration * speed + 0.2) {
@@ -592,9 +596,52 @@ enum CaptureEffect: String, CaseIterable {
             ring.add(group, forKey: "converge")
         }
     }
+
+    // MARK: - 7. Tap ripple (Android emulator style)
+
+    /// A single solid yellow disc, the same "tap indicator" Android Studio's
+    /// emulator draws over a touch point: fades in already centered on the
+    /// point at 100pt diameter, grows out to 250pt while fading out, and is
+    /// gone. No convergence — this is the opposite metaphor from the other
+    /// six (it marks the point rather than gathering the screen toward it),
+    /// added on request purely to compare against them.
+    private static func playTapRipple(into root: CALayer, target: CGPoint) {
+        let startDiameter: CGFloat = 100
+        let endDiameter: CGFloat = 250
+        let duration: CFTimeInterval = 0.55
+
+        let dot = CAShapeLayer()
+        let base = CGRect(x: -startDiameter / 2, y: -startDiameter / 2, width: startDiameter, height: startDiameter)
+        dot.path = CGPath(ellipseIn: base, transform: nil)
+        dot.bounds = base
+        dot.position = target
+        dot.fillColor = NSColor.systemYellow.cgColor
+        dot.strokeColor = nil
+        dot.opacity = 0
+        root.addSublayer(dot)
+
+        let group = CAAnimationGroup()
+        group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+
+        let grow = CABasicAnimation(keyPath: "transform.scale")
+        grow.fromValue = 1.0
+        grow.toValue = endDiameter / startDiameter
+
+        // Fades in fast, holds briefly at full strength while still
+        // growing, then fades out over the second half of the growth.
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.values = [0.0, 0.6, 0.6, 0.0]
+        fade.keyTimes = [0.0, 0.15, 0.4, 1.0]
+
+        group.animations = [grow, fade]
+        dot.add(group, forKey: "tap")
+    }
 }
 
-/// The tryout harness for `CaptureEffect` — plays all six, three times
+/// The tryout harness for `CaptureEffect` — plays all seven, three times
 /// each, in a fixed order, all converging on the same point so they can be
 /// compared apples-to-apples. Triggered by `WALKIE_EFFECT_DEMO=1` in the
 /// environment (see `AppDelegate`); not reachable any other way, because
