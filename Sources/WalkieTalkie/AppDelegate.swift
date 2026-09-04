@@ -543,6 +543,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["RELAY_SHOOT"] {
             OverlayStates.shoot(overlay: overlay, into: dir)
         }
+        // The `CaptureEffect` tryout — see `CaptureEffects.swift`. Fires once,
+        // on the whole app's normal running state, so Victor can watch all
+        // five live without anything else being disturbed.
+        if ProcessInfo.processInfo.environment["WALKIE_EFFECT_DEMO"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                CaptureEffectDemo.run()
+            }
+        }
     }
 
     /// **A wheel hold is waiting on the model**, and the microphone opens the
