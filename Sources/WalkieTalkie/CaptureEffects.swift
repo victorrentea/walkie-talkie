@@ -110,7 +110,7 @@ enum CaptureEffect: String, CaseIterable {
 
     // MARK: - 1. Concentric spikes converging
 
-    /// Sharp darts stationed all around the screen, tips already aimed at
+    /// Sharp darts scattered across the whole screen, tips already aimed at
     /// the point, that fly straight in and vanish into it — the read is
     /// "everything on this screen just got pulled to that one pixel."
     ///
@@ -119,17 +119,26 @@ enum CaptureEffect: String, CaseIterable {
     /// than shapes flying in. Wider, longer, fully opaque, outlined and
     /// glowing so they hold up over any background, and given almost a full
     /// second so the flight itself is watchable rather than guessed at.
+    ///
+    /// **Scattered, not ringed** (2026-09-04, Victor's ask): they used to
+    /// stand in a ring just past every edge, arriving from "outside" the
+    /// screen. Starting them at random points *on* the screen instead reads
+    /// as "the whole desktop is being pulled in," not "something flew in
+    /// from off-screen" — each dart's angle is now computed from wherever it
+    /// actually starts rather than assigned to it.
     private static func playSpikes(into root: CALayer, target: CGPoint, size: CGSize, speed: Double = 1.0) {
-        let count = 26
-        let radius = reach(from: target, size: size)
+        let count = 52
         let duration: CFTimeInterval = 0.95 * speed
         let jitter: Double = 0.25 * speed
         let now = CACurrentMediaTime()
 
-        for i in 0..<count {
-            let angle = (2 * .pi * Double(i) / Double(count)) + Double.random(in: -0.05...0.05)
-            let a = CGFloat(angle)
-            let start = CGPoint(x: target.x + radius * cos(a), y: target.y + radius * sin(a))
+        for _ in 0..<count {
+            let start = CGPoint(x: CGFloat.random(in: 0...size.width),
+                                y: CGFloat.random(in: 0...size.height))
+            // The direction this dart actually has to travel — outward from
+            // `target` through `start` — not a slot on a ring it was never
+            // placed on.
+            let angle = atan2(start.y - target.y, start.x - target.x)
 
             let dartLength: CGFloat = 90
             let dartWidth: CGFloat = 22
@@ -604,17 +613,21 @@ enum CaptureEffectDemo {
     /// `0.5` runs twice as fast. Driven by `WALKIE_EFFECT_ONLY` /
     /// `WALKIE_EFFECT_REPS` / `WALKIE_EFFECT_SPEED` (see `AppDelegate`), for
     /// exactly the "replay #1, 3 times, 1.5x slower" kind of ask.
+    ///
+    /// Each rep converges on wherever the mouse **is when that rep fires**,
+    /// not on one point captured before the first — Victor can move the
+    /// pointer between reps and watch each one chase it there.
     static func runOne(_ only: CaptureEffect?, reps: Int, speed: Double) {
-        let point = NSEvent.mouseLocation
         let effects = only.map { [$0] } ?? Array(CaptureEffect.allCases)
-        Log.info("effect-demo: starting at \(point), \(effects.count) effect(s) × \(reps) reps, speed ×\(speed)")
+        Log.info("effect-demo: \(effects.count) effect(s) × \(reps) reps, speed ×\(speed)")
         var delay: CFTimeInterval = 0.3
 
         for effect in effects {
             for rep in 1...reps {
                 let fireAt = delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + fireAt) {
-                    Log.info("effect-demo: \(effect.label) (\(rep)/\(reps))")
+                    let point = NSEvent.mouseLocation
+                    Log.info("effect-demo: \(effect.label) (\(rep)/\(reps)) at \(point)")
                     EffectBanner.show(text: "\(effect.label)  ·  \(rep)/\(reps)")
                     effect.play(at: point, speed: speed)
                 }
