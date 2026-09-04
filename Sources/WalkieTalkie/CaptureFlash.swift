@@ -116,17 +116,44 @@ enum CaptureFlash {
     /// subprocess ahead of the capture, and by the time anything reads
     /// `NSEvent.mouseLocation` again the hand has moved on.
     ///
+    /// `cycleMarker` (2026-09-04, Victor's ask): a live A/B/C playtest of the
+    /// two `CaptureEffects` prototypes he's been tuning this session (spikes,
+    /// tap ripple) against the classic red reticle — every real dictation
+    /// start round-robins through all three so he can compare them in actual
+    /// daily use, not just the demo harness, and pick a favourite next week.
+    /// Only the true dictation-start call (`captureContext`) opts in; the
+    /// mid-dictation "one more shot" marker (`plusOneShot`) always stays the
+    /// plain reticle, since that one is a deliberate, separate gesture, not
+    /// the moment being playtested.
+    ///
     /// Synchronous when already on the main thread. Callers use this *before*
     /// their slow work (AX probe, screencapture) precisely so the panel is on
     /// screen first; an unconditional async hop would queue the flash behind that
     /// work and reintroduce the lag it exists to remove.
-    static func announce(cursor: NSPoint? = nil) {
+    static func announce(cursor: NSPoint? = nil, cycleMarker: Bool = false) {
         let point = cursor ?? NSEvent.mouseLocation
         let show = {
             if let screen = screen(containing: point) { flash(on: screen) }
-            markCursor(at: point)
+            if cycleMarker, let effect = nextMarkerEffect() {
+                effect.play(at: point)
+            } else {
+                markCursor(at: point)
+            }
         }
         if Thread.isMainThread { show() } else { DispatchQueue.main.async(execute: show) }
+    }
+
+    /// The round-robin state for `cycleMarker`: `nil` means "the classic red
+    /// reticle" (`markCursor`), so the cycle is current → spikes → tap ripple
+    /// → current → ... Only ever touched on the main thread (both call sites
+    /// go through `announce`'s main-thread `show` closure), so no lock needed.
+    private static var markerRotationIndex = 0
+    private static let markerRotation: [CaptureEffect?] = [nil, .spikes, .tapRipple]
+
+    private static func nextMarkerEffect() -> CaptureEffect? {
+        let effect = markerRotation[markerRotationIndex % markerRotation.count]
+        markerRotationIndex += 1
+        return effect
     }
 
     /// The red target, on screen, at `point` in global Cocoa coordinates.

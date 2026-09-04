@@ -1194,7 +1194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Those take the best part of a second between them, and a flash that
         // lands after the work is a flash that no longer means "now": it was
         // firing long after the frame it confirms had already been taken.
-        if !alreadyOpen { CaptureFlash.announce(cursor: cursor) }
+        if !alreadyOpen { CaptureFlash.announce(cursor: cursor, cycleMarker: true) }
 
         armOrphanFlush()
 

@@ -5,10 +5,16 @@ import CoreImage
 /// Prototype "the screen was just captured, right here" effects — seven
 /// different visual answers to the same brief: converge on the pointer the
 /// way `CaptureFlash.markCursor` already does, but bigger and busier, so
-/// Victor can watch them side by side and pick one. **Nothing here is wired
-/// into a real dictation start** — `CaptureEffectDemo` below is the only
-/// caller, triggered by an env var for exactly this tryout. Whichever one
-/// wins gets folded into the real trigger as a separate change.
+/// Victor can watch them side by side and pick one. `CaptureEffectDemo`
+/// below is a standalone tryout harness triggered by an env var, for
+/// playing all of them (or a chosen one) back to back outside of any real
+/// dictation.
+///
+/// **Two of these are also live-playtested for real** (2026-09-04, Victor's
+/// ask): `CaptureFlash.announce(cycleMarker: true)` round-robins every
+/// actual dictation start between the classic reticle, `.spikes`, and
+/// `.tapRipple`, so he can compare them in day-to-day use, not just the
+/// demo, before picking a favourite next week.
 enum CaptureEffect: String, CaseIterable {
     case spikes
     case gatheringPixels
