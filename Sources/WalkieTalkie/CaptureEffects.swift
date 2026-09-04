@@ -1,7 +1,8 @@
 import AppKit
 import QuartzCore
+import CoreImage
 
-/// Prototype "the screen was just captured, right here" effects — five
+/// Prototype "the screen was just captured, right here" effects — six
 /// different visual answers to the same brief: converge on the pointer the
 /// way `CaptureFlash.markCursor` already does, but bigger and busier, so
 /// Victor can watch them side by side and pick one. **Nothing here is wired
@@ -14,14 +15,16 @@ enum CaptureEffect: String, CaseIterable {
     case wave
     case pinch
     case iris
+    case wireRings
 
     var label: String {
         switch self {
         case .spikes: return "Concentric spikes"
         case .gatheringPixels: return "Gathering pixels"
-        case .wave: return "Converging wave"
+        case .wave: return "Undulating wave"
         case .pinch: return "Pinch / vortex"
         case .iris: return "Iris shutter"
+        case .wireRings: return "Converging wire rings"
         }
     }
 
@@ -29,11 +32,12 @@ enum CaptureEffect: String, CaseIterable {
     /// (including any staggered start delays) to fully play out.
     var totalDuration: CFTimeInterval {
         switch self {
-        case .spikes: return 0.75
+        case .spikes: return 1.3
         case .gatheringPixels: return 1.0
-        case .wave: return 0.95
+        case .wave: return 1.1
         case .pinch: return 0.75
         case .iris: return 0.7
+        case .wireRings: return 1.0
         }
     }
 
@@ -53,9 +57,10 @@ enum CaptureEffect: String, CaseIterable {
         switch self {
         case .spikes: Self.playSpikes(into: root, target: target, size: size)
         case .gatheringPixels: Self.playGatheringPixels(into: root, target: target, size: size)
-        case .wave: Self.playWave(into: root, target: target, size: size)
+        case .wave: Self.playWave(into: root, target: target, size: size, screen: screen)
         case .pinch: Self.playPinch(into: root, target: target, size: size)
         case .iris: Self.playIris(into: root, target: target, size: size)
+        case .wireRings: Self.playWireRings(into: root, target: target, size: size)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.2) {
@@ -107,10 +112,16 @@ enum CaptureEffect: String, CaseIterable {
     /// Sharp darts stationed all around the screen, tips already aimed at
     /// the point, that fly straight in and vanish into it — the read is
     /// "everything on this screen just got pulled to that one pixel."
+    ///
+    /// **Bigger, brighter, slower** (2026-09-04, Victor's ask): the original
+    /// darts were thin enough and quick enough to read as a flicker rather
+    /// than shapes flying in. Wider, longer, fully opaque, outlined and
+    /// glowing so they hold up over any background, and given almost a full
+    /// second so the flight itself is watchable rather than guessed at.
     private static func playSpikes(into root: CALayer, target: CGPoint, size: CGSize) {
-        let count = 20
+        let count = 26
         let radius = reach(from: target, size: size)
-        let duration: CFTimeInterval = 0.5
+        let duration: CFTimeInterval = 0.95
         let now = CACurrentMediaTime()
 
         for i in 0..<count {
@@ -118,8 +129,8 @@ enum CaptureEffect: String, CaseIterable {
             let a = CGFloat(angle)
             let start = CGPoint(x: target.x + radius * cos(a), y: target.y + radius * sin(a))
 
-            let dartLength: CGFloat = 46
-            let dartWidth: CGFloat = 9
+            let dartLength: CGFloat = 90
+            let dartWidth: CGFloat = 22
             let path = CGMutablePath()
             path.move(to: .zero)
             path.addLine(to: CGPoint(x: dartLength, y: dartWidth / 2))
@@ -128,7 +139,15 @@ enum CaptureEffect: String, CaseIterable {
 
             let dart = CAShapeLayer()
             dart.path = path
-            dart.fillColor = NSColor.captureAccent.withAlphaComponent(0.85).cgColor
+            dart.fillColor = NSColor.captureAccent.cgColor
+            dart.strokeColor = NSColor.white.withAlphaComponent(0.9).cgColor
+            dart.lineWidth = 2
+            // A glow, not just a fill — this is what keeps the dart legible
+            // over a bright window instead of blending into it.
+            dart.shadowColor = NSColor.captureAccent.cgColor
+            dart.shadowOpacity = 1.0
+            dart.shadowRadius = 14
+            dart.shadowOffset = .zero
             dart.anchorPoint = .zero
             dart.bounds = CGRect(x: 0, y: -dartWidth / 2, width: dartLength, height: dartWidth)
             dart.position = start
@@ -140,7 +159,7 @@ enum CaptureEffect: String, CaseIterable {
 
             let group = CAAnimationGroup()
             group.duration = duration
-            group.beginTime = now + Double.random(in: 0...0.15)
+            group.beginTime = now + Double.random(in: 0...0.25)
             group.timingFunction = CAMediaTimingFunction(name: .easeIn)
             group.fillMode = .forwards
             group.isRemovedOnCompletion = false
@@ -151,11 +170,14 @@ enum CaptureEffect: String, CaseIterable {
 
             let shrink = CABasicAnimation(keyPath: "transform.scale")
             shrink.fromValue = 1.0
-            shrink.toValue = 0.08
+            shrink.toValue = 0.1
 
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 0.9
-            fade.toValue = 0.0
+            // Full brightness for most of the flight — only the last fifth
+            // dims, right as it reaches the point, so it never looks like it
+            // is guttering out along the way.
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = [1.0, 1.0, 0.0]
+            fade.keyTimes = [0.0, 0.8, 1.0]
 
             group.animations = [move, shrink, fade]
             dart.add(group, forKey: "converge")
@@ -211,12 +233,95 @@ enum CaptureEffect: String, CaseIterable {
         }
     }
 
-    // MARK: - 3. Converging wave
+    // MARK: - 3. Undulating wave
 
-    /// Rings launched a beat apart, each collapsing from screen-covering to
-    /// a dot and dissolving on the way in — a shutter's rings run backwards,
-    /// like the screen was dropped into the point instead of blown out of it.
-    private static func playWave(into root: CALayer, target: CGPoint, size: CGSize) {
+    /// **Actually ripples the desktop** (2026-09-04, Victor's ask): the
+    /// previous version drew rings *over* the screen; this grabs one real
+    /// frame of it and pushes its own pixels through a pinch/bulge filter
+    /// that oscillates and decays at the point, so what moves is the
+    /// desktop itself, not a shape drawn on top of it. Falls back to the
+    /// plain ring version if a frame can't be captured (no Screen Recording
+    /// permission yet) rather than showing nothing.
+    private static func playWave(into root: CALayer, target: CGPoint, size: CGSize, screen: NSScreen) {
+        guard let cgImage = captureScreenImage(screen) else {
+            playWaveRings(into: root, target: target, size: size)
+            return
+        }
+
+        // Downsampled before filtering: a full Retina frame put through
+        // CIPinchDistortion ~25 times in under a second is far more GPU work
+        // than this needs, and the softness the downsample leaves behind
+        // reads as part of the ripple rather than as a lower-quality image.
+        let downscale: CGFloat = 0.5
+        let fullImage = CIImage(cgImage: cgImage)
+        let ciImage = fullImage.transformed(by: CGAffineTransform(scaleX: downscale, y: downscale))
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+
+        // Everywhere else in this file works in the screen's points; Core
+        // Image always works in its own image's pixel space, so the target
+        // point and radius are scaled up to match once, here.
+        let pixelsPerPoint = CGFloat(cgImage.width) / size.width * downscale
+        let centerInImage = CGPoint(x: target.x * pixelsPerPoint, y: target.y * pixelsPerPoint)
+        let radiusInImage = 320 * pixelsPerPoint
+
+        let waveLayer = CALayer()
+        waveLayer.frame = CGRect(origin: .zero, size: size)
+        waveLayer.contentsGravity = .resizeAspectFill
+        root.addSublayer(waveLayer)
+
+        let duration: CFTimeInterval = 0.85
+        let start = CACurrentMediaTime()
+        let cycles: Double = 3 // three in-out swells, decaying to stillness
+
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { timer in
+            let elapsed = CACurrentMediaTime() - start
+            let progress = min(elapsed / duration, 1.0)
+            guard progress < 1.0, let filter = CIFilter(name: "CIPinchDistortion") else {
+                timer.invalidate()
+                return
+            }
+            let decay = 1.0 - progress
+            let scaleAmount = sin(progress * cycles * 2 * .pi) * decay * 0.7
+
+            filter.setValue(ciImage, forKey: kCIInputImageKey)
+            filter.setValue(CIVector(cgPoint: centerInImage), forKey: kCIInputCenterKey)
+            filter.setValue(radiusInImage, forKey: kCIInputRadiusKey)
+            filter.setValue(scaleAmount, forKey: kCIInputScaleKey)
+
+            guard let output = filter.outputImage,
+                  let rendered = context.createCGImage(output, from: ciImage.extent) else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            waveLayer.contents = rendered
+            CATransaction.commit()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+
+        let fadeOut = CABasicAnimation(keyPath: "opacity")
+        fadeOut.fromValue = 1.0
+        fadeOut.toValue = 0.0
+        fadeOut.beginTime = start + duration
+        fadeOut.duration = 0.2
+        fadeOut.fillMode = .forwards
+        fadeOut.isRemovedOnCompletion = false
+        waveLayer.add(fadeOut, forKey: "fadeOut")
+    }
+
+    /// A single frame of `screen`, in its own native pixel size. `nil` if
+    /// Screen Recording permission isn't granted (same requirement
+    /// `ScreenCapture.grab`'s `/usr/sbin/screencapture` subprocess has).
+    private static func captureScreenImage(_ screen: NSScreen) -> CGImage? {
+        guard let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else {
+            return nil
+        }
+        return CGDisplayCreateImage(CGDirectDisplayID(displayID))
+    }
+
+    /// The fallback (and the original prototype): rings launched a beat
+    /// apart, each collapsing from screen-covering to a dot and dissolving
+    /// on the way in — a shutter's rings run backwards, like the screen was
+    /// dropped into the point instead of blown out of it.
+    private static func playWaveRings(into root: CALayer, target: CGPoint, size: CGSize) {
         let radius = reach(from: target, size: size)
         let rings = 5
         let ringGap: CFTimeInterval = 0.11
@@ -415,9 +520,68 @@ enum CaptureEffect: String, CaseIterable {
         pop.animations = [grow, flashFade]
         flash.add(pop, forKey: "click")
     }
+
+    // MARK: - 6. Converging wire rings
+
+    /// A tight bundle of thin, translucent concentric circles — one visual
+    /// "ring" built out of several close-set wires, the way a target
+    /// reticle or a lock-on HUD is drawn — that shrinks and spins gently as
+    /// a single unit down into the point. Kept translucent throughout so it
+    /// reads as an overlay grid rather than a solid shape, and only really
+    /// fades in its last moments as the bundle disappears.
+    private static func playWireRings(into root: CALayer, target: CGPoint, size: CGSize) {
+        let wires = 6
+        let maxRadius = reach(from: target, size: size)
+        let duration: CFTimeInterval = 0.9
+        let now = CACurrentMediaTime()
+
+        for i in 0..<wires {
+            // A narrow band near the outer edge, not spread across the
+            // whole screen — that's what keeps the wires reading as one
+            // bundle rather than as separate independent rings.
+            let spread = CGFloat(i) / CGFloat(wires - 1)
+            let startRadius = maxRadius * (0.68 + 0.14 * spread)
+            let base = CGRect(x: -startRadius, y: -startRadius, width: startRadius * 2, height: startRadius * 2)
+
+            let ring = CAShapeLayer()
+            ring.path = CGPath(ellipseIn: base, transform: nil)
+            ring.bounds = base
+            ring.position = target
+            ring.fillColor = nil
+            ring.strokeColor = NSColor.captureAccent.cgColor
+            ring.lineWidth = 1.5
+            root.addSublayer(ring)
+
+            let group = CAAnimationGroup()
+            group.duration = duration
+            group.beginTime = now + Double(i) * 0.015
+            group.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            group.fillMode = .forwards
+            group.isRemovedOnCompletion = false
+
+            let shrink = CABasicAnimation(keyPath: "transform.scale")
+            shrink.fromValue = 1.0
+            shrink.toValue = 0.01
+
+            // Alternating spin direction per wire — nested rings visibly
+            // turning past each other as they close in is what sells "wire
+            // mesh" instead of "shrinking circle."
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            let direction: CGFloat = i % 2 == 0 ? 1 : -1
+            spin.fromValue = 0
+            spin.toValue = direction * 1.2
+
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = [0.0, 0.5, 0.42, 0.0]
+            fade.keyTimes = [0.0, 0.12, 0.78, 1.0]
+
+            group.animations = [shrink, spin, fade]
+            ring.add(group, forKey: "converge")
+        }
+    }
 }
 
-/// The tryout harness for `CaptureEffect` — plays all five, three times
+/// The tryout harness for `CaptureEffect` — plays all six, three times
 /// each, in a fixed order, all converging on the same point so they can be
 /// compared apples-to-apples. Triggered by `WALKIE_EFFECT_DEMO=1` in the
 /// environment (see `AppDelegate`); not reachable any other way, because
@@ -430,7 +594,7 @@ enum CaptureEffectDemo {
 
     static func run() {
         let point = NSEvent.mouseLocation
-        Log.info("effect-demo: starting at \(point), 5 effects × \(repeats) reps")
+        Log.info("effect-demo: starting at \(point), 6 effects × \(repeats) reps")
         var delay: CFTimeInterval = 0.3
 
         for effect in CaptureEffect.allCases {
