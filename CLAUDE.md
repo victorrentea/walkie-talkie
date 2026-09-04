@@ -2415,13 +2415,13 @@ its own way back is not one.
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
 that performs it — `Dictate to new Claude — ⬆️ 0.6s · ➡️ + 🛞 1s`,
-`Cancel Dictation — 🛞 2s`, `Take Screenshot — ⬇️ while dictating`. A row greys out when it cannot act *this second*; it
+`Cancel Dictation — 🛞 2s`, `Take Screenshot — ⬇️`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
 în care sunt acum"* asks for.
 
 One row exists because of this rule rather than despite it:
-**`Pick Element in Chrome — ⌘⇧ + ⬅️ while dictating`** is a legend, permanently
+**`Pick Element in Chrome — ⌘⇧ + ⬅️`** is a legend, permanently
 disabled — the gesture happens inside a page this app cannot reach from a menu,
 but the relay takes the input over, so with the chip silent there is nowhere else
 it could be written. A disabled row is the honest rendering of *this is something
@@ -2610,8 +2610,8 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
 | `End Dictation` | `mic.slash` | `🛞` | ⌘⌃D |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` | |
-| `Take Screenshot` | 📷 | `⬇️ while dictating` | — |
-| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️ while dictating` | |
+| `Take Screenshot` | 📷 | `⬇️` | — |
+| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` | |
 | `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) | |
 | `Message log of last 2 days` | 📜 | | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
@@ -2625,11 +2625,11 @@ written, with the two gestures that are only live mid-sentence sitting three row
 below the block they belong to. A menu that is the app's only legend has to group
 by the question its reader is asking.
 
-**`while dictating` is spelled out, in words.** It was the marker `@🎙️` for two
-days — an address, *this gesture lives at the dictation* — until Victor had the
-microphone emoji out of the menu (2026-09-04). The words cost the width the
-marker was invented to save, and that is accepted: the two rows it qualifies
-are disabled legends now, read at leisure rather than mid-gesture.
+**The legend chords are bare — no `while dictating` qualifier at all.** It was
+those two words for minutes and the marker `@🎙️` for two days before them;
+Victor took both out (2026-09-04). The condition is said by the section the two
+rows sit in — legends, under their own separator, below the dictation commands —
+not by words or emoji riding on the row.
 
 **The word `hold` is gone from every chord**, on Victor's ask. Where a hold has a
 *duration* the duration says so (`🛞 2s`, `➡️ + 🛞 1s`); where it does not, the

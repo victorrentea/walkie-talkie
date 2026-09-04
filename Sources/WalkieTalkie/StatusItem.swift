@@ -460,21 +460,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // It was ⬆️ (the forward button) for one day, until that button
             // proved to arrive as an instant pair however long it is held.
             (newSession, newSession.title, "⬇️ 0.6s · ➡️ + 🛞 1s"),
-            (shot, shot.title, "⬇️ \(Self.whileDictating)"),
-            (pickLegend, pickLegend.title, "⌘⇧ + ⬅️ \(Self.whileDictating)"),
+            // **Bare chords — no qualifier.** Both legends said "while
+            // dictating" until Victor had the words out (2026-09-04, minutes
+            // after they replaced the @🎙️ marker he had out first); the two
+            // rows are disabled legends read at leisure, and the condition is
+            // the section they sit in, not words on the row.
+            (shot, shot.title, "⬇️"),
+            (pickLegend, pickLegend.title, "⌘⇧ + ⬅️"),
         ]
         layOutGestures(in: menu)
 
         item.menu = menu
         mirror.start()
     }
-
-    /// **`while dictating` qualifies the two legend chords.** It used to be the
-    /// marker `@🎙️` — an address, "this gesture lives at the dictation" — until
-    /// Victor had the microphone emoji out of the menu (2026-09-04). The words
-    /// cost the width the marker was invented to save, and that is accepted:
-    /// both rows it qualifies are disabled legends now, read at leisure.
-    private static let whileDictating = "while dictating"
 
     /// The item, **its label**, and the chord it is performed with.
     ///
