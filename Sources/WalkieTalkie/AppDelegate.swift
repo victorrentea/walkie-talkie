@@ -545,10 +545,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The `CaptureEffect` tryout — see `CaptureEffects.swift`. Fires once,
         // on the whole app's normal running state, so Victor can watch all
-        // five live without anything else being disturbed.
+        // six live without anything else being disturbed. WALKIE_EFFECT_ONLY
+        // / _REPS / _SPEED narrow that to "replay #1, 3 times, 1.5x slower".
         if ProcessInfo.processInfo.environment["WALKIE_EFFECT_DEMO"] == "1" {
+            let env = ProcessInfo.processInfo.environment
+            let only = env["WALKIE_EFFECT_ONLY"].flatMap { CaptureEffect(rawValue: $0) }
+            let reps = env["WALKIE_EFFECT_REPS"].flatMap { Int($0) } ?? 3
+            let speed = env["WALKIE_EFFECT_SPEED"].flatMap { Double($0) } ?? 1.0
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                CaptureEffectDemo.run()
+                CaptureEffectDemo.runOne(only, reps: reps, speed: speed)
             }
         }
     }

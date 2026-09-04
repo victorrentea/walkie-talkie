@@ -43,8 +43,9 @@ enum CaptureEffect: String, CaseIterable {
 
     /// Fire this effect once, converging on `point` (global Cocoa
     /// coordinates, i.e. `NSEvent.mouseLocation`'s space) on whichever
-    /// screen contains it.
-    func play(at point: NSPoint) {
+    /// screen contains it. `speed` scales every duration involved — `1.5`
+    /// plays it 1.5x slower, `0.5` twice as fast.
+    func play(at point: NSPoint, speed: Double = 1.0) {
         guard let screen = Self.screen(containing: point) else { return }
         let (panel, view) = Self.makePanel(on: screen)
         let root = view.layer!
@@ -55,7 +56,7 @@ enum CaptureEffect: String, CaseIterable {
         let size = screen.frame.size
 
         switch self {
-        case .spikes: Self.playSpikes(into: root, target: target, size: size)
+        case .spikes: Self.playSpikes(into: root, target: target, size: size, speed: speed)
         case .gatheringPixels: Self.playGatheringPixels(into: root, target: target, size: size)
         case .wave: Self.playWave(into: root, target: target, size: size, screen: screen)
         case .pinch: Self.playPinch(into: root, target: target, size: size)
@@ -63,7 +64,7 @@ enum CaptureEffect: String, CaseIterable {
         case .wireRings: Self.playWireRings(into: root, target: target, size: size)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration * speed + 0.2) {
             panel.orderOut(nil)
             Self.activePanels.removeAll { $0 === panel }
         }
@@ -118,10 +119,11 @@ enum CaptureEffect: String, CaseIterable {
     /// than shapes flying in. Wider, longer, fully opaque, outlined and
     /// glowing so they hold up over any background, and given almost a full
     /// second so the flight itself is watchable rather than guessed at.
-    private static func playSpikes(into root: CALayer, target: CGPoint, size: CGSize) {
+    private static func playSpikes(into root: CALayer, target: CGPoint, size: CGSize, speed: Double = 1.0) {
         let count = 26
         let radius = reach(from: target, size: size)
-        let duration: CFTimeInterval = 0.95
+        let duration: CFTimeInterval = 0.95 * speed
+        let jitter: Double = 0.25 * speed
         let now = CACurrentMediaTime()
 
         for i in 0..<count {
@@ -159,7 +161,7 @@ enum CaptureEffect: String, CaseIterable {
 
             let group = CAAnimationGroup()
             group.duration = duration
-            group.beginTime = now + Double.random(in: 0...0.25)
+            group.beginTime = now + Double.random(in: 0...jitter)
             group.timingFunction = CAMediaTimingFunction(name: .easeIn)
             group.fillMode = .forwards
             group.isRemovedOnCompletion = false
@@ -588,24 +590,35 @@ enum CaptureEffect: String, CaseIterable {
 /// this exists to be watched once while picking a favourite, not to become
 /// a feature of its own.
 enum CaptureEffectDemo {
-    private static let repeats = 3
     private static let gapBetweenReps: CFTimeInterval = 0.35
     private static let gapBetweenEffects: CFTimeInterval = 0.9
 
+    /// The full-set tryout: every effect once each, three reps, normal speed.
     static func run() {
+        runOne(nil, reps: 3, speed: 1.0)
+    }
+
+    /// `effect == nil` plays the whole set, in `CaptureEffect` order;
+    /// otherwise plays just that one effect `reps` times. `speed` scales
+    /// every duration in the played effect(s) — `1.5` runs 1.5x slower,
+    /// `0.5` runs twice as fast. Driven by `WALKIE_EFFECT_ONLY` /
+    /// `WALKIE_EFFECT_REPS` / `WALKIE_EFFECT_SPEED` (see `AppDelegate`), for
+    /// exactly the "replay #1, 3 times, 1.5x slower" kind of ask.
+    static func runOne(_ only: CaptureEffect?, reps: Int, speed: Double) {
         let point = NSEvent.mouseLocation
-        Log.info("effect-demo: starting at \(point), 6 effects × \(repeats) reps")
+        let effects = only.map { [$0] } ?? Array(CaptureEffect.allCases)
+        Log.info("effect-demo: starting at \(point), \(effects.count) effect(s) × \(reps) reps, speed ×\(speed)")
         var delay: CFTimeInterval = 0.3
 
-        for effect in CaptureEffect.allCases {
-            for rep in 1...repeats {
+        for effect in effects {
+            for rep in 1...reps {
                 let fireAt = delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + fireAt) {
-                    Log.info("effect-demo: \(effect.label) (\(rep)/\(repeats))")
-                    EffectBanner.show(text: "\(effect.label)  ·  \(rep)/\(repeats)")
-                    effect.play(at: point)
+                    Log.info("effect-demo: \(effect.label) (\(rep)/\(reps))")
+                    EffectBanner.show(text: "\(effect.label)  ·  \(rep)/\(reps)")
+                    effect.play(at: point, speed: speed)
                 }
-                delay += effect.totalDuration + gapBetweenReps
+                delay += effect.totalDuration * speed + gapBetweenReps
             }
             delay += gapBetweenEffects
         }
