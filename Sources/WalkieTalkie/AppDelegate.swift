@@ -730,6 +730,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         publishShotCount()
         publishPicks()
+        // **And the highlight comes off the chip with it.** `pendingSelection` is
+        // cleared above, but the row showing it is the overlay's own copy and
+        // nothing else here puts it down: `setListening(false)` does not touch it,
+        // and the flash below draws *over* the chip rather than resetting it. Every
+        // other way a dictation ends already calls this — `commit` before the panel
+        // opens, `flushOrphaned` for the ones that died — and cancel was the one
+        // route that did not, so the last thing he had highlighted went on sitting
+        // beside the cursor with no dictation behind it, until the next sentence
+        // happened to overwrite it. Reported 2026-09-04: *"once I have a selected
+        // text it sometimes remains into the tooltip even if there is no current
+        // dictation"*.
+        overlay.clearSelection()
         // **Bare, and short.** It replaces `Listening…` in the row it was just
         // occupying, beside the pointer, and then dissolves back to the chip at
         // rest. Three seconds inside a blurred panel made cancelling look like
@@ -1871,6 +1883,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stashSelection() {
         stateLock.lock()
         let alreadyHave = pendingSelection != nil
+        // Which dictation this probe belongs to. `dictationStartedAt` is set the
+        // instant one opens and nil'd the instant one ends, by every route there
+        // is, so it doubles as the identity of the sentence in flight.
+        let opened = dictationStartedAt
         stateLock.unlock()
         guard !alreadyHave else { return }
 
@@ -1879,9 +1895,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let text = text, !text.isEmpty else { return }
 
         stateLock.lock()
+        // **The dictation can end while this probe is still running**, and often
+        // does: the ⌘C fallback polls the pasteboard for up to 400ms, and the
+        // wheel held down through those 400ms is a cancel. Everything the cancel
+        // cleared would then be written straight back — a `pendingSelection` that
+        // rides the *next* sentence, and a row on the chip with no dictation
+        // behind it. Anchored on the moment it opened, so a sentence that ended
+        // (nil) or a different one that has since begun both read as stale.
+        let stale = opened == nil || dictationStartedAt != opened
         let lost = pendingSelection != nil      // the other probe got there first
-        if !lost { pendingSelection = text }
+        if !stale && !lost { pendingSelection = text }
         stateLock.unlock()
+        guard !stale else {
+            Log.info("selection dropped — the dictation it was read for is over")
+            return
+        }
         guard !lost else { return }
         DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text) }
     }
@@ -1910,9 +1938,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// page is not a highlight AX can see, so every shot he took over one filed
     /// nothing at all, without saying so. See `SelectionCapture.read`.
     private func stashExtraSelection(at offset: TimeInterval) {
+        stateLock.lock()
+        let opened = dictationStartedAt
+        stateLock.unlock()
         guard let text = SelectionCapture.read(), !text.isEmpty else { return }
 
         stateLock.lock()
+        // The probe outliving its dictation, exactly as in `stashSelection` and
+        // for the same 400ms — a highlight filed against a sentence that is over
+        // would be attached to the next one and shown on a chip at rest.
+        guard opened != nil, dictationStartedAt == opened else {
+            stateLock.unlock()
+            Log.info("↪ selection at \(Self.stamp(offset)) — the dictation ended first, dropped")
+            return
+        }
         let isFrozen = pendingSelection == text
         let isRepeat = pendingExtraSelections.last?.text == text
         let novel = !isFrozen && !isRepeat

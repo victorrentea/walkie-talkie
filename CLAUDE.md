@@ -1720,8 +1720,8 @@ held. The third is a chord with the left button.**
 | **any state, bound or not** | **⌘ + click** | start a dictation **at a session that does not exist yet** — see *⌘ + the wheel* |
 | anywhere, any state | **left button held ≥0.3s, then click the wheel** | **bind** — same call as ⌘⌃B, **without the toggle** |
 | anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
-| bound, any state | **right button held ≥0.3s, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
-| anywhere, any state | **right button held ≥0.3s, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
+| bound, any state | **right button down, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
+| anywhere, any state | **right button down, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
 | nothing bound, no chord | click | passed straight through |
 
 **The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
@@ -1793,9 +1793,34 @@ when there is no session at all.
 
 **Right held, then the wheel, lets the binding go** — also since 2026-09-01. It is
 deliberately the *mirror* of the rebind chord: one button held as a modifier, the
-wheel clicked on top, judged at the press, with the same `chordHoldSeconds`
-telling a chord from two buttons that overlapped. Left points the relay at
-something; right takes it back. Nothing has to be learned twice.
+wheel clicked on top, judged at the press. Left points the relay at something;
+right takes it back. Nothing has to be learned twice.
+
+### The right chord has no hold to wait out (2026-09-04)
+
+It was judged against `chordHoldSeconds` like the left one, and that threshold was
+a bug rather than a symmetry. Right-press then wheel are two halves of one quick
+motion, and they land inside 0.3s often enough that the press fell through every
+chord branch to the bare-wheel one at the bottom of `HotkeyTap` — opening a
+dictation **at the terminal already bound**, which is the one destination the
+gesture exists to get away from. Doing it again more slowly "worked", which is
+exactly how a timing threshold feels from the outside. Reported 2026-09-04:
+*"the tool thinks I want to dictate to the existing bound terminal … if I repeat
+it a bunch of times, I make it work eventually"*.
+
+The threshold was borrowed reasoning. It earns its keep on the **left** chord,
+where a click-drag with the wheel pressed on top is a real thing to rule out.
+Nothing is like that on the right: there is no right-drag anyone finishes with a
+middle click, so the button being down at all is already the entire signal.
+
+**And `rightIsHeld` now asks the window server too**, not only this tap's own
+bookkeeping (`rightDownAt > 0 || CGEventSource.buttonState(.combinedSessionState,
+button: .right)`). A press the tap never saw — re-enabled after a timeout
+mid-gesture, or a context menu's tracking loop in the way, which is what Victor
+guessed was happening — leaves `rightDownAt` at zero while the finger is very much
+down. The reverse staleness is handled by `reconcileButtons()`, run before any
+chord is judged: a *release* the tap never saw would otherwise leave a button held
+for good and read every bare wheel click as a chord.
 
 Disconnecting was in the menu and nowhere else, and the menu bar is the one place
 the hand on the mouse is not — every other thing the wheel does (bind, dictate,
@@ -3101,6 +3126,50 @@ sent or flushed (`stashSelection` bails when `pendingSelection` is already set;
 minute, another window jumps in front, he switches apps to look something up —
 none of that changes what he is talking about. Later probes exist only to fill a
 blank the first one left.
+
+### …but it must not outlive it (2026-09-04)
+
+*"Once I have a selected text it sometimes remains into the tooltip even if there
+is no current dictation."* Two independent leaks, both fixed:
+
+1. **Cancel never put the row down.** `cancelLocalRecording` clears
+   `pendingSelection` under the lock, but the row showing it is the overlay's own
+   copy and nothing else there touches it — `setListening(false)` does not, and
+   the `🗑️ dictation cancelled` flash draws *over* the chip rather than resetting
+   it. Every other exit already called `overlay.clearSelection()` (`commit` before
+   the panel opens, `flushOrphaned` for the ones that died); cancel was the one
+   route that did not, so the last highlight sat beside the cursor with no
+   dictation behind it until the next sentence overwrote it.
+2. **The probe can outlive its dictation.** `SelectionCapture.read` falls back to
+   a ⌘C that polls the pasteboard for up to 400ms, and the wheel held down through
+   those 400ms is a cancel. The probe then wrote everything the cancel had just
+   cleared straight back — a `pendingSelection` that would ride the *next*
+   sentence, and a row on a chip at rest. Both `stashSelection` and
+   `stashExtraSelection` now capture `dictationStartedAt` before probing and drop
+   the result if it no longer matches: nil means the sentence ended, a different
+   instant means a new one has begun.
+
+### Where a spawned window opens (2026-09-04)
+
+A spawn is by definition the one window Victor never pointed at: it appears on its
+own while his eyes are somewhere else. It used to `activate` and land wherever
+Terminal felt like, which in practice is on top of whatever he is reading on the
+built-in Retina display. `SpawnTerminal.elsewhere()` decides instead:
+
+- **an external display attached** → the window is moved onto the roomiest
+  non-Retina screen, centred, keeping the size Terminal gave it, and Terminal is
+  brought forward — on a screen he is not working on, that costs him nothing.
+- **nothing but the Retina display** → there is nowhere to move it to, so it opens
+  **behind** instead. Nothing activates Terminal; if `do script` launched it from
+  cold and it took the front anyway, the app that *was* frontmost is put back a
+  quarter second later. The window still exists and `adoptSpawnedWindow` still
+  binds it a beat later — delivery goes through `do script … in <tab>`, which does
+  not need the window in front.
+
+"Retina" is `backingScaleFactor >= 2` — the same test the `come-back-when-done`
+skill uses, and deliberately not a size or a name. The rectangle is flipped into
+AppleScript's coordinates (origin top-left of the primary screen, y downwards)
+inside `elsewhere()`, because that is the only place it is used.
 
 ## A stale bundle in /Applications is three bugs at once
 

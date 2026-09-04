@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// **The destination that does not exist yet.** Shift + the wheel opens a fresh
@@ -62,24 +63,114 @@ enum SpawnTerminal {
             return .failed("could not stage the new session — \(error.localizedDescription)")
         }
 
+        // **Where it opens is not where Terminal would have put it.** See
+        // `elsewhere()`: an external display if there is one, and otherwise
+        // behind whatever Victor is looking at.
+        let area = elsewhere()
+        // Only worth remembering in the second case. In the first, Terminal is
+        // being brought forward on purpose, onto a screen he is not working on.
+        let previous = area == nil ? NSWorkspace.shared.frontmostApplication : nil
+
+        // Moved rather than sized: the window keeps whatever Terminal gave it and
+        // is centred on the target screen, shrunk only if it would not fit — a
+        // spawn is not the place to overrule his window settings.
+        let place = area.map { a in """
+            set w to front window
+            set b to bounds of w
+            set wd to (item 3 of b) - (item 1 of b)
+            set ht to (item 4 of b) - (item 2 of b)
+            if wd > \(a.w) then set wd to \(a.w)
+            if ht > \(a.h) then set ht to \(a.h)
+            set bounds of w to {\(a.x) + ((\(a.w) - wd) div 2), \(a.y) + ((\(a.h) - ht) div 2), \(a.x) + ((\(a.w) - wd) div 2) + wd, \(a.y) + ((\(a.h) - ht) div 2) + ht}
+        """ } ?? ""
+
         // `do script` with no `in` clause opens a **new window**, which is the
         // whole request: a second session beside the one he is in, not a line
         // typed into it. The tab it returns is how the relay finds the tty
         // without going back and guessing which window is in front — and by the
         // time an answer came back from that guess, Victor's hand may well have
         // moved on.
+        //
+        // **`front window` is Terminal's own front, not the screen's**, so the
+        // window just created is it whether or not this app was activated.
         let osa = """
         tell application "Terminal"
-            activate
+            \(area == nil ? "" : "activate")
             set t to do script "\(escape(launcher.path))"
+        \(place)
             return tty of t
         end tell
         """
         guard let tty = run("/usr/bin/osascript", ["-e", osa]), tty.hasPrefix("/dev/") else {
             return .failed("Terminal would not open a window for the new session")
         }
-        Log.info("✨ new Claude Code spawned in \(directory) on \((tty as NSString).lastPathComponent)")
+        // **Put the front back, if Terminal took it.** Nothing here activates it,
+        // but a Terminal that was not running is launched by `do script` and comes
+        // forward on its own. The quarter second is that launch settling: restoring
+        // into the middle of it is a swap the window server undoes a moment later.
+        if let previous = previous {
+            Thread.sleep(forTimeInterval: 0.25)
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier != previous.processIdentifier {
+                previous.activate(options: [])
+            }
+        }
+        Log.info("✨ new Claude Code spawned in \(directory) on \((tty as NSString).lastPathComponent)"
+                 + (area == nil ? " — behind, no display but the Retina one" : " — on the external display"))
         return .opened(tty: tty)
+    }
+
+    /// **The Retina screen is Victor's, and a window nobody asked to look at may
+    /// not take it.** Added 2026-09-04 on his ask: *"the terminal should be placed
+    /// outside of the Retina screen if there is any other screen connected. If
+    /// there's not, place it in the background, not in the foreground."*
+    ///
+    /// Every spawn used to `activate` and land wherever Terminal felt like, which
+    /// in practice is on top of what he is reading — and a spawn is by definition
+    /// the one window he did not point at, so it arrives while his eyes are
+    /// somewhere else.
+    ///
+    ///  * With an external display attached, this returns its visible area and
+    ///    the window is moved there and raised: it costs him nothing there.
+    ///  * With nothing but the built-in display, there is nowhere to move it to,
+    ///    so this returns `nil` and the caller opens it **behind** instead. The
+    ///    window still exists and the relay still binds it a beat later; what it
+    ///    does not do is take the front.
+    ///
+    /// "Retina" is `backingScaleFactor >= 2` — the same test the
+    /// `come-back-when-done` skill uses, and deliberately not a size or a name,
+    /// so it holds whatever is plugged in. The roomiest qualifying screen wins,
+    /// because with three identical monitors any of them will do and the biggest
+    /// is the least surprising default.
+    ///
+    /// The rectangle comes back in **AppleScript's** coordinates — origin at the
+    /// top-left of the primary screen, y growing downwards — since that is the
+    /// only place it is used. `NSScreen` speaks Cocoa's, so the y is flipped
+    /// against the primary screen's height here rather than at the call site.
+    private static func elsewhere() -> (x: Int, y: Int, w: Int, h: Int)? {
+        var found: (x: Int, y: Int, w: Int, h: Int)?
+        let read = {
+            let screens = NSScreen.screens
+            guard !screens.isEmpty else { return }
+            // The pivot for the flip is the primary screen — the one at Cocoa
+            // origin — wherever it sits in the list.
+            let primary = screens.first { $0.frame.origin == .zero } ?? screens[0]
+            let pivot = primary.frame.maxY
+            guard let target = screens
+                .filter({ $0.backingScaleFactor < 2 })
+                .max(by: { $0.visibleFrame.width * $0.visibleFrame.height
+                         < $1.visibleFrame.width * $1.visibleFrame.height })
+            else { return }
+            let f = target.visibleFrame
+            found = (x: Int(f.minX.rounded()),
+                     y: Int((pivot - f.maxY).rounded()),
+                     w: Int(f.width.rounded()),
+                     h: Int(f.height.rounded()))
+        }
+        // `launchClaude` runs off the main thread by contract, and `NSScreen` is
+        // main-thread state. The hop is a hop, not a deadlock, precisely because
+        // of that contract.
+        if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
+        return found
     }
 
     /// **A login shell is what runs this, so `claude` is normally on the PATH

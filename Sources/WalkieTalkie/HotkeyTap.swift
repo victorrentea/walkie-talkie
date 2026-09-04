@@ -256,9 +256,48 @@ final class HotkeyTap {
     private var leftIsHeld: Bool { leftDownAt > 0 && CACurrentMediaTime() - leftDownAt >= Self.chordHoldSeconds }
 
     /// When the right button went down, or 0 while it is up — the mirror of
-    /// `leftDownAt`, and read against the same threshold. Same thread, so no lock.
+    /// `leftDownAt`. Same thread, so no lock.
     private var rightDownAt: CFTimeInterval = 0
-    private var rightIsHeld: Bool { rightDownAt > 0 && CACurrentMediaTime() - rightDownAt >= Self.chordHoldSeconds }
+
+    /// **The right chord has no hold to wait out, since 2026-09-04.**
+    ///
+    /// It was judged against `chordHoldSeconds` like the left one, and that
+    /// threshold was the bug: right-press then wheel — the two halves of one
+    /// quick motion — land inside 0.3s often enough that the press fell straight
+    /// through to the branch at the bottom of this file and opened a dictation
+    /// *at the terminal already bound*, which is the one destination this
+    /// gesture exists to get away from. Doing it again more slowly "worked",
+    /// which is exactly how a timing threshold feels from the outside.
+    /// Reported 2026-09-04: *"the tool thinks I want to dictate to the existing
+    /// bound terminal … if I repeat it a bunch of times, I make it work"*.
+    ///
+    /// The threshold was borrowed reasoning. It earns its keep on the **left**
+    /// chord, where a click-drag with the wheel pressed on top of it is a real
+    /// thing to rule out. Nothing is like that on the right: there is no
+    /// right-drag anyone finishes with a middle click, so the button being down
+    /// at all is already the entire signal.
+    ///
+    /// **And the window server is asked as well as our own bookkeeping.** A
+    /// press this tap never saw — re-enabled after a timeout mid-gesture, or a
+    /// menu tracking loop in the way, which is what Victor guessed was happening
+    /// — leaves `rightDownAt` at zero while the finger is very much down, and
+    /// that is the same failure wearing a different hat.
+    private var rightIsHeld: Bool {
+        rightDownAt > 0 || CGEventSource.buttonState(.combinedSessionState, button: .right)
+    }
+
+    /// **Our own bookkeeping can go stale; the window server cannot.** A release
+    /// this tap never saw would otherwise leave a button held for good — every
+    /// bare wheel click read as a chord, which is the reported bug pointing the
+    /// other way. Run before any chord is judged, so the two always agree.
+    private func reconcileButtons() {
+        if leftDownAt > 0 && !CGEventSource.buttonState(.combinedSessionState, button: .left) {
+            leftDownAt = 0
+        }
+        if rightDownAt > 0 && !CGEventSource.buttonState(.combinedSessionState, button: .right) {
+            rightDownAt = 0
+        }
+    }
 
     /// The hold fired (or the chord was taken) — the matching release is ours
     /// too, or the app underneath is left holding a button that was never let go.
@@ -396,6 +435,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
 
         if type == .otherMouseDown || type == .otherMouseUp {
+            // Before anything below reads `leftIsHeld` or `rightIsHeld`.
+            reconcileButtons()
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
             let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
