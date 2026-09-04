@@ -1781,6 +1781,38 @@ click 0.6s late at worst, and in practice the hand is off the button by then.
   AppKit answer this app waits on lands. A verdict that arrives late is, from the
   hand, indistinguishable from one that never arrives.
 
+### The forward button has no hold, as far as the event stream is concerned
+
+**Measured 2026-09-04, on a press Victor was deliberately holding: 18ms.**
+Something between the mouse and this tap — the Bolt receiver, Logi's agent, or
+LinearMouse, which already rewrites the *back* button into a Return — hands the
+forward button over as an instantaneous down-and-up pair however long the finger
+is on it. A gesture defined by duration cannot be built on a stream that has
+thrown the duration away, and no threshold of any length would ever have been
+met.
+
+**So the physical button is watched instead of the events being timed.**
+`CGEventSourceButtonState` answers for button 4 — `CGMouseButton(rawValue: 4)` is
+not nil, the type comes from a C enum and takes any raw value — and it is the
+same instrument `rightIsHeld` already reaches for when a press this tap never saw
+leaves its bookkeeping stale. Both state IDs are asked: `.hidSystemState` is the
+hardware, `.combinedSessionState` includes what has been synthesized on top of
+it, and a button down in either is down.
+
+- **A release while the button is still physically down is not a release.** It is
+  the second half of that instant pair, and taking it at face value is precisely
+  what cancelled the verdict 18ms after arming it, every time. The press is left
+  standing and nothing is replayed, because the click has not happened yet.
+- **Once an up has been ignored there is no second event left**, so a timer alone
+  would fire on every plain click. `judgeMouse5Press` therefore *watches*: 40ms
+  polls for at most `mouse5HoldSeconds`, the finger coming off before the
+  deadline being a click — handed back then — and the deadline arriving with the
+  button still down being a hold.
+- **It fails safe.** Where the button state cannot be read the answer is false,
+  the up is never ignored, the release claims the press as it always did, and
+  this is the old timer again. Every other mouse is unaffected for the same
+  reason: a release the tap takes normally never reaches the loop's end.
+
 **And every edge of this button is now written to the log**, which is the part
 that matters more than either fix. Reported 2026-09-04: *"it doesn't really work
 to keep that button hold down to start a new session"* — and the log had nothing

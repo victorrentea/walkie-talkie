@@ -365,6 +365,37 @@ final class HotkeyTap {
 
     /// The same two-flag dance the wheel does, for the same reason — a hold timer
     /// and a release on the tap thread racing for one press.
+    /// **Is the forward button physically down, according to the window server?**
+    ///
+    /// The event stream cannot answer this. Something between the mouse and this
+    /// tap — the receiver, Logi's own agent, or LinearMouse, which already
+    /// rewrites the *back* button into a Return — hands the forward button over
+    /// as an 18ms down-and-up pair however long it is actually held (measured
+    /// 2026-09-04). A gesture defined by duration cannot be built on a stream
+    /// that has thrown the duration away.
+    ///
+    /// `CGEventSourceButtonState` is the way round it, and it is the same
+    /// instrument `rightIsHeld` already reaches for when a press this tap never
+    /// saw leaves its own bookkeeping stale. **Both state IDs are asked**:
+    /// `.hidSystemState` is the hardware, `.combinedSessionState` includes
+    /// whatever has been synthesized on top of it, and a button that is down in
+    /// either is down.
+    ///
+    /// `CGMouseButton(rawValue: 4)` is not nil — the type is imported from a C
+    /// enum and takes any raw value, which is what makes the two side buttons
+    /// askable at all.
+    private static let forwardButton = CGMouseButton(rawValue: 4) ?? .center
+
+    static func mouse5IsPhysicallyDown() -> Bool {
+        CGEventSource.buttonState(.hidSystemState, button: forwardButton)
+            || CGEventSource.buttonState(.combinedSessionState, button: forwardButton)
+    }
+
+    /// Set when a release was refused because the button was still physically
+    /// down — i.e. this press will get no second event, and `judgeMouse5Press`
+    /// owns both endings.
+    private var mouse5UpIgnored = false
+
     /// When the current press went down, for the log line at its release.
     private var mouse5PressedAt: CFTimeInterval = 0
 
@@ -400,6 +431,55 @@ final class HotkeyTap {
     /// Without that, the posted press would be judged as a fresh one, arm another
     /// hold, and be swallowed again — a gesture eating itself.
     private static let replayTag: Int64 = 0x57414C4B    // "WALK"
+
+    /// **The verdict on one press, watched rather than timed.**
+    ///
+    /// It was a single `asyncAfter` at `mouse5HoldSeconds`, and that only works
+    /// where a press and its release are two events. On this mouse they are not:
+    /// the pair arrives inside 18ms whatever the finger does, so the release has
+    /// to be *ignored* while the button is still physically down — and once it is
+    /// ignored, there is no second event left to say when the finger lifted. A
+    /// timer alone would then fire on every plain click.
+    ///
+    /// So the physical state is watched, on this gesture's own queue and for at
+    /// most `mouse5HoldSeconds`: the finger coming off before the deadline is a
+    /// click, and the deadline arriving with the button still down is a hold.
+    /// **40ms**, which is inside the interval a click is over in and is 15 polls
+    /// for a gesture made a few times an hour.
+    ///
+    /// **A press whose release this tap took normally never reaches the loop's
+    /// end** — the release claims it, and `claimMouse5Press` fails here. That is
+    /// what keeps every other mouse working exactly as before, and what makes
+    /// this fail safe where the button state cannot be read at all: `physical` is
+    /// then false, the up is never ignored, and this is the old timer again.
+    private func judgeMouse5Press() {
+        let deadline = CACurrentMediaTime() + Self.mouse5HoldSeconds
+        while CACurrentMediaTime() < deadline {
+            Thread.sleep(forTimeInterval: 0.04)
+            stateLock.lock()
+            let pending = mouse5Down
+            let ignored = mouse5UpIgnored
+            stateLock.unlock()
+            // The release got there first: an ordinary click, already replayed.
+            guard pending else { return }
+            // The finger came off, and the only release this gesture was ever
+            // going to see was swallowed. Hand the click back now.
+            if ignored, !Self.mouse5IsPhysicallyDown() {
+                if claimMouse5Press() {
+                    Log.info("🖱️ mouse 5 — a click after all, handing it back")
+                    replayMouse5Click()
+                }
+                return
+            }
+        }
+        guard claimMouse5Press() else { return }
+        // Ending a dictation is ending one, whichever gesture opened it — the
+        // destination belongs to the press that started it, exactly as in the
+        // right chord.
+        Log.info(dictating ? "🎙️ mouse 5 held — ending the dictation"
+                           : "✨ mouse 5 held — dictating at a new Claude Code")
+        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+    }
 
     private func replayMouse5Click() {
         let point = CGEvent(source: nil)?.location ?? .zero
@@ -579,18 +659,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // explanation is downstream of, and nothing was recording the answer.
             // It is one line per press on a button pressed a few times an hour.
             if button == MOUSE_BUTTON_5 {
+                let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
                 if type == .otherMouseDown {
                     mouse5PressedAt = CACurrentMediaTime()
-                    Log.info("🖱️ mouse 5 down — bare=\(bare) replaceWispr=\(replaceWispr)")
+                    Log.info("🖱️ mouse 5 down — bare=\(bare) pid \(pid) remapper=\(isRemapper(pid)) physical=\(Self.mouse5IsPhysicallyDown())")
                 } else {
-                    // **The duration is the whole diagnosis.** "Holding it does
-                    // nothing" has two readings — the press never reached this
-                    // tap, or it reached it and was shorter than
-                    // `mouse5HoldSeconds` — and they call for opposite fixes. A
-                    // number in milliseconds tells them apart on the first press
-                    // after the report, which nothing else here could.
+                    // **The duration was the whole diagnosis, and it answered.**
+                    // Measured 2026-09-04, on a press Victor was deliberately
+                    // holding: **18ms**. The button does not reach this tap as a
+                    // press and a release — it reaches it as an instantaneous
+                    // pair, so a threshold of any length can never be met. See
+                    // `mouse5IsPhysicallyDown` for what is done about it; the pid
+                    // and the physical state here are what say *which* of the
+                    // two shapes the pair has.
                     let ms = Int((CACurrentMediaTime() - mouse5PressedAt) * 1000)
-                    Log.info("🖱️ mouse 5 up — held \(ms)ms (\(ms >= Int(Self.mouse5HoldSeconds * 1000) ? "a hold" : "a click"))")
+                    Log.info("🖱️ mouse 5 up — held \(ms)ms, pid \(pid) remapper=\(isRemapper(pid)) physical=\(Self.mouse5IsPhysicallyDown())")
                 }
             }
 
@@ -607,6 +690,27 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // when nothing is bound yet.
             if button == MOUSE_BUTTON_5 && bare {
                 if type == .otherMouseUp {
+                    // **A release while the button is still physically down is
+                    // not a release.** It is the second half of the instant pair
+                    // something upstream emits for this button; the finger is
+                    // still on it. Taking it at face value is what made a hold
+                    // impossible — the verdict was cancelled 18ms after it was
+                    // armed, every time. So the press is left standing and the
+                    // timer left running, and the *real* end of the gesture is
+                    // whichever comes first: the verdict, or a later up with the
+                    // button genuinely released.
+                    //
+                    // Nothing is replayed here either, for the same reason: the
+                    // click has not happened yet. It is replayed at the genuine
+                    // release, or never, if the press turned out to be a hold.
+                    //
+                    // **Fail-safe.** Where the state cannot be read the answer is
+                    // false, which is exactly the behaviour this replaces.
+                    if Self.mouse5IsPhysicallyDown() {
+                        stateLock.lock(); mouse5UpIgnored = true; stateLock.unlock()
+                        Log.info("🖱️ mouse 5 up ignored — the button is still down")
+                        return nil
+                    }
                     // **Any release whose press we took is ours**, whatever the
                     // state has become since — the same rule the wheel's release
                     // follows, and for the same reason: nothing downstream may be
@@ -656,17 +760,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     // it by then.
                     mouse5Down = true
                     mouse5Armed = false
-                    let work = DispatchWorkItem { [weak self] in
-                        guard let self = self, self.claimMouse5Press() else { return }
-                        // Ending a dictation is ending one, whichever gesture
-                        // opened it — the destination belongs to the press that
-                        // started it, exactly as in the right chord.
-                        Log.info(self.dictating ? "🎙️ mouse 5 held — ending the dictation"
-                                                : "✨ mouse 5 held — dictating at a new Claude Code")
-                        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
-                    }
+                    stateLock.lock(); mouse5UpIgnored = false; stateLock.unlock()
+                    let work = DispatchWorkItem { [weak self] in self?.judgeMouse5Press() }
                     mouse5Hold = work
-                    holdQueue.asyncAfter(deadline: .now() + Self.mouse5HoldSeconds, execute: work)
+                    holdQueue.async(execute: work)
                     return nil
                 }
             }
