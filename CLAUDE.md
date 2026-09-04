@@ -2109,6 +2109,13 @@ that sentence is the same five words every time.
   wait seconds for the weights, and the menu was waiting with them, when its clock
   is his reading time. The red cursor mark still blooms out of the pointer for
   half a second, and the menu is now below-left of it rather than on it.
+- **Offered once per gesture** (fixed 2026-09-04). A cold model makes
+  `startLocalRecording` run twice for one press — once at the press, once when
+  the weights land — and the second run re-did the whole opening: the menu
+  re-appeared ten seconds in under the hovering hand with its clock restarted,
+  and a folder he had *already clicked* was wiped by the `spawnFolder` reset and
+  the menu popped back up over it. The continuation passes `resumed: true`,
+  which keeps the choice and skips the offer.
 - **Not an `NSMenu`.** `popUp` runs a nested tracking run loop, which would
   freeze the pulsing 🔴 and the chip's own cursor-following for as long as it is
   up, and it offers neither a timed dismissal nor a fade. The rows are drawn

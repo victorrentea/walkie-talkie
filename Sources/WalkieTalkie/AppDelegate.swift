@@ -582,7 +582,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // to wait ten seconds for the weights is still a spawn; going
                     // back through the bare path would have started a dictation
                     // with nowhere to go and then dropped it at `send`.
-                    self.startLocalRecording(spawn: self.spawnPending, paste: self.pasteMode)
+                    // `resumed`, so the folder menu — offered at the press, its
+                    // clock his reading time — is not re-offered, and a folder
+                    // already clicked is not wiped.
+                    self.startLocalRecording(spawn: self.spawnPending, paste: self.pasteMode,
+                                             resumed: true)
                     return
                 }
                 // **Nothing is said.** This used to flash "local Whisper ready —
@@ -626,7 +630,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `spawn` is ⇧ + the wheel: this dictation carries its own destination, so
     /// it is allowed through the one gate a bare one is not — having a binding.
-    private func startLocalRecording(spawn: Bool = false, paste: Bool = false) {
+    ///
+    /// `resumed` is the model-ready continuation, and it exists because a cold
+    /// model makes this method run **twice** for one gesture: once at the press
+    /// (which offers the folder menu and returns to wait for the weights) and
+    /// once when the model comes up. The second run must not redo the opening
+    /// ceremony: measured on Victor's desk 2026-09-04, it re-offered the menu
+    /// ten seconds in — flickering it under the hovering hand, restarting its
+    /// clock, and, if he had already clicked, **wiping the folder he chose**
+    /// with the `spawnFolder = nil` below and popping the menu back up.
+    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -640,7 +653,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spawnPending = spawn
         // A folder chosen for a previous sentence must never ride this one: the
         // menu is offered again below, and not answering it means `~/workspace`.
-        spawnFolder = nil
+        // A resumed start keeps the choice — its menu was offered at the press
+        // and may already have been clicked.
+        if !resumed { spawnFolder = nil }
         pasteMode = paste
         // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
@@ -659,7 +674,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // mark blooms out of the pointer for half a second and the menu is
             // now *below-left* of it rather than on it, so the two no longer
             // arrive in the same pixels.
-            offerSpawnFolders()
+            //
+            // **Once per gesture, though** — a resumed start (the model had to
+            // load) skips this: the menu has been up since the press, its clock
+            // is his reading time, and a second offer is a flicker, a reset
+            // clock, and a popup over a choice already made.
+            if !resumed { offerSpawnFolders() }
         }
         // **The chip says the caret, and it outranks the bound terminal** — the
         // same slot, and the same argument, a spawn uses: for the length of this
