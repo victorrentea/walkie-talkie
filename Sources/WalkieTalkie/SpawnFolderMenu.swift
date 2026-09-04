@@ -16,7 +16,9 @@ import AppKit
 /// for that dictation; **no click means `~/workspace`**, exactly as before. It
 /// stays solid for three and a half seconds and then fades out over one, because
 /// a dictation is already running behind it and a menu that waits to be
-/// dismissed is a menu in the way of the sentence being spoken.
+/// dismissed is a menu in the way of the sentence being spoken — **unless the
+/// hand is on it**: the pointer arriving suspends the clock, mid-fade included,
+/// and leaving lets the fade run (2026-09-04).
 ///
 /// **It is a menu, not a tooltip, so it draws a surface.** *Nothing beside the
 /// pointer draws a window* is about the chip and the flashes — things that are
@@ -62,12 +64,15 @@ enum SpawnFolderMenu {
             .appendingPathComponent("workspace").path
     }
 
-    /// **Three and a half seconds solid, then a second of fade.** Victor's
-    /// numbers — it was two, and two is not long enough to read five names,
-    /// decide and travel to one while a sentence is already being spoken. The
-    /// fade is not only a way out: it is the part that says the menu was
-    /// optional, since something that vanishes on its own was never asking to be
-    /// answered.
+    /// **Three and a half seconds solid, then a second of fade — unless the
+    /// hand is on it.** Victor's numbers for the clock, and Victor's exception
+    /// for the hover (2026-09-04): *"the modal to pick the folder should not
+    /// fade out while I hover it"*. The fade exists to say the menu was
+    /// optional; a pointer resting on a row is the answer being made, and a
+    /// target that dims as the hand arrives punishes the one gesture it exists
+    /// for. So the mouse arriving stops the clock — mid-fade included, a click
+    /// lands during the fade so the menu is still answering — and leaving it
+    /// lets the fade run from wherever the clock had got to.
     ///
     /// **A click still lands during the fade**, so the window to answer is four
     /// and a half seconds. Nothing turns hit-testing off; the panel is ordered
@@ -101,6 +106,14 @@ enum SpawnFolderMenu {
     private static var panel: NSPanel?
     private static var timer: Timer?
     private static var chosen: ((Choice) -> Void)?
+    /// The hand on the menu, which suspends the fade — see `solidSeconds`.
+    private static var hovered = false
+    /// Whether the solid period has run out; the fade an exit triggers only
+    /// makes sense once it has.
+    private static var solidOver = false
+    /// Bumped on every state change, so a fade's completion can tell it has
+    /// been superseded by an un-fade and must not hide the panel.
+    private static var generation = 0
 
     // MARK: - Showing
 
@@ -138,12 +151,44 @@ enum SpawnFolderMenu {
         p.alphaValue = 1
         p.orderFrontRegardless()
         panel = p
+        hovered = false
+        solidOver = false
+        generation += 1
 
         // `.common`, or it stops running the moment anything on the main thread
         // enters a tracking loop.
-        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in fade() }
+        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in
+            solidOver = true
+            // Hovered, the clock has run out and nothing happens: the exit is
+            // what lets the fade start, whenever the hand leaves.
+            if !hovered { fade() }
+        }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+    }
+
+    /// **The pointer arriving on the menu stops the fade; leaving restarts it.**
+    /// Called from the content view's tracking area. Arriving mid-fade is not
+    /// too late — clicks land during the fade, so the menu is still answering,
+    /// and a target that dims under the hand is one being taken away as it is
+    /// aimed at.
+    static func setHovered(_ on: Bool) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { setHovered(on) }
+            return
+        }
+        hovered = on
+        if on {
+            guard let p = panel, p.alphaValue < 1 else { return }
+            // Invalidate the in-flight fade's completion before reversing it.
+            generation += 1
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                p.animator().alphaValue = 1
+            }
+        } else if solidOver {
+            fade()
+        }
     }
 
     /// Take it down now — a pick, a cancelled dictation, a second menu.
@@ -157,14 +202,17 @@ enum SpawnFolderMenu {
 
     private static func fade() {
         guard let p = panel else { return }
+        let gen = generation
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = fadeSeconds
             ctx.timingFunction = CAMediaTimingFunction(name: .linear)
             p.animator().alphaValue = 0
         }, completionHandler: {
-            // Only if it is still this menu: a pick, or a second spawn, has
-            // already put it away and may have put another one up.
-            if panel === p { hide() }
+            // Only if it is still this menu **and this fade**: a pick or a
+            // second spawn has already put it away, and an un-fade (the hand
+            // arriving mid-fade) reversed it — a stale completion must not hide
+            // a panel that is solid again.
+            if panel === p && generation == gen { hide() }
         })
     }
 
@@ -187,7 +235,8 @@ enum SpawnFolderMenu {
     }
 
     private static func build(size: NSSize) -> NSView {
-        let root = NSView(frame: NSRect(origin: .zero, size: size))
+        let root = HoverRoot(frame: NSRect(origin: .zero, size: size))
+        root.onHover = { SpawnFolderMenu.setHovered($0) }
         root.wantsLayer = true
         root.layer?.cornerRadius = radius
         root.layer?.masksToBounds = true
@@ -252,6 +301,27 @@ enum SpawnFolderMenu {
 
         return NSPoint(x: x, y: y)
     }
+}
+
+// MARK: - The panel's content view
+
+/// Watches the pointer for the menu's clock: entered/exited on the whole menu,
+/// which is what suspends and releases the fade (`SpawnFolderMenu.setHovered`).
+/// The rows' own tracking areas are about highlighting one folder; this one is
+/// about the menu as a target being aimed at.
+private final class HoverRoot: NSView {
+    var onHover: ((Bool) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
 // MARK: - A row

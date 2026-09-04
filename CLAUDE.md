@@ -2079,14 +2079,18 @@ that sentence is the same five words every time.
   *he works in them by hand every day*, which is why they are the five. A folder
   that is not on disk is dropped rather than offered, since the launcher falls
   back to `$HOME` on a failed `cd` and that is the one destination nobody meant.
-- **Three and a half seconds solid, then a second of fade** — his numbers, and
-  the first of them was two for half an hour: two is not long enough to read five
-  names, decide and travel to one while a sentence is already being spoken. The
-  fade is not only a way out: something that vanishes on its own was never asking
-  to be answered, and a dictation is already running behind it. **A click still
-  lands during the fade**, so the window to answer is four and a half seconds —
-  nothing turns hit-testing off, and the panel is ordered out only once the
-  animation has finished.
+- **Three and a half seconds solid, then a second of fade — unless the hand is
+  on it.** His numbers, and the first of them was two for half an hour: two is
+  not long enough to read five names, decide and travel to one while a sentence
+  is already being spoken. The fade is not only a way out: something that
+  vanishes on its own was never asking to be answered, and a dictation is
+  already running behind it. **Hovering suspends the clock** (his ask, later
+  the same day) — the pointer arriving mid-fade brings the menu back to solid,
+  and leaving it lets the fade run; a target that dims as the hand reaches it
+  is being taken away at the exact moment it is aimed at. **A click still lands
+  during the fade**, so the window to answer is four and a half seconds plus
+  hover — nothing turns hit-testing off, and the panel is ordered out only once
+  the animation has finished.
 - **It draws a surface, which is the one place it departs from *Nothing beside
   the pointer draws a window*.** That rule is about the chip and the flashes,
   which are read and never touched. This one has to be *aimed at*: rows need
