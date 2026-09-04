@@ -185,12 +185,12 @@ enum CaptureEffect: String, CaseIterable {
             shrink.fromValue = 1.0
             shrink.toValue = 0.1
 
-            // (2026-09-04, Victor's ask) A brief fade-in from invisible up to
-            // 80% opacity — instead of snapping to full brightness — so each
-            // dart materializes rather than popping into existence, then
-            // holds at 80% for most of the flight and dims out at the end.
+            // (2026-09-04, Victor's ask) Starts partially visible (20%) and
+            // brightens to 50% — instead of invisible/80% — so each dart
+            // materializes rather than popping into existence, then holds
+            // at 50% for most of the flight and dims out at the end.
             let fade = CAKeyframeAnimation(keyPath: "opacity")
-            fade.values = [0.0, 0.8, 0.8, 0.0]
+            fade.values = [0.2, 0.5, 0.5, 0.0]
             fade.keyTimes = [0.0, 0.08, 0.8, 1.0]
 
             group.animations = [move, shrink, fade]
