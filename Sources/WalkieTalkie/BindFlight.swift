@@ -125,6 +125,10 @@ enum BindFlight {
     /// a picture in the layer a fill would be behind it and invisible, and
     /// without one it is the whole shape.
     private static var hasPicture = false
+    /// Set by `fly` and read by `place` — see the note on `reversed` there.
+    private static var backwards = false
+    /// How long this particular flight runs. `duration` is the default it takes.
+    private static var span: CFTimeInterval = duration
 
     /// Fly from `source` to wherever the cursor is, for the whole second — the mouse
     /// is re-read every frame rather than sampled once, so the rectangle chases
@@ -141,8 +145,28 @@ enum BindFlight {
     /// is the whole difference between a rectangle that stops next to the label
     /// and one that goes *into* it. Defaults to the pointer for callers with no
     /// chip to aim at.
+    /// **`reversed` plays the very same flight backwards** — it leaves the chip
+    /// under the cursor and arrives *on* the window, growing instead of
+    /// shrinking, going from half opacity to full. That is the sentence a spawn
+    /// needs and the opposite of the one a bind needs: a bind says *that window
+    /// is now this chip*, and a spawn says *what you just said is now that
+    /// window over there*, about a window Victor has not looked at yet and does
+    /// not know the position of. Victor's ask, 2026-09-04.
+    ///
+    /// It is one flipped `t` rather than a second animation, so the two can never
+    /// drift: the hold that opens a bind (standing still over the window) becomes
+    /// the beat a spawn *ends* on, resting on the window it just filled, and the
+    /// fade that ends a bind becomes the spawn's fade **in** out of the pointer.
+    /// `source` is still the window and `destination` still the chip in both
+    /// directions — only which of them it starts at changes.
+    ///
+    /// `seconds` is the whole flight. The default is the bind's second; a spawn
+    /// asks for less, because its flight is a hand-off rather than an answer to a
+    /// press and it plays while the eye is still travelling to the new window.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
+                    seconds: CFTimeInterval = duration,
+                    reversed: Bool = false,
                     landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
@@ -218,20 +242,26 @@ enum BindFlight {
         target = destination
         onLanded = landed
         startedAt = CACurrentMediaTime()
+        backwards = reversed
+        span = max(0.1, seconds)
 
         place(at: 0)
         let tick = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
             let elapsed = CACurrentMediaTime() - startedAt
-            guard elapsed < duration else { return land() }
-            place(at: elapsed / duration)
+            guard elapsed < span else { return land() }
+            place(at: elapsed / span)
         }
         RunLoop.main.add(tick, forMode: .common)
         timer = tick
     }
 
     /// One frame. `t` is 0…1 across the whole flight, hold included.
-    private static func place(at t: CFTimeInterval) {
+    private static func place(at progress: CFTimeInterval) {
         guard !panes.isEmpty else { return }
+
+        // **The whole of "backwards" is here.** Every line below reads the same
+        // shape off the same clock; a spawn simply reads it from the other end.
+        let t = backwards ? 1 - progress : progress
 
         // The hold is subtracted here rather than by delaying the timer, so the
         // rectangle is on screen from the first frame — standing still is a
@@ -347,5 +377,7 @@ enum BindFlight {
         panes = []
         onLanded = nil
         hasPicture = false
+        backwards = false
+        span = duration
     }
 }

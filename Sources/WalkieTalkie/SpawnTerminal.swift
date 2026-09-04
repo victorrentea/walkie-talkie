@@ -64,25 +64,10 @@ enum SpawnTerminal {
         }
 
         // **Where it opens is not where Terminal would have put it.** See
-        // `elsewhere()`: an external display if there is one, and otherwise
-        // behind whatever Victor is looking at.
-        let area = elsewhere()
-        // Only worth remembering in the second case. In the first, Terminal is
-        // being brought forward on purpose, onto a screen he is not working on.
-        let previous = area == nil ? NSWorkspace.shared.frontmostApplication : nil
-
-        // Moved rather than sized: the window keeps whatever Terminal gave it and
-        // is centred on the target screen, shrunk only if it would not fit — a
-        // spawn is not the place to overrule his window settings.
-        let place = area.map { a in """
-            set w to front window
-            set b to bounds of w
-            set wd to (item 3 of b) - (item 1 of b)
-            set ht to (item 4 of b) - (item 2 of b)
-            if wd > \(a.w) then set wd to \(a.w)
-            if ht > \(a.h) then set ht to \(a.h)
-            set bounds of w to {\(a.x) + ((\(a.w) - wd) div 2), \(a.y) + ((\(a.h) - ht) div 2), \(a.x) + ((\(a.w) - wd) div 2) + wd, \(a.y) + ((\(a.h) - ht) div 2) + ht}
-        """ } ?? ""
+        // `board()` and `slot(for:on:avoiding:)`: tiled across the displays
+        // around the Retina one, and otherwise opened behind.
+        let screens = board()
+        let previous = screens.isEmpty ? NSWorkspace.shared.frontmostApplication : nil
 
         // `do script` with no `in` clause opens a **new window**, which is the
         // whole request: a second session beside the one he is in, not a line
@@ -91,86 +76,176 @@ enum SpawnTerminal {
         // time an answer came back from that guess, Victor's hand may well have
         // moved on.
         //
-        // **`front window` is Terminal's own front, not the screen's**, so the
-        // window just created is it whether or not this app was activated.
+        // **It also reports every window Terminal has**, in one round trip, since
+        // the slot is chosen by *what is already there* and a second `osascript`
+        // to ask would be a second launch of the interpreter for a list the first
+        // one was already holding. `front window` is Terminal's own front, not
+        // the screen's, so it names the window just created whether or not this
+        // app was activated.
         let osa = """
         tell application "Terminal"
-            \(area == nil ? "" : "activate")
+            \(screens.isEmpty ? "" : "activate")
             set t to do script "\(escape(launcher.path))"
-        \(place)
-            return tty of t
+            set out to (tty of t) & linefeed & (id of front window as string)
+            repeat with x in windows
+                try
+                    if visible of x then
+                        set b to bounds of x
+                        set out to out & linefeed & (id of x as string) & " " & (item 1 of b as string) & " " & (item 2 of b as string) & " " & (item 3 of b as string) & " " & (item 4 of b as string)
+                    end if
+                end try
+            end repeat
+            return out
         end tell
         """
-        guard let tty = run("/usr/bin/osascript", ["-e", osa]), tty.hasPrefix("/dev/") else {
+        guard let reply = run("/usr/bin/osascript", ["-e", osa]) else {
             return .failed("Terminal would not open a window for the new session")
         }
-        // **Put the front back, if Terminal took it.** Nothing here activates it,
-        // but a Terminal that was not running is launched by `do script` and comes
-        // forward on its own. The quarter second is that launch settling: restoring
-        // into the middle of it is a swap the window server undoes a moment later.
+        let lines = reply.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard let tty = lines.first, tty.hasPrefix("/dev/"), lines.count >= 2,
+              let mine = Int(lines[1]) else {
+            return .failed("Terminal would not open a window for the new session")
+        }
+
+        var windows: [(id: Int, box: Box)] = []
+        for line in lines.dropFirst(2) {
+            let n = line.split(separator: " ").compactMap { Int($0) }
+            guard n.count == 5 else { continue }
+            windows.append((id: n[0], box: Box(x: n[1], y: n[2], w: n[3] - n[1], h: n[4] - n[2])))
+        }
+
+        var placed = "behind, no display but the Retina one"
+        if !screens.isEmpty, let window = windows.first(where: { $0.id == mine }) {
+            let taken = windows.filter { $0.id != mine }.map { $0.box }
+            let target = slot(for: window.box, on: screens, avoiding: taken)
+            _ = run("/usr/bin/osascript", ["-e", """
+            tell application "Terminal" to set bounds of (first window whose id is \(mine)) \
+                to {\(target.x), \(target.y), \(target.x + target.w), \(target.y + target.h)}
+            """])
+            placed = "tiled at \(target.x),\(target.y) \(target.w)×\(target.h)"
+        }
+
+        // **Put the front back, if Terminal took it.** Nothing above activates it
+        // in this branch, but a Terminal that was not running is launched by
+        // `do script` and comes forward on its own. The quarter second is that
+        // launch settling: restoring into the middle of it is a swap the window
+        // server undoes a moment later.
         if let previous = previous {
             Thread.sleep(forTimeInterval: 0.25)
             if NSWorkspace.shared.frontmostApplication?.processIdentifier != previous.processIdentifier {
                 previous.activate(options: [])
             }
         }
-        Log.info("✨ new Claude Code spawned in \(directory) on \((tty as NSString).lastPathComponent)"
-                 + (area == nil ? " — behind, no display but the Retina one" : " — on the external display"))
+        Log.info("✨ new Claude Code spawned in \(directory) on \((tty as NSString).lastPathComponent) — \(placed)")
         return .opened(tty: tty)
     }
 
-    /// **The Retina screen is Victor's, and a window nobody asked to look at may
-    /// not take it.** Added 2026-09-04 on his ask: *"the terminal should be placed
-    /// outside of the Retina screen if there is any other screen connected. If
-    /// there's not, place it in the background, not in the foreground."*
+    /// A rectangle in **AppleScript's** coordinates: origin at the top-left of
+    /// the primary screen, y growing downwards. Everything below speaks these,
+    /// because the only thing any of it is for is `set bounds of window`.
+    private struct Box {
+        var x: Int, y: Int, w: Int, h: Int
+        var right: Int { x + w }
+        var bottom: Int { y + h }
+    }
+
+    /// **The displays a spawned window is allowed to land on, left to right.**
+    /// Added 2026-09-04 on Victor's ask: *"the terminal should be placed outside
+    /// of the Retina screen if there is any other screen connected"*, and then
+    /// *"tile them somehow so that they don't overlap with others… use all the
+    /// monitors you have around"*.
     ///
-    /// Every spawn used to `activate` and land wherever Terminal felt like, which
-    /// in practice is on top of what he is reading — and a spawn is by definition
-    /// the one window he did not point at, so it arrives while his eyes are
-    /// somewhere else.
-    ///
-    ///  * With an external display attached, this returns its visible area and
-    ///    the window is moved there and raised: it costs him nothing there.
-    ///  * With nothing but the built-in display, there is nowhere to move it to,
-    ///    so this returns `nil` and the caller opens it **behind** instead. The
-    ///    window still exists and the relay still binds it a beat later; what it
-    ///    does not do is take the front.
+    /// A spawn is by definition the one window he never pointed at: it appears on
+    /// its own while his eyes are elsewhere. It used to `activate` and land
+    /// wherever Terminal felt like, which in practice is on top of what he is
+    /// reading on the built-in display.
     ///
     /// "Retina" is `backingScaleFactor >= 2` — the same test the
-    /// `come-back-when-done` skill uses, and deliberately not a size or a name,
-    /// so it holds whatever is plugged in. The roomiest qualifying screen wins,
-    /// because with three identical monitors any of them will do and the biggest
-    /// is the least surprising default.
+    /// `come-back-when-done` skill uses, and deliberately neither a size nor a
+    /// name, so it holds whatever is plugged in. An empty result means there is
+    /// nowhere to move a window to, and the caller opens it **behind** instead:
+    /// the window still exists and `adoptSpawnedWindow` still binds it, since
+    /// delivery is `do script … in <tab>` and never needs a window in front.
     ///
-    /// The rectangle comes back in **AppleScript's** coordinates — origin at the
-    /// top-left of the primary screen, y growing downwards — since that is the
-    /// only place it is used. `NSScreen` speaks Cocoa's, so the y is flipped
-    /// against the primary screen's height here rather than at the call site.
-    private static func elsewhere() -> (x: Int, y: Int, w: Int, h: Int)? {
-        var found: (x: Int, y: Int, w: Int, h: Int)?
+    /// `visibleFrame`, not `frame`, so a menu bar or a Dock on a display is not
+    /// tiled over.
+    private static func board() -> [Box] {
+        var found: [Box] = []
         let read = {
             let screens = NSScreen.screens
             guard !screens.isEmpty else { return }
-            // The pivot for the flip is the primary screen — the one at Cocoa
+            // The pivot for the y flip is the primary screen — the one at Cocoa
             // origin — wherever it sits in the list.
             let primary = screens.first { $0.frame.origin == .zero } ?? screens[0]
             let pivot = primary.frame.maxY
-            guard let target = screens
-                .filter({ $0.backingScaleFactor < 2 })
-                .max(by: { $0.visibleFrame.width * $0.visibleFrame.height
-                         < $1.visibleFrame.width * $1.visibleFrame.height })
-            else { return }
-            let f = target.visibleFrame
-            found = (x: Int(f.minX.rounded()),
-                     y: Int((pivot - f.maxY).rounded()),
-                     w: Int(f.width.rounded()),
-                     h: Int(f.height.rounded()))
+            found = screens
+                .filter { $0.backingScaleFactor < 2 }
+                .map { screen -> Box in
+                    let f = screen.visibleFrame
+                    return Box(x: Int(f.minX.rounded()),
+                               y: Int((pivot - f.maxY).rounded()),
+                               w: Int(f.width.rounded()),
+                               h: Int(f.height.rounded()))
+                }
+                .sorted { $0.x < $1.x }
         }
         // `launchClaude` runs off the main thread by contract, and `NSScreen` is
         // main-thread state. The hop is a hop, not a deadlock, precisely because
         // of that contract.
         if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
         return found
+    }
+
+    /// **Where this window goes so that it covers as little as possible of what
+    /// is already open.**
+    ///
+    /// Each display is cut into a grid of cells the size of the window itself —
+    /// two columns of a 905pt terminal on a 1920pt monitor — and the grid is
+    /// centred in whatever the cells did not use, so a single-column screen does
+    /// not park the window against its left edge. Every cell on every display is
+    /// then scored by how many square points of *other* Terminal windows it would
+    /// sit on, and the first cell with the lowest score wins.
+    ///
+    /// **Scored rather than filtered**, so it degrades instead of failing: with
+    /// every slot taken — six terminals across three monitors — the answer is the
+    /// least-covered one rather than no answer at all, and the windows stack in
+    /// the same order they were opened rather than piling on the first cell.
+    /// Reading left to right across the displays is what makes a second spawn
+    /// land beside the first instead of on it.
+    ///
+    /// Only Terminal's own windows are avoided. They are what this is laying out,
+    /// they are what the question was about, and they are the only rectangles the
+    /// same `osascript` was already holding — asking the window server about every
+    /// app's windows would price a browser off these monitors on displays that are
+    /// there to hold browsers.
+    private static func slot(for window: Box, on screens: [Box], avoiding taken: [Box]) -> Box {
+        var best: (cover: Int, box: Box)?
+        for screen in screens {
+            let w = min(window.w, screen.w), h = min(window.h, screen.h)
+            guard w > 0, h > 0 else { continue }
+            let cols = max(1, screen.w / w), rows = max(1, screen.h / h)
+            let padX = (screen.w - cols * w) / 2, padY = (screen.h - rows * h) / 2
+            for row in 0..<rows {
+                for col in 0..<cols {
+                    let cell = Box(x: screen.x + padX + col * w, y: screen.y + padY + row * h, w: w, h: h)
+                    let cover = taken.reduce(0) { $0 + overlap(cell, $1) }
+                    // Strictly less, so ties go to the earlier cell and the order
+                    // of the grid is the order windows fill it in.
+                    if best == nil || cover < best!.cover { best = (cover, cell) }
+                    // Nothing beats an empty cell; stop looking for a better one.
+                    if cover == 0 { return cell }
+                }
+            }
+        }
+        return best?.box ?? window
+    }
+
+    /// Square points two rectangles share, or zero.
+    private static func overlap(_ a: Box, _ b: Box) -> Int {
+        let w = min(a.right, b.right) - max(a.x, b.x)
+        let h = min(a.bottom, b.bottom) - max(a.y, b.y)
+        return w > 0 && h > 0 ? w * h : 0
     }
 
     /// **A login shell is what runs this, so `claude` is normally on the PATH

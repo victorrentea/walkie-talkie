@@ -213,8 +213,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `AppDelegate` because it needs state only the delegate has; this one needs
     /// nothing but the file on disk, and a hop through the delegate would exist
     /// only to be consistent with rows that had a reason.
-    private let messageLog = NSMenuItem(title: "Message Log — the last 2 days, in the browser",
-                                        action: nil, keyEquivalent: "")
+    private let messageLog = NSMenuItem(title: "Message log of last 2 days", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     /// **The app, named and dated, one row above Quit.** It carries the build
@@ -454,7 +453,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            (newSession, newSession.title, "➡️ + 🛞 1s"),
+            // **Two ways in, and the chord-free one first.** ⬆️ is the forward
+            // side button, the pair of the ⬇️ the shutter row already draws for
+            // the back one; `0.6s` is what tells it from an ordinary click on a
+            // button this app otherwise hands straight back.
+            (newSession, newSession.title, "⬆️ 0.6s · ➡️ + 🛞 1s"),
             (shot, shot.title, "⬇️ \(Self.whileDictating)"),
             (pickLegend, pickLegend.title, "⌘⇧ + ⬅️ \(Self.whileDictating)"),
         ]

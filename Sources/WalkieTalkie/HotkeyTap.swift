@@ -337,6 +337,72 @@ final class HotkeyTap {
         return true
     }
 
+    /// **How long the forward side button has to be held to mean *a new
+    /// session*.** Added 2026-09-04 at Victor's ask, as a second way in to the
+    /// spawn that needs no chord at all — one button, one hand position.
+    ///
+    /// **0.6s, and the press is taken away from everything downstream while it is
+    /// judged.** He asked how long a hold could last before Wispr Flow took the
+    /// button over; the honest answer is *none*, because a push-to-talk fires at
+    /// the press and waiting is precisely what hands it over. So the press is
+    /// swallowed at the tap instead, and replayed by `replayMouse5Click()` if it
+    /// turns out to have been a click — see the note there for what that costs.
+    ///
+    /// Longer than a click and shorter than the wheel chords' second: those have
+    /// a *second reading* to be told apart from, and this one has only a click,
+    /// so the wait is the shortest one that cannot be made by accident.
+    private static let mouse5HoldSeconds: TimeInterval = 0.6
+
+    /// The same two-flag dance the wheel does, for the same reason — a hold timer
+    /// on the main queue and a release on the tap thread racing for one press.
+    private var mouse5Down = false
+    private var mouse5Armed = false
+    private var mouse5Hold: DispatchWorkItem?
+
+    /// See `claimWheelPress`, of which this is the mouse-5 copy.
+    private func claimMouse5Press() -> Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard mouse5Down else { return false }
+        mouse5Armed = true
+        mouse5Down = false
+        return true
+    }
+
+    /// **The click this tap swallowed, handed back to the machine.**
+    ///
+    /// The forward button is not this app's — *mouse 5 is nobody's* — and taking
+    /// it away for good to buy one hold would be the trade Victor already
+    /// reversed once, on 2026-08-29. So a press that turns out to be a *click* is
+    /// posted again, at the HID tap, where LinearMouse and Wispr Flow are: from
+    /// downstream it is the same click 0.6s late at worst, and in practice the
+    /// hand is off the button by then anyway.
+    ///
+    /// **What it cannot give back is a *hold*.** Anything downstream that reads a
+    /// long press on this button — Wispr Flow's push-to-talk, if it is ever moved
+    /// here from the back button — now sees a click instead. That is the price of
+    /// the gesture and it is deliberate; the one line to change is
+    /// `mouse5HoldSeconds` and the branch that swallows.
+    ///
+    /// The replay is tagged so this tap knows its own handiwork on the way past.
+    /// Without that, the posted press would be judged as a fresh one, arm another
+    /// hold, and be swallowed again — a gesture eating itself.
+    private static let replayTag: Int64 = 0x57414C4B    // "WALK"
+
+    private func replayMouse5Click() {
+        let point = CGEvent(source: nil)?.location ?? .zero
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        source.userData = Self.replayTag
+        for down in [true, false] {
+            guard let event = CGEvent(mouseEventSource: source,
+                                      mouseType: down ? .otherMouseDown : .otherMouseUp,
+                                      mouseCursorPosition: point,
+                                      mouseButton: .center) else { continue }
+            event.setIntegerValueField(.mouseEventButtonNumber, value: MOUSE_BUTTON_5)
+            event.setIntegerValueField(.mouseEventClickState, value: 1)
+            event.post(tap: .cghidEventTap)
+        }
+    }
+
     private let stateLock = NSLock()
 
     private let VK_B: CGKeyCode = 0x0B
@@ -435,6 +501,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
 
         if type == .otherMouseDown || type == .otherMouseUp {
+            // **Our own replayed click, on its way to whatever is downstream.**
+            // Judged a second time it would arm another hold and be swallowed
+            // again, which is this gesture eating itself. See `replayMouse5Click`.
+            if event.getIntegerValueField(.eventSourceUserData) == Self.replayTag {
+                return Unmanaged.passUnretained(event)
+            }
             // Before anything below reads `leftIsHeld` or `rightIsHeld`.
             reconcileButtons()
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
@@ -484,14 +556,33 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return nil
             }
 
+            // **The forward button says two things, and the press is taken away
+            // from the machine until it is known which.**
+            //
+            //   click        → nothing of ours; replayed downstream untouched
+            //   click ×2     → bind: point the relay at the window in front
+            //   held 0.6s    → a dictation at a session that does not exist yet,
+            //                  the same call ➡️ + 🛞 held makes
+            //
             // The double-click test comes first, and applies whether or not
             // anything is bound: binding by pointing is most useful precisely
-            // when nothing is bound yet, and that is the state in which mouse 5
-            // is otherwise passed straight through.
+            // when nothing is bound yet.
             if button == MOUSE_BUTTON_5 && bare {
-                if type == .otherMouseUp && swallowMouse5Up {
+                if type == .otherMouseUp {
+                    // **Any release whose press we took is ours**, whatever the
+                    // state has become since — the same rule the wheel's release
+                    // follows, and for the same reason: nothing downstream may be
+                    // handed an up it never saw a down for.
+                    mouse5Hold?.cancel()
+                    mouse5Hold = nil
+                    let armed = mouse5Armed
+                    // A press still unjudged at the release is the click.
+                    let tapped = claimMouse5Press()
+                    mouse5Armed = false
+                    let swallowed = swallowMouse5Up
                     swallowMouse5Up = false
-                    return nil
+                    if tapped { replayMouse5Click() }
+                    return (tapped || armed || swallowed) ? nil : Unmanaged.passUnretained(event)
                 }
                 if type == .otherMouseDown {
                     let now = CACurrentMediaTime()
@@ -500,6 +591,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // fresh pair instead of binding again on every press.
                         lastMouse5DownAt = 0
                         swallowMouse5Up = true
+                        // The first click's own press was swallowed and replayed
+                        // at its release; this one is not replayed, because it is
+                        // ours.
+                        mouse5Hold?.cancel()
+                        mouse5Hold = nil
+                        mouse5Down = false
+                        mouse5Armed = true
                         Log.info("🎯 mouse 5 ×2 — binding")
                         // **Global, not main** — the same queue ⌘⌃B uses, and for
                         // the reason it uses it: `bindFrontmostTerminal` asks the
@@ -512,6 +610,26 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         return nil
                     }
                     lastMouse5DownAt = now
+
+                    // **Swallowed, and judged when it is let go or when the hold
+                    // runs out.** The alternative — pass it through and act at
+                    // 0.6s — is what Victor asked about and what cannot work:
+                    // whatever downstream does with this button has already done
+                    // it by then.
+                    mouse5Down = true
+                    mouse5Armed = false
+                    let work = DispatchWorkItem { [weak self] in
+                        guard let self = self, self.claimMouse5Press() else { return }
+                        // Ending a dictation is ending one, whichever gesture
+                        // opened it — the destination belongs to the press that
+                        // started it, exactly as in the right chord.
+                        Log.info(self.dictating ? "🎙️ mouse 5 held — ending the dictation"
+                                                : "✨ mouse 5 held — dictating at a new Claude Code")
+                        DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+                    }
+                    mouse5Hold = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.mouse5HoldSeconds, execute: work)
+                    return nil
                 }
             }
 
@@ -794,8 +912,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return nil
             }
 
-            // Mouse 5 otherwise belongs to whatever the system has mapped it
-            // to — the relay only ever claims the double click above.
+            // Anything else on these buttons belongs to whatever the system has
+            // mapped it to. Mouse 5's own presses never reach here — they are
+            // swallowed at the branch above and replayed from there if they turn
+            // out to be clicks.
             return Unmanaged.passUnretained(event)
         }
 
