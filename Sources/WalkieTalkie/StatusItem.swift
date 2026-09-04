@@ -454,11 +454,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (startDictation, startDictation.title, "🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            // **Two ways in, and the chord-free one first.** `🛞 2s` is the bare
-            // wheel kept down past the dictation it just started — Victor's
-            // replacement (2026-09-04) for the side-button holds the mouse
-            // hardware never delivered. The right chord is the unbound route.
-            (newSession, newSession.title, "🛞 2s · ➡️ + 🛞 1s"),
+            // **Two ways in, and the chord-free one first.** `🛞🛞` is the bare
+            // wheel clicked twice — Victor's replacement (2026-09-05) for the
+            // 2s hold of the day before, which lost every race to the 1s
+            // cancel-hold on the same button. The right chord is the unbound route.
+            (newSession, newSession.title, "🛞🛞 · ➡️ + 🛞 1s"),
             // **Bare chords — no qualifier.** Both legends said "while
             // dictating" until Victor had the words out (2026-09-04, minutes
             // after they replaced the @🎙️ marker he had out first); the two

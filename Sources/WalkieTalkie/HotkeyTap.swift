@@ -46,19 +46,18 @@ final class HotkeyTap {
 
     /// **The wheel pressed at rest, bound: start a dictation — and defer its
     /// context shot to the release** (Victor, 2026-09-04). Distinct from
-    /// `onLocalToggle` because the bare wheel is the one gesture with a hold on
-    /// it: for the two seconds the press might still become a spawn, the
-    /// vignette and the cursor mark would be announcing a picture of a screen
-    /// the sentence may not be about. The shot fires at the release instead,
-    /// through `onWheelRelease`.
+    /// `onLocalToggle` because the bare wheel's press is only half a verdict:
+    /// a second click on its heels turns the dictation into a spawn, and the
+    /// picture is of the screen his finger left, not of the one it landed on.
+    /// The shot fires at the release instead, through `onWheelRelease`.
     var onWheelDictate: (() -> Void)?
 
-    /// **The wheel, still down two seconds after it started a dictation** —
-    /// turn that dictation into a spawn: same words being recorded, but the
-    /// destination becomes a session that does not exist yet, and the folder
-    /// menu opens at the 2s mark. Victor's design, 2026-09-04, replacing the
-    /// side-button holds that provably never survived the mouse hardware.
-    var onWheelHoldSpawn: (() -> Void)?
+    /// **The wheel clicked twice** — turn the dictation the first click started
+    /// into a spawn: same words being recorded, but the destination becomes a
+    /// session that does not exist yet, and the folder menu opens on the second
+    /// click. Victor's design, 2026-09-05, replacing the 2s wheel hold of the
+    /// day before, which never fired (see `spawnDoubleSeconds`).
+    var onWheelDoubleSpawn: (() -> Void)?
 
     /// The wheel came up after a press that started a dictation — the deferred
     /// context shot's cue (`onWheelDictate`). Fires on no other release.
@@ -327,19 +326,30 @@ final class HotkeyTap {
     private var wheelLeftChord = false
     private var wheelHold: DispatchWorkItem?
 
-    /// How long the wheel stays down before the dictation its press just
-    /// started **turns into a spawn** — the destination becomes a session that
-    /// does not exist yet and the folder menu opens (Victor, 2026-09-04). The
-    /// same two seconds a cancel costs while dictating, and deliberately so:
-    /// both are "keep holding to change what this dictation is", told apart by
-    /// the state at the press.
-    private static let spawnHoldSeconds: TimeInterval = 2.0
+    /// **How close the wheel's second click has to land** for the dictation the
+    /// first one started to become a spawn (Victor, 2026-09-05).
+    ///
+    /// This replaced a 2s *hold*, which lasted one day and never once fired.
+    /// `relay.log` says why: the hold's timer guarded on `dictating`, a flag the
+    /// tap only learns from `syncBorrowedGestures` after the recording is up, so
+    /// on a cold model it was still false at the 2s mark — and when it was true,
+    /// the press had long since been read by the branch below as *hold to
+    /// cancel*, whose 1s timer wins every race against a 2s one. Two holds on
+    /// one button, told apart by a flag that arrives late, is not a gesture.
+    ///
+    /// A double click has no such race: both presses are events, and the second
+    /// one is judged the instant it arrives.
+    private static let spawnDoubleSeconds: TimeInterval = 0.6
+
+    /// When the wheel last opened a dictation on its own. The second click is
+    /// measured from **the press that started it**, not from the release, so a
+    /// slow finger on the first click does not eat the window.
+    private var wheelDictateAt: TimeInterval = 0
 
     /// A rest-press that started a dictation and whose wheel is still down —
-    /// the press the spawn-hold timer judges, and the one whose release takes
-    /// the deferred context shot. Set false by every other kind of press.
+    /// the press whose release takes the deferred context shot. Set false by
+    /// every other kind of press.
     private var wheelHeldFromPress = false
-    private var spawnHold: DispatchWorkItem?
 
     /// **Take the undecided press, if it is still going.** Every gesture with a
     /// hold has two claimants racing for one press: the timer, which runs on the
@@ -761,12 +771,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 wheelLeftChord = false
                 wheelHold?.cancel()
                 wheelHold = nil
-                // The spawn-hold timer does not survive the release — a hold is
-                // only a hold while the button is down — and a press that
-                // started a dictation takes its context shot **now**, at the
-                // release, per Victor 2026-09-04 (see `onWheelDictate`).
-                spawnHold?.cancel()
-                spawnHold = nil
+                // A press that started a dictation takes its context shot
+                // **now**, at the release, per Victor 2026-09-04 (see
+                // `onWheelDictate`).
                 let contextAtRelease = wheelHeldFromPress
                 wheelHeldFromPress = false
                 guard tapped else {
@@ -857,38 +864,59 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Removed at Victor's ask 2026-09-03: the modifier belonged to this
             // app for as long as it was running, bound or not, which cost every
             // ⌘-middle-click everywhere else on the machine. The spawn itself
-            // came back a day later as the bare wheel *held* (below), and ➡️ + 🛞
-            // held a second is still the same call for the unbound case.
+            // came back a day later as the bare wheel *clicked twice* (below),
+            // and ➡️ + 🛞 held a second is still the same call for the unbound case.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown
                 && bare && (localCapture || dictating) {
                 wheelDown = true
                 wheelLeftChord = false
                 wheelRightChord = false
-                // **Idle it still fires on the press, not on the release** — even
-                // though a hold now means *convert to a spawn*. Waiting for the
-                // lift was inherited from the days when a hold meant something
-                // here, and what it cost was the one thing this gesture has to
-                // give: Victor could not tell whether the microphone had opened
-                // until he let go, so he kept holding the button "for a second"
-                // to be sure — the wait the tap was supposed to have removed, put
-                // back by hand because nothing on screen said otherwise. Reported
-                // 2026-08-31: *"nu mai știam dacă trebuie să țin apăsat butonul o
-                // secundă ca să înceapă să mă asculte"*. The conversion solves
-                // that the other way: the dictation starts at the press and the
-                // hold *changes* it, so the chip still appears under his finger.
+
+                // **The second click of a double click, judged before anything
+                // else** (Victor, 2026-09-05): the dictation the first click
+                // opened becomes a spawn — same recording, new destination, a
+                // session that does not exist yet, with the folder menu opening
+                // right here.
+                //
+                // It is tested **ahead of `dictating`** on purpose. That flag
+                // reaches the tap only once the recording is actually up, and on
+                // a cold model that is ten seconds after the first click; asking
+                // it first is precisely what killed the hold this replaces. The
+                // stamp is set by the branch below, so it alone says "the click
+                // before this one was mine, and it was a dictation".
+                if wheelDictateAt > 0
+                    && CFAbsoluteTimeGetCurrent() - wheelDictateAt <= Self.spawnDoubleSeconds {
+                    wheelDictateAt = 0
+                    // Ours, swallowed, and nothing left for the release to
+                    // claim: `wheelArmed` keeps the middle-up from reaching the
+                    // app underneath, and `wheelDown` cleared makes `tapped`
+                    // false there — otherwise this second click would end the
+                    // dictation it just re-aimed.
+                    wheelArmed = true
+                    wheelDown = false
+                    wheelHeldFromPress = false
+                    Log.info("🎙️✨ wheel double-clicked — this dictation opens a new Claude Code")
+                    DispatchQueue.global().async { [weak self] in self?.onWheelDoubleSpawn?() }
+                    return nil
+                }
+
+                // **Idle it fires on the press, not on the release.** Waiting for
+                // the lift cost the one thing this gesture has to give: Victor
+                // could not tell whether the microphone had opened until he let
+                // go, so he kept holding the button "for a second" to be sure —
+                // the wait the tap was supposed to have removed, put back by hand
+                // because nothing on screen said otherwise. Reported 2026-08-31:
+                // *"nu mai știam dacă trebuie să țin apăsat butonul o secundă ca
+                // să înceapă să mă asculte"*. The double click above solves the
+                // spawn the other way round: the dictation starts at the first
+                // press, so the chip appears under his finger, and the second
+                // press only *changes where it is going*.
                 //
                 // `wheelArmed` is what keeps the release honest: it still belongs
                 // to us and is still swallowed — the app underneath must never see
                 // a middle-up it never saw a middle-down for — but `tapped` is
                 // then false, so the release fires nothing and cannot immediately
                 // end the dictation the press just started.
-                //
-                // **Except: a hold now has a meaning here too** (2026-09-04).
-                // Keep the wheel down `spawnHoldSeconds` and the dictation this
-                // press just started turns into a spawn — same recording, new
-                // destination: a session that does not exist yet, with the folder
-                // menu opening at the 2s mark. This replaced the side-button
-                // holds, which the mouse hardware provably never delivered.
                 guard dictating else {
                     wheelArmed = true
                     // **Decided here, so the release has nothing left to claim.**
@@ -898,26 +926,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     // opened on top of itself.
                     wheelDown = false
                     wheelHeldFromPress = true
+                    // The stamp the branch above measures the second click
+                    // against. Only a *bare wheel opening a dictation* sets it,
+                    // so no chord and no cancel can be doubled into a spawn.
+                    wheelDictateAt = CFAbsoluteTimeGetCurrent()
                     Log.info("🎙️ wheel pressed — starting a dictation")
                     DispatchQueue.global().async { [weak self] in self?.onWheelDictate?() }
-                    let work = DispatchWorkItem { [weak self] in
-                        guard let self = self else { return }
-                        // The press's own release is the other claimant — the up
-                        // branch clears `wheelHeldFromPress`, so a timer that
-                        // lost the race finds nothing to convert. `dictating`
-                        // is the state check: a dictation that ended under his
-                        // finger (menu, ⌘⌃D) must not be turned into anything.
-                        guard self.dictating, self.wheelHeldFromPress else { return }
-                        Log.info("🎙️✨ wheel held — this dictation opens a new Claude Code")
-                        DispatchQueue.global().async { [weak self] in self?.onWheelHoldSpawn?() }
-                    }
-                    spawnHold = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.spawnHoldSeconds, execute: work)
                     return nil
                 }
                 wheelHeldFromPress = false
-                spawnHold?.cancel()
-                spawnHold = nil
                 let work = DispatchWorkItem { [weak self] in
                     // The state at the press picked this timer and the state at
                     // the fire has to still agree — a dictation that ended under

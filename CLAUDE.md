@@ -1732,7 +1732,7 @@ held. The third is a chord with the left button.**
 | anywhere, any state | **left button held ≥0.3s, then the wheel held 1s** | bind **and** start the dictation at it |
 | bound, any state | **right button down, then click the wheel** | **disconnect** — same call as the menu's Disconnect |
 | anywhere, any state | **right button down, then the wheel held 1s** | dictate at a terminal that does not exist yet — ⌘ + the wheel, without the keyboard |
-| bound, not dictating | **click, then keep holding 2s** | the dictation the press just started **becomes** a spawn — new session, folder menu at the 2s mark |
+| bound, not dictating | **click twice** | the dictation the first click started **becomes** a spawn — new session, folder menu on the second click |
 | nothing bound, no chord | click | passed straight through |
 
 **The chord does not toggle, since 2026-09-01.** ⌘⌃B on the target already bound
@@ -1746,7 +1746,7 @@ already has two routes that mean nothing else — the right-held chord, and the
 menu's Disconnect. A toggle earns its keep on a key with no off switch; it is a
 trap on a gesture that has two.
 
-### The wheel held 2s turns the dictation into a spawn (2026-09-04)
+### Double-clicking the wheel turns the dictation into a spawn (2026-09-05)
 
 The side-button holds are dead, and the evidence killed them. The forward
 button first: measured on presses Victor was deliberately holding, it reaches
@@ -1760,37 +1760,59 @@ hypothesis that it might be the one button not intercepted; Victor gave up on
 the whole circuit before the experiment finished: *"let's give up on that,
 remove that circuit, and instead let's go for keeping the wheel held down."*
 
-**The bare wheel now carries the spawn, as a conversion rather than a gesture
-of its own.** A press at rest starts a dictation at the bound terminal, exactly
-as it always has — the microphone opens at the press, not the release. Keep
-the wheel down two seconds (`spawnHoldSeconds`, the cancel's own duration) and
-the dictation *in flight* turns into a spawn: `spawnPending` flips, the chip
-grows the ✨ mark, and the folder menu opens at the 2s mark. Same words, same
-recording — only the destination changes, which is exactly the rule *A bind
-mid-sentence changes the recipient* already runs on. ➡️ + 🛞 held a second
-remains the unbound route in, and the menu's **Dictate to new Claude** the
-discoverable one.
+**The wheel hold that replaced it lasted exactly one day and never fired once.**
+*"holding wheel does not seem to work"* — and unlike the side buttons, this one
+was ours, not the hardware's. `relay.log` has no `🎙️✨ wheel held` in it at all;
+what it has, every time, is `🗑️ wheel held while dictating — cancelling it`.
+The button had two holds on it and they were not separable in the hand:
 
-- **The state at the press tells the two 2s holds apart.** Pressed at rest, a
-  hold converts to a spawn; pressed while dictating, a hold cancels. Same
-  duration, opposite moments — the press's context is the whole difference.
-- **The context shot waits for the release** — Victor's refinement in the same
-  breath: *"you could take the screenshot when I release the mouse."* During
-  the two seconds the hold is being judged, a vignette and a cursor mark would
-  announce a picture of a screen the sentence may not be about. So the bare
-  wheel starts the recording without `captureContext` (`deferContext`), and the
-  release takes it. The audio's zero stays the press — the shot is named by
-  its real offset, so a converted spawn's context frame reads `0:02`, not a
-  lie of `0:00`. Every other route in (⌘⌃D, the menu, the chords) still
-  captures at the press.
-- **The claim race is the one this file already solved twice.** The timer and
-  the release both read `wheelHeldFromPress`; the release clears it, so a
-  release that lands first leaves the timer nothing to convert, and a timer
-  that fired leaves the release only the deferred shot. A dictation that ended
-  under his finger fails the `dictating` check at the fire.
-- **A cold model converts nothing.** While the weights load there is no
-  dictation in flight (`dictating` is false), the guard refuses, and the
-  resumed start captures its context when the microphone actually opens.
+- **The two holds were the same length** — `cancelHoldSeconds` and
+  `spawnHoldSeconds` were both 2s — and told apart only by *the state at the
+  press*. A wheel he pressed, held, and went on holding past the moment the
+  dictation came up read as the cancel on the very next press, which is what a
+  finger that has just been told "hold it longer" naturally does.
+- **The spawn timer additionally guarded on `dictating`**, a flag the tap only
+  learns from `syncBorrowedGestures` once the recording is up — which on a cold
+  model is ten seconds after the press. The one path where the hold mattered
+  most was the one where the guard was still false when the timer fired.
+
+A second duration on a button that already has one, arbitrated by a flag that
+arrives late, is not a gesture. **A second click is.**
+
+**The bare wheel now carries the spawn as a double click**, and still as a
+conversion rather than a gesture of its own. The first click starts a dictation
+at the bound terminal, exactly as it always has — the microphone opens at the
+press, so the chip appears under his finger. Click again inside
+`spawnDoubleSeconds` (0.6s) and the dictation *in flight* turns into a spawn:
+`spawnPending` flips, the chip grows the ✨ mark, and the folder menu opens on
+the second click. Same words, same recording — only the destination changes,
+which is exactly the rule *A bind mid-sentence changes the recipient* already
+runs on. ➡️ + 🛞 held a second remains the unbound route in, and the menu's
+**Dictate to new Claude** the discoverable one.
+
+- **The double click is judged before `dictating` is consulted** — deliberately,
+  because consulting it first is what killed the hold. The test is
+  `wheelDictateAt`, a stamp only *the bare wheel opening a dictation* sets, so
+  no chord and no cancel can be doubled into a spawn, and a cold model converts
+  as readily as a warm one.
+- **A cold model converts too**, therefore. The first click banked the gesture
+  in `recordWhenModelReady` and is waiting on the weights; the second lands
+  half a second later, sets `spawnPending`, and the resumed start reads it —
+  which is why the handler accepts `localRecording || recordWhenModelReady`.
+  The folder menu opened by the second click survives, because a resumed start
+  is `resumed: true` and skips its own offer (see *the modal must not be
+  offered twice*).
+- **The second press is swallowed and left unclaimable.** It sets `wheelArmed`
+  (so the app underneath never sees a middle-up without its middle-down) and
+  clears `wheelDown`, which makes `tapped` false at the release — otherwise the
+  click that re-aimed the dictation would immediately end it.
+- **The context shot still waits for the release** — Victor's refinement from
+  the day before: *"you could take the screenshot when I release the mouse."*
+  The bare wheel starts the recording without `captureContext`
+  (`deferContext`), and the first release takes it, so the picture is of the
+  screen his finger left rather than the one it landed on. The audio's zero
+  stays the press, so shots are named by their real offset. Every other route
+  in (⌘⌃D, the menu, the chords) still captures at the press.
 
 **Keeping the wheel down turns the same chord into a dictation**, since the same
 day. Press and let go binds; hold the wheel a further second
@@ -2407,7 +2429,7 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `Dictate to new Claude — 🛞 2s · ➡️ + 🛞 1s`,
+that performs it — `Dictate to new Claude — 🛞🛞 · ➡️ + 🛞 1s`,
 `Cancel Dictation — 🛞 2s`, `Take Screenshot — ⬇️`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
@@ -2597,7 +2619,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 |---|---|---|---|
 | `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
-| `Dictate to new Claude` | ✨ | `🛞 2s · ➡️ + 🛞 1s` | |
+| `Dictate to new Claude` | ✨ | `🛞🛞 · ➡️ + 🛞 1s` | |
 | `Paste last prompt` | 📋 | | ⌘⌃P |
 | — separator — | | | |
 | `Start Dictation` | `mic` | `🛞` | ⌘⌃D |

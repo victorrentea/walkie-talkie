@@ -393,22 +393,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleLocalRecording() }
         }
-        // **The bare wheel at rest** — distinct from the toggle above because it
-        // is the one gesture with a hold on it: the context shot waits for the
-        // release (`onWheelRelease`), so the two seconds in which a hold can
-        // still turn the dictation into a spawn are not announced by a vignette
-        // and a cursor mark for a screen the sentence may not be about.
+        // **The bare wheel at rest** — distinct from the toggle above because its
+        // press is only half a verdict: a second click on its heels turns the
+        // dictation into a spawn, so the context shot waits for the release
+        // (`onWheelRelease`) and pictures the screen his finger left.
         hotkeys.onWheelDictate = { [weak self] in
             DispatchQueue.main.async { self?.startLocalRecording(deferContext: true) }
         }
-        // **The wheel still down 2s after it started a dictation: convert it to
-        // a spawn.** Same recording, same words — only the destination changes:
-        // the terminal it opens in does not exist yet, so the folder menu is
-        // offered exactly as at a fresh spawn press.
-        hotkeys.onWheelHoldSpawn = { [weak self] in
+        // **The wheel clicked a second time: convert the dictation to a spawn.**
+        // Same recording, same words — only the destination changes: the terminal
+        // it opens in does not exist yet, so the folder menu is offered exactly
+        // as at a fresh spawn press.
+        hotkeys.onWheelDoubleSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard self.localRecording, !self.spawnPending, !self.pasteMode else { return }
+                // **`recordWhenModelReady` counts as a dictation.** On a cold
+                // model the first click has not opened the microphone yet — it
+                // banked the gesture and is waiting on the weights — and the
+                // second click lands half a second later, long before that. The
+                // resumed start reads `spawnPending`, so setting it here is
+                // exactly how the conversion survives the wait.
+                guard self.localRecording || self.recordWhenModelReady else { return }
+                guard !self.spawnPending, !self.pasteMode else { return }
                 self.spawnPending = true
                 self.spawnFolder = nil
                 self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
@@ -677,10 +683,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// with the `spawnFolder = nil` below and popping the menu back up.
     ///
     /// `deferContext` is the bare wheel at rest: its context shot is taken at
-    /// the **release**, not the press, because the press's two seconds of hold
-    /// may still turn this dictation into a spawn — and the vignette and cursor
-    /// mark would otherwise announce a picture of a screen the sentence may not
-    /// be about (Victor, 2026-09-04).
+    /// the **release**, not the press, so the picture is of the screen his
+    /// finger left — and a second click, which turns this dictation into a
+    /// spawn, has not landed yet (Victor, 2026-09-04/05).
     private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
                                      deferContext: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
