@@ -136,7 +136,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var listening = false
     private var hovering = false
 
-    private var followTimer: Timer?
+    /// Drives `followCursor()` from real pointer reports instead of a fixed-rate
+    /// poll — see the note on `startFollowingMouse()`. Global catches every other
+    /// app, local catches events landing on this app's own (non-activating)
+    /// windows.
+    private var followMonitorGlobal: Any?
+    private var followMonitorLocal: Any?
+    /// Debounces "the pointer has stopped" — armed on every real move while
+    /// `engaged`, firing `settleDelay` after the last one. Replaces the old
+    /// `stillTicks` counter, which counted *ticks* of a timer that no longer runs.
+    private var settleTimer: Timer?
+    private let settleDelay: TimeInterval = 0.25
     private var labelTimer: Timer?
     /// Shots this dictation is carrying — the automatic context capture included,
     /// since from where Victor sits it is simply the first picture taken.
@@ -1005,9 +1015,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var typingMonitor: Any?
     private var settlePoint = NSPoint.zero
     private var lastMouse = NSPoint.zero
-    private var stillTicks = 0
-    /// ~0.25s of stillness at 60 Hz.
-    private let settleTicks = 15
     private let wakeDistance: CGFloat = 70
 
     /// macOS hides the pointer the moment he starts typing — in a terminal, in an
@@ -1062,13 +1069,21 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     private func startFollowingMouse() {
-        // 60 Hz: while engaged this is a window move per frame, which is what
-        // "follows the mouse" costs. Settled, it is two point comparisons.
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        // Was a 60 Hz `Timer` polling `NSEvent.mouseLocation`, which trailed a
+        // fast-moving pointer by up to a whole tick plus a window-move round
+        // trip — the same lag `CursorGlow` (victor-macos-addons) had chasing the
+        // cursor the same way, fixed there the same day by switching to the
+        // events themselves. Global catches every other app the pointer moves
+        // over; local catches this app's own (non-activating) panel, which
+        // never receives a global monitor's events.
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        followMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
             self?.followCursor()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        followTimer = timer
+        followMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+            self?.followCursor()
+            return event
+        }
     }
 
     private func followCursor() {
@@ -1101,13 +1116,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         lastMouse = mouse
 
         if engaged {
-            stillTicks = moved < 1 ? stillTicks + 1 : 0
-            if stillTicks >= settleTicks {
-                engaged = false
-                settlePoint = mouse
-                return
-            }
             moveNextTo(mouse, on: screen)
+            // A real move pushes the settle deadline out; an event that reports
+            // no actual displacement (rare, but the reason the old tick counter
+            // didn't reset on every tick either) leaves whatever deadline is
+            // already ticking alone.
+            if moved >= 1 { armSettleTimer() }
             return
         }
 
@@ -1115,10 +1129,25 @@ private let frontLabel = NSTextField(labelWithString: "")
         // for the chip itself.
         if hypot(mouse.x - settlePoint.x, mouse.y - settlePoint.y) > wakeDistance || screen !== homeScreen {
             engaged = true
-            stillTicks = 0
             moveNextTo(mouse, on: screen)
+            armSettleTimer()
         }
     }
+
+    /// One-shot, re-armed on every qualifying move: fires `settleDelay` after
+    /// the *last* one, which is what "0.25s of stillness" means without a timer
+    /// ticking the whole time the pointer is moving.
+    private func armSettleTimer() {
+        settleTimer?.invalidate()
+        let timer = Timer(timeInterval: settleDelay, repeats: false) { [weak self] _ in
+            guard let self, self.engaged else { return }
+            self.engaged = false
+            self.settlePoint = NSEvent.mouseLocation
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        settleTimer = timer
+    }
+
 
     /// Below-right of the cursor. **Always** below-right: it used to flip and
     /// clamp near the screen edges to stay fully visible, which meant the chip
@@ -1138,7 +1167,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
         if anchored {
             engaged = true
-            stillTicks = 0
+            armSettleTimer()
             moveNextTo(NSEvent.mouseLocation, on: screen)
         } else {
             moveToTopLeft(of: screen)
