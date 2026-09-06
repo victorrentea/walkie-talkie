@@ -59,6 +59,10 @@ final class HotkeyTap {
     /// day before, which never fired (see `spawnDoubleSeconds`).
     var onWheelDoubleSpawn: (() -> Void)?
 
+    /// The same double click made **with nothing bound**, where there is no
+    /// dictation yet to convert: it opens one, already aimed at a new session.
+    var onWheelIdleDoubleSpawn: (() -> Void)?
+
     /// The wheel came up after a press that started a dictation — the deferred
     /// context shot's cue (`onWheelDictate`). Fires on no other release.
     var onWheelRelease: (() -> Void)?
@@ -345,6 +349,12 @@ final class HotkeyTap {
     /// measured from **the press that started it**, not from the release, so a
     /// slow finger on the first click does not eat the window.
     private var wheelDictateAt: TimeInterval = 0
+
+    /// When the wheel was last clicked **while this app wanted nothing to do
+    /// with it** — unbound, not dictating, the press passed straight through to
+    /// whatever was underneath. It is the only trace such a click leaves, and it
+    /// is what the second one of a double click is measured against.
+    private var idleWheelClickAt: TimeInterval = 0
 
     /// A rest-press that started a dictation and whose wheel is still down —
     /// the press whose release takes the deferred context shot. Set false by
@@ -946,6 +956,53 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 wheelHold = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelHoldSeconds, execute: work)
                 return nil
+            }
+
+            // **The same double click, with nothing bound at all.**
+            //
+            // The branch above is gated on `localCapture || dictating`, i.e. on
+            // there being a binding — *"with no destination there is nowhere for
+            // a transcript to go, so a recording would be a room taped for
+            // nobody"* (`syncLocalCapture`). A double click is the one wheel
+            // gesture that gate cannot apply to: it **brings its own
+            // destination**, a Claude Code session that does not exist yet, so
+            // the premise the gate rests on is false for it. Reported by Victor
+            // 2026-09-06 — at rest, the gesture did nothing at all, and the log
+            // stayed empty because the tap was not even claiming the button.
+            //
+            // **The first click is passed through, not swallowed**, and that is
+            // the whole design. While unbound this app has no claim on the middle
+            // button — the same argument that took ⌘ + wheel away on 2026-09-03 —
+            // and swallowing every middle click on the machine on the chance that
+            // a second one follows would cost every middle-click-to-open-a-tab in
+            // Chrome. So a lone click leaves nothing behind but a timestamp, and
+            // only the **second** one within `spawnDoubleSeconds` is taken. The
+            // price is exact and small: a deliberate double middle click on a
+            // link opens one background tab. A single one behaves as it always
+            // did.
+            if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown
+                && bare && !leftIsHeld && !rightIsHeld && !promptHeld {
+                let now = CFAbsoluteTimeGetCurrent()
+                if idleWheelClickAt > 0 && now - idleWheelClickAt <= Self.spawnDoubleSeconds {
+                    idleWheelClickAt = 0
+                    // Ours from here: the release is swallowed (`wheelArmed`) so
+                    // the app underneath is never handed a middle-up whose
+                    // middle-down it never saw, and `wheelDown` stays clear so
+                    // that release fires nothing — this press starts a dictation,
+                    // it must not also end it.
+                    wheelArmed = true
+                    wheelDown = false
+                    // This press *did* start a dictation, so its release is where
+                    // the context shot belongs — the same deal the bound first
+                    // click gets, except here the shot rides the second click,
+                    // the first having gone to the app underneath.
+                    wheelHeldFromPress = true
+                    Log.info("🎙️✨ wheel double-clicked at rest — dictating at a new Claude Code")
+                    DispatchQueue.global().async { [weak self] in self?.onWheelIdleDoubleSpawn?() }
+                    return nil
+                }
+                idleWheelClickAt = now
+                return Unmanaged.passUnretained(event)
             }
 
             // Anything else on these buttons belongs to whatever the system has

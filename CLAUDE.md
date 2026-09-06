@@ -1814,6 +1814,41 @@ runs on. ➡️ + 🛞 held a second remains the unbound route in, and the menu'
   stays the press, so shots are named by their real offset. Every other route
   in (⌘⌃D, the menu, the chords) still captures at the press.
 
+**It also works with nothing bound at all — added 2026-09-06**, the same day
+Victor reported the gesture doing *nothing* at rest. Two things were in the way,
+and only the first was in this repo's control:
+
+- **The ChatGPT bar was eating it.** `victor-macos-addons` had its own
+  double-wheel-click detector, which synthesized ⌃⌥Space — the ChatGPT desktop
+  app's `toggleLauncher` shortcut. Two event taps cannot share one gesture, and
+  that one fired visibly. It was removed there (`caa3ffe`), taking
+  `KeySimulator.simulateCtrlOptSpace` and `otherMouseUp` off that tap with it.
+- **This tap wasn't claiming the button either.** The conversion branch is gated
+  on `localCapture || dictating`, and `localCapture` is `isBound` — *"with no
+  destination there is nowhere for a transcript to go"* (`syncLocalCapture`).
+  That premise is **false for a double click**: it brings its own destination, a
+  session that does not exist yet. So a second branch handles the unbound case
+  and calls `startLocalRecording(spawn: true)`, which is already built to walk
+  through that gate — it sets `spawnPending` *before* `hasDestination` is read.
+
+The unbound half is deliberately **not** symmetrical with the bound one: the
+**first click is passed through, not swallowed**. Unbound, this app has no claim
+on the middle button — the argument that took ⌘ + wheel away on 2026-09-03 —
+and holding every middle click on the machine on the chance a second follows
+would cost every middle-click-to-open-a-tab in Chrome. A lone click therefore
+leaves nothing but a timestamp (`idleWheelClickAt`); only the second one inside
+`spawnDoubleSeconds` is taken. The price is exact: a *deliberate* double middle
+click on a link opens one background tab. The second press is swallowed the same
+way as in the bound case (`wheelArmed` set, `wheelDown` cleared), and carries
+`wheelHeldFromPress` so its release still takes the context shot — the first
+click having gone to the app underneath.
+
+Verified end-to-end on a cold model with synthesized middle clicks (log,
+2026-09-06): `🎙️✨ wheel double-clicked at rest` → `wheel clicked with the model
+down — bringing it up now` → 7s of weights → `model up after a press that had to
+wait — opening the microphone` → `context screen captured`. A single click in
+the same state logs nothing, which is the pass-through working.
+
 **Keeping the wheel down turns the same chord into a dictation**, since the same
 day. Press and let go binds; hold the wheel a further second
 (`chordDictateSeconds`) and the microphone opens at the terminal that was just

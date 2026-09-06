@@ -404,6 +404,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Same recording, same words — only the destination changes: the terminal
         // it opens in does not exist yet, so the folder menu is offered exactly
         // as at a fresh spawn press.
+        // **The same double click made at rest** — nothing bound, no dictation
+        // to convert, so this one *opens* one that is a spawn from its first
+        // sample. `startLocalRecording(spawn:)` is the whole implementation:
+        // `spawnPending` is set before the `hasDestination` gate is read, which
+        // is exactly how a spawn is allowed through the gate a bare dictation is
+        // not — see its doc comment. `deferContext` is on for the same reason it
+        // is on the bare wheel: the picture wanted is the screen his finger
+        // *left*, so the second click's release is what asks for it.
+        hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard !self.localRecording, !self.recordWhenModelReady else { return }
+                self.startLocalRecording(spawn: true, deferContext: true)
+            }
+        }
         hotkeys.onWheelDoubleSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
