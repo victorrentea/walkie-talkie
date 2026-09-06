@@ -854,18 +854,19 @@ read, so it costs the prose nothing.
 The panel is outside the rule (`promptFont`, the quote mark, the front line): it
 parks in a corner and is read whole.
 
-## The two waits are icon-sized, and it was the colour that mattered
+## The wait is icon-sized, and it was the colour that mattered
 
-`preparing` (the model coming up) and `transcribing…` (the model chewing) are the
-only two states in which Victor is **waiting on this app**. For two days that
-bought their hourglass 30pt — `hintInk`, nearly twice the size of every other
-glyph on the chip.
+`transcribing…` (the model chewing) is the only state left in which Victor is
+**waiting on this app**. `preparing` (the model coming up) was the other one, and
+since 2026-09-06 it does not exist on the chip at all — see *The model loads at
+launch*. For two days the pair of them bought their hourglass 30pt — `hintInk`,
+nearly twice the size of every other glyph on the chip.
 
 They were icon-sized, in `secondaryLabelColor`, on a bare chip: half-transparent
 dark grey with no halo, over the dark terminals and editors the chip spends its
 life on. **Exactly the bug the selection row had** — the row was there and could
-not be seen — and this time it was two states where the question being asked is
-*is it still doing something?*, asked from wherever he has already looked away to.
+not be seen — and the question being asked is *is it still doing something?*,
+asked from wherever he has already looked away to.
 
 **The fix that mattered was the colour**, and it was made in the same commit:
 these rows joined `refreshChrome`'s white-plus-halo list, which is the one place a
@@ -950,7 +951,7 @@ red pixel in it. The drawing is still narrower than the icon column (30 × 0.568
 17 against a box of 20), so only the height changes and the column the
 destination's icon starts in is kept. `statusLines` carries each row's ink size and
 `hintRowHeight` turns it into a height, which is what lets the same two views also
-render the 16pt `send` / `transcribing…` / `preparing` states at 22.
+render the 16pt `send` / `transcribing…` states at 22.
 
 The `send` row, the shot-hint row (`.back`) and the ⌘⇧-pick hint (`.left`) use the
 same drawings at icon size: those rows say what they mean in words, so the picture
@@ -1585,12 +1586,20 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   between the end of a sentence and the agent seeing it. `helpers/whisper_helper.py`
   starts once, warms up on a second of silence, and answers one JSON line per
   request at ~0.1× the audio's duration.
-- **Started only when a dictation is coming, released when the session ends.**
-  The weights are 1.5 GB resident — **measured: the relay alone is 56 MB, the
-  helper 2.5 GB once a transcription has run** — and the ordinary case is a relay
-  sitting in the menu bar all day with nothing bound. Two gestures bring it up,
-  and they are the two that mean he is about to talk: ⌘⌃B binding a terminal, and
-  a wheel hold on a model that is not up yet (`AppDelegate.startWhisper`).
+- **Loaded at launch, released when the session ends** (since 2026-09-06, on
+  Victor's ask). It used to wait for one of the two gestures that mean a
+  dictation is coming — ⌘⌃B binding a terminal, or a wheel hold on a model that
+  is not up — on the argument that the weights are 1.5 GB resident
+  (**measured: the relay alone is 56 MB, the helper 2.5 GB once a transcription
+  has run**) and the ordinary case is a relay sitting in the menu bar all day
+  with nothing bound. That traded the wrong resource: the relay is a **login
+  item**, up before Victor is, so the ten seconds are free at launch and were
+  instead being charged, every day, to the first sentence he said.
+  `applicationDidFinishLaunching` calls `startWhisper` now. **The two gesture
+  call sites stay** — `startWhisper` is idempotent, and they are what retries a
+  launch load that failed (no `mlx_whisper`, most likely) instead of leaving the
+  relay deaf until it is restarted. `RELAY_SHOOT` is excluded: that run draws
+  the state pages and quits.
 - **A wheel hold that has to wait for the model opens the microphone itself.** On
   a cold model that intention was costing ten seconds of waiting followed by a
   gesture he had to remember to repeat. `recordWhenModelReady` is set only when
@@ -1631,20 +1640,20 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   - Filed on the **success path only**: a decode that returned nothing says
     nothing about how long a decode takes. At zero the seconds stop
   being shown rather than sitting at `0s` or counting up, which would be the app
-  insisting on a promise it has already broken. `Preparing…` has no estimate: a
-  model load is not proportional to anything the app knows.
-- **⏳ in two places while it loads.** The chip beside the cursor shows
-  `⏳ folder@branch`, taking the slot ⏸️ uses and outranking it for those seconds;
-  the menu bar shows `⏳🤖`, which is the half that survives him typing, since
-  macOS hides the pointer then and the chip goes with it.
-  `AppDelegate.setEngineLoading` drives both from one call so they cannot
-  disagree. **The row is the only place the word appears**: `startWhisper` used to
-  also flash `⏳ preparing` when nothing was bound, on the reading that the row is
-  only shown bound — which `statusLines` never did, since it answers
-  `engineLoading` above its `boundLabel == nil` check. So the two appeared
-  together the moment the right-held chord made it possible to load the model
-  unbound: *"2 mesaje de preparing, unul mare unul mai mic"*. The flash is gone. `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is now
-  the only badge that ever claims it — ⏸️ shared the slot until pause was removed.
+  insisting on a promise it has already broken.
+- **⏳ in the menu bar only, and nothing beside the cursor.** The load has had
+  three narrations on the chip over its life: a flash, then an hourglass on the
+  folder name, then a `Preparing…` row of its own — and for a while two of them
+  at once, which is what Victor actually saw the day the right-held chord let him
+  load the model unbound: *"2 mesaje de preparing, unul mare unul mai mic"*. All
+  of them are gone as of 2026-09-06, and the reason is not layout: the load runs
+  at **launch** now, so there is nobody waiting on it to tell. What is left is
+  `⏳🤖` in the menu bar and `<model> — loading…` in its menu — free space, the
+  half that survives him typing (macOS hides the pointer, and the chip goes with
+  it), and the only way to see the load is still running if he goes looking.
+  `AppDelegate.setEngineLoading` is now a one-liner into `StatusItem`.
+  `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is the only
+  badge that ever claims it — ⏸️ shared the slot until pause was removed.
 - **A failure has to be loud**, because there is nothing else to transcribe with:
   no `mlx_whisper`, most likely, and then `⚠️ Whisper unavailable — …` sits on
   screen for twelve seconds and the log says why.
@@ -1795,7 +1804,9 @@ runs on. ➡️ + 🛞 held a second remains the unbound route in, and the menu'
   `wheelDictateAt`, a stamp only *the bare wheel opening a dictation* sets, so
   no chord and no cancel can be doubled into a spawn, and a cold model converts
   as readily as a warm one.
-- **A cold model converts too**, therefore. The first click banked the gesture
+- **A cold model converts too**, therefore — rarer since the weights load at
+  launch, but still reachable in the first seconds after login, or when the
+  launch load failed and a gesture is retrying it. The first click banked the gesture
   in `recordWhenModelReady` and is waiting on the weights; the second lands
   half a second later, sets `spawnPending`, and the resumed start reads it —
   which is why the handler accepts `localRecording || recordWhenModelReady`.
@@ -2438,8 +2449,10 @@ already were.
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening…`, `Transcribing… 4s`, `Preparing…`, the picks he has
-actually made, the destination.
+the pulse, `Listening…`, `Transcribing… 4s`, the picks he has
+actually made, the destination. (`Preparing…` was on that list until 2026-09-06,
+when the model started loading at launch and the state stopped being one he could
+be waiting on.)
 
 **The exception is `⌘⇧`, shown while dictating *and* with Chrome in front.**
 Victor asked for that one back the same day, and the two conditions are what earn
@@ -2613,10 +2626,10 @@ but this state lasts hours.
 a row: the dictation in progress, a held prompt, a flash, a ⌘-picked element, a
 frozen selection. So a layout that produced *only* the title row is by
 construction an overlay with nothing to say, and `layoutContent` hands its row
-count straight to `refreshPresence`. The three states that change the *title*
-instead of adding a row have to be named there explicitly: bound, and
-the model coming up. A row added later keeps the chip on screen without anyone
-remembering to come back and edit that condition.
+count straight to `refreshPresence`. The one state that changes the *title*
+instead of adding a row has to be named there explicitly: bound. A row added
+later keeps the chip on screen without anyone remembering to come back and edit
+that condition.
 
 Coming back, it is `reposition`ed first: it may have been away for hours, so it
 lands where the pointer is now rather than reappearing wherever it was last

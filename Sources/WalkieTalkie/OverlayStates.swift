@@ -104,14 +104,6 @@ enum OverlayStates {
                  note: "Faded to zero — the window is still there, unlike the unbound case, because this lasts as long as a keystroke and a panel ordered out and back would flicker. macOS hides the pointer while typing, and the chip belongs to the pointer. **Except while dictating**, which is the one state where the chip is the only evidence the microphone is open — and except at a bind, which is a keystroke whose whole answer is drawn beside the pointer, so ⌘⌃B wakes both the chip and the hidden pointer back up before the flight arrives.",
                  shape: "none", alpha: 0) { _ in },
 
-            Shot(slug: "preparing", group: "At rest", title: "The model is coming up",
-                 when: "The ~10 s after a bind, or after the wheel if the weights are not resident.",
-                 note: "One row, and the 🎙️ is not on it. The microphone *is* the readiness, so showing it above a line that says `preparing` was the chip contradicting itself — and a wheel pressed on the strength of the top line loses the first seconds of the sentence to an engine that is not up. The hourglass is the whole chip until it is; then the microphone appears, and means it. **The hourglass is drawn big** — 30pt where every other row's glyph is 16: this and `transcribing…` are the only two states in which Victor is waiting on the app, and the answer to *is it still doing something?* has to be readable from wherever he looked away to. It was icon-sized and grey, and unreadable on the dark terminals the chip lives over. The words stay at the chip's one size and weight, like every other row — emphasis here is the glyph column's job.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setEngineLoading(true)
-            },
-
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From the wheel click until he clicks it again — the bulk of every dictation.",
                  note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
@@ -187,7 +179,7 @@ enum OverlayStates {
 
             Shot(slug: "transcribing", group: "Dictating", title: "Waiting on the model",
                  when: "Between the wheel click that ends the sentence and the panel that shows what it heard.",
-                 note: "The same row the invitation and `preparing` use: what this chip is doing, in one place — and with the same enlarged hourglass, for the same reason: it is the other state where he is waiting on the app. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top.",
+                 note: "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setTranscribing(true)
@@ -405,7 +397,6 @@ enum OverlayStates {
         o.setHovering(false)
         o.setListening(false)
         o.setTranscribing(false)
-        o.setEngineLoading(false)
         o.setPicks(count: 0, newest: nil)
         o.setShotCount(0)
         o.clearSelection()

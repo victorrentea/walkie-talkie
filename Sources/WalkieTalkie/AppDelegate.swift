@@ -367,22 +367,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.frontIsBindable = { [weak self] in self?.hotkeys.frontIsBindable ?? false }
         startWatchingFrontApp()
 
-        // **The model is not brought up at launch any more**, even when the
-        // setting says Local Whisper.
+        // **The model is brought up at launch again** (2026-09-06, Victor's ask),
+        // and the actual load is at the end of this method.
         //
-        // It used to be, on the argument that loading it lazily would cost ten
-        // seconds mid-sentence. That argument was made when the relay was started
-        // per session by ⌘⌃B and lived for as long as Victor was dictating.
-        // Since 2026-08-26 it starts at **login** and sits there all day, so
-        // eager loading means 2.5 GB of unified memory held from breakfast for a
+        // It has been both ways. Lazy loading was argued from memory: since
+        // 2026-08-26 the relay starts at **login** and sits there all day, so
+        // eager weights mean 2.5 GB of unified memory held from breakfast for a
         // dictation that may not come until the afternoon — on a Mac whose GPU
-        // memory is also what the training demos run in.
-        //
-        // The ten seconds are not paid mid-sentence either: the load is kicked
-        // off by the two gestures that mean a dictation is coming — ⌘⌃B binding a
-        // terminal, and mouse 5 on an engine that is not up yet — and both say
-        // ⏳ while it happens.
-        Log.info("the model stays down until a session starts")
+        // memory is also what the training demos run in. What that costs is the
+        // other side of the trade, and it is charged to the one moment that
+        // cannot absorb it: the first sentence of the day waits ten seconds
+        // between the wheel and the microphone. Held memory is a number in
+        // Activity Monitor; ten seconds mid-gesture is the app being broken in
+        // front of a room. The memory loses.
+        Log.info("the model is loaded at launch")
         syncLocalCapture()
         overlay.onPromptResolved = { [weak self] send, edited in
             self?.releaseHeld(send: send, edited: edited)
@@ -552,6 +550,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
+        // **The model comes up here, at launch, not on the first gesture.**
+        // Loading it lazily meant the first dictation of the day paid ten
+        // seconds for the weights, and paid them in the worst place available:
+        // between Victor deciding to talk and the microphone opening. The relay
+        // is a login item that is up before he is, so the same ten seconds cost
+        // nothing at all when they are spent here — by the time the first ⌘⌃B
+        // happens the helper has been warm for minutes.
+        //
+        // What it buys back is the whole `Preparing…` state, which no longer
+        // exists on the chip: a wait nobody is waiting on does not need to be
+        // narrated. `startWhisper` stays idempotent and the two gestures still
+        // call it, so a load that *failed* here — no `mlx_whisper`, most likely —
+        // is retried at the next bind rather than leaving the relay deaf until
+        // it is restarted.
+        //
+        // Not while shooting the state pages: `RELAY_SHOOT` draws every view and
+        // quits, and 1.5 GB of weights is a long detour to take for a picture.
+        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil { startWhisper() }
+
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
         // Photograph every state and quit — see `OverlayStates`, and
         // `docs/shoot-overlay-states.sh`, which is what actually runs this.
@@ -596,22 +613,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// there, and a failure has to say so out loud: this is the only recogniser
     /// the relay has, and a dictation started against a model that never loaded
     /// is a sentence with nowhere to go.
+    ///
+    /// **Called at launch**, so in the ordinary run it has finished long before
+    /// any gesture arrives. The gesture call sites stay: they are what retries a
+    /// launch load that failed, and `engineLoading` makes a second call a no-op
+    /// while the first is still running.
     private func startWhisper() {
         guard !whisper.ready, !engineLoading else { return }
 
         setEngineLoading(true)
-        // **No flash.** There was one here, gated on `!isBound` — "bound, the
-        // status row already says it; unbound there is no row". The second half
-        // was never true: `RelayWindow.statusLines` answers `engineLoading`
-        // **above** its `boundLabel == nil` check, so the row is up either way,
-        // and the flash put a second `⏳ preparing` under the first. Victor saw
-        // exactly that — *"2 mesaje de preparing, unul mare unul mai mic"* — the
-        // moment the right-held chord gave him a way to load the model with
-        // nothing bound.
-        //
-        // One place says it, and it is the row: it ends when the model does
-        // rather than when a timer says so, which is the property a flash had to
-        // fake with `duration: 600`.
+        // **Nothing is said beside the cursor.** There was a flash here once,
+        // and then a `Preparing…` row, and for a while both at the same time —
+        // *"2 mesaje de preparing, unul mare unul mai mic"*. Both are gone, and
+        // the reason is no longer layout: the load runs at launch now, so there
+        // is nobody to tell. The menu bar's ⏳ is the whole of it.
         whisper.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -764,10 +779,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // go, and this line's whole job is to get that right.
         if paste { overlay.setSpawnDestination("⌨️ at the caret") }
         guard whisper.ready else {
-            // Not an error, since the helper is deliberately down until something
-            // says a dictation is coming — this press is one of the two things
-            // that say it. It still costs him this sentence, which is why the
-            // banner is worded as a wait rather than as a failure.
+            // **Rare, now that the load runs at launch**: this is either the
+            // first seconds after login or a launch load that failed and is
+            // being retried. Not an error either way — the gesture is banked
+            // below and honoured the moment the weights land.
             Log.info("wheel clicked with the model down — bringing it up now")
             startWhisper()
             // **The gesture is kept.** Telling him to say it again was making him
@@ -776,10 +791,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // gesture. The intention is unambiguous, so it is held and honoured
             // when the weights land.
             recordWhenModelReady = true
-            // Nothing to flash: the wheel means he is bound, so the status row
-            // under the destination is already showing `⏳ preparing`, and it
-            // stays until the model is up — which is exactly when the click he
-            // just made turns into a recording.
+            // Nothing to show: the `Preparing…` row is gone with the lazy load
+            // that justified it, and what is left of this wait lives in the
+            // seconds after login rather than in the middle of a session. The
+            // menu bar's ⏳ is there for anyone who looks, and the click turns
+            // itself into a recording when the weights arrive.
             return
         }
 
@@ -1041,19 +1057,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// One switch for both places the ⏳ shows, so they can never disagree — the
-    /// chip beside the cursor and the menu bar glyph. Both are needed and
-    /// neither is enough: the chip is where he is looking, and the menu bar is
-    /// the half that survives him typing, since macOS hides the pointer then and
-    /// the chip goes with it.
-    /// Whether the helper is on its way up right now — asked by the two gestures
-    /// that can kick the load off, so neither starts a second one on top of it.
+    /// Whether the helper is on its way up right now — asked by `startWhisper`
+    /// itself, so the launch preload and the two gestures that also call it can
+    /// never stack two loads on top of one another.
     private var engineLoading = false
 
+    /// **The menu bar, and only the menu bar.** The chip carried a `Preparing…`
+    /// row for the same seconds, and it was worth its pixels while a gesture was
+    /// what started the load: he had just asked for something and was waiting on
+    /// it. The load now runs at launch, before he has asked for anything, so a
+    /// row beside the cursor would be the app narrating work nobody is waiting
+    /// on. The menu bar glyph keeps the ⏳ — it costs no space, it survives him
+    /// typing (macOS hides the pointer, and the chip goes with it), and it is
+    /// the one place the load is still visible if he goes looking.
     private func setEngineLoading(_ loading: Bool) {
         engineLoading = loading
         status.setEngineLoading(loading)
-        overlay.setEngineLoading(loading)
     }
 
     /// Register the app as a login item, once, quietly.
@@ -1062,9 +1081,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// moved into this app there is nothing else left to launch it: the key that
     /// starts a session is served by the very process that has to be running to
     /// hear it. A login item is the whole of what that requires — the app is an
-    /// accessory with no window, so starting it costs a menu bar icon and 56 MB,
-    /// and the model it could load is deliberately not loaded until a session
-    /// begins (see `applicationDidFinishLaunching`).
+    /// accessory with no window, so starting it costs a menu bar icon and 56 MB.
+    /// **The model comes up with it** (see `applicationDidFinishLaunching`):
+    /// paying for the weights at login is what makes the first dictation of the
+    /// day cost nothing, and login is the one moment nobody is waiting.
     ///
     /// `SMAppService` rather than a LaunchAgent plist: it registers the bundle
     /// that is running, so a copy moved or renamed cannot leave a stale plist
@@ -1504,10 +1524,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             //
             // With no window to fly from — nothing resolved a frame — there is no
             // arrival to wait for and the chip is set at once.
-            // A bind means a dictation is coming, which is the moment to pay for
-            // the model if it is not up — ten seconds that overlap him settling
-            // into the session, rather than ten seconds in the middle of the
-            // first sentence.
+            // Ordinarily a no-op — the model has been up since launch. It stays
+            // as the retry for a launch load that failed, and a bind is the right
+            // moment for one: a dictation is coming, and the ten seconds overlap
+            // him settling into the session.
             // **The load only.** Arming the microphone here was wrong: a bind is
             // Victor pointing the relay at a terminal, not Victor starting to
             // talk, and the two can be minutes apart. The wheel remains the only

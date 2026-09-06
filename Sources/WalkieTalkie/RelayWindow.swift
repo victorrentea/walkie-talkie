@@ -131,8 +131,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// says `selecting` instead of the count for a couple of seconds.
     private var selectionAnnounced = false
     private var selectionAnnounceWork: DispatchWorkItem?
-    /// True while the local Whisper model is loading — see `titleText`.
-    private var engineLoading = false
     private var listening = false
     private var hovering = false
 
@@ -527,7 +525,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         // belongs to the glyph column — the half that is recognised rather than
         // read.
         if transcribing { return [(Self.waitGlyph, plain(transcribeText), Self.iconInk)] }
-        if engineLoading { return [(Self.waitGlyph, plain("Preparing…"), Self.iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -1339,16 +1336,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the pointer at rest. Now the chip stays, carrying the one row that says
         // how to end that state.
         //
-        // **Nor while the model is still coming up.** Standing by, the chip is a
-        // microphone and the microphone *is* the readiness — so putting it on
-        // screen above a row that says `preparing` is the chip contradicting
-        // itself in two lines, and the wheel pressed on the strength of the top
-        // one loses the first seconds of the sentence to an engine that is not
-        // there yet. While it loads, the ⏳ row is the whole chip; the 🎙️ appears
-        // when it means something, which is when he can talk.
+        // **The model loading is no longer one of these states.** It used to
+        // suppress this row and put a `⏳ preparing` in its place — the chip is a
+        // microphone standing by, and a microphone above a line that says
+        // `preparing` is the chip contradicting itself in two lines. The load now
+        // happens at launch, minutes before any of this is on screen, so there is
+        // no window left in which the two could disagree.
         //
-        // Only in the collapsed case: with a dictation in flight the title is the
-        // destination, and that is true whatever the engine is doing.
         // **Nor under a flash.** Collapsed, this row is a lone 🎙️ with no words
         // beside it — the chip *being* a microphone is the whole sentence, and it
         // is a fine one at rest. Over a message it is not: `dictation cancelled`
@@ -1361,9 +1355,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         // rather than being appended to it. Only in the collapsed case, though —
         // with a folder name in the row the glyph is that line's icon, and the
         // line is still the honest answer to *where do the words go*.
-        let names = boundLabel != nil || spawnLabel != nil || engineLoading || sentPrompt != nil || listening
+        let names = boundLabel != nil || spawnLabel != nil || sentPrompt != nil || listening
         let mutedByFlash = collapsed && flashMessage != nil
-        if names, !(collapsed && engineLoading), !mutedByFlash, !spawnCollapsed {
+        if names, !mutedByFlash, !spawnCollapsed {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))
@@ -2182,19 +2176,11 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the dictation is early enough to act on, and a chip that carried it the
         // rest of the time was buying nothing with the space.
         if collapsed { return "" }
-        // **Loading outranks every other state**, and it is the only state here
-        // that is about the *near future* rather than the present.
-        // The model takes ten seconds to come up and a dictation started inside
-        // that window is silently handed to the other engine — so the one thing
-        // worth saying while it loads is "not yet", and saying it beside the
-        // cursor is saying it where he is already looking. It disappears on its
-        // own, which is why it can afford to shout for those seconds.
-        // **No ⏳ on the name.** The state has a row of its own now, directly
-        // under this line, and an hourglass in front of the folder said the same
-        // thing a second time — while also making the one line that never changes
-        // during a session change. What the chip *is* stays put; what it is
-        // *doing* is the row below.
-        if engineLoading { return identity }
+        // **The model loading is not a state here any more.** It was, twice: an
+        // hourglass in front of the folder name, and then a row of its own. Both
+        // were answering "not yet" to a dictation started against weights that
+        // were not resident — a window that only existed because the load waited
+        // for a gesture. It runs at launch now, so there is nothing to say.
         // No state word at all. "Stand by" is the one thing he can infer from the
         // fact that nothing is happening; what he cannot infer, and what this chip
         // exists to tell him, is which agent is sitting there waiting.
@@ -2297,17 +2283,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// to say — the dictation in progress, a held prompt, a flash, a picked
     /// element, a frozen selection — is a row, so a layout that produced only
     /// the title row is by construction an overlay with nothing to say. The
-    /// two states that change the *title* instead of adding a row are the ones
-    /// that have to be named here: bound, and the model coming up. A row
-    /// added later keeps the chip on screen without anyone remembering to come
-    /// back and edit this.
+    /// one state that changes the *title* instead of adding a row is the one
+    /// that has to be named here: bound. A row added later keeps the chip on
+    /// screen without anyone remembering to come back and edit this.
     private func refreshPresence(rowCount: Int) {
         // Any row at all is something to say. It was `rowCount > 1` while the
         // title row was unconditional and therefore free — one row meant *only*
         // the title, i.e. nothing. The title is now absent when unbound, so the
         // single row left is the invitation to bind, and it is the whole reason
         // the chip is there.
-        let wanted = rowCount > 0 || engineLoading
+        let wanted = rowCount > 0
         guard panel.isVisible != wanted else { return }
         guard wanted else { return panel.orderOut(nil) }
         // It may have been away for hours, so it lands where the pointer is now
@@ -2446,17 +2431,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         boundLabel = label
         boundFolder = label == nil ? nil : folder
         boundIcon = label == nil ? nil : icon
-        refreshTitle()
-        layoutContent()
-    }
-
-    /// The local recogniser is coming up (or going away). Drives the ⏳ on the
-    /// chip; `StatusItem` shows the same thing in the menu bar, which is the half
-    /// that is still visible while he types and the pointer — and with it the
-    /// chip — is hidden.
-    func setEngineLoading(_ value: Bool) {
-        guard engineLoading != value else { return }
-        engineLoading = value
         refreshTitle()
         layoutContent()
     }

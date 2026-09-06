@@ -10,11 +10,14 @@ import Foundation
 /// warms up on a second of silence, and then answers at roughly a tenth of the
 /// audio's duration.
 ///
-/// **It is started only when a dictation is coming.** The weights are 1.5 GB
-/// resident, and the ordinary case is a relay sitting in the menu bar all day
-/// with nothing bound, which must not be paying for a model nobody asked for.
-/// The two gestures that mean a dictation is coming — binding a terminal, and
-/// the wheel held on a model that is not up yet — are what bring it up.
+/// **It is started at launch** (`AppDelegate.applicationDidFinishLaunching`).
+/// It used to wait for one of the two gestures that mean a dictation is coming —
+/// binding a terminal, or the wheel held on a model that is not up — to avoid
+/// keeping 1.5 GB resident for a relay nobody had spoken to. That trade was the
+/// wrong way round: the relay is a login item that is up before Victor is, so
+/// the ten seconds are free at launch and were being charged, every single time,
+/// to the first sentence of the day. Those gestures still call `start`, which is
+/// idempotent, so a launch load that failed is retried rather than fatal.
 final class LocalWhisper {
 
     struct Result {
