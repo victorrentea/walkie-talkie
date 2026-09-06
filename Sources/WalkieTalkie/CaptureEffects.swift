@@ -10,11 +10,14 @@ import CoreImage
 /// playing all of them (or a chosen one) back to back outside of any real
 /// dictation.
 ///
-/// **Two of these are also live-playtested for real** (2026-09-04, Victor's
-/// ask): `CaptureFlash.announce(cycleMarker: true)` round-robins every
-/// actual dictation start between the classic reticle, `.spikes`, and
-/// `.tapRipple`, so he can compare them in day-to-day use, not just the
-/// demo, before picking a favourite next week.
+/// **Two of these were also live-playtested for real** (2026-09-04, Victor's
+/// ask): `CaptureFlash.announce(cycleMarker: true)` round-robined every actual
+/// dictation start between the classic reticle, `.spikes`, and `.tapRipple`, so
+/// he could compare them in day-to-day use and not just in the demo. **It ended
+/// on 2026-09-06 with `.tapRipple`**, which is now the only entry left
+/// uncommented in `CaptureFlash.markerRotation` — and therefore the marker
+/// every capture draws. The rest of this file stays as the ballot: the demo
+/// harness still plays all seven.
 enum CaptureEffect: String, CaseIterable {
     case spikes
     case gatheringPixels

@@ -117,14 +117,19 @@ enum CaptureFlash {
     /// `NSEvent.mouseLocation` again the hand has moved on.
     ///
     /// `cycleMarker` (2026-09-04, Victor's ask): a live A/B/C playtest of the
-    /// two `CaptureEffects` prototypes he's been tuning this session (spikes,
-    /// tap ripple) against the classic red reticle — every real capture
-    /// marker round-robins through all three so he can compare them in
-    /// actual daily use, not just the demo harness, and pick a favourite next
-    /// week. Both callers opt in — the dictation-start call (`captureContext`)
-    /// and the mid-dictation "one more shot" call (`plusOneShot`) — sharing
-    /// one rotation index, so the sequence keeps advancing across both kinds
-    /// of capture rather than each restarting its own cycle.
+    /// two `CaptureEffects` prototypes he'd been tuning that session (spikes,
+    /// tap ripple) against the classic red reticle — every real capture marker
+    /// round-robined through all three so he could compare them in actual daily
+    /// use, not just the demo harness. Both callers opt in — the
+    /// dictation-start call (`captureContext`) and the mid-dictation "one more
+    /// shot" call (`plusOneShot`) — sharing one rotation index, so the sequence
+    /// kept advancing across both kinds of capture rather than each restarting
+    /// its own cycle.
+    ///
+    /// **Decided 2026-09-06: the tap ripple, on its own.** See
+    /// `markerRotation` — the losers are commented out in the list, not
+    /// removed, and this flag still means "the chosen effect rather than the
+    /// classic reticle".
     ///
     /// Synchronous when already on the main thread. Callers use this *before*
     /// their slow work (AX probe, screencapture) precisely so the panel is on
@@ -144,11 +149,23 @@ enum CaptureFlash {
     }
 
     /// The round-robin state for `cycleMarker`: `nil` means "the classic red
-    /// reticle" (`markCursor`), so the cycle is current → spikes → tap ripple
-    /// → current → ... Only ever touched on the main thread (both call sites
-    /// go through `announce`'s main-thread `show` closure), so no lock needed.
+    /// reticle" (`markCursor`), so the cycle *was* current → spikes → tap
+    /// ripple → current → ... Only ever touched on the main thread (both call
+    /// sites go through `announce`'s main-thread `show` closure), so no lock
+    /// needed.
+    ///
+    /// **The playtest is over and the tap ripple won** (Victor, 2026-09-06):
+    /// the other two are commented out rather than deleted, so the list is
+    /// still the whole ballot and putting one back is uncommenting it. With a
+    /// single entry the rotation is a constant — every capture marker is now
+    /// the ripple — and the machinery around it costs nothing, so it stays
+    /// where the next comparison can use it.
     private static var markerRotationIndex = 0
-    private static let markerRotation: [CaptureEffect?] = [nil, .spikes, .tapRipple]
+    private static let markerRotation: [CaptureEffect?] = [
+        // nil,        // the classic red reticle (`markCursor`)
+        // .spikes,    // concentric spikes
+        .tapRipple,
+    ]
 
     private static func nextMarkerEffect() -> CaptureEffect? {
         let effect = markerRotation[markerRotationIndex % markerRotation.count]
