@@ -138,9 +138,20 @@ enum SpawnFolderMenu {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        // Above the chip and above a full-screen window, since the dictation it
-        // belongs to is routinely started over one.
-        p.level = .popUpMenu
+        // **Above the chip, above a full-screen window, and above the capture
+        // effect** — the dictation this menu belongs to is routinely started
+        // over a full-screen window, and it is *always* started on top of the
+        // marker that blooms out of the pointer.
+        //
+        // `.popUpMenu` (101) cleared the chip (`.statusBar`, 25) but lost to the
+        // effect panels, which sit at `CGWindowLevelForKey(.maximumWindow)` —
+        // and the effect is created *after* the menu (the menu opens at the
+        // press, the context shot fires at the release), so ordering could not
+        // save it either: the tap ripple played over the top of the menu.
+        // Victor, 2026-09-06. One above the maximum is the only level that wins
+        // by construction rather than by luck, and `kCGMaximumWindowLevel` is
+        // `INT32_MAX - 16`, so there is room above it.
+        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         // The relay photographs the screen during the very dictation this menu
         // opens — the automatic frame and every back-button shot. Same rule `CaptureFlash`,
@@ -271,10 +282,13 @@ enum SpawnFolderMenu {
         return root
     }
 
-    /// **Down and to the left of the pointer** — Victor's ask, 2026-09-04. It is
-    /// also the one quadrant the chip is never in: that hangs below-*right*
-    /// (`RelayWindow.anchorGap`), and a menu underneath a chip following the
-    /// same cursor cannot be clicked.
+    /// **Down and to the right of the pointer** — Victor's ask, 2026-09-06,
+    /// replacing the down-and-*left* he asked for on 09-04. That one was picked
+    /// as the quadrant the chip is never in, since the chip hangs below-right
+    /// (`RelayWindow.anchorGap`) and a menu buried under a chip following the
+    /// same cursor cannot be clicked. The overlap is real but harmless: the chip
+    /// is a `.statusBar` window and this one now sits above every level in use,
+    /// so it is the menu that covers the chip and the clicks land on the menu.
     ///
     /// **It is always wholly on screen**, which is the half worth saying out
     /// loud: a menu that opens near an edge opens there precisely when the hand
@@ -288,9 +302,9 @@ enum SpawnFolderMenu {
             ?? NSScreen.main ?? NSScreen.screens.first
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: size.width, height: size.height)
 
-        // Right edge just left of the pointer; flipped right if it would hang off.
-        var x = point.x - gap - size.width
-        if x < visible.minX { x = point.x + gap }
+        // Left edge just right of the pointer; flipped left if it would hang off.
+        var x = point.x + gap
+        if x + size.width > visible.maxX { x = point.x - gap - size.width }
         x = max(visible.minX, min(x, visible.maxX - size.width))
 
         // Top edge just below the pointer; flipped above it if the rows would

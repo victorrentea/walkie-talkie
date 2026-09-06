@@ -746,10 +746,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // clock is his reading time, which starts now, and the seconds a
             // model load costs are seconds he could have been choosing in.
             //
-            // It no longer waits for the opening picture either. The red cursor
-            // mark blooms out of the pointer for half a second and the menu is
-            // now *below-left* of it rather than on it, so the two no longer
-            // arrive in the same pixels.
+            // It no longer waits for the opening picture either. The capture
+            // marker blooms out of the pointer for half a second and the menu
+            // sits *below-right* of it (2026-09-06) — drawn above it, too, at a
+            // window level past every effect panel's, so the ripple washes over
+            // the screen and not over the choice being read.
             //
             // **Once per gesture, though** — a resumed start (the model had to
             // load) skips this: the menu has been up since the press, its clock

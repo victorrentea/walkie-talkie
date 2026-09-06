@@ -2146,8 +2146,16 @@ that sentence is the same five words every time.
   soon as possible"*. It moved up out of the end of `startLocalRecording` for a
   reason that only shows on a cold model: everything below it can `return` and
   wait seconds for the weights, and the menu was waiting with them, when its clock
-  is his reading time. The red cursor mark still blooms out of the pointer for
-  half a second, and the menu is now below-left of it rather than on it.
+  is his reading time. The capture marker still blooms out of the pointer for
+  half a second, and the menu sits **below-right** of it (2026-09-06, moved from
+  below-left) and **above** it: the effect panels sit at
+  `CGWindowLevelForKey(.maximumWindow)` and are created *after* the menu — it
+  opens at the press, the context shot fires at the release — so `.popUpMenu`
+  lost to them and the ripple played over the top of the choice being read. The
+  menu is now one level past that maximum, which is the only way it wins by
+  construction rather than by ordering. Overlapping the chip is fine for the
+  same reason: that is a `.statusBar` window, so the menu covers it and the
+  clicks land on the menu.
 - **Offered once per gesture** (fixed 2026-09-04). A cold model makes
   `startLocalRecording` run twice for one press — once at the press, once when
   the weights land — and the second run re-did the whole opening: the menu
