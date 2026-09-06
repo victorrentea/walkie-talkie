@@ -155,7 +155,9 @@ captured, which shrinks and flies to your cursor: that window is now this chip.
 
 ### Spoken at a session that does not exist yet
 
-**⌘ + the wheel** starts a dictation with no target on screen. When it ends, the
+**Click the wheel twice** — inside 0.6s — and the dictation is aimed at a session
+that does not exist yet. At rest the double click starts it; on a dictation
+already running it re-aims that one, same words, new destination. When it ends, the
 relay opens a new Terminal window, starts an interactive Claude Code in it, and
 hands over what you said as the session's first prompt.
 
@@ -229,12 +231,11 @@ once, each taking one):
 | **⌘⌃B** | Points the relay at the terminal in front — or ends the session when it is already pointed there |
 | **⌘⌃D** | Starts a dictation, and ends the open one — the wheel's click from the keyboard |
 | **click the wheel** | Starts a dictation — red flash, screen captured, selection grabbed — and ends the open one. Only while a terminal is bound |
-| **⌘ + click the wheel** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound, and leaves the binding where it was |
+| **click the wheel twice** | The same dictation, aimed at a session that does not exist yet: at the end of it a **new Terminal window** opens in `~/workspace` with an interactive Claude Code in it, and the words are its first prompt. Works bound or unbound; on a dictation already open it re-aims that one instead of starting another |
 | **hold the wheel 2s** | Cancels the open dictation — the audio is discarded, nothing is transcribed |
 | **hold left, click the wheel** | Points the relay at the window in front — the same call as ⌘⌃B, minus the toggle: made twice on the same terminal it binds twice rather than letting go |
 | **hold left, hold the wheel 1s** | The same bind, **and** it starts the dictation at it — one gesture instead of the chord followed by a second click |
 | **hold right, click the wheel** | Lets the binding go — the same call as the menu's **Disconnect**. Outranks every other meaning the wheel has, so it works mid-dictation too |
-| **hold right, hold the wheel 1s** | The same **new session** ⌘ + the wheel opens — without the keyboard, for when you are across the room with only the mouse |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |

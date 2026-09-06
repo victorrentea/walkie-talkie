@@ -83,31 +83,6 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
-    /// **➡️ + the wheel, held a second — talk at a session that does not exist
-    /// yet.** Start a dictation whose destination is a Terminal window this app
-    /// has not opened yet: at the end of it, a new one appears with an interactive Claude Code
-    /// in it and the words as its first prompt.
-    ///
-    /// **It ignores every gate the bare wheel obeys.** A binding is the bare
-    /// wheel's on switch (*Unbound is inert*) precisely because a dictation with
-    /// nowhere to go is a room taped for nobody — and that argument does not
-    /// reach this gesture, which *carries* its destination. So it acts whenever
-    /// the app is running, bound or not, which is exactly what Victor asked for:
-    /// the moment this is most useful is the moment there is no session yet.
-    ///
-    /// **Mid-dictation it is just the wheel.** The destination is decided at the
-    /// press that opened the microphone and cannot be changed halfway through a
-    /// sentence, so the chord made while one is running ends it like any other,
-    /// and it goes wherever it was already going.
-    ///
-    /// **⌘ + the wheel was the other way in, and is gone since 2026-09-03.** It
-    /// cost the modifier: ⌘-middle-click belonged to this app everywhere on the
-    /// machine for as long as it was running, bound or not. The chord asks for
-    /// nothing outside the mouse, which was always the better half of the pair —
-    /// the moment this gesture is most useful is the moment Victor is across the
-    /// room from the laptop with only the mouse to hand.
-    var onSpawnToggle: (() -> Void)?
-
     /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
     /// at the window in front. Same call ⌘⌃B makes, including its toggle: made on
@@ -319,11 +294,6 @@ final class HotkeyTap {
     private var wheelArmed = false
     /// A press we swallowed and have not yet judged.
     private var wheelDown = false
-    /// …and whether the **right** button was the one held when we took it. The
-    /// right chord means two things — disconnect on a tap, a new session on a
-    /// hold — so the press cannot decide, and the release has to know which
-    /// branch swallowed it.
-    private var wheelRightChord = false
     /// The same, for the left chord. There the release has nothing to do — the
     /// bind fired at the press — but it still has to be told apart from a bare
     /// wheel, whose release is the whole gesture.
@@ -651,9 +621,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //     wheel held 1s      → …and start the dictation at it
             //   right held, then
             //     wheel              → disconnect: let the binding go
-            //   right held, then
-            //     wheel held 1s      → dictate at a terminal that does not exist
-            //                          yet
             //
             // **Starting used to cost a one-second hold and now costs a tap.**
             // The hold was buying one thing: a bare middle click could still be
@@ -692,42 +659,37 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Nothing bound is nothing to disconnect, and the branch is skipped
             // so the click stays available to whatever is underneath.
             //
-            // **And held, it opens a session instead of closing one.** ⌘ + the
-            // wheel already spawns, and ⌘ is a key — which is exactly what
-            // Victor does not have to hand when he is across the room from the
-            // laptop with only the mouse. So the right chord carries both
-            // readings, the same way the left one does: tap to disconnect, hold
-            // to start a dictation at a terminal that does not exist yet.
+            // **Held, it used to open a session instead of closing one**, and
+            // that second reading is gone (Victor, 2026-09-06). The spawn keeps
+            // the two routes that do not need this chord — the bare wheel
+            // clicked twice, and the menu's **Start dictation to new claude** — so what
+            // the hold bought was a third way in, at the price of the chord
+            // having to be *told apart from itself*: the disconnect could not
+            // fire until the finger came up, and a tap that Victor made in a
+            // hurry was one timer away from opening a session he did not ask
+            // for.
             //
-            // The pairing is not arbitrary. The left chord is *point at
-            // something that exists*; the right one is now *let this one go* /
-            // *make a new one*, which are the two things you do when the session
-            // in front of you is not the one you want.
+            // **So it is judged at the press again**, like the left chord: one
+            // reading, nothing to wait out, and the unbind burst goes off under
+            // the finger that ordered it.
             //
-            // **The disconnect therefore moves to the release**, where it can be
-            // told from a hold. Firing it at the press and spawning a second
-            // later would do both: an unbind burst going off over a binding the
-            // spawn is about to replace anyway, which is one gesture read out
-            // loud as two.
+            // The press is swallowed either way — `wheelArmed` claims the
+            // release with it — so a right-held wheel click never falls through
+            // to the dictation branches below and never reaches the app
+            // underneath half a gesture. Nothing bound is nothing to
+            // disconnect: then the chord is simply inert.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && rightIsHeld {
                 // A hold timer from a press we are now overriding must not fire
                 // on the dictation this click is ending.
                 wheelHold?.cancel()
                 wheelHold = nil
-                wheelDown = true
-                wheelArmed = false
-                wheelRightChord = true
+                wheelDown = false
+                wheelArmed = true
                 wheelLeftChord = false
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.claimWheelPress() else { return }
-                    // Ending a dictation is ending one, whichever gesture opened
-                    // it — the destination belongs to the press that started it.
-                    Log.info(self.dictating ? "🎙️ right held + wheel held — ending the dictation"
-                                            : "✨ right held + wheel held — dictating at a new Claude Code")
-                    DispatchQueue.global().async { [weak self] in self?.onSpawnToggle?() }
+                if bound {
+                    Log.info("🔌 right held + wheel — disconnecting")
+                    DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
                 }
-                wheelHold = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordDictateSeconds, execute: work)
                 return nil
             }
 
@@ -749,7 +711,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     // the branch below exists to prevent.
                     wheelArmed = false
                     wheelDown = false
-                    wheelRightChord = false
                     wheelLeftChord = false
                     wheelHold?.cancel()
                     wheelHold = nil
@@ -769,7 +730,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // means something already fired on the press or during the hold, so
             // what is left — a press we took and nothing acted on — is the tap.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseUp && (wheelArmed || wheelDown) {
-                let right = wheelRightChord
                 let left = wheelLeftChord
                 // **The one place a tap is decided**, and it is a claim rather
                 // than a test: the hold timer is racing this release for the same
@@ -777,7 +737,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // `claimWheelPress`.
                 let tapped = claimWheelPress()
                 wheelArmed = false
-                wheelRightChord = false
                 wheelLeftChord = false
                 wheelHold?.cancel()
                 wheelHold = nil
@@ -792,17 +751,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     }
                     return nil
                 }
-                if right {
-                    // **Let go before the hold fired: disconnect.** Judged here
-                    // rather than at the press because this is the only place it
-                    // can be told from the hold that opens a session. Nothing
-                    // bound is nothing to disconnect, and the press is already
-                    // swallowed, so the click does nothing rather than reaching
-                    // the app underneath late.
-                    guard bound else { return nil }
-                    Log.info("🔌 right held + wheel — disconnecting")
-                    DispatchQueue.global().async { [weak self] in self?.onWheelUnbind?() }
-                } else if left {
+                if left {
                     // Nothing: the bind fired at the press, and the hold that
                     // would also have started a dictation did not last.
                 } else if localCapture || dictating {
@@ -851,7 +800,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // has to be short enough that the hand does not let go first.
                 wheelDown = true
                 wheelLeftChord = true
-                wheelRightChord = false
                 let work = DispatchWorkItem { [weak self] in
                     guard let self = self, self.claimWheelPress() else { return }
                     // A dictation that started some other way while he was still
@@ -875,12 +823,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // app for as long as it was running, bound or not, which cost every
             // ⌘-middle-click everywhere else on the machine. The spawn itself
             // came back a day later as the bare wheel *clicked twice* (below),
-            // and ➡️ + 🛞 held a second is still the same call for the unbound case.
+            // which is now its only gesture — ➡️ + 🛞 held a second went the same
+            // way on 2026-09-06.
             if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown
                 && bare && (localCapture || dictating) {
                 wheelDown = true
                 wheelLeftChord = false
-                wheelRightChord = false
 
                 // **The second click of a double click, judged before anything
                 // else** (Victor, 2026-09-05): the dictation the first click

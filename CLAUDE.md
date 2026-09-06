@@ -29,7 +29,7 @@ Current strings live in `RelayWindow.swift`:
 - `flash(_:)` / `flashTitle(_:)` call sites in `AppDelegate.swift`
 - `StatusItem.swift` — **now the longest of these**, since the menu is where
   every gesture is written down (*The chip teaches nothing; the menu does*):
-  `Connect Terminal` / `Disconnect` / `Dictate to new Claude` and their
+  `Connect Terminal` / `Disconnect` / `Start dictation to new claude` and their
   chords, which since 2026-09-02 ride a right-aligned column of their own, the
   three dictation rows, `Replace WisprFlow`,
   the `Take Screenshot` and `Pick Element in Chrome` legends, `Autosend`,
@@ -1796,8 +1796,9 @@ press, so the chip appears under his finger. Click again inside
 `spawnPending` flips, the chip grows the ✨ mark, and the folder menu opens on
 the second click. Same words, same recording — only the destination changes,
 which is exactly the rule *A bind mid-sentence changes the recipient* already
-runs on. ➡️ + 🛞 held a second remains the unbound route in, and the menu's
-**Dictate to new Claude** the discoverable one.
+runs on. Since 2026-09-06 it is the **only** gesture for a spawn — ➡️ + 🛞 held a
+second is gone — with the menu's **Start dictation to new claude** as the
+discoverable route beside it.
 
 - **The double click is judged before `dictating` is consulted** — deliberately,
   because consulting it first is what killed the hold. The test is
@@ -1897,24 +1898,28 @@ reverses the bargain the previous build was written to protect; if it grates, th
 cheap fix is to hand the click back when the frontmost app is a browser, not to
 put the hold back.
 
-**Right held, then the wheel held, opens a session instead of closing one** —
-since 2026-09-01, the same day the left chord grew its own hold. ⌘ + the wheel
-already spawns, and ⌘ is a *key*, which is exactly what Victor does not have to
-hand when he is across the room from the laptop with only the mouse on it. So the
-right chord carries both readings the way the left one does: **tap to disconnect,
-hold a second to start a dictation at a terminal that does not exist yet.**
+### The right chord means one thing again (2026-09-06)
 
-The pairing is not arbitrary. Left is *point at something that exists*; right is
-now *let this one go* / *make a new one* — the two things to do when the session
-in front of you is not the one you want.
+**Right held, then the wheel held, used to open a session instead of closing
+one** — from 2026-09-01, when ⌘ + the wheel was still the other way in and the
+argument was that ⌘ is a *key*, which is what Victor does not have to hand across
+the room from the laptop. Victor took the second reading out on 2026-09-06.
 
-**The disconnect therefore moved to the release.** It fired at the press, and
-firing at the press then spawning a second later would do both — an unbind burst
-going off over a binding the spawn is about to replace anyway, which is one
-gesture read out loud as two. `wheelRightChord` is what
-the release reads to know which branch swallowed the press; the spawn half is
-**not** gated on `bound`, since the one moment a new session is most wanted is
-when there is no session at all.
+What it cost is what the two readings always cost: the chord had to be told apart
+from itself. **Disconnect could not fire until the finger came up** (a press that
+unbound and then spawned a second later would do both — an unbind burst over a
+binding the spawn was about to replace), and a tap made in a hurry was one timer
+away from opening a session nobody asked for. The spawn meanwhile kept two routes
+that need no chord at all — the bare wheel **clicked twice**, and the menu row —
+so the hold was buying a third way in at the price of the mirror gesture's
+directness.
+
+**So the disconnect is judged at the press again**, like the left chord: one
+reading, no timer, and the unbind burst goes off under the finger that ordered
+it. `wheelRightChord` went with the hold — there is nothing left for the release
+to disambiguate. The press is still swallowed either way (`wheelArmed` claims the
+release with it), so a right-held wheel click never falls through to the bare
+wheel below; with nothing bound the chord is simply inert.
 
 **Right held, then the wheel, lets the binding go** — also since 2026-09-01. It is
 deliberately the *mirror* of the rebind chord: one button held as a modifier, the
@@ -2214,7 +2219,7 @@ session he is working in and a spawn that silently re-pointed it would put the
 next ordinary dictation into a session four seconds old.
 
 What killed that rule is the commonest path through the gesture, not an edge of
-it: the app starts unbound, the right chord opens a session, the words land — and
+it: the app starts unbound, a double click opens a session, the words land — and
 the relay is still pointing at nothing, so the wheel is inert (*Unbound is
 inert*) and the second sentence of the conversation he has just started has
 nowhere to go. He has to bind the window by hand, which is the pointing this
@@ -2224,8 +2229,8 @@ minute later.
 
 **Always, not only when nothing was bound** — his call, asked and answered the
 same day. A spawn is him saying the session he wants does not exist yet, which is
-the same sentence as *the one I am pointed at is not it* — literally what the
-right chord means (*let this one go / make a new one*). Two spawns in a row each
+the same sentence as *the one I am pointed at is not it* — the thing the right
+chord says by letting the binding go. Two spawns in a row each
 still get their own window; the relay ends up on the second, which is the one he
 is talking to.
 
@@ -2485,7 +2490,7 @@ its own way back is not one.
 
 **The menu bar becomes the only legend, and therefore has to be complete.**
 Every action the app has is a row, **always visible**, naming the mouse or key
-that performs it — `Dictate to new Claude — 🛞🛞 · ➡️ + 🛞 1s`,
+that performs it — `Start dictation to new claude — 🛞🛞`,
 `Cancel Dictation — 🛞 2s`, `Take Screenshot — ⬇️`. A row greys out when it cannot act *this second*; it
 never disappears, because a menu that hid what he cannot do right now would be
 useless for learning what he can do at all. That is what *"indiferent de starea
@@ -2499,7 +2504,7 @@ it could be written. A disabled row is the honest rendering of *this is somethin
 you do, not something you pick*.
 
 The two new commands are the same calls their gestures make, not quieter
-variants: `Dictate to new Claude` is `startLocalRecording(spawn: true)`, and
+variants: `Start dictation to new claude` is `startLocalRecording(spawn: true)`, and
 `Take Screenshot` is `plusOneShot` — the latter **after a 0.35s beat**,
 because AppKit dismisses the menu and the screen redraws a frame or two later,
 so a capture fired on the click would photograph the menu that ordered it.
@@ -2675,10 +2680,10 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 |---|---|---|
 | `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` |
-| `Dictate to new Claude` | ✨ | `🛞🛞 · ➡️ + 🛞 1s` |
 | `Paste last prompt` | 📋 | `⌘⌃P` |
 | — separator — | | |
 | `Start Dictation` | `mic` | `🛞` |
+| `Start dictation to new claude` | ✨ | `🛞🛞` |
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
 | `Take Screenshot` | 📷 | `⬇️` |
@@ -2700,9 +2705,14 @@ already open — the chords themselves belong to the event tap (`HotkeyTap`), wh
 is untouched.
 
 **The line groups by what a row is *for*.** Above it, everything about a
-**destination** — point at one, let it go, make a new one, paste the last
-sentence somewhere by hand. Below it, everything done **with a dictation open**,
-plus the row that opens one. They were interleaved before, in the order each was
+**destination** — point at one, let it go, paste the last sentence somewhere by
+hand. Below it, everything done **with a dictation open**, plus the two rows that
+open one: `Start Dictation` and, directly under it since 2026-09-06,
+`Start dictation to new claude`. They are the same verb with the two destinations
+there are — the terminal that is bound, and the session that is not open yet — so
+they are read as a pair, and the row that used to sit up with Bind and Disconnect
+on the argument that a new session is a destination now sits with the verb it
+actually performs. They were interleaved before, in the order each was
 written, with the two gestures that are only live mid-sentence sitting three rows
 below the block they belong to. A menu that is the app's only legend has to group
 by the question its reader is asking.
@@ -2714,7 +2724,7 @@ rows sit in — legends, under their own separator, below the dictation commands
 not by words or emoji riding on the row.
 
 **The word `hold` is gone from every chord**, on Victor's ask. Where a hold has a
-*duration* the duration says so (`🛞 2s`, `➡️ + 🛞 1s`); where it does not, the
+*duration* the duration says so (`🛞 2s`); where it does not, the
 chord is unambiguous without it — there is no tap-⬅️-then-🛞 meaning something
 else for it to be told apart from. It was four characters in front of the two
 rows read most often.

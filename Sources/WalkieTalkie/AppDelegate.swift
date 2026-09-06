@@ -444,20 +444,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.captureContext()
             }
         }
-        // ⇧ + the wheel. **Ending is the same call as ever** — the destination
-        // belongs to the press that opened the microphone, not to the one that
-        // closes it — so the shift only means anything when nothing is running.
-        hotkeys.onSpawnToggle = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                if self.localRecording { self.stopLocalRecording() }
-                else { self.startLocalRecording(spawn: true) }
-            }
-        }
         // The forward side button, in Replace Wispr mode — shaped exactly like
-        // the spawn above, and ending the same way: whichever gesture opened the
-        // microphone, closing it is closing it, and the destination was decided
-        // at the press.
+        // a spawn dictation, and ending the same way: whichever gesture opened
+        // the microphone, closing it is closing it, and the destination was
+        // decided at the press.
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -1713,15 +1703,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **The binding moves to the new window, since 2026-09-01.** It used to
     /// stay where it was — a spawn was a one-shot destination — and the case
     /// that killed that rule is the commonest one there is: the app starts
-    /// unbound, the right chord opens a session, the words land, and the relay
+    /// unbound, a double click opens a session, the words land, and the relay
     /// is still pointing at nothing, so the next sentence has nowhere to go and
     /// the wheel is inert (*Unbound is inert*). Reported 2026-09-01: *"nu s-a
     /// autolegat de acel terminal … a rămas idle"*.
     ///
     /// Always, not only when unbound — Victor's call. A spawn is him saying the
     /// session he wants does not exist yet, which is the same sentence as "the
-    /// one I am pointed at is not it"; that is literally what the right chord
-    /// means (*let this one go / make a new one*). Two spawns in a row still
+    /// one I am pointed at is not it" — the thing the right chord says by
+    /// letting the binding go. Two spawns in a row still
     /// each get their own window; the relay ends up on the second, which is the
     /// one he is talking to.
     private func spawnClaude(_ m: Message) {

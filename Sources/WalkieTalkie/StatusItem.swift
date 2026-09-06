@@ -86,8 +86,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord make.
     var onBind: (() -> Void)?
 
-    /// Picked from **Dictate to new Claude** — open the microphone with the spawn
-    /// destination armed, exactly as the right-held chord does.
+    /// Picked from **Start dictation to new claude** — open the microphone with
+    /// the spawn destination armed, exactly as the wheel clicked twice does.
     var onNewSession: (() -> Void)?
 
     /// Picked from **Take Screenshot** — the same picture the back button
@@ -145,17 +145,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// never varies, so it was a word the row spent on something already known,
     /// where *what happens* is the half worth the width.
     ///
-    /// **One route now, and it is the mouse's.** ⌘ + the wheel was the other, and
-    /// went on 2026-09-03 — the moment this gesture is most useful is the moment
-    /// Victor is across the room from the laptop with nothing but the mouse, and
-    /// a modifier claimed machine-wide for the whole time the app runs was a
-    /// steep price for a second way in that needs the keyboard anyway.
+    /// **One gesture now, and it is the bare wheel clicked twice.** ⌘ + the
+    /// wheel went on 2026-09-03 — a modifier claimed machine-wide for as long as
+    /// the app runs was a steep price for a way in that needs the keyboard
+    /// anyway — and ➡️ + 🛞 held a second went on 2026-09-06, because a chord
+    /// that had to be told apart from itself made **Disconnect** wait for the
+    /// finger to come up and put a session Victor had not asked for one timer
+    /// away from every hurried tap.
     ///
-    /// `1s` distinguishes it from **Disconnect**, which is the same two buttons
-    /// tapped rather than held — the same idiom `Cancel Dictation — hold 🛞 2s`
-    /// already uses, and the only thing that separates the two readings of one
-    /// chord.
-    private let newSession = NSMenuItem(title: "Dictate to new Claude", action: nil, keyEquivalent: "")
+    /// **The title says "start dictation" for the same reason the row sits
+    /// under `Start Dictation`** (Victor, 2026-09-06): what it does is open the
+    /// microphone, exactly like the row above it — the only difference is where
+    /// the sentence lands, and a new session is the one destination that does
+    /// not exist yet when the words start.
+    private let newSession = NSMenuItem(title: "Start dictation to new claude", action: nil, keyEquivalent: "")
     /// The shutter. Its one route is named: the back button, only while a dictation
     /// is running — which is also the only window in which it stops typing
     /// Return.
@@ -326,16 +329,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
         cancelDictation.target = self
         cancelDictation.isEnabled = false
 
-        // **Under the three that end a dictation, because it starts one.** It
-        // sits with them rather than beside Bind — which is where a reader
-        // looking for "how do I get a session" would expect it — because what it
-        // actually does is open the microphone; the window is what happens when
-        // the sentence is over. Enabled whether or not anything is bound: that is
-        // the whole point of the gesture.
+        // **Directly under `Start Dictation`, because it is the same verb**
+        // (Victor, 2026-09-06). It was up with the destination rows, beside Bind
+        // and Disconnect, on the argument that a new session is a destination —
+        // but the row does not *make* one, it opens the microphone, and the
+        // window appears when the sentence is over. Read as a pair with the row
+        // above it, the two say the whole choice at the moment it is made: start
+        // talking to the terminal that is bound, or to one that is not there
+        // yet. Added to the menu further down, with that block.
+        //
+        // Enabled whether or not anything is bound — unlike every other row in
+        // the block — because that is the whole point of the gesture: it carries
+        // its own destination.
         newSession.image = Self.emojiIcon("✨")
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
-        menu.addItem(newSession)
 
         // **Under the dictation commands, because it is about the last one.**
         // Not a gesture that happens *during* a sentence like the two rows below,
@@ -360,10 +368,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         pickLegend.isEnabled = false
         // **A line between where the words go and what happens while they are
         // being said.** Victor's ask, and the regrouping is the half that makes
-        // the line mean anything: the four rows above it are about a
-        // *destination* — point at one, let it go, make a new one, or paste the
-        // last sentence somewhere by hand — and every row below it is a gesture
-        // made with a dictation already open, or the one that opens it.
+        // the line mean anything: the three rows above it are about a
+        // *destination* — point at one, let it go, or paste the last sentence
+        // somewhere by hand — and every row below it is a gesture made with a
+        // dictation already open, or one of the two that open one.
         //
         // They were interleaved before, in the order each was written: the two
         // that are only live mid-sentence sat at the bottom, under `New Claude
@@ -378,6 +386,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // with no way in.
         menu.addItem(.separator())
         menu.addItem(startDictation)
+        menu.addItem(newSession)
         menu.addItem(stopRecording)
         menu.addItem(cancelDictation)
         // **A line between the verbs that end a dictation and the two legends.**
@@ -450,13 +459,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (bind, bind.title, "⬅️ + 🛞"),
             (disconnect, disconnect.title, "➡️ + 🛞"),
             (startDictation, startDictation.title, "🛞"),
+            // **One way in, and it is the bare wheel clicked twice** — Victor's
+            // replacement (2026-09-05) for the 2s hold of the day before, which
+            // lost every race to the 1s cancel-hold on the same button. `➡️ + 🛞
+            // 1s` rode beside it until 2026-09-06 and is gone with the chord.
+            //
+            // Right under `Start Dictation`'s own `🛞`, which is the pair the
+            // order is for: one click of the wheel talks to what is bound, two
+            // talk to a session that is not open yet.
+            (newSession, newSession.title, "🛞🛞"),
             (stopRecording, stopRecording.title, "🛞"),
             (cancelDictation, cancelDictation.title, "🛞 2s"),
-            // **Two ways in, and the chord-free one first.** `🛞🛞` is the bare
-            // wheel clicked twice — Victor's replacement (2026-09-05) for the
-            // 2s hold of the day before, which lost every race to the 1s
-            // cancel-hold on the same button. The right chord is the unbound route.
-            (newSession, newSession.title, "🛞🛞 · ➡️ + 🛞 1s"),
             // **The one key chord left, drawn like the mouse ones.** It used to
             // ride as a real `keyEquivalent`, which put it in AppKit's own
             // right-hand column — so the menu had two shortcut columns, one for
@@ -612,8 +625,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         stopRecording.isEnabled = recording
         cancelDictation.isEnabled = recording
         // The one row that does not ask about a binding — it brings its own
-        // destination. Only a dictation already running takes it away, and then
-        // only because the chord would end that one rather than start this.
+        // destination. Only a dictation already running takes it away: the row
+        // *starts* one, and the sentence already open is re-aimed by the wheel's
+        // second click, not from here.
         newSession.isEnabled = !recording
         // Take Screenshot is a legend now (disabled at construction), so there
         // is nothing to re-enable here.
