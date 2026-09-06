@@ -2658,22 +2658,33 @@ only moment the answer has to be right is the moment he is looking at it.
 
 Since 2026-09-01 each command carries a picture in the menu's icon column.
 
-| row | icon | chord column | key column |
-|---|---|---|---|
-| `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` | ⌘⌃B |
-| `Disconnect` | `mappin.slash` | `➡️ + 🛞` | |
-| `Dictate to new Claude` | ✨ | `🛞🛞 · ➡️ + 🛞 1s` | |
-| `Paste last prompt` | 📋 | | ⌘⌃P |
-| — separator — | | | |
-| `Start Dictation` | `mic` | `🛞` | ⌘⌃D |
-| `End Dictation` | `mic.slash` | `🛞` | ⌘⌃D |
-| `Cancel Dictation` | 🗑️ | `🛞 2s` | |
-| `Take Screenshot` | 📷 | `⬇️` | — |
-| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` | |
-| `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) | |
-| `Message log of last 2 days` | 📜 | | |
+| row | icon | shortcut column |
+|---|---|---|
+| `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` |
+| `Disconnect` | `mappin.slash` | `➡️ + 🛞` |
+| `Dictate to new Claude` | ✨ | `🛞🛞 · ➡️ + 🛞 1s` |
+| `Paste last prompt` | 📋 | `⌘⌃P` |
+| — separator — | | |
+| `Start Dictation` | `mic` | `🛞` |
+| `End Dictation` | `mic.slash` | `🛞` |
+| `Cancel Dictation` | 🗑️ | `🛞 2s` |
+| `Take Screenshot` | 📷 | `⬇️` |
+| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
+| `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) |
+| `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
+
+**One shortcut column, not two** (Victor, 2026-09-06). Until then the mouse
+chords were drawn into a tab-stopped column of their own and AppKit laid its
+`keyEquivalent` column out to the right of it, so `Connect Terminal` and the two
+dictation rows were the only ones with something in both, and every other row had
+a gap where the second column ran past it. ⌘⌃B and ⌘⌃D lost their key equivalents
+outright and ⌘⌃P moved into the drawn column beside the wheel chords. **Nothing
+about the keyboard changed**: none of the three ever fired *as* a menu key
+equivalent — this app is never the key app, so they only worked with the menu
+already open — the chords themselves belong to the event tap (`HotkeyTap`), which
+is untouched.
 
 **The line groups by what a row is *for*.** Above it, everything about a
 **destination** — point at one, let it go, make a new one, paste the last
@@ -2773,12 +2784,12 @@ gets its `session_end` before the process dies. There is no ⌘Q key equivalent:
 the app is `.accessory` and never becomes key, so the hint would advertise a
 shortcut that does nothing outside the open menu.
 
-### Message Log: the outbox read back as a page
+### Prompt Log: the outbox read back as a page
 
 `outbox.jsonl` is the record of everything Victor has ever dictated, and until
 2026-09-03 the only way to read it was to `tail` a file of one-line JSON blobs
 with UTC stamps and absolute paths to retina JPGs in them — a format written for
-the agent watching the queue, not for the person who filled it. **Message Log**
+the agent watching the queue, not for the person who filled it. **Prompt Log**
 (`MessageLog.swift`, 📜, under the two switches) renders the **last 48 hours** of
 that same file into one self-contained HTML file and opens it in the default
 browser.

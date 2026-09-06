@@ -105,8 +105,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// while reaching for the thing it does, which makes it the one place a
     /// gesture can be learned without being taught.
     ///
-    /// ⌘⌃B rides as a real key equivalent so macOS right-aligns it; the wheel
-    /// gestures have no key equivalent to be, so they are said in the title.
+    /// ⌘⌃B is not written on this row at all any more (Victor, 2026-09-06): it
+    /// is the one gesture with a mouse route on the very same row, and a key
+    /// equivalent for it existed only to be read — see `gestureRows`, where the
+    /// single shortcut column now lives.
     ///
     /// **The gestures are drawn, not spelled.** `hold left, click the wheel` is
     /// six words describing two objects, and it was read in a menu opened for a
@@ -117,7 +119,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord rides in an attributed title right-aligned to a tab stop set just
     /// left of the shortcut column, and the two columns line up. See
     /// `layOutGestures`, and `restyleGestures` for the price it costs.
-    private let bind = NSMenuItem(title: "Connect Terminal", action: nil, keyEquivalent: "b")
+    private let bind = NSMenuItem(title: "Connect Terminal", action: nil, keyEquivalent: "")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
@@ -131,11 +133,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let disconnect = NSMenuItem(title: "Disconnect", action: nil, keyEquivalent: "")
     /// Ends the dictation the relay is recording itself — Local Whisper only,
     /// see the comment at the row's construction.
-    /// Opens the microphone from the menu — see `onStartDictation`. ⌘⌃D rides it
-    /// as a real key equivalent, the same way ⌘⌃B rides **Connect Terminal**; the
-    /// wheel has no key equivalent to be, so it stays in the title beside it.
-    private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "d")
-    private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "d")
+    /// Opens the microphone from the menu — see `onStartDictation`. The wheel is
+    /// the gesture written on the row; ⌘⌃D, which does the same thing from the
+    /// keyboard, went off the menu with ⌘⌃B (Victor, 2026-09-06).
+    private let startDictation = NSMenuItem(title: "Start Dictation", action: nil, keyEquivalent: "")
+    private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     /// A dictation whose destination is a terminal that does not exist yet — it
@@ -159,7 +161,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Return.
     /// The last dictation, again — see `AppDelegate.pasteLastDictation`. Greyed
     /// until there is one, like every other row that cannot act right now.
-    private let pasteLast = NSMenuItem(title: "Paste last prompt", action: nil, keyEquivalent: "p")
+    private let pasteLast = NSMenuItem(title: "Paste last prompt", action: nil, keyEquivalent: "")
     private let shot = NSMenuItem(title: "Take Screenshot", action: nil, keyEquivalent: "")
     /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
     /// happens inside Chrome, in a page this app cannot reach from a menu — but
@@ -214,7 +216,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `AppDelegate` because it needs state only the delegate has; this one needs
     /// nothing but the file on disk, and a hop through the delegate would exist
     /// only to be consistent with rows that had a reason.
-    private let messageLog = NSMenuItem(title: "Message log of last 2 days", action: nil, keyEquivalent: "")
+    private let messageLog = NSMenuItem(title: "Prompt Log", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
     /// **The app, named and dated, one row above Quit.** It carries the build
@@ -268,7 +270,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         bind.image = Self.symbolIcon("mappin", tint: Self.pinRed)
-        bind.keyEquivalentModifierMask = [.command, .control]
         bind.action = #selector(bindClicked)
         bind.target = self
         menu.addItem(bind)
@@ -305,15 +306,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // relay is inert and `startLocalRecording` would refuse anyway, and a row
         // that silently does nothing is worse than one that says it cannot.
         startDictation.image = Self.symbolIcon("mic")
-        startDictation.keyEquivalentModifierMask = [.command, .control]
         startDictation.action = #selector(startDictationClicked)
         startDictation.target = self
         startDictation.isEnabled = false
 
-        // The same ⌘⌃D on both rows: only one of the two is ever enabled, so the
-        // key reads as the toggle it is rather than as a clash.
         stopRecording.image = Self.symbolIcon("mic.slash")
-        stopRecording.keyEquivalentModifierMask = [.command, .control]
         stopRecording.action = #selector(stopRecordingClicked)
         stopRecording.target = self
         stopRecording.isEnabled = false
@@ -346,7 +343,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // once the words have landed somewhere and he wants them somewhere else
         // too — a commit message, a chat, a form.
         pasteLast.image = Self.emojiIcon("📋")
-        pasteLast.keyEquivalentModifierMask = [.command, .control]
         pasteLast.action = #selector(pasteLastClicked)
         pasteLast.target = self
         pasteLast.isEnabled = false
@@ -442,12 +438,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
         exit.target = self
         menu.addItem(exit)
 
-        // **The mouse chords get a column of their own, beside the key ones.**
-        // Victor asked twice; the first answer was that `NSMenuItem` does not
-        // offer it, which is true only of the shortcut column itself. A right
-        // tab stop in an attributed title is the same right edge drawn by hand,
-        // and AppKit lays its own ⌘⌃ column out to the right of the text — so the
-        // two end up as neighbours, which is all that was ever wanted.
+        // **One column for every shortcut, mouse or key.**
+        // Victor asked twice for the mouse chords to be right-aligned; the first
+        // answer was that `NSMenuItem` does not offer it, which is true only of
+        // the shortcut column itself. A right tab stop in an attributed title is
+        // the same right edge drawn by hand. It sat *beside* AppKit's own ⌘⌃
+        // column for a day — two columns, and rows with an entry in neither
+        // straddling the gap — until (2026-09-06) the key equivalents went and
+        // ⌘⌃P moved in here with the wheel. What is drawn is the whole legend.
         gestureRows = [
             (bind, bind.title, "⬅️ + 🛞"),
             (disconnect, disconnect.title, "➡️ + 🛞"),
@@ -459,11 +457,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // 2s hold of the day before, which lost every race to the 1s
             // cancel-hold on the same button. The right chord is the unbound route.
             (newSession, newSession.title, "🛞🛞 · ➡️ + 🛞 1s"),
+            // **The one key chord left, drawn like the mouse ones.** It used to
+            // ride as a real `keyEquivalent`, which put it in AppKit's own
+            // right-hand column — so the menu had two shortcut columns, one for
+            // the three keys and one for the wheel, with rows that had neither
+            // spanning the gap between them. Victor asked for one column
+            // (2026-09-06): ⌘⌃B and ⌘⌃D lost their key equivalents outright, and
+            // this one is written here instead. Nothing is lost by it — none of
+            // the three ever fired *as* a key equivalent (the app is never key,
+            // so they only worked with the menu already open); the chords
+            // themselves are the event tap's, see `HotkeyTap`.
             // **Bare chords — no qualifier.** Both legends said "while
             // dictating" until Victor had the words out (2026-09-04, minutes
             // after they replaced the @🎙️ marker he had out first); the two
             // rows are disabled legends read at leisure, and the condition is
             // the section they sit in, not words on the row.
+            (pasteLast, pasteLast.title, "⌘⌃P"),
             (shot, shot.title, "⬇️"),
             (pickLegend, pickLegend.title, "⌘⇧ + ⬅️"),
         ]

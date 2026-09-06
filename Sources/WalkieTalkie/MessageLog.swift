@@ -5,7 +5,7 @@ import AppKit
 /// `outbox.jsonl` is the record of everything Victor has dictated, and until now
 /// the only way to read it was `tail`ing a file of one-line JSON blobs with
 /// absolute paths to retina JPGs in them — i.e. a format written for the agent
-/// watching the queue, not for the person who filled it. **Message Log** renders
+/// watching the queue, not for the person who filled it. **Prompt Log** renders
 /// the last two days of that same file as one self-contained HTML file and opens
 /// it in the browser: the sentences in local time, grouped by day, with the
 /// screenshots inline.
@@ -168,7 +168,7 @@ enum MessageLog {
         var out = """
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Walkie Talkie — Message Log</title>
+        <title>Walkie Talkie — Prompt Log</title>
         <style>
         :root {
           color-scheme: light dark;
@@ -237,7 +237,7 @@ enum MessageLog {
         <div class="wrap">
         """
 
-        out += "<h1>Message Log</h1>\n"
+        out += "<h1>Prompt Log</h1>\n"
         out += "<div class=\"sub\">The last 2 days of <code>~/.walkie-talkie/outbox.jsonl</code>"
         out += " — newest first, in local time. Generated \(esc(clock.string(from: now)))"
         out += " on \(esc(dayHeading.string(from: now))).</div>\n"
