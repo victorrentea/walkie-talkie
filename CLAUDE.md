@@ -3802,13 +3802,33 @@ picture, and newer state wins the chip.
 **The outline then leaves the dialog** — `BindFlight.fly(from: promptFarewell,
 to: { window })`, which is *the same call the send flight makes*, so the two
 panel→terminal flights are one animation with two callers. It flies the moment
-`adoptSpawnedWindow` finds the window, and the dialog begins a half-second fade
-in that same instant (`releaseSpawnPanel`, `AppDelegate.spawnPanelFade` = 0.5s):
-the rectangle leaving the dialog is what the dialog *becomes*, so the panel
-emptying out behind it is the other half of one sentence — cut in one frame it
-reads as two unrelated things, held to the end it reads as a dialog that forgot
-to close. The whole gesture is therefore a fade, a 0.7s flight and a fade, with
-nothing hanging at either end.
+`adoptSpawnedWindow` finds the window, and **the dialog holds still for a quarter
+of a second before it starts to fade** (`spawnPanelFadeDelay`, then
+`releaseSpawnPanel` over `spawnPanelFade` = 0.5s).
+
+**The delay is the whole thing working.** The two ran on the same instant for a
+day, on the reasoning that the rectangle leaving the dialog is what the dialog
+*becomes*, so the panel emptying out behind it is the other half of one sentence.
+That reasoning is right and the timing defeated it: at t=0 the outline lies pixel
+for pixel on the panel's own rectangle, so a panel already dissolving underneath
+it never reads as *a thing leaving a dialog* — it reads as both of them fading at
+once, which is a dismissal rather than a journey. Victor, 2026-09-07: *"dialogul
+trebuie abia atunci să înceapă să facă fade-out timp de jumătate de secundă, dar
+doar după ce conturul lui pleacă în călătorie către terminalul nou deschis …
+vreau să văd vizual că ideea dialogului se duce spre terminal"*.
+
+A quarter second is a third of the flight — by then the rectangle has
+unmistakably cleared the panel it came from — and it lands the end of the
+half-second fade within a hair of the outline's arrival, so the dialog finishes
+emptying out just as the window receives it. The whole gesture is a held dialog,
+an outline leaving it, a fade and an arrival, with nothing hanging at either end.
+
+**The terminal is open before any of this starts**, which is the precondition the
+sequence rests on and the reason `adoptSpawnedWindow` polls for up to
+`spawnWindowWait` (4s): a flight needs a real rectangle to aim at, so the window
+has to exist and have coordinates first. That is also why the panel is *held*
+rather than dismissed when the prompt resolves — it is being kept alive for a
+moment that has not happened yet.
 
 **The old backwards flight is still there, as the fallback**, for a spawn that
 never showed a panel — there is then nothing but the chip to leave from. What

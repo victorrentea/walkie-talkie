@@ -1845,14 +1845,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // dialog is what makes the honest source available.
                     let farewell = self.overlay.promptFarewell
                     self.overlay.promptFarewell = nil
-                    // Now, not when the flight lands: the fade and the travel are
-                    // one gesture — see `RelayWindow.releaseSpawnPanel`.
-                    self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
                     if let farewell = farewell, farewell.width > 1 {
                         BindFlight.fly(from: farewell, to: { frame },
                                        seconds: Self.spawnFlightSeconds,
                                        outlined: true, tail: Self.spawnFlightRest)
+                        // **The outline leaves first; the dialog goes after it.**
+                        // These two ran on the same instant, and that is exactly
+                        // what made the gesture unreadable: at t=0 the outline
+                        // lies pixel for pixel on the panel, so a panel already
+                        // dissolving underneath it never reads as *a thing
+                        // leaving a dialog* — it reads as both of them fading at
+                        // once. Victor, 2026-09-07: *"dialogul trebuie abia
+                        // atunci să înceapă să facă fade-out … dar doar după ce
+                        // conturul lui pleacă în călătorie către terminalul nou
+                        // deschis"*.
+                        //
+                        // A quarter second is what it takes for the rectangle to
+                        // clear the panel it came from — a third of the flight,
+                        // by which point it is unmistakably somewhere else — and
+                        // it lands the panel's half-second fade almost exactly on
+                        // the outline's arrival, so the dialog is gone when the
+                        // window has it.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Self.spawnPanelFadeDelay) { [weak self] in
+                            // `releaseSpawnPanel` no-ops unless the hold is still
+                            // this one's, so a second dictation that took the chip
+                            // in the meantime is not faded out from under itself.
+                            self?.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                        }
                     } else {
+                        // No panel to leave from, so nothing to hold back for.
+                        self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
                         // A spawn that never showed a panel has only the chip to
                         // leave from, which is the flight this used to be.
                         BindFlight.fly(from: frame, to: { [weak self] in
@@ -1910,6 +1932,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `spawnFlightSeconds` — so the whole gesture is a fade, a flight and a fade
     /// with nothing left hanging at either end.
     private static let spawnPanelFade: TimeInterval = 0.5
+
+    /// **How long the dialog stays solid after the outline has set off.**
+    ///
+    /// The fade used to start on the same instant as the flight, which is the
+    /// one arrangement that cannot show what the flight is for: at t=0 the
+    /// outline is lying exactly on the panel's own rectangle, so a panel already
+    /// dissolving under it reads as the two of them fading together rather than
+    /// as something *leaving* a dialog that is still there.
+    ///
+    /// A quarter of a second is a third of the flight — far enough that the
+    /// rectangle has visibly cleared the panel — and it puts the end of the
+    /// half-second fade within a hair of the outline's arrival, so the dialog
+    /// finishes emptying out just as the window receives it.
+    private static let spawnPanelFadeDelay: TimeInterval = 0.25
 
     /// How long to keep asking Terminal for the new window before giving up on
     /// the flight. Generous, because it costs nothing when the window is up in
