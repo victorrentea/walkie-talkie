@@ -792,7 +792,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `🗑️ dictation cancelled` in the row `Listening…` was in — 1.5 s, then half a second of dissolve back to the chip at rest. The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
+| the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, then half a second of dissolve back to the chip at rest. The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | the destination app's icon + `⌨️ at the caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
@@ -3572,7 +3572,7 @@ is no current dictation."* Two independent leaks, both fixed:
 1. **Cancel never put the row down.** `cancelLocalRecording` clears
    `pendingSelection` under the lock, but the row showing it is the overlay's own
    copy and nothing else there touches it — `setListening(false)` does not, and
-   the `🗑️ dictation cancelled` flash draws *over* the chip rather than resetting
+   the `🗑️ Dictation aborted` flash draws *over* the chip rather than resetting
    it. Every other exit already called `overlay.clearSelection()` (`commit` before
    the panel opens, `flushOrphaned` for the ones that died); cancel was the one
    route that did not, so the last highlight sat beside the cursor with no

@@ -941,7 +941,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // That title row is gone from flashes now (*A flash replaces the
         // collapsed chip*), so the bin is the row's only picture and says what
         // every other flash's leading emoji says: which kind of thing this is.
-        overlay.flash("🗑️ dictation cancelled", duration: 1.5)
+        overlay.flash("🗑️ Dictation aborted", duration: 1.5)
     }
 
     private func stopLocalRecording() {

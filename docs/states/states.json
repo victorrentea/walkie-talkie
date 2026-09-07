@@ -219,7 +219,7 @@
     "slug" : "flash-cancelled",
     "title" : "Dictation cancelled",
     "when" : "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
-    "width" : 195
+    "width" : 184
   },
   {
     "alpha" : 0.80000000000000004,
