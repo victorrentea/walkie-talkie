@@ -1799,7 +1799,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.wakePointer()
                     BindFlight.fly(from: frame, to: { [weak self] in
                         self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
-                    }, seconds: Self.spawnFlightSeconds, reversed: true)
+                    }, seconds: Self.spawnFlightSeconds, reversed: true,
+                       outlined: true, tail: Self.spawnFlightRest)
                 }
             } else {
                 Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) never appeared — no flight")
@@ -1823,6 +1824,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { if let bound = bound { self.showBound(bound) } }
         }
     }
+
+    /// **The half second the outline spends resting on the new window**, fading
+    /// out (Victor, 2026-09-07). The fade starts inside the last sixth of the
+    /// travel and finishes here, so the rectangle is already dissolving as it
+    /// settles and is gone a beat later — see `BindFlight.tailFadeFraction`.
+    ///
+    /// A bind ends by sliding under the chip, which is a place for it to *go*;
+    /// this direction ends on a window that stays exactly where it is, so
+    /// without a fade the last frame is a white rectangle blinking off a
+    /// terminal. Landing and dissolving is the same sentence with an ending.
+    private static let spawnFlightRest: TimeInterval = 0.5
 
     /// How long to keep asking Terminal for the new window before giving up on
     /// the flight. Generous, because it costs nothing when the window is up in

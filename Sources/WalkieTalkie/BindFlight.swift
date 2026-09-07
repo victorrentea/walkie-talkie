@@ -88,6 +88,18 @@ enum BindFlight {
     /// what makes it *end* rather than blink out mid-flight.
     private static let fadeFraction = 0.2
 
+    /// **With a `tail`, the fade starts before the arrival and ends after it.**
+    /// A flight that reaches its destination and blinks out has its last frame
+    /// exactly where the eye finally caught up with it; one that is already
+    /// dissolving as it settles reads as the rectangle being *absorbed* by what
+    /// it landed on. Victor, 2026-09-07, about the spawn: *"când mai are 10%,
+    /// 20% din distanță, începe să facă fade-out … mai stând acolo încă jumate
+    /// de secundă, până când dispare complet."*
+    ///
+    /// This is the "10–20%" — the share of the travel still left when the fade
+    /// begins. It runs from there, through the arrival, to the end of the tail.
+    private static let tailFadeFraction = 0.15
+
     /// Opacity at the window and opacity at the cursor — see the note on the
     /// type. Full at the source, because there the picture *is* what is
     /// underneath and the seam has to be invisible; half on arrival, because by
@@ -129,6 +141,13 @@ enum BindFlight {
     private static var backwards = false
     /// How long this particular flight runs. `duration` is the default it takes.
     private static var span: CFTimeInterval = duration
+    /// Seconds spent resting on the destination after the travel is over, fading
+    /// out. Zero for the flights that end by simply arriving — see
+    /// `tailFadeFraction`.
+    private static var tail: CFTimeInterval = 0
+    /// A flight with nothing to carry: a hollow rectangle, no picture and no
+    /// fill. See `outlined` on `fly`.
+    private static var hollow = false
 
     /// Fly from `source` to wherever the cursor is, for the whole second — the mouse
     /// is re-read every frame rather than sampled once, so the rectangle chases
@@ -168,11 +187,27 @@ enum BindFlight {
     /// has. The send flight needs it: the prompt panel is invisible to screen
     /// capture (`sharingType = .none`), so the only picture of it in existence
     /// is the one its own view just drew.
+    ///
+    /// **`outlined` refuses the picture altogether** — a hollow white rectangle,
+    /// no contents and no fill. It is the spawn's shape (Victor, 2026-09-07:
+    /// *"să nu ia poza terminalului … doar un chenar către chenarul
+    /// terminalului"*), and the argument the type makes for carrying pixels is
+    /// exactly the argument against them here. A bind's picture is *invisible*
+    /// at the start because it lies pixel for pixel on the window it was copied
+    /// from; a spawn's flight runs the other way and ends up **over** a window
+    /// that is usually in the background, on the one screen he is working on —
+    /// so the same trick renders as a copy of a terminal pasted on top of what
+    /// he is reading. A frame arriving on a frame says *there* without covering
+    /// anything, which is all this direction ever had to say.
+    ///
+    /// `tail` holds it on the destination afterwards while it fades to nothing.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
                     seconds: CFTimeInterval = duration,
                     reversed: Bool = false,
                     carrying picture: CGImage? = nil,
+                    outlined: Bool = false,
+                    tail rest: CFTimeInterval = 0,
                     landed: (() -> Void)? = nil) {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
@@ -183,8 +218,9 @@ enum BindFlight {
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
         // actually on it.
-        let picture = picture ?? grab(source)
+        let picture = outlined ? nil : (picture ?? grab(source))
         hasPicture = picture != nil
+        hollow = outlined
 
         panes = NSScreen.screens.map { screen in
             // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` pulls a
@@ -250,19 +286,24 @@ enum BindFlight {
         startedAt = CACurrentMediaTime()
         backwards = reversed
         span = max(0.1, seconds)
+        tail = max(0, rest)
 
-        place(at: 0)
+        place(at: 0, elapsed: 0)
         let tick = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
             let elapsed = CACurrentMediaTime() - startedAt
-            guard elapsed < span else { return land() }
-            place(at: elapsed / span)
+            guard elapsed < span + tail else { return land() }
+            // Clamped, so the tail is spent standing on the destination rather
+            // than sailing past it: the geometry is finished, only the fade is
+            // still running.
+            place(at: min(1, elapsed / span), elapsed: elapsed)
         }
         RunLoop.main.add(tick, forMode: .common)
         timer = tick
     }
 
-    /// One frame. `t` is 0…1 across the whole flight, hold included.
-    private static func place(at progress: CFTimeInterval) {
+    /// One frame. `progress` is 0…1 across the travel, hold included; `elapsed`
+    /// is the wall clock since the start, which runs on past 1 through the tail.
+    private static func place(at progress: CFTimeInterval, elapsed: CFTimeInterval) {
         guard !panes.isEmpty else { return }
 
         // **The whole of "backwards" is here.** Every line below reads the same
@@ -296,12 +337,24 @@ enum BindFlight {
                             width: size.width, height: size.height)
 
         let fade = t > 1 - fadeFraction ? CGFloat((1 - t) / fadeFraction) : 1
+        // **The tail's fade**, which is a different shape from the one above: it
+        // is measured off the clock rather than off `t`, because it has to start
+        // inside the travel and finish after it has stopped. Without a tail it
+        // is 1 throughout and nothing here applies.
+        let settle: CGFloat
+        if tail > 0 {
+            let begins = span * (1 - tailFadeFraction)
+            let over = span * tailFadeFraction + tail
+            settle = elapsed <= begins ? 1 : max(0, CGFloat(1 - (elapsed - begins) / over))
+        } else {
+            settle = 1
+        }
         // The fall from solid to half, times the fade at the end. With a picture
         // the layer's own opacity is the whole effect; without one the white fill
         // does the same job the blue one used to, and the two are multiplied
         // rather than added so a fallback flight is not twice as pale.
         let alpha = startAlpha + (endAlpha - startAlpha) * eased
-        let fill = hasPicture
+        let fill = hasPicture || hollow
             ? NSColor.white.withAlphaComponent(0).cgColor
             : NSColor.white.withAlphaComponent(0.55 * eased).cgColor
         // The border thins as the shape does, and "how far along is it" is now
@@ -329,7 +382,7 @@ enum BindFlight {
             pane.shape.backgroundColor = fill
             pane.shape.borderWidth = border
             pane.shape.cornerRadius = radius
-            pane.shape.opacity = Float(fade * alpha)
+            pane.shape.opacity = Float(fade * alpha * settle)
         }
         CATransaction.commit()
     }
@@ -383,7 +436,9 @@ enum BindFlight {
         panes = []
         onLanded = nil
         hasPicture = false
+        hollow = false
         backwards = false
         span = duration
+        tail = 0
     }
 }

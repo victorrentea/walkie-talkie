@@ -1610,33 +1610,60 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   rounding up is deliberate: over is a pleasant surprise, under is a number that
   is wrong every second it is on screen.
 
-  **The factor is learned, not written down** (`DecodeRate.swift`, same day).
-  Every decode files what it actually cost against the audio it was handed, and
-  the estimate is the **mean of the last fifty** — since 2026-09-04, on
-  Victor's call: the 80th percentile of twenty it replaced was measured
-  promising 33s for decodes that landed in 3 (the window's p80 sat at 0.225×
-  while real decodes came in at 0.09–0.11×), and a countdown wrong by an order
-  of magnitude in the "safe" direction is still wrong every second it is on
-  screen. The bigger window is what a mean needs: one slow decode moves it by
-  its own ÷50 instead of sitting at a rank of twenty for an afternoon. GPU load
-  is not sampled separately — the ratio of the most recent decodes already *is*
-  the load on whatever resource the model uses, measured end to end. A constant measured once is right
-  until the model (`RELAY_WHISPER_MODEL`), the machine's load or its thermals
-  move under it, and none of those announce themselves; what they produce is a
-  countdown that is quietly wrong for weeks. **0.12 is still the fallback**,
-  used until there are five samples.
-  - **The window is on disk**, `~/.walkie-talkie/decode-rate.json`, beside the
-    outbox and not in Caches. Fifty dictations is more than one launch: an
-    in-memory window would spend most of its life under the minimum and the
-    learning would never take.
-  - **The first decode after the helper starts is not filed.** The helper warms
-    up on a second of silence, but the first real decode still pays for weights
-    the allocator has not touched — 2.8s against 1.3s warm — and one cold sample
-    in a window of twenty drags every estimate after it. `LocalWhisper.stop()`
+  **The estimate is a line fitted to the last fifty decodes**
+  (`DecodeRate.swift`). Every decode files the audio it was handed, the seconds
+  it took and the machine's load at the time, and the next prediction is
+  `intercept + slope × audio` off that window.
+
+  **It was a mean ratio until 2026-09-07, and the filter around it was throwing
+  away the truth.** Reported as *"secundele estimate … sunt mereu grav
+  supraestimate, 14 secunde și s-a terminat în 3"*, and the cause is written in
+  `relay.log` by the old code as it discarded the evidence:
+  `ignoring 0.033× (45.5s audio, 1.5s decode) — outside 0.04…0.60`. **Nineteen
+  such pairs**, 22s to 207s of audio, every one of them warm, every one rejected
+  for being *too fast* — the floor was 0.04× and this Mac decodes at 0.033×.
+  What survived in the window were short clips and the odd cold decode (ratios
+  0.05…0.48), so the mean sat near 0.15 and a two-minute dictation was promised
+  twenty seconds for four seconds of work. A guard written to keep nonsense out
+  was keeping every representative sample out and nothing else in.
+
+  **A line rather than a ratio**, because a decode is a fixed round trip (JSON
+  out, ffmpeg, the answer back) *plus* a cost per second of audio, and one ratio
+  can fit one of those or the other. Least squares over those nineteen pairs is
+  `0.0355 × audio − 0.10`, worst residual **0.39s across the whole range** —
+  exact, once the line is allowed an intercept. Predictions now: 45s→2s (1.5s
+  actual), 90s→3s (3.3s), 207s→7s (7.5s).
+
+  **The load is recorded and deliberately not in the model.** Victor asked for it
+  by name — *"loghează … câtă încărcare are mașina și cât a durat efectiv"* — and
+  that is its job: it sits in the file so a better rule can be *derived* later
+  instead of guessed at now. The fit does not use it because the recent decodes
+  already are the machine's load, measured end to end on the resource that
+  matters.
+  - **The file is `~/.walkie-talkie/decode-rate.jsonl`, appended forever**, one
+    object per decode: `{at, audio, decode, load, cold}`. Beside the outbox and
+    not in Caches, for the outbox's reason. The estimate reads only the tail.
+    It supersedes `decode-rate.json`, which held bare ratios with **no audio
+    beside them** — which is exactly why this fault could only be diagnosed from
+    `relay.log`, and only from the lines about the samples that were *dropped*.
+    The file was seeded from those log lines when the fix landed, so the fit was
+    right on the first dictation after it.
+  - **The first decode after the helper starts is recorded but not fitted.** The
+    helper warms up on a second of silence, but the first real decode still pays
+    for weights the allocator has not touched — 2.8s against 1.3s warm, and
+    visible in the log as a 4.3s clip that took 7.3s. `LocalWhisper.stop()`
     resets the counter, so the next helper's first is cold again.
-  - **Ratios outside 0.04…0.60 are dropped, not clamped.** A reading that far
-    out is evidence about something other than the model's speed, and letting it
-    in would move the estimate for the next twenty dictations.
+  - **Ratios outside 0.005…1.0 are not fitted to** (they are still written down).
+    Wide on purpose, after the old 0.04…0.60 excluded reality: what is left out
+    is only a reply that came back in no time at all, and one that took longer
+    than the sentence did to say.
+  - **A fit needs spread, not only points.** Below eight samples, or with less
+    than 15s between the shortest and longest of them, the window is used as a
+    **median** ratio through the origin instead — least squares asked about
+    clustered points answers with a line through noise, and a median is what
+    survives one cold decode where a mean does not. With nothing at all the
+    fallback is `0.3s + 0.045×`, which is the measured line rounded up on both
+    terms.
   - Filed on the **success path only**: a decode that returned nothing says
     nothing about how long a decode takes. At zero the seconds stop
   being shown rather than sitting at `0s` or counting up, which would be the app
@@ -2353,6 +2380,13 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   (`pasteText`, which ⌘⌃P now shares), so a paste that landed somewhere unhelpful
   is one ⌘V of his own away from being fixed. `lastDictation` is set too: a
   Replace Wispr sentence is exactly the kind wanted twice, in a second field.
+- **The menu row's icon *is* its state**: a `checkmark` in front of the words
+  when the mode is on, and an empty box the same size when it is off (Victor,
+  2026-09-07 — asked for as an ✕ or nothing, *"sau mai bine chiar … nimic"*). It
+  had `⌨️` in that column and its state in `NSMenuItem.state`, which is the
+  arrangement `Autosend` gave up one row below and for the same reason: a ticked
+  row makes AppKit reserve the state column for the **whole** menu, so switching
+  this one mode on shoved every other row sideways.
 - **`POST /test/replace-wispr {"on": true}`** exists because the mode is otherwise
   reachable only by clicking a menu row — the one input nothing at a desk can
   produce. The route and the row both go through `setReplaceWispr`, so the tick,
@@ -2688,7 +2722,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
-| `Replace WisprFlow` | ⌨️ | the forward side button (see *Replace Wispr*) |
+| `Replace WisprFlow` | a `checkmark` when on, **nothing** when off | the forward side button (see *Replace Wispr*) |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
@@ -3524,6 +3558,29 @@ in both directions; only which of them it starts at changes.
 bind's second, because this flight is a hand-off rather than an answer to a press
 and it plays while the eye is still travelling to a window that has just
 appeared somewhere else.
+
+**It carries no picture — an outline, and only an outline** (`outlined:`, since
+2026-09-07). Everything the bind flight argues for carrying pixels is an argument
+*against* them in this direction. A bind's picture is invisible at the start
+because it lies pixel for pixel on the window it was copied from; a spawn's
+starts at the cursor and ends **on** a window that, with one monitor, has just
+opened *behind* whatever Victor is reading — so the same trick renders as a copy
+of a terminal pasted on top of his work. *"Să nu ia poza terminalului … doar un
+chenar către chenarul terminalului, oriunde ar fi el."* A frame arriving on a
+frame says *there* without covering anything, which is all this direction ever
+had to say. The white fill the picture-less bind flight falls back to is off for
+the same reason.
+
+**And it fades across the arrival rather than at it** (`tail:`,
+`AppDelegate.spawnFlightRest` = 0.5s). The fade starts with the last sixth of the
+travel still to go (`BindFlight.tailFadeFraction`), runs through the landing, and
+reaches nothing half a second after the rectangle has come to rest on the window.
+A bind ends by sliding under the chip, which is somewhere for it to *go*; this
+one ends on a window that stays exactly where it is, so without the tail its last
+frame is a white rectangle blinking off a terminal. Landing and dissolving is the
+same sentence with an ending. Victor: *"când mai are 10%, 20% din distanță,
+începe să facă fade-out … mai stând acolo încă jumate de secundă, până când
+dispare complet."*
 
 ## A stale bundle in /Applications is three bugs at once
 

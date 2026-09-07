@@ -2478,7 +2478,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         transcribeTicker = nil
         transcribeDeadline = nil
         if value, audio > 0 {
-            transcribeDeadline = Date().addingTimeInterval(max(1, (audio * DecodeRate.factor).rounded()))
+            transcribeDeadline = Date().addingTimeInterval(max(1, DecodeRate.seconds(for: audio).rounded()))
             // Four ticks a second, like the panel's countdown and for its reason:
             // a number that jumps reads as a number nobody is watching.
             let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in

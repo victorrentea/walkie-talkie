@@ -201,10 +201,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
     ///
     /// The title names both halves of what changes, because both are surprising:
     /// a button that did nothing for this app starts recording, and the words
-    /// stop going to the terminal the header above still names. `⌨️` is the icon
-    /// for the same reason it is the chip's label in this mode — the destination
-    /// is *wherever the caret is*, which is the one thing the row has to say.
+    /// stop going to the terminal the header above still names.
+    ///
+    /// **The icon column is the tick** (Victor, 2026-09-07): nothing at all when
+    /// the mode is off, a `checkmark` in front of the words when it is on. It
+    /// carried `⌨️` in that column and its state in `NSMenuItem.state`, which is
+    /// the arrangement `Autosend` had already given up one row below and for the
+    /// same reason — a ticked row makes AppKit reserve the state column for the
+    /// **whole** menu, so switching this one mode on shoved every other row
+    /// sideways. The `⌨️` is what pays for the tick, and it is the cheaper half:
+    /// it said *the destination is wherever the caret is*, which is what the
+    /// title says in words, while the tick is the only place the mode can be
+    /// read at all.
+    ///
+    /// **Off is blank, not an ✕.** Asked for as either — *"un X când e dezactivat
+    /// … sau mai bine chiar … nimic"* — and blank is the one that leaves the row
+    /// looking like the commands above it when the mode is doing nothing. It is
+    /// still an image, transparent and exactly the size of the others, so the
+    /// title does not step left the moment the tick goes.
     private let replaceWispr = NSMenuItem(title: "Replace WisprFlow", action: nil, keyEquivalent: "")
+    /// Mirrors what the `replaceWispr` row means, since the row no longer carries
+    /// a `state` to read it back from — the same shape `autosendOn` has.
+    private var replaceWisprOn = false
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
     /// browser — see `MessageLog`.
@@ -399,10 +417,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        replaceWispr.image = Self.emojiIcon("⌨️")
         replaceWispr.action = #selector(replaceWisprClicked)
         replaceWispr.target = self
-        replaceWispr.state = .off
+        applyReplaceWisprIcon()
         menu.addItem(replaceWispr)
 
         autosend.action = #selector(autosendClicked)
@@ -722,6 +739,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
         return image
     }
 
+    /// The icon column's own width, drawn and empty. A row whose state is *off*
+    /// still has to occupy the column, or its title steps left the moment the
+    /// tick appears — which is the layout shifting under him that put both
+    /// switches in this column in the first place.
+    private static let blankIcon: NSImage = {
+        let image = NSImage(size: NSSize(width: 18, height: 16))
+        image.lockFocus()
+        image.unlockFocus()
+        return image
+    }()
+
     private static let idleIcon = loadIcon("walkie-idle")
     private static let boundIcon = loadIcon("walkie-bound")
 
@@ -820,12 +848,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// only place Victor can read the answer, so anything that changes the mode
     /// has to come through here.
     func setReplaceWispr(_ on: Bool) {
-        replaceWispr.state = on ? .on : .off
+        replaceWisprOn = on
+        applyReplaceWisprIcon()
     }
 
     @objc private func replaceWisprClicked() {
-        replaceWispr.state = replaceWispr.state == .on ? .off : .on
-        onToggleReplaceWispr?(replaceWispr.state == .on)
+        replaceWisprOn.toggle()
+        applyReplaceWisprIcon()
+        onToggleReplaceWispr?(replaceWisprOn)
+    }
+
+    /// The tick, or the space where one would be. See the note on the row.
+    private func applyReplaceWisprIcon() {
+        replaceWispr.image = replaceWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
     }
 
     @objc private func autosendClicked() {
