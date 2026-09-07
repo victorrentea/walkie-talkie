@@ -210,11 +210,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the two expensive halves of that — a warm local Whisper and a mouse button
     /// — pointed at agents only.
     ///
-    /// **Off at every launch and deliberately not persisted**, the same call
-    /// `autosend` makes. It changes where every sentence lands, and a tick that
-    /// survived a restart would send a dictation meant for a bound agent into
-    /// whatever field happened to have the caret, weeks after he had forgotten it
-    /// was on. The menu row is where the answer is, and it is one click away.
+    /// **Restored from the last launch** (Victor, 2026-09-07), the same call
+    /// `autosend` makes and for the same reason — see the note on
+    /// `StatusItem.replaceWisprOn` for what the argument against it was and what
+    /// overruled it. The menu row is where the answer is, and it is one click
+    /// away.
     private var replaceWispr = false
 
     /// The one place the mode is written, so the tick in the menu, the flag the
@@ -318,6 +318,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // disagree the first time one of them changed key or meaning.
         autosend = status.isAutosend
         if autosend { Log.info("autosend restored on from the last launch") }
+        // Seeded from the menu for `autosend`'s reason — the row is the one
+        // source of truth — but pushed **through the flag and the tap by hand**
+        // rather than through `setReplaceWispr`: that call flashes the overlay,
+        // and a mode restored from the last launch is not an event to announce.
+        // The tick is already drawn, so nothing has to be pushed back to the row.
+        replaceWispr = status.isReplaceWispr
+        hotkeys.replaceWispr = replaceWispr
+        if replaceWispr { Log.info("Replace Wispr restored on from the last launch") }
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.

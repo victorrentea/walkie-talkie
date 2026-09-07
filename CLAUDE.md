@@ -2699,10 +2699,20 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
 - **The chip says `⌨️ at the caret`**, in the slot a spawn uses and for the
   spawn's reason: the bound terminal is still there, and for the length of this
   sentence the words are not going to it.
-- **Off at every launch, deliberately not persisted** — the call `Autosend`
-  makes. It changes where every sentence lands, and a tick that survived a restart
-  would put a dictation meant for a bound agent into whatever field had the caret,
-  weeks after he had forgotten it was on.
+- **Restored from the last launch** (since 2026-09-07) — the call `Autosend`
+  makes. It was deliberately *not* persisted until then, and the argument was the
+  stronger one of the pair: autosend changes *how long the panel waits*, this
+  changes **where every sentence lands**, so a tick that survived a restart would
+  put a dictation meant for a bound agent into whatever field had the caret,
+  weeks after he had forgotten it was on. What overrules it is that the mode is
+  not a setting he drifts into — it is how he dictates for a whole stretch of
+  work, and re-ticking it every launch is a tax charged on the one gesture that
+  exists to save typing. The tick is one click away and the chip says
+  `⌨️ at the caret` on every sentence it takes, so a mode left on is visible
+  before a word is spoken. `AppDelegate` seeds the flag and the tap from
+  `StatusItem.isReplaceWispr` at launch **without** going through
+  `setReplaceWispr`: that call flashes the overlay, and a restored mode is not an
+  event to announce.
 - **The transcript is on the clipboard as well as at the caret**
   (`pasteText`, which ⌘⌃P now shares), so a paste that landed somewhere unhelpful
   is one ⌘V of his own away from being fixed. `lastDictation` is set too: a
@@ -3172,9 +3182,10 @@ tick that came back on its own would quietly take that away weeks later, in a
 session where he had forgotten it was set. Victor overruled it after enough
 restarts to settle the question — the reading it was protecting against is one he
 makes deliberately, and re-making the same choice every launch is the worse tax.
-**`Replace WisprFlow` still does not persist**, and the two are not the same bet:
-autosend changes *how long the panel waits*, that one changes **where the words
-go**.
+**`Replace WisprFlow` persists too**, since 2026-09-07 — it was the second of the
+pair to give the argument up, and it was the stronger bet: autosend changes *how
+long the panel waits*, that one changes **where the words go**. See its own
+section for what overruled it.
 
 - **The panel still opens.** It is the receipt, and a dictation that vanished into
   a terminal with nothing shown is the one state where a delivery cannot be told

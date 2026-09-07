@@ -216,14 +216,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// he makes deliberately, and re-making the same choice every launch is a
     /// worse tax than the risk it was buying off.
     ///
-    /// **`Replace WisprFlow` deliberately still does not persist**, and the two
-    /// are not the same bet. Autosend changes *how long* the panel waits;
-    /// Replace Wispr changes **where the words go** — a stale tick there puts a
-    /// dictation meant for a bound agent into whatever field holds the caret.
+    /// **`Replace WisprFlow` persists too**, since 2026-09-07 — the note on
+    /// `replaceWisprOn` says what it cost to give up the argument that kept it
+    /// from doing so.
     private var autosendOn = UserDefaults.standard.bool(forKey: StatusItem.autosendKey)
-    /// The one key this app keeps in `UserDefaults`. It is a *preference* rather
-    /// than data, so it does not belong in `~/.walkie-talkie` beside the outbox
-    /// and the corpus, and `--home` has no business moving it.
+    /// One of the two keys this app keeps in `UserDefaults`. They are
+    /// *preferences* rather than data, so they do not belong in
+    /// `~/.walkie-talkie` beside the outbox and the corpus, and `--home` has no
+    /// business moving them.
     private static let autosendKey = "autosend"
 
     /// What the row is set to right now — read once at launch by `AppDelegate`,
@@ -257,7 +257,26 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let replaceWispr = NSMenuItem(title: "Replace WisprFlow", action: nil, keyEquivalent: "")
     /// Mirrors what the `replaceWispr` row means, since the row no longer carries
     /// a `state` to read it back from — the same shape `autosendOn` has.
-    private var replaceWisprOn = false
+    ///
+    /// **It survives a restart** (Victor, 2026-09-07), and it is the second of
+    /// the two switches to give that argument up. The argument was the stronger
+    /// one of the pair: autosend changes *how long* the panel waits, while this
+    /// changes **where the words go**, so a tick that came back on its own would
+    /// put a dictation meant for a bound agent into whatever field held the
+    /// caret, weeks after he had forgotten it was set. What overrules it is that
+    /// the mode is not a setting he drifts into — it is how he dictates for a
+    /// whole stretch of work, and re-ticking it every launch is a tax charged on
+    /// the one gesture that exists to save typing. The tick is still one click
+    /// away and the chip still says `⌨️ at the caret` on every sentence it
+    /// takes, so a mode left on is visible before a word is spoken.
+    private var replaceWisprOn = UserDefaults.standard.bool(forKey: StatusItem.replaceWisprKey)
+    /// The other preference key — see the note on `autosendKey`.
+    private static let replaceWisprKey = "replaceWispr"
+
+    /// What the row is set to right now — read once at launch by `AppDelegate`,
+    /// so the restored tick and the behaviour behind it start out agreeing, the
+    /// same shape `isAutosend` has.
+    var isReplaceWispr: Bool { replaceWisprOn }
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
     /// browser — see `MessageLog`.
@@ -884,12 +903,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// has to come through here.
     func setReplaceWispr(_ on: Bool) {
         replaceWisprOn = on
+        UserDefaults.standard.set(on, forKey: Self.replaceWisprKey)
         applyReplaceWisprIcon()
     }
 
     @objc private func replaceWisprClicked() {
-        replaceWisprOn.toggle()
-        applyReplaceWisprIcon()
+        setReplaceWispr(!replaceWisprOn)
         onToggleReplaceWispr?(replaceWisprOn)
     }
 
