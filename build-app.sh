@@ -22,6 +22,9 @@ BIN="$DIR/.build/release/WalkieTalkie"
 [ -x "$BIN" ] || { echo "❌ build produced no binary at $BIN"; exit 1; }
 
 echo "Assembling $APP_NAME.app…"
+# Remembered across the wipe so the icon caches are only kicked when the picture
+# actually changed — see the note beside `dock.iconcache` at the end of the file.
+OLD_ICON_SUM="$(shasum -a 256 "$CONTENTS/Resources/AppIcon.icns" 2>/dev/null | cut -d' ' -f1 || true)"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS"
 cp "$BIN" "$MACOS/$APP_NAME"
@@ -115,5 +118,23 @@ fi
 # Finder and the Dock cache an app's icon by bundle path; touching the bundle is
 # what tells them the cache is stale, or the old picture survives the rebuild.
 touch "$APP_DIR"
+
+# **And touching it is not enough for the Dock.** Measured on 2026-09-07, when
+# the icon was inset to Apple's grid: the installed `.icns` was the new one and
+# `NSWorkspace.iconForFile:` served the new one, while the Dock went on painting
+# the old picture across a `killall Dock` — because the tile it draws comes from
+# `com.apple.dock.iconcache` in the darwin user cache dir, which **survives a
+# Dock restart**. Deleting that file and restarting is what actually repaints it,
+# verified by capturing the Dock and measuring the tile (72px against a
+# neighbour's 76, i.e. the circle slot, where before it was the full tile).
+#
+# Only when the picture changed: a Dock restart is a visible flicker and this
+# script runs on every build. The old checksum was taken before the wipe above.
+NEW_ICON_SUM="$(shasum -a 256 "$CONTENTS/Resources/AppIcon.icns" | cut -d' ' -f1)"
+if [ "$OLD_ICON_SUM" != "$NEW_ICON_SUM" ]; then
+    rm -f "$(getconf DARWIN_USER_CACHE_DIR)com.apple.dock.iconcache"
+    killall Dock 2>/dev/null || true
+    echo "   icon changed — cleared the Dock icon cache and restarted it"
+fi
 
 echo "✅ Installed $APP_DIR (built $(date '+%b %-d, %H:%M'))"

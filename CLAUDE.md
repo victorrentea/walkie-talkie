@@ -4247,6 +4247,17 @@ running what I just built?" had no answer anywhere in the app.
   it on the next build. The bundle is `touch`ed afterwards or Finder and the Dock
   keep serving the cached old picture.
 
+  **And touching the bundle is not enough for the Dock.** Measured the day the
+  grid inset landed: the installed `.icns` was the new one and
+  `NSWorkspace.iconForFile:` served the new one, while the Dock went on painting
+  the old picture across a `killall Dock` — the tile it draws comes from
+  `com.apple.dock.iconcache` in the darwin user cache dir, and **that file
+  survives a Dock restart**. Deleting it and restarting is what repaints the
+  tile. `build-app.sh` now does exactly that, and only when the `.icns` checksum
+  actually changed (a Dock restart is a visible flicker, and the script runs on
+  every build). Verified by capturing the Dock and measuring: 72px against a
+  neighbour's 76 — the circle slot — where before it was the full tile.
+
   **The tiles are inset to Apple's icon grid, and until 2026-09-07 they were
   not.** `sips -Z` scales artwork to *fill* the tile, and `walkie-bound.png`
   fills its own canvas corner to corner — so the ring was drawn at the full width
