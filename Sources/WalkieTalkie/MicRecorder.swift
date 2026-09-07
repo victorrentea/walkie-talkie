@@ -181,7 +181,16 @@ final class MicRecorder {
         // Per recording, both of them: a floor carried over from the last
         // sentence would be a floor for a room, a microphone and a distance from
         // it that may all have changed since.
-        lock.lock(); voiced = 0; noiseFloor = -1; lock.unlock()
+        //
+        // **No `lock.lock()` around this pair.** It is the one place in the file
+        // where that reflex is wrong: `start` has held the lock since its first
+        // line, `lock` is an `NSLock` and NSLock is not recursive, so taking it
+        // again here deadlocked the thread that opened the microphone — the main
+        // thread — and froze the whole app on every dictation. Shipped in the
+        // commit that added the meter and found on the forward button the same
+        // afternoon (2026-09-07); the button was innocent.
+        voiced = 0
+        noiseFloor = -1
         isRecording = true
         Log.info("mic: recording through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil

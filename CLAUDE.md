@@ -4121,8 +4121,8 @@ running what I just built?" had no answer anywhere in the app.
   `sips` and calls `iconutil`, rather than committing an `.icns`, so the PNG stays
   the single source of truth and the app icon follows it on the next build. The
   bundle is `touch`ed afterwards or Finder and the Dock keep serving the cached
-  old picture. (The app is `LSUIElement`, so this icon never appears in the Dock —
-  Finder, Spotlight and Get Info are where it shows.)
+  old picture. (It shows in Finder, Spotlight, Get Info — and, since 2026-09-07,
+  in the Dock: see *The Dock tile is the escape hatch* below.)
 - **`Quit — built Aug 28, 17:48`**, one row, the way Victor Addons does it: read
   once a session, and read while reaching for Quit anyway, since the answer to
   "no, that's the old build" is to quit and relaunch. The date is the
@@ -4131,3 +4131,63 @@ running what I just built?" had no answer anywhere in the app.
   the working tree and lands in commits as noise, while the file date says the
   same thing for free, cannot go stale, and works unchanged for a plain
   `swift build` run from the terminal.
+
+## The Dock tile is the escape hatch
+
+The app is a **`.regular`** app since 2026-09-07 — `setActivationPolicy(.regular)`
+in `main.swift`, and no `LSUIElement` in the plist `build-app.sh` writes. So there
+is a Dock tile, with the running dot under it.
+
+It was `.accessory` from the start, on an argument that is still true: an overlay
+is not an app you switch to, and a Dock tile for something with no window is
+clutter. What that argument never covered is **the day the app hangs**. Victor's
+Dock is on the right of the screen, and ⌥-click on a tile → **Force Quit** is the
+gesture his hands already know. An `.accessory` app has no tile, so the only ways
+out of a frozen relay were Activity Monitor or a `pkill` in a terminal — and the
+terminal may be the very thing the relay was in the middle of typing into. That
+happened on 2026-09-07 (see the deadlock below), and the tile went in the same
+afternoon.
+
+**It costs nothing the rest of the time.** Nothing in the app activates itself:
+the overlay is a `.nonactivatingPanel` (see *Nothing beside the pointer draws a
+window*), the About row and the message log open pages in the browser rather than
+modals, and no code calls `NSApp.activate`. The one thing that changes is that a
+click on the tile now *does* make the app frontmost — which is why `main.swift`
+installs a minimal main menu (About, Hide, Quit ⌘Q). A `.regular` app with no
+`mainMenu` shows an empty menu bar, and an empty menu bar on the one occasion
+Victor looks at the app directly reads as a broken app.
+
+**The comments that say "never becomes key" are still right in spirit.** They are
+in `RecordingBeacon`, `SpawnFolderMenu`, `RelayWindow` and `AboutPage`, and each
+is about a mouse monitor or a click-through: the app is never frontmost *by its
+own doing*, so every click still arrives at a background app and still counts as a
+first click. Clicking the Dock tile is the exception, and it is a deliberate act
+that ends in Force Quit or in ⌘Q.
+
+## The mic's own lock is not recursive, and `start` already holds it
+
+`MicRecorder.lock` is an `NSLock`. `start(to:)` takes it on its first line and
+holds it to the `return`. On 2026-09-07 the commit that added the voiced-seconds
+meter reset the meter's two fields halfway down that method and wrapped the pair
+in `lock.lock()` / `lock.unlock()` — the reflex every other write to `voiced` and
+`noiseFloor` correctly follows, because they are written from CoreAudio's thread.
+
+`NSLock` is not recursive. That second acquire deadlocked the thread that called
+`start`, which is the **main thread** — `onPasteToggle` and every other dictation
+gesture hop to main before opening the microphone — so the whole app froze on the
+first dictation of the build, with the window server still delivering events to
+the tap on its own thread and the log still filling up with mouse edges that led
+nowhere.
+
+**The log is what dated it, and the shape is worth remembering**: the last line
+before the freeze was `🎙️ forward button — Replace Wispr` and the next line that
+should have existed, `🎙️ local recording started`, never did. Everything between
+those two lines is `mic.start`. Victor reported it as *"cum apas forward pe mouse
+se blochează"* and the forward button was innocent — the wheel and ⌘⌃D would have
+frozen it just the same; the forward button was simply what he was testing that
+afternoon, having just turned Replace Wispr on.
+
+The fix is to **not** take the lock: inside `start` the state is already private.
+The rule for this file is that `lock` is taken exactly once per public entry
+point, and never again inside one.
+

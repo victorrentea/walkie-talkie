@@ -84,8 +84,11 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>APPL</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
-    <key>LSUIElement</key>
-    <true/>
+    <!-- No LSUIElement here on purpose. The app is a regular app since
+         2026-09-07 so it has a Dock tile with a running dot, which is the only
+         option-click -> Force Quit there is when it hangs. The reasoning is in
+         main.swift. (No backticks in this heredoc: it is unquoted, so the shell
+         would run them.) -->
     <key>NSAccessibilityUsageDescription</key>
     <string>Walkie Talkie needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
     <key>NSMicrophoneUsageDescription</key>

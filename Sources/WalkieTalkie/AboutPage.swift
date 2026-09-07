@@ -9,9 +9,10 @@ import AppKit
 /// follow. The About row answers that with the repository URL.
 ///
 /// **A page in the browser rather than an `NSAlert`**, for the reason the message
-/// log is one: the app is `.accessory` and never becomes key, so a modal it puts
-/// up arrives behind whatever is in front and steals focus from the terminal
-/// Victor is bound to. A page is also the only rendering where the GitHub link
+/// log is one: the app never activates itself — `.regular` since 2026-09-07 for
+/// the Dock tile, but nothing here calls `NSApp.activate` and the overlay is a
+/// `.nonactivatingPanel` — so a modal it puts up arrives behind whatever is in
+/// front and steals focus from the terminal Victor is bound to. A page is also the only rendering where the GitHub link
 /// is a link — which is the whole point of the row.
 enum AboutPage {
 
