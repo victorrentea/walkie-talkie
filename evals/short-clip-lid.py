@@ -27,12 +27,27 @@ into repetition loops with it at its default — and an eval that quietly turned
 back on would be measuring that instead.
 
 **The reference is Wispr Flow's transcript, not ground truth.** The 803 rows this
-runs over are the ones carrying both: `text` is what Wispr made of the WAV (which
-Victor considers the better transcript) and `asr` is what the local model made of
-it. So every number here is a *disagreement* rate, the same caveat the 442-clip
-table in `CLAUDE.md` carries — and `--suspect` prints the rows where Wispr is the
-one that is wrong, because those move an aggregate silently. `retina` → `Rentea`
-is the one to look at first.
+runs over are the ones carrying an `asr` field, and `text` is what Wispr made of
+the WAV — the transcript Victor considers the better one. So every number here is
+a *disagreement* rate, the same caveat the 442-clip table in `CLAUDE.md` carries —
+and `--suspect` prints the rows where Wispr is the one that is wrong, because
+those move an aggregate silently. `retina` → `Rentea` is the one to look at first:
+Wispr has Victor's surname in a personal dictionary and writes it over a word that
+sounds like it, and the local model, which has never heard of him, gets it right
+and is scored wrong for it.
+
+**`asr` is not the local model, and reading it as one is the trap this eval
+walked into first.** `corpus_harvest.py` writes `"asr": r["asrText"]` straight
+out of Wispr's own database and `text` as `best_text(edited, formatted, asr)` —
+both halves are Wispr, one raw and one cleaned, and the file says so in its own
+first paragraph: *"No model runs here and none is called."* They agree to a
+median WER of **0.008**; they are the same transcript with different punctuation.
+Scoring `asr` against `text` measures Wispr's formatter. **The only honest
+baseline is config A, decoded here with `whisper_helper.py`'s exact settings**,
+and it disagrees with `asr` at a median WER of 0.151 — which is the local model's
+real error, not a bookkeeping difference. `detectedLanguage` in the corpus has
+the same provenance: on these 803 rows it is Wispr's language pick, 0.7% outside
+{ro, en}, while the local model's own pick on the same audio is **3.2%**.
 
 **The empty-output column cannot be compared to the 71%-under-1s figure in
 `CLAUDE.md`, and the reason is the eval set itself.** A row qualifies here by
@@ -83,19 +98,21 @@ SPOKEN = ("ro", "en")
 # `--vocab` prints the derivation, term by term, with the reference frequency
 # and the baseline's recall on it.
 #
-# **Every term is attested and most are measurably broken.** The core of the
-# list is the terms the baseline actually mangles: `frontend` → `front-end`
-# (recall 0.70 over 10), `subagenți` → `sub agenți`/`subagents` (0.70 over 10),
-# `JetBrains` → `jet brains` (0.67 over 3), `backend` → `back-end` (0.76 over
-# 25), `IntelliJ` → `intelliju`/`inteliju` (0.76 over 17), and the one that
-# matters most, `Claude` → `cloud`/`claw`/`cloudmd` (0.92 over 52, and `md`
-# 0.93 over 61 — `CLAUDE.md` comes back as `cloudmd`).
+# **Every term is attested and most are measurably broken.** Recall below is
+# config A's — the production decode — over the reference occurrences of each
+# term: `petclinic` **0.00** over 5, `frontend` 0.10 over 10, `agentic` 0.20
+# over 5, `Claude` **0.33** over 52 (`cloud`, `claw`, `cloud code`), `md` 0.44
+# over 61 (`CLAUDE.md` → `CloudMD`), `backend` 0.44 over 25, `subagenți` 0.50
+# over 10, `IntelliJ` 0.59 over 17 (`intelliju`, `inteliju`), `JetBrains` 0.67
+# over 3 (`jet brains`), `code` 0.78 over 79.
 #
-# The rest — Copilot, MCP, skill, hook, prompt, commit, push, petclinic,
-# Walkie Talkie, Wispr Flow, agentic — already score 1.00 and are in as cheap
-# insurance on the words whose loss would cost an agent the most. **Terms that
-# were guessed and then thrown out on the evidence**: `Devoxx` (n=0 — he does
-# not say it into this microphone), `repo` (n=1), `VS Code` (n=2). The cap that
+# The list was first derived against the corpus `asr` column and looked far
+# milder — `Claude` at 0.92 rather than 0.33. That column is Wispr's own raw
+# output, not the local model's, so it was measuring the wrong recogniser
+# entirely; the numbers above are the re-measurement against config A and they
+# are the reason C is worth running at all. **Terms guessed and then thrown out
+# on the evidence**: `Devoxx` (n=0 — he does not say it into this microphone),
+# `repo` (n=1), `VS Code` (n=2). The cap that
 # decides the length is not Whisper's 224 tokens, which this is nowhere near
 # (65 under the `ro` tokenizer), but that a long prompt is itself a source of
 # hallucination.
@@ -554,27 +571,46 @@ def main_suspect(args):
 
 
 def main_vocab(args):
-    """Where VOCAB came from: reference frequency and baseline recall, per term.
+    """Where VOCAB came from: reference frequency and recall per term, per config.
 
     Printed rather than hardcoded so the next person can see the prompt is a
     measurement and not a wish list — and so a term that stops being mangled can
     be dropped from it on evidence.
+
+    **Scored against the decodes, never against the corpus `asr` column.** That
+    column is Wispr's raw output; a term list built from it describes what Wispr
+    mangles, which is a different question and a much gentler one. If the results
+    file is not there yet, this says so rather than answering with the wrong
+    recogniser.
     """
     import collections
-    rows = [json.loads(l) for l in open(os.path.join(CORPUS, "corpus.jsonl"))]
-    rows = [r for r in rows if (r.get("asr") or "").strip()]
-    ref, hit = collections.Counter(), collections.Counter()
+    if not os.path.exists(RESULTS):
+        print("no %s yet — run the eval first; the corpus `asr` column is Wispr's\n"
+              "own output and cannot stand in for the local model here." % RESULTS)
+        return
+    rows = [json.loads(l) for l in open(RESULTS)]
+    configs = sorted(set(r["config"] for r in rows))
+    ref = collections.Counter()
+    hit = collections.defaultdict(collections.Counter)
     for r in rows:
-        h = set(tokens(r["asr"]))
-        for t in tokens(r["text"]):
-            ref[t] += 1
-            hit[t] += t in h
-    print("%-14s %5s %8s" % ("term", "n", "baseline recall"))
+        h = set(tokens(r["text"]))
+        for t in tokens(r["ref"]):
+            if r["config"] == configs[0]:
+                ref[t] += 1
+            hit[r["config"]][t] += t in h
+    print("%-14s %5s  %s" % ("term", "n", "  ".join("%-5s" % c for c in configs)))
     for term in sorted(set(tokens(VOCAB))):
         if ref[term]:
-            print("%-14s %5d %11.2f" % (term, ref[term], hit[term] / ref[term]))
+            print("%-14s %5d  %s" % (term, ref[term],
+                                     "  ".join("%.2f " % (hit[c][term] / ref[term])
+                                               for c in configs)))
         else:
-            print("%-14s %5d %11s" % (term, 0, "— not in the references"))
+            print("%-14s %5d  — not in the references" % (term, 0))
+    total = sum(ref[t] for t in set(tokens(VOCAB)))
+    if total:
+        print("%-14s %5d  %s" % ("POOLED", total,
+                                 "  ".join("%.2f " % (sum(hit[c][t] for t in set(tokens(VOCAB)))
+                                                      / total) for c in configs)))
 
 
 def main():
