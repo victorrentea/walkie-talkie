@@ -1296,6 +1296,40 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         var rows: [(view: NSView, height: CGFloat)] = []
 
+        // **The state of the dictation comes first, above the destination**
+        // (Victor, 2026-09-07: *"aș vrea ca listening cu bila roșie să
+        // înlocuiască microfonul — să fie primul rând, iar terminalul conectat
+        // să fie al doilea"*).
+        //
+        // At rest the top row is a lone 🎙️ — the chip *being* a microphone is
+        // the whole sentence. Starting to talk used to leave that slot to the
+        // destination and push the pulse underneath, so the one row that changes
+        // arrived below the one that does not. Now the pulse takes the
+        // microphone's place literally: the top line goes 🎙️ → `🔴 Listening…`,
+        // and `petclinic@main` slides to the second row, where a fact that holds
+        // still for the whole sentence belongs.
+        //
+        // The waits go with it (`statusLines` → `⏳ Transcribing… 4s`), because
+        // they are the same slot at the next moment — *"la fel în toate"*.
+        if let engine = engineText {
+            engineInfo.stringValue = engine
+            layoutGlyphRow(engineRow, glyph: recordDot, label: engineInfo, width: innerWidth)
+            engineRow.isHidden = false
+            rows.append((engineRow, recordRowHeight))
+        } else {
+            engineRow.isHidden = true
+        }
+        let hints = statusLines
+        for (i, hint) in hintRows.enumerated() {
+            guard i < hints.count else { hint.row.isHidden = true; continue }
+            hint.glyph.image = hints[i].glyph
+            hint.label.attributedStringValue = hints[i].text
+            hint.label.sizeToFit()
+            let h = hintRowHeight(hints[i].ink)
+            layoutGlyphRow(hint.row, glyph: hint.glyph, label: hint.label, width: innerWidth, height: h)
+            hint.row.isHidden = false
+            rows.append((hint.row, h))
+        }
         // **No title row while nothing is bound.** The line names where the words
         // go, and unbound there is nowhere — it used to read `🤖 /`, the launch
         // directory of a login item, which is what got the whole chip taken off
@@ -1331,17 +1365,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             titleRow.isHidden = true
         }
 
-        let hints = statusLines
-        for (i, hint) in hintRows.enumerated() {
-            guard i < hints.count else { hint.row.isHidden = true; continue }
-            hint.glyph.image = hints[i].glyph
-            hint.label.attributedStringValue = hints[i].text
-            hint.label.sizeToFit()
-            let h = hintRowHeight(hints[i].ink)
-            layoutGlyphRow(hint.row, glyph: hint.glyph, label: hint.label, width: innerWidth, height: h)
-            hint.row.isHidden = false
-            rows.append((hint.row, h))
-        }
 
         // **Above the words, not inside them.** The selection used to be folded
         // into the prompt text as a `↪ …` first line, which made the passage he
@@ -1359,17 +1382,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             quoteLabel.isHidden = true
         }
 
-        // First of the three, because it is the one that is *about* the dictation
-        // rather than about what is riding along with it: something is listening,
-        // and this is what.
-        if let engine = engineText {
-            engineInfo.stringValue = engine
-            layoutGlyphRow(engineRow, glyph: recordDot, label: engineInfo, width: innerWidth)
-            engineRow.isHidden = false
-            rows.append((engineRow, recordRowHeight))
-        } else {
-            engineRow.isHidden = true
-        }
 
         // Then what the message is carrying: while he is talking this is the row
         // that changes, and the one he glances down at to check that the shot he
@@ -2800,7 +2812,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // so the only picture of it is the one it draws of itself, here, at the
         // frame it was just read at. `releaseHeld` flies it to the terminal the
         // words were sent to. A cancel leaves nothing behind to fly.
-        promptFarewell = send ? (frame: panel.frame, image: panelImage()) : nil
+        promptFarewell = send ? panel.frame : nil
         // Leave the field before anything else: it owns the text being resolved,
         // and it is holding the keyboard.
         endPromptEdit()
@@ -2916,19 +2928,14 @@ private let frontLabel = NSTextField(labelWithString: "")
         refreshOpacity()
     }
 
-    /// The panel's contents and the frame it sat at, captured in
-    /// `resolvePrompt` the instant a prompt is released for sending — the send
-    /// flight's raw material. Read and cleared by `AppDelegate.releaseHeld`.
-    var promptFarewell: (frame: CGRect, image: CGImage?)?
-
-    /// The panel drawn by its own view, as an image — the only picture of it
-    /// there is, since the window is excluded from every screen capture
-    /// (`sharingType`). Same trick `snapshot(to:)` uses, without the PNG.
-    func panelImage() -> CGImage? {
-        guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return nil }
-        root.cacheDisplay(in: root.bounds, to: rep)
-        return rep.cgImage
-    }
+    /// The frame the panel sat at, taken in `resolvePrompt` the instant a prompt
+    /// is released for sending — the send flight's raw material. Read and
+    /// cleared by `AppDelegate.releaseHeld`.
+    ///
+    /// **A rectangle, and nothing else.** It carried the panel's own drawing
+    /// (`panelImage()`, since the window is invisible to every screen capture)
+    /// until 2026-09-07, when the flight became an outline — see `sendFlight`.
+    var promptFarewell: CGRect?
 
     /// Draw the overlay into a PNG — the only way left to *see* it.
     ///

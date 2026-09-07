@@ -807,15 +807,31 @@ entire point of the state is reassurance that speech is being captured.
 
 ## The recording rows
 
-While dictating, three rows sit directly under the title, one glyph column and
-one text column:
+While dictating, the state rows sit **above** the destination, one glyph column
+and one text column:
 
 ```
-🤖 ai@master
-🔴 whisper-large-v3-turbo           ← something is listening, and this is what
-📸 2 — mouse/F3 for more shots      ← what the message is carrying
+🔴 Listening…                       ← something is listening
+[Terminal] petclinic@main           ← and this is where the words go
 [chrome] — ⌘⇧+click to select element
 ```
+
+**The pulse takes the microphone's place, since 2026-09-07.** At rest the top
+row is a lone 🎙️ — the chip *being* a microphone is the whole sentence
+(`collapsed`). Starting to talk used to leave that slot to the destination and
+push the pulse underneath, so the one row that *changes* arrived below the one
+that does not, and the top line went from a microphone to a folder name at the
+exact moment the microphone became true. Now it goes 🎙️ → `🔴 Listening…` in
+place and `petclinic@main` slides to the second row. Victor: *"aș vrea ca
+listening cu bila roșie să înlocuiască microfonul — să fie primul rând, iar
+terminalul conectat să fie al doilea"*.
+
+The waits go with it — `⏳ Transcribing… 4s` is the same slot at the next moment
+(*"la fel în toate"*). The spawn is unaffected: `spawnCollapsed` already drops
+the destination row and rides ✨ in front of `Listening…`, which is this order
+with the second row taken out. **Only the chip.** The held panel keeps its title
+first: it is parked in a corner and read whole, and *where these words are about
+to go* is what a panel with a Cancel button on it opens with.
 
 It was one row (`🔴 📸 ×2 🖱️/F3`) until 2026-08-26, packed as tight as it would
 go on the argument that every character costs width over the work underneath.
@@ -3212,11 +3228,19 @@ the bound window's frame, then dissolves. The receipt for *it went there*, in
 the bind flight's own language and through the same `BindFlight` machinery —
 which is what guarantees the two can never drift.
 
-- **The picture is the panel's own drawing of itself**, captured in
-  `resolvePrompt` a breath before the state clears (`promptFarewell`). The
-  overlay is invisible to screen capture (`sharingType = .none`), so
-  `BindFlight`'s usual screen grab would carry the desktop *behind* the panel;
-  `carrying:` is the parameter that exists for this.
+- **An outline, and only an outline** (`outlined:`, since 2026-09-07). It flew
+  the panel's own drawing of itself — the overlay is invisible to screen capture
+  (`sharingType = .none`), so its view's `panelImage()` was the only picture of
+  it in existence, handed in through a `carrying:` parameter that existed for
+  this one caller. Victor took it out the same day the spawn flight lost its
+  picture, and for the same reason: *"când dialogul se duce spre terminal, vreau
+  să se ducă spre un border doar … nu mai știu mental ce era în acel terminal,
+  doar să înțeleg că se duce într-un terminal, undeva"*. A bind ends **small, at
+  the cursor**, so pixels are what say which window became the chip; this ends
+  **on a window, at full size**, over what he is reading — where a picture covers
+  the very destination it is pointing at. `carrying:` and `panelImage()` went
+  with it, having no other caller. It fades across the arrival (`tail:`) like the
+  spawn's, rather than blinking off a terminal.
 - **The destination is re-resolved, not remembered.** `Target.sourceFrame` went
   stale the moment Victor dragged anything after binding; the flight asks
   Terminal for the window showing the bound tty *now* — the same

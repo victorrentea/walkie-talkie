@@ -41,7 +41,7 @@
     "shape" : "chip",
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
-    "when" : "the right-held chord: the dictation goes to a terminal that does not exist yet.",
+    "when" : "the wheel clicked twice: the dictation goes to a terminal that does not exist yet.",
     "width" : 163
   },
   {
@@ -351,7 +351,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,

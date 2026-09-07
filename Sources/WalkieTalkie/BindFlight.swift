@@ -183,29 +183,33 @@ enum BindFlight {
     /// asks for less, because its flight is a hand-off rather than an answer to a
     /// press and it plays while the eye is still travelling to the new window.
     ///
-    /// `carrying` replaces the screen grab with a picture the caller already
-    /// has. The send flight needs it: the prompt panel is invisible to screen
-    /// capture (`sharingType = .none`), so the only picture of it in existence
-    /// is the one its own view just drew.
-    ///
     /// **`outlined` refuses the picture altogether** — a hollow white rectangle,
-    /// no contents and no fill. It is the spawn's shape (Victor, 2026-09-07:
-    /// *"să nu ia poza terminalului … doar un chenar către chenarul
-    /// terminalului"*), and the argument the type makes for carrying pixels is
-    /// exactly the argument against them here. A bind's picture is *invisible*
-    /// at the start because it lies pixel for pixel on the window it was copied
-    /// from; a spawn's flight runs the other way and ends up **over** a window
-    /// that is usually in the background, on the one screen he is working on —
-    /// so the same trick renders as a copy of a terminal pasted on top of what
-    /// he is reading. A frame arriving on a frame says *there* without covering
+    /// no contents and no fill. It is the shape of **both flights that end on a
+    /// window** (Victor, 2026-09-07: *"să nu ia poza terminalului … doar un
+    /// chenar către chenarul terminalului"*, and for the send flight the same
+    /// day: *"nu mai știu mental ce era în acel terminal, doar să înțeleg că se
+    /// duce într-un terminal, undeva"*), and the argument the type makes for
+    /// carrying pixels is exactly the argument against them here.
+    ///
+    /// A bind's picture is *invisible* at the start because it lies pixel for
+    /// pixel on the window it was copied from, and it ends small, at the cursor
+    /// — so the pixels are what identify which window became the chip. These two
+    /// run the other way and end up **over** a window, at full size, on the one
+    /// screen he is working on; the same trick renders as a copy of a terminal
+    /// pasted on top of what he is reading, covering the destination it is
+    /// pointing at. A frame arriving on a frame says *there* without covering
     /// anything, which is all this direction ever had to say.
+    ///
+    /// It is also why there is no `carrying:` any more. The send flight had one
+    /// — the prompt panel is invisible to screen capture (`sharingType = .none`),
+    /// so its own view's drawing was the only picture of it in existence — and
+    /// with that flight outlined, nothing was left to hand a picture in.
     ///
     /// `tail` holds it on the destination afterwards while it fades to nothing.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
                     seconds: CFTimeInterval = duration,
                     reversed: Bool = false,
-                    carrying picture: CGImage? = nil,
                     outlined: Bool = false,
                     tail rest: CFTimeInterval = 0,
                     landed: (() -> Void)? = nil) {
@@ -218,7 +222,7 @@ enum BindFlight {
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
         // actually on it.
-        let picture = outlined ? nil : (picture ?? grab(source))
+        let picture = outlined ? nil : grab(source)
         hasPicture = picture != nil
         hollow = outlined
 

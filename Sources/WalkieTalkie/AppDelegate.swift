@@ -2858,7 +2858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // its own flight already; a cancelled prompt has nowhere to fly.
         if !m.spawn, let farewell = overlay.promptFarewell {
             overlay.promptFarewell = nil
-            sendFlight(from: farewell.frame, carrying: farewell.image)
+            sendFlight(from: farewell)
         }
     }
 
@@ -2866,7 +2866,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// fills it. Silent no-op when there is no honest frame to aim at — IDE and
     /// keystroke targets have no window this app can name, and a flight toward
     /// a guessed rectangle is worse than none.
-    private func sendFlight(from frame: CGRect, carrying image: CGImage?) {
+    ///
+    /// **An outline, never a picture** — Victor, 2026-09-07: *"când dialogul se
+    /// duce spre terminal, vreau să se ducă spre un border doar … nu mai știu
+    /// mental ce era în acel terminal, doar să înțeleg că se duce într-un
+    /// terminal, undeva"*. It carried the panel's own drawing, which is the
+    /// bind flight's argument run in the wrong direction: a bind ends at the
+    /// cursor, on a shape the size of the chip, so pixels are what identify the
+    /// window it came from; this ends **on** a window, at full size, over
+    /// whatever he is reading — and a picture there covers the destination it is
+    /// pointing at. Same call the spawn flight makes, and for the same reason.
+    private func sendFlight(from frame: CGRect) {
         guard let target = terminal.target else { return }
         let tty: String?
         switch target.handle {
@@ -2881,7 +2891,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let destination = TerminalBinding.terminalWindowFrame(tty: tty) else { return }
             DispatchQueue.main.async {
                 BindFlight.fly(from: frame, to: { destination },
-                               seconds: Self.spawnFlightSeconds, carrying: image)
+                               seconds: Self.spawnFlightSeconds,
+                               outlined: true, tail: Self.spawnFlightRest)
             }
         }
     }
