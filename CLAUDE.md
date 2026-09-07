@@ -792,7 +792,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, then half a second of dissolve back to the chip at rest. The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
+| the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | the destination app's icon + `⌨️ at the caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
@@ -3355,6 +3355,132 @@ Victor: *"să nu se arate și microfonul acela mic, ci doar dictation cancelled"
 So `layoutContent` drops the title row while a flash is up **and** the chip is
 collapsed. Only then: with a folder name in the row the glyph is that line's icon,
 and the line is still the honest answer to *where do the words go*.
+
+## The oblique wipe: a message replaces a message
+
+**Since 2026-09-07 a message does not appear beside the pointer and it does not
+disappear — a line at 60° crosses the chip, brightens the words it passes over,
+and leaves the next ones behind it** (`ChipWipe.swift`).
+
+Victor's ask, in his own words: *"an oblique line that wipes out the message of
+dictating when I cancel by holding the wheel down… an effect that wipes the text
+that was there and replaces it with 'cancelled'… imagine an oblique line, like 60
+degrees from the horizontal, which makes the text a bit brighter where it passes
+through and then it wipes the text out, or replaces it with another text"*.
+
+**It exists because the chip's whole vocabulary is one row being swapped for
+another**, and a swap made in a single frame is indistinguishable from a redraw.
+Cancelling is the case that makes it obvious: `🔴 Listening…` is gone and
+`🗑️ Dictation aborted` is there, with nothing on screen saying the second
+*replaced* the first — which is exactly the fact a cancel has to carry, since the
+thing that went away is the sentence he had just spoken. What was there before
+was a half-second alpha dissolve on the message **leaving** and nothing at all on
+the message **arriving**: an asymmetric fade for a symmetric event, and the fade
+is gone with this.
+
+**A line rather than a fade, because a fade cannot say *replaced*.** A fade says
+*this is ending*; a wipe says *this became that*, since at every instant of it
+both are on screen with a boundary between them. The chip is a flat stack of
+one-line facts and there is nothing else a transition here could add: what a line
+travelling through it adds is direction, with no surface, no window and no second
+meaning attached.
+
+**60° is his number and is also the only one that works.** The chip is wide and
+short — 200 points by 40 to 100 — so a vertical edge crosses every row at the
+same instant, one column of text after another, which reads as a curtain; a
+horizontal one takes the rows off one at a time, which reads as three separate
+events. A steep oblique crosses the whole stack at once and still reaches the
+bottom row a beat after the top, so the shape is one gesture with a grain to it.
+Steeper than 45° deliberately: at 45° the travel is dominated by the chip's
+height and the sweep looks like it is going *down* rather than across.
+
+**0.32 s, and the floor is the brightening, not the wipe.** The argument that
+halved the bind flight from 2 s to 1 s applies harder here — a bind is answered
+once per binding, this runs on every flash the app raises, dozens of times a day,
+an inch from what he is reading. But below about a quarter of a second the band
+crosses a 200pt chip faster than the eye resolves it and the whole thing collapses
+into a flicker, which is worse than the instant swap it replaced. 0.32 leaves the
+band roughly four frames over any given word and is over well before the message
+it announces has been read.
+
+**Both halves of the swap are pictures, and the live rows are muted for the
+length of it.** The obvious build — one picture of the old content erased over
+the live new content — is wrong in a way that only shows on a message longer than
+the one it replaces: the chip's background is transparent, so wherever the old
+picture has no ink the new row is already showing through it, `Dictation aborted`
+sticking its tail out past `Listening…` from the first frame, on the side the
+line has not reached yet. Two masked pictures over an `alphaValue`-muted view
+tree is the only arrangement in which the region ahead of the line is honestly
+*only* the old chip. Muted by alpha and not by `isHidden`, because
+`layoutContent` owns `isHidden` on every one of those rows and would fight for
+it; `ChipWipe.cancel` is the single place it is given back, so an interrupted
+sweep cannot leave the chip blank.
+
+**The light is masked by the words — and by luminance, not by alpha.** A white
+band laid straight over the chip would be a translucent stripe dragged across
+whatever is behind it, and behind it is his screen (*Nothing beside the pointer
+draws a window*). So the band is stencilled by the text's own pixels. Taking that
+stencil from the **alpha** channel does not work, and it is the halo that breaks
+it: every row is white ink carrying a dark halo so it reads over a terminal, the
+halo has alpha too, and a stencil cut from alpha is therefore a blurred blob
+around each glyph rather than the glyph — lit up, the row becomes a white slab
+with the letters lost inside it. The brightest **channel** of a premultiplied
+pixel is the white ink's own coverage and reads a black halo as zero, which is
+the whole difference. Measured against a rendered sheet of the sweep before it
+shipped: alpha-stencilled the seam is an unreadable smear, luminance-stencilled it
+is the words, brighter.
+
+**And the fattening is what makes "brighter" mean anything.** The ink is already
+white, so white light on it changes nothing; what changes is the *edge* — the
+stencil is grown a point, so under the band the halo is filled and the stroke
+gains a rim, and the word reads as momentarily bolder and hotter. That is
+Victor's "a bit brighter" on ink that was white to begin with.
+
+**The band leads the edge and rides inside each picture.** It sits a quarter of
+its own width ahead of the erasing line, so the order is the order he described —
+brighter first, gone second — while still straddling the seam enough to catch the
+incoming words on the way past. Each picture carries its **own** copy of the band,
+clipped by its own ink and its own side of the line, because a single glow over
+the union of both lit the outgoing and the incoming words *at once* wherever it
+crossed the seam: on two different strings that is two words superimposed, and it
+reads as a smear rather than as a line.
+
+**The picture it sweeps away is taken at the top of `layoutContent`, not at the
+flash**, and that is the one piece of this that is not about drawing. Cancelling
+is four calls in one call stack — `setListening(false)`, `clearSelection()`, then
+`flash("🗑️ Dictation aborted")` — and the first two each relayout the chip.
+Nothing is *rendered* in between, since Core Animation commits once at the end of
+the turn, so what Victor sees leave is `🔴 Listening…`; but a capture taken at the
+flash draws the views as they are *by then*, which is the collapsed `🎙️` nobody
+ever saw. The sweep would have started from a picture that was never on screen,
+and the row it exists to replace would have vanished in a jump one frame earlier.
+So `rememberChip` takes it at the first relayout of a turn, while the views still
+hold what the last frame showed, and releases it on the next hop through the main
+queue — which drains after the call stack unwinds and before the frame is
+committed, i.e. exactly at the boundary that matters.
+
+**What it does not apply to.** The **panel** is out: parked in a corner and read
+whole — a transcript, a quotation, a strip of frames, two buttons — a line
+travelling across all of that is a page being turned, which is a far bigger claim
+than the one row changing that this narrates. `anchored` is the test, the same one
+`refreshChrome` asks. A flash raised while **nothing is on screen** is out too:
+there is nothing to wipe *from*, and a stripe of light over blank desktop
+announces nothing. `showSentPrompt` clears its flash **without** the sweep, since
+what comes next is not another chip but the panel unfolding out from under it.
+And it is off entirely under `RELAY_SHOOT`: `docs/overlay-states.html` photographs
+*states*, and a transition is by definition not one — which is also why nothing
+here needed a new `Shot`.
+
+**It is drawn in the chip's own layer rather than in a panel of its own**, unlike
+`UnbindPop` and `BindFlight`. Those open a window over the screen because what
+they draw leaves the chip — a burst spreading past its edges, a rectangle
+travelling from a terminal. This never leaves the chip: it is the chip's own
+content being exchanged, and the chip is riding the pointer while it happens, so a
+separate window would have to chase the cursor for a third of a second to stay
+registered with the thing it is drawing on, and would composite at its own opacity
+instead of at the chip's 0.80. The one price is that `RelayWindow.snapshot` has to
+stand a sweep down before it photographs anything, or a `kill -USR1` landing
+inside those 0.32 s would write out an empty chip.
 
 ## Placement
 

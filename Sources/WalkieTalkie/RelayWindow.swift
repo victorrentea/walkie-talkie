@@ -1169,6 +1169,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Manual layout in one pass: build the visible rows top-down with their
     /// heights, size the window to their total, then place them.
     private func layoutContent(animated: Bool = false) {
+        rememberChip()
         // Hug the content of the *current* state, not the widest state there is:
         // standing by is what the overlay does for hours, and it should take no
         // more room than "🤖 ai@master" needs. Changing state resizes it, which is
@@ -2485,14 +2486,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// outlives the thing it promised by however long its timer had left.
     ///
     /// `animated: false` is for `OverlayStates`, which photographs one state per
-    /// beat and cannot wait out a 0.45s dissolve: a shot taken during one catches
-    /// the row it is clearing, at alpha zero, still holding its height.
+    /// beat and cannot afford a transition still running under the shutter, and
+    /// for the one caller that is not going back to the chip at all — see
+    /// `showSentPrompt`.
     func clearFlash(animated: Bool = true) {
-        // Through the same dissolve as a flash that ran its course: a promise
-        // being kept early is still a message leaving, and it leaves the same way.
+        // Through the same sweep as a flash that ran its course: a promise being
+        // kept early is still a message leaving, and it leaves the same way.
         guard let message = flashMessage else { return }
-        guard animated else { return endFlash(message) }
-        fadeOutFlash(message)
+        endFlash(message, wiped: animated)
     }
 
     /// A dictation started / stopped.
@@ -2570,7 +2571,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // is why it broke: the site that used to take the ⏳ down stopped
         // flashing, and nothing else knew it had inherited the job. The panel
         // opening is the one moment that is true of every path into it.
-        clearFlash()
+        //
+        // **Without the sweep**, unlike every other way a flash ends. `ChipWipe`
+        // exchanges one chip for another *in place*; here the next thing on
+        // screen is the panel, which is a different shape parked in a different
+        // corner and unfolds with an animation of its own. A wipe would be
+        // playing over a window that is growing out from under it.
+        clearFlash(animated: false)
 
         sentPrompt = trimmed
         // Split the preview back into "what he said" and "what the app added",
@@ -2854,60 +2861,86 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// 2026-09-02 made that the only behaviour there is.
     func flash(_ message: String, duration: TimeInterval = 2.0) {
         flashMessage = message
-        // A previous flash may still be halfway through its fade; whatever it
-        // faded has to be opaque again before this one is drawn into it.
-        hintLabel.alphaValue = 1
-        root.blur?.alphaValue = 1
+        // `layoutContent` takes the outgoing picture on its way past — see
+        // `rememberChip` for why it has to be taken there and not here.
         layoutContent()
         reposition()             // still beside the pointer — a flash is not a reason to move
         refreshOpacity()
+        wipe()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            self?.fadeOutFlash(message)
+            self?.endFlash(message)
         }
     }
 
-    /// **The message dissolves; it does not vanish.**
+    /// **The message is wiped away; it does not fade and it does not vanish.**
     ///
-    /// A flash used to be cut at the end of its timer — the row gone and the
-    /// blur behind it gone in the same frame, beside the pointer, while Victor
-    /// was looking somewhere else entirely. What that reads as is a *window
-    /// closing*, which is an event; and since the chip is otherwise bare text on
-    /// his work, the panel appearing and disappearing under his hand was the most
-    /// eventful thing on screen for something as unremarkable as `🎙️ local
-    /// Whisper ready`.
+    /// A flash used to be cut at the end of its timer — the row simply gone in
+    /// the next frame, beside the pointer, while Victor was looking somewhere
+    /// else. That was replaced by a half-second alpha dissolve, which fixed the
+    /// abruptness and left the asymmetry: the message *arrived* in one frame and
+    /// *left* over half a second, so the two halves of one swap looked like two
+    /// unrelated things happening.
     ///
-    /// Both halves fade together — the words and the blur they are sitting on —
-    /// so what is left behind is the chip that was there before, rather than a
-    /// backdrop with nothing in it for a frame.
-    private func fadeOutFlash(_ message: String) {
-        guard flashMessage == message else { return }
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = Self.flashFade
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            hintLabel.animator().alphaValue = 0
-            root.blur?.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in self?.endFlash(message) })
-    }
-
-    /// The other end of the dissolve, on its own so it can also be reached
-    /// without one.
-    private func endFlash(_ message: String) {
+    /// Both ends now go through `ChipWipe`, in the same direction and at the same
+    /// speed — see the note on that type, and on `wipe()` below.
+    private func endFlash(_ message: String, wiped: Bool = true) {
         guard flashMessage == message else { return }
         flashMessage = nil
-        // Reset before the relayout, not after: the same two views carry the
-        // next flash, and one that inherited a zero alpha would never appear.
-        hintLabel.alphaValue = 1
-        root.blur?.alphaValue = 1
         layoutContent()
         reposition()
         refreshOpacity()
+        if wiped { wipe() } else { ChipWipe.cancel() }
     }
 
-    /// Long enough to read as a dissolve rather than as a blink, short enough
-    /// that a message he has finished reading is not still going.
-    /// Half a second, on Victor's ask for the cancelled-dictation notice — near
-    /// enough to the 0.45 it was that the other messages read the same.
-    private static let flashFade: TimeInterval = 0.5
+    /// The chip as it was **last drawn**, kept for one turn of the run loop so a
+    /// sweep can start from it.
+    ///
+    /// **Why it cannot simply be read at the flash.** Cancelling a dictation is
+    /// four calls in one call stack — `setListening(false)`, `clearSelection()`,
+    /// then `flash("🗑️ Dictation aborted")` — and each of the first two relayouts
+    /// the chip. Nothing is *rendered* in between (Core Animation commits once,
+    /// at the end of the turn), so what Victor sees go away is `🔴 Listening…`;
+    /// but a `cacheDisplay` taken at the flash draws the views as they are by
+    /// then, which is the collapsed `🎙️` nobody ever saw. The sweep would have
+    /// started from a picture that was never on screen, and the row it is
+    /// replacing would have vanished in a jump one frame earlier.
+    ///
+    /// So the picture is taken at the top of the **first** `layoutContent` of a
+    /// turn, when the views still hold what the last frame showed, and released
+    /// on the next hop through the main queue — which drains after this call
+    /// stack unwinds and before the frame is committed, i.e. exactly at the
+    /// boundary that matters.
+    private var chipBefore: ChipWipe.Frame?
+
+    private func rememberChip() {
+        guard chipBefore == nil, anchored, panel.isVisible, !ChipWipe.isRunning else { return }
+        guard let frame = ChipWipe.capture(root) else { return }
+        chipBefore = frame
+        DispatchQueue.main.async { [weak self] in self?.chipBefore = nil }
+    }
+
+    /// Sweep the remembered picture away, now that the new rows are laid out.
+    ///
+    /// **Only the chip.** The panel is parked in a corner and read whole — a
+    /// transcript, a quotation, a strip of frames and two buttons — and a line
+    /// travelling across all of that is a page being turned, which is a much
+    /// bigger claim than the one row changing that this effect exists to
+    /// narrate. `anchored` is the test, the same one `refreshChrome` asks, and it
+    /// is asked *here* rather than at the capture: `showSentPrompt` clears a
+    /// flash a breath before it turns the chip into a panel, so a state that was
+    /// a chip when it was photographed may not be one by the time it is swept.
+    ///
+    /// Nothing to sweep is the ordinary answer for a chip that was not on screen
+    /// — an unbound relay raising a flash has nothing to wipe *from*, and a
+    /// stripe of light over blank desktop announces nothing.
+    ///
+    /// The picture is **consumed**, so two messages in one turn cannot both claim
+    /// it.
+    private func wipe() {
+        defer { chipBefore = nil }
+        guard let source = chipBefore, anchored, panel.isVisible else { return ChipWipe.cancel() }
+        ChipWipe.play(over: root, from: source)
+    }
 
     /// Internal for the same reason `beginPromptEdit` is: the ✕ is a state, and
     /// a state that cannot be reached from `OverlayStates` cannot be documented.
@@ -2951,6 +2984,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// land on transparency. The chip has no blur at all, so it comes out exactly
     /// as Victor sees it — over whatever you composite it onto.
     func snapshot(to path: String) {
+        // A sweep in flight has the real rows muted (`ChipWipe.play`), so a
+        // photograph taken over one would come out empty. Debugging tools do not
+        // get to see a transition; they get the state.
+        ChipWipe.cancel()
         guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return }
         root.cacheDisplay(in: root.bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return }
