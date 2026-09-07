@@ -958,27 +958,41 @@ seconds of speech on an ordinary sentence and 0.8 on a thoughtful one, so a
 clock-driven bar filled while he was thinking and told him the one thing it
 exists not to.
 
-`MicRecorder.voicedSeconds` is the source. Re-bucketing all 1254 corpus samples
-by it turns a slope into a cliff:
+`MicRecorder.voicedSeconds` is the source. Re-bucketing by it turns a slope into
+a cliff — these are the **local model's own** language picks, from re-decoding
+803 clips (`evals/short-clip-lid.md`):
 
-| voiced | decoded into a language Victor does not speak | came back empty |
-|---|---|---|
-| 0–1s | **13%** | 25% |
-| 1–2s | 5% | 11% |
-| 2–3s | **0%** | 3% |
-| 3–4s | 1% | 3% |
-| 4–5s | 1% | 2% |
-| 5s+ | 0% | 0–1% |
+| voiced | decoded into a language Victor does not speak |
+|---|---|
+| 0–1s | **42%** |
+| 1–2s | **15%** |
+| 2–3s | **1%** |
+| 3–4s | 2% |
+| 4s+ | **0%** |
 
-against 12% / 11% / 4% / 0% at two, three, four and five seconds of *wall clock* —
-the same failures, sorted by the thing that actually causes them. The cause is
-`language=None` in `whisper_helper.py`: the model picks a language off its
-30-second window before it decodes a word, and with a second of speech in that
-window the pick is a guess. A wrong pick is not a wrong word — it is
-`Teşekkürler.`, `É bom ir o outro dia? Ai, que acessou tudo?`, `да`, `Thank
-you.`, `For no works, no works works works works…`, all on Romanian or English
-speech. Same cliff the confidence floor sees from the other side (*The
-recogniser*: "nearly all are clips under 5s").
+against 50% / 28% / 19% / 2% / 0% at one, two, three, four and five seconds of
+*wall clock* — the same failures, sorted by the thing that actually causes them.
+
+⚠️ **The first version of this table was wrong, and the way it was wrong is worth
+keeping.** It read the language off `detectedLanguage` in `corpus.jsonl`, which
+is **Wispr Flow's** pick, not this model's — `corpus_harvest.py` copies Wispr's
+row wholesale (`asr` is `r["asrText"]`, and its own docstring says *"No model
+runs here and none is called"*). So a column that looked like evidence about the
+local recogniser was evidence about a different one, and it understated every
+figure by about three times. The **shape** survived — short clips fail
+catastrophically, the cliff is real, the threshold below is right — but nothing
+in that manifest describes what this model does, and `asr` is not a second
+opinion to score against: it disagrees with `text` at median WER 0.008 because
+they are two fields of the same Wispr row.
+
+The cause is `language=None` in `whisper_helper.py`: the model picks a language
+off its 30-second window before it decodes a word, and with a second of speech in
+that window the pick is a guess. A wrong pick is not a wrong word — it is
+`Teşekkür ederim.`, `É bom ir o outro dia? Ai, que acessou tudo?`, `안녕하세요.`,
+`Thank you.`, all on Romanian or English speech. **That lever has since been
+pulled** — see *The recogniser* — so the bar now forecasts a failure the
+recogniser no longer has, which is the right time to say what it is still for:
+everything else that is worse when there is less to hear.
 
 **Full at three voiced seconds** (`RelayWindow.enoughSpeech`): the first bucket
 where both failure modes are at their floor. About fifteen words at his measured
@@ -1035,10 +1049,11 @@ fires immediately after `apply`, so without a chosen frame every dictating state
 on the page would be a photograph of its own first 200ms. `reset` pins the full
 bar; `listening-cold` and `listening-warming` pin their own.
 
-**If the failure itself is ever worth fixing rather than forecasting**, the lever
-is that `language=None`: restricting language ID to `{ro, en}` would have caught
-every case counted above, since Victor speaks only those two. That is a change to
-the recogniser, not to the overlay.
+**The lever named here has been pulled.** Restricting language ID to `{ro, en}`
+took the wrong-language mode to 0% in every bucket, measured on the same 803
+clips — see *The recogniser*. The bar stays: it forecasts short-clip quality in
+general (a two-word clip is still a clip with no context in it), and the language
+pin only removed the most spectacular of its symptoms.
 
 ## One face, one size, one weight — everywhere on the chip
 
@@ -1905,6 +1920,98 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
 - `GET /engine` reports which model is loaded and whether it is ready — enough
   for a test to wait out a ten-second load. `POST /test/dictation` enters *below*
   the recogniser with a fabricated string, so it says nothing about it.
+
+### The language is pinned to {ro, en}, and the prompt carries his vocabulary (2026-09-07)
+
+Two decode settings, both measured on **803 of his own clips, 3212 decodes, four
+configs** — `evals/short-clip-lid.md`, and read it before touching either.
+
+**A** = `language=None` (what shipped until now). **B** = argmax over `{ro, en}`
+of the model's own LID. **C** = B plus a 65-token vocabulary prompt. **D** = A
+plus that prompt, so the two halves could be attributed separately. **C is what
+ships.**
+
+#### B — the language pin removes an entire failure mode, for free
+
+Wrong-language decodes: **3.2% of all clips, 19.3% under 5s, 50% under 2s → 0% in
+every bucket.** These are not near misses — a whole sentence of Turkish or Korean
+made out of Romanian speech, which is the one failure an agent cannot defend
+against, because nothing about the text looks wrong.
+
+It costs **−22 ms**, i.e. it is faster. `transcribe(language=None)` already runs
+that exact encoder pass internally to pick a language; pinning only *relocates*
+it, and `detect_language` hands back the full distribution over all 99 codes, so
+restricting the argmax needs no second pass and no tokenizer surgery:
+
+```python
+model = ModelHolder.get_model(MODEL, mx.float16)   # the cache transcribe() uses
+mel   = A.log_mel_spectrogram(samples[:A.N_SAMPLES], n_mels=model.dims.n_mels, padding=A.N_SAMPLES)
+mel   = A.pad_or_trim(mel, A.N_FRAMES, axis=-2).astype(mx.float16)
+_, probs = model.detect_language(mel)
+language = max(("ro", "en"), key=lambda c: probs[c])   # ← the whole change
+```
+
+`pick_language` returns **None** on anything unexpected, which falls back to
+Whisper's own unrestricted pick. A helper whose job is to answer must not stop
+answering because a library moved a symbol.
+
+#### C — the vocabulary prompt is the bigger win, and it is not free
+
+Recall on the prompted identifiers, over their 490 occurrences in the reference
+transcripts: **0.67 → 0.88**. `Claude` 0.33 → 0.85 (without it the model writes
+`cloud`, `claw`, and turns `CLAUDE.md` into `CloudMD`), `frontend` 0.10 → 0.70,
+`petclinic` 0.00 → 0.60, `backend` 0.44 → 0.92, `IntelliJ` 0.59 → 0.88. Median
+WER under five seconds 0.300 → 0.222. **This is the metric that matters** — a
+mangled identifier costs the agent everything, a wrong verb ending costs it
+nothing.
+
+**Every term is attested in his own transcripts.** `Devoxx`, `repo` and `VS Code`
+were guessed at, checked (0, 1 and 2 occurrences) and thrown out. A prompt is
+capped at 224 tokens and attention weights its tail hardest, so it is a short
+list of things that actually break — not a glossary.
+
+**The cost is real and it cuts both ways.** Against A: 7.0% of clips improved by
+more than 0.1 WER, **4.7% got worse**. The prompt biases *toward* its own words,
+so `clone` and `cloud` both come out `Claude` on a clip that says neither —
+visible in the very first smoke test after it landed. The trade is net positive
+and it is a trade, not a free win.
+
+**Nothing changes past 12s** — median WER 0.167 and rare-word recall 72% in all
+four configs — because `condition_on_previous_text=False` makes `transcribe` drop
+the prompt after the first window. Both settings are short-clip medicine.
+
+#### The loop gate is the price of C, and it was already in the file
+
+`Transcriber.Result.compressionRatio` has been parsed since the helper was
+written and read by nothing. It is read now, at **2.4** (`loopCeiling`), because
+the prompt costs repetition loops — `af af af af…` four hundred times, which
+gzips at 39 where prose sits near 1.5.
+
+Of the 38 clips C made worse, the **12 catastrophic ones are caught by this, all
+twelve**; the 26 it misses are worst-case +0.44 WER. It fires on **none** of the
+802 clips whose transcript was fine — zero false alarms, which is the only reason
+it can be shown to Victor at all.
+
+**`avg_logprob` cannot do this job**: it caught 2 of the 14 loops, and the reason
+is structural rather than a threshold that needs moving — **a loop is
+*confidently* wrong.** The decoder is not hesitating between `af` and something
+else, it is certain, over and over, which is what a high average log-probability
+describes. Two numbers, two failure modes, neither a substitute for the other.
+
+**It warns; it does not swallow.** Same rule the confidence floor already
+follows, for the same reason: there is one reading of this audio and silence is
+the one outcome Victor cannot notice and correct.
+
+#### Where the worst of it actually lives
+
+Every one of the top regressions is a clip with **almost no speech in it** —
+`you` (1.3s), `VoxxedDays.` (0.6s), `5 minutes.` (1.7s). Whisper is being asked
+to transcribe something that is mostly padding, and A's answer there was a
+harmless `Thank you.` where C's is four hundred `af`. The literature's standard
+answer to this is not a better prompt, it is **not calling the model at all** —
+VAD-gate the clip and return empty. `MicRecorder.voicedSeconds` is already that
+VAD; nothing gates on it yet, and that is the obvious next move rather than a
+done one.
 
 ### What the local model is actually worth, measured
 

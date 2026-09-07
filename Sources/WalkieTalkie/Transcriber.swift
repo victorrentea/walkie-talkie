@@ -36,6 +36,30 @@ final class LocalWhisper {
     /// said. See `Result.avgLogprob` for where the number comes from.
     static let confidenceFloor = -0.6
 
+    /// **Above this, the model was looping**, and the floor above cannot see it.
+    ///
+    /// `compression_ratio` is how well the transcript gzips: ordinary prose sits
+    /// near 1.5, and `af af af af…` four hundred times sits at 39. It has been
+    /// parsed into `Result.compressionRatio` since the helper was written and
+    /// nothing read it — which stopped being affordable the day the vocabulary
+    /// prompt went in, because a prompt buys rare words at the price of a few
+    /// more loops (`evals/short-clip-lid.md`: 7 more across 803 clips).
+    ///
+    /// **2.4, measured on those 803.** Of the 38 clips the prompt made worse,
+    /// the 12 that were made *catastrophically* worse — a whole transcript
+    /// replaced by one repeated syllable — are caught by this, all twelve; the
+    /// 26 it misses are worst-case +0.44 WER and median +0.14, i.e. a wrong word
+    /// or two. And it fires on **none** of the 802 clips whose transcript was
+    /// fine: zero false alarms, which is what lets it be shown to Victor at all.
+    ///
+    /// **`avg_logprob` cannot do this job.** It caught 2 of the 14 loops in the
+    /// same run, and the reason is structural rather than a matter of where the
+    /// threshold sits: a loop is *confidently* wrong. The decoder is not
+    /// hesitating between `af` and something else — it is certain, over and
+    /// over, which is exactly what a high average log-probability describes.
+    /// Two numbers, two failure modes, and neither substitutes for the other.
+    static let loopCeiling = 2.4
+
     private var proc: Process?
     /// The helper's pid, kept beside `proc` so it can be read **without touching
     /// the queue**. Everything else about the process is queue-confined, and this

@@ -8,7 +8,7 @@ import AppKit
 /// macOS 15). The only way to see it is `RelayWindow.snapshot`, the view drawing
 /// itself — which until now was fired by hand with `kill -USR1` while the state
 /// happened to be on screen. That is fine for one picture and hopeless for the
-/// thirty-five states below: half of them last a second and a half of *those*
+/// thirty-six states below: half of them last a second and a half of *those*
 /// cannot be reached on demand at all (`⚠️ Whisper unavailable`, a transcript the
 /// confidence gate flagged).
 ///
@@ -123,7 +123,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-cold", group: "Dictating", title: "The first words — too little speech to trust",
                  when: "From the instant the microphone opens until about a second of actual speech has arrived.",
-                 note: "**`Listening...` is a progress bar, and it is empty here.** It fills one character at a time as speech arrives and is full when the last dot lights — a *count*, not a brightness, because a fade over an unknown backdrop gives him nothing to judge \"is it done yet?\" against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus, **by voiced seconds**: 13% under one voiced second come back in a language Victor does not speak, 5% between one and two, and **none past two**.",
+                 note: "**`Listening...` is a progress bar, and it is empty here.** It fills one character at a time as speech arrives and is full when the last dot lights — a *count*, not a brightness, because a fade over an unknown backdrop gives him nothing to judge \"is it done yet?\" against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted by re-decoding 803 of his own clips, **by voiced seconds**: 42% under one voiced second come back in a language Victor does not speak, 15% between one and two, and 1% past two. (The language pin has since taken that mode to zero — the bar still forecasts everything else that is worse when there is less to hear.)",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

@@ -47,9 +47,11 @@ final class MicRecorder {
     /// (p10 14%), so six seconds of wall clock is 2.3 seconds of speech on an
     /// ordinary sentence and 0.8 on a thoughtful one — and the risk the ramp
     /// forecasts tracks the speech, not the clock. Re-bucketed by this measure
-    /// over the same 1254 samples, the cliff is far sharper than the wall-clock
-    /// one: 13% of dictations with under **one** voiced second come back in a
-    /// language he does not speak, 5% between one and two, and **0% past two**.
+    /// over the 803 clips the local model was re-decoded on
+    /// (`evals/short-clip-lid.md`), the cliff is far sharper than the wall-clock
+    /// one: **42%** of dictations with under one voiced second come back in a
+    /// language he does not speak, **15%** between one and two, and **1% past
+    /// two**.
     ///
     /// Read from the main thread while the ramp ticks, written from CoreAudio's
     /// thread; `Double` is not atomic on any platform this ships to, so it goes

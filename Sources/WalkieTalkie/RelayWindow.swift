@@ -92,27 +92,33 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// seconds of speech on an ordinary sentence and 0.8 on a thoughtful one —
     /// and a bar that filled while he was thinking would be telling him the one
     /// thing it exists not to. So it counts `MicRecorder.voicedSeconds`, and the
-    /// same 1254 samples re-bucketed by that measure are a far sharper cliff
-    /// than the wall-clock one they were first read off:
+    /// 803 clips it was re-decoded on, re-bucketed by that measure, are a far
+    /// sharper cliff than the wall-clock one:
     ///
     /// ```
-    ///   voiced    decoded into a language Victor does not speak    came back empty
-    ///   0–1s       13%                                             25%
-    ///   1–2s        5%                                             11%
-    ///   2–3s        0%                                              3%
-    ///   3–4s        1%                                              3%
-    ///   4–5s        1%                                              2%
-    ///   5s+         0%                                             0–1%
+    ///   voiced   decoded into a language Victor does not speak
+    ///   0–1s      42%
+    ///   1–2s      15%
+    ///   2–3s       1%
+    ///   3–4s       2%
+    ///   4s+        0%
     /// ```
     ///
-    /// against 12% / 11% / 4% / 0% at two, three, four and five seconds of wall
-    /// clock — the same failures, sorted by the thing that actually causes them.
-    /// They are not near misses: they are whole sentences of Turkish, Portuguese
-    /// or Russian made out of Romanian speech (`Teşekkürler.`,
-    /// `É bom ir o outro dia?`, `да`), beside the classic short-clip
-    /// hallucinations — `Thank you.`, `works works works works…`. The right
-    /// column is partly his own doing — a button pressed and nothing said —
-    /// which is exactly why it is the *left* column the bar is drawn from.
+    /// against 50% / 28% / 19% / 2% / 0% at one, two, three, four and five
+    /// seconds of wall clock — the same failures, sorted by the thing that
+    /// actually causes them. They are not near misses: they are whole sentences
+    /// of Turkish, Portuguese or Korean made out of Romanian speech
+    /// (`Teşekkür ederim.`, `É bom ir o outro dia?`, `안녕하세요.`), beside the
+    /// classic short-clip hallucinations — `Thank you.`,
+    /// `works works works works…`.
+    ///
+    /// **These are the local model's own picks, measured by decoding the audio
+    /// again** (`evals/short-clip-lid.md`). The first version of this note read
+    /// them off `detectedLanguage` in the corpus manifest, which is **Wispr
+    /// Flow's** pick rather than this model's — the corpus stores Wispr's
+    /// reading beside the audio, and nothing about it describes what the local
+    /// model does with the same seconds. It understated every figure here by
+    /// about three times. The shape of the cliff was right; its depth was not.
     ///
     /// It is a **forecast, not a measurement**: it knows how much speech has
     /// arrived, not what is in it. The only honest thing it can say is *this is
@@ -138,9 +144,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     var voicedSeconds: (() -> TimeInterval)?
     /// The bar is full at **three voiced seconds**.
     ///
-    /// That is the first bucket in the table above where *both* failure modes
-    /// are at their floor, and the catastrophic one — a fluent sentence in a
-    /// language he never spoke — is already gone at two. At his median 38%
+    /// The catastrophic mode — a fluent sentence in a language he never spoke —
+    /// is already down to 1% at two voiced seconds and 0.5% cumulatively past
+    /// three, against 11% for everything below it. At his median 38%
     /// voiced fraction it is about eight seconds of ordinary talking, and at his
     /// measured 5.1 words per voiced second it is roughly fifteen words.
     ///

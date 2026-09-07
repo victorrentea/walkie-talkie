@@ -1027,8 +1027,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.abandonDictation("the model returned nothing")
                 return
             }
-            Log.info(String(format: "local whisper: %@ (%.2f) — %d chars",
-                            r.language ?? "?", r.avgLogprob, r.text.count))
+            Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
+                            r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count))
             // Filed on the success path only: a decode that returned nothing
             // says nothing about how long a decode takes, and a failure that
             // came back instantly would pull the estimate down for the next
@@ -1051,9 +1051,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Handed to the panel rather than flashed: a flash lands in the hint
             // row, which is the last row of the panel, and this is a note about
             // the transcript — it belongs under the words it qualifies.
-            self.pendingPromptWarning = r.avgLogprob < LocalWhisper.confidenceFloor
-                ? String(format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
-                : nil
+            //
+            // **Two gates, and the second one is not a second threshold on the
+            // first.** A hallucination is the model unsure and fluent, which is
+            // what `avg_logprob` sees; a loop is the model certain and stuck,
+            // which it cannot see and `compression_ratio` can. Neither is
+            // allowed to swallow the dictation — see above — so both are
+            // rendered the same way: a note under the words, with the number, in
+            // front of a Cancel button that still works.
+            if r.compressionRatio > LocalWhisper.loopCeiling {
+                self.pendingPromptWarning = String(
+                    format: "⚠️ the model looped (%.1f) — check what was sent", r.compressionRatio)
+            } else if r.avgLogprob < LocalWhisper.confidenceFloor {
+                self.pendingPromptWarning = String(
+                    format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
+            } else {
+                self.pendingPromptWarning = nil
+            }
             // Reads the bytes on this thread and files the sample on its own, so
             // the staged copy can go immediately after — the corpus keeps its own.
             self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,

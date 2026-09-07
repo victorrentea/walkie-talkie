@@ -222,7 +222,7 @@
         </header>
         <div class="shot"><img src="states/listening-cold.png" width="169" height="69" style="opacity:0.8" alt="The first words — too little speech to trust"></div>
         <p class="when">From the instant the microphone opens until about a second of actual speech has arrived.</p>
-        <p class="note"><strong><code>Listening...</code> is a progress bar, and it is empty here.</strong> It fills one character at a time as speech arrives and is full when the last dot lights — a <em>count</em>, not a brightness, because a fade over an unknown backdrop gives him nothing to judge &quot;is it done yet?&quot; against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus, <strong>by voiced seconds</strong>: 13% under one voiced second come back in a language Victor does not speak, 5% between one and two, and <strong>none past two</strong>.</p>
+        <p class="note"><strong><code>Listening...</code> is a progress bar, and it is empty here.</strong> It fills one character at a time as speech arrives and is full when the last dot lights — a <em>count</em>, not a brightness, because a fade over an unknown backdrop gives him nothing to judge &quot;is it done yet?&quot; against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted by re-decoding 803 of his own clips, <strong>by voiced seconds</strong>: 42% under one voiced second come back in a language Victor does not speak, 15% between one and two, and 1% past two. (The language pin has since taken that mode to zero — the bar still forecasts everything else that is worse when there is less to hear.)</p>
         <code class="slug">listening-cold</code>
       </section>
       <section class="card" id="listening-warming">
@@ -503,7 +503,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 94c6e99 · 07 Sep 2026 · built 07 Sep 2026, 13:48
+  Generated from <code>OverlayStates.swift</code> · repo at 5d099e6 · 07 Sep 2026 · built 07 Sep 2026, 16:23
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>
