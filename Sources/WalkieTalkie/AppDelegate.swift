@@ -143,9 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// they are released as a message of their own.
     private let orphanTimeout: TimeInterval = 120
 
-    /// **Send the transcript without asking.** Off at every launch, held here and
-    /// nowhere else, and deliberately not persisted — see the menu row it comes
-    /// from (`StatusItem.autosend`).
+    /// **Send the transcript without asking.** Held here and nowhere else, and
+    /// **restored from the last launch** — see the menu row it comes from
+    /// (`StatusItem.autosendOn`), which owns the stored value; this is seeded
+    /// from it once the menu exists and then only ever moves through
+    /// `onToggleAutosend`, so there is one writer and no second copy to drift.
     ///
     /// The panel still opens; it opens for `autosendHold` with no buttons on it.
     /// The receipt is the half of it that survives, because a dictation that
@@ -310,6 +312,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info(on ? "autosend on — the panel is a one-second receipt, no buttons"
                         : "autosend off — the panel waits for Send or the countdown")
         }
+        // **Seeded from the menu, not read from the defaults again here.** The
+        // row is where the setting lives and where it is written; a second read
+        // of the same key would be a second source of truth, and the two would
+        // disagree the first time one of them changed key or meaning.
+        autosend = status.isAutosend
+        if autosend { Log.info("autosend restored on from the last launch") }
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.

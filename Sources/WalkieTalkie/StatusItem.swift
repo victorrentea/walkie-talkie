@@ -206,7 +206,30 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let autosend = NSMenuItem(title: "Autosend", action: nil, keyEquivalent: "")
     /// Mirrors what the `autosend` row means, since the row itself no longer
     /// carries a `state` to read it back from.
-    private var autosendOn = false
+    ///
+    /// **It survives a restart** (Victor, 2026-09-07). It deliberately did not,
+    /// for two weeks, and the argument was a real one: the panel is what catches
+    /// a transcript the model got fluently wrong, and a tick that came back on
+    /// its own would quietly take that away weeks later, in a session where he
+    /// had forgotten it was set. He has now ticked it back on after enough
+    /// restarts to overrule that — the reading it was protecting against is one
+    /// he makes deliberately, and re-making the same choice every launch is a
+    /// worse tax than the risk it was buying off.
+    ///
+    /// **`Replace WisprFlow` deliberately still does not persist**, and the two
+    /// are not the same bet. Autosend changes *how long* the panel waits;
+    /// Replace Wispr changes **where the words go** — a stale tick there puts a
+    /// dictation meant for a bound agent into whatever field holds the caret.
+    private var autosendOn = UserDefaults.standard.bool(forKey: StatusItem.autosendKey)
+    /// The one key this app keeps in `UserDefaults`. It is a *preference* rather
+    /// than data, so it does not belong in `~/.walkie-talkie` beside the outbox
+    /// and the corpus, and `--home` has no business moving it.
+    private static let autosendKey = "autosend"
+
+    /// What the row is set to right now — read once at launch by `AppDelegate`,
+    /// so the restored tick and the behaviour behind it start out agreeing.
+    /// Every later change arrives through `onToggleAutosend`.
+    var isAutosend: Bool { autosendOn }
     /// **The mode row.** It sits beside `Autosend` because the two are the only
     /// switches in this menu — everything above them is something that happens
     /// once, when clicked.
@@ -877,6 +900,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func autosendClicked() {
         autosendOn.toggle()
+        UserDefaults.standard.set(autosendOn, forKey: Self.autosendKey)
         applyAutosendIcon()
         onToggleAutosend?(autosendOn)
     }

@@ -2897,9 +2897,19 @@ the same reason the header and the footprint are read there.
 
 ### Autosend
 
-A checkbox, **off at every launch and deliberately not persisted**. Ticked, the
+A checkbox, **restored from the last launch** since 2026-09-07. Ticked, the
 pre-send panel opens for one second (`AppDelegate.autosendHold`) **with no Send
 and no Cancel on it**, and then the message goes.
+
+**It deliberately did not persist for two weeks, and the argument was a real
+one**: the panel is what catches a transcript the model got fluently wrong, and a
+tick that came back on its own would quietly take that away weeks later, in a
+session where he had forgotten it was set. Victor overruled it after enough
+restarts to settle the question — the reading it was protecting against is one he
+makes deliberately, and re-making the same choice every launch is the worse tax.
+**`Replace WisprFlow` still does not persist**, and the two are not the same bet:
+autosend changes *how long the panel waits*, that one changes **where the words
+go**.
 
 - **The panel still opens.** It is the receipt, and a dictation that vanished into
   a terminal with nothing shown is the one state where a delivery cannot be told
@@ -2907,10 +2917,11 @@ and no Cancel on it**, and then the message goes.
 - **The buttons' row goes with them**, not just their labels: two buttons up for
   one second are two buttons nobody can reach — an invitation to press something
   that will not be there when the hand arrives.
-- **Not remembered across launches**, and that is the point. The panel is what
-  catches a transcript the model got fluently wrong; a checkbox that survived a
-  restart would quietly take that away weeks later, in a session where he had
-  forgotten it was ticked.
+- **The icon column is the state, and off is blank** — `⏩` when it sends straight
+  through, nothing at all when it does not. It rides the icon column rather than
+  `NSMenuItem.state` for the reason `Replace WisprFlow` does one row up: a ticked
+  row makes AppKit reserve the state column for the **whole** menu, shoving every
+  other row sideways the moment this one is switched on.
 - The state lives on the menu item and is pushed to `AppDelegate.autosend`
   through `onToggleAutosend`, so the tick and the behaviour cannot disagree.
 - **The icon column is the state, and off is blank** — `⏩` when it sends straight
