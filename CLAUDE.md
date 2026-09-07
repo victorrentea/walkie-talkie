@@ -3077,6 +3077,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
 | `Replace WisprFlow` | a `checkmark` when on, **nothing** when off | the forward side button (see *Replace Wispr*) |
+| `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
@@ -3193,23 +3194,28 @@ section for what overruled it.
 - **The buttons' row goes with them**, not just their labels: two buttons up for
   one second are two buttons nobody can reach — an invitation to press something
   that will not be there when the hand arrives.
-- **The icon column is the state, and off is blank** — `⏩` when it sends straight
-  through, nothing at all when it does not. It rides the icon column rather than
-  `NSMenuItem.state` for the reason `Replace WisprFlow` does one row up: a ticked
-  row makes AppKit reserve the state column for the **whole** menu, shoving every
-  other row sideways the moment this one is switched on.
 - The state lives on the menu item and is pushed to `AppDelegate.autosend`
   through `onToggleAutosend`, so the tick and the behaviour cannot disagree.
-- **The icon column is the state, and off is blank** — `⏩` when it sends straight
-  through, nothing at all when it does not (Victor, 2026-09-07). It rides the
-  icon column rather than `NSMenuItem.state` for the reason `Replace WisprFlow`
-  does one row up: a ticked row makes AppKit reserve the state column for the
+- **The icon column is the state: a `checkmark` when it sends straight through,
+  and nothing at all when it does not** (Victor, 2026-09-07). It rides the icon
+  column rather than `NSMenuItem.state` for the reason `Replace WisprFlow` does
+  one row up: a ticked row makes AppKit reserve the state column for the
   **whole** menu, shoving every other row sideways the moment this one is
-  switched on. Off was `⏸️` until then, which is the same mistake an ✕ would have
-  been on the row above — a picture in the column claims the row is *doing*
-  something, and the panel holding for its three seconds is the app's ordinary
-  behaviour, not a mode. Blank is still an image of the column's exact width, so
-  the title does not step sideways when the mode comes on.
+  switched on.
+
+  Both halves of that pair were settled the same day, in two steps. Off was `⏸️`
+  first, which is the same mistake an ✕ would have been on the row above — a
+  picture in the column claims the row is *doing* something, and the panel
+  holding for its three seconds is the app's ordinary behaviour, not a mode. On
+  was then `⏩` for an afternoon, and Victor replaced it with the tick the row
+  above already carried: *"autosend să aibă bifă în față, nu ⏩ când e activ"*.
+  The icon column is where a row draws *what it is*, which is right for a row
+  like `Take Screenshot` whose picture never changes — these two are the menu's
+  only **switches**, so the one fact their column has to carry is on or off. A
+  glyph illustrating the behaviour makes the reader decode a picture to answer a
+  yes/no question, and makes the two switches look like unrelated rows when they
+  are the same kind of thing. Blank is still an image of the column's exact
+  width, so the title does not step sideways when the mode comes on.
 
 Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:

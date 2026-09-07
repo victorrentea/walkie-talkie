@@ -189,20 +189,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// menu, which pushes every other row — all of them already carrying an
     /// emoji — sideways the moment this one row is switched on. The layout
     /// shifting under him is a worse readout than the tick was a good one, so
-    /// the state is drawn where the other rows draw their identity: `⏩` when it
-    /// sends straight through.
+    /// the state is drawn where the other rows draw their identity — and since
+    /// 2026-09-07 that drawing is a **`checkmark`**, the same mark
+    /// `Replace WisprFlow` carries one row up (Victor: *"autosend să aibă bifă
+    /// în față, nu ⏩ când e activ"*).
     ///
-    /// **And nothing at all when it does not** (Victor, 2026-09-07 — *"by
-    /// default să nu aibă nimic în față și când e activat să aibă un fast
-    /// forward"*). It was `⏸️` for the off half, which is the same mistake the
-    /// ✕ would have been one row up: a picture in the column claims the row is
-    /// *doing* something, and off is precisely the state in which this row does
-    /// nothing — the panel holding for its three seconds is the app's ordinary
-    /// behaviour, not a mode. `Replace WisprFlow` had already settled this the
-    /// same day; blank here makes the two switches read the same way, which is
-    /// the whole reason they sit next to each other. Blank is still an image of
-    /// the column's exact size (`blankIcon`), so the title does not step
-    /// sideways when the mode comes on.
+    /// It was `⏩` for an afternoon, on the argument that the icon column is
+    /// where a row draws *what it is* — and that is right for a row like
+    /// `Take Screenshot`, whose picture never changes. These two are not that:
+    /// they are the menu's only **switches**, so the one fact their column has
+    /// to carry is on or off. A glyph that illustrates the behaviour makes the
+    /// reader decode a picture to answer a yes/no question, and it makes the two
+    /// switches look like two unrelated rows when they are the same kind of
+    /// thing. A tick is read without being read.
+    ///
+    /// **And nothing at all when it is off** (Victor, 2026-09-07 — *"by default
+    /// să nu aibă nimic în față"*). It was `⏸️` for the off half, which is the
+    /// same mistake the ✕ would have been one row up: a picture in the column
+    /// claims the row is *doing* something, and off is precisely the state in
+    /// which this row does nothing — the panel holding for its three seconds is
+    /// the app's ordinary behaviour, not a mode. Blank is still an image of the
+    /// column's exact size (`blankIcon`), so the title does not step sideways
+    /// when the mode comes on.
     private let autosend = NSMenuItem(title: "Autosend", action: nil, keyEquivalent: "")
     /// Mirrors what the `autosend` row means, since the row itself no longer
     /// carries a `state` to read it back from.
@@ -924,10 +932,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         onToggleAutosend?(autosendOn)
     }
 
-    /// `⏩` when it sends straight through, and **nothing** when it does not.
-    /// See the note on the row.
+    /// A tick when it sends straight through, and **nothing** when it does not —
+    /// the same pair `applyReplaceWisprIcon` draws. See the note on the row.
     private func applyAutosendIcon() {
-        autosend.image = autosendOn ? Self.emojiIcon("⏩") : Self.blankIcon
+        autosend.image = autosendOn ? Self.symbolIcon("checkmark") : Self.blankIcon
     }
 
 }
