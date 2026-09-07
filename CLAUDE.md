@@ -4241,11 +4241,31 @@ running what I just built?" had no answer anywhere in the app.
   the reversal: the ring reads as a *state* only in the menu bar, where the two
   pictures alternate in the same pixels. Nothing ever shows the app icon beside
   its own alternative — there it is the app's identity, and the ring is what
-  makes it findable at 32px in a folder of a hundred icons. `build-app.sh` scales the ten iconset sizes with
-  `sips` and calls `iconutil`, rather than committing an `.icns`, so the PNG stays
-  the single source of truth and the app icon follows it on the next build. The
-  bundle is `touch`ed afterwards or Finder and the Dock keep serving the cached
-  old picture. (It shows in Finder, Spotlight, Get Info — and, since 2026-09-07,
+  makes it findable at 32px in a folder of a hundred icons. `build-app.sh` renders the ten iconset sizes
+  (`assets/make-appicon.swift`) and calls `iconutil`, rather than committing an
+  `.icns`, so the PNG stays the single source of truth and the app icon follows
+  it on the next build. The bundle is `touch`ed afterwards or Finder and the Dock
+  keep serving the cached old picture.
+
+  **The tiles are inset to Apple's icon grid, and until 2026-09-07 they were
+  not.** `sips -Z` scales artwork to *fill* the tile, and `walkie-bound.png`
+  fills its own canvas corner to corner — so the ring was drawn at the full width
+  of the Dock slot while every neighbour sits inside the grid, and it read as
+  visibly fatter than the icons either side of it. Victor spotted it in the Dock
+  and in ⌘-Tab. Measured on this Mac rather than taken from the HIG: on a 1024
+  canvas Finder's and Chrome's bodies are **824** across to the pixel (80.5% —
+  the 83.6% an alpha bounding box reports is their drop shadow bleeding), and a
+  **circle** gets the smaller slot, **790** (77.1%), because at equal width a
+  disc reads as the larger object. Victor Addons, circular like this one, sits at
+  77.0–78.1%. This icon is now 790/1024, verified in the built `.icns`.
+
+  **The padding cannot live in the artwork**, which is the whole reason there is
+  a script: `walkie-bound.png` is *also* the menu bar's icon, drawn into a 19pt
+  box that has no grid and must not be inset. One source of truth, two framings.
+  Swift rather than a `sips` loop because `sips` cannot pad with transparency
+  (`--padColor` takes an opaque RGB triple), and not Python because CoreGraphics
+  there needs PyObjC, which `/usr/bin/python3` does not have — while the Swift
+  toolchain is already a hard dependency of `build-app.sh`. (It shows in Finder, Spotlight, Get Info — and, since 2026-09-07,
   in the Dock: see *The Dock tile is the escape hatch* below.)
 - **`Quit — built Aug 28, 17:48`**, one row, the way Victor Addons does it: read
   once a session, and read while reaching for Quit anyway, since the answer to
