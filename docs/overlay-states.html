@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 35 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 36 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -169,6 +169,16 @@
         <p class="note"><strong>One row, and the ✨ is all that is left of the destination.</strong> It had a title row of its own — Terminal&#x27;s icon, ✨, <code>workspace</code> — and Victor took it off on 2026-09-02: the folder is <em>always</em> <code>~/workspace</code>, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of <code>Listening…</code> and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.</p>
         <code class="slug">spawn</code>
       </section>
+      <section class="card" id="spawn-folder">
+        <header>
+          <h3>…and he picked which folder</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">186×69 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/spawn-folder.png" width="186" height="69" style="opacity:0.8" alt="…and he picked which folder"></div>
+        <p class="when">After clicking a row in the folder menu, for the rest of that dictation.</p>
+        <p class="note"><strong>The chosen folder gets the row a binding would have taken</strong>, behind Terminal&#x27;s own icon — Victor&#x27;s ask, 2026-09-07: <em>&quot;ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie&quot;</em>. The argument that removed this row was that the folder is <em>always</em> <code>~/workspace</code>, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. The ✨ stays one row up, in front of <code>Listening...</code>: it is the fact this destination does not share with a binding — the session does not exist yet.</p>
+        <code class="slug">spawn-folder</code>
+      </section>
     </div>
     <h2 id="At rest">At rest</h2>
     <div class="grid">
@@ -202,27 +212,27 @@
         </header>
         <div class="shot"><img src="states/listening.png" width="169" height="69" style="opacity:0.8" alt="Dictating"></div>
         <p class="when">From the wheel click until he clicks it again — the bulk of every dictation.</p>
-        <p class="note"><strong>The destination is named here</strong>, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination&#x27;s own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. <strong>This is the settled end of the warmth ramp</strong> — six seconds in, where the word has finished brightening and stays for the rest of the sentence; the two shots below it are what the same row looks like on the way up.</p>
+        <p class="note"><strong>The destination is named here</strong>, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination&#x27;s own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. <strong>This is the bar full</strong> — three voiced seconds in, every character of <code>Listening...</code> lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there.</p>
         <code class="slug">listening</code>
       </section>
       <section class="card" id="listening-cold">
         <header>
-          <h3>The first second — too short to trust</h3>
+          <h3>The first words — too little speech to trust</h3>
           <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">169×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-cold.png" width="169" height="69" style="opacity:0.8" alt="The first second — too short to trust"></div>
-        <p class="when">The instant the microphone opens, and for the first second or so of every sentence.</p>
-        <p class="note"><strong><code>Listening…</code> is dark grey, and that is a forecast about the transcript.</strong> The local model picks a language off a 30-second window before it decodes a word; with two or three seconds of speech in that window the pick is a guess, and a wrong guess is not a wrong word — it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus: 12% of 2–3s recordings and 11% of 3–4s ones came back in a language Victor does not speak, against 4% at 4–5s and <strong>not one</strong> past five seconds. The row is dim for exactly as long as the sentence is in that zone.</p>
+        <div class="shot"><img src="states/listening-cold.png" width="169" height="69" style="opacity:0.8" alt="The first words — too little speech to trust"></div>
+        <p class="when">From the instant the microphone opens until about a second of actual speech has arrived.</p>
+        <p class="note"><strong><code>Listening...</code> is a progress bar, and it is empty here.</strong> It fills one character at a time as speech arrives and is full when the last dot lights — a <em>count</em>, not a brightness, because a fade over an unknown backdrop gives him nothing to judge &quot;is it done yet?&quot; against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus, <strong>by voiced seconds</strong>: 13% under one voiced second come back in a language Victor does not speak, 5% between one and two, and <strong>none past two</strong>.</p>
         <code class="slug">listening-cold</code>
       </section>
       <section class="card" id="listening-warming">
         <header>
-          <h3>Three seconds in — halfway up</h3>
+          <h3>Halfway — six characters lit</h3>
           <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">169×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-warming.png" width="169" height="69" style="opacity:0.8" alt="Three seconds in — halfway up"></div>
-        <p class="when">About three seconds into a sentence: the ramp is halfway and still climbing.</p>
-        <p class="note">The same row, brightening. It moves continuously over six seconds rather than flipping at a threshold, because the underlying risk does the same thing — it falls off a cliff between three and five seconds and has no edge to draw a line on. <strong>A colour and not a warning</strong>: there is nothing to act on, only something to know, and the one question he has mid-press is whether to stop here or add another clause. Six seconds is where it lands — five is where the wrong-language failures stop, and the second past it is the free one.</p>
+        <div class="shot"><img src="states/listening-warming.png" width="169" height="69" style="opacity:0.8" alt="Halfway — six characters lit"></div>
+        <p class="when">About a second and a half of speech in. Speech, not seconds: if he stops to think, the bar stops with him.</p>
+        <p class="note"><strong>It counts <code>MicRecorder.voicedSeconds</code>, not the clock</strong>, and that correction is Victor&#x27;s: <em>&quot;uneori eu pur și simplu tac — dacă tac pe microfon și nu vine semnal, nu știu cât de valoroasă e întârzierea asta&quot;</em>. The corpus is emphatic — the median dictation is only <strong>38% voiced</strong>, so a wall-clock bar would fill while he was thinking and tell him the one thing it exists not to. Full at <strong>three voiced seconds</strong>: the first bucket where both failure modes are at their floor, about fifteen words at his measured 5.1 words per voiced second, and within a hair of where he put the boundary by feel.</p>
         <code class="slug">listening-warming</code>
       </section>
       <section class="card" id="listening-chrome">
@@ -454,9 +464,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -493,7 +503,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at f75749b · 07 Sep 2026 · built 07 Sep 2026, 13:17
+  Generated from <code>OverlayStates.swift</code> · repo at 94c6e99 · 07 Sep 2026 · built 07 Sep 2026, 13:48
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

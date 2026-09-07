@@ -538,6 +538,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         startListeningForSnapshots()
 
+        // The chip's `Listening...` bar fills on speech, not on elapsed time —
+        // see `RelayWindow.listenWarmth`. This is the whole of the wiring: the
+        // overlay pulls the number when it wants it and never learns what a
+        // recorder is.
+        overlay.voicedSeconds = { [weak self] in self?.mic.voicedSeconds ?? 0 }
+
         picker.start()
         music.start()
         beacon.start()
@@ -861,7 +867,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SpawnFolderMenu.show(at: NSEvent.mouseLocation) { [weak self] choice in
             guard let self = self, self.spawnPending else { return }
             self.spawnFolder = choice.path
-            self.overlay.setSpawnDestination("✨ \(choice.name)", mark: "✨")
+            // **The folder he picked gets a row of its own, behind Terminal's
+            // icon** — the shape a binding has, which is what he asked for:
+            // *"ca și cum aș fi fost deja bind-uit la un alt astfel de
+            // terminal"*. The name loses its ✨ here because the ✨ has not gone
+            // anywhere — it stays in front of `Listening...` one row up, saying
+            // the one thing a binding's row cannot: this session does not exist
+            // yet. See `RelayWindow.spawnCollapsed`.
+            //
+            // Terminal's icon and not the app the spawn happens to be launched
+            // from: `SpawnTerminal` opens a Terminal.app window, always, so this
+            // is a fact about the destination rather than a guess about it.
+            self.overlay.setSpawnDestination(choice.name, mark: "✨",
+                                             icon: Self.appIcon("com.apple.Terminal", height: 18))
             Log.info("✨ spawn folder chosen — \(choice.path)")
         }
     }

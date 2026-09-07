@@ -42,7 +42,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-35 of them — each with the moment it appears and why it looks the way it does. It
+36 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -51,7 +51,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 35 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 36 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -925,63 +925,120 @@ three forms: `🖱️/F3`, then the words `— mouse/F3 for more shots`, then �
 🔽 kerned underneath. The last was a rebus — it needed a legend, and the legend was
 the thing the row was supposed to be. A drawing of the actual button does not.
 
-### `Listening…` warms from dark grey to full over six seconds (2026-09-07)
+### `Listening...` is a progress bar, and it fills on speech (2026-09-07)
 
-The word beside the pulse starts at `white(0.45)` and ramps to the row's normal
-colour over `RelayWindow.enoughAudio` = **6.0s**, then stays there. It is a
-**forecast about the transcript**, not a measurement of this recording: the ramp
-runs on a clock and nothing in it has heard the audio.
+The word beside the pulse is drawn one character at a time: dim characters ahead,
+lit characters behind, full when the last dot lights. Twelve steps —
+`RelayWindow.listeningWord`, and **three full stops rather than `…`** so the tail
+is three of them rather than one glyph taking a quarter of the bar in one step.
 
-**What it is drawn from.** Victor's report was *"dacă vorbesc peste 5–7 secunde,
-transcripția e mult mai calitativă"*, and the corpus says why. `language=None`
-in `whisper_helper.py` means the model picks a language off its 30-second window
-**before** it decodes a word; with two or three seconds of speech and
-twenty-seven of padding in that window, the pick is a guess, and a wrong pick is
-not a wrong word — it is a fluent sentence in a language he does not speak.
-Counted over all 1254 samples in `~/.walkie-talkie/voice-corpus/corpus.jsonl`:
+It is a **forecast about the transcript**, not a measurement of this recording:
+it knows how much speech has arrived, not what is in it.
 
-| length | decoded into a language Victor does not speak | came back empty |
+#### It was a fade first, and the fade was the wrong instrument
+
+For one afternoon the whole row dissolved from dark grey to full over six
+seconds. Victor: *"nu e suficient de vizibilă … așa fade, nu înțeleg când e
+aprins complet"*. He is right, and the reason generalises: **brightness is judged
+against what is beside it**, and this row spends its life over a terminal, an
+editor, a photograph — so *is it fully lit yet?* was a question about a grey with
+nothing to compare it to, asked mid-sentence in peripheral vision. Twelve
+characters filling one after another turn the same number into a **count**: it is
+done when there are no dim letters left, which is a fact about the row itself.
+
+Binary per character, not a per-character gradient — a gradient would be the same
+complaint again, in twelve places.
+
+#### It counts voiced seconds, not elapsed ones
+
+*"Uneori eu pur și simplu tac. Dacă tac pe microfon și nu vine semnal, nu știu
+cât de valoroasă e întârzierea asta."* — and the corpus is emphatic: the median
+dictation is only **38% voiced** (p10 14%). Six seconds of wall clock is 2.3
+seconds of speech on an ordinary sentence and 0.8 on a thoughtful one, so a
+clock-driven bar filled while he was thinking and told him the one thing it
+exists not to.
+
+`MicRecorder.voicedSeconds` is the source. Re-bucketing all 1254 corpus samples
+by it turns a slope into a cliff:
+
+| voiced | decoded into a language Victor does not speak | came back empty |
 |---|---|---|
-| 2–3s | 12% | 8% |
-| 3–4s | 11% | 8% |
-| 4–5s | 4% | 9% |
-| 5–6s | **0%** | 4% |
-| 6–8s | 1% | 5% |
-| 8s+ | 0–1% | 1–2% |
+| 0–1s | **13%** | 25% |
+| 1–2s | 5% | 11% |
+| 2–3s | **0%** | 3% |
+| 3–4s | 1% | 3% |
+| 4–5s | 1% | 2% |
+| 5s+ | 0% | 0–1% |
 
+against 12% / 11% / 4% / 0% at two, three, four and five seconds of *wall clock* —
+the same failures, sorted by the thing that actually causes them. The cause is
+`language=None` in `whisper_helper.py`: the model picks a language off its
+30-second window before it decodes a word, and with a second of speech in that
+window the pick is a guess. A wrong pick is not a wrong word — it is
 `Teşekkürler.`, `É bom ir o outro dia? Ai, que acessou tudo?`, `да`, `Thank
-you.`, `For no works, no works works works works…` — every one of them under 4s,
-on Romanian or English speech. Past five seconds there is not one in the file.
-This is the same cliff the confidence floor already sees from the other side
-(*The recogniser*: "nearly all are clips under 5s").
+you.`, `For no works, no works works works works…`, all on Romanian or English
+speech. Same cliff the confidence floor sees from the other side (*The
+recogniser*: "nearly all are clips under 5s").
 
-**Six rather than five**: five is where the wrong-language mode stops, the
-empties do not settle until eight, and the underlying shape is a cliff between
-three and five seconds rather than a slope — so a second either way changes
-nothing he can see, and the later end is the one that costs nothing to believe.
+**Full at three voiced seconds** (`RelayWindow.enoughSpeech`): the first bucket
+where both failure modes are at their floor. About fifteen words at his measured
+5.1 words per voiced second, and about eight seconds of ordinary talking — which
+is where he put the boundary by feel, *"dacă vorbesc peste 5–7 secunde,
+transcripția e mult mai calitativă"*, five to seven seconds of his speech being 2
+to 2.7 voiced seconds.
 
-- **A colour, not a warning.** There is nothing to act on, only something to
-  know, and the one question he has mid-press is whether to stop here or add a
-  clause. It costs no attention to ignore.
-- **A colour, not an opacity.** Fading the layer would take the halo with it,
-  and the halo is what keeps a white row legible over a white page — the dim end
-  would have been invisible on exactly the backgrounds the halo exists for.
-- **A timer, not a layer animation.** `textColor` is not animatable: an
-  `NSTextField` draws its string through the view, so Core Animation has nothing
-  to interpolate and `NSAnimationContext` silently does nothing. 15fps, on
-  `.common` (the wheel chord is a held mouse button, i.e. a tracking loop), each
-  tick assigning one colour and touching no layout, stopping the moment it
-  arrives.
-- **`pinListenWarmth(_:)` is for `OverlayStates` alone.** The shutter fires
-  immediately after `apply`, so without a chosen frame every dictating state on
-  the page would be a photograph of its own first 200ms. `reset` pins 1; the two
-  shots that are *about* the ramp (`listening-cold`, `listening-warming`) pin
-  their own.
+#### The meter
+
+`MicRecorder.meter` runs on the converted 16 kHz mono buffer — the same audio the
+model and the corpus see, which is what makes its constants transferable from the
+corpus replay that set them (`evals/voiced-seconds.py`). Per 1024 frames (64ms):
+RMS against an adaptive noise floor, **9 dB** over it to count as speech, with an
+absolute floor of 180 underneath.
+
+- **Adaptive, because a fixed threshold cannot work here** — and `InputDevice`
+  already wrote down why: measured in the same room, the DJI receiver peaks at
+  16552 where the built-in microphone manages 855. One number would call the
+  built-in silent all day or the receiver's room tone speech.
+- **Instant attack down, 2% release up**, the standard cheap noise tracker: it
+  settles into the gaps between his words rather than into his words.
+- **The absolute floor is for the case the adaptive one cannot see**: a recording
+  that is *entirely* room tone has a noise floor equal to its own content, and
+  every buffer would clear a purely relative bar.
+- **Reset per recording**, both of them: a floor carried over is a floor for a
+  room, a microphone and a distance that may all have changed.
+
+#### Two implementation traps, both paid for
+
+- **A timer, not a layer animation, twice over.** `textColor` is not animatable —
+  an `NSTextField` draws its string through the view, not a `CATextLayer`, so
+  Core Animation has nothing to interpolate and `NSAnimationContext` silently
+  does nothing. And there is nothing to interpolate *toward*: the bar is driven
+  by audio that has not arrived, so its length is polled, never scheduled. 15
+  ticks a second on `.common` (the wheel chord is a held mouse button, i.e. a
+  tracking loop), each reading one `Double` under a lock and **doing nothing at
+  all unless the count of lit characters changed** — twelve steps against fifteen
+  ticks a second means the overwhelming majority are a no-op. It must never reach
+  `layoutContent`, which would re-measure every row of the chip on every frame.
+- **The ✨ goes in as a picture, not as a character** (`Glyphs.emoji` through
+  `inline`). A raw emoji inside an attributed string on a label carrying a halo
+  is the failure `applyTitleText` has warned about for weeks: the emoji draws and
+  **every other glyph comes out fully transparent**. It cost the spawn row its
+  entire word for one build — the chip read `🔴 ✨` and nothing else — and it is
+  close to invisible in review, because the *other* spawn state (a picked folder,
+  wider chip) drew correctly and looked like proof the row was fine. Caught by
+  `docs/overlay-states.html`, which is the whole argument for that page: a
+  regression in a state that lasts two seconds, found by looking at all of them
+  at once.
+
+`pinListenWarmth(_:)` freezes a frame for `OverlayStates` alone — the shutter
+fires immediately after `apply`, so without a chosen frame every dictating state
+on the page would be a photograph of its own first 200ms. `reset` pins the full
+bar; `listening-cold` and `listening-warming` pin their own.
 
 **If the failure itself is ever worth fixing rather than forecasting**, the lever
 is that `language=None`: restricting language ID to `{ro, en}` would have caught
 every case counted above, since Victor speaks only those two. That is a change to
-the recogniser, not to the overlay, and it has not been made.
+the recogniser, not to the overlay.
 
 ## One face, one size, one weight — everywhere on the chip
 
@@ -2368,9 +2425,22 @@ that sentence is the same five words every time.
   then. `send` moves `spawnFolder` onto `Message.directory` and clears it, and a
   pick arriving after that is refused — the words are already in flight, and
   moving a folder under them silently is worse than ignoring a late click.
-- **The chip says which folder**, `✨ petclinic` in the slot that said
-  `✨ workspace` a moment earlier. It is the same state, not a new one, so
-  `docs/overlay-states.html` is unaffected.
+- **The chip gives the picked folder a row of its own**, behind Terminal's icon
+  — the shape a binding has. Victor, 2026-09-07: *"numele folderului trebuie să
+  fie arătat cu iconul de terminal în față, ca și cum aș fi fost deja bind-uit la
+  un alt astfel de terminal … să știu dacă am setat ce trebuie"*. The argument
+  that removed this row is *the folder is always `~/workspace`, so it says
+  nothing he does not know* — and that holds exactly until he picks one out of
+  five, at which point the only place the choice could be checked was the ✨'s
+  own label, three seconds after the menu had gone.
+
+  `RelayWindow.spawnCollapsed` therefore split into two questions:
+  `spawnMarked` (the ✨ rides in front of `Listening...`, unchanged) and
+  `spawnCollapsed` (the destination row is dropped — now only when no folder was
+  picked). The ✨ **stays where it is**: it is the one fact this destination does
+  not share with a binding, namely that the session does not exist yet. Passing
+  the icon is what turns the row on, so the default `~/workspace` is untouched.
+  New state, so `docs/overlay-states.html` has a new `Shot` (`spawn-folder`).
 
 **The window flies into the chip, 2.5s after it opens** — the same `BindFlight`
 every bind plays (`AppDelegate.flySpawnedWindow`). A spawn is the one destination
@@ -2726,7 +2796,7 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `./docs/shoot-overlay-states.sh` → all 35 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 36 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies
@@ -3185,77 +3255,106 @@ answered it, rides the pointer and is hidden the moment he types.
   next `cd`. `cursor color` is the one per-tab property nothing else claims, and
   is where that idea would have to go if the status line ever proves not enough.
 
-## The corner beacon: a microphone on every screen while it listens
+## The beacon: a microphone in Wispr Flow's own badge slot (2026-09-07)
 
-**Top-right of every display, a 150pt panel, a 🎙️ pulsing 1.0 → 0.15 and back
-over 1.2 s each way** (`RecordingBeacon.swift`), for exactly as long as the
-microphone is open — and it **flies there out of the pointer**.
+**On the screen the pointer is on, 19pt, in the menu bar where Wispr Flow puts
+its own badge, pulsing 🎙️ for exactly as long as the microphone is open**
+(`RecordingBeacon.swift`) — and it flies there out of the pointer.
 
-The chip already says this — the pulsing 🔴 and `Listening…` — and it says it
-*beside the cursor*, which is the one place Victor is not looking while he talks:
-he dictates while reading something on another display, with a full-screen window
-up, and macOS hides the pointer the moment he touches the keyboard, taking the
-chip with it. The state that must never be in doubt — *is it still hearing me?* —
-had the least dependable receipt in the app. This is Wispr Flow's own answer to
-the same problem, which is what he asked for by name.
+The chip already says this — the pulsing 🔴 and the `Listening...` bar — and it
+says it *beside the cursor*, which is the one place Victor is not looking while
+he talks: he dictates while reading something on another display, with a
+full-screen window up, and macOS hides the pointer the moment he touches the
+keyboard, taking the chip with it. The state that must never be in doubt — *is it
+still hearing me?* — had the least dependable receipt in the app.
 
-- **Five times what it was**, since 2026-09-02 and on Victor's ask. A 30pt strip
-  with a 22pt glyph in it was a speck, and the whole argument for this thing is
-  that it answers *is it still hearing me?* from the display he is **not** typing
-  on — an indicator that has to be looked for does not. It costs the "a margin,
-  never on his work" property the strip had, deliberately: it is up only while he
-  is talking, half-faded for most of that by the pulse, and the corner it sits in
-  is the one part of a screen nothing is ever laid out against.
-- **It flies out of the pointer, 0.55 s after the microphone opens.** The corner
-  is the right place for this to *live* and the wrong place for it to *appear*: a
-  microphone materialising on the far edge of a screen he is not looking at is
-  something he finds later, if at all. The gesture happened under his hand, so
-  that is where the receipt starts — `BindFlight`'s sentence, run for a state
-  instead of a target: *what you just did now lives up there.*
+### It moved from a 150pt corner, and the reason is not aesthetics
 
-  The 0.55 s is `CaptureFlash.markerDuration` plus a beat, because the red cursor
-  target is blooming out of those exact pixels for the first half-second and two
-  things growing out of one point at one instant read as one confused shape. It
-  also means a dictation that ends inside that beat — under
-  `MicRecorder.minimumDuration`, i.e. a misfire — never puts anything on screen
-  at all.
+It spent a week as a **150pt microphone in the top-right corner of every
+display**, on two arguments that are both true: a corner is the one part of a
+screen nothing is ever laid out against, and big is what makes an indicator
+readable across a room. Victor replaced it anyway: *"emoji-ul acela de microfon
+vreau să îl pui în locul badge-ului lui Wispr Flow, în aceeași poziție, că mă uit
+mereu la el acolo … un pic mai mic"*.
 
-  **Only the screen the pointer is on flies**; the others come up in their
-  corners at the same moment, so all of them arrive together. A window belongs to
-  a single display, so a flight across two is not a thing that can be drawn — and
-  the sentence is only true of the corner on the screen the hand is on anyway.
-  `setFrame` on the animator rather than a layer transform: a 150pt window parked
-  over his work for the length of a flight is exactly what the corner exists to
-  avoid.
+**The eye does not go to the best place, it goes to the practised one.** A year
+of dictating through Wispr Flow is a year of glancing at one specific spot in the
+menu bar to find out whether the microphone is open. An indicator that is
+objectively more visible somewhere else is still one he has to remember to look
+for; one in the slot his eyes already travel to costs nothing to read. That beats
+size, and it is why this went from 150pt to 19.
 
-  `flown` is what keeps a `sync` from a display change mid-sentence from flying
-  the panels out of a pointer that has long since moved.
-- **The pulse is the point, and it is slow on purpose.** 1.2 s each way is the
-  🔴's tempo and is chosen for the 🔴's reason: anything brisker is something
-  flashing in the corner of the eye of a man trying to think, and this one is up
-  for the whole minute a dictation to an agent lasts. A frozen microphone is
-  indistinguishable from a hung app, which is the failure it is here to rule out.
-- **One panel per screen**, the shape `MenuBarMirror` has and for its reason: with
-  `com.apple.spaces spans-displays` off — the default — no window spans two
-  displays, and the display he is *not* typing on is the one this is for.
-  `.statusBar` level and `fullScreenAuxiliary`, so a full-screen window does not
-  bury it.
-- **Never in a screenshot** (`sharingType = .none`). The relay photographs the
-  screen during the very dictation this marks — the automatic frame and every
-  back-button shot —
-  and a confirmation inside the thing it confirms is a fixture the agent has to
-  learn to ignore. Same rule `CaptureFlash` and `MenuBarMirror` follow. **It is
-  therefore not checkable with a screenshot**; what is checkable is the geometry,
-  through `CGWindowListCopyWindowInfo`, which is how the four panels were verified
-  sitting at the right edge of each screen under the menu bar.
-- **Just under the menu bar, not in it.** The bar's right end is the clock and
-  Control Center. `visibleFrame.maxY` is what places it, so the notch's taller bar
-  needs no number written down here.
-- **`syncBorrowedGestures` is the switch**, on `listening` rather than on `live`:
-  it answers *is it hearing me?*, and the microphone is either open or it is not —
-  where the words then go is the chip's question, not this one. Riding the one
-  method every edge of a dictation already passes through is what keeps it from
-  drifting out of step with the row on the chip.
+- **The slot is measured, not written down.** `anchor(on:)` asks
+  `CGWindowListCopyWindowInfo` where Wispr Flow's badge actually is on that
+  screen — owner name plus `layer > 0` plus a size cap, because the name alone
+  also matches its 512 × 586 `Status` panel. Hardcoding the x would be hardcoding
+  *how many status items happen to sit to its right*, and that failure would be
+  silent and would look exactly like the feature not working. Measured on all
+  four of his displays: 21 × 24 each (37 tall on the built-in), one per screen.
+- **The flip is the load-bearing line.** `CGWindowList` speaks CG global
+  coordinates — y downwards from the top-left of the *primary* display — and
+  everything else here is Cocoa's. They agree only on the primary screen, which
+  is the trap `TerminalBinding.cocoaRect` is already written under and which
+  stays invisible until a second monitor is plugged in. Verified on all four:
+  the badge lands inside the menu bar's own y range on each.
+- **The fallback is 513pt from the right edge**, which is where his Wispr badge
+  sits on three of his four bars (532 on the built-in). It is only reached if
+  Wispr Flow is not running, and being a few points off there is the correct
+  amount of wrong.
+- **19pt box, 16pt glyph** — *"un pic mai mic"* than the 21 × 24 it stands beside,
+  so it reads as one badge rather than two competing.
+- **Bounds need no Screen Recording permission**; only pixels do, and nothing
+  here reads pixels.
+
+### One screen, the pointer's — and it gets out of the way
+
+It was every display at once, which is right for a corner nobody clicks and wrong
+for a badge in the menu bar: four copies means three sitting on top of three real
+menu bars he is not looking at. The pointer is the best available guess at where
+he is looking — the same assumption the chip is built on — and unlike the chip
+this one survives him typing, because it is not anchored to a pointer macOS hides.
+
+**And the pointer arriving inside it takes it off screen** until it leaves:
+*"dacă mouse-ul merge peste el, dispare ca să pot să dau click sub el"*. The panel
+has always been `ignoresMouseEvents`, so the click was already getting through;
+what it did not do is let him *see* what he was aiming at — and what is under it
+is, by construction, Wispr Flow's own badge. There is `clearance` of 8pt around
+the box, because a bare containment test flickers it on and off while he works
+along the bar.
+
+**A global monitor, not a poll.** `MenuBarMirror` polls `NSScreen.main` every
+500ms because the focused screen posts nothing; the pointer does post, and half a
+second of lag on *get out of the way so I can click* is half a second of clicking
+at something still covered. A global monitor sees only events going to other
+applications, which is every event there is here — the app is `.accessory`, never
+key, and the panel ignores the mouse. It is armed for the length of a dictation
+and taken down with it.
+
+### What did not change
+
+- **It flies out of the pointer**, 0.55s after the microphone opens
+  (`CaptureFlash.markerDuration` plus a beat, so the red cursor target is not
+  blooming out of the same pixels at the same instant). The slot is the right
+  place for it to *live* and the wrong place for it to *appear*: a microphone
+  materialising in a menu bar he is not looking at is a thing he finds later, if
+  at all. It **shrinks** now where it used to grow — 34pt to 19 — which is
+  `BindFlight`'s own direction and reads the same way.
+- **A dictation that ends inside that beat never puts anything up at all**, which
+  is the correct ceremony for a gesture that did not happen.
+- **The pulse**: 1.0 → 0.15 and back over 1.2s each way, the 🔴's tempo for the
+  🔴's reason. At 19pt it is doing more work than it used to, since size is no
+  longer carrying any of it.
+- **One panel per screen** even though only one is up: a window belongs to a
+  single display and a panel built for one keeps that display's scale and Space
+  behaviour. `.statusBar` level and `fullScreenAuxiliary`, so a full-screen
+  window does not bury it and it draws *over* the bar rather than under it.
+- **Never in a screenshot** (`sharingType = .none`) — the relay photographs the
+  screen during the very dictation this marks. So it cannot be checked with a
+  screenshot; what is checkable is the geometry, which is how both this and the
+  slot it aims at were verified.
+- **`syncBorrowedGestures` is still the switch**, on `listening` rather than
+  `live`: it answers *is it hearing me?*, and where the words go is the chip's
+  question.
 
 ## The prompt is held, not sent
 

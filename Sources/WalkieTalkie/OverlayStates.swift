@@ -90,6 +90,15 @@ enum OverlayStates {
                 o.setListening(true)
             },
 
+            Shot(slug: "spawn-folder", group: "Dictating", title: "…and he picked which folder",
+                 when: "After clicking a row in the folder menu, for the rest of that dictation.",
+                 note: "**The chosen folder gets the row a binding would have taken**, behind Terminal's own icon — Victor's ask, 2026-09-07: *\"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie\"*. The argument that removed this row was that the folder is *always* `~/workspace`, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. The ✨ stays one row up, in front of `Listening...`: it is the fact this destination does not share with a binding — the session does not exist yet.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setSpawnDestination("training-assistant", mark: "✨", icon: terminal)
+                o.setListening(true)
+            },
+
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
                  note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
@@ -106,24 +115,24 @@ enum OverlayStates {
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From the wheel click until he clicks it again — the bulk of every dictation.",
-                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the settled end of the warmth ramp** — six seconds in, where the word has finished brightening and stays for the rest of the sentence; the two shots below it are what the same row looks like on the way up.",
+                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
             },
 
-            Shot(slug: "listening-cold", group: "Dictating", title: "The first second — too short to trust",
-                 when: "The instant the microphone opens, and for the first second or so of every sentence.",
-                 note: "**`Listening…` is dark grey, and that is a forecast about the transcript.** The local model picks a language off a 30-second window before it decodes a word; with two or three seconds of speech in that window the pick is a guess, and a wrong guess is not a wrong word — it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus: 12% of 2–3s recordings and 11% of 3–4s ones came back in a language Victor does not speak, against 4% at 4–5s and **not one** past five seconds. The row is dim for exactly as long as the sentence is in that zone.",
+            Shot(slug: "listening-cold", group: "Dictating", title: "The first words — too little speech to trust",
+                 when: "From the instant the microphone opens until about a second of actual speech has arrived.",
+                 note: "**`Listening...` is a progress bar, and it is empty here.** It fills one character at a time as speech arrives and is full when the last dot lights — a *count*, not a brightness, because a fade over an unknown backdrop gives him nothing to judge \"is it done yet?\" against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus, **by voiced seconds**: 13% under one voiced second come back in a language Victor does not speak, 5% between one and two, and **none past two**.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
                 o.pinListenWarmth(0)
             },
 
-            Shot(slug: "listening-warming", group: "Dictating", title: "Three seconds in — halfway up",
-                 when: "About three seconds into a sentence: the ramp is halfway and still climbing.",
-                 note: "The same row, brightening. It moves continuously over six seconds rather than flipping at a threshold, because the underlying risk does the same thing — it falls off a cliff between three and five seconds and has no edge to draw a line on. **A colour and not a warning**: there is nothing to act on, only something to know, and the one question he has mid-press is whether to stop here or add another clause. Six seconds is where it lands — five is where the wrong-language failures stop, and the second past it is the free one.",
+            Shot(slug: "listening-warming", group: "Dictating", title: "Halfway — six characters lit",
+                 when: "About a second and a half of speech in. Speech, not seconds: if he stops to think, the bar stops with him.",
+                 note: "**It counts `MicRecorder.voicedSeconds`, not the clock**, and that correction is Victor's: *\"uneori eu pur și simplu tac — dacă tac pe microfon și nu vine semnal, nu știu cât de valoroasă e întârzierea asta\"*. The corpus is emphatic — the median dictation is only **38% voiced**, so a wall-clock bar would fill while he was thinking and tell him the one thing it exists not to. Full at **three voiced seconds**: the first bucket where both failure modes are at their floor, about fifteen words at his measured 5.1 words per voiced second, and within a hair of where he put the boundary by feel.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

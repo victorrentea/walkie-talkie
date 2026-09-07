@@ -82,50 +82,74 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// whatever it is handed, and it picks the language off that window before
     /// it decodes a word (`language=None` in `whisper_helper.py`); with three
     /// seconds of speech and twenty-seven of padding in it, that pick is a
-    /// guess. Counted over the 1254 samples in `~/.walkie-talkie/voice-corpus`,
-    /// by the length of the recording:
+    /// guess.
+    ///
+    /// **And what matters is the speech, not the clock** — the correction that
+    /// made this measure what it claims to. Victor: *"uneori eu pur și simplu
+    /// tac; dacă tac pe microfon și nu vine semnal, nu știu cât de valoroasă e
+    /// întârzierea asta"*. The corpus agrees emphatically: the median dictation
+    /// is only **38% voiced** (p10 14%), so six seconds of wall clock is 2.3
+    /// seconds of speech on an ordinary sentence and 0.8 on a thoughtful one —
+    /// and a bar that filled while he was thinking would be telling him the one
+    /// thing it exists not to. So it counts `MicRecorder.voicedSeconds`, and the
+    /// same 1254 samples re-bucketed by that measure are a far sharper cliff
+    /// than the wall-clock one they were first read off:
     ///
     /// ```
-    ///   length    decoded into a language Victor does not speak    came back empty
-    ///   2–3s       12%                                              8%
-    ///   3–4s       11%                                              8%
-    ///   4–5s        4%                                              9%
-    ///   5–6s        0%                                              4%
-    ///   6–8s        1%                                              5%
-    ///   8s+         0–1%                                            1–2%
+    ///   voiced    decoded into a language Victor does not speak    came back empty
+    ///   0–1s       13%                                             25%
+    ///   1–2s        5%                                             11%
+    ///   2–3s        0%                                              3%
+    ///   3–4s        1%                                              3%
+    ///   4–5s        1%                                              2%
+    ///   5s+         0%                                             0–1%
     /// ```
     ///
-    /// The left column is not near misses. It is whole sentences of Turkish,
-    /// Portuguese or Russian made out of Romanian speech (`Teşekkürler.`,
+    /// against 12% / 11% / 4% / 0% at two, three, four and five seconds of wall
+    /// clock — the same failures, sorted by the thing that actually causes them.
+    /// They are not near misses: they are whole sentences of Turkish, Portuguese
+    /// or Russian made out of Romanian speech (`Teşekkürler.`,
     /// `É bom ir o outro dia?`, `да`), beside the classic short-clip
-    /// hallucinations — `Thank you.`, `works works works works…`. Past five
-    /// seconds not one of the 1254 has a single case of it. The right column is
-    /// partly his own doing — a button pressed and nothing said — which is
-    /// exactly why it is the *left* column the ramp is drawn from.
+    /// hallucinations — `Thank you.`, `works works works works…`. The right
+    /// column is partly his own doing — a button pressed and nothing said —
+    /// which is exactly why it is the *left* column the bar is drawn from.
     ///
-    /// So the row is dimmed for as long as the sentence is inside that zone and
-    /// comes up to full as it leaves it. It is a **forecast, not a
-    /// measurement**: nothing here has heard the audio, and the only honest
-    /// thing it can say is *this is still the part where a short sentence comes
-    /// back as somebody else's language*. That is why it is a colour and not a
-    /// warning — it costs him no attention to ignore, and it answers the one
-    /// question he actually has mid-press, which is whether to stop now or add
-    /// another clause.
+    /// It is a **forecast, not a measurement**: it knows how much speech has
+    /// arrived, not what is in it. The only honest thing it can say is *this is
+    /// still the part where a short sentence comes back as somebody else's
+    /// language*, which is why it is a bar and not a warning — it costs him no
+    /// attention to ignore, and it answers the one question he has mid-press,
+    /// which is whether to stop now or add another clause.
+    /// The row's current text, kept because the row is drawn as an attributed
+    /// string and `applyEngineText` may be called again — by `refreshChrome`,
+    /// by a ramp tick — long after `layoutContent` decided what it says.
+    private var engineString = ""
     private var listenWarmth: CGFloat = 0
     private var warmthTimer: Timer?
     /// Set only by `pinListenWarmth`, i.e. only by `OverlayStates`.
     private var warmthPinned: CGFloat?
-    /// When the row reaches full colour.
+    /// How many characters of `Listening...` are lit right now. Kept so the tick
+    /// can do nothing at all between steps — the bar changes twelve times in a
+    /// sentence and the timer runs fifteen times a second.
+    private var warmthLit = -1
+    /// **Where the ramp is read from.** Set by `AppDelegate` to the live
+    /// recorder's meter; nil in `OverlayStates`, which has no microphone and
+    /// falls back to the clock so a photographed state still has a ramp to pin.
+    var voicedSeconds: (() -> TimeInterval)?
+    /// The bar is full at **three voiced seconds**.
     ///
-    /// **Six, not five.** Five is where the wrong-language failures stop in the
-    /// corpus, and it is also where Victor put the boundary by feel — *"dacă
-    /// vorbesc peste 5–7 secunde, transcripția e mult mai calitativă"* — which
-    /// is the same cliff read from the other side. Six because the empties are
-    /// still at four percent at five and do not settle until eight, and because
-    /// the underlying shape is a cliff between three and five seconds rather
-    /// than a slope: a second either way changes nothing he can see, and the
-    /// later end of the range is the one that costs him nothing to believe.
-    private static let enoughAudio: TimeInterval = 6.0
+    /// That is the first bucket in the table above where *both* failure modes
+    /// are at their floor, and the catastrophic one — a fluent sentence in a
+    /// language he never spoke — is already gone at two. At his median 38%
+    /// voiced fraction it is about eight seconds of ordinary talking, and at his
+    /// measured 5.1 words per voiced second it is roughly fifteen words.
+    ///
+    /// **It also lands almost exactly where he put the boundary by feel**:
+    /// *"dacă vorbesc peste 5–7 secunde, transcripția e mult mai calitativă"* —
+    /// five to seven seconds of his speech is 2 to 2.7 voiced seconds, which is
+    /// the cliff, read from the other side by the only instrument that was in
+    /// the room.
+    private static let enoughSpeech: TimeInterval = 3.0
     /// The recording row: how many shots this dictation is carrying, and how to
     /// add another.
     private let recordRow = NSView()
@@ -249,6 +273,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// See `spawnCollapsed` — the ✨, kept apart from the label so the row can be
     /// dropped without the mark going with it.
     private var spawnMark: String?
+    /// Terminal's own icon, set only when he **picked** the folder out of the
+    /// menu. Its presence is what gives the spawn a destination row — see
+    /// `spawnCollapsed` — so it is the whole of the difference between the
+    /// default `~/workspace`, which says nothing, and a choice, which does.
+    private var spawnIcon: NSImage?
 
     /// **The chip advertises no gesture at all, since 2026-08-30.** Every row
     /// whose job was to teach an input — `ReBind` and `dictate` at rest, `send`
@@ -651,8 +680,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening else { return nil }
-        return spawnCollapsed ? "\(spawnMark ?? "") Listening…" : "Listening…"
+        return spawnMarked ? "\(spawnMark ?? "") \(Self.listeningWord)" : Self.listeningWord
     }
+
+    /// **Three full stops, not `…`.** The word is a progress bar now
+    /// (`applyEngineText`) and it fills a character at a time, so the tail has to
+    /// *be* three characters — an ellipsis is one glyph and would light in one
+    /// step, taking a quarter of the bar with it. Identical on screen, and the
+    /// three dots are the last three steps, which is the part Victor reads to
+    /// know it is done.
+    private static let listeningWord = "Listening..."
 
     /// **The mark of a destination that does not exist yet, moved onto the row
     /// that reports the dictation.**
@@ -678,8 +715,31 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **And only for the spawn.** Replace Wispr's `⌨️ at the caret` is not the
     /// same kind of fact — it names a destination that genuinely varies — so it
     /// keeps its row.
-    private var spawnCollapsed: Bool {
+    /// **The ✨ rides in front of `Listening...`** — the half of the old
+    /// `spawnCollapsed` that is about the mark rather than about the row.
+    private var spawnMarked: Bool {
         spawnMark != nil && sentPrompt == nil && (listening || transcribing)
+    }
+
+    /// **…and the destination row is dropped with it — unless he picked a
+    /// folder.** Since 2026-09-07 the two are separate questions, and the folder
+    /// menu is why. The argument that took the row away is that the folder is
+    /// *always* `~/workspace` — nothing is inferred, so the row spent a line
+    /// beside his cursor saying one thing he already knew. That argument holds
+    /// exactly until he clicks a row in the folder menu, at which point the
+    /// destination is a thing he chose from five and the only place he could
+    /// check it was the ✨'s own label, three seconds after the menu had gone.
+    ///
+    /// Victor: *"dacă aleg în acel select folder în care se pornește sesiunea
+    /// nouă, numele folderului trebuie să fie arătat cu iconul de terminal în
+    /// față, ca și cum aș fi fost deja bind-uit la un alt astfel de terminal …
+    /// să știu dacă am setat ce trebuie"*. So a picked folder comes back with
+    /// Terminal's own icon and takes the row a binding would have taken, under
+    /// `Listening...` — and the ✨ stays where it is, because *that* is still
+    /// the fact this destination does not share with a binding: the session does
+    /// not exist yet.
+    private var spawnCollapsed: Bool {
+        spawnMarked && spawnIcon == nil
     }
 
     /// The gesture that picks an element out of the page — shown **only while
@@ -1250,7 +1310,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // nothing on its right, and reserving 5pt for it would leave the chip
         // visibly off-centre around its own icon.
         let titleWidth = ceil(titleLabel.frame.width)
-            + (boundLabel != nil ? glyphColumn + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
+            + (boundLabel != nil || spawnIcon != nil
+               ? glyphColumn + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -1377,7 +1438,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // The waits go with it (`statusLines` → `⏳ Transcribing… 4s`), because
         // they are the same slot at the next moment — *"la fel în toate"*.
         if let engine = engineText {
-            engineInfo.stringValue = engine
+            engineString = engine
+            applyEngineText()
             layoutGlyphRow(engineRow, glyph: recordDot, label: engineInfo, width: innerWidth)
             engineRow.isHidden = false
             rows.append((engineRow, recordRowHeight))
@@ -1899,14 +1961,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// One column for the icons and one for the text is what makes it a card
     /// rather than four labels that happen to be adjacent.
     private func layoutTitleRow(width: CGFloat) {
-        let bound = boundLabel != nil
+        // A picked spawn folder wears one too, and for the same reason a
+        // binding does: the icon is what says *a terminal*, which is the whole
+        // of "as if I were already bound to one".
+        let bound = boundLabel != nil || spawnIcon != nil
         titleGlyph.isHidden = !bound
         // **Here rather than in `setBound`**, because the glyph is no longer a
         // property of the binding: it depends on whether a sentence is in flight,
         // which changes several times per dictation and never passes through
         // `setBound` at all. This method runs on every layout, which is every
         // state change there is.
-        titleGlyph.image = collapsed ? Self.micGlyph : (boundIcon ?? Self.pinGlyph)
+        titleGlyph.image = collapsed ? Self.micGlyph : (spawnIcon ?? boundIcon ?? Self.pinGlyph)
         titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
         let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
@@ -2150,32 +2215,106 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
         // Last, and after both branches: the ramp is a *modifier* of whichever
         // colour this row was just given, not a third case beside them.
-        applyEngineInk()
+        applyEngineText()
     }
 
-    /// The colour of `Listening…` at this instant — dark grey at the top of the
-    /// sentence, the row's own colour once `enoughAudio` has gone by.
+    /// **`Listening...` is the progress bar** — the word fills a character at a
+    /// time, left to right, dim to lit, and it is full when the last dot lights.
     ///
-    /// **A colour and not an opacity.** Fading the layer would take the halo
-    /// with it, and the halo is the only thing that keeps a white row legible
-    /// over a white page (see `refreshChrome`) — so the dim end of the ramp
-    /// would have been invisible on exactly the backgrounds the halo exists for.
-    /// The ink moves; the outline drawn around it does not.
-    private func applyEngineInk() {
+    /// It was one continuous fade of the whole row for an afternoon, and Victor
+    /// threw it out on the only test that matters: *"nu e suficient de vizibilă…
+    /// așa fade, nu înțeleg când e aprins complet"*. He is right, and the reason
+    /// is that a fade has **no landmark in it**. Brightness is judged against
+    /// what is beside it, and this row spends its life over a terminal, an
+    /// editor, a photograph — so "is it fully lit yet?" is a question about a
+    /// grey he cannot compare to anything, asked mid-sentence, in peripheral
+    /// vision. Twelve characters filling one after another turn the same number
+    /// into a **count**: it is done when there are no dim letters left, which is
+    /// a fact about the row itself and needs nothing to compare against.
+    ///
+    /// It is also why the tail is `...` and not `…` — see `listeningWord`.
+    ///
+    /// **Binary per character, not a per-character fade.** A smooth gradient
+    /// across the letters would be the same complaint again, in twelve places.
+    ///
+    /// **Colour and not opacity.** Dimming the layer would take the halo with
+    /// it, and the halo is the only thing that keeps a white row legible over a
+    /// white page (see `refreshChrome`) — the unlit end would have been
+    /// invisible on exactly the backgrounds the halo exists for. The ink
+    /// changes; the outline drawn around it does not.
+    ///
+    /// **Built, never assigned** — the rule `applySelectionText` is written
+    /// under, for its reason: an attributed string outranks `textColor`, so
+    /// `refreshChrome`'s white-with-a-halo switch would do nothing to a row
+    /// that had one assigned behind its back. The lit ink is read *off* the
+    /// label, so this stays correct in both of the row's homes without knowing
+    /// which one it is in.
+    private func applyEngineText() {
         let warmth = warmthPinned ?? listenWarmth
-        if anchored {
-            // White at the top end, because that is what every other row on the
-            // bare chip is and the ramp must land on it rather than near it.
-            // 0.45 at the bottom: dark enough to read as *not yet*, light enough
-            // to still be a word against the black halo.
-            engineInfo.textColor = NSColor(calibratedWhite: 0.45 + 0.55 * warmth, alpha: 1)
-        } else {
-            // The panel almost never carries this row — it is up after the words
-            // are in — but it does in `OverlayStates`, and a row that ignored the
-            // ramp in one of its two homes would read as the ramp being broken.
-            engineInfo.textColor = NSColor.secondaryLabelColor
-                .withAlphaComponent(0.35 + 0.65 * warmth)
+        let lit = engineInfo.textColor ?? (anchored ? .white : .secondaryLabelColor)
+        // Opaque grey on the chip rather than a faded white: alpha over an
+        // unknown backdrop is the halo problem again, one step further in.
+        let dim = anchored ? NSColor(calibratedWhite: 0.45, alpha: 1)
+                           : lit.withAlphaComponent(0.30)
+
+        let out = NSMutableAttributedString()
+        // **The ✨ goes in as a picture, not as a character** — `Glyphs.emoji`
+        // through `inline`, the way every other glyph that rides *between* words
+        // on this chip does. A raw emoji inside an attributed string on a label
+        // that carries a halo is the failure this file has warned about since
+        // `applyTitleText`: the emoji draws and every other glyph comes out
+        // fully transparent. It cost the spawn row its entire word for one
+        // build — `🔴 ✨` and nothing else — and it is invisible in review,
+        // because the *other* spawn state (a picked folder, wider chip) drew
+        // correctly. Measured, not reasoned: `docs/states/spawn.png`.
+        if spawnMarked, let mark = spawnMark {
+            out.append(Self.inline(Glyphs.emoji(mark, ink: iconInk), font: hintFont))
+            out.append(NSAttributedString(string: " ", attributes: [.font: hintFont]))
         }
+
+        // **`Listening...` is the progress bar** — the word fills a character at
+        // a time, left to right, dim to lit, and it is full when the last dot
+        // lights.
+        //
+        // It was one continuous fade of the whole row for an afternoon, and
+        // Victor threw it out on the only test that matters: *"nu e suficient
+        // de vizibilă… așa fade, nu înțeleg când e aprins complet"*. He is
+        // right, and the reason is that a fade has **no landmark in it**.
+        // Brightness is judged against what is beside it, and this row spends
+        // its life over a terminal, an editor, a photograph — so "is it fully
+        // lit yet?" is a question about a grey he cannot compare to anything,
+        // asked mid-sentence, in peripheral vision. Twelve characters filling
+        // one after another turn the same number into a **count**: it is done
+        // when there are no dim letters left, which is a fact about the row
+        // itself and needs nothing to compare against.
+        //
+        // It is also why the tail is `...` and not `…` — see `listeningWord`.
+        //
+        // **Binary per character, not a per-character fade.** A smooth gradient
+        // across the letters would be the same complaint again, in twelve
+        // places.
+        //
+        // **Colour and not opacity.** Dimming the layer would take the halo with
+        // it, and the halo is the only thing that keeps a white row legible over
+        // a white page (see `refreshChrome`) — the unlit end would have been
+        // invisible on exactly the backgrounds the halo exists for. The ink
+        // changes; the outline drawn around it does not.
+        //
+        // **Built, never assigned** — the rule `applySelectionText` is written
+        // under, for its reason: an attributed string outranks `textColor`, so
+        // `refreshChrome`'s white-with-a-halo switch would do nothing to a row
+        // that had one assigned behind its back. The lit ink is read *off* the
+        // label, so this stays correct in both of the row's homes without
+        // knowing which one it is in.
+        let word = Array(Self.listeningWord)
+        let steps = Int((CGFloat(word.count) * warmth).rounded())
+        for (i, ch) in word.enumerated() {
+            out.append(NSAttributedString(string: String(ch),
+                                          attributes: [.font: hintFont,
+                                                       .foregroundColor: i < steps ? lit : dim]))
+        }
+        engineInfo.attributedStringValue = out
+        warmthLit = steps
     }
 
     private static func halo() -> NSShadow {
@@ -2425,36 +2564,46 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     private func stopPulse() { recordDot.layer?.removeAnimation(forKey: "pulse") }
 
-    /// The dark-to-light ramp on `Listening…`, over `enoughAudio` — see
-    /// `listenWarmth` for the measurement it is drawn from.
+    /// Fills `Listening...` as speech arrives, over `enoughSpeech` **voiced**
+    /// seconds — see `listenWarmth` for the measurement it is drawn from and
+    /// `applyEngineText` for why it is a bar rather than a fade.
     ///
-    /// **A timer, where the pulse beside it is a layer animation.** `textColor`
-    /// is not animatable: an `NSTextField` draws its string through the view,
-    /// not through a `CATextLayer`, so Core Animation has nothing to interpolate
-    /// and `NSAnimationContext` silently does nothing. Fifteen frames a second
-    /// for six seconds is ninety ticks that each assign one colour and lay out
-    /// nothing — the ramp must not go anywhere near `layoutContent`, which would
-    /// re-measure and re-place every row of the chip ninety times per sentence.
+    /// **A timer, where the pulse beside it is a layer animation**, and it is a
+    /// timer twice over. `textColor` is not animatable — an `NSTextField` draws
+    /// its string through the view, not through a `CATextLayer`, so Core
+    /// Animation has nothing to interpolate and `NSAnimationContext` silently
+    /// does nothing. And there is nothing to interpolate *toward*: the bar is
+    /// driven by audio that has not arrived yet, so its length is polled, never
+    /// scheduled. Fifteen ticks a second, each reading one `Double` under a lock
+    /// and doing nothing at all unless the count of lit characters changed — the
+    /// ramp must not go anywhere near `layoutContent`, which would re-measure
+    /// and re-place every row of the chip on every frame.
     ///
-    /// Elapsed time is read off the clock rather than counted in ticks, because
-    /// a timer beside a running transcription gets coalesced and a count would
-    /// quietly stretch the six seconds into eight.
+    /// **The clock is the fallback, not the source.** `voicedSeconds` is nil in
+    /// `OverlayStates`, which has no microphone; there the bar fills over the
+    /// same number of seconds so a photographed state still has one to pin.
     private func startWarmth() {
         stopWarmth()
-        // A pinned frame is a photograph being taken; the clock has no business
-        // moving it. See `pinListenWarmth`.
-        guard warmthPinned == nil else { return applyEngineInk() }
+        // A pinned frame is a photograph being taken; nothing may move it.
+        // See `pinListenWarmth`.
+        guard warmthPinned == nil else { return applyEngineText() }
         listenWarmth = 0
-        applyEngineInk()
+        warmthLit = -1
+        applyEngineText()
         let opened = Date()
         let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] tick in
             guard let self else { return tick.invalidate() }
-            let warmth = min(1, Date().timeIntervalSince(opened) / Self.enoughAudio)
+            let heard = self.voicedSeconds?() ?? Date().timeIntervalSince(opened)
+            let warmth = min(1, heard / Self.enoughSpeech)
             self.listenWarmth = CGFloat(warmth)
-            self.applyEngineInk()
-            // Nothing to do once it has arrived, and a dictation can run for
-            // minutes: the timer stops rather than spending the rest of the
-            // sentence assigning white to a white label.
+            // Twelve steps in a sentence against fifteen ticks a second: the
+            // overwhelming majority of these are a no-op, and rebuilding an
+            // attributed string to redraw the same twelve characters is the one
+            // cost this loop could have had.
+            let steps = Int((CGFloat(Self.listeningWord.count) * CGFloat(warmth)).rounded())
+            if steps != self.warmthLit { self.applyEngineText() }
+            // Nothing left to do once it is full, and a dictation can run for
+            // minutes.
             if warmth >= 1 { self.stopWarmth() }
         }
         // `.common`, or the ramp freezes the moment a modal tracking loop starts —
@@ -2539,10 +2688,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// `mark` is the one character of the label that survives the row being
     /// dropped — see `spawnCollapsed`. Passing none keeps the old behaviour: a
     /// title row of its own, which is what Replace Wispr wants.
-    func setSpawnDestination(_ label: String?, mark: String? = nil) {
-        guard spawnLabel != label || spawnMark != mark else { return }
+    func setSpawnDestination(_ label: String?, mark: String? = nil, icon: NSImage? = nil) {
+        guard spawnLabel != label || spawnMark != mark || spawnIcon !== icon else { return }
         spawnLabel = label
         spawnMark = label == nil ? nil : mark
+        spawnIcon = label == nil ? nil : icon
         refreshTitle()
         layoutContent()
     }
@@ -2660,7 +2810,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     func pinListenWarmth(_ value: Double?) {
         warmthPinned = value.map { CGFloat(max(0, min(1, $0))) }
         if warmthPinned != nil { stopWarmth() }
-        applyEngineInk()
+        applyEngineText()
     }
 
     /// How many pictures this dictation is carrying, the automatic context capture

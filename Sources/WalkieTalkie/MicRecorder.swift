@@ -37,6 +37,60 @@ final class MicRecorder {
 
     private(set) var isRecording = false
 
+    /// **How many seconds of this recording were actually speech**, updated on
+    /// the audio thread as the buffers arrive.
+    ///
+    /// It exists because the chip's warmth ramp was counting the wrong thing.
+    /// Victor: *"uneori eu pur și simplu tac — dacă tac pe microfon și nu vine
+    /// semnal, nu știu cât de valoroasă e întârzierea asta"*. He is right, and
+    /// the corpus says how right: the **median dictation is only 38% voiced**
+    /// (p10 14%), so six seconds of wall clock is 2.3 seconds of speech on an
+    /// ordinary sentence and 0.8 on a thoughtful one — and the risk the ramp
+    /// forecasts tracks the speech, not the clock. Re-bucketed by this measure
+    /// over the same 1254 samples, the cliff is far sharper than the wall-clock
+    /// one: 13% of dictations with under **one** voiced second come back in a
+    /// language he does not speak, 5% between one and two, and **0% past two**.
+    ///
+    /// Read from the main thread while the ramp ticks, written from CoreAudio's
+    /// thread; `Double` is not atomic on any platform this ships to, so it goes
+    /// through the same `lock` the rest of the state does. Fifteen reads a
+    /// second against a lock held for one addition is not a contention anybody
+    /// will measure.
+    var voicedSeconds: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return voiced
+    }
+    private var voiced: TimeInterval = 0
+
+    /// The noise floor this recording is being judged against, tracked rather
+    /// than fixed.
+    ///
+    /// A fixed threshold cannot work here and the reason is already written down
+    /// in `InputDevice`: measured on the same room, the DJI receiver peaks at
+    /// 16552 where the built-in microphone manages 855. One number would call
+    /// the built-in silent all day or the receiver's room tone speech.
+    ///
+    /// So: instant attack downwards, slow release upwards — the floor drops to
+    /// any quiet buffer at once and climbs back at 2% a buffer, which is the
+    /// standard cheap noise tracker and is what makes it settle into the gaps
+    /// between his words rather than into his words. Seeded on the first buffer,
+    /// which is the one place a recording is guaranteed not to have started
+    /// mid-syllable.
+    private var noiseFloor: Float = -1
+    /// How far over the floor a buffer has to sit to count as speech. 9 dB is
+    /// wide enough that room tone, a fan and the receiver's hiss never reach it,
+    /// and narrow enough to catch the tail of a quiet word.
+    private static let voicedOverFloor: Float = 9
+    /// And an absolute floor under that, for the case the adaptive one cannot
+    /// see: a recording that is *entirely* room tone has a noise floor equal to
+    /// its own content, and every buffer would clear a purely relative bar.
+    private static let voicedAbsoluteFloor: Float = 180
+    /// The window the meter runs on, in frames of the 16 kHz output — 64ms.
+    /// Fixed rather than "one converted buffer", because a buffer's length
+    /// depends on the input device's rate and the constants above were
+    /// calibrated at this hop over the whole corpus.
+    private static let voicedHop = 1024
+
     /// Asks for the microphone **once, up front**, rather than at the first
     /// press: the grant dialog is modal and takes a few seconds of hunting in
     /// System Settings if it was ever refused, and the moment to discover that is
@@ -124,6 +178,10 @@ final class MicRecorder {
         }
 
         startedAt = Date()
+        // Per recording, both of them: a floor carried over from the last
+        // sentence would be a floor for a room, a microphone and a distance from
+        // it that may all have changed since.
+        lock.lock(); voiced = 0; noiseFloor = -1; lock.unlock()
         isRecording = true
         Log.info("mic: recording through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
@@ -191,5 +249,40 @@ final class MicRecorder {
         do { try file.write(from: out) } catch {
             Log.error("mic: could not write buffer — \(error.localizedDescription)")
         }
+        meter(out)
+    }
+
+    /// Adds this buffer's speech to `voiced`. Same thread as `append`, and
+    /// deliberately after the write: the file is the product, the meter is a
+    /// readout, and a meter that threw would not be allowed to cost a sentence.
+    ///
+    /// Measured on the converted buffer rather than the input one so it sees the
+    /// same 16 kHz mono int16 the model and the corpus see — which is also what
+    /// makes the constants above transferable from the corpus replay that set
+    /// them (`evals/voiced-seconds.py`).
+    private func meter(_ buffer: AVAudioPCMBuffer) {
+        guard let samples = buffer.int16ChannelData?[0] else { return }
+        let hop = Self.voicedHop
+        let count = Int(buffer.frameLength)
+        guard count >= hop else { return }
+
+        var seconds: TimeInterval = 0
+        lock.lock()
+        var floor = noiseFloor
+        for start in stride(from: 0, through: count - hop, by: hop) {
+            var sum: Float = 0
+            for i in start..<(start + hop) {
+                let s = Float(samples[i])
+                sum += s * s
+            }
+            let rms = (sum / Float(hop)).squareRoot() + 1e-6
+            if floor < 0 || rms < floor { floor = rms }        // instant attack
+            else { floor += (rms - floor) * 0.02 }             // slow release
+            let bar = max(Self.voicedAbsoluteFloor, floor * pow(10, Self.voicedOverFloor / 20))
+            if rms > bar { seconds += Double(hop) / 16000 }
+        }
+        noiseFloor = floor
+        voiced += seconds
+        lock.unlock()
     }
 }
