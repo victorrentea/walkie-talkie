@@ -3260,9 +3260,12 @@ which is what guarantees the two can never drift.
 - **IDE and keystroke targets get no flight.** Nothing outside those apps can
   name their window's frame honestly, and a flight toward a guessed rectangle
   is worse than none.
-- **A spawn and a cancel have their own grammar already** — the spawn's
-  backwards flight, the cancel's 🗑️ row — so neither flies. Replace Wispr holds
-  no prompt at all, so there is nothing to fly.
+- **A cancel has its own grammar already** — the 🗑️ row — so it does not fly,
+  and Replace Wispr holds no prompt at all, so there is nothing to fly. **A spawn
+  makes this very call, since 2026-09-07**, from its held dialog to the window
+  that has just opened (*The spawn's flight leaves the dialog*): it is late by
+  however long the terminal takes to appear, and it is the one flight whose
+  source has to be kept alive on screen until then.
 
 ### ⏎ sends it, and clicking the words edits them
 
@@ -3766,7 +3769,50 @@ skill uses, and deliberately not a size or a name. Everything below `board()`
 speaks **AppleScript's** coordinates (origin top-left of the primary screen, y
 downwards), because the only thing any of it is for is `set bounds of window`.
 
-### The spawn's flight runs backwards
+### The spawn's flight leaves the dialog, and the dialog waits for it
+
+*"dialogul dispare … înainte ca terminalul pornit să apară, dacă îl deschid unul
+nou. În cazul în care a deschis terminalul nou, așteaptă ca terminalul să
+pornească și abia apoi începe animarea care duce fereastra către terminal"*, and
+then: *"imediat când chenarul din jurul dialogului pleacă către terminalul nou
+pornit, atunci să înceapă și fade-out-ul pe jumătate de secundă, în timp ce
+chenarul călătorește către terminal"* — Victor, 2026-09-07.
+
+**The panel is not relayouted when a spawn is sent** (`RelayWindow.spawnPanelHeld`).
+Every other resolved prompt collapses back to the chip in the frame it is
+released, and for a delivery that is right — the words went to a session that is
+already open, so the panel has nothing left to say. A spawn is the one case where
+the destination **does not exist yet**: the terminal takes a few hundred
+milliseconds to appear, and collapsing on the way there left a hole in the middle
+of the gesture — the dialog gone, nothing arrived, and then an outline setting off
+from a chip beside the pointer with no visible connection to what had just been
+read.
+
+The state behind the panel is cleared exactly as it always was (the delegate may
+raise the next prompt from inside that same call); what stays on screen is the
+last frame the views were laid out in, which is what he was reading. Two
+consequences fall out of holding a *live* panel rather than a picture of one, and
+both are guarded: it must not follow the pointer (`followCursor` returns early —
+the outline is aimed at that exact rectangle), and nothing else may touch its
+alpha (`refreshOpacity` returns early — a keystroke arriving mid-dissolve would
+otherwise animate it back up). Any **relayout** ends the hold (`endSpawnHold`, at
+the top of `layoutContent`): a new dictation or a flash is newer state than this
+picture, and newer state wins the chip.
+
+**The outline then leaves the dialog** — `BindFlight.fly(from: promptFarewell,
+to: { window })`, which is *the same call the send flight makes*, so the two
+panel→terminal flights are one animation with two callers. It flies the moment
+`adoptSpawnedWindow` finds the window, and the dialog begins a half-second fade
+in that same instant (`releaseSpawnPanel`, `AppDelegate.spawnPanelFade` = 0.5s):
+the rectangle leaving the dialog is what the dialog *becomes*, so the panel
+emptying out behind it is the other half of one sentence — cut in one frame it
+reads as two unrelated things, held to the end it reads as a dialog that forgot
+to close. The whole gesture is therefore a fade, a 0.7s flight and a fade, with
+nothing hanging at either end.
+
+**The old backwards flight is still there, as the fallback**, for a spawn that
+never showed a panel — there is then nothing but the chip to leave from. What
+follows is why it was built that way, and it is still the argument for that case.
 
 *"the animation should be backwards, from the mouse going to the terminal, and
 should start as soon as the terminal window is displayed. Faster a bit."* —

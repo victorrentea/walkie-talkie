@@ -1084,6 +1084,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     private func followCursor() {
+        // **A held spawn dialog does not follow anything.** It is the panel the
+        // prompt was read on, kept where it was read while its terminal opens,
+        // and the outline in the air is aimed at that exact rectangle — a dialog
+        // that walked off after the pointer would leave the flight starting from
+        // empty screen. See `spawnPanelHeld`.
+        if spawnPanelHeld || spawnPanelFading { return }
+
         // The first real movement of the pointer brings the chip back after
         // typing sent it away.
         if typing, hypot(NSEvent.mouseLocation.x - lastMouse.x,
@@ -1169,6 +1176,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Manual layout in one pass: build the visible rows top-down with their
     /// heights, size the window to their total, then place them.
     private func layoutContent(animated: Bool = false) {
+        // A held spawn dialog is the last frame of a state that has already been
+        // cleared. Any relayout means newer state has arrived, and newer state
+        // wins the chip — see `releaseSpawnPanel`.
+        endSpawnHold()
         rememberChip()
         // Hug the content of the *current* state, not the widest state there is:
         // standing by is what the overlay does for hours, and it should take no
@@ -2281,6 +2292,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     private func refreshOpacity() {
+        // The held dialog owns the panel's alpha until it is released — its own
+        // fade is the only thing allowed to move it, and a keystroke arriving
+        // mid-dissolve must not animate it back up. `endSpawnHold` clears the
+        // flags before it calls this, so the way back is not blocked.
+        guard !spawnPanelHeld, !spawnPanelFading else { return }
+
         // The chip belongs to the pointer: no pointer, no chip. Panels are their
         // own reason to be on screen and stay put.
         //
@@ -2820,6 +2837,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         // frame it was just read at. `releaseHeld` flies it to the terminal the
         // words were sent to. A cancel leaves nothing behind to fly.
         promptFarewell = send ? panel.frame : nil
+        // Read before the state is cleared, and only true for the ⏎ Start New
+        // half of this panel — see `spawnPanelHeld`.
+        let holdForSpawn = send && promptSpawning
         // Leave the field before anything else: it owns the text being resolved,
         // and it is holding the keyboard.
         endPromptEdit()
@@ -2837,9 +2857,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         promptSelection = nil
         promptFront = nil
         promptWarning = nil
-        layoutContent()
-        reposition()
-        refreshOpacity()
+        if holdForSpawn {
+            spawnPanelHeld = true
+        } else {
+            layoutContent()
+            reposition()
+            refreshOpacity()
+        }
         // Last, and with the state already cleared: the delegate may well show
         // the next prompt from inside this call. The edited words travel with the
         // verdict rather than being fetched afterwards — by then this state is
@@ -2969,6 +2993,75 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// (`panelImage()`, since the window is invisible to every screen capture)
     /// until 2026-09-07, when the flight became an outline — see `sendFlight`.
     var promptFarewell: CGRect?
+
+    /// **A spawn's dialog stays on screen until its terminal exists** (Victor,
+    /// 2026-09-07: *"dialogul dispare … înainte ca terminalul pornit să apară …
+    /// așteaptă ca terminalul să pornească și abia apoi începe animarea"*).
+    ///
+    /// Every other resolved prompt collapses back to the chip in the same frame
+    /// it is released, and for a delivery that is right: the words went to a
+    /// session that is already open, so the panel has nothing left to say. A
+    /// spawn is the one case where the destination **does not exist yet** — the
+    /// terminal takes a few hundred milliseconds to appear — and collapsing on
+    /// the way there left the gesture with a hole in the middle: the dialog was
+    /// gone, nothing had arrived, and the outline then set off from a chip beside
+    /// the pointer that had no visible connection to what had just been read.
+    ///
+    /// So the panel is simply **not relayouted** when a spawn is sent. The state
+    /// behind it is cleared exactly as it always was — the delegate may raise the
+    /// next prompt from inside that same call — and what stays is the last frame
+    /// the views were laid out in, which is what he was reading. `AppDelegate`
+    /// ends the hold with `releaseSpawnPanel` the moment the window is on screen,
+    /// and any relayout in between (a new dictation, a flash) ends it too, since
+    /// new state on the chip is by definition newer than this picture.
+    private var spawnPanelHeld = false
+    /// The half second between the outline leaving and the panel being gone.
+    private var spawnPanelFading = false
+
+    /// Whether a spawn's dialog is currently being kept on screen.
+    var isHoldingSpawnPanel: Bool { spawnPanelHeld }
+
+    /// Dissolve the held dialog and collapse back to the chip.
+    ///
+    /// **The fade starts as the outline leaves, and runs while it travels**
+    /// (Victor, 2026-09-07: *"imediat când chenarul din jurul dialogului pleacă
+    /// către terminalul nou pornit, atunci să înceapă și fade-out-ul pe jumătate
+    /// de secundă, în timp ce chenarul călătorește"*). The two are one gesture:
+    /// the rectangle that leaves the dialog is what the dialog *becomes*, so the
+    /// panel emptying out behind it is the other half of the same sentence —
+    /// where cutting it in one frame reads as two unrelated things, and holding
+    /// it to the end reads as a dialog that forgot to close.
+    ///
+    /// Nothing happens if the hold has already ended: the flight is fired from a
+    /// background poll, and a dictation started in the meantime has taken the
+    /// chip back.
+    func releaseSpawnPanel(fadeOver seconds: TimeInterval = 0.5) {
+        guard spawnPanelHeld else { return }
+        spawnPanelHeld = false
+        spawnPanelFading = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = seconds
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self = self, self.spawnPanelFading else { return }
+            self.spawnPanelFading = false
+            self.layoutContent()
+            self.reposition()
+            self.refreshOpacity()
+        })
+    }
+
+    /// The hold is over because something else wants the chip. Called from
+    /// `layoutContent`, so there is no state change that can draw over a held
+    /// dialog and leave it half on screen.
+    private func endSpawnHold() {
+        guard spawnPanelHeld || spawnPanelFading else { return }
+        spawnPanelHeld = false
+        spawnPanelFading = false
+        // Not `alphaValue = 1`: a fade already in the air is driven by the
+        // animator, and only another animation on the same property replaces it.
+        refreshOpacity()
+    }
 
     /// Draw the overlay into a PNG — the only way left to *see* it.
     ///

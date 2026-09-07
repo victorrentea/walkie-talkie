@@ -1765,6 +1765,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .opened(let tty):
                     self.adoptSpawnedWindow(tty: tty)
                 case .failed(let why):
+                    // Nothing to fly to and nothing to wait for — the dialog goes
+                    // now, and the warning below takes the chip.
+                    self.overlay.promptFarewell = nil
+                    self.overlay.releaseSpawnPanel(fadeOver: 0.2)
                     // The outbox already has the line — `commit` wrote it before
                     // this ran — so what is lost is the delivery, and this is the
                     // only place he would learn that.
@@ -1828,16 +1832,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let frame = frame {
                 DispatchQueue.main.async {
                     // Same reason ⌘⌃B wakes it: macOS hides the pointer while he
-                    // types, and a flight that leaves a hidden chip leaves from
-                    // empty screen.
+                    // types, and the chip the dialog collapses back into must be
+                    // somewhere he can see it land.
                     self.overlay.wakePointer()
-                    BindFlight.fly(from: frame, to: { [weak self] in
-                        self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
-                    }, seconds: Self.spawnFlightSeconds, reversed: true,
-                       outlined: true, tail: Self.spawnFlightRest)
+                    // **The outline leaves the dialog, not the chip** (Victor,
+                    // 2026-09-07). The panel he read the prompt on is still on
+                    // screen — it was held for exactly this moment — so the
+                    // flight is the same sentence the send flight says, with the
+                    // same call: *these words are now that window over there*.
+                    // It used to leave the chip beside the pointer, `reversed`,
+                    // because by then the dialog was long gone; holding the
+                    // dialog is what makes the honest source available.
+                    let farewell = self.overlay.promptFarewell
+                    self.overlay.promptFarewell = nil
+                    // Now, not when the flight lands: the fade and the travel are
+                    // one gesture — see `RelayWindow.releaseSpawnPanel`.
+                    self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                    if let farewell = farewell, farewell.width > 1 {
+                        BindFlight.fly(from: farewell, to: { frame },
+                                       seconds: Self.spawnFlightSeconds,
+                                       outlined: true, tail: Self.spawnFlightRest)
+                    } else {
+                        // A spawn that never showed a panel has only the chip to
+                        // leave from, which is the flight this used to be.
+                        BindFlight.fly(from: frame, to: { [weak self] in
+                            self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                        }, seconds: Self.spawnFlightSeconds, reversed: true,
+                           outlined: true, tail: Self.spawnFlightRest)
+                    }
                 }
             } else {
                 Log.error("✨ spawned window on \((tty as NSString).lastPathComponent) never appeared — no flight")
+                // The dialog was being held for a window that never came. It
+                // still has to go: a panel left on screen is worse than a missing
+                // receipt.
+                DispatchQueue.main.async {
+                    self.overlay.promptFarewell = nil
+                    self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                }
             }
         }
         // **The bind keeps the beat it always had, on a queue of its own.**
@@ -1869,6 +1901,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// without a fade the last frame is a white rectangle blinking off a
     /// terminal. Landing and dissolving is the same sentence with an ending.
     private static let spawnFlightRest: TimeInterval = 0.5
+
+    /// **The half second the dialog spends dissolving** while the outline that
+    /// left it travels to the new terminal (Victor, 2026-09-07). Deliberately the
+    /// same number as `spawnFlightRest` at the other end of the same flight: the
+    /// panel empties out over half a second here, the outline dissolves over half
+    /// a second there, and the travel between them is the 0.7s of
+    /// `spawnFlightSeconds` — so the whole gesture is a fade, a flight and a fade
+    /// with nothing left hanging at either end.
+    private static let spawnPanelFade: TimeInterval = 0.5
 
     /// How long to keep asking Terminal for the new window before giving up on
     /// the flight. Generous, because it costs nothing when the window is up in
