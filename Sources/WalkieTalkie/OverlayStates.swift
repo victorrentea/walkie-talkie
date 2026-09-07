@@ -8,7 +8,7 @@ import AppKit
 /// macOS 15). The only way to see it is `RelayWindow.snapshot`, the view drawing
 /// itself — which until now was fired by hand with `kill -USR1` while the state
 /// happened to be on screen. That is fine for one picture and hopeless for the
-/// thirty-two states below: half of them last a second and a half of *those*
+/// thirty-five states below: half of them last a second and a half of *those*
 /// cannot be reached on demand at all (`⚠️ Whisper unavailable`, a transcript the
 /// confidence gate flagged).
 ///
@@ -106,10 +106,28 @@ enum OverlayStates {
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From the wheel click until he clicks it again — the bulk of every dictation.",
-                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.",
+                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the settled end of the warmth ramp** — six seconds in, where the word has finished brightening and stays for the rest of the sentence; the two shots below it are what the same row looks like on the way up.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+            },
+
+            Shot(slug: "listening-cold", group: "Dictating", title: "The first second — too short to trust",
+                 when: "The instant the microphone opens, and for the first second or so of every sentence.",
+                 note: "**`Listening…` is dark grey, and that is a forecast about the transcript.** The local model picks a language off a 30-second window before it decodes a word; with two or three seconds of speech in that window the pick is a guess, and a wrong guess is not a wrong word — it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus: 12% of 2–3s recordings and 11% of 3–4s ones came back in a language Victor does not speak, against 4% at 4–5s and **not one** past five seconds. The row is dim for exactly as long as the sentence is in that zone.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(0)
+            },
+
+            Shot(slug: "listening-warming", group: "Dictating", title: "Three seconds in — halfway up",
+                 when: "About three seconds into a sentence: the ramp is halfway and still climbing.",
+                 note: "The same row, brightening. It moves continuously over six seconds rather than flipping at a threshold, because the underlying risk does the same thing — it falls off a cliff between three and five seconds and has no edge to draw a line on. **A colour and not a warning**: there is nothing to act on, only something to know, and the one question he has mid-press is whether to stop here or add another clause. Six seconds is where it lands — five is where the wrong-language failures stop, and the second past it is the free one.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(0.5)
             },
 
             Shot(slug: "listening-chrome", group: "Dictating", title: "Dictating, at a page",
@@ -403,6 +421,14 @@ enum OverlayStates {
         o.setChromeFront(false)
         o.setSpawnDestination(nil)
         o.setBound(label: nil)
+        // **Settled, unless a shot says otherwise.** `Listening…` ramps from dark
+        // grey to full over six seconds (`RelayWindow.listenWarmth`), so without
+        // a chosen frame every dictating state on this page would be a picture of
+        // its own first 200ms — the shutter fires immediately after `apply`. The
+        // default is the end of the ramp, which is what the row looks like for
+        // all but the first seconds of every sentence; the two shots that are
+        // *about* the ramp pin their own.
+        o.pinListenWarmth(1)
     }
 
     // MARK: - Props

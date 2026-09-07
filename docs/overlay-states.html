@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 33 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 35 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -202,8 +202,28 @@
         </header>
         <div class="shot"><img src="states/listening.png" width="169" height="69" style="opacity:0.8" alt="Dictating"></div>
         <p class="when">From the wheel click until he clicks it again — the bulk of every dictation.</p>
-        <p class="note"><strong>The destination is named here</strong>, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination&#x27;s own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month.</p>
+        <p class="note"><strong>The destination is named here</strong>, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination&#x27;s own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says <em>now</em>, <code>Listening…</code> says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. <strong>This is the settled end of the warmth ramp</strong> — six seconds in, where the word has finished brightening and stays for the rest of the sentence; the two shots below it are what the same row looks like on the way up.</p>
         <code class="slug">listening</code>
+      </section>
+      <section class="card" id="listening-cold">
+        <header>
+          <h3>The first second — too short to trust</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">169×69 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-cold.png" width="169" height="69" style="opacity:0.8" alt="The first second — too short to trust"></div>
+        <p class="when">The instant the microphone opens, and for the first second or so of every sentence.</p>
+        <p class="note"><strong><code>Listening…</code> is dark grey, and that is a forecast about the transcript.</strong> The local model picks a language off a 30-second window before it decodes a word; with two or three seconds of speech in that window the pick is a guess, and a wrong guess is not a wrong word — it is a whole sentence of Turkish made out of Romanian. Counted over the 1254 samples in the voice corpus: 12% of 2–3s recordings and 11% of 3–4s ones came back in a language Victor does not speak, against 4% at 4–5s and <strong>not one</strong> past five seconds. The row is dim for exactly as long as the sentence is in that zone.</p>
+        <code class="slug">listening-cold</code>
+      </section>
+      <section class="card" id="listening-warming">
+        <header>
+          <h3>Three seconds in — halfway up</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">169×69 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-warming.png" width="169" height="69" style="opacity:0.8" alt="Three seconds in — halfway up"></div>
+        <p class="when">About three seconds into a sentence: the ramp is halfway and still climbing.</p>
+        <p class="note">The same row, brightening. It moves continuously over six seconds rather than flipping at a threshold, because the underlying risk does the same thing — it falls off a cliff between three and five seconds and has no edge to draw a line on. <strong>A colour and not a warning</strong>: there is nothing to act on, only something to know, and the one question he has mid-press is whether to stop here or add another clause. Six seconds is where it lands — five is where the wrong-language failures stop, and the second past it is the free one.</p>
+        <code class="slug">listening-warming</code>
       </section>
       <section class="card" id="listening-chrome">
         <header>
@@ -473,7 +493,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 6472d9a · 07 Sep 2026 · built 07 Sep 2026, 09:18
+  Generated from <code>OverlayStates.swift</code> · repo at f75749b · 07 Sep 2026 · built 07 Sep 2026, 13:17
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

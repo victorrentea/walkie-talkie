@@ -42,7 +42,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-33 of them — each with the moment it appears and why it looks the way it does. It
+35 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -51,7 +51,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 33 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 35 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -894,6 +894,64 @@ of the dictation.
 three forms: `🖱️/F3`, then the words `— mouse/F3 for more shots`, then 🖱️ with a
 🔽 kerned underneath. The last was a rebus — it needed a legend, and the legend was
 the thing the row was supposed to be. A drawing of the actual button does not.
+
+### `Listening…` warms from dark grey to full over six seconds (2026-09-07)
+
+The word beside the pulse starts at `white(0.45)` and ramps to the row's normal
+colour over `RelayWindow.enoughAudio` = **6.0s**, then stays there. It is a
+**forecast about the transcript**, not a measurement of this recording: the ramp
+runs on a clock and nothing in it has heard the audio.
+
+**What it is drawn from.** Victor's report was *"dacă vorbesc peste 5–7 secunde,
+transcripția e mult mai calitativă"*, and the corpus says why. `language=None`
+in `whisper_helper.py` means the model picks a language off its 30-second window
+**before** it decodes a word; with two or three seconds of speech and
+twenty-seven of padding in that window, the pick is a guess, and a wrong pick is
+not a wrong word — it is a fluent sentence in a language he does not speak.
+Counted over all 1254 samples in `~/.walkie-talkie/voice-corpus/corpus.jsonl`:
+
+| length | decoded into a language Victor does not speak | came back empty |
+|---|---|---|
+| 2–3s | 12% | 8% |
+| 3–4s | 11% | 8% |
+| 4–5s | 4% | 9% |
+| 5–6s | **0%** | 4% |
+| 6–8s | 1% | 5% |
+| 8s+ | 0–1% | 1–2% |
+
+`Teşekkürler.`, `É bom ir o outro dia? Ai, que acessou tudo?`, `да`, `Thank
+you.`, `For no works, no works works works works…` — every one of them under 4s,
+on Romanian or English speech. Past five seconds there is not one in the file.
+This is the same cliff the confidence floor already sees from the other side
+(*The recogniser*: "nearly all are clips under 5s").
+
+**Six rather than five**: five is where the wrong-language mode stops, the
+empties do not settle until eight, and the underlying shape is a cliff between
+three and five seconds rather than a slope — so a second either way changes
+nothing he can see, and the later end is the one that costs nothing to believe.
+
+- **A colour, not a warning.** There is nothing to act on, only something to
+  know, and the one question he has mid-press is whether to stop here or add a
+  clause. It costs no attention to ignore.
+- **A colour, not an opacity.** Fading the layer would take the halo with it,
+  and the halo is what keeps a white row legible over a white page — the dim end
+  would have been invisible on exactly the backgrounds the halo exists for.
+- **A timer, not a layer animation.** `textColor` is not animatable: an
+  `NSTextField` draws its string through the view, so Core Animation has nothing
+  to interpolate and `NSAnimationContext` silently does nothing. 15fps, on
+  `.common` (the wheel chord is a held mouse button, i.e. a tracking loop), each
+  tick assigning one colour and touching no layout, stopping the moment it
+  arrives.
+- **`pinListenWarmth(_:)` is for `OverlayStates` alone.** The shutter fires
+  immediately after `apply`, so without a chosen frame every dictating state on
+  the page would be a photograph of its own first 200ms. `reset` pins 1; the two
+  shots that are *about* the ramp (`listening-cold`, `listening-warming`) pin
+  their own.
+
+**If the failure itself is ever worth fixing rather than forecasting**, the lever
+is that `language=None`: restricting language ID to `{ro, en}` would have caught
+every case counted above, since Victor speaks only those two. That is a change to
+the recogniser, not to the overlay, and it has not been made.
 
 ## One face, one size, one weight — everywhere on the chip
 
@@ -2638,7 +2696,7 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `./docs/shoot-overlay-states.sh` → all 33 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 35 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies

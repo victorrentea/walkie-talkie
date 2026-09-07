@@ -73,6 +73,59 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let bindInfo = NSTextField(labelWithString: "")
     private let recordDot = NSImageView()
     private let engineInfo = NSTextField(labelWithString: "")
+    /// **How far into the sentence he is, 0…1** — and the whole reason
+    /// `Listening…` starts dark grey and arrives at its normal colour a few
+    /// seconds later.
+    ///
+    /// A short dictation is not *slightly* worse than a long one, it is a
+    /// different kind of wrong. The local model decodes a 30-second window
+    /// whatever it is handed, and it picks the language off that window before
+    /// it decodes a word (`language=None` in `whisper_helper.py`); with three
+    /// seconds of speech and twenty-seven of padding in it, that pick is a
+    /// guess. Counted over the 1254 samples in `~/.walkie-talkie/voice-corpus`,
+    /// by the length of the recording:
+    ///
+    /// ```
+    ///   length    decoded into a language Victor does not speak    came back empty
+    ///   2–3s       12%                                              8%
+    ///   3–4s       11%                                              8%
+    ///   4–5s        4%                                              9%
+    ///   5–6s        0%                                              4%
+    ///   6–8s        1%                                              5%
+    ///   8s+         0–1%                                            1–2%
+    /// ```
+    ///
+    /// The left column is not near misses. It is whole sentences of Turkish,
+    /// Portuguese or Russian made out of Romanian speech (`Teşekkürler.`,
+    /// `É bom ir o outro dia?`, `да`), beside the classic short-clip
+    /// hallucinations — `Thank you.`, `works works works works…`. Past five
+    /// seconds not one of the 1254 has a single case of it. The right column is
+    /// partly his own doing — a button pressed and nothing said — which is
+    /// exactly why it is the *left* column the ramp is drawn from.
+    ///
+    /// So the row is dimmed for as long as the sentence is inside that zone and
+    /// comes up to full as it leaves it. It is a **forecast, not a
+    /// measurement**: nothing here has heard the audio, and the only honest
+    /// thing it can say is *this is still the part where a short sentence comes
+    /// back as somebody else's language*. That is why it is a colour and not a
+    /// warning — it costs him no attention to ignore, and it answers the one
+    /// question he actually has mid-press, which is whether to stop now or add
+    /// another clause.
+    private var listenWarmth: CGFloat = 0
+    private var warmthTimer: Timer?
+    /// Set only by `pinListenWarmth`, i.e. only by `OverlayStates`.
+    private var warmthPinned: CGFloat?
+    /// When the row reaches full colour.
+    ///
+    /// **Six, not five.** Five is where the wrong-language failures stop in the
+    /// corpus, and it is also where Victor put the boundary by feel — *"dacă
+    /// vorbesc peste 5–7 secunde, transcripția e mult mai calitativă"* — which
+    /// is the same cliff read from the other side. Six because the empties are
+    /// still at four percent at five and do not settle until eight, and because
+    /// the underlying shape is a cliff between three and five seconds rather
+    /// than a slope: a second either way changes nothing he can see, and the
+    /// later end of the range is the one that costs him nothing to believe.
+    private static let enoughAudio: TimeInterval = 6.0
     /// The recording row: how many shots this dictation is carrying, and how to
     /// add another.
     private let recordRow = NSView()
@@ -2095,6 +2148,34 @@ private let frontLabel = NSTextField(labelWithString: "")
             selectionGlyph.shadow = nil
             applySelectionText()
         }
+        // Last, and after both branches: the ramp is a *modifier* of whichever
+        // colour this row was just given, not a third case beside them.
+        applyEngineInk()
+    }
+
+    /// The colour of `Listening…` at this instant — dark grey at the top of the
+    /// sentence, the row's own colour once `enoughAudio` has gone by.
+    ///
+    /// **A colour and not an opacity.** Fading the layer would take the halo
+    /// with it, and the halo is the only thing that keeps a white row legible
+    /// over a white page (see `refreshChrome`) — so the dim end of the ramp
+    /// would have been invisible on exactly the backgrounds the halo exists for.
+    /// The ink moves; the outline drawn around it does not.
+    private func applyEngineInk() {
+        let warmth = warmthPinned ?? listenWarmth
+        if anchored {
+            // White at the top end, because that is what every other row on the
+            // bare chip is and the ramp must land on it rather than near it.
+            // 0.45 at the bottom: dark enough to read as *not yet*, light enough
+            // to still be a word against the black halo.
+            engineInfo.textColor = NSColor(calibratedWhite: 0.45 + 0.55 * warmth, alpha: 1)
+        } else {
+            // The panel almost never carries this row — it is up after the words
+            // are in — but it does in `OverlayStates`, and a row that ignored the
+            // ramp in one of its two homes would read as the ramp being broken.
+            engineInfo.textColor = NSColor.secondaryLabelColor
+                .withAlphaComponent(0.35 + 0.65 * warmth)
+        }
     }
 
     private static func halo() -> NSShadow {
@@ -2344,6 +2425,50 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     private func stopPulse() { recordDot.layer?.removeAnimation(forKey: "pulse") }
 
+    /// The dark-to-light ramp on `Listening…`, over `enoughAudio` — see
+    /// `listenWarmth` for the measurement it is drawn from.
+    ///
+    /// **A timer, where the pulse beside it is a layer animation.** `textColor`
+    /// is not animatable: an `NSTextField` draws its string through the view,
+    /// not through a `CATextLayer`, so Core Animation has nothing to interpolate
+    /// and `NSAnimationContext` silently does nothing. Fifteen frames a second
+    /// for six seconds is ninety ticks that each assign one colour and lay out
+    /// nothing — the ramp must not go anywhere near `layoutContent`, which would
+    /// re-measure and re-place every row of the chip ninety times per sentence.
+    ///
+    /// Elapsed time is read off the clock rather than counted in ticks, because
+    /// a timer beside a running transcription gets coalesced and a count would
+    /// quietly stretch the six seconds into eight.
+    private func startWarmth() {
+        stopWarmth()
+        // A pinned frame is a photograph being taken; the clock has no business
+        // moving it. See `pinListenWarmth`.
+        guard warmthPinned == nil else { return applyEngineInk() }
+        listenWarmth = 0
+        applyEngineInk()
+        let opened = Date()
+        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] tick in
+            guard let self else { return tick.invalidate() }
+            let warmth = min(1, Date().timeIntervalSince(opened) / Self.enoughAudio)
+            self.listenWarmth = CGFloat(warmth)
+            self.applyEngineInk()
+            // Nothing to do once it has arrived, and a dictation can run for
+            // minutes: the timer stops rather than spending the rest of the
+            // sentence assigning white to a white label.
+            if warmth >= 1 { self.stopWarmth() }
+        }
+        // `.common`, or the ramp freezes the moment a modal tracking loop starts —
+        // a mouse button held, a scrollbar grabbed — and the wheel chord that
+        // opens the microphone is a held mouse button.
+        RunLoop.main.add(timer, forMode: .common)
+        warmthTimer = timer
+    }
+
+    private func stopWarmth() {
+        warmthTimer?.invalidate()
+        warmthTimer = nil
+    }
+
     // MARK: - Public API (main thread)
 
     /// `count` is how many highlights this dictation is now carrying, the frozen
@@ -2524,7 +2649,18 @@ private let frontLabel = NSTextField(labelWithString: "")
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
         reposition()             // …and the chip snaps back to the cursor
-        if value { startPulse() } else { stopPulse() }
+        if value { startPulse(); startWarmth() } else { stopPulse(); stopWarmth() }
+    }
+
+    /// Freeze the ramp at one frame, for `OverlayStates` alone.
+    ///
+    /// A photograph of a moving colour has to choose which moment it is of, and
+    /// the catalogue chooses three. `nil` hands the row back to the clock, which
+    /// is what every other caller wants and what no other caller has to ask for.
+    func pinListenWarmth(_ value: Double?) {
+        warmthPinned = value.map { CGFloat(max(0, min(1, $0))) }
+        if warmthPinned != nil { stopWarmth() }
+        applyEngineInk()
     }
 
     /// How many pictures this dictation is carrying, the automatic context capture
