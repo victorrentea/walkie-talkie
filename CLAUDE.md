@@ -217,17 +217,47 @@ with `claude-rc` alive. `tmuxPane` therefore checks `list-clients` first. A wron
 pane is the worst failure available here: indistinguishable from a correct bind
 until a sentence lands in somebody else's window.
 
-### One line, always
+### The words, a blank line, then one clause per line (2026-09-07)
 
-Whatever carries the text ends with a Return, so an embedded newline is not
-formatting — it is an early submit that sends half the sentence and leaves the
-rest to arrive as a prompt of its own. `AppDelegate.terminalLine` flattens
-everything into one line and the shots travel as **paths, not a `📸 ×2` count**:
+`AppDelegate.terminalLine` puts the dictation first, then a blank line, then each
+bracketed clause on a line of its own. Victor's ask, and his reason: *"să fie
+fiecare începând pe rând nou … să fie mai ușor de înțeles când mă uit eu pe
+text"*. This envelope is read by **him** as often as by an agent — `⌘⌃P` pastes
+exactly it and the Prompt Log shows it — and five bracketed clauses run together
+behind the sentence is a shape you have to parse a sentence out of.
+
+**It said *One line, always* until then, and that rule was half right.** Its
+argument was that whatever carries the text ends with a Return, so an embedded
+newline is an early submit that sends half the sentence. That is true of `\r`
+and false of `\n`: in a TUI in raw mode `\n` *inserts* a newline, which is
+exactly how Claude Code takes a multi-line prompt, and the submitting Return is
+written separately by every delivery path here. It is the same distinction
+measured when both IDE extensions were fixed for appending `\n` where a real
+Return was meant — this rule was written from that bug and generalised one step
+too far.
+
+**Verified end to end before shipping**, because this is the path that fragments
+a prompt if it is wrong. Bytes first, through a real `do script` into a
+non-shell reader: `'fix the tax calculation\n'`, `'\n'`, one line per clause,
+then the separate Return. Then into a **live Claude Code session**, which is the
+question bytes cannot answer: it arrived as *one* prompt with the clauses on
+their own lines and was answered once, not five times.
+
+Two things it rests on, neither to be quietly undone. **The separators are `\n`,
+and nothing here may send `\r`** except the Return that submits. And
+**`TerminalBinding.escape` spells a newline `\n` for AppleScript**, whose string
+literals cannot contain a raw one — without that the script does not compile and
+the delivery disappears silently, with no error anywhere. `singleLine` still
+normalises whitespace *inside* each line, so a transcript arriving with its own
+breaks cannot fragment the sentence: the structure is the app's, never the
+recogniser's.
+
+The shots travel as **paths, not a `📸 ×2` count**:
 the panel's preview is written for Victor, who needs only to know they landed,
 while this is written for an agent, which can do nothing with a number and
 everything with something to `Read`. `[selected: …]`, `[look at: …]`,
 `[context: …]`, `[pointed at: …]` are the same split the outbox makes in keys,
-said in one line — and they are what replaces the skill, which is no longer there
+and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
 **And `[this text was dictated in RO or EN]`, which is the one clause that
@@ -3318,6 +3348,19 @@ which is what guarantees the two can never drift.
 - **IDE and keystroke targets get no flight.** Nothing outside those apps can
   name their window's frame honestly, and a flight toward a guessed rectangle
   is worse than none.
+- **The dialog is held for it, and fades only once the outline has left**
+  (Victor, 2026-09-07: *"când pleacă mesajul din dialog către terminal existent,
+  la fel … abia atunci începe să facă fade dialogul"*). It vanished the instant
+  the prompt resolved, so the outline set off from a dialog that was already
+  gone — which is the same thing that made the spawn's flight unreadable, one
+  section down. `resolvePrompt` now holds the panel on **every** send,
+  `sendFlight` starts the flight and schedules the fade `spawnPanelFadeDelay`
+  later, and **every path with no flight to make releases it at once** — an IDE
+  or keystroke target, a window that could not be found, a send with no panel
+  behind it. That last part is the one to keep right: a dialog waiting for a
+  flight that never comes is a dialog that never closes. The spawn learned this
+  first only because its window does not exist yet; the argument was never about
+  spawning.
 - **A cancel has its own grammar already** — the 🗑️ row — so it does not fly,
   and Replace Wispr holds no prompt at all, so there is nothing to fly. **A spawn
   makes this very call, since 2026-09-07**, from its held dialog to the window
