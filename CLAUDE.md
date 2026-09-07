@@ -504,6 +504,52 @@ quick presses bind it and then let it go.
 Verified across all three cases: bind, re-point to a second tab (the first tab is
 let go), press again on that tab (nothing bound, app still running).
 
+### A terminal that was closed lets go of the binding by itself (2026-09-07)
+
+The 10s tick that re-reads the bound window's name now also asks whether it is
+**still there**, and lets the binding go the normal way when it is not —
+`unbindTerminal`, the chip coming apart where it stood, exactly as the menu's
+**Disconnect** and the right-held chord do. Victor's ask, and the whole of it:
+*"dacă s-a închis terminalul la care ești bound, să te deconectezi de el normal,
+dacă poți să afli"*.
+
+The check already existed and ran in the one place it is too late to be useful:
+`deliver` finds the target gone, drops the binding and flashes a warning — i.e.
+**after** a sentence has been spoken at a window that stopped existing minutes
+ago. Everything up to that point behaved as though there were somewhere for words
+to go: the chip named the dead session, the wheel and mouse 4 stayed borrowed
+(*Unbound is inert* is keyed on `isBound`, and the binding was still there), and
+the status line kept its microphone.
+
+- **`TerminalBinding.checkAlive()` answers three things, not two.** Unbinding is
+  not free — it is the thing Victor pointed at something to get — so *I could not
+  ask* must never be spelled the same way as *it is not there*. `.gone` is
+  returned only on a definite answer, `.unknown` on silence, and `.unknown` does
+  nothing at all.
+- **A Terminal.app tab is tested on *any* process on its tty, not the foreground
+  one.** That is deliberately the weaker test, and it is the difference between
+  this and the delivery guard: `foregroundCommand` answers nil for a live tab
+  whose processes all happen to be backgrounded, where it costs one refused
+  delivery that says so out loud — here it would cost the binding, silently,
+  while he is not looking. A tab that is still open has a shell in it.
+- **tmux is asked about the pane, never the tty**, which is the outer Terminal
+  tab and outlives a pane closed inside it.
+- **An IDE target is two questions.** The editor having quit is definite and free
+  (`NSRunningApplication` on the target's bundle id). The panel itself is
+  `IDEBridge.alive`, and only a listener that **answered** `ok: false` may take
+  the binding away — an extension host mid-reload answers nothing, which is
+  `.unknown`.
+- **Not while a sentence is in the air.** `listening || held != nil` skips the
+  check: the delivery asks the same question a beat later and answers it with the
+  words still in hand. Handing the wheel and the microphone back from under a
+  dictation in progress to save ten seconds is a bad trade.
+- **It lets go quietly**, without `report(.targetGone)`'s six-second warning.
+  Nothing was lost here, and a panel announcing the tidy-up of a window he closed
+  himself would be the app reporting his own action back to him.
+- **The tty can be reused by the next tab**, so a binding can still survive its
+  session by pointing at a stranger. That is unchanged and out of this check's
+  reach — it is the same hole delivery has always had.
+
 ### The loopback control surface
 
 `ElementPicker` is no longer only Chrome's mailbox — it is the relay's loopback
@@ -2621,11 +2667,28 @@ receipt is a number in the recording row and not a `flash(_:)`: a flash takes th
 chip over for a second and a half, and the count has to keep climbing while he
 talks.
 
-Tracking has two modes, and the second is what keeps the chip catchable:
-*engaged* pins it to the cursor every frame at 60 Hz (anything lazier reads as
-lag, because it is lag), and after ~0.25s of stillness it *settles* and stays put
-until the cursor travels 70px. Growing into the panel is animated (0.22s ease
-out); everything else resizes instantly.
+The chip is pinned to the pointer on **every** mouse event, and there is no
+second mode. Growing into the panel is animated (0.22s ease out); everything
+else resizes instantly.
+
+**The leash is gone, 2026-09-07.** There was a *settled* state: 0.25s of
+stillness parked the chip, and it then stayed where it stopped until the pointer
+had travelled 70px. It was bought to keep the ✕ **catchable** — a chip that
+re-engages on the first pixel of movement can never be walked over to and
+clicked — and that argument died twice over without anyone coming back for the
+leash: the ✕ is the panel's alone (*There is never a ✕ beside the pointer*), and
+pause, the one thing a click on the chip ever toggled, is gone (*Pause is gone*).
+Nothing on the chip has been clickable for months.
+
+It was still being paid at every stop-and-start of the hand, and paid visibly.
+Victor: *"nu e lipit de mouse, ci ceva care se trage lângă mouse … a trecut în
+cursor de resize și după aia are vreo jumătate de secundă lag până când reprinde
+mouse-ul"*. That is the leash exactly, and the resize cursor is the tell rather
+than the cause: pausing over a window edge long enough for the pointer to change
+shape is 0.25s of stillness, which settles the chip, and the 70px that follow —
+half a second at reading speed — are spent with it standing still. **Do not
+reintroduce a leash, a smoothing filter or a spring**: every one of them is lag
+by construction, and the thing they were meant to make reachable is not there.
 
 ## The pointer is clean when nothing is bound
 
@@ -2832,9 +2895,18 @@ and no Cancel on it**, and then the message goes.
   catches a transcript the model got fluently wrong; a checkbox that survived a
   restart would quietly take that away weeks later, in a session where he had
   forgotten it was ticked.
-- The state lives on the menu item (`StatusItem.autosend.state`) and is pushed to
-  `AppDelegate.autosend` through `onToggleAutosend`, so the tick and the behaviour
-  cannot disagree.
+- The state lives on the menu item and is pushed to `AppDelegate.autosend`
+  through `onToggleAutosend`, so the tick and the behaviour cannot disagree.
+- **The icon column is the state, and off is blank** — `⏩` when it sends straight
+  through, nothing at all when it does not (Victor, 2026-09-07). It rides the
+  icon column rather than `NSMenuItem.state` for the reason `Replace WisprFlow`
+  does one row up: a ticked row makes AppKit reserve the state column for the
+  **whole** menu, shoving every other row sideways the moment this one is
+  switched on. Off was `⏸️` until then, which is the same mistake an ✕ would have
+  been on the row above — a picture in the column claims the row is *doing*
+  something, and the panel holding for its three seconds is the app's ordinary
+  behaviour, not a mode. Blank is still an image of the column's exact width, so
+  the title does not step sideways when the mode comes on.
 
 Quit goes through the same `endSession(reason:)` as the ✕, so the outbox still
 gets its `session_end` before the process dies. There is no ⌘Q key equivalent:

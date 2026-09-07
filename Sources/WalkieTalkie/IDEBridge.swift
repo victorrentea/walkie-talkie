@@ -179,6 +179,18 @@ enum IDEBridge {
         return obj["cwd"] as? String
     }
 
+    /// Is that terminal panel still open?
+    ///
+    /// `nil` is a third answer and it is load-bearing: the caller uses this to
+    /// decide whether to drop the binding on a timer, and an extension host in
+    /// the middle of a reload answers nothing at all — which is not the same
+    /// fact as a terminal that was closed. Only a listener that replied, and
+    /// replied `ok: false`, says the panel is gone.
+    static func alive(_ handle: Handle) -> Bool? {
+        guard let obj = request("GET", "/state?id=\(handle.id)", on: handle.endpoint) else { return nil }
+        return (obj["ok"] as? Bool) == true
+    }
+
     /// Type the line into that terminal and nowhere else.
     static func send(_ line: String, to handle: Handle) -> Bool {
         guard let obj = request("POST", "/send", on: handle.endpoint,

@@ -1566,14 +1566,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The bound terminal has been renamed by whatever is running in it. Called
-    /// off the overlay's 10s tick — and doing the work on a background queue,
-    /// because reading the title is an `osascript` round trip and the caller is
-    /// the main thread in the middle of a timer.
+    /// The bound terminal has been renamed by whatever is running in it — **or
+    /// closed under the relay.** Called off the overlay's 10s tick, and doing
+    /// the work on a background queue, because reading the title is an
+    /// `osascript` round trip and the caller is the main thread in the middle of
+    /// a timer.
+    ///
+    /// **The window closing is the same question as the window being renamed**,
+    /// which is why it rides the same tick: both ask whether the line on the
+    /// chip is still true. Until this, only a *delivery* could find out — so a
+    /// terminal Victor closed left a chip naming a dead session, the wheel and
+    /// the shutter borrowed for it, and a microphone on the status line, until
+    /// he spoke a whole sentence at it and was told afterwards.
+    ///
+    /// It lets go the **normal** way (`unbindTerminal`, the chip coming apart
+    /// where it stood) rather than with `report(.targetGone)`'s six-second
+    /// warning: nothing was lost here, and a panel announcing the tidy-up of a
+    /// window he closed himself would be the app reporting his own action back
+    /// to him.
     private func refreshBoundTitle() {
         guard terminal.target != nil else { return }
+        // **Not while a sentence is in the air.** The delivery asks the same
+        // question a beat later and answers it with the words still in hand —
+        // a warning, and the transcript kept. Unbinding here would hand the
+        // wheel and the microphone back from under a dictation in progress to
+        // save it ten seconds. This is the tidy-up for a relay at rest.
+        let busy = listening || held != nil
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self, let updated = self.terminal.refreshBinding() else { return }
+            guard let self = self else { return }
+            if !busy, case .gone(let what) = self.terminal.checkAlive() {
+                Log.info("📍 \(what) — letting the binding go")
+                self.unbindTerminal()
+                return
+            }
+            guard let updated = self.terminal.refreshBinding() else { return }
             // **Not deliberate**: this is the same binding with a fresher name
             // on it, so it must not take a spawn's destination away.
             DispatchQueue.main.async { self.showBound(updated, deliberate: false) }

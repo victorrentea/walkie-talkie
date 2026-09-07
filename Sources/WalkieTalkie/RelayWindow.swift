@@ -140,11 +140,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// windows.
     private var followMonitorGlobal: Any?
     private var followMonitorLocal: Any?
-    /// Debounces "the pointer has stopped" — armed on every real move while
-    /// `engaged`, firing `settleDelay` after the last one. Replaces the old
-    /// `stillTicks` counter, which counted *ticks* of a timer that no longer runs.
-    private var settleTimer: Timer?
-    private let settleDelay: TimeInterval = 0.25
     private var labelTimer: Timer?
     /// Shots this dictation is carrying — the automatic context capture included,
     /// since from where Victor sits it is simply the first picture taken.
@@ -991,28 +986,33 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and it resizes under it as rows come and go.
     var chipFrame: CGRect { panel.frame }
 
-    /// Tracking has two states, and the second one is what keeps the ✕ reachable.
+    /// **The chip is pinned to the pointer on every event, full stop.**
     ///
-    /// **Engaged** — the cursor is moving, so the chip is pinned to it every
-    /// frame. Anything less (a leash, a "catch up when far enough" rule) reads as
-    /// lag, because it *is* lag: the chip visibly trails behind the pointer.
+    /// It had a second state until 2026-09-07 — *settled*: 0.25s of stillness
+    /// parked the chip, and it then stayed put until the pointer had travelled
+    /// `wakeDistance` (70px) from where it stopped. That leash was bought to keep
+    /// the ✕ reachable — a chip that re-engages on the first pixel of movement
+    /// can never be walked over to and clicked.
     ///
-    /// **Settled** — the cursor has stopped, so the chip stops with it and stays
-    /// put until he goes somewhere (`wakeDistance`). That is the window in which
-    /// he can walk the pointer over to it and click: a chip that re-engages on
-    /// the first pixel of movement can never be caught, and with the ✕ living on
-    /// it that would mean no way to end a session at rest.
-    private var engaged = false
-    /// He has the mouse down *on the overlay* — the only gesture that may move it
-    /// by hand, and the only one tracking must yield to.
+    /// **There has been nothing on the chip to click for months.** The ✕ is the
+    /// panel's alone (*There is never a ✕ beside the pointer*), and pause — the
+    /// one thing a click on the chip ever toggled — is gone. So the leash was
+    /// still being paid for at every single stop-and-start of the pointer, for a
+    /// target that no longer exists.
+    ///
+    /// And it was paid *visibly*. Victor, 2026-09-07: *"nu e lipit de mouse, ci
+    /// ceva care se trage lângă mouse … a trecut în cursor de resize și după aia
+    /// are vreo jumătate de secundă lag până când reprinde mouse-ul"*. That is
+    /// the leash exactly: pausing over a window edge long enough for the cursor
+    /// to become a resize arrow is 0.25s of stillness, which settles the chip,
+    /// and the next 70px of travel — half a second at reading speed — is spent
+    /// with the chip standing where it stopped.
     private var draggingSelf = false
     /// He is typing, so macOS has hidden the pointer and the chip has nothing
     /// left to be anchored to.
     private var typing = false
     private var typingMonitor: Any?
-    private var settlePoint = NSPoint.zero
     private var lastMouse = NSPoint.zero
-    private let wakeDistance: CGFloat = 70
 
     /// macOS hides the pointer the moment he starts typing — in a terminal, in an
     /// editor — and a chip anchored to an invisible pointer is a label sitting in
@@ -1109,40 +1109,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
 
         let mouse = NSEvent.mouseLocation
-        let moved = hypot(mouse.x - lastMouse.x, mouse.y - lastMouse.y)
         lastMouse = mouse
-
-        if engaged {
-            moveNextTo(mouse, on: screen)
-            // A real move pushes the settle deadline out; an event that reports
-            // no actual displacement (rare, but the reason the old tick counter
-            // didn't reset on every tick either) leaves whatever deadline is
-            // already ticking alone.
-            if moved >= 1 { armSettleTimer() }
-            return
-        }
-
-        // Settled: wake on a real journey, not on the nudge that is him reaching
-        // for the chip itself.
-        if hypot(mouse.x - settlePoint.x, mouse.y - settlePoint.y) > wakeDistance || screen !== homeScreen {
-            engaged = true
-            moveNextTo(mouse, on: screen)
-            armSettleTimer()
-        }
-    }
-
-    /// One-shot, re-armed on every qualifying move: fires `settleDelay` after
-    /// the *last* one, which is what "0.25s of stillness" means without a timer
-    /// ticking the whole time the pointer is moving.
-    private func armSettleTimer() {
-        settleTimer?.invalidate()
-        let timer = Timer(timeInterval: settleDelay, repeats: false) { [weak self] _ in
-            guard let self, self.engaged else { return }
-            self.engaged = false
-            self.settlePoint = NSEvent.mouseLocation
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        settleTimer = timer
+        moveNextTo(mouse, on: screen)
     }
 
 
@@ -1159,12 +1127,10 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     /// Called on every entry to and exit from a panel state, so the move happens
-    /// with the state change rather than whenever the leash next gives.
+    /// with the state change rather than waiting on the next pointer event.
     private func reposition() {
         guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
         if anchored {
-            engaged = true
-            armSettleTimer()
             moveNextTo(NSEvent.mouseLocation, on: screen)
         } else {
             moveToTopLeft(of: screen)

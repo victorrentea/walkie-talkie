@@ -367,6 +367,89 @@ final class TerminalBinding {
         }
     }
 
+
+    /// Whether the bound session still exists — the question the 10s poll asks
+    /// so that a terminal Victor simply **closed** lets go of the binding by
+    /// itself, instead of waiting for the next dictation to discover it.
+    ///
+    /// The check already existed and ran in exactly the wrong place: `deliver`
+    /// finds the target gone, drops the binding and flashes a warning — i.e.
+    /// after a sentence has been spoken at a window that stopped existing
+    /// minutes ago. Everything up to that point behaved as though there were
+    /// still somewhere for words to go: the chip named the dead session, the
+    /// wheel and the shutter stayed borrowed, and the status line kept its
+    /// microphone.
+    ///
+    /// **Three answers, and the third is the reason this is not a `Bool`.**
+    /// Unbinding is not free — it is the thing Victor pointed at something to
+    /// get — so "I could not ask" must never be spelled the same way as "it is
+    /// not there". Every case below reports `.gone` only on a definite answer
+    /// and `.unknown` on silence.
+    enum Liveness {
+        case alive
+        /// Definitely gone, with the sentence for the log.
+        case gone(String)
+        /// The question could not be answered, which is not the same as *no*.
+        case unknown
+    }
+
+    func checkAlive() -> Liveness {
+        guard let target = target else { return .unknown }
+        switch target.handle {
+        case .terminalApp(let tty):
+            // **Any process on the tty, not the *foreground* one** — which is
+            // the weaker test on purpose, and the difference between this and
+            // the delivery guard. `foregroundCommand` answers nil for a live tab
+            // whose every process happens to be backgrounded, and there it costs
+            // one refused delivery that says so out loud; here it would cost the
+            // binding, silently, while Victor is not looking. A tab that is
+            // still open has a shell in it, so this is the fact worth asking for.
+            return Self.hasProcesses(onTTY: tty)
+                ? .alive : .gone("\(target.address) is gone")
+
+        case .tmux(let pane, _):
+            // The pane, never the tty: the tty is the outer Terminal tab, which
+            // outlives a pane closed inside it.
+            return Self.tmuxPaneCommand(pane) == nil
+                ? .gone("tmux pane \(pane) is gone") : .alive
+
+        case .ide(let handle):
+            // The editor quitting is the definite half, and it is free to ask.
+            guard Self.isRunning(bundleID: target.bundleID) else {
+                return .gone("\(target.appName) is gone")
+            }
+            // The panel itself: only a listener that **answered** may take the
+            // binding away. An extension host reloading, or a window busy enough
+            // to miss a 3s timeout, is silence — and silence here is `.unknown`.
+            switch IDEBridge.alive(handle) {
+            case .some(true):  return .alive
+            case .some(false): return .gone("\(handle.name) is gone")
+            case .none:        return .unknown
+            }
+
+        case .keystroke(let pid, let app):
+            guard let running = NSRunningApplication(processIdentifier: pid),
+                  !running.isTerminated else { return .gone("\(app) is gone") }
+            return .alive
+        }
+    }
+
+    /// Is anything at all attached to that tty? A closed Terminal.app tab has
+    /// no processes on it and, usually, no device node either — `ps` answers
+    /// with an error in that case, which `run` and `clean` fold into the same
+    /// nil as an empty listing.
+    private static func hasProcesses(onTTY tty: String) -> Bool {
+        let device = (tty as NSString).lastPathComponent
+        return clean(run("/bin/ps", ["-t", device, "-o", "pid="])) != nil
+    }
+
+    private static func isRunning(bundleID: String) -> Bool {
+        guard !bundleID.isEmpty else { return true }
+        return NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .contains { !$0.isTerminated }
+    }
+
     func unbind() {
         lock.lock()
         let had = current
