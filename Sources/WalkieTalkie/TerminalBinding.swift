@@ -1202,14 +1202,33 @@ final class TerminalBinding {
     /// Return, so an embedded newline is not formatting — it is an early submit
     /// that cuts the sentence in half and sends the rest as a second prompt.
     /// Tabs go for a related reason: in a TUI they are a completion key.
+    /// Normalise the whitespace **inside** each line, and keep the lines.
+    ///
+    /// It flattened everything into one line until 2026-09-07, under the rule
+    /// *One line, always*: whatever carries the text ends with a Return, so an
+    /// embedded newline was treated as an early submit that would send half the
+    /// sentence. That is true of `\r` and false of `\n` — in a TUI in raw mode
+    /// `\n` inserts a newline, which is exactly how Claude Code takes a
+    /// multi-line prompt, and the submitting Return is written separately by
+    /// every path here. The same distinction is what both IDE extensions were
+    /// fixed for, one commit apart, when they appended `\n` where a Return was
+    /// meant.
+    ///
+    /// So the structure `AppDelegate.terminalLine` builds — the words, a blank
+    /// line, then one clause per line — survives, while a transcript that
+    /// arrives with line breaks of its own is still collapsed before it gets
+    /// here. What this guarantees is narrower than before and is the part that
+    /// mattered: no run of spaces, no tabs, and nothing that submits.
     private static func singleLine(_ text: String) -> String {
         text.components(separatedBy: .newlines)
-            .joined(separator: " ")
-            .replacingOccurrences(of: "\t", with: " ")
-            .components(separatedBy: " ")
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
+            .map { line in
+                line.replacingOccurrences(of: "\t", with: " ")
+                    .components(separatedBy: " ")
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// AppleScript string literals understand exactly two escapes, and a
@@ -1218,6 +1237,15 @@ final class TerminalBinding {
     private static func escape(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "\\\\")
          .replacingOccurrences(of: "\"", with: "\\\"")
+        // **A raw newline is a syntax error inside an AppleScript string
+        // literal**, not merely a formatting choice — the script would fail to
+        // compile and the delivery would vanish with it. AppleScript spells it
+        // `\n`, which `do script` then writes to the tty as the byte itself,
+        // which is what the multi-line envelope needs. Added the day
+        // `terminalLine` stopped being one line.
+         .replacingOccurrences(of: "\r\n", with: "\\n")
+         .replacingOccurrences(of: "\n", with: "\\n")
+         .replacingOccurrences(of: "\r", with: "\\n")
     }
 
     // MARK: - Subprocesses

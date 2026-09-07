@@ -2145,7 +2145,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             parts.append("[pointed at: \(named.joined(separator: " · "))]")
         }
-        return parts.joined(separator: " ")
+        // **The words, a blank line, then one clause per line** (Victor,
+        // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
+        // textele ajutătoare să fie fiecare începând pe rând nou"*).
+        //
+        // **This is a deliberate reversal of *One line, always*, and it is safe
+        // for exactly one reason**: the Return that submits is `\r`, written
+        // separately, while these separators are `\n` — and in a TUI in raw mode
+        // `\n` is *insert a newline*, which is the convention Claude Code uses
+        // for a multi-line prompt. That distinction is not new; it is the same
+        // one measured when both IDE extensions were fixed for appending `\n`
+        // where a real Return was wanted. What the old rule was right about is
+        // that a newline must never be *submitted*, and nothing here submits one.
+        //
+        // The words themselves are still flattened (`clampForTerminal` and the
+        // per-line pass in `TerminalBinding`), so a transcript that arrives with
+        // its own line breaks cannot fragment the sentence; the structure below
+        // is the app's, not the recogniser's.
+        //
+        // Why it is worth it: this envelope is read by Victor as often as by an
+        // agent — `⌘⌃P` pastes exactly this, and the Prompt Log shows it — and
+        // five bracketed clauses run together on one line is the shape he has to
+        // parse a sentence out of. The shell guard is unaffected: it looks at
+        // what is *running* on the target, not at what is being sent.
+        guard let first = parts.first else { return "" }
+        let clauses = parts.dropFirst()
+        guard !clauses.isEmpty else { return first }
+        return first + "\n\n" + clauses.joined(separator: "\n")
     }
 
     /// How the pictures are handed over: the folder once, then the frames by
@@ -2944,6 +2970,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !m.spawn, let farewell = overlay.promptFarewell {
             overlay.promptFarewell = nil
             sendFlight(from: farewell)
+        } else if !m.spawn {
+            // Held with nothing to fly — a panel left on screen is worse than a
+            // missing receipt.
+            overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
         }
     }
 
@@ -2962,22 +2992,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// whatever he is reading — and a picture there covers the destination it is
     /// pointing at. Same call the spawn flight makes, and for the same reason.
     private func sendFlight(from frame: CGRect) {
-        guard let target = terminal.target else { return }
+        // **Every exit releases the panel**, because `resolvePrompt` now holds it
+        // for this method on every send — see `RelayWindow.resolvePrompt`. A
+        // target with no window this app can honestly name has no flight, and a
+        // dialog waiting for one that will never come is a dialog that never
+        // closes.
+        let giveUp = { [weak self] in
+            guard let self = self else { return }
+            self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+        }
+        guard let target = terminal.target else { return giveUp() }
         let tty: String?
         switch target.handle {
         case .terminalApp(let t): tty = t
         case .tmux(_, let t): tty = t
         case .ide, .keystroke: tty = nil
         }
-        guard let tty = tty else { return }
+        guard let tty = tty else { return giveUp() }
         // AppleScript, so off the main thread — the same discipline
         // `deliverToTerminal` keeps.
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let destination = TerminalBinding.terminalWindowFrame(tty: tty) else { return }
+            guard let destination = TerminalBinding.terminalWindowFrame(tty: tty) else {
+                DispatchQueue.main.async { giveUp() }
+                return
+            }
             DispatchQueue.main.async {
                 BindFlight.fly(from: frame, to: { destination },
                                seconds: Self.spawnFlightSeconds,
                                outlined: true, tail: Self.spawnFlightRest)
+                // **The outline leaves, then the dialog fades** — the same beat
+                // the spawn flight keeps, and for its reason: at t=0 the outline
+                // lies exactly on the panel, so a panel already dissolving under
+                // it reads as both fading at once rather than as one leaving the
+                // other. See `spawnPanelFadeDelay`.
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.spawnPanelFadeDelay) { [weak self] in
+                    self?.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                }
             }
         }
     }

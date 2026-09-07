@@ -2973,9 +2973,20 @@ private let frontLabel = NSTextField(labelWithString: "")
         // frame it was just read at. `releaseHeld` flies it to the terminal the
         // words were sent to. A cancel leaves nothing behind to fly.
         promptFarewell = send ? panel.frame : nil
-        // Read before the state is cleared, and only true for the ⏎ Start New
-        // half of this panel — see `spawnPanelHeld`.
-        let holdForSpawn = send && promptSpawning
+        // **Held for every send that has a flight to make, not only a spawn**
+        // (Victor, 2026-09-07: *"când pleacă mesajul din dialog către terminal
+        // existent, la fel … abia atunci începe să facă fade dialogul"*). The
+        // spawn learned this first because it *had* to — the window it flies to
+        // does not exist yet — but the argument was never about spawning: an
+        // outline leaving a dialog that is already gone is an outline leaving
+        // nothing, and the panel vanishing a beat before it is what made the
+        // ordinary send read as a dismissal rather than a delivery.
+        //
+        // `AppDelegate` owns the release from here on, and every path releases:
+        // the flight's, and the three that have no flight to make (an IDE or
+        // keystroke target, whose window this app cannot honestly name; a window
+        // that could not be found; a send with no panel behind it).
+        let holdForSpawn = send
         // Leave the field before anything else: it owns the text being resolved,
         // and it is holding the keyboard.
         endPromptEdit()
