@@ -990,22 +990,41 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
         // The same button, arriving as a keystroke.
         //
-        // LinearMouse taps the event stream **upstream of this one**, so the
+        // The remapper taps the event stream **upstream of this one**, so the
         // remap happens before a session tap can ever see a mouse button: what
         // reaches us is already a Return. The branch above therefore never fires
         // on Victor's Mac, and is kept only because it is the correct handling if
         // the order is ever the other way round.
         //
         // Telling this Return from the one he types is the whole trick, and the
-        // discriminator is the source pid: a key pressed on real hardware carries
-        // 0, an event posted by a process carries that process's pid. So the
-        // physical Return key is never touched — only one that LinearMouse itself
-        // manufactured, and only while a dictation is running.
+        // discriminator has two forms, because the remapper changed identity on
+        // 2026-09-07:
+        //
+        // - **The stamp**, which is the live one. Victor Addons took the button
+        //   over when LinearMouse was uninstalled, and it is not a remapper — it
+        //   is a general-purpose app that also posts Returns for its own reasons
+        //   (`KeySimulator`), and those mean Enter and must be left alone. So the
+        //   one Return that is a disguised button carries `backButtonStamp` in
+        //   `eventSourceUserData` and nothing else does. **The constant is
+        //   duplicated in `BackButtonEnter.swift` in the victor-macos-addons
+        //   repo; the two must not drift.**
+        // - **The source pid**, kept for LinearMouse, which owned this until
+        //   2026-09-07 and is matched by process name. A key pressed on real
+        //   hardware carries pid 0, an event posted by a process carries that
+        //   process's pid, so the physical Return key is never touched either way.
+        //
+        // Why this was worth a fix rather than a note: for a day the answer was
+        // "neither", and the failure is silent — no shot, and the Enter it would
+        // have been lands in whatever is in front. See *Tap order is what makes
+        // this work* in CLAUDE.md: the order flipped because Victor Addons is
+        // rebuilt and restarted after every change to it, i.e. routinely later
+        // than the relay.
         if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER) && dictating
             && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
             let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
-            let synthetic = pid != 0 && isRemapper(pid)
-            Log.info("↩︎ Return while dictating — source pid \(pid), remapper=\(synthetic)")
+            let stamped = event.getIntegerValueField(.eventSourceUserData) == Self.backButtonStamp
+            let synthetic = stamped || (pid != 0 && isRemapper(pid))
+            Log.info("↩︎ Return while dictating — source pid \(pid), stamped=\(stamped), remapper=\(synthetic)")
             if synthetic {
                 let cursor = NSEvent.mouseLocation
                 DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
@@ -1095,6 +1114,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
     /// `~/.config/linearmouse/linearmouse.json` is where the button → Return
     /// mapping lives; this is the process that acts on it.
+    ///
+    /// **Uninstalled on 2026-09-07** — Victor Addons does this natively now, and
+    /// is recognised by `backButtonStamp` instead, since a name cannot separate
+    /// its disguised button from the Returns it posts for other reasons. Kept so
+    /// that a reinstall keeps working, and because it costs one string.
     private static let remapperProcessName = "LinearMouse"
     private var remapperPids: [pid_t: Bool] = [:]
+
+    /// The mark Victor Addons puts on the Return it makes out of the back
+    /// button. Shared literal — see the branch that reads it.
+    private static let backButtonStamp: Int64 = 0x7774_4241_434B_0000
 }

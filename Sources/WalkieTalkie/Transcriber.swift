@@ -71,6 +71,10 @@ final class LocalWhisper {
     private var toHelper: FileHandle?
     private var fromHelper: FileHandle?
     private var buffer = Data()
+    /// Landing area for `read(2)` in `readLine`. One allocation for the life of
+    /// the process, reused because it is touched once per chunk of every reply
+    /// and holds nothing between calls.
+    private var scratch = [UInt8](repeating: 0, count: 64 * 1024)
     /// What the helper said it loaded, e.g. `mlx-community/whisper-large-v3-turbo`.
     ///
     /// Read back rather than hardcoded: the id lives in `whisper_helper.py` and is
@@ -300,7 +304,7 @@ final class LocalWhisper {
             // is ~20s of work, and a timeout that fires mid-transcription would
             // desynchronise the stream for every request after it.
             guard let obj = self.readLine(timeout: 300) else {
-                Log.error("whisper helper timed out")
+                Log.error("whisper helper gave no answer — see the read loop")
                 done(nil); return
             }
             guard (obj["ok"] as? Bool) == true, let text = obj["text"] as? String else {
@@ -328,10 +332,37 @@ final class LocalWhisper {
                 if lineData.isEmpty { continue }
                 return (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any]
             }
-            guard Date() < deadline, let handle = fromHelper else { return nil }
-            let chunk = handle.availableData   // blocks until there is something
-            if chunk.isEmpty { return nil }    // EOF — the helper died
-            buffer.append(chunk)
+            guard Date() < deadline else {
+                Log.error("whisper helper timed out after \(Int(timeout))s")
+                return nil
+            }
+            guard let handle = fromHelper else { return nil }
+
+            // **`read(2)` rather than `FileHandle.availableData`, and only a
+            // literal 0 counts as EOF.**
+            //
+            // `availableData` answers a *failed* read with an empty `Data`,
+            // which is the same value it uses for end-of-file — so a read the
+            // kernel merely interrupted was indistinguishable from a helper that
+            // had died, and the loop bailed out. That is not theoretical: three
+            // dictations were thrown away this way (2026-08-28, 09-03, 09-08),
+            // and the tell is the timing — the last one gave up **one second**
+            // into a 300-second budget while the helper was alive, answering
+            // requests, and stayed up for another nine hours. EINTR is the
+            // likely interruption: this app spawns `screencapture` and terminals
+            // around every dictation, so `SIGCHLD` arrives exactly here.
+            //
+            // The user-visible cost of the old behaviour was a whole sentence:
+            // the transcript is dropped, and the audio with it.
+            let n = read(handle.fileDescriptor, &scratch, scratch.count)
+            if n > 0 { buffer.append(contentsOf: scratch[0..<n]); continue }
+            if n == 0 {
+                Log.error("whisper helper closed its pipe — it died")
+                return nil
+            }
+            if errno == EINTR || errno == EAGAIN { continue }
+            Log.error("whisper helper read failed: errno \(errno)")
+            return nil
         }
     }
 }

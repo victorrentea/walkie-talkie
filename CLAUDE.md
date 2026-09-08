@@ -1305,12 +1305,27 @@ Three rules keep the theft honest:
   why the tap mask grew). LinearMouse sits downstream of this tap and would
   otherwise still see an orphan release to act on.
 
-**Tap order is what makes this work, and it is not guaranteed.** Both apps use
-`.cgSessionEventTap` at `.headInsertEventTap`, where the most recently installed
-tap sees events first. LinearMouse starts at login and the relay starts per
-session, i.e. always later — so the relay wins. If LinearMouse is ever restarted
-*after* a relay, it will convert the button to Return before this tap sees it and
-the shot silently stops working; restarting the relay fixes it.
+**Tap order does not decide this any more, and that is deliberate.** Both apps
+use `.cgSessionEventTap` at `.headInsertEventTap`, where the most recently
+installed tap sees events first, so whoever restarted last is ahead. That used to
+be the relay, because LinearMouse started at login and the relay started per
+session. It stopped being true on **2026-09-07**, when LinearMouse was
+uninstalled and **Victor Addons** took the mapping over natively
+(`BackButtonEnter.swift`): that app is rebuilt and restarted after every change to
+it, which is often, so it is routinely the newer tap. On 2026-09-08 it was —
+relay up since 22:14, addons since 22:37 — and every press became a Return before
+this tap saw a mouse button. The shot silently stopped, and the Enter landed in
+whatever was in front (in Chrome, it scrolled the page).
+
+The branch that catches the Return was already there; what it could not do was
+tell *that* Return apart. It matched the source pid's process name against
+`LinearMouse`, and a name cannot work for Victor Addons, which posts Returns for
+its own reasons too (`KeySimulator`) and those genuinely mean Enter. So the one
+Return that is a button in disguise now carries a stamp in
+`eventSourceUserData` — `backButtonStamp`, `0x7774_4241_434B_0000` — set by
+`BackButtonEnter.post` and read here. **The literal is duplicated across the two
+repos and must not drift.** Restart order is now irrelevant: whichever tap is
+first, the shot is taken exactly once.
 
 ## The shot's name is *when in the sentence* and *where the mouse was*
 
