@@ -140,6 +140,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// can do nothing at all between steps — the bar changes twelve times in a
     /// sentence and the timer runs fifteen times a second.
     private var warmthLit = -1
+    /// **The reward for having said enough** — see `listenStar`. An image view of
+    /// its own rather than a glyph appended to the row's attributed string,
+    /// because it has to *move*: a text attachment inside an `NSTextField` has no
+    /// layer to animate and re-rasterising it at a new size every frame would put
+    /// a relayout in the one loop that must not have one.
+    private let listenStar = NSImageView()
+    /// Whether the star is currently up, so the pop fires on the edge and not on
+    /// every repaint of a full bar.
+    private var listenStarUp = false
     /// **Where the ramp is read from.** Set by `AppDelegate` to the live
     /// recorder's meter; nil in `OverlayStates`, which has no microphone and
     /// falls back to the clock so a photographed state still has a ramp to pin.
@@ -699,6 +708,30 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// know it is done.
     private static let listeningWord = "Listening..."
 
+    /// **⭐ and not ✨.** The sparkles are already the spawn's mark, and on a
+    /// spawn dictation both would be on this very row — one in front of the word
+    /// meaning *this session does not exist yet*, one behind it meaning *you have
+    /// said enough*. Two identical glyphs on one row saying two unrelated things
+    /// is the row failing to say either. A gold star is also the thing itself:
+    /// it is what you get for having done the thing well.
+    private static let listenStarMark = "⭐"
+    /// The gap between the last dot and the star.
+    private static let listenStarGap: CGFloat = 5
+
+    /// **Is the bar full?** The star is a function of this and nothing else, so a
+    /// state photographed at full warmth (`OverlayStates` pins one) wears it
+    /// without any transition having happened — the pop is how it *arrives*, not
+    /// what makes it true.
+    private var listenStarShown: Bool {
+        guard listening, engineText != nil else { return false }
+        return (warmthPinned ?? listenWarmth) >= 1
+    }
+
+    /// How much wider the row is for carrying it.
+    private var listenStarWidth: CGFloat {
+        listenStarShown ? Self.listenStarGap + Self.iconInk : 0
+    }
+
     /// **The mark of a destination that does not exist yet, moved onto the row
     /// that reports the dictation.**
     ///
@@ -955,8 +988,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         recordDot.wantsLayer = true
         engineInfo.font = hintFont
         engineInfo.textColor = .secondaryLabelColor
+        listenStar.image = Glyphs.emoji(Self.listenStarMark, ink: Self.iconInk)
+        listenStar.imageScaling = .scaleProportionallyUpOrDown
+        listenStar.wantsLayer = true
+        listenStar.isHidden = true
         engineRow.addSubview(recordDot)
         engineRow.addSubview(engineInfo)
+        engineRow.addSubview(listenStar)
         engineRow.isHidden = true
         root.addSubview(engineRow)
 
@@ -1334,7 +1372,10 @@ private let frontLabel = NSTextField(labelWithString: "")
             hint.label.sizeToFit()
             idleWidth = max(idleWidth, glyphColumn + recordDotGap + ceil(hint.label.frame.width))
         }
-        let engineWidth = engineText.map { rowWidth($0) } ?? 0
+        // The star is measured in rather than allowed to hang off the end: the
+        // chip hugs its current state (*Size: minimal, per state*), and a glyph
+        // drawn past the row's own width would be clipped by the panel.
+        let engineWidth = engineText.map { rowWidth($0) + listenStarWidth } ?? 0
         // Asked of the label rather than of the font: this row is an attributed
         // string with a smaller, lowered glyph in it, and `measure` knows only
         // one font. Same reason the ⌘-pick row has always measured this way.
@@ -2329,6 +2370,89 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
         engineInfo.attributedStringValue = out
         warmthLit = steps
+        placeListenStar(after: out)
+    }
+
+    /// **A star pops out at the end of `Listening...` the moment it fills.**
+    ///
+    /// Victor's ask, 2026-09-08: *"când vorbesc suficient timp ca să ai content
+    /// pentru o transcripție corectă, când se umple complet listening-ul, să
+    /// apară o steluță la final, cu un mic efect de explozie mică … care
+    /// compensează că am vorbit suficient de mult"*.
+    ///
+    /// **The bar already said this and said it too quietly.** It is done when
+    /// there are no dim characters left — which is a fact he has to *look* at the
+    /// row to read, and the whole reason the bar exists is that he is looking
+    /// somewhere else while he talks. A thing that **moves** is seen in
+    /// peripheral vision when a thing that merely finished changing is not. The
+    /// bar is the gauge; the star is the notification.
+    ///
+    /// It also gives the row a state the last two steps could not distinguish
+    /// from each other: at eleven of twelve characters the difference between
+    /// *nearly* and *enough* is one full stop.
+    ///
+    /// **Placed after the text, measured off the string itself.** The label is
+    /// laid out at the row's full remaining width and the words are flush left
+    /// inside it, so the end of the text is the string's own width and not the
+    /// label's frame.
+    private func placeListenStar(after text: NSAttributedString) {
+        let show = listenStarShown
+        defer { listenStarUp = show }
+        guard show else {
+            listenStar.isHidden = true
+            return
+        }
+        let ink = Self.iconInk
+        listenStar.frame = NSRect(x: (engineInfo.frame.minX + ceil(text.size().width)
+                                      + Self.listenStarGap).rounded(),
+                                  y: ((engineRow.frame.height - ink) / 2).rounded(),
+                                  width: ink, height: ink)
+        listenStar.isHidden = false
+        // **Only on the edge.** `applyEngineText` runs on every relayout and on
+        // `refreshChrome`; a pop replayed each time would be a star flashing at
+        // the corner of his eye for the rest of the sentence, which is the
+        // opposite of a reward. `RELAY_SHOOT` is excluded for the reason the
+        // oblique wipe is: the catalogue photographs states, and this is a
+        // transition — the shot wants the star sitting there at rest.
+        guard !listenStarUp, ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil,
+              let layer = listenStar.layer else { return }
+        layer.removeAnimation(forKey: "pop")
+        // **Nothing here touches `anchorPoint`, `position` or `frame`.** AppKit
+        // owns a layer-backed view's geometry and drives it from the view's own
+        // frame; the anchor is already the centre, which is what makes a scale
+        // on `transform` grow out of the middle. Setting any of the three by
+        // hand is how a view ends up displaced by half its size the first time
+        // something else relayouts it.
+
+        // **A pop, which is what a small explosion is at 16pt.** It arrives from
+        // almost nothing, overshoots well past its size, undershoots, and
+        // settles — the shape of something landing rather than something being
+        // faded in. `CursorMarker`'s bloom is the app's other burst and is the
+        // wrong one here: that mark's job is to get *out of the way*, so it
+        // spreads and dies, while this one has to stay on the row for the rest
+        // of the sentence.
+        //
+        // The quarter turn is `CursorMarker`'s trick and is here for its reason:
+        // growing straight out is the one motion easiest to miss on a screen
+        // that is already repainting, and a rotation is not. It runs *to* zero,
+        // so nothing is left tilted — the star rests square.
+        let pop = CAKeyframeAnimation(keyPath: "transform")
+        pop.values = [0.15, 1.45, 0.85, 1.08, 1.0].enumerated().map { i, s in
+            let turn = -CGFloat.pi / 2 * (1 - CGFloat(i) / 4)
+            return NSValue(caTransform3D: CATransform3DRotate(
+                CATransform3DMakeScale(s, s, 1), turn, 0, 0, 1))
+        }
+        pop.keyTimes = [0, 0.42, 0.66, 0.85, 1]
+        pop.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeOut), count: 4)
+        pop.duration = 0.42
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.42 * 0.42
+        let group = CAAnimationGroup()
+        group.animations = [pop, fade]
+        group.duration = pop.duration
+        layer.add(group, forKey: "pop")
     }
 
     private static func halo() -> NSShadow {
@@ -2615,7 +2739,14 @@ private let frontLabel = NSTextField(labelWithString: "")
             // attributed string to redraw the same twelve characters is the one
             // cost this loop could have had.
             let steps = Int((CGFloat(Self.listeningWord.count) * CGFloat(warmth)).rounded())
-            if steps != self.warmthLit { self.applyEngineText() }
+            // **The one tick in a sentence that is allowed a relayout.** The
+            // rule this loop is written under is that it must never re-measure
+            // every row on the chip — and that is about the *ramp*, which
+            // changes ink and no geometry. The star changes the row's width, so
+            // the frame it arrives in has to go the long way round. It happens
+            // once per dictation, at the moment the chip is meant to be noticed.
+            if warmth >= 1 && !self.listenStarUp { self.layoutContent() }
+            else if steps != self.warmthLit { self.applyEngineText() }
             // Nothing left to do once it is full, and a dictation can run for
             // minutes.
             if warmth >= 1 { self.stopWarmth() }

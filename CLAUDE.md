@@ -994,6 +994,52 @@ pulled** — see *The recogniser* — so the bar now forecasts a failure the
 recogniser no longer has, which is the right time to say what it is still for:
 everything else that is worse when there is less to hear.
 
+#### A star pops out when it fills (2026-09-08)
+
+**The moment the last dot lights, ⭐ arrives at the end of the row** — from
+almost nothing, overshooting well past its size and settling, with a quarter turn
+on the way (`placeListenStar`). Victor's ask: *"când se umple complet
+listening-ul, să apară o steluță la final, cu un mic efect de explozie mică …
+care compensează că am vorbit suficient de mult"*.
+
+**The bar already said this and said it too quietly.** It is done when there are
+no dim characters left — which is a fact he has to *look at the row* to read, and
+the whole reason the bar exists is that he is looking somewhere else while he
+talks. A thing that **moves** is caught in peripheral vision; a thing that merely
+stopped changing is not. The bar is the gauge, the star is the notification. It
+also gives the row a state the last two steps could not tell apart: at eleven of
+twelve characters, the difference between *nearly* and *enough* is one full stop.
+
+- **⭐ and not ✨.** The sparkles are the spawn's mark, and on a spawn dictation
+  both are on this very row — one in front of the word meaning *this session does
+  not exist yet*, one behind it meaning *you have said enough*. Two identical
+  glyphs saying two unrelated things is the row failing to say either. Checked in
+  `docs/states/spawn.png`, where the two sit five characters apart.
+- **An `NSImageView`, not a glyph in the attributed string.** It has to *move*,
+  and a text attachment inside an `NSTextField` has no layer to animate —
+  re-rasterising it at a new size every frame would put a relayout inside the one
+  loop that must not have one.
+- **A pop, which is what a small explosion is at 16pt**: 0.15 → 1.45 → 0.85 →
+  1.08 → 1.0 over 0.42s. `CursorMarker`'s bloom is the app's other burst and is
+  the wrong one here — that mark's whole job is to get *out of the way*, so it
+  spreads and dies, while this one stays on the row for the rest of the sentence.
+  The quarter turn is `CursorMarker`'s trick for `CursorMarker`'s reason: growing
+  straight out is the motion easiest to miss on a screen that is already
+  repainting. It runs *to* zero, so the star rests square.
+- **The star is a function of the bar being full, and the pop is only the edge.**
+  A state photographed at full warmth wears it with no transition having
+  happened, which is what lets `OverlayStates` show it at all; and
+  `applyEngineText` runs on every relayout and on `refreshChrome`, so a pop
+  replayed each time would be a star flashing at the corner of his eye for the
+  rest of the sentence — the opposite of a reward. `RELAY_SHOOT` skips it for the
+  oblique wipe's reason: the catalogue photographs states, and this is a
+  transition.
+- **It is measured into the row's width** (`listenStarWidth`), not left to hang
+  off the end, which the panel would clip. That makes the frame it arrives in the
+  **one tick in a sentence allowed a relayout** — the rule the ramp is written
+  under is about ink, which changes no geometry; the star changes the width, once
+  per dictation, at the exact moment the chip is meant to be noticed.
+
 **Full at three voiced seconds** (`RelayWindow.enoughSpeech`): the first bucket
 where both failure modes are at their floor. About fifteen words at his measured
 5.1 words per voiced second, and about eight seconds of ordinary talking — which
