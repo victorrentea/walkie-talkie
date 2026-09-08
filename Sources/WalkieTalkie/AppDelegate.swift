@@ -805,7 +805,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // hole through it, and not 📍, which Apple draws as a thumbtack). It
         // rides the icon column like every other destination's icon, which is
         // what takes it out of the words.
+        //
+        // **And it stays up through the wait.** It is cleared where the words
+        // actually land, not where the microphone closes — see
+        // `stopLocalRecording`. A start that is neither a spawn nor a paste
+        // takes the row down, since a caret left over from a decode that never
+        // came back would name a destination this sentence is not going to.
         if paste { overlay.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph) }
+        else if !spawn { overlay.setSpawnDestination(nil) }
         guard whisper.ready else {
             // **Rare, now that the load runs at launch**: this is either the
             // first seconds after login or a launch load that failed and is
@@ -1002,7 +1009,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // clicked into since. Same rule `Message.spawn` follows.
         let paste = pasteMode
         pasteMode = false
-        if paste { overlay.setSpawnDestination(nil) }
+        // **The caret row is *not* taken down here** — Victor, 2026-09-08:
+        // *"când fac transcribing … dar sunt în modul de insert la caret, îmi
+        // trebuie să rămână tot jos același lucru scris, insert at caret"*.
+        // Clearing it at the microphone's close put the **bound terminal** back
+        // on the chip for the whole decode — which is the one destination these
+        // words are certainly not going to, said in the seconds he is watching
+        // the row to find out where they went. It comes down where they land
+        // (the paste below) and on every path that gives up on them
+        // (`clearSpawn`).
         let app = localRecordingApp
         localRecordingApp = nil
 
@@ -1113,7 +1128,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // remove. The transcript is on the clipboard either way, which is the
             // safety net if the caret has moved on.
             guard !paste else {
-                DispatchQueue.main.async { self.pasteText(r.text) }
+                DispatchQueue.main.async {
+                    // The words have landed; the row that named where they were
+                    // going has nothing left to say.
+                    self.overlay.setSpawnDestination(nil)
+                    self.pasteText(r.text)
+                }
                 return
             }
             self.send(kind: "dictation", text: r.text, app: app)

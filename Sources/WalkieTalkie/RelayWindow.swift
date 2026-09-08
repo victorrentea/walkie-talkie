@@ -607,7 +607,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // word on this chip is one size and one weight, so what emphasis there is
         // belongs to the glyph column — the half that is recognised rather than
         // read.
-        if transcribing { return [(Self.waitGlyph, plain(transcribeText), Self.iconInk)] }
+        if transcribing { return [(Self.waitGlyph, transcribeString, Self.iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -1933,7 +1933,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Both drawn once and reused: they never change, and re-rasterising a shape
     /// on every relayout would be work done sixty times a second while the chip
     /// follows the cursor.
-    private static let pinGlyph = Glyphs.mapPin(height: 18)
+    /// Not private: the caret destination wears it too (`AppDelegate`, Replace
+    /// Wispr), and one rasterisation is the point.
+    static let pinGlyph = Glyphs.mapPin(height: 18)
 
 
 
@@ -2220,8 +2222,12 @@ private let frontLabel = NSTextField(labelWithString: "")
             applySelectionText()
         }
         // Last, and after both branches: the ramp is a *modifier* of whichever
-        // colour this row was just given, not a third case beside them.
+        // colour this row was just given, not a third case beside them. The wait
+        // is the same ramp on the same terms, and it reads its lit ink off the
+        // label this method has just set — so it is rebuilt here too, or the bar
+        // keeps the colours of the shape the chip was a moment ago.
         applyEngineText()
+        if transcribing { transcribeLabel.attributedStringValue = transcribeString }
     }
 
     /// **`Listening...` is the progress bar** — the word fills a character at a
@@ -2733,12 +2739,90 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// percentile rather than the median is the same bargain: over is a pleasant
     /// surprise, under is the number being wrong every second it is on screen.
     private var transcribeText: String {
-        let mark = spawnCollapsed ? "\(spawnMark ?? "") " : ""
-        guard let deadline = transcribeDeadline else { return mark + "Transcribing…" }
+        guard let deadline = transcribeDeadline else { return Self.transcribeWord }
         let left = Int(ceil(deadline.timeIntervalSinceNow))
-        return left > 0 ? mark + "Transcribing… \(left)s" : mark + "Transcribing…"
+        return left > 0 ? "\(Self.transcribeWord) \(left)s" : Self.transcribeWord
     }
+
+    /// **Three full stops, not `…`** — `listeningWord`'s reason, applied to the
+    /// row that is the same slot at the next moment: the word fills a character
+    /// at a time, and an ellipsis is one glyph that would light in one step.
+    private static let transcribeWord = "Transcribing..."
+
+    /// How far through the estimate this decode is, 0…1 — the same reading
+    /// `listenWarmth` is, off a different clock. **Full when there is no
+    /// estimate**: with no deadline the row is a bare `Transcribing...`, and a
+    /// bar that never fills would be promising a progress nobody is measuring.
+    private var transcribeWarmth: CGFloat {
+        guard let deadline = transcribeDeadline, transcribeSpan > 0 else { return 1 }
+        let left = deadline.timeIntervalSinceNow
+        return CGFloat(min(1, max(0, 1 - left / transcribeSpan)))
+    }
+
+    /// **The wait is a progress bar too** — Victor's ask, 2026-09-08: *"la fel
+    /// vrea să colorezi transcribing, să-l colorezi de la întunecat la mai
+    /// aprins, ca pe post de progress bar"*.
+    ///
+    /// It is the same instrument as `Listening...` (`applyEngineText`, and read
+    /// that for why a filling word beats a fade) pointed at the one wait that
+    /// has a **deadline**: `DecodeRate` has already promised a number of
+    /// seconds, so unlike the dictation there is a real fraction to draw, and
+    /// the row was already counting it down in digits. The bar is that same
+    /// countdown said in the way the eye reads without stopping — the digits
+    /// answer *how much longer*, the ink answers *nearly there* from the corner
+    /// of the eye.
+    ///
+    /// **The seconds stay lit throughout.** They are not part of the bar: their
+    /// character count shrinks as the number falls, so a filling ramp over them
+    /// would run backwards at every digit boundary. The word is the bar and the
+    /// number is the readout beside it.
+    private var transcribeString: NSAttributedString {
+        let lit = transcribeLabel.textColor ?? (anchored ? .white : .secondaryLabelColor)
+        // The unlit end, `applyEngineText`'s colours exactly: opaque grey on the
+        // chip, because alpha over an unknown backdrop is the halo problem one
+        // step further in.
+        let dim = anchored ? NSColor(calibratedWhite: 0.45, alpha: 1)
+                           : lit.withAlphaComponent(0.30)
+        let out = NSMutableAttributedString()
+        // **The ✨ goes in as a picture** — the failure `applyEngineText` is
+        // written under, and this row was still walking into it: a raw emoji in
+        // an attributed string on a label carrying a halo draws itself and
+        // leaves every other glyph transparent, so a spawn dictation's wait was
+        // one mark and no word.
+        if spawnCollapsed, let mark = spawnMark {
+            out.append(Self.inline(Glyphs.emoji(mark, ink: Self.iconInk), font: hintFont))
+            out.append(NSAttributedString(string: " ", attributes: [.font: hintFont]))
+        }
+        let word = Array(Self.transcribeWord)
+        let steps = Int((CGFloat(word.count) * transcribeWarmth).rounded())
+        for (i, ch) in word.enumerated() {
+            out.append(NSAttributedString(string: String(ch),
+                                          attributes: [.font: hintFont,
+                                                       .foregroundColor: i < steps ? lit : dim]))
+        }
+        let tail = transcribeText.dropFirst(Self.transcribeWord.count)
+        if !tail.isEmpty {
+            out.append(NSAttributedString(string: String(tail),
+                                          attributes: [.font: hintFont, .foregroundColor: lit]))
+        }
+        transcribeLit = steps
+        return out
+    }
+
+    /// The row the wait is drawn in. `statusLines` answers with exactly one
+    /// line while transcribing, and `layoutContent` fills `hintRows` in order,
+    /// so it is always the first — which is what lets the ticker repaint the ink
+    /// without going anywhere near a layout. The lit ink is read *off* it, so
+    /// `refreshChrome`'s white-with-a-halo switch reaches this row through the
+    /// same door every other one uses.
+    private var transcribeLabel: NSTextField { hintRows[0].label }
+
     private var transcribeDeadline: Date?
+    private var transcribeSpan: TimeInterval = 0
+    /// How many characters were lit the last time the row was built, so the
+    /// ticker can do nothing on the fourteen frames out of fifteen where the
+    /// answer has not changed — `startWarmth`'s bargain, for its reason.
+    private var transcribeLit = -1
     private var transcribeTicker: Timer?
 
     /// The model is chewing on the audio. Shown where the invitation to dictate
@@ -2754,14 +2838,40 @@ private let frontLabel = NSTextField(labelWithString: "")
         transcribeTicker?.invalidate()
         transcribeTicker = nil
         transcribeDeadline = nil
+        transcribeSpan = 0
+        transcribeLit = -1
         if value, audio > 0 {
-            transcribeDeadline = Date().addingTimeInterval(max(1, DecodeRate.seconds(for: audio).rounded()))
-            // Four ticks a second, like the panel's countdown and for its reason:
-            // a number that jumps reads as a number nobody is watching.
-            let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            let span = max(1, DecodeRate.seconds(for: audio).rounded())
+            transcribeSpan = span
+            transcribeDeadline = Date().addingTimeInterval(span)
+            // **Fifteen ticks a second, and almost all of them do nothing** —
+            // the word fills a character at a time and a four-second decode has
+            // fifteen characters to light, so a quarter-second beat would draw
+            // the bar in visible jumps while still being too slow for the last
+            // ones. What each tick costs is one `Int` comparison.
+            //
+            // **Only the digits are worth a relayout.** They change the row's
+            // width, so they go through `layoutContent`, once a second at most;
+            // the ink changes nothing about the geometry, so it is written
+            // straight onto the label — the rule `startWarmth` follows, for the
+            // reason it gives: this loop must never re-measure every row on the
+            // chip sixty times a decode.
+            var shown = transcribeText
+            let tick = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
                 guard let self = self, self.transcribing else { return }
-                self.layoutContent()
+                let now = self.transcribeText
+                if now != shown {
+                    shown = now
+                    self.layoutContent()
+                    return
+                }
+                let steps = Int((CGFloat(Self.transcribeWord.count) * self.transcribeWarmth).rounded())
+                guard steps != self.transcribeLit else { return }
+                self.transcribeLabel.attributedStringValue = self.transcribeString
             }
+            // `.common`, or the bar freezes under any modal tracking loop —
+            // `startWarmth`'s reason, and the wheel that ends the sentence is a
+            // held mouse button.
             RunLoop.main.add(tick, forMode: .common)
             transcribeTicker = tick
         }

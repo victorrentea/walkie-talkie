@@ -104,7 +104,7 @@ enum OverlayStates {
                  note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setSpawnDestination("⌨️ at the caret")
+                o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
             },
 

@@ -66,7 +66,7 @@
     "slug" : "replace-wispr",
     "title" : "Replace Wispr — this one goes to the caret",
     "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-    "width" : 168
+    "width" : 140
   },
   {
     "alpha" : 0,
@@ -387,7 +387,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,

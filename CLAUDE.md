@@ -823,7 +823,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
 | the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
-| dictating in Replace Wispr | the destination app's icon + `⌨️ at the caret` — the same slot a spawn takes, and for the same reason |
+| dictating in Replace Wispr | the drawn map pin + `at the caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -856,7 +856,7 @@ place and `petclinic@main` slides to the second row. Victor: *"aș vrea ca
 listening cu bila roșie să înlocuiască microfonul — să fie primul rând, iar
 terminalul conectat să fie al doilea"*.
 
-The waits go with it — `⏳ Transcribing… 4s` is the same slot at the next moment
+The waits go with it — `⏳ Transcribing... 4s` is the same slot at the next moment
 (*"la fel în toate"*). The spawn is unaffected: `spawnCollapsed` already drops
 the destination row and rides ✨ in front of `Listening…`, which is this order
 with the second row taken out. **Only the chip.** The held panel keeps its title
@@ -1048,6 +1048,31 @@ absolute floor of 180 underneath.
 fires immediately after `apply`, so without a chosen frame every dictating state
 on the page would be a photograph of its own first 200ms. `reset` pins the full
 bar; `listening-cold` and `listening-warming` pin their own.
+
+#### The wait fills too (2026-09-08)
+
+`Transcribing... 4s` is drawn the same way, on Victor's ask — *"la fel vrea să
+colorezi transcribing, să-l colorezi de la întunecat la mai aprins, ca pe post de
+progress bar"*. Same instrument, pointed at the one wait that has a **deadline**:
+`DecodeRate` has already promised a number of seconds, so unlike the dictation
+there is a real fraction to draw, and the row was already counting it down in
+digits. The bar is that countdown said in the way the eye reads without stopping.
+
+- **The word is the bar; the seconds are a readout beside it** and stay lit
+  throughout. Their character count *shrinks* as the number falls, so a ramp over
+  them would run backwards at every digit boundary.
+- **`Transcribing...`, three full stops**, for `Listening...`'s reason: an
+  ellipsis is one glyph and would light in one step.
+- **Fifteen ticks a second, and only the digits are worth a relayout.** They
+  change the row's width, so they go through `layoutContent`, at most once a
+  second; the ink changes no geometry, so it is written straight onto the label —
+  `startWarmth`'s bargain, and this loop must never re-measure every row on the
+  chip sixty times a decode.
+- **The ✨ goes in as a picture here too.** This row was still putting a raw emoji
+  into an attributed string on a label carrying a halo, which is the failure
+  written down two sections up — so a *spawn* dictation's wait was one mark and no
+  word at all. Fixed with the same `inline(Glyphs.emoji(…))` the listening row
+  uses.
 
 **The lever named here has been pulled.** Restricting language ID to `{ro, en}`
 took the wrong-language mode to 0% in every bucket, measured on the same 803
@@ -1843,7 +1868,7 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   the **hold** asked for the load: a load started by a bind is Victor pointing the
   relay at a terminal, a different sentence, and must not open the microphone.
 - **The wait says how long, not only that it is waiting** (since 2026-09-02).
-  `Transcribing… 4s` counts down from the audio's own length × a factor, and the
+  `Transcribing... 4s` counts down from the audio's own length × a factor, and the
   rounding up is deliberate: over is a pleasant surprise, under is a number that
   is wrong every second it is on screen.
 
@@ -1918,6 +1943,12 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   `AppDelegate.setEngineLoading` is now a one-liner into `StatusItem`.
   `StatusItem.refreshGlyph` still arbitrates the glyph, though ⏳ is the only
   badge that ever claims it — ⏸️ shared the slot until pause was removed.
+- **An empty result says `No words detected`, and nothing else** (2026-09-08,
+  Victor's ask). It read `⚠️ the model returned nothing — that dictation is
+  lost`: three sentences where one is a fact. What the recogniser did with the
+  audio is the app's business, and *that dictation is lost* names a loss he can
+  do nothing about — while *nothing was heard* is the one thing he acts on, and
+  it already says what to do about it.
 - **A failure has to be loud**, because there is nothing else to transcribe with:
   no `mlx_whisper`, most likely, and then `⚠️ Whisper unavailable — …` sits on
   screen for twelve seconds and the log says why.
@@ -2774,7 +2805,7 @@ listening și nu mai afișa primul rând."* The ✨ now rides in front of `Liste
 - **The held panel keeps its title row.** It is parked in a corner, read whole,
   and *where these words are about to go* is exactly what a panel with a Cancel
   button on it has to say out loud.
-- **Only the spawn.** Replace Wispr's `⌨️ at the caret` names a destination that
+- **Only the spawn.** Replace Wispr's `at the caret` names a destination that
   genuinely varies, so it keeps its row — which is why the mark is passed in
   (`setSpawnDestination(_:mark:)`) rather than sliced off the label.
 
@@ -2854,9 +2885,28 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   The real reason is the selection probe that comes with it: it posts a ⌘C into
   whatever field he is about to dictate into, and this is the one mode where that
   field is the whole subject.
-- **The chip says `⌨️ at the caret`**, in the slot a spawn uses and for the
-  spawn's reason: the bound terminal is still there, and for the length of this
-  sentence the words are not going to it.
+- **The chip says `at the caret` behind the drawn map pin**, in the slot a spawn
+  uses and for the spawn's reason: the bound terminal is still there, and for the
+  length of this sentence the words are not going to it.
+
+  **The pin replaced a ⌨️ on 2026-09-08**, on Victor's ask. The keyboard named
+  the *input* — which is the one thing a dictation does not use — where the row's
+  whole job is to say **where the words land**, and it named it inside the words
+  instead of in the icon column every other destination's picture rides in. It is
+  `RelayWindow.pinGlyph`, the same drawn `Glyphs.mapPin` a binding falls back to
+  — the oval drawn down to a point with a hole through it, and deliberately not
+  📍, which Apple draws as a thumbtack stuck in at an angle.
+
+  **And it stays up through the decode** (2026-09-08, his ask: *"când fac
+  transcribing … dar sunt în modul de insert la caret, îmi trebuie să rămână tot
+  jos același lucru scris"*). `stopLocalRecording` used to clear it at the
+  microphone's close, which put the **bound terminal** back on the chip for the
+  whole wait — the one destination those words are certainly not going to, named
+  in the seconds he is watching the row to find out where they went. It comes
+  down where they land, and on every path that gives up on them (`clearSpawn`).
+  A dictation that is neither a spawn nor a paste takes the row down as it opens,
+  so a caret left by a decode that never came back cannot ride the next
+  sentence.
 - **Restored from the last launch** (since 2026-09-07) — the call `Autosend`
   makes. It was deliberately *not* persisted until then, and the argument was the
   stronger one of the pair: autosend changes *how long the panel waits*, this
@@ -2866,7 +2916,7 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   not a setting he drifts into — it is how he dictates for a whole stretch of
   work, and re-ticking it every launch is a tax charged on the one gesture that
   exists to save typing. The tick is one click away and the chip says
-  `⌨️ at the caret` on every sentence it takes, so a mode left on is visible
+  `at the caret` on every sentence it takes, so a mode left on is visible
   before a word is spoken. `AppDelegate` seeds the flag and the tap from
   `StatusItem.isReplaceWispr` at launch **without** going through
   `setReplaceWispr`: that call flashes the overlay, and a restored mode is not an
@@ -2983,7 +3033,7 @@ already were.
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening…`, `Transcribing… 4s`, the picks he has
+the pulse, `Listening...`, `Transcribing... 4s`, the picks he has
 actually made, the destination. (`Preparing…` was on that list until 2026-09-06,
 when the model started loading at launch and the state stopped being one he could
 be waiting on.)
