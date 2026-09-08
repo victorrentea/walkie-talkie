@@ -914,20 +914,59 @@ final class TerminalBinding {
 
     // MARK: - What is running there
 
-    /// The command in the tty's **foreground** process group — the one that
-    /// would receive what we type. BSD `ps` marks it with `+` in `STAT`.
+    /// Every command in the tty's **foreground process group** — the whole job
+    /// that would receive what we type, in pid order. BSD `ps` marks the group
+    /// with `+` in `STAT`; an interactive shell leaves that group the moment it
+    /// starts a job, which is why a prompt is exactly the case where the only
+    /// `+` line *is* that shell.
+    ///
+    /// Full paths, not basenames: telling an app-bundle helper from a program
+    /// needs the path, and `foregroundCommand` is the one that shortens.
+    private static func foregroundJob(onTTY tty: String) -> [String] {
+        let device = (tty as NSString).lastPathComponent
+        guard let out = run("/bin/ps", ["-t", device, "-o", "stat=,comm="]), !out.isEmpty else { return [] }
+        return out.components(separatedBy: "\n").compactMap { line in
+            let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            guard parts.count == 2, parts[0].contains("+") else { return nil }
+            return String(parts[1]).trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    /// **What is actually running in front on this tty** — the fact the shell
+    /// guard judges, and the name the delivery log prints.
     ///
     /// Returns nil when the tty has no processes left at all, which is how a
     /// closed tab announces itself.
+    ///
+    /// **Not simply the first `+` process**, which is what this was, and what
+    /// made a Copilot CLI in a VS Code terminal impossible to talk to. VS Code's
+    /// Copilot Chat starts the CLI through a shim of its own —
+    /// `…/globalStorage/github.copilot-chat/copilotCli/copilot`, a `#!/bin/sh`
+    /// script that does **not** `exec` — so the foreground group is
+    /// `sh` → `Code Helper (Plugin)` → `copilot` → its MCP servers, and the
+    /// first line of it is a shell. Measured on ttys014, 2026-09-08: the guard
+    /// read `sh`, called it a prompt, and refused every dictation, while what
+    /// was on screen was an agent waiting for one. The same pane took `text` +
+    /// `Return` through tmux and submitted normally — delivery was never the
+    /// problem, the verdict about it was.
+    ///
+    /// A prompt is a foreground job that is **only** a shell: a waiting zsh is
+    /// alone in the group, and a zsh running something is not in the group at
+    /// all (`Ss`, no `+`). So a job with any non-shell in it is a program
+    /// running, whatever launched it. A nested interactive shell — Victor types
+    /// `bash` — is still one shell alone in the group and is still refused,
+    /// which is the case the old rule was right about and this one keeps.
+    ///
+    /// Of the non-shells it names the first that is not an **app-bundle
+    /// helper**: `Code Helper (Plugin)` is the runtime the shim exec'd, not the
+    /// thing running in the terminal, and a log line naming it answers nothing.
+    /// Skipping it makes that same job report `copilot`.
     private static func foregroundCommand(onTTY tty: String) -> String? {
-        let device = (tty as NSString).lastPathComponent
-        guard let out = run("/bin/ps", ["-t", device, "-o", "stat=,comm="]), !out.isEmpty else { return nil }
-        for line in out.components(separatedBy: "\n") {
-            let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            guard parts.count == 2, parts[0].contains("+") else { continue }
-            return (String(parts[1]).trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
-        }
-        return nil
+        let job = foregroundJob(onTTY: tty)
+        guard !job.isEmpty else { return nil }
+        let name = { (path: String) in (path as NSString).lastPathComponent }
+        let running = job.filter { !isShell(name($0)) }
+        return name(running.first { !$0.contains("/Contents/MacOS/") } ?? running.first ?? job[0])
     }
 
     /// The tty a process is attached to, `/dev/ttys004` style.

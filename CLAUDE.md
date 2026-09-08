@@ -207,6 +207,22 @@ does not distinguish them (every bound target is 📍); the bind flash says
 `— no shell guard` and `GET /target` carries `guarded`, which is where the fact
 can still change what Victor does about it.
 
+**The guard reads the whole foreground job, not its first process** (2026-09-08).
+A prompt is a foreground group that is *only* a shell: a waiting zsh is alone in
+it, and a zsh that started something is not in it at all (`Ss`, no `+`). Reading
+only the first `+` line made Copilot CLI in a VS Code terminal permanently
+undeliverable — VS Code's Copilot Chat launches it through
+`…/globalStorage/github.copilot-chat/copilotCli/copilot`, a `#!/bin/sh` script
+that does **not** `exec`, so the job is `sh` → `Code Helper (Plugin)` →
+`copilot` → its MCP servers and the guard read `sh`. Measured on ttys014: every
+dictation refused as "would run as shell" while an agent sat there waiting for
+one; typed by hand into that same pane, `text` + `Return` submitted normally.
+The rule that replaced it — *any non-shell in the group means a program is
+running* — still refuses the case the old one was right about, a nested
+interactive `bash`, which is one shell alone in the group. The name reported
+skips app-bundle helpers, so that job says `copilot` rather than
+`Code Helper (Plugin)`.
+
 ### tmux: `display-message -c` does not refuse
 
 Handed a tty attached to nothing, `tmux display-message -c <tty>` silently falls
