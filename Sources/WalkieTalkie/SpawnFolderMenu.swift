@@ -38,7 +38,7 @@ enum SpawnFolderMenu {
         let path: String
     }
 
-    /// **Victor's five, in the order he said them**, under `~/workspace`.
+    /// **Victor's projects, in the order he named them**, under `~/workspace`.
     ///
     /// A hardcoded list and not a listing of the workspace: that folder holds
     /// ~150 directories, nearly all of them course material (see the workspace's
@@ -49,13 +49,15 @@ enum SpawnFolderMenu {
     /// than assumed.** The reason the spawn directory was frozen at `~/workspace`
     /// is that Claude Code stops on *"do you trust this folder"* in a directory
     /// it has never been started from, which costs the sentence already spoken.
-    /// All five carry `hasTrustDialogAccepted` in `~/.claude.json` — he works in
-    /// them by hand every day, which is the same reason they are on this list.
+    /// Every one of them carries `hasTrustDialogAccepted` in `~/.claude.json` —
+    /// he works in them by hand every day, which is the same reason they are on
+    /// this list.
     /// A folder that does not exist is dropped rather than offered: the launcher
     /// falls back to `$HOME` on a failed `cd`, which is the one destination
     /// nobody meant.
     static let choices: [Choice] = ["victor-macos-addons", "training-assistant",
-                                    "walkie-talkie", "victor-vsc", "petclinic"]
+                                    "walkie-talkie", "victor-vsc", "petclinic",
+                                    "human-review"]
         .map { Choice(name: $0, path: workspace + "/" + $0) }
         .filter { FileManager.default.fileExists(atPath: $0.path) }
 

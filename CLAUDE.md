@@ -2473,7 +2473,7 @@ beat the fixed answer was inference, and a folder he pointed at is not inferred.
 ### The folder menu (2026-09-04)
 
 **Three seconds after a spawn dictation opens, a small menu sits where the mouse
-was when he started talking, naming the five repos he starts sessions in.** A
+was when he started talking, naming the repos he starts sessions in.** A
 click on one is where that session opens; not clicking is `~/workspace`, exactly
 as before. `SpawnFolderMenu.swift`, put up by `AppDelegate.offerSpawnFolders`.
 
@@ -2482,17 +2482,22 @@ pornesc dictarea"*. The fixed destination costs the first sentence of every new
 session — said out loud, to name the repo, so the agent can `cd` into it — and
 that sentence is the same five words every time.
 
-- **The five are hardcoded, and the trust prompt does not reach them.**
+- **The list is hardcoded, and the trust prompt does not reach it.**
   `~/workspace` holds ~150 directories, nearly all of them course material, so a
   listing is not a menu. `victor-macos-addons`, `training-assistant`,
-  `walkie-talkie`, `victor-vsc`, `petclinic` — checked, not assumed: all five
-  carry `hasTrustDialogAccepted` in `~/.claude.json`, which is the same fact as
-  *he works in them by hand every day*, which is why they are the five. A folder
-  that is not on disk is dropped rather than offered, since the launcher falls
-  back to `$HOME` on a failed `cd` and that is the one destination nobody meant.
+  `walkie-talkie`, `victor-vsc`, `petclinic`, and `human-review` since
+  2026-09-08 — checked, not assumed: every one of them carries
+  `hasTrustDialogAccepted` in `~/.claude.json`, which is the same fact as
+  *he works in them by hand every day*, which is why they are on the list. A
+  folder that is not on disk is dropped rather than offered, since the launcher
+  falls back to `$HOME` on a failed `cd` and that is the one destination nobody
+  meant. **Adding a row is adding a name here**: the menu sizes itself to what
+  it holds, so nothing else has to change — but the fade's clock does not grow
+  with the list, and a list long enough to outrun three and a half seconds of
+  reading is a different design, not a longer array.
 - **Three and a half seconds solid, then a second of fade — unless the hand is
   on it.** His numbers, and the first of them was two for half an hour: two is
-  not long enough to read five names, decide and travel to one while a sentence
+  not long enough to read a half-dozen names, decide and travel to one while a sentence
   is already being spoken. The fade is not only a way out: something that
   vanishes on its own was never asking to be answered, and a dictation is
   already running behind it. **Hovering suspends the clock** (his ask, later
@@ -2552,8 +2557,8 @@ that sentence is the same five words every time.
   fie arătat cu iconul de terminal în față, ca și cum aș fi fost deja bind-uit la
   un alt astfel de terminal … să știu dacă am setat ce trebuie"*. The argument
   that removed this row is *the folder is always `~/workspace`, so it says
-  nothing he does not know* — and that holds exactly until he picks one out of
-  five, at which point the only place the choice could be checked was the ✨'s
+  nothing he does not know* — and that holds exactly until he picks one off
+  the menu, at which point the only place the choice could be checked was the ✨'s
   own label, three seconds after the menu had gone.
 
   `RelayWindow.spawnCollapsed` therefore split into two questions:
