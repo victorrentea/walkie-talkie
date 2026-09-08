@@ -25,6 +25,27 @@ struct ElementPick {
     /// common case and prints nothing.
     let frame: String?
 
+    /// **Where he dragged it to**, when the ⌘⇧ gesture ended in a drag rather
+    /// than a click — the element's top-left corner in **page** coordinates,
+    /// before and after.
+    ///
+    /// Nothing in the page moves: the extension drags an outline of the element
+    /// and puts the two corners in the message, which is the whole feature.
+    /// Victor's ask, 2026-09-09: *"să capturăm poziția originală și coordonatele
+    /// … dragul să se ducă translucent, doar chenarul … și să transmită în text
+    /// unde sunt noile coordonate ale acelui element"*.
+    ///
+    /// **Page coordinates and not viewport ones.** A viewport corner is a fact
+    /// about how far the page happened to be scrolled at the instant of the
+    /// drag, which is exactly the thing that has changed by the time an agent
+    /// reads it; a page corner is where the element sits in the document, which
+    /// is what a rule that moves it would be written against.
+    struct Move {
+        let from: (x: Int, y: Int)
+        let to: (x: Int, y: Int)
+    }
+    let move: Move?
+
     /// What the overlay shows — the last two steps of the path.
     ///
     /// The full selector is often a paragraph, and the head of it is the part he
@@ -44,13 +65,19 @@ struct ElementPick {
         if let url = url, !url.isEmpty { obj["url"] = url }
         if let title = title, !title.isEmpty { obj["title"] = title }
         if let frame = frame, !frame.isEmpty { obj["frame"] = frame }
+        if let move = move {
+            obj["move"] = ["from": ["x": move.from.x, "y": move.from.y],
+                           "to": ["x": move.to.x, "y": move.to.y]]
+        }
         return obj
     }
 
     init(at: Date, path: String, tag: String, text: String? = nil, label: String? = nil,
-         href: String? = nil, url: String? = nil, title: String? = nil, frame: String? = nil) {
+         href: String? = nil, url: String? = nil, title: String? = nil, frame: String? = nil,
+         move: Move? = nil) {
         self.at = at; self.path = path; self.tag = tag; self.text = text; self.label = label
         self.href = href; self.url = url; self.title = title; self.frame = frame
+        self.move = move
     }
 
     init?(json: [String: Any]) {
@@ -65,6 +92,24 @@ struct ElementPick {
         self.url = ElementPick.clamp(json["url"] as? String, 400)
         self.title = ElementPick.clamp(json["title"] as? String, 200)
         self.frame = ElementPick.clamp(json["frame"] as? String, 200)
+        self.move = ElementPick.move(json["move"])
+    }
+
+    /// The drag, or nil — and nil for anything malformed rather than a corner at
+    /// the origin. The page is hostile input, and a `move` that half-parsed
+    /// would put `0,0` into the message as if he had dropped it there.
+    private static func move(_ raw: Any?) -> Move? {
+        guard let obj = raw as? [String: Any],
+              let from = corner(obj["from"]), let to = corner(obj["to"]) else { return nil }
+        return Move(from: from, to: to)
+    }
+
+    private static func corner(_ raw: Any?) -> (x: Int, y: Int)? {
+        guard let obj = raw as? [String: Any],
+              let x = (obj["x"] as? NSNumber)?.doubleValue,
+              let y = (obj["y"] as? NSNumber)?.doubleValue,
+              x.isFinite, y.isFinite else { return nil }
+        return (Int(x.rounded()), Int(y.rounded()))
     }
 
     /// The page is hostile input: a `text` of a megabyte would ride into the

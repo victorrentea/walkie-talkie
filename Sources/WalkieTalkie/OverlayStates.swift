@@ -8,7 +8,7 @@ import AppKit
 /// macOS 15). The only way to see it is `RelayWindow.snapshot`, the view drawing
 /// itself — which until now was fired by hand with `kill -USR1` while the state
 /// happened to be on screen. That is fine for one picture and hopeless for the
-/// thirty-six states below: half of them last a second and a half of *those*
+/// thirty-eight states below: half of them last a second and a half of *those*
 /// cannot be reached on demand at all (`⚠️ Whisper unavailable`, a transcript the
 /// confidence gate flagged).
 ///
@@ -127,10 +127,19 @@ enum OverlayStates {
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From the wheel click until he clicks it again — the bulk of every dictation.",
-                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there.",
+                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there. **The blue `HQ` after it is what the bar filling means**, said in two letters: past three voiced seconds the wrong-language mode is at its floor and the median WER of a short clip has halved, so the tag is a claim about *this* dictation rather than the gold star it replaced, which only said well done and left him to remember what for. It pops out when the last dot lights — a thing that moves is caught in peripheral vision, which is where this row spends its life.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+            },
+
+            Shot(slug: "listening-long", group: "Dictating", title: "Two minutes in",
+                 when: "Any dictation that has been running for a whole minute — and every one that runs for several.",
+                 note: "**`(2m)` is the one fact the rest of the row cannot carry.** `Listening...` fills in the first three voiced seconds and then never changes again, so from that moment on nothing distinguishes a sentence from a monologue — and a monologue costs real seconds at the other end, since the decode is charged per second of audio and the panel he has to read while Cancel is running is as long as he made it. Victor's ask, 2026-09-09: *\"să pui după toată povestea o paranteză rotundă în care treci numărul de minute\"*. **Nothing under a minute**: `(0m)` would be a readout saying only that a clock exists, an inch from what he is reading, for the length of every ordinary dictation — which is the rent the model id was taken off this row for paying.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setListening(true)
+                o.pinListenElapsed(2)
             },
 
             Shot(slug: "listening-cold", group: "Dictating", title: "The first words — too little speech to trust",
@@ -198,13 +207,14 @@ enum OverlayStates {
 
             Shot(slug: "listening-everything", group: "Dictating", title: "Dictating, everything at once",
                  when: "Rare, and the widest the chip ever gets: browser in front, picks made, a highlight riding along.",
-                 note: "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover.",
+                 note: "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
                 o.setChromeFront(true)
                 o.setPicks(count: 3, newest: "main.content > button.buy-button")
                 o.setSelection(selection, count: 2)
+                o.pinListenElapsed(2)
             },
 
             Shot(slug: "listening-flash", group: "Dictating", title: "Something went wrong mid-sentence",
@@ -452,6 +462,10 @@ enum OverlayStates {
         // all but the first seconds of every sentence; the two shots that are
         // *about* the ramp pin their own.
         o.pinListenWarmth(1)
+        // No clock runs for a catalogue shot — every state is set up and
+        // photographed in the same millisecond — so the minutes are pinned, and
+        // pinned to nothing unless a shot asks for them.
+        o.pinListenElapsed(nil)
     }
 
     // MARK: - Props

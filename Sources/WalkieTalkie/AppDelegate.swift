@@ -1848,6 +1848,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("✨ spawn dropped — bound mid-sentence, the words go to \(target.label)")
             clearSpawn()
         }
+        // **And a caret dictation becomes a terminal one on the same terms**
+        // (Victor, 2026-09-09: *"sesiunea de dictare pornită pentru paste …
+        // trebuie să se poată converti într-o sesiune legată de un terminal,
+        // prin același gest … și într-adevăr să se trimită nu la caret, ci în
+        // terminal"*).
+        //
+        // It is the same rule the spawn branch above is, arrived at from the
+        // other side: Replace Wispr's destination is *wherever the caret is*,
+        // which is the vaguest destination this app has, and the chord is him
+        // naming a precise one while the sentence is still being spoken. The
+        // spawn case had to be written because `spawnPending` was decided at the
+        // press; this one had to be written for exactly the same reason —
+        // `pasteMode` is read at the press and consumed in `stopLocalRecording`,
+        // so without this the words went to the caret however deliberately he
+        // had just pointed at a terminal.
+        //
+        // **Only the sentence, never the mode.** `replaceWispr` — the menu tick,
+        // the forward button's meaning — is untouched: the *next* press of the
+        // forward button opens another caret dictation, which is what the tick
+        // says it does. What is taken back is this one dictation's destination.
+        // Clearing the mode here would make a bind a hidden way to switch it off,
+        // discoverable only by finding it already off.
+        //
+        // The chip is the other half. `setSpawnDestination(nil)` takes the map
+        // pin and `at the caret` down, and the line the bind writes a moment
+        // later — the destination app's icon and `petclinic@main` — is then the
+        // top row again, which is the honest answer to where the words go.
+        if pasteMode, localRecording, deliberate {
+            Log.info("⌨️ caret dictation redirected — bound mid-sentence, the words go to \(target.label)")
+            pasteMode = false
+            overlay.setSpawnDestination(nil)
+        }
         let line = target.folder ?? target.appName
         overlay.setBound(label: target.label, folder: line,
                          icon: Self.appIcon(target.bundleID, height: 18))
@@ -2338,10 +2370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var parts: [String] = [words]
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
         if !picks.isEmpty {
-            let named = picks.map { pick -> String in
-                guard let text = pick.text, !text.isEmpty else { return pick.path }
-                return "\(pick.path) (\(Self.clampForTerminal(text, 60)))"
-            }
+            let named = picks.map { Self.namePick($0) }
             parts.append("[pointed at: \(named.joined(separator: " · "))]")
         }
         guard parts.count > 1 else { return words }
@@ -2394,10 +2423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
         if !m.elements.isEmpty {
-            let named = m.elements.map { pick -> String in
-                guard let text = pick.text, !text.isEmpty else { return pick.path }
-                return "\(pick.path) (\(clampForTerminal(text, 60)))"
-            }
+            let named = m.elements.map { namePick($0) }
             parts.append("[pointed at: \(named.joined(separator: " · "))]")
         }
         // **The words, a blank line, then one clause per line** (Victor,
@@ -2739,6 +2765,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and further away. What this adds is the running total, in the chip.
     private func record(_ pick: ElementPick) {
         stateLock.lock()
+        // **A drag amends the press that started it, rather than arriving beside
+        // it.** The extension picks on the *press* — the outline turns green
+        // under his finger before this code has run, which is the receipt — and
+        // it cannot know at that instant whether a drag is about to follow. So a
+        // drag sends the same element again with its two corners on it, and the
+        // one already waiting is replaced: one gesture, one entry, and the
+        // receipt still lands at the press where his hand expects it.
+        //
+        // Matched on the path and only against the newest entry, so two
+        // deliberate picks of two different things can never collapse into one.
+        if pick.move != nil, pendingPicks.last?.path == pick.path {
+            pendingPicks.removeLast()
+        }
         pendingPicks.append(pick)
         pruneStalePicks()
         let count = pendingPicks.count
@@ -2752,6 +2791,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func pruneStalePicks() {
         let cutoff = Date().addingTimeInterval(-pickTTL)
         pendingPicks.removeAll { $0.at < cutoff }
+    }
+
+    /// One element, as the message names it: the selector, what it said, and —
+    /// when he dragged it — where he dragged it to.
+    ///
+    /// **The move is spelled out in words rather than as a pair of fields**,
+    /// because the whole clause is read by an agent as a sentence and by Victor
+    /// as a receipt, and *moves from 120,340 to 500,200* is the same instruction
+    /// in both readings. His own wording for it: *"spune în text: divul acela se
+    /// mută de la XY la XY, coordonata originală cu colțul stânga sus"*.
+    ///
+    /// Shared by `terminalLine` and `caretLine` — the two envelopes name picks
+    /// identically on purpose, and the day they stopped doing so would be the
+    /// day a caret dictation quietly lost half of what it was carrying.
+    private static func namePick(_ pick: ElementPick) -> String {
+        var line = pick.path
+        if let text = pick.text, !text.isEmpty { line += " (\(clampForTerminal(text, 60)))" }
+        if let move = pick.move {
+            line += " — moves from \(move.from.x),\(move.from.y)"
+                  + " to \(move.to.x),\(move.to.y) (page coordinates, top-left)"
+        }
+        return line
     }
 
     /// Keep the overlay's `🎯 ×N` honest, and name the newest one — the count says

@@ -33,6 +33,12 @@ selected is captured and frozen for the whole dictation, and either the **back
 mouse button** or **F3** attaches extra screenshots as you talk — the count going
 up is the receipt.
 
+`Listening...` is itself a gauge: it fills a character at a time as *speech*
+arrives — not as the clock runs — and is full at three voiced seconds, which is
+where a short clip stops being the kind the recogniser mangles. When it fills, a
+blue **HQ** tag pops out beside it. After the first whole minute, `(2m)` follows,
+so a monologue is distinguishable from a sentence at a glance.
+
 The mouse button is borrowed **only while that row is up**, so a dictation never
 needs the keyboard at all; the rest of the time the button keeps doing whatever
 your mouse software says it does. Each shot records where the pointer was —
@@ -82,6 +88,23 @@ extract the tax calculation out of this method
 🎯 0:12 main.content > button.buy-button
 🎯 0:21 div#cart > span.price
 ```
+
+**⌘⇧-drag says where you would move it, and moves nothing.** Press on an element
+with the chord held and drag: only the outline travels, translucent and dashed,
+the cursor closes into a `grabbing` hand, and the label follows it with the
+coordinate you are aiming at. Let go and the message reads
+`div#cart > span.price (1.299,00 lei) — moves from 120,340 to 500,205 (page
+coordinates, top-left)`. The page itself is never touched — what the agent gets
+is an instruction to carry out in the source, not a change the next render would
+throw away.
+
+**If the outline is slow to appear, a small spinner says so** beside the cursor.
+The hold is 400ms by design and the extension's service worker sometimes has to
+be woken before it can answer; the probe now runs alongside the hold rather than
+after it, and the console line `[walkie] armed 431ms after ⌘⇧ went down` is what
+to look at if a click ever falls through to Chrome. A hold that arms nothing at
+all almost always means **no dictation is open** — the gesture only exists while
+one is.
 
 **A quick ⌘⇧-click is still a quick ⌘⇧-click.** ⌘⇧-click opens a link in a new
 tab and jumps to it, so the inspector arms only after the chord has been held on
@@ -195,7 +218,8 @@ routes come alive together.
 ```
 
 Elements picked in the browser ride in an `elements` array of
-`{path, tag, text, label, href, url, title, frame}`, in the order they were
+`{path, tag, text, label, href, url, title, frame}` — plus `move`, as
+`{from: {x, y}, to: {x, y}}`, when you dragged it — in the order they were
 picked, so the first demonstrative in the sentence is the first entry. `url` is
 the page's address (the top document's, even when the element sits in an iframe —
 the frame's own URL travels in `frame`), and `text` is what the element says: its

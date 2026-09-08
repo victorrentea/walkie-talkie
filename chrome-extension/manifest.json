@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Walkie Talkie Inspector",
-  "version": "1.2",
-  "description": "Hold ⌘⇧ to outline the element under the cursor; ⌘⇧-click hands its selector to the agent Walkie Talkie is talking to. Pauses whatever Chrome is playing while Victor dictates.",
+  "version": "1.3",
+  "description": "Hold ⌘⇧ to outline the element under the cursor; ⌘⇧-click hands its selector to the agent Walkie Talkie is talking to, and ⌘⇧-drag reports where you would move it without touching the page. Pauses whatever Chrome is playing while Victor dictates.",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

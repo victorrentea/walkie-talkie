@@ -31,6 +31,26 @@
   // and any other key cancels the hold outright.
   const HOLD_MS = 400;
 
+  // **How long before the wait is admitted to.** The hold is 400ms by design and
+  // the probe behind it is not free — a torn-down MV3 service worker has to be
+  // started before it can answer, and three loopback fetches follow — so the gap
+  // between "I am holding ⌘⇧" and "the outline is up" is regularly half a second
+  // and occasionally more. Nothing said so, and a click made inside that gap
+  // falls through to Chrome and opens a link in a new tab: reported 2026-09-09
+  // as *"deseori când sunt pe Chrome și apăs ⌘⇧, nu prinde elementele"*.
+  //
+  // So a spinner appears at the cursor while the arm is being decided. It is
+  // delayed rather than immediate because every ⌘⇧ *shortcut* passes through the
+  // same code — ⌘⇧T, ⌘⇧N — and is poisoned within a few tens of milliseconds by
+  // its third key; 150ms is comfortably past that and still well inside the
+  // hold, so the spinner is only ever seen by a hold that is genuinely a hold.
+  const SPINNER_MS = 150;
+
+  // How far the pointer has to travel with the button down before this is a drag
+  // and not a click. Four pixels is the usual threshold for the distinction and
+  // is under the tremor of a deliberate press.
+  const DRAG_MIN_PX = 4;
+
   // Beyond this the selector stops being read and starts being scrolled past.
   const MAX_STEPS = 8;
 
@@ -49,7 +69,13 @@
   let armTimer = 0;
   let current = null;       // the element under the outline
   let mouse = { x: 0, y: 0 };
-  let ui = null;            // built on the first arm, never before
+  let ui = null;            // built on the first hold that lasts long enough
+  let spinTimer = 0;
+  // The arm's probe, started with the hold rather than after it — see beginHold.
+  let probing = null;
+  // A press that may become a drag: the element, where the button went down, the
+  // element's box and the scroll at that instant, and whether it has moved yet.
+  let drag = null;
 
   // ---------------------------------------------------------------- selector
 
@@ -116,6 +142,15 @@
     return (typeof el.value === 'string' ? el.value : '').trim().replace(/\s+/g, ' ').slice(0, 160);
   }
 
+  /// Where the element's top-left corner sits **in the document**, rounded.
+  ///
+  /// Page coordinates rather than viewport ones: a viewport corner is a fact
+  /// about how far the page happened to be scrolled at that instant, which is
+  /// the one thing certain to have changed by the time anyone reads the message.
+  function corner(rect, sx, sy) {
+    return { x: Math.round(rect.left + sx), y: Math.round(rect.top + sy) };
+  }
+
   /// What he would have called this thing out loud.
   function describe(el) {
     return {
@@ -169,8 +204,27 @@
         .picked .box { border-color: #32d74b; background: rgba(50, 215, 75, .16);
                        box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 0 18px rgba(50, 215, 75, .5); }
         .picked .tag b { color: #7ee89a; }
+        /* **Only the outline while it travels**, and translucent — Victor's ask:
+           the box is a picture of *where the element would go*, drawn on top of
+           the page it would go on, so anything filled in it hides the very thing
+           the drop is being judged against. The glow goes with the fill for the
+           same reason. */
+        .dragging .box { background: transparent !important;
+                         border-style: dashed; opacity: .75;
+                         box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) !important; }
+        .spin {
+          position: fixed; width: 13px; height: 13px; box-sizing: border-box;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, .3);
+          border-top-color: #ff453a;
+          box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+          animation: wt-spin .6s linear infinite;
+          pointer-events: none;
+        }
+        @keyframes wt-spin { to { transform: rotate(360deg); } }
         .hidden { display: none; }
       </style>
+      <div class="spin hidden"></div>
       <div class="wrap hidden"><div class="box"></div><div class="tag"></div></div>`;
 
     // The cursor has to be on the page's own elements, so it cannot live in the
@@ -191,7 +245,35 @@
       wrap: shadow.querySelector('.wrap'),
       box: shadow.querySelector('.box'),
       tag: shadow.querySelector('.tag'),
+      spin: shadow.querySelector('.spin'),
     };
+  }
+
+  /// **The wait, admitted to.** A hold that has lasted `SPINNER_MS` and has not
+  /// armed yet is a hold that is waiting on something — the rest of the 400ms,
+  /// the service worker waking, the loopback probe — and until this existed the
+  /// only evidence of any of it was that the gesture sometimes did not work.
+  ///
+  /// It builds the UI, which means a page that sees a long ⌘⇧ hold now gets a
+  /// node from us even when the arm is then refused. That is a deliberate
+  /// departure from *a page that never sees ⌘⇧ held never gets a node*: the node
+  /// is still 0×0, still `pointer-events:none`, still inside a closed shadow
+  /// root, and the alternative is a gesture whose latency is invisible.
+  function showSpinner() {
+    if (armed || !heldSince || poisoned) return;
+    if (!ui) ui = buildUI();
+    placeSpinner();
+    ui.spin.classList.remove('hidden');
+  }
+
+  function placeSpinner() {
+    if (!ui) return;
+    Object.assign(ui.spin.style, { left: `${mouse.x + 16}px`, top: `${mouse.y + 16}px` });
+  }
+
+  function hideSpinner() {
+    clearTimeout(spinTimer);
+    ui?.spin.classList.add('hidden');
   }
 
   function paint(el) {
@@ -235,24 +317,46 @@
   function beginHold() {
     if (heldSince || poisoned) return;
     heldSince = Date.now();
+    // **The probe rides alongside the hold, not behind it.** It used to be asked
+    // for inside `tryArm`, i.e. only once the 400ms had already elapsed — so the
+    // two waits were serial and the gesture armed at 400ms *plus* however long
+    // the round trip took, which on a torn-down service worker is a few hundred
+    // milliseconds more. Started here it has the whole hold to answer in, and in
+    // the ordinary case the answer is already sitting there when the timer fires.
+    //
+    // It costs nothing when the hold turns out to be a shortcut: the answer is
+    // simply dropped, and the probe itself is three loopback fetches the worker
+    // caches for a second anyway.
+    probing = askRelay();
     clearTimeout(armTimer);
     armTimer = setTimeout(tryArm, HOLD_MS);
+    clearTimeout(spinTimer);
+    spinTimer = setTimeout(showSpinner, SPINNER_MS);
+  }
+
+  /// Is a relay dictating right now? With nobody dictating, ⌘⇧ in Chrome must go
+  /// back to meaning exactly what Chrome says it means — the relay refuses the
+  /// probe outside a dictation, so the window in which the gesture is borrowed is
+  /// the window in which the overlay is on screen saying so.
+  async function askRelay() {
+    try { return (await chrome.runtime.sendMessage({ type: 'probe' }))?.live === true; }
+    catch { return false; }   // no extension context, no relay, no arm
   }
 
   async function tryArm() {
     if (armed || !heldSince || poisoned) return;
 
-    // With nobody dictating, ⌘⇧ in Chrome must go back to meaning exactly what
-    // Chrome says it means. The relay refuses the probe outside a dictation, so
-    // the window in which the gesture is borrowed is the window in which the
-    // overlay is on screen saying so.
-    let live = false;
-    try { live = (await chrome.runtime.sendMessage({ type: 'probe' }))?.live === true; } catch { live = false; }
-    if (!live || !heldSince || poisoned) return;
+    const live = await (probing || askRelay());
+    if (!live || !heldSince || poisoned) return hideSpinner();
 
     armed = true;
+    hideSpinner();
     if (!ui) ui = buildUI();
     (document.head || document.documentElement).appendChild(ui.cursor);
+    // The one number that answers "why did it not catch it": how long the whole
+    // gesture actually took to arm, hold included. Read with
+    // `read_console_messages` or DevTools, and it costs one line per hold.
+    console.log(`[walkie] armed ${Date.now() - heldSince}ms after ⌘⇧ went down`);
     hover(mouse.x, mouse.y);
   }
 
@@ -261,10 +365,15 @@
   /// rather than turning into a hold halfway through.
   function disarm() {
     clearTimeout(armTimer);
+    hideSpinner();
+    probing = null;
     heldSince = 0;
     poisoned = false;
     down.Meta = down.Shift = false;
     current = null;
+    // A drag abandoned by letting the chord go sends nothing: the gesture was
+    // not finished, and a drop nobody made is not a coordinate to report.
+    endDrag();
     if (!armed) return;
     armed = false;
     ui?.cursor.remove();
@@ -273,12 +382,95 @@
   }
 
   function hover(x, y) {
-    if (!armed) return;
+    if (!armed || drag) return;   // mid-drag the outline is the thing being moved
     const el = document.elementFromPoint(x, y);
     if (!el || el === current) return;
     current = el;
     ui.wrap.classList.remove('picked');
     paint(el);
+  }
+
+  // ------------------------------------------------------------------- drag
+
+  /// **Dragging moves the outline and nothing else.**
+  ///
+  /// Victor's ask, 2026-09-09: *"să permit drag and drop de elemente prin
+  /// extensie, dar să nu mut nimic în pagină … să capturăm poziția originală și
+  /// coordonatele … dragul se duce translucent, doar chenarul … și când îl las,
+  /// la mouse-up, comunică unde a ajuns elementul"*.
+  ///
+  /// **Nothing in the page is touched**, which is what makes this safe to do on
+  /// somebody's live application: the element keeps its position, its styles and
+  /// its listeners, and the only thing that travels is the red rectangle this
+  /// extension was already drawing on top of it. What reaches the agent is a
+  /// sentence — *moves from 120,340 to 500,200* — which is an instruction to be
+  /// carried out in the source, not a change already made in the DOM.
+  ///
+  /// **The pick still fires at the press**, unchanged: the outline turning green
+  /// under his finger is the receipt, and at the press nothing can know whether
+  /// a drag is coming. A drag that then happens sends the same element again
+  /// with its two corners on it, and the relay replaces the entry it already has
+  /// (`AppDelegate.record`) — one gesture, one element in the message.
+  function beginDrag(el, e) {
+    const rect = el.getBoundingClientRect();
+    drag = {
+      el, rect,
+      x: e.clientX, y: e.clientY,
+      // The scroll *at the grab*, which is what the `from` corner is measured
+      // against. The `to` corner reads the scroll again at the drop, so a page
+      // scrolled mid-drag still reports two corners in the same frame.
+      sx: window.scrollX, sy: window.scrollY,
+      moved: false,
+    };
+  }
+
+  function moveDrag(e) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_MIN_PX) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      ui.wrap.classList.add('dragging');
+      // The closed hand: the page's own convention for *you are holding this*,
+      // and the natural second half of the `grab` the outline already sets.
+      ui.cursor.textContent = 'html, html * { cursor: grabbing !important; }';
+    }
+    const r = drag.rect;
+    Object.assign(ui.box.style, { left: `${r.left + dx}px`, top: `${r.top + dy}px` });
+    const to = corner(r, window.scrollX + dx, window.scrollY + dy);
+    Object.assign(ui.tag.style, {
+      left: `${Math.max(4, Math.min(r.left + dx, innerWidth - 8))}px`,
+      top: `${r.top + dy >= 26 ? r.top + dy - 24 : Math.min(r.top + dy + r.height + 4, innerHeight - 26)}px`,
+    });
+    // Live, because the number is the whole payload: he is aiming at a
+    // coordinate, and a drop he cannot read until the message arrives is a drop
+    // he has to make twice.
+    ui.tag.innerHTML = `<b>${to.x}, ${to.y}</b> <i>page</i>`;
+  }
+
+  /// The button came up. A drag that actually moved reports its two corners; a
+  /// press that never moved was a plain click and has already been picked.
+  function endDrag(e) {
+    if (!drag) return;
+    const it = drag;
+    drag = null;
+    ui?.wrap.classList.remove('dragging');
+    if (ui) ui.cursor.textContent = 'html, html * { cursor: grab !important; }';
+    if (!it.moved || !e || !armed) return void (armed && hover(mouse.x, mouse.y));
+
+    // The grab offset inside the element, so the drop corner is where the
+    // element's own top-left lands rather than where the pointer does.
+    const ox = it.x - it.rect.left, oy = it.y - it.rect.top;
+    const payload = describe(it.el);
+    payload.move = {
+      from: corner(it.rect, it.sx, it.sy),
+      to: {
+        x: Math.round(e.clientX - ox + window.scrollX),
+        y: Math.round(e.clientY - oy + window.scrollY),
+      },
+    };
+    if (payload.path) send(payload);
+    current = null;
+    hover(mouse.x, mouse.y);
   }
 
   async function pick() {
@@ -290,7 +482,13 @@
     // turning green at the moment of the click is what tells him the click was
     // taken, and the count in the overlay confirms it a beat later.
     ui.wrap.classList.add('picked');
+    send(payload);
+  }
 
+  /// Hand one element to whichever relays are listening, and say so if none was.
+  /// Shared by the press and by the drop, so a drag cannot quietly fail where a
+  /// click would have complained.
+  async function send(payload) {
     let result = null;
     try { result = await chrome.runtime.sendMessage({ type: 'pick', pick: payload }); } catch { /* relay gone */ }
 
@@ -334,6 +532,10 @@
 
   addEventListener('mousemove', (e) => {
     mouse = { x: e.clientX, y: e.clientY };
+    if (drag) return moveDrag(e);
+    // Only while one is actually up: `ui` outlives every arm, and a style write
+    // on every mousemove for a hidden node is a cost paid all day for nothing.
+    if (heldSince && !armed) placeSpinner();
     if (armed) return hover(e.clientX, e.clientY);
 
     // The second way in, and the one that matters inside an iframe: keystrokes go
@@ -347,7 +549,9 @@
     }
   }, true);
 
-  addEventListener('scroll', () => { if (armed && current) paint(current); }, true);
+  // Not while dragging: the box is no longer registered with the element under
+  // it, and repainting would snap it back to where the element still is.
+  addEventListener('scroll', () => { if (armed && current && !drag) paint(current); }, true);
 
   // While armed the page gets none of it. ⌘⇧-click would open a new tab and jump
   // to it, ⇧-drag would extend a selection, and the point of the gesture is that
@@ -360,7 +564,12 @@
       e.stopImmediatePropagation();
       // On the press, not the release: it is the half that his hand calls "the
       // click", and the release can land somewhere else entirely after a twitch.
-      if (type === 'mousedown' && e.button === 0) pick();
+      // A drag, when one follows, amends what this sent — see `beginDrag`.
+      if (type === 'mousedown' && e.button === 0) {
+        if (current) beginDrag(current, e);
+        pick();
+      }
+      if (type === 'mouseup' && e.button === 0) endDrag(e);
     }, true);
   }
 })();

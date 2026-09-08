@@ -140,15 +140,42 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// can do nothing at all between steps — the bar changes twelve times in a
     /// sentence and the timer runs fifteen times a second.
     private var warmthLit = -1
-    /// **The reward for having said enough** — see `listenStar`. An image view of
+    /// **The reward for having said enough** — see `hqBadge`. An image view of
     /// its own rather than a glyph appended to the row's attributed string,
     /// because it has to *move*: a text attachment inside an `NSTextField` has no
     /// layer to animate and re-rasterising it at a new size every frame would put
     /// a relayout in the one loop that must not have one.
-    private let listenStar = NSImageView()
-    /// Whether the star is currently up, so the pop fires on the edge and not on
+    private let listenBadge = NSImageView()
+    /// Whether the badge is currently up, so the pop fires on the edge and not on
     /// every repaint of a full bar.
-    private var listenStarUp = false
+    private var listenBadgeUp = false
+    /// **How long he has been talking**, in whole minutes and in brackets after
+    /// everything else on the row — `(2m)`.
+    ///
+    /// Victor's ask, 2026-09-09: *"să pui după toată povestea o paranteză rotundă
+    /// în care treci numărul de minute"*. It is the one fact about a dictation
+    /// that the rest of the row cannot carry: `Listening...` fills in the first
+    /// three voiced seconds and then never changes again, so from that moment on
+    /// nothing on the chip distinguishes a sentence from a monologue — and the
+    /// cost of a monologue is real, since the decode is charged per second of
+    /// audio and the panel he has to read at the end is as long as he made it.
+    ///
+    /// **A label of its own, not a run in the attributed string.** The badge sits
+    /// between the word and this, and the badge is an image view because it has
+    /// to pop; a run appended to `engineInfo` would therefore land *before* the
+    /// badge rather than after it.
+    private let elapsedLabel = NSTextField(labelWithString: "")
+    /// The wall clock this dictation opened on. Wall clock and not voiced
+    /// seconds, deliberately: the bar above it is a forecast about the
+    /// transcript and counts only speech, while this answers *how long have I
+    /// been at this*, where the pauses are part of the answer.
+    private var listeningSince: Date?
+    /// Set only by `pinListenElapsed`, i.e. only by `OverlayStates` — the
+    /// catalogue has no minutes to let pass.
+    private var elapsedPinned: Int?
+    /// One tick a second, and it relayouts at most once a minute — see
+    /// `startElapsed`.
+    private var elapsedTimer: Timer?
     /// **Where the ramp is read from.** Set by `AppDelegate` to the live
     /// recorder's meter; nil in `OverlayStates`, which has no microphone and
     /// falls back to the clock so a photographed state still has a ramp to pin.
@@ -708,28 +735,64 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// know it is done.
     private static let listeningWord = "Listening..."
 
-    /// **⭐ and not ✨.** The sparkles are already the spawn's mark, and on a
-    /// spawn dictation both would be on this very row — one in front of the word
-    /// meaning *this session does not exist yet*, one behind it meaning *you have
-    /// said enough*. Two identical glyphs on one row saying two unrelated things
-    /// is the row failing to say either. A gold star is also the thing itself:
-    /// it is what you get for having done the thing well.
-    private static let listenStarMark = "⭐"
-    /// The gap between the last dot and the star.
-    private static let listenStarGap: CGFloat = 5
+    /// **A tag that says `HQ`, where a gold star used to sit** — Victor's ask,
+    /// 2026-09-09: *"la steluța care apare după listening, desenez un tag micuț
+    /// care scrie HQ, de la High Quality … un tag micuț, pe albastru"*.
+    ///
+    /// **A star is a reward; a tag is a claim about the thing it is stuck on.**
+    /// The mark arrives when the bar fills, and what filling means is measured
+    /// and specific: past three voiced seconds the wrong-language mode is at its
+    /// floor and the median WER of a short clip has halved. That is a *property
+    /// of this dictation*, and two letters say it where a star only said
+    /// *well done* and left him to remember what for.
+    ///
+    /// **Blue, and drawn rather than typed.** Every other mark on this row is a
+    /// signal colour spent on an event — the 🔴 for *now*, `systemRed` for *this
+    /// was captured*. A label is not an event, so it takes the one colour on the
+    /// chip that has never meant one. Drawn because these rows carry a halo, in
+    /// which a raw glyph renders and every other character does not
+    /// (`applyTitleText`), and because a word set in the row's own font would
+    /// read as another word in the sentence rather than as a label on it.
+    ///
+    /// **Shorter than the icon column**, at `0.8 ×` it: the badge is a capsule
+    /// that fills its box corner to corner, where the emoji beside it sit a
+    /// bearing in from the edge — at equal height it would be the largest thing
+    /// on the row. Same correction Chrome's icon was given one row down.
+    private static let hqBadge = Glyphs.tag("HQ", height: (iconInk * 0.8).rounded())
+    /// The gap between the last dot and the badge, and between the badge and the
+    /// minutes after it.
+    private static let listenBadgeGap: CGFloat = 5
 
-    /// **Is the bar full?** The star is a function of this and nothing else, so a
-    /// state photographed at full warmth (`OverlayStates` pins one) wears it
+    /// **Is the bar full?** The badge is a function of this and nothing else, so
+    /// a state photographed at full warmth (`OverlayStates` pins one) wears it
     /// without any transition having happened — the pop is how it *arrives*, not
     /// what makes it true.
-    private var listenStarShown: Bool {
+    private var listenBadgeShown: Bool {
         guard listening, engineText != nil else { return false }
         return (warmthPinned ?? listenWarmth) >= 1
     }
 
-    /// How much wider the row is for carrying it.
-    private var listenStarWidth: CGFloat {
-        listenStarShown ? Self.listenStarGap + Self.iconInk : 0
+    /// `(2m)` once a whole minute has gone by, and nothing before that.
+    ///
+    /// **Nothing under a minute**, deliberately: `(0m)` is a readout that says
+    /// only that a clock exists, on a row an inch from what he is reading, for
+    /// the length of the ordinary dictation — which is exactly the rent the
+    /// model id was taken off this row for paying.
+    private var elapsedText: String? {
+        guard listening, engineText != nil else { return nil }
+        if let pinned = elapsedPinned { return pinned > 0 ? "(\(pinned)m)" : nil }
+        guard let since = listeningSince else { return nil }
+        let minutes = Int(Date().timeIntervalSince(since) / 60)
+        return minutes > 0 ? "(\(minutes)m)" : nil
+    }
+
+    /// How much wider the row is for carrying the two of them.
+    private var listenExtrasWidth: CGFloat {
+        var extra: CGFloat = listenBadgeShown ? Self.listenBadgeGap + Self.hqBadge.size.width : 0
+        if let elapsed = elapsedText {
+            extra += Self.listenBadgeGap + ceil(measure(elapsed, font: hintFont))
+        }
+        return extra
     }
 
     /// **The mark of a destination that does not exist yet, moved onto the row
@@ -988,13 +1051,17 @@ private let frontLabel = NSTextField(labelWithString: "")
         recordDot.wantsLayer = true
         engineInfo.font = hintFont
         engineInfo.textColor = .secondaryLabelColor
-        listenStar.image = Glyphs.emoji(Self.listenStarMark, ink: Self.iconInk)
-        listenStar.imageScaling = .scaleProportionallyUpOrDown
-        listenStar.wantsLayer = true
-        listenStar.isHidden = true
+        listenBadge.image = Self.hqBadge
+        listenBadge.imageScaling = .scaleProportionallyUpOrDown
+        listenBadge.wantsLayer = true
+        listenBadge.isHidden = true
+        elapsedLabel.font = hintFont
+        elapsedLabel.textColor = .secondaryLabelColor
+        elapsedLabel.isHidden = true
         engineRow.addSubview(recordDot)
         engineRow.addSubview(engineInfo)
-        engineRow.addSubview(listenStar)
+        engineRow.addSubview(listenBadge)
+        engineRow.addSubview(elapsedLabel)
         engineRow.isHidden = true
         root.addSubview(engineRow)
 
@@ -1375,7 +1442,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // The star is measured in rather than allowed to hang off the end: the
         // chip hugs its current state (*Size: minimal, per state*), and a glyph
         // drawn past the row's own width would be clipped by the panel.
-        let engineWidth = engineText.map { rowWidth($0) + listenStarWidth } ?? 0
+        let engineWidth = engineText.map { rowWidth($0) + listenExtrasWidth } ?? 0
         // Asked of the label rather than of the font: this row is an attributed
         // string with a smaller, lowered glyph in it, and `measure` knows only
         // one font. Same reason the ⌘-pick row has always measured this way.
@@ -1572,18 +1639,19 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordRow.isHidden = true
         }
 
-        // Under the recording row, above the selection: it belongs with the other
-        // things this message is carrying, and unlike them it is also there
-        // between messages, which is when he needs it most.
-        if let pick = pickText {
-            pickInfo.attributedStringValue = pick
-            layoutPickRow(width: innerWidth)
-            pickRow.isHidden = false
-            rows.append((pickRow, pickRowHeight))
-        } else {
-            pickRow.isHidden = true
-        }
-
+        // **The quotation, and then Chrome under it.** They were the other way
+        // round until 2026-09-09, when Victor put the browser at the bottom for
+        // good: *"citatul să apară mereu deasupra Chrome-ului … Chrome trebuie
+        // să fie mereu ultima din listă"*.
+        //
+        // The two rows differ in what they belong to. A highlight is part of
+        // *this* message — it was read at the shutter, it rides out with the
+        // words, and it goes when they do — so it sits with the frames above it.
+        // The ⌘⇧ row is the odd one out: before he has picked anything it is not
+        // a payload at all but an invitation, and after he has, it is the one
+        // row that stays up *between* messages. A thing that outlives the
+        // message belongs at the foot of it, and a row that keeps moving up and
+        // down as a highlight comes and goes is a row he has to find each time.
         if selection != nil {
             // The strings were written with the widths above. **The row is the
             // same 22 as its neighbours**, and the 26pt mark simply overhangs
@@ -1597,6 +1665,16 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((selectionRow, selectionRowHeight))
         } else {
             selectionRow.isHidden = true
+        }
+
+        // Last, always — see the note above the selection row.
+        if let pick = pickText {
+            pickInfo.attributedStringValue = pick
+            layoutPickRow(width: innerWidth)
+            pickRow.isHidden = false
+            rows.append((pickRow, pickRowHeight))
+        } else {
+            pickRow.isHidden = true
         }
 
         if let prompt = sentPrompt, !prompt.isEmpty {
@@ -2202,6 +2280,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         titleLabel.wantsLayer = true
         recordInfo.wantsLayer = true
         engineInfo.wantsLayer = true
+        // The minutes are a label of their own on the engine row, so they need
+        // the halo on their own account — they are not a run inside `engineInfo`.
+        elapsedLabel.wantsLayer = true
         shotGlyph.wantsLayer = true
         pickInfo.wantsLayer = true
         selectionLabel.wantsLayer = true
@@ -2221,6 +2302,8 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordInfo.textColor = .white
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
+            elapsedLabel.shadow = Self.halo()
+            elapsedLabel.textColor = .white
             // The picked row spends even more of its life on the chip than the
             // recording one: it is up between messages, which is most of the day.
             pickInfo.shadow = Self.halo()
@@ -2257,6 +2340,8 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordInfo.textColor = .secondaryLabelColor
             engineInfo.shadow = nil
             engineInfo.textColor = .secondaryLabelColor
+            elapsedLabel.shadow = nil
+            elapsedLabel.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
             selectionLabel.shadow = nil
@@ -2370,22 +2455,25 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
         engineInfo.attributedStringValue = out
         warmthLit = steps
-        placeListenStar(after: out)
+        placeListenExtras(after: out)
     }
 
-    /// **A star pops out at the end of `Listening...` the moment it fills.**
+    /// **An `HQ` tag pops out at the end of `Listening...` the moment it fills,
+    /// and the minutes sit after it.**
     ///
     /// Victor's ask, 2026-09-08: *"când vorbesc suficient timp ca să ai content
     /// pentru o transcripție corectă, când se umple complet listening-ul, să
     /// apară o steluță la final, cu un mic efect de explozie mică … care
-    /// compensează că am vorbit suficient de mult"*.
+    /// compensează că am vorbit suficient de mult"* — and 2026-09-09, replacing
+    /// the star with the tag: *"desenez un tag micuț care scrie HQ, de la High
+    /// Quality"*.
     ///
     /// **The bar already said this and said it too quietly.** It is done when
     /// there are no dim characters left — which is a fact he has to *look* at the
     /// row to read, and the whole reason the bar exists is that he is looking
     /// somewhere else while he talks. A thing that **moves** is seen in
     /// peripheral vision when a thing that merely finished changing is not. The
-    /// bar is the gauge; the star is the notification.
+    /// bar is the gauge; the tag is the notification.
     ///
     /// It also gives the row a state the last two steps could not distinguish
     /// from each other: at eleven of twelve characters the difference between
@@ -2394,28 +2482,33 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **Placed after the text, measured off the string itself.** The label is
     /// laid out at the row's full remaining width and the words are flush left
     /// inside it, so the end of the text is the string's own width and not the
-    /// label's frame.
-    private func placeListenStar(after text: NSAttributedString) {
-        let show = listenStarShown
-        defer { listenStarUp = show }
+    /// label's frame. The minutes are placed off the badge for the same reason,
+    /// and off the end of the text when there is no badge yet — a dictation is a
+    /// minute old long after the bar filled, but the two are independent and
+    /// nothing here may assume an order they arrive in.
+    private func placeListenExtras(after text: NSAttributedString) {
+        let show = listenBadgeShown
+        defer { listenBadgeUp = show }
+        var x = (engineInfo.frame.minX + ceil(text.size().width)).rounded()
+        defer { placeElapsed(at: x) }
         guard show else {
-            listenStar.isHidden = true
+            listenBadge.isHidden = true
             return
         }
-        let ink = Self.iconInk
-        listenStar.frame = NSRect(x: (engineInfo.frame.minX + ceil(text.size().width)
-                                      + Self.listenStarGap).rounded(),
-                                  y: ((engineRow.frame.height - ink) / 2).rounded(),
-                                  width: ink, height: ink)
-        listenStar.isHidden = false
+        let ink = Self.hqBadge.size
+        listenBadge.frame = NSRect(x: x + Self.listenBadgeGap,
+                                  y: ((engineRow.frame.height - ink.height) / 2).rounded(),
+                                  width: ink.width, height: ink.height)
+        x = listenBadge.frame.maxX
+        listenBadge.isHidden = false
         // **Only on the edge.** `applyEngineText` runs on every relayout and on
         // `refreshChrome`; a pop replayed each time would be a star flashing at
         // the corner of his eye for the rest of the sentence, which is the
         // opposite of a reward. `RELAY_SHOOT` is excluded for the reason the
         // oblique wipe is: the catalogue photographs states, and this is a
         // transition — the shot wants the star sitting there at rest.
-        guard !listenStarUp, ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil,
-              let layer = listenStar.layer else { return }
+        guard !listenBadgeUp, ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil,
+              let layer = listenBadge.layer else { return }
         layer.removeAnimation(forKey: "pop")
         // **Nothing here touches `anchorPoint`, `position` or `frame`.** AppKit
         // owns a layer-backed view's geometry and drives it from the view's own
@@ -2453,6 +2546,59 @@ private let frontLabel = NSTextField(labelWithString: "")
         group.animations = [pop, fade]
         group.duration = pop.duration
         layer.add(group, forKey: "pop")
+    }
+
+    /// The minutes, after everything else on the row.
+    ///
+    /// `x` is the right edge of whatever precedes it — the badge if it is up, the
+    /// last dot of `Listening...` if it is not.
+    private func placeElapsed(at x: CGFloat) {
+        guard let text = elapsedText else { return elapsedLabel.isHidden = true }
+        elapsedLabel.stringValue = text
+        elapsedLabel.sizeToFit()
+        let h = ceil(elapsedLabel.intrinsicContentSize.height)
+        elapsedLabel.frame = NSRect(x: x + Self.listenBadgeGap,
+                                    y: ((engineRow.frame.height - h) / 2).rounded(),
+                                    width: ceil(elapsedLabel.frame.width), height: h)
+        elapsedLabel.isHidden = false
+    }
+
+    /// **One tick a second, and a relayout at most once a minute.**
+    ///
+    /// The ramp's timer cannot carry this: it stops the moment the bar fills
+    /// (three voiced seconds in), which is before the first minute has passed in
+    /// every dictation there has ever been. So this is a second clock, and it is
+    /// written under the same rule — it must never reach `layoutContent` on an
+    /// ordinary tick. The minute count is what it watches, so 59 ticks in 60 do
+    /// nothing at all, and the one that does changes the row's width, which is
+    /// exactly the case that has to go the long way round.
+    private func startElapsed() {
+        stopElapsed()
+        guard elapsedPinned == nil else { return }
+        listeningSince = Date()
+        var shown = 0
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] tick in
+            guard let self, let since = self.listeningSince else { return tick.invalidate() }
+            let minutes = Int(Date().timeIntervalSince(since) / 60)
+            guard minutes != shown else { return }
+            shown = minutes
+            self.layoutContent()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        elapsedTimer = timer
+    }
+
+    private func stopElapsed() {
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
+    }
+
+    /// Freeze the minutes at a number, for `OverlayStates` alone — the catalogue
+    /// shoots a state in the millisecond it sets it up, and no clock runs for it.
+    func pinListenElapsed(_ minutes: Int?) {
+        elapsedPinned = minutes
+        if minutes != nil { stopElapsed() }
+        layoutContent()
     }
 
     private static func halo() -> NSShadow {
@@ -2745,7 +2891,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // changes ink and no geometry. The star changes the row's width, so
             // the frame it arrives in has to go the long way round. It happens
             // once per dictation, at the moment the chip is meant to be noticed.
-            if warmth >= 1 && !self.listenStarUp { self.layoutContent() }
+            if warmth >= 1 && !self.listenBadgeUp { self.layoutContent() }
             else if steps != self.warmthLit { self.applyEngineText() }
             // Nothing left to do once it is full, and a dictation can run for
             // minutes.
@@ -3048,7 +3194,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
         reposition()             // …and the chip snaps back to the cursor
-        if value { startPulse(); startWarmth() } else { stopPulse(); stopWarmth() }
+        if value { startPulse(); startWarmth(); startElapsed() }
+        else { stopPulse(); stopWarmth(); stopElapsed(); listeningSince = nil }
     }
 
     /// Freeze the ramp at one frame, for `OverlayStates` alone.
@@ -3641,7 +3788,27 @@ private let frontLabel = NSTextField(labelWithString: "")
         // photograph taken over one would come out empty. Debugging tools do not
         // get to see a transition; they get the state.
         ChipWipe.cancel()
-        guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return }
+        // **Always 2×, never the display's own scale.** `bitmapImageRepForCachingDisplay`
+        // answers at the backing scale of whatever screen the window happens to be
+        // on, so the catalogue came out 1× when the shooter ran with the external
+        // monitors awake and 2× when it ran on the built-in Retina panel — and
+        // the whole of `docs/states/` then shows up in the diff, with nothing in
+        // the change to explain it. The page lays every picture out at its size
+        // in **points** (`build-overlay-states.py` writes `width=`/`height=` from
+        // the manifest), so the extra pixels are pure sharpness and the layout is
+        // unaffected. Making it a constant is what stops "which screen was
+        // plugged in" from being a property of the repository.
+        let scale: CGFloat = 2
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                   pixelsWide: Int((root.bounds.width * scale).rounded()),
+                                   pixelsHigh: Int((root.bounds.height * scale).rounded()),
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB,
+                                   bytesPerRow: 0, bitsPerPixel: 0)
+        guard let rep = rep else { return }
+        // The rep's *size* is in points and its pixel count is twice that, which
+        // is the whole of how AppKit is told to draw at 2×.
+        rep.size = root.bounds.size
         root.cacheDisplay(in: root.bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return }
         try? png.write(to: URL(fileURLWithPath: path))

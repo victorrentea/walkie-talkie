@@ -72,6 +72,37 @@ enum Glyphs {
         }
     }
 
+    /// A small filled badge with a word written into it — `HQ`, the mark that
+    /// says this dictation now has enough speech behind it to transcribe well.
+    ///
+    /// **Drawn rather than typed, for this file's own reason**: it rides an
+    /// `NSTextField` row that carries a halo, where an inline glyph turns every
+    /// other character transparent, and a word set in the row's own font would
+    /// read as another word in the sentence rather than as a label stuck on it.
+    /// A filled capsule is the one shape that says *tag* with no text at all.
+    ///
+    /// Sized off the height it is given, so it stays in proportion if the row's
+    /// ink ever changes: the corner radius is half the height (a capsule), the
+    /// word is bold at `0.66 ×` it, and the side padding is `0.36 ×` it.
+    static func tag(_ word: String, height: CGFloat, fill: NSColor = .systemBlue,
+                    ink: NSColor = .white) -> NSImage {
+        let font = NSFont.systemFont(ofSize: max(7, (height * 0.66).rounded()), weight: .bold)
+        let text = NSAttributedString(string: word, attributes: [.font: font,
+                                                                .foregroundColor: ink])
+        let drawn = text.size()
+        let width = (ceil(drawn.width) + (height * 0.36).rounded() * 2).rounded()
+        return NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+            fill.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: height / 2, yRadius: height / 2).fill()
+            // Centred on the ink the font reports rather than on its line box:
+            // a capital-only word sits high in a line box built for descenders.
+            text.draw(at: NSPoint(x: ((rect.width - drawn.width) / 2).rounded(),
+                                  y: ((rect.height - drawn.height) / 2).rounded()))
+            return true
+        }
+    }
+
+
     /// An emoji as an **image, trimmed to its ink** and fitted to a square of
     /// `ink` points.
     ///

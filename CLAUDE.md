@@ -21,6 +21,9 @@ Current strings live in `RelayWindow.swift`:
 - `Self.shotHint` + `recordText` — the shots row (the drawn back button, then `+ selection`)
   and `engineText` beside the pulsing 🔴 (`Listening…` — the model id it used to
   carry now lives only in the menu's engine row, see `applyWhisperTitle`)
+- `hqBadge` + `elapsedText` — `HQ` on the listening row once the bar fills, and
+  `(2m)` after it. Both are language-neutral by luck rather than by design, and
+  both must stay so
 - `Self.pickHint` + `pickText` — the ⌘⇧-picked row (`⌘⇧`, then
   `×2 div#cart > span.price`, both behind Chrome's icon); the label beside the outline in
   `chrome-extension/inspect.js` counts too, and so do its one error string
@@ -42,7 +45,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-36 of them — each with the moment it appears and why it looks the way it does. It
+38 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -51,7 +54,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 36 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 38 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -1010,13 +1013,36 @@ pulled** — see *The recogniser* — so the bar now forecasts a failure the
 recogniser no longer has, which is the right time to say what it is still for:
 everything else that is worse when there is less to hear.
 
-#### A star pops out when it fills (2026-09-08)
+#### A tag pops out when it fills (2026-09-08; it said `HQ` from 2026-09-09)
 
-**The moment the last dot lights, ⭐ arrives at the end of the row** — from
-almost nothing, overshooting well past its size and settling, with a quarter turn
-on the way (`placeListenStar`). Victor's ask: *"când se umple complet
-listening-ul, să apară o steluță la final, cu un mic efect de explozie mică …
-care compensează că am vorbit suficient de mult"*.
+**The moment the last dot lights, a small blue `HQ` arrives at the end of the
+row** — from almost nothing, overshooting well past its size and settling, with a
+quarter turn on the way (`placeListenExtras`). Victor's ask: *"când se umple
+complet listening-ul, să apară o steluță la final, cu un mic efect de explozie
+mică … care compensează că am vorbit suficient de mult"*, and the day after:
+*"la steluța care apare după listening, desenez un tag micuț care scrie HQ, de la
+High Quality … un tag micuț, pe albastru"*.
+
+**A star is a reward; a tag is a claim about the thing it is stuck on.** It was
+⭐ for a day, and the star said *well done* and left him to remember what for.
+What filling actually means is measured and specific — past three voiced seconds
+the wrong-language mode is at its floor and the median WER of a short clip has
+halved — so two letters say it where a picture could not. The animation, the
+edge-triggering and the measured width are all unchanged; only the mark is
+different.
+
+- **Blue, and drawn** (`Glyphs.tag`). Every other mark on this row is a signal
+  colour spent on an *event* — the 🔴 for *now*, `systemRed` for *this was
+  captured*. A label is not an event, so it takes the one colour on the chip that
+  has never meant one. Drawn rather than typed for this file's standing reason: a
+  raw glyph in an attributed string on a label carrying a halo renders and turns
+  every other character transparent (`applyTitleText`), and a word set in the
+  row's own font would read as another word in the sentence rather than as a
+  label stuck on it. A filled capsule says *tag* with no text at all.
+- **`0.8 ×` the icon column, not the full 16pt.** The badge fills its box corner
+  to corner where the emoji beside it sit a bearing in from the edge, so at equal
+  height it was the largest thing on the row — the same correction Chrome's icon
+  was given one row down.
 
 **The bar already said this and said it too quietly.** It is done when there are
 no dim characters left — which is a fact he has to *look at the row* to read, and
@@ -1026,11 +1052,12 @@ stopped changing is not. The bar is the gauge, the star is the notification. It
 also gives the row a state the last two steps could not tell apart: at eleven of
 twelve characters, the difference between *nearly* and *enough* is one full stop.
 
-- **⭐ and not ✨.** The sparkles are the spawn's mark, and on a spawn dictation
-  both are on this very row — one in front of the word meaning *this session does
-  not exist yet*, one behind it meaning *you have said enough*. Two identical
-  glyphs saying two unrelated things is the row failing to say either. Checked in
-  `docs/states/spawn.png`, where the two sit five characters apart.
+- **It has never been ✨, in either form.** The sparkles are the spawn's mark, and
+  on a spawn dictation both are on this very row — one in front of the word
+  meaning *this session does not exist yet*, one behind it meaning *you have said
+  enough*. Two identical glyphs saying two unrelated things is the row failing to
+  say either. Checked in `docs/states/spawn.png`, where the two sit five
+  characters apart.
 - **An `NSImageView`, not a glyph in the attributed string.** It has to *move*,
   and a text attachment inside an `NSTextField` has no layer to animate —
   re-rasterising it at a new size every frame would put a relayout inside the one
@@ -1050,11 +1077,47 @@ twelve characters, the difference between *nearly* and *enough* is one full stop
   rest of the sentence — the opposite of a reward. `RELAY_SHOOT` skips it for the
   oblique wipe's reason: the catalogue photographs states, and this is a
   transition.
-- **It is measured into the row's width** (`listenStarWidth`), not left to hang
+- **It is measured into the row's width** (`listenExtrasWidth`), not left to hang
   off the end, which the panel would clip. That makes the frame it arrives in the
   **one tick in a sentence allowed a relayout** — the rule the ramp is written
-  under is about ink, which changes no geometry; the star changes the width, once
+  under is about ink, which changes no geometry; the tag changes the width, once
   per dictation, at the exact moment the chip is meant to be noticed.
+
+#### And then the minutes, in brackets (2026-09-09)
+
+`🔴 Listening... [HQ] (2m)` — the whole minutes this dictation has been running,
+after everything else on the row and only once the first one has gone by.
+Victor's ask: *"să pui după toată povestea o paranteză rotundă în care treci
+numărul de minute"*.
+
+**It is the one fact the rest of the row cannot carry.** `Listening...` fills in
+the first three voiced seconds and then never changes again, so from that moment
+on nothing on the chip distinguishes a sentence from a monologue — and a
+monologue costs real seconds at the other end: the decode is charged per second
+of audio, and the panel he has to read while the Cancel clock runs is as long as
+he made it.
+
+- **Wall clock, not voiced seconds**, and that is the opposite choice from the
+  bar directly to its left. The bar is a forecast about the *transcript*, so it
+  counts only speech and stops when he stops; this answers *how long have I been
+  at this*, where the thinking pauses are part of the answer.
+- **Nothing under a minute.** `(0m)` is a readout saying only that a clock
+  exists, an inch from what he is reading, for the length of every ordinary
+  dictation — which is exactly the rent the model id was taken off this row for
+  paying.
+- **A label of its own, not a run in `engineInfo`.** The tag sits between the
+  word and this, and the tag is an image view because it has to pop; a run
+  appended to the attributed string would land *before* it.
+- **A second clock, and it relayouts at most once a minute** (`startElapsed`).
+  The ramp's timer cannot carry this — it stops the moment the bar fills, which
+  is three voiced seconds in and therefore before the first minute of every
+  dictation there has ever been. So this ticks once a second, watches the whole
+  minute count, and does nothing at all on 59 ticks in 60; the one that acts
+  changes the row's width, which is the case that has to go the long way round.
+  Same bargain the tag's arrival strikes.
+- **`pinListenElapsed` freezes it for `OverlayStates`**, which sets a state up
+  and photographs it in the same millisecond and so has no minutes to let pass —
+  the same reason `pinListenWarmth` and `pinTranscribeWarmth` exist.
 
 **Full at three voiced seconds** (`RelayWindow.enoughSpeech`): the first bucket
 where both failure modes are at their floor. About fifteen words at his measured
@@ -2827,7 +2890,7 @@ everything else near the pointer, so the only way to review a layout change was
 to make a spawn dictation and look with your own eyes, within three and a half
 seconds, at something that then faded. Same problem `docs/overlay-states.html`
 solves for the chip and the same answer — the real views drawing themselves —
-minus the catalogue, since this panel has one layout rather than 36 states.
+minus the catalogue, since this panel has one layout rather than 38 states.
 
 It paid for itself on the first run: the stars came out as **five solid
 squares**. Drawing a template `NSImage` and then `fill(using: .sourceAtop)` over
@@ -2983,6 +3046,10 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   in `stopLocalRecording`, so a transcript landing a second later goes where the
   press said it would even if the tick has been clicked since — the rule
   `Message.spawn` already follows.
+- **…but a bind mid-sentence overrules it**, since 2026-09-09: the left-plus-wheel
+  chord made while a caret dictation is running sends the words to that terminal
+  instead, and the chip stops saying `at the caret`. The mode itself is untouched.
+  See *A bind mid-sentence changes the recipient*.
 - **No context shot, and that is not only a saving.** The automatic frame exists
   to be read by an agent beside the words; here there is no agent and no message.
   The real reason is the selection probe that comes with it: it posts a ⌘C into
@@ -3131,6 +3198,36 @@ anyway and left the terminal he had just pointed at with nothing.
 The chip stops saying `✨ workspace` at the same moment, because `clearSpawn`
 does both — a destination line that is no longer true is worse than none.
 
+**A caret dictation converts the same way, since 2026-09-09.** Victor's ask:
+*"sesiunea de dictare pornită pentru paste … trebuie să se poată converti într-o
+sesiune legată de un terminal, prin același gest … tot tipul actualizat în
+consecință, și într-adevăr să se trimită nu la caret, ci în terminal"*. He starts
+a Replace Wispr dictation with the forward button, decides mid-sentence that the
+words belong to an agent after all, makes the left-plus-wheel chord at that
+terminal, and the sentence goes there.
+
+It is the spawn rule arrived at from the other side, and it needed writing for
+exactly the same mechanical reason: `pasteMode` is decided at the press and
+consumed in `stopLocalRecording`, so without this the words went to the caret
+however deliberately he had just pointed at a terminal. `showBound` takes it back
+on the same three conditions — a paste in flight, a recording running, and a
+**deliberate** bind, never the 10s poll.
+
+- **Only the sentence, never the mode.** `replaceWispr` — the menu tick, what the
+  forward button means — is untouched, so the *next* press opens another caret
+  dictation, which is what the tick says it does. Clearing the mode here would
+  make a bind a hidden way to switch it off, discoverable only by finding it
+  already off.
+- **The chip is the other half of the ask.** `setSpawnDestination(nil)` takes the
+  map pin and `at the caret` down, and the line the bind writes a moment later —
+  the destination app's icon and `petclinic@main` — is the top row again, which
+  is the honest answer to where the words go. Same reason the spawn's row is
+  taken back rather than left to be wrong for the rest of the sentence.
+- **Both ways of ending it still work.** The forward button goes on toggling
+  (`replaceWispr` is still on, and `onPasteToggle` stops a running recording
+  whatever its destination), and the wheel becomes available the instant the
+  binding lands, since `syncLocalCapture` is keyed on `isBound`.
+
 **Only a deliberate bind may do this** (fixed 2026-09-02). `showBound` is not
 only the bind route: `refreshBoundTitle` rides the overlay's 10s branch tick and
 calls it with the binding **already** in place, to pick up a window an agent has
@@ -3270,6 +3367,23 @@ empty space the whole time.
 Resizing on a state change is therefore expected and fine, and so is the hair of
 width the recording row gains at `×10`.
 
+### The order of the rows, and Chrome is last (2026-09-09)
+
+Top to bottom on the chip: **the dictation's state** (`🔴 Listening... [HQ] (2m)`,
+or a wait), **the destination**, **the shots**, **the quoted highlight**, and
+**Chrome**. Victor's rule for the last two: *"citatul să apară mereu deasupra
+Chrome-ului … Chrome trebuie să fie mereu ultima din listă"*.
+
+They were the other way round until then, and the argument that reorders them is
+about what each row *belongs to*. A highlight is part of **this** message — it
+was read at the shutter, it rides out with the words, and it goes when they do —
+so it sits with the frames above it. The ⌘⇧ row is the odd one out twice over:
+before he has picked anything it is not a payload at all but an invitation, and
+after he has, it is the one row that survives *between* messages. A thing that
+outlives the message belongs at the foot of it — and a row that shuffles up and
+down as a highlight comes and goes is a row he has to find again every time,
+beside a cursor he is not looking at.
+
 Row heights, for checking a layout change without seeing it: title 21, and every
 other row on the chip — engine, shots, ⌘⇧-picked and the selection — 22, with
 `rowGap` 2 between them. **The chip's rows are all the same height on purpose**:
@@ -3291,7 +3405,16 @@ longer buys it back on macOS 15 (verified 2026-07-31: transparent image, both
 whole-display and `screencapture -l <windowid>`). Two ways to see a change
 anyway:
 
-- `./docs/shoot-overlay-states.sh` → all 36 states at once, and the page that
+**The pictures are always 2×**, whatever screen the shooter ran on (2026-09-09).
+`bitmapImageRepForCachingDisplay` answers at the backing scale of the display the
+window is on, so the catalogue came out 1× with the external monitors awake and
+2× on the built-in Retina panel — and then *every* file in `docs/states/` turns up
+in the diff with nothing in the change to explain it. `snapshot` now builds the
+rep itself at a fixed 2×. The page lays each picture out at its size in **points**
+(`build-overlay-states.py` writes `width=`/`height=` from the manifest), so the
+extra pixels are sharpness and nothing else moves.
+
+- `./docs/shoot-overlay-states.sh` → all 38 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies
@@ -4339,6 +4462,115 @@ against the relay directly: at rest `/ping` and `/pick` both answer 503 and
 nothing is recorded; with the dictation flag set, both answer 200 and the pick
 lands.
 
+### "Sometimes it does not catch the element" (2026-09-09)
+
+Reported as *"deseori când sunt pe Chrome și apăs ⌘⇧ jos, nu prinde elementele
+uneori"*, with the guess that something in the page is slow to load. It is not
+the page. There are exactly two causes, and only one of them is a delay.
+
+**The first is not a bug: the gesture only exists while a dictation is open.**
+`/ping` answers 503 outside one (`ElementPicker.dictating`), so a ⌘⇧ hold made
+before he has started talking arms nothing at all and the click goes to Chrome —
+by design, because ⌘⇧-click is how a link opens in a new tab and jumps to it, and
+a browser that stopped doing that all day would read as broken. Measured on this
+Mac while the relay sat idle: `GET /ping` on 8917 → **503 in 1.4ms**. This is the
+common case and the answer to it is *start the dictation first*.
+
+**The second is real latency, and it was serial when it did not have to be.**
+`tryArm` used to ask for the probe only after the 400ms hold had already elapsed,
+so the two waits ran one after the other: 400ms, then the message to the service
+worker, then its answer. The loopback half of that is free — 1.4ms to a live
+relay and **0.2ms** to a refused port, so the three-port fan-out is noise — but an
+MV3 service worker is torn down after ~30s idle and has to be *started* before it
+can handle the message, which is the variable few hundred milliseconds nobody was
+paying attention to. Inside that gap `armed` is still false, so a click falls
+straight through to Chrome: the gesture "does nothing", and doing it again more
+slowly works, which is exactly how a timing threshold feels from the outside.
+
+Two changes, and the first is the fix:
+
+- **The probe now starts with the hold, not after it** (`beginHold` sets
+  `probing`, `tryArm` awaits it). The worker gets the whole 400ms to wake up in,
+  and in the ordinary case the answer is already sitting there when the timer
+  fires — so arming happens at the 400ms the gate was designed to cost and not at
+  400 plus a wake. It costs nothing when the hold turns out to be a shortcut: the
+  answer is dropped, and the worker caches it for a second anyway.
+- **A spinner says the wait is happening.** 150ms after the chord completes, if
+  the outline is not up yet, a small ring appears beside the cursor and goes when
+  the arm is decided either way. Victor asked for it by name — *"mi-ar plăcea o
+  rotiță, un loading pe parcurs"* — and it is what turns *the gesture is
+  unreliable* into *the gesture is not ready yet*. 150ms rather than immediately
+  because every ⌘⇧ shortcut passes through this same code and is poisoned by its
+  third key within a few tens of milliseconds, so a shortcut never sees one.
+- **And the arm time is logged**, one line per hold:
+  `[walkie] armed 431ms after ⌘⇧ went down`. The one number that answers "why did
+  it not catch it", and the only way to tell the two causes apart from the
+  outside — a refused arm prints nothing at all.
+
+**The spinner is the one departure from *a page that never sees ⌘⇧ held never
+gets a node from us*.** A hold that lasts 150ms now builds the UI even if the arm
+is then refused. The node is still 0×0, still `pointer-events:none`, still inside
+a closed shadow root — and the alternative is a gesture whose latency is
+invisible, which is the whole complaint.
+
+### ⌘⇧-drag: where he would move it, without moving it (2026-09-09)
+
+**Hold the chord, press on an element, drag, let go — and the message says the
+element moves from one page coordinate to another. Nothing in the page moves.**
+Victor's ask: *"să permit drag and drop de elemente prin extensie, dar să nu mut
+nimic în pagină … să capturăm poziția originală și coordonatele … dragul se duce
+translucent, doar chenarul, fără nimic … și când îl las, la mouse-up, comunică
+unde a ajuns elementul"*.
+
+```
+[pointed at: div#cart > span.price (1.299,00 lei) — moves from 120,340 to 500,205
+ (page coordinates, top-left)]
+```
+
+**Nothing in the page is touched**, which is what makes this safe on somebody's
+live application in front of a room: the element keeps its position, its styles
+and its listeners, and the only thing that travels is the rectangle this
+extension was already drawing on top of it. What reaches the agent is an
+*instruction* — move this, to there — to be carried out in the source, not a
+change already made in the DOM that the next render would throw away.
+
+- **Only the outline travels, and translucent** — `.dragging` clears the fill and
+  the glow and dashes the border. A filled box is a picture of where the element
+  would go, drawn over the very thing the drop is being judged against.
+- **The cursor closes.** `grab` → `grabbing`, the page's own convention for *you
+  are holding this*, and the natural second half of the hand the outline already
+  puts up.
+- **Page coordinates, top-left**, of the element's own corner and not of the
+  pointer (the grab offset inside the element is subtracted at the drop). A
+  *viewport* corner is a fact about how far the page happened to be scrolled at
+  that instant, which is the one thing certain to have changed by the time
+  anybody reads the message; a page corner is where the element sits in the
+  document, which is what a rule that moves it would be written against. The
+  `from` corner is measured against the scroll at the grab and the `to` corner
+  against the scroll at the drop, so a page scrolled mid-drag still reports two
+  corners in one frame.
+- **The live readout is the payload.** The label follows the box saying
+  `500, 205 page`, because he is aiming at a coordinate and a drop he cannot read
+  until the message arrives is a drop he has to make twice.
+- **The pick still fires at the press, and the drag amends it.** The outline
+  turning green under his finger is the receipt and it must not wait for a
+  release that may be a second away — and at the press nothing can know whether a
+  drag is coming. So a drag sends the same element again with its two corners on
+  it, and `AppDelegate.record` **replaces** the entry it already has when the
+  incoming pick carries a `move` and the newest pending pick has the same path.
+  One gesture, one element in the message. Matched only against the newest entry,
+  so two deliberate picks of two different things can never collapse into one.
+- **A drag abandoned by letting the chord go sends nothing.** The gesture was not
+  finished, and a drop nobody made is not a coordinate to report.
+- **Under `DRAG_MIN_PX` (4) it was a click**, which is the existing behaviour
+  untouched: the press picked, the release does nothing.
+
+Verified end to end at a desk through the loopback routes, since the gesture
+itself needs a browser and a hand: `/test/dictation/start`, two `/pick`s (one
+carrying a `move`), then `/test/dictation` — the envelope above came out on the
+clipboard, and repeating the same path with and then without a move produced
+**one** entry carrying the move, which is the amendment rule.
+
 ### The pick queue still survives a dictation opening
 
 Unlike shots and the selection, `pendingPicks` survives `captureContext` — not
@@ -4364,10 +4596,17 @@ taken blind, and the screen has moved on anyway.
 ### What a pick carries: the page, and what the thing said
 
 Each entry of the outbox's `elements` is `{path, tag, text, label, href, url,
-title, frame}` — built in `describe()` (`inspect.js`), re-read and clamped by
-`ElementPick(json:)`, emitted by `ElementPick.json`. Nothing in that chain may
-rename or drop a key: the `relay` skill documents them by name, and an agent
-reading an old key it no longer gets is worse than an agent with fewer keys.
+title, frame}`, plus `move` when he dragged it — built in `describe()`
+(`inspect.js`), re-read and clamped by `ElementPick(json:)`, emitted by
+`ElementPick.json`. Nothing in that chain may rename or drop a key: the `relay`
+skill documents them by name, and an agent reading an old key it no longer gets
+is worse than an agent with fewer keys. Adding one is free, which is how `move`
+arrived.
+
+`move` is `{from: {x, y}, to: {x, y}}`, the element's top-left corner in page
+coordinates before and after — see *⌘⇧-drag*. It is parsed **all or nothing**
+(`ElementPick.move(_:)`): the page is hostile input, and a half-parsed corner
+would put `0,0` into the message as if he had dropped it there.
 
 Two of them do the work Victor asked them to do, and both were wrong in a case
 that is easy to hit:
