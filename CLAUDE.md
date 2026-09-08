@@ -4250,6 +4250,56 @@ bundle carries the *install* time whatever its contents.
 This is why the Quit row now carries a build stamp (below): the question "am I
 running what I just built?" had no answer anywhere in the app.
 
+## Never launch the installed app by its executable path
+
+`open "/Applications/Walkie Talkie.app"` — never
+`"/Applications/Walkie Talkie.app/Contents/MacOS/Walkie Talkie"`, however much
+easier the second one makes reading the log on stdout.
+
+**macOS keys a privacy grant to a bundle identifier only for a process it
+launched itself.** A process started by its own path is attributed to the
+**path** instead, i.e. filed as a second, unrelated application that happens to
+share a name. Found 2026-09-08, with two of them already on this Mac:
+
+```
+kTCCServiceScreenCapture | ro.victorrentea.wispr-relay                              | 0 | 2026-08-15
+kTCCServiceScreenCapture | /Applications/Walkie Talkie.app/Contents/MacOS/Walkie…   | 1 | 2026-09-08
+kTCCServiceAppleEvents   | ro.victorrentea.wispr-relay            → com.apple.Terminal | 0 | 2026-08-15
+kTCCServiceAppleEvents   | /Applications/Walkie Talkie.app/Contents/MacOS/Walkie…  → com.apple.Terminal | 1 | 2026-08-28
+```
+
+`client_type` is the whole story: `0` is a bundle id, `1` is a path. Victor saw
+the consequence in System Settings — **two rows both called "Walkie Talkie"**,
+one carrying the app's own icon and one the generic `exec` icon macOS gives an
+unbundled Mach-O, each holding Screen Recording of its own. *"Elimină Walkie
+Talkie-ul care arată ca terminalul … să apară doar aplicația asta odată."*
+
+- **The rows are indistinguishable in the UI**, which is what makes this worth a
+  section: same name, and nothing in the pane says which is the bundle. The
+  query above is the diagnostic —
+  `/Library/Application Support/com.apple.TCC/TCC.db` for Screen Recording and
+  Accessibility, `~/Library/Application Support/com.apple.TCC/TCC.db` for
+  Automation and the microphone. Both are readable with a `sqlite3` select from
+  a terminal that has Full Disk Access; **neither is writable** without root, and
+  `tccutil reset` takes a bundle identifier, so it cannot name a path row at all.
+  **Removing one is a click in System Settings** — select the row, press `−` —
+  and that is the only route there is.
+- **A duplicate is not merely untidy.** Each row is a grant that can be revoked
+  independently of the one the app actually uses, so the app can lose Screen
+  Recording while a checkbox next to its name is still ticked. That is the same
+  class of confusion as *A stale bundle in /Applications is three bugs at once*
+  above, and it presents the same way: a feature stops working with nothing
+  visible to explain it.
+- **`main.swift` now makes it structurally impossible.**
+  `relaunchThroughLaunchServicesIfNeeded()` runs before `NSApplication.shared` is
+  so much as touched: if the parent is not launchd (pid 1) **and** the executable
+  sits inside a `.app`, it re-execs the bundle through `open -n -a … --args` and
+  exits, having asked macOS for nothing. `WT_ALLOW_DIRECT=1` overrides it.
+- **Development runs are untouched**, and that is the point of testing the
+  bundle rather than the parent alone: `swift build` puts the binary in
+  `.build`, which is not a `.app` and has no bundle identity to be mistaken for.
+  `RELAY_SHOOT` and `docs/shoot-overlay-states.sh` run exactly as before.
+
 ## The app icon and the build stamp
 
 - **The Finder/Spotlight icon is generated at build time** from

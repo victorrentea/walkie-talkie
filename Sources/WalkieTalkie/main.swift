@@ -37,6 +37,20 @@ while let arg = args.next() {
     }
 }
 
+// **Launched by path from a shell? Start over through LaunchServices.** macOS
+// attributes a privacy grant to a *bundle identifier* only for a process it
+// launched itself; a process started by its executable path is attributed to
+// the **path**, i.e. filed as a second, unrelated app. That is how a duplicate
+// "Walkie Talkie" — same name, generic `exec` icon — came to sit in System
+// Settings beside the real one, holding Screen Recording and Automation grants
+// of its own (found 2026-09-08; the path rows dated 15:24 that day and
+// 2026-08-28). Nothing in the repo launches it that way: it is what a person
+// does to watch the log on stdout, which is a reasonable thing to want and a
+// bad thing to leave working. So the direct launch is honoured by relaunching
+// the bundle properly, before anything here has asked macOS for a single
+// permission.
+relaunchThroughLaunchServicesIfNeeded()
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an
@@ -81,4 +95,44 @@ private func installAppMenu(_ app: NSApplication) {
 private final class AppMenuActions: NSObject {
     static let shared = AppMenuActions()
     @objc func about() { AboutPage.openInBrowser() }
+}
+
+/// Re-exec through `open` when this bundle's executable was started by path.
+///
+/// The test is the parent: `open`, the Dock and the `SMAppService` login item
+/// all arrive from **launchd**, which is pid 1, while a shell that ran the
+/// binary is still sitting there as the parent. A plain `swift build` binary is
+/// left alone — it lives in `.build`, not inside a `.app`, so it has no bundle
+/// identity to be mistaken for in the first place, which is what keeps
+/// `RELAY_SHOOT` and every other development run working unchanged.
+private func relaunchThroughLaunchServicesIfNeeded() {
+    guard ProcessInfo.processInfo.environment["WT_ALLOW_DIRECT"] == nil else { return }
+    guard getppid() != 1 else { return }
+
+    let bundleURL = Bundle.main.bundleURL
+    guard bundleURL.pathExtension == "app" else { return }
+
+    let note = """
+    walkie: started by path from a shell — macOS would file this as a SECOND privacy
+    walkie: client keyed by the path, which is how a duplicate "Walkie Talkie" with a
+    walkie: generic exec icon appears in System Settings. Relaunching \(bundleURL.path)
+    walkie: through `open` instead. Set WT_ALLOW_DIRECT=1 to run it here anyway.
+
+    """
+    FileHandle.standardError.write(Data(note.utf8))
+
+    let open = Process()
+    open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    // `-n` keeps the meaning of the gesture: the person asked for an instance to
+    // start, and SingleInstance stands any older one down exactly as it did when
+    // the binary was run directly.
+    open.arguments = ["-n", "-a", bundleURL.path, "--args"] + CommandLine.arguments.dropFirst()
+    do {
+        try open.run()
+    } catch {
+        // Better a duplicate privacy row than an app that refuses to start.
+        FileHandle.standardError.write(Data("walkie: could not relaunch (\(error)) — carrying on here.\n".utf8))
+        return
+    }
+    exit(0)
 }
