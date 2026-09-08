@@ -1781,6 +1781,82 @@ learn a key to keep working. In the terminal line they are stamped
 is two highlights with no way to tell which came from where in the sentence.
 The chip shows the newest with `↪ ×N`, the same idiom as `📸 ×N` and `🎯 ×N`.
 
+## A highlight is picked up on its own (2026-09-09)
+
+**While a dictation is running, whatever is highlighted is read every 0.6s and
+filed the first time it is seen. No shutter press, and therefore no screenshot.**
+`AppDelegate.pollSelection`, `SelectionCapture.readQuiet`.
+
+Victor's ask, and his reason: *"de multe ori selectez text și apoi apas butonul
+de back ca să ți-l dau, doar că asta face și poza la ecran, ceea ce uneori nu-i
+nevoie … ai putea să preiei automat textul selectat printr-un polling, să vezi
+dacă s-a selectat text nou în timpul dictării … dacă e nou; dacă l-ai mai văzut,
+îl ignori. Și în felul ăsta n-aș mai fi nevoit să fac poze ca să-ți dau textul
+selectat."*
+
+**The shutter is one gesture doing two jobs**, and handing over a highlight was
+only ever reachable through both of them. A retina frame costs a megabyte or two
+on disk — in a folder capped at 300 — and ~550 tokens in the agent's context, and
+it has to be *looked at* before anything can be read off it. The selection costs
+the characters it contains and is already the thing he meant. Selecting the text
+is a gesture he was making anyway; this makes it the whole gesture.
+
+- **Accessibility only.** `readQuiet` is back from the dead, and the argument
+  that removed it on 2026-08-31 is the argument for it here. It went because the
+  **shutter** used it: a deliberate press with a deliberate subject, where
+  stopping at AX meant a highlight in a Chrome page recorded nothing, silently,
+  and the ⌘C was a price Victor asked to pay. None of that transfers to a poll. A
+  synthetic ⌘C posted into whatever app is under his hand *once a second, all
+  sentence*, would fight his own copying, spend 400ms of pasteboard wait per
+  tick, and race its own clipboard restore.
+- **So a Chrome page is still the shutter's job**, and that is the one real gap.
+  ⌘⇧-click is the better answer there anyway: it addresses a page element as an
+  element rather than as loose text.
+- **A selection has to settle before it is filed.** Dragging grows it under the
+  cursor — `Hel`, `Hello wor`, `Hello world` — and a poll that filed the first
+  thing it saw would put a fragment in the message *and* the whole line beside
+  it. A text has to come back **twice in a row** to count, which costs one tick
+  and removes the class.
+- **Once each, per dictation.** `polledSeen` is *"dacă l-ai mai văzut, îl
+  ignori"*: a highlight left on screen is read every tick and filed on none of
+  them after the first. A **set**, not a last-value check, so going back to
+  something selected earlier in the same sentence is not a second entry either.
+  Losing the highlight clears what was settling, so re-selecting the same text
+  has to settle again rather than being filed off a stale half-read.
+- **Silent when it finds nothing new.** `fileSelection` is shared with the
+  shutter and takes `announceOnRepeat`, which is the one thing the two callers
+  disagree about: a **press** that found a highlight already carried still earns
+  the `“ selecting …` receipt — he aimed at something, and a shutter that says
+  nothing reads as one that missed — while a **poll** that finds the same text
+  has found nothing, and a row flickering once a second about an unchanged
+  highlight is the opposite of a receipt.
+- **Not in Replace Wispr.** `caretLine` carries no `[selected: …]` at all, since
+  the field under the caret is the one he is dictating *into*, so a watcher there
+  would gather text nothing would ever send. `syncBorrowedGestures` passes
+  `live && !pasteMode` — and a bind that converts a caret dictation mid-sentence
+  therefore switches the watcher **on** at the same moment, which is right.
+- **The first one still fills the frozen slot.** A dictation that opened with
+  nothing highlighted takes the first thing he selects as its subject — that is
+  `fileSelection`'s existing rule and it is exactly the shape of this feature: he
+  starts talking, then selects the thing he is talking about.
+- **Half a second of AX messaging timeout**, set on both the system-wide element
+  and the focused one. `AXUIElementCopyAttributeValue` blocks until the app
+  answers and the default allowance is seconds; an app mid-beachball would stall
+  this queue tick after tick. A serial `DispatchQueue` is the other half — a read
+  that outran its interval delays the next one instead of overlapping with it.
+- **Driven from `syncBorrowedGestures`**, the one switch every edge of a
+  dictation passes through, so the watcher cannot outlive the sentence. Both
+  edges are logged (`👁 selection watcher on/off`), because this is the first
+  thing in the app that reads the screen on a timer and *"why did it not pick up
+  my selection"* has to be answerable from the log.
+
+**Verified end to end** (TextEdit, a bound scratch terminal at a shell prompt so
+the delivery was refused and the outbox line still written): dictation opened
+with nothing selected; ⌘A filed 67 chars three seconds later; ⌘A again filed
+nothing; a different range filed a second entry — and the envelope came out with
+`[selected: …]` and `[selected 0:22: …]` and **no shots clause at all**, which is
+the whole point.
+
 ## Shots live in Caches, one folder per relay session
 
 `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session-stamp>/`, and

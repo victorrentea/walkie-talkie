@@ -29,20 +29,49 @@ enum SelectionCapture {
         return readViaClipboardProbe()
     }
 
+    /// **Strategy 1 alone — no keystroke, no clipboard, nothing the app can
+    /// notice.** For the watcher that reads the selection *every second* while a
+    /// dictation is running (`AppDelegate.pollSelection`).
+    ///
+    /// This is `readQuiet` back from the dead, and the argument that removed it
+    /// on 2026-08-31 is the argument for it here. It was taken out because the
+    /// **shutter** used it: a deliberate press with a deliberate subject, where
+    /// stopping at AX meant a highlight in a Chrome page recorded nothing at
+    /// all, silently, and the ⌘C was a price Victor asked to pay for it. Nothing
+    /// about that transfers to a poll. A synthetic ⌘C posted into whatever app
+    /// is under his hand *once per second, all sentence*, is not a price
+    /// anybody would pay: it would fight his own copying, spend 400ms of a
+    /// pasteboard wait per tick, and stamp on the clipboard restore if two
+    /// probes ever overlapped. So the watcher sees what AX exposes and no more,
+    /// and the shutter stays exactly what it was for everything AX cannot see.
+    ///
+    /// **The messaging timeout is the other half.** `AXUIElementCopyAttributeValue`
+    /// blocks until the target app answers, and the default allowance is
+    /// seconds — an app mid-beachball would otherwise stall this queue through
+    /// tick after tick. Half a second is far longer than a healthy answer takes
+    /// and short enough that a sick app costs one skipped read.
+    static func readQuiet() -> String? {
+        readViaAccessibility(timeout: 0.5)
+    }
+
     static func frontmostAppName() -> String? {
         NSWorkspace.shared.frontmostApplication?.localizedName
     }
 
     // MARK: - 1. Accessibility
 
-    private static func readViaAccessibility() -> String? {
+    private static func readViaAccessibility(timeout: Float? = nil) -> String? {
         let system = AXUIElementCreateSystemWide()
+        if let timeout = timeout { AXUIElementSetMessagingTimeout(system, timeout) }
 
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let element = focused else { return nil }
         // CFTypeRef → AXUIElement: the API guarantees this type for the attribute.
         let focusedElement = element as! AXUIElement
+        // Set on both: the timeout belongs to the element it is asked of, and
+        // the focused element is a different one from the system-wide handle.
+        if let timeout = timeout { AXUIElementSetMessagingTimeout(focusedElement, timeout) }
 
         var selected: CFTypeRef?
         guard AXUIElementCopyAttributeValue(focusedElement, kAXSelectedTextAttribute as CFString, &selected) == .success,

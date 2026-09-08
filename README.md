@@ -33,6 +33,16 @@ selected is captured and frozen for the whole dictation, and either the **back
 mouse button** or **F3** attaches extra screenshots as you talk — the count going
 up is the receipt.
 
+**Highlighting something is enough — you do not have to press anything.** While a
+dictation is running the relay reads whatever is selected a couple of times a
+second and files each new highlight once, so `select the paragraph, say what to
+do with it` is the whole gesture. It reads through Accessibility only, so it
+never touches your clipboard and never posts a keystroke — the cost is that a
+selection inside a **Chrome page** is invisible to it, which is what the back
+button (and ⌘⇧-click) are still for. This is what makes the shutter optional: a
+screenshot costs a megabyte on disk and several hundred tokens to read, a
+highlight costs the characters in it.
+
 `Listening...` is itself a gauge: it fills a character at a time as *speech*
 arrives — not as the clock runs — and is full at three voiced seconds, which is
 where a short clip stops being the kind the recogniser mangles. When it fills, a

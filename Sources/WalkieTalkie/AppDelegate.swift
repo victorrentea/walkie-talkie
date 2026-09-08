@@ -1560,6 +1560,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // with a track playing over it, which is the one thing the pause exists
         // to stop. Same switch as the beacon, and for the same reason.
         music.setActive(listening)
+        // **The watcher wants `live` minus the caret**, since `caretLine` carries
+        // no highlight at all — see `pollSelection`.
+        syncSelectionWatch(live && !pasteMode)
     }
 
     // MARK: - The bound terminal
@@ -2618,12 +2621,132 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// feature was missing precisely where he uses it: a highlight in a Chrome
     /// page is not a highlight AX can see, so every shot he took over one filed
     /// nothing at all, without saying so. See `SelectionCapture.read`.
+    // MARK: - The selection watcher
+
+    /// **A highlight is picked up on its own, without the shutter** (2026-09-09).
+    ///
+    /// Victor's ask, and his reason: *"de multe ori selectez text și apoi apas
+    /// butonul de back ca să ți-l dau, doar că asta face și poza la ecran, ceea
+    /// ce uneori nu-i nevoie. Ai putea să preiei automat textul selectat printr-un
+    /// polling, să vezi dacă s-a selectat text nou în timpul dictării … dacă e
+    /// nou; dacă l-ai mai văzut, îl ignori. Și în felul ăsta n-aș mai fi nevoit
+    /// să fac poze ca să-ți dau textul selectat."*
+    ///
+    /// **The shutter is one gesture doing two jobs.** Mouse 4 takes a picture
+    /// *and* reads the selection, so the only way to hand over a highlight was to
+    /// pay for a retina JPEG he did not want — on disk (a megabyte or two a
+    /// press, in a folder capped at 300 frames) and in the agent's context (~550
+    /// tokens for an 800px frame, and it has to be *looked at* before anything
+    /// can be read off it). A selection costs the characters it contains and is
+    /// already the thing he meant. Selecting the text is a gesture he was making
+    /// anyway; this makes it the whole gesture.
+    ///
+    /// - **Accessibility only** (`SelectionCapture.readQuiet`) — see there for
+    ///   why the ⌘C fallback the shutter uses is exactly wrong in a loop. The
+    ///   cost is that a highlight in a **Chrome page** is not seen: that is the
+    ///   one case AX does not expose and the reason the shutter grew the ⌘C in
+    ///   the first place. Mouse 4 is still the answer there, and so is ⌘⇧-click,
+    ///   which addresses a page element properly rather than as loose text.
+    /// - **It has to settle before it is filed.** A selection made by dragging
+    ///   grows under the cursor — `Hel`, `Hello wor`, `Hello world` — and a poll
+    ///   that filed the first thing it saw would put a fragment in the message
+    ///   and the whole line beside it. So a text has to come back **twice in a
+    ///   row** before it counts, which costs one tick of latency and removes the
+    ///   entire class.
+    /// - **Once each, per dictation.** `polledSeen` is what *"dacă l-ai mai
+    ///   văzut, îl ignori"* is: a highlight left on screen is read every tick
+    ///   and filed on none of them after the first. It is a set rather than a
+    ///   last-value check, so going back to something he selected earlier in the
+    ///   same sentence is not a second entry either.
+    /// - **Silent when it finds nothing new.** The chip's `“ selecting …` row is
+    ///   the receipt for a *deliberate* press; here it appears only on the tick
+    ///   that actually filed something.
+    /// - **Not in Replace Wispr.** `caretLine` carries no `[selected: …]` at all
+    ///   — the field under the caret is the one he is dictating *into* — so a
+    ///   watcher there would gather text nothing would ever send.
+    /// - **The first one still fills the frozen slot.** A dictation that opened
+    ///   with nothing highlighted takes the first thing he selects as its
+    ///   subject, which is `fileSelection`'s existing rule and is exactly right
+    ///   here: he starts talking, then selects the thing he is talking about.
+    private static let selectionPollSeconds: TimeInterval = 0.6
+
+    /// Reset per dictation, and touched **only** on `selectionQueue`, which is
+    /// serial — so the two of them need no lock of their own.
+    private var polledSettling: String?
+    private var polledSeen: Set<String> = []
+    private var selectionWatch: DispatchSourceTimer?
+    private let selectionQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.selection")
+
+    /// On for the length of a dictation, off otherwise — driven from
+    /// `syncBorrowedGestures`, the one switch every edge of a dictation passes
+    /// through, so the watcher cannot outlive the sentence it belongs to.
+    private func syncSelectionWatch(_ on: Bool) {
+        guard on != (selectionWatch != nil) else { return }
+        guard on else {
+            selectionWatch?.cancel()
+            selectionWatch = nil
+            Log.info("👁 selection watcher off")
+            return
+        }
+        Log.info("👁 selection watcher on — reading the highlight every "
+                 + String(format: "%.1fs", Self.selectionPollSeconds))
+        selectionQueue.async { [weak self] in
+            self?.polledSettling = nil
+            self?.polledSeen = []
+        }
+        let timer = DispatchSource.makeTimerSource(queue: selectionQueue)
+        timer.schedule(deadline: .now() + Self.selectionPollSeconds,
+                       repeating: Self.selectionPollSeconds)
+        timer.setEventHandler { [weak self] in self?.pollSelection() }
+        timer.resume()
+        selectionWatch = timer
+    }
+
+    /// One tick. On `selectionQueue`, which is serial, so a read that outran its
+    /// interval delays the next one rather than overlapping with it.
+    private func pollSelection() {
+        stateLock.lock()
+        let opened = dictationStartedAt
+        stateLock.unlock()
+        // The dictation ended between the tick being scheduled and it running.
+        guard let opened = opened else { return }
+
+        guard let text = SelectionCapture.readQuiet(), !text.isEmpty else {
+            // Nothing highlighted: whatever was settling is abandoned rather than
+            // carried across a gap, so `select, deselect, select the same again`
+            // has to settle again on its own.
+            polledSettling = nil
+            return
+        }
+        guard !polledSeen.contains(text) else { return }
+        guard text == polledSettling else { polledSettling = text; return }
+
+        polledSeen.insert(text)
+        let offset = Date().timeIntervalSince(opened)
+        Log.info("👁 selection watched at \(Self.stamp(offset)) — \(text.count) chars, taken without a shot")
+        fileSelection(text, at: offset, opened: opened, announceOnRepeat: false)
+    }
+
     private func stashExtraSelection(at offset: TimeInterval) {
         stateLock.lock()
         let opened = dictationStartedAt
         stateLock.unlock()
         guard let text = SelectionCapture.read(), !text.isEmpty else { return }
+        fileSelection(text, at: offset, opened: opened, announceOnRepeat: true)
+    }
 
+    /// File one highlight against the dictation in flight, and say so on the
+    /// chip. Shared by the shutter — which reads with a ⌘C fallback — and by the
+    /// watcher, which reads through Accessibility alone.
+    ///
+    /// `announceOnRepeat` is the one thing the two callers disagree about. A
+    /// **press** that found a highlight already carried still deserves the
+    /// receipt: he aimed at something and a shutter that says nothing reads as
+    /// one that missed. A **poll** that finds the same text has found nothing —
+    /// saying so once a second would be a row flickering for the whole sentence
+    /// about a highlight that has not changed.
+    private func fileSelection(_ text: String, at offset: TimeInterval, opened: Date?,
+                               announceOnRepeat: Bool) {
         stateLock.lock()
         // The probe outliving its dictation, exactly as in `stashSelection` and
         // for the same 400ms — a highlight filed against a sentence that is over
@@ -2659,9 +2782,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // selection, and the message still carries each highlight once.
         if novel {
             Log.info("↪ selection at \(Self.stamp(offset)) — \(text.count) chars (\(total) in this dictation)")
-        } else {
+        } else if announceOnRepeat {
             Log.info("↪ selection at \(Self.stamp(offset)) — already carried, not filed again")
         }
+        guard novel || announceOnRepeat else { return }
         // **Said back, in his own words, for a beat.** The row carries this
         // highlight for the rest of the dictation either way, which answers "is
         // it still there" but not the question he has at the instant he presses:
