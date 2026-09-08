@@ -278,6 +278,35 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// away and the chip still says `⌨️ at the caret` on every sentence it
     /// takes, so a mode left on is visible before a word is spoken.
     private var replaceWisprOn = UserDefaults.standard.bool(forKey: StatusItem.replaceWisprKey)
+
+    /// **Use Logi Gestures** — which mouse the app thinks it is holding.
+    ///
+    /// Ticked (the default): the side buttons arrive as ⌃⌥⌘F3…F12 from Logi
+    /// Options+ custom gestures, and every mouse button is passed straight
+    /// through — the wheel included, which is what gives middle-click back to
+    /// Chrome and VS Code. Unticked: the pre-2026-09-09 wiring, where the wheel
+    /// carries the dictation and the left and right buttons are chord modifiers.
+    ///
+    /// **Both sets are live code.** Victor asked for the old one kept rather than
+    /// deleted (*"tine-le pt moment comentate pe cele vechi, sau cu feat togle"*),
+    /// and the case it is kept for is a real one: the Logi gestures live in an
+    /// Options+ profile, and a Mac without that profile — a fresh install, a
+    /// machine in a training room — has no side buttons at all until it is
+    /// rebuilt. The tick is the way back in the meantime.
+    ///
+    /// **Defaults to on, and that needs saying** because `bool(forKey:)` answers
+    /// false for a key that was never written, which would have shipped the old
+    /// gestures to a Mac already configured for the new ones.
+    private let logiGestures = NSMenuItem(title: "Use Logi Gestures", action: nil, keyEquivalent: "")
+    private var logiGesturesOn: Bool =
+        UserDefaults.standard.object(forKey: StatusItem.logiGesturesKey) as? Bool ?? true
+    private static let logiGesturesKey = "useLogiGestures"
+
+    /// What the row is set to right now — read once at launch by `AppDelegate`,
+    /// like `isReplaceWispr`.
+    var isLogiGestures: Bool { logiGesturesOn }
+    /// The tap has to be told; `AppDelegate` owns that wire.
+    var onToggleLogiGestures: ((Bool) -> Void)?
     /// The other preference key — see the note on `autosendKey`.
     private static let replaceWisprKey = "replaceWispr"
 
@@ -484,6 +513,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyReplaceWisprIcon()
         menu.addItem(replaceWispr)
 
+        logiGestures.action = #selector(logiGesturesClicked)
+        logiGestures.target = self
+        applyLogiGesturesIcon()
+        menu.addItem(logiGestures)
+
         autosend.action = #selector(autosendClicked)
         autosend.target = self
         applyAutosendIcon()
@@ -546,29 +580,50 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // The wheel's `🛞` is gone from every row here, and with it the chord
         // rows `⬅️ + 🛞` and `➡️ + 🛞`: since 2026-09-09 this app takes no mouse
         // button at all. See *The side buttons speak in function keys*.
+        // **The vocabulary: an emoji for the button, a thin arrow for the
+        // movement.** The emoji names a button by where it sits on the mouse —
+        // `◀️` and `▶️` are the left and right buttons, and because the two side
+        // buttons are stacked, `🔼` is the forward one and `🔽` the back one. A
+        // gesture made by holding a side button and moving the mouse writes the
+        // button first and the direction after it as a text arrow (`🔼 →`).
+        // Victor picked the filled triangles over `⬆️`/`⬇️` for exactly that
+        // reason: against a thin `↑` the difference has to be visible at a
+        // glance, and a boxed arrow next to a bare one is not.
+        //
+        // **Two legends per row**, because both gesture sets are live: the first
+        // is what the row is performed with while *Use Logi Gestures* is ticked,
+        // the second what it was before — the wheel's own vocabulary, where `🛞`
+        // is the wheel and `+` joins a held modifier button to it. `restyleGestures`
+        // picks, and it runs whenever the tick changes as well as on every open.
         gestureRows = [
-            (bind, bind.title, "🔼 ↓"),
-            (disconnect, disconnect.title, "🔽 ↓"),
-            (startDictation, startDictation.title, "🔼 →"),
-            // Right under `Start Dictation`'s own `🔼 →`, which is the pair the
-            // order is for: one direction talks to what is bound, the one above
-            // it talks to a session that is not open yet.
-            (newSession, newSession.title, "🔼 ↑"),
+            (bind, bind.title, "🔼 ↓", "◀️ + 🛞"),
+            (disconnect, disconnect.title, "🔽 ↓", "▶️ + 🛞"),
+            (startDictation, startDictation.title, "🔼 →", "🛞"),
+            // Right under `Start Dictation`'s own gesture, which is the pair the
+            // order is for: one talks to what is bound, the one above it talks to
+            // a session that is not open yet.
+            (newSession, newSession.title, "🔼 ↑", "🛞🛞"),
             // The same gesture as Start: it is one toggle, and writing it twice
             // is how the menu says so without a sentence.
-            (stopRecording, stopRecording.title, "🔼 →"),
+            (stopRecording, stopRecording.title, "🔼 →", "🛞"),
             // The mirror direction of the one that starts it — the two gestures
             // that open and abandon a sentence are one hand movement, reversed.
-            (cancelDictation, cancelDictation.title, "🔼 ←"),
-            // **The caret dictation finally has a legend.** It never had one:
-            // it lived on mouse 5, which the menu had no glyph for, so the only
-            // place the gesture was written down was a doc comment. It is a
-            // plain click of the forward button, and it only means anything
-            // while the row above it is ticked.
-            (replaceWispr, replaceWispr.title, "🔼"),
-            (pasteLast, pasteLast.title, "⌘⌃P"),
-            (shot, shot.title, "🔽"),
-            (pickLegend, pickLegend.title, "⌘⇧ + ⬅️"),
+            // The wheel had no mirror to offer and used a 2s hold instead.
+            (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s"),
+            // **The caret dictation finally has a legend.** It never had one: it
+            // lived on mouse 5, which the menu had no glyph for, so the only
+            // place the gesture was written down was a doc comment. It is a plain
+            // click of the forward button, and it only means anything while this
+            // row is ticked.
+            (replaceWispr, replaceWispr.title, "🔼", "🖱️5"),
+            (pasteLast, pasteLast.title, "⌘⌃P", "⌘⌃P"),
+            (shot, shot.title, "🔽", "🔽"),
+            // **No `+`, and the button drawn rather than spelled** (Victor,
+            // 2026-09-09): the modifiers and the click are one continuous
+            // gesture — hold ⌘⇧ and click — not two things added together, and
+            // the chord column is narrow enough that a `+` is a character spent
+            // on punctuation.
+            (pickLegend, pickLegend.title, "⌘⇧◀️", "⌘⇧◀️"),
         ]
         layOutGestures(in: menu)
 
@@ -584,7 +639,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// carried one, and every gesture row in the menu printed its chord twice on
     /// two lines. `restyleGestures` runs on every `menuWillOpen`, so it was the
     /// second open that broke it, not the first.
-    private var gestureRows: [(item: NSMenuItem, label: String, gesture: String)] = []
+    private var gestureRows: [(item: NSMenuItem, label: String, logi: String, wheel: String)] = []
+    /// The legend for the mode that is on right now.
+    private func gesture(_ row: (item: NSMenuItem, label: String, logi: String, wheel: String)) -> String {
+        logiGesturesOn ? row.logi : row.wheel
+    }
     /// Where that column's right edge sits, measured once from the widest row.
     private var gestureTab: CGFloat = 0
 
@@ -603,7 +662,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let gap: CGFloat = 28
         var tab: CGFloat = 0
         for item in menu.items where !item.isSeparatorItem { tab = max(tab, width(item.title)) }
-        for row in gestureRows { tab = max(tab, width(row.label) + gap + width(row.gesture)) }
+        // **Measured against the widest of *both* legend sets**, not just the one
+        // showing: the tick can be flipped with the menu open, and a column that
+        // resized under the pointer would move every chord on screen.
+        for row in gestureRows {
+            tab = max(tab, width(row.label) + gap + width(row.logi))
+            tab = max(tab, width(row.label) + gap + width(row.wheel))
+        }
         gestureTab = tab
         restyleGestures()
     }
@@ -622,7 +687,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         for row in gestureRows {
             let ink: NSColor = row.item.isEnabled ? .labelColor : .disabledControlTextColor
             row.item.attributedTitle = NSAttributedString(
-                string: "\(row.label)\t\(row.gesture)",
+                string: "\(row.label)\t\(gesture(row))",
                 attributes: [.font: font, .foregroundColor: ink, .paragraphStyle: style])
         }
     }
@@ -925,6 +990,27 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The tick, or the space where one would be. See the note on the row.
     private func applyReplaceWisprIcon() {
         replaceWispr.image = replaceWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+    }
+
+    /// Push the mode in from outside, the shape `setReplaceWispr` has.
+    func setLogiGestures(_ on: Bool) {
+        logiGesturesOn = on
+        UserDefaults.standard.set(on, forKey: Self.logiGesturesKey)
+        applyLogiGesturesIcon()
+        // **The legend column is rewritten, not just the tick.** The menu is
+        // where every gesture is written down, and a row saying `🔼 →` on a Mac
+        // whose forward button does nothing is worse than no legend at all.
+        restyleGestures()
+    }
+
+    @objc private func logiGesturesClicked() {
+        setLogiGestures(!logiGesturesOn)
+        onToggleLogiGestures?(logiGesturesOn)
+    }
+
+    /// The tick, or the space where one would be. See the note on the row.
+    private func applyLogiGesturesIcon() {
+        logiGestures.image = logiGesturesOn ? Self.symbolIcon("checkmark") : Self.blankIcon
     }
 
     @objc private func autosendClicked() {

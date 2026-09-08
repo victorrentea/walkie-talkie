@@ -131,6 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// wrong in the one moment he looks at the row. It drops back to zero if the
     /// capture actually fails, which is the only case where zero is the truth.
     private var contextShotPending = false
+    /// The bare-wheel dictation whose context shot is taken at the wheel's
+    /// release rather than at the press (`startLocalRecording(deferContext:)`,
+    /// consumed by `onWheelRelease`). **Only ever set with *Use Logi Gestures*
+    /// off** — a Logi gesture ends with the mouse already moved, so there is no
+    /// release worth waiting for and the shot is taken at the press.
+    private var contextAtWheelRelease = false
 
     private let stateLock = NSLock()
 
@@ -312,6 +318,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the mode and the button that performs it cannot disagree — and flashed,
         // because it is the one setting that changes where every sentence lands.
         status.onToggleReplaceWispr = { [weak self] on in self?.setReplaceWispr(on) }
+        // **Use Logi Gestures** — pushed into the tap, which is the only thing
+        // that acts on it. No flash and no overlay: it is a wiring switch, not
+        // something that happens to a dictation.
+        status.onToggleLogiGestures = { [weak self] on in
+            self?.hotkeys.useLogiGestures = on
+            Log.info(on ? "🖱️ Logi gestures on — the wheel is the browser's"
+                        : "🖱️ Logi gestures off — the wheel is the relay's again")
+        }
         status.onToggleAutosend = { [weak self] on in
             self?.autosend = on
             Log.info(on ? "autosend on — the panel is a one-second receipt, no buttons"
@@ -330,6 +344,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The tick is already drawn, so nothing has to be pushed back to the row.
         replaceWispr = status.isReplaceWispr
         hotkeys.replaceWispr = replaceWispr
+        // Seeded the same way, and for the same reason: the row is the one
+        // source of truth, and the tick is already drawn.
+        hotkeys.useLogiGestures = status.isLogiGestures
+        if !status.isLogiGestures { Log.info("🖱️ Logi gestures off from the last launch — the wheel is the relay's") }
         if replaceWispr { Log.info("Replace Wispr restored on from the last launch") }
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
@@ -434,6 +452,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.startLocalRecording(spawn: true)
             }
         }
+        // ── Only reachable with *Use Logi Gestures* off ─────────────────────
+        // **The bare wheel at rest** — distinct from the toggle above because its
+        // press is only half a verdict: a second click on its heels turns the
+        // dictation into a spawn, so the context shot waits for the release
+        // (`onWheelRelease`) and pictures the screen his finger left.
+        hotkeys.onWheelDictate = { [weak self] in
+            DispatchQueue.main.async { self?.startLocalRecording(deferContext: true) }
+        }
+        // **The wheel clicked a second time: convert the dictation to a spawn.**
+        // Same recording, same words — only the destination changes: the terminal
+        // it opens in does not exist yet, so the folder menu is offered exactly
+        // as at a fresh spawn press.
+        // **The same double click made at rest** — nothing bound, no dictation
+        // to convert, so this one *opens* one that is a spawn from its first
+        // sample. `startLocalRecording(spawn:)` is the whole implementation:
+        // `spawnPending` is set before the `hasDestination` gate is read, which
+        // is exactly how a spawn is allowed through the gate a bare dictation is
+        // not — see its doc comment. `deferContext` is on for the same reason it
+        // is on the bare wheel: the picture wanted is the screen his finger
+        // *left*, so the second click's release is what asks for it.
+        hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard !self.localRecording, !self.recordWhenModelReady else { return }
+                self.startLocalRecording(spawn: true, deferContext: true)
+            }
+        }
+        hotkeys.onWheelDoubleSpawn = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                // **`recordWhenModelReady` counts as a dictation.** On a cold
+                // model the first click has not opened the microphone yet — it
+                // banked the gesture and is waiting on the weights — and the
+                // second click lands half a second later, long before that. The
+                // resumed start reads `spawnPending`, so setting it here is
+                // exactly how the conversion survives the wait.
+                guard self.localRecording || self.recordWhenModelReady else { return }
+                guard !self.spawnPending, !self.pasteMode else { return }
+                self.spawnPending = true
+                self.spawnFolder = nil
+                self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+                self.offerSpawnFolders()
+            }
+        }
+        // The deferred context shot's cue — see `onWheelDictate`.
+        hotkeys.onWheelRelease = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self, self.contextAtWheelRelease else { return }
+                self.contextAtWheelRelease = false
+                // Ended under the finger (menu, ⌘⌃D) — no sentence, no picture.
+                guard self.localRecording else { return }
+                self.captureContext()
+            }
+        }
         // The forward side button, in Replace Wispr mode — shaped exactly like
         // a spawn dictation, and ending the same way: whichever gesture opened
         // the microphone, closing it is closing it, and the destination was
@@ -454,6 +526,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
         hotkeys.onPasteLast = { [weak self] in
             DispatchQueue.main.async { self?.pasteLastDictation() }
+        }
+        hotkeys.onMouse5Double = { [weak self] in
+            guard let self = self else { return }
+            // The first click of the pair has already opened the microphone if
+            // the local engine is up. Close it: a double click is by definition
+            // faster than `MicRecorder.minimumDuration`, so the recording is
+            // dropped by the guard there rather than transcribed and sent.
+            if self.localRecording { self.stopLocalRecording() }
+            _ = self.bindFrontmostTerminal()
         }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
         hotkeys.onPromptEscape = { [weak self] in self?.overlay.cancelHeldPrompt() }
@@ -772,12 +853,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// clock, and, if he had already clicked, **wiping the folder he chose**
     /// with the `spawnFolder = nil` below and popping the menu back up.
     ///
-    /// **The context shot is always taken at the press.** `deferContext` used to
-    /// hold it back to the wheel's *release*, so the picture was of the screen
-    /// his finger left before a second click could turn the dictation into a
-    /// spawn. Both the wheel and that second click went on 2026-09-09; a gesture
-    /// that ends with the mouse already moved has no release worth waiting for.
-    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false) {
+    /// `deferContext` is the bare wheel at rest, and reachable only with *Use
+    /// Logi Gestures* off: its context shot is taken at the **release**, not the
+    /// press, so the picture is of the screen his finger left — and a second
+    /// click, which turns this dictation into a spawn, has not landed yet
+    /// (Victor, 2026-09-04/05). Every Logi gesture leaves it false.
+    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
+                                     deferContext: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -910,7 +992,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stateLock.unlock()
             armOrphanFlush()
         } else {
-            captureContext()
+            if deferContext {
+                // The audio's zero stays the press — shot offsets count from
+                // where the listening started — but the picture itself waits
+                // for the wheel's release: see `onWheelDictate`.
+                stateLock.lock()
+                dictationStartedAt = Date()
+                stateLock.unlock()
+                contextAtWheelRelease = true
+            } else {
+                captureContext()
+            }
         }
         listening = true
         syncBorrowedGestures()
@@ -999,6 +1091,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingScreen = nil
         dictationInFlight = false
         contextShotPending = false
+        contextAtWheelRelease = false
         stateLock.unlock()
 
         publishShotCount()

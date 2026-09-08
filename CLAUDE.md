@@ -2375,8 +2375,11 @@ is alive: a dead one has no footprint and the row goes back to its bare name.
 
 ### The side buttons speak in function keys (2026-09-09)
 
-**This app takes no mouse button at all any more.** The wheel is handed back,
-both side buttons arrive as keystrokes, and the two sections below are history.
+**In the default mode this app takes no mouse button at all.** The wheel is
+handed back, both side buttons arrive as keystrokes — and the old wiring is one
+menu tick away, not one `git revert` away: see *Use Logi Gestures* at the end of
+this section. The two sections below describe what that tick turns back on, and
+are therefore still live documentation rather than history.
 
 **What was measured, because it settles an argument the notes had wrong.** The
 forward button was said to reach the tap as an ~18ms down-and-up pair however
@@ -2422,10 +2425,13 @@ gesture goes to whatever app claims that chord instead — silently, since a cho
 nothing handles is a chord nothing complains about.
 
 **The glyph vocabulary in the menu.** An emoji names the button by where it sits
-on the mouse — `⬅️` `➡️` are the left and right buttons, and because the side
+on the mouse — `◀️` `▶️` are the left and right buttons, and because the side
 buttons are stacked, `🔼` is the forward one and `🔽` the back one. The movement
-is a **thin text arrow** after it (`🔼 →`), Victor's call: a different weight and
-colour from the boxed emoji, so it cannot be misread as a second button.
+is a **thin text arrow** after it (`🔼 →`), Victor's call: filled triangles were
+picked over `⬆️`/`⬇️` for exactly that contrast, since a boxed arrow beside a
+bare `↑` is not a difference you see at a glance. And the Chrome pick row lost
+its `+` (`⌘⇧◀️`): the modifiers and the click are one continuous gesture, not two
+things added together.
 
 **What this bought, beyond the button.** The wheel is the browser's again.
 *The wheel is the relay's* below states the price of the old design plainly —
@@ -2442,7 +2448,41 @@ a second click could turn the dictation into a spawn. A gesture that ends with
 the mouse already moved has no such moment, and the spawn is its own direction
 now rather than a conversion.
 
-**The back button's Return is posted by this app now.** It used to be typed
+### Use Logi Gestures — the tick that chooses between the two sets
+
+**Both gesture sets are compiled in and one of them is switched off.** Victor's
+call (*"tine-le pt moment comentate pe cele vechi, sau cu feat togle check box in
+menu: Use Logi Gestures (retinut intre restart)"*), and the toggle beat the
+comments because a gesture set that only exists in a diff cannot be switched back
+to on a Mac that needs it.
+
+- **Ticked, the default.** The side buttons arrive as ⌃⌥⌘F3…F12 and every mouse
+  button is passed straight through — one comparison in `HotkeyTap.handle` and
+  out again.
+- **Unticked.** The pre-2026-09-09 wiring, whole: the wheel carries the
+  dictation, holds cancel, the left and right buttons are chord modifiers, mouse
+  4 is the shutter and mouse 5 drives Replace Wispr.
+
+**Why it is worth keeping rather than deleting.** The Logi gestures live in an
+Options+ profile on *this* Mac. A fresh install, or a machine in a training room,
+has no side buttons at all until that profile is rebuilt — and the wheel path
+needs nothing but the app.
+
+Three details that are easy to get wrong:
+
+- **The default is on, and it has to be written out.** `UserDefaults.bool(forKey:)`
+  answers `false` for a key never written, which would have shipped the wheel
+  gestures to the Mac already configured for the new ones. The row reads
+  `object(forKey:) as? Bool ?? true`.
+- **The tap subscribes to the mouse in both modes.** The event mask is fixed when
+  the tap is created and the tick can be flipped at any moment, so the events
+  have to be arriving already. Rebuilding the tap on a toggle would mean tearing
+  down the thing carrying ⌘⌃B while a dictation may be running.
+- **The menu legend column carries both legends and picks one.** `restyleGestures`
+  runs on the toggle as well as on every open, and the tab stop is measured
+  against the wider of the two sets so the column cannot resize under the pointer.
+
+**The back button's Return is posted by this app now — in Logi mode.** It used to be typed
 upstream — LinearMouse, then Victor Addons' `BackButtonEnter` — and this tap's
 only job was to *withhold* it mid-dictation and take the picture instead. Options+
 owns the button, so nothing upstream types anything: `HotkeyTap.postReturn` makes
@@ -2452,9 +2492,10 @@ existing.**
 
 ### The wheel is the relay's; mouse 5 is nobody's (except in Replace Wispr)
 
-> **Superseded on 2026-09-09** by *The side buttons speak in function keys*
-> above. Kept for the reasoning, not the behaviour: nothing below this line is
-> still wired up — the wheel is untouched and both side buttons arrive as chords.
+> **Off by default since 2026-09-09**, and still live code. Everything below is
+> what the menu's *Use Logi Gestures* turns back on when it is unticked; with it
+> ticked the wheel is untouched and the side buttons arrive as chords instead.
+> See *The side buttons speak in function keys* above.
 
 
 Until 2026-08-29 the relay took **mouse 5** — the same button the dictation app
@@ -2498,11 +2539,11 @@ trap on a gesture that has two.
 
 ### Double-clicking the wheel turns the dictation into a spawn (2026-09-05)
 
-> **Superseded on 2026-09-09.** The spawn is 🔼 ↑ — the forward button held and
-> the mouse moved up — and is a gesture of its own rather than a conversion of a
-> dictation already in flight. The measurement in this section is what made the
-> side buttons look unusable; *The side buttons speak in function keys* corrects
-> it.
+> **Off by default since 2026-09-09**, and still live code — this is what the
+> wheel does with *Use Logi Gestures* unticked. Ticked, the spawn is 🔼 ↑, a
+> gesture of its own rather than a conversion of a dictation in flight. The
+> measurement in this section is what made the side buttons look unusable;
+> *The side buttons speak in function keys* corrects it.
 
 
 The side-button holds are dead, and the evidence killed them. The forward

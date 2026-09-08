@@ -68,7 +68,7 @@ enum OverlayStates {
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "bound-idle", group: "At rest", title: "Bound, standing by",
-                 when: "From ⌘⌃B (or 🔼 ↓) until something happens.",
+                 when: "From ⌘⌃B (or 🔼 ↓, or ◀️ + 🛞 with Logi gestures off) until something happens.",
                  note: "A microphone, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. **The same glyph for every destination**: at rest the only thing worth saying is *armed*, and bound has to look different from unbound, where there is no chip at all. Which terminal it is, is a menu away.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -82,7 +82,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "spawn", group: "Dictating", title: "This sentence opens a new session",
-                 when: "🔼 ↑ — the forward button held, mouse moved up: the dictation goes to a terminal that does not exist yet.",
+                 when: "🔼 ↑ — the forward button held, mouse moved up (🛞🛞 with Logi gestures off): the dictation goes to a terminal that does not exist yet.",
                  note: "**One row, and the ✨ is all that is left of the destination.** It had a title row of its own — Terminal's icon, ✨, `workspace` — and Victor took it off on 2026-09-02: the folder is *always* `~/workspace`, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of `Listening…` and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -126,7 +126,7 @@ enum OverlayStates {
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
-                 when: "From 🔼 → until he makes it again — the bulk of every dictation.",
+                 when: "From 🔼 → until he makes it again (🛞 with Logi gestures off) — the bulk of every dictation.",
                  note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there. **The blue `HQ` after it is what the bar filling means**, said in two letters: past three voiced seconds the wrong-language mode is at its floor and the median WER of a short clip has halved, so the tag is a claim about *this* dictation rather than the gold star it replaced, which only said well done and left him to remember what for. It pops out when the last dot lights — a thing that moves is caught in peripheral vision, which is where this row spends its life.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -227,7 +227,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "transcribing", group: "Dictating", title: "Waiting on the model",
-                 when: "Between the 🔼 → that ends the sentence and the panel that shows what it heard.",
+                 when: "Between the gesture that ends the sentence and the panel that shows what it heard.",
                  note: "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
@@ -261,7 +261,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "flash-cancelled", group: "Flashes", title: "Dictation cancelled",
-                 when: "The instant 🔼 ← is made mid-sentence — 1.5 s, then half a second of dissolve.",
+                 when: "The instant 🔼 ← is made mid-sentence (🛞 held 2 s with Logi gestures off) — 1.5 s, then half a second of dissolve.",
                  note: "**Words and nothing else**, and **bare**: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row `Listening…` was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an *event* rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
