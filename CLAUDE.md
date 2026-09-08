@@ -4437,15 +4437,25 @@ built-in Retina display. `SpawnTerminal.board()` and `slot(for:on:avoiding:)`
 decide instead:
 
 - **an external display attached** → the window is **tiled** across every
-  non-Retina screen, left to right, and Terminal is brought forward — on screens
-  he is not working on, that costs him nothing. *"tile them somehow so that they
-  don't overlap with others… use all the monitors you have around"*.
+  non-Retina screen, left to right. *"tile them somehow so that they don't overlap
+  with others… use all the monitors you have around"*.
 - **nothing but the Retina display** → there is nowhere to move it to, so it opens
-  **behind** instead. Nothing activates Terminal; if `do script` launched it from
-  cold and it took the front anyway, the app that *was* frontmost is put back a
-  quarter second later. The window still exists and `adoptSpawnedWindow` still
-  binds it a beat later — delivery goes through `do script … in <tab>`, which does
-  not need the window in front.
+  **behind** instead. The window still exists and `adoptSpawnedWindow` still binds
+  it a beat later — delivery goes through `do script … in <tab>`, which does not
+  need the window in front.
+
+**Neither case activates Terminal any more (2026-09-08).** The tiled one used to,
+and `activate` is an *application*-level raise: it lifts every window Terminal
+owns, on every display, so putting one new window on a side monitor also threw
+the sessions Victor keeps on the built-in screen over whatever he was reading —
+*"toate terminalele sar în față, inclusiv cele de pe retina… nu ar trebui să
+apară nimic nou în față pe retina"*. Measured with Finder frontmost and Terminal
+already running: `do script` creates the window and **does not** take the front,
+so dropping the line is the whole fix. The quarter-second restore afterwards
+stays, for the one case that still steals it — a Terminal launched from cold by
+`do script` — and it now runs in both branches. It can only give back the
+*focus*: windows an activation raised stay raised, which is why `activate` had to
+go rather than be undone after the fact.
 
 **The tiling is a grid of the window's own size, scored rather than filtered.**
 Each display is cut into cells as big as the window Terminal just made — two

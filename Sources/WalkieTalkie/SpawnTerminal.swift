@@ -67,7 +67,10 @@ enum SpawnTerminal {
         // `board()` and `slot(for:on:avoiding:)`: tiled across the displays
         // around the Retina one, and otherwise opened behind.
         let screens = board()
-        let previous = screens.isEmpty ? NSWorkspace.shared.frontmostApplication : nil
+        // Taken **before** anything is asked of Terminal, and in every branch:
+        // see the restore below for why the spawn is not allowed to keep the
+        // front it may take on the way.
+        let previous = NSWorkspace.shared.frontmostApplication
 
         // `do script` with no `in` clause opens a **new window**, which is the
         // whole request: a second session beside the one he is in, not a line
@@ -82,9 +85,22 @@ enum SpawnTerminal {
         // one was already holding. `front window` is Terminal's own front, not
         // the screen's, so it names the window just created whether or not this
         // app was activated.
+        //
+        // **And it does not activate Terminal** (Victor, 2026-09-08: *"când
+        // pornești un terminal nou… toate terminalele sar în față, inclusiv cele
+        // de pe retina… nu ar trebui să apară nimic nou în față pe retina"*).
+        // `activate` is an **application**-level raise: it lifts every window
+        // Terminal owns, on every display, so tiling one new window onto a side
+        // monitor also threw the four sessions he keeps on the built-in screen
+        // over whatever he was reading there. It was in the first version of this
+        // and never had a reason beyond "the new window should be seen" — which
+        // the tiling now does properly, by putting it where nothing else is.
+        //
+        // Nothing is lost by dropping it: `front window` above is Terminal's own
+        // ordering, so the new tab is still identified, and delivery is
+        // `do script … in <tab>`, which never needed a window in front.
         let osa = """
         tell application "Terminal"
-            \(screens.isEmpty ? "" : "activate")
             set t to do script "\(escape(launcher.path))"
             set out to (tty of t) & linefeed & (id of front window as string)
             repeat with x in windows
@@ -126,11 +142,20 @@ enum SpawnTerminal {
             placed = "tiled at \(target.x),\(target.y) \(target.w)×\(target.h)"
         }
 
-        // **Put the front back, if Terminal took it.** Nothing above activates it
-        // in this branch, but a Terminal that was not running is launched by
+        // **Put the front back, if Terminal took it.** Nothing above asks for the
+        // front any more, but a Terminal that was **not running** is launched by
         // `do script` and comes forward on its own. The quarter second is that
         // launch settling: restoring into the middle of it is a swap the window
         // server undoes a moment later.
+        //
+        // In every branch since 2026-09-08, not only when there was nowhere to
+        // tile: a spawn is by definition the window Victor did not ask to look at
+        // — he is mid-sentence, looking somewhere else — so the app he *was* in
+        // keeps the keyboard whatever else happened.
+        //
+        // This only restores **focus**. It cannot un-raise windows: an app that
+        // was activated keeps its windows where the activation put them, which is
+        // the whole reason `activate` had to go rather than be undone here.
         if let previous = previous {
             Thread.sleep(forTimeInterval: 0.25)
             if NSWorkspace.shared.frontmostApplication?.processIdentifier != previous.processIdentifier {
