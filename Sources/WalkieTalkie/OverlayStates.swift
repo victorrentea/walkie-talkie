@@ -179,26 +179,27 @@ enum OverlayStates {
             },
 
             Shot(slug: "listening-selection", group: "Dictating", title: "Dictating, carrying a highlight",
-                 when: "He had text selected when he started talking, or took a shot with a selection.",
-                 note: "`↪` and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading.",
+                 when: "He had text selected when he started talking, or took a shot with a selection — for the four seconds after it lands.",
+                 note: "The quotation mark and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading. Four seconds later it is the row below.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
                 o.setSelection(selection)
             },
 
-            Shot(slug: "listening-selection-multi", group: "Dictating", title: "Dictating, several highlights",
-                 when: "A second and third selection stashed with the side button during one sentence.",
-                 note: "`↪ ×3` — the count is the only thing that changes, because the newest one is the one he can still see in his editor.",
+            Shot(slug: "listening-selection-multi", group: "Dictating", title: "A highlight, four seconds later",
+                 when: "Every highlight ends here — the words have had their seconds and the row is the running count alone. Three of them, here.",
+                 note: "`×3` and nothing else. A highlight is read once, at the moment it is caught; from then on the only open question is whether any of them fell out, and a line of somebody else's code beside the cursor for the rest of a two-minute sentence is the widest row on the chip restating something already checked. `×1` is written out too — the number is all that is left, so an empty row would read as a highlight that got lost.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
                 o.setSelection(selection, count: 3)
+                o.pinSelectionSettled()
             },
 
             Shot(slug: "listening-selection-caught", group: "Dictating", title: "The shutter caught a highlight",
                  when: "For a beat after every side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
-                 note: "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It settles to `↪ ×N` after 2.5s, and it truncates to whatever width the rows above already gave the chip.",
+                 note: "The verb, then his own words back, on the row that was going to carry them anyway — deliberately not a flash, since a flash is a panel and a shutter press must not throw one over the work he is photographing. It collapses to `×N` after four seconds, and it truncates at 34 characters.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)

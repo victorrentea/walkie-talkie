@@ -249,8 +249,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// when there is no selection row at all.
     private var selectionCount = 0
     /// The selection row is announcing a highlight the shutter just caught, and
-    /// says `selecting` instead of the count for a couple of seconds.
+    /// says `selecting` in front of it while the words are still up.
     private var selectionAnnounced = false
+    /// The row has given the highlight its seconds and collapsed to `×N`.
+    ///
+    /// **The words are dropped, not shortened.** A highlight is read once, at
+    /// the moment it is caught — *did this catch the thing I meant?* — and from
+    /// then on the only open question is whether any of them fell out, which a
+    /// count answers on its own. Carrying 34 characters of somebody's code for
+    /// the rest of a two-minute sentence spends the widest row on the chip
+    /// restating something already checked, an inch from what he is reading.
+    private var selectionSettled = false
     private var selectionAnnounceWork: DispatchWorkItem?
     private var listening = false
     private var hovering = false
@@ -1457,11 +1466,15 @@ private let frontLabel = NSTextField(labelWithString: "")
         // chip now, and a label measured before it is written reports the
         // previous dictation's highlight.
         //
-        // `selecting` for the first beat after the shutter caught it, the count
-        // from then on. The two answer different questions: at the press he is
-        // asking *did this catch the thing I meant*, and the verb plus his own
-        // words back is the whole answer; a second later the only open question
-        // is whether any of them fell out, which is what `×N` is for.
+        // **The words for `selectionHold`, then the count alone.** The two answer
+        // different questions and only the first of them has an expiry date: at
+        // the moment a highlight is caught he is asking *did this catch the
+        // thing I meant*, and his own words back — with the verb in front when a
+        // press asked for them — is the whole answer; once he has read it the
+        // only open question is whether any of them fell out, which is what
+        // `×N` is for. So the row holds the quote long enough to be read and
+        // then collapses to a number, rather than carrying a line of somebody
+        // else's code beside the cursor for the rest of the sentence.
         //
         // **Clamped by characters, then measured** — the same bargain the
         // ⌘-pick row strikes one row up. Left out of the width, this row
@@ -1472,9 +1485,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // much as fits comfortably" means in a row that has to stay a receipt.
         var selectionWidth: CGFloat = 0
         if let selection = selection {
-            selectionHead = selectionAnnounced ? "selecting "
-                          : (selectionCount > 1 ? "×\(selectionCount) " : "")
-            selectionBody = Self.fitHead(singleLine(selection), 34)
+            if selectionSettled {
+                selectionHead = "×\(selectionCount)"
+                selectionBody = ""
+            } else {
+                selectionHead = selectionAnnounced ? "selecting " : ""
+                selectionBody = Self.fitHead(singleLine(selection), 34)
+            }
             applySelectionText()
             // Off the label rather than the font: the mark is in the icon column
             // now, so the text is plain `hintFont` — but it is set as an
@@ -2911,12 +2928,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     // MARK: - Public API (main thread)
 
     /// `count` is how many highlights this dictation is now carrying, the frozen
-    /// one included. The row shows the **newest** and prefixes `×N` once there
-    /// is more than one — the same reading `📸 ×N` and `🎯 ×N` already use, and
-    /// for the same reason: what he can check at a glance is *that* the last
+    /// one included. The row shows the **newest** for `selectionHold` seconds and
+    /// then collapses to `×N` — the same reading `📸 ×N` and `🎯 ×N` already use,
+    /// and for the same reason: what he can check at a glance is *that* the last
     /// gesture landed, and the running total is what says none of the earlier
-    /// ones fell out. The row stays one line; a stack of them would push the
-    /// chip over the work it is riding on.
+    /// ones fell out. `×1` included, unlike the count on those rows: here the
+    /// number is what is left when the words go, so a row that showed nothing at
+    /// all for the first highlight would read as one that lost it. The row stays
+    /// one line; a stack of them would push the chip over the work it is riding
+    /// on.
     ///
     /// `announced` is the shutter saying it just read this one off the screen.
     /// It is **not** a flash: a flash is a panel, and the rule that keeps the
@@ -2935,21 +2955,40 @@ private let frontLabel = NSTextField(labelWithString: "")
         selectionAnnounceWork?.cancel()
         selectionAnnounceWork = nil
         selectionAnnounced = announced && selection != nil
-        if selectionAnnounced {
+        // **Every highlight gets the same seconds, announced or not.** The
+        // opening probe's is as new to him as one the shutter read — it is
+        // whatever he happened to have selected when he started talking — so
+        // there is no reading on which one of them deserves to be shown and the
+        // other does not.
+        selectionSettled = false
+        if selection != nil {
             let settle = DispatchWorkItem { [weak self] in
-                guard let self = self, self.selectionAnnounced else { return }
+                guard let self = self, self.selection != nil else { return }
                 self.selectionAnnounced = false
+                self.selectionSettled = true
                 self.layoutContent()
             }
             selectionAnnounceWork = settle
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.selectionAnnounceHold, execute: settle)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.selectionHold, execute: settle)
         }
         layoutContent()
     }
 
-    /// Long enough to read a phrase beside a moving cursor, short enough that it
-    /// is gone before the next shot of the same sentence.
-    private static let selectionAnnounceHold: TimeInterval = 2.5
+    /// Long enough to read a phrase beside a moving cursor — Victor's number,
+    /// *"nu știu, 5-3 secunde"* — and short enough to be gone before the next
+    /// highlight of the same sentence lands on top of it.
+    private static let selectionHold: TimeInterval = 4
+
+    /// `OverlayStates` sets a state up and photographs it in the same
+    /// millisecond, so the four seconds above never pass there. This is the row
+    /// after they have — the same reason `pinListenWarmth` exists.
+    func pinSelectionSettled() {
+        selectionAnnounceWork?.cancel()
+        selectionAnnounceWork = nil
+        selectionAnnounced = false
+        selectionSettled = selection != nil
+        layoutContent()
+    }
 
     func clearSelection() { setSelection(nil, count: 0) }
 

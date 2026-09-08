@@ -1725,8 +1725,32 @@ deliberate act with a deliberate subject; the ⌘C is a price he asked to pay, a
 with nothing selected the probe is a no-op nothing notices. `readQuiet` is gone —
 it had no other caller.
 
-**The chip says `“ selecting <his own words>` for 2.5s** and then settles to
-`“ ×N …`.
+**The chip says `“ selecting <his own words>` for four seconds** and then
+collapses to `“ ×N` — the words dropped, not shortened (2026-09-09, Victor:
+*"citatul îl ții un pic acolo și apoi îl colapsezi doar într-un număr"*).
+
+It carried the highlight for the rest of the sentence until then, and the two
+readings have different expiry dates. At the instant it lands he is asking *did
+this catch the thing I meant?*, and his own words back are the whole answer;
+once he has read them the only open question is whether any of them fell out,
+which a count answers on its own. The old arrangement spent the widest row on
+the chip restating something already checked, for as long as two minutes, an
+inch from what he is reading.
+
+- **Four seconds, and the hold is now every highlight's, not the shutter's.**
+  It was 2.5s and it only existed to time out the verb; the words underneath it
+  never went. The opening probe's highlight is as new to him as one a press read
+  — it is whatever he happened to have selected when he started talking — so
+  there is no reading on which one of them earns the seconds and the other does
+  not.
+- **`×1` is written out**, unlike `📸 ×N` and `🎯 ×N`, which say nothing at one.
+  On those rows the count is a prefix to something; here it is *all that is
+  left*, so a row that went blank for the first highlight would read as one that
+  lost it.
+- **`pinSelectionSettled()` is what lets the catalogue photograph it** —
+  `OverlayStates` sets a state up and shoots it in the same millisecond, so the
+  four seconds never pass there. Same reason `pinListenWarmth` exists, and
+  `listening-selection-multi` is now that state: `×3` and nothing else.
 
 **The mark is the panel's, shrunk** (since 2026-09-02, Victor's ask). The row led
 with `↪`, an arrow — *this came from somewhere*, where what has to be said is
@@ -1745,17 +1769,18 @@ paragraphs below. **The receipt is not behind the novelty test, the filing is**:
 the three skipped cases are presses that *did* catch a highlight — the frozen one
 he never let go of, the same one shot twice — and a shutter that says nothing
 there reads as one that missed, which is the failure the row exists to rule out.
-The message still carries each highlight exactly once. The row was already going to carry the highlight for the rest of the
-sentence, which answers *is it still there* but not the question he has at the
-instant he presses — *did this catch the thing I meant?* A picture is taken
+The message still carries each highlight exactly once. The row carries the
+highlight for four seconds either way, which answers *is it still there* but not
+the question he has at the instant he presses — *did this catch the thing I
+meant?* A picture is taken
 silently and a selection is read silently, so without the verb the only
 confirmation the shutter grabbed the right paragraph arrived in the terminal, a
 sentence too late to reselect.
 
 **It is deliberately not a `flash(_:)`.** A flash *replaces* the chip for a
-second and a half, and the receipt has to sit beside the text it is about for the
-rest of the sentence — so the row that was going to carry the highlight anyway is
-where it goes. (When this was written a flash was also a *panel*, thrown across
+second and a half, and the receipt has to sit beside the text it is about — so
+the row that carries the highlight anyway is where it goes, and the two now end
+together, since the words go when the four seconds do. (When this was written a flash was also a *panel*, thrown across
 the work being photographed; that half of the argument is gone since 2026-09-02,
 and the other half is enough.)
 
@@ -1779,7 +1804,8 @@ It rides the outbox as **`selections`** — `[{at: "0:31", text: …}]` — whil
 learn a key to keep working. In the terminal line they are stamped
 (`[selected 0:31: …]`), because a second bare `[selected: …]` beside the first
 is two highlights with no way to tell which came from where in the sentence.
-The chip shows the newest with `↪ ×N`, the same idiom as `📸 ×N` and `🎯 ×N`.
+The chip shows the newest for four seconds and then the count alone — see
+*The shutter also takes the selection* for why the words go.
 
 ## A highlight is picked up on its own (2026-09-09)
 
