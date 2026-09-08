@@ -83,11 +83,11 @@ enum ChipWipe {
     /// How wide the bright band is across itself. Wide enough to hold a couple of
     /// glyphs at once: a band narrower than a letter reads as a scanline artefact
     /// rather than as light moving over the words.
-    private static let bandWidth: CGFloat = 26
+    private static let bandWidth: CGFloat = 13
 
     /// How soft the erasing edge is. Hard enough to read as an edge, soft enough
     /// not to alias into a staircase along a 60° diagonal.
-    private static let softEdge: CGFloat = 7
+    private static let softEdge: CGFloat = 3
 
     /// The band rides **ahead** of the erasing edge by this much of its own
     /// width, so the order Victor described is the order it happens in: brighter
@@ -174,8 +174,8 @@ enum ChipWipe {
         host.masksToBounds = true
         host.contentsScale = scale
 
-        host.addSublayer(picture(after, in: size, scale: scale, keeping: .behind))
-        host.addSublayer(picture(before, in: size, scale: scale, keeping: .ahead))
+        host.addSublayer(picture(after, in: size, scale: scale, keeping: .behind, animated: true).layer)
+        host.addSublayer(picture(before, in: size, scale: scale, keeping: .ahead, animated: true).layer)
 
         root.addSublayer(host)
         self.host = host
@@ -187,6 +187,72 @@ enum ChipWipe {
             guard self.host === host else { return }
             cancel()
         }
+    }
+
+    // MARK: - Looking at it
+
+    /// **Draw the whole sweep as a strip of frames and write it to a PNG.**
+    ///
+    /// `WT_SHOOT_WIPE=/tmp/wipe.png` — `RelayWindow.shootWipe`.
+    ///
+    /// This effect is the least reviewable thing in the app and it took a bug
+    /// report to notice. The chip is invisible to every screen capture
+    /// (`sharingType`), the sweep lasts a third of a second, and it is drawn in
+    /// *layers* — so `RelayWindow.snapshot`, which draws the view tree and
+    /// explicitly stands a wipe down first, cannot see it either. Reviewing a
+    /// change to it meant provoking a cancel and watching, twelve times.
+    ///
+    /// The same argument as `docs/overlay-states.html` and `WT_SHOOT_MENU`, and
+    /// the same answer: the real layers, drawing themselves, at instants chosen
+    /// by hand. `CALayer.render(in:)` honours `mask` — checked before this was
+    /// built, since the whole effect is two masked pictures and a stencil, and a
+    /// renderer that ignored masks would have produced a confident lie.
+    ///
+    /// **On a dark ground**, because the chip is bare and its ink is white with
+    /// a halo: rendered on white the brightening is invisible, and rendered on
+    /// transparency it is unjudgeable. A terminal is what this actually sits on.
+    static func shoot(over view: NSView, from before: Frame, to path: String, frames: Int = 13) {
+        guard let after = capture(view) else { return }
+        let size = view.bounds.size
+        let scale: CGFloat = 2
+        let gap: CGFloat = 8
+        let sheetW = size.width
+        let sheetH = (size.height + gap) * CGFloat(frames) - gap
+
+        guard let ctx = CGContext(data: nil, width: Int(sheetW * scale), height: Int(sheetH * scale),
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        ctx.scaleBy(x: scale, y: scale)
+
+        let back = picture(after, in: size, scale: scale, keeping: .behind, animated: false)
+        let front = picture(before, in: size, scale: scale, keeping: .ahead, animated: false)
+        let host = CALayer()
+        host.frame = CGRect(origin: .zero, size: size)
+        host.masksToBounds = true
+        host.contentsScale = scale
+        host.addSublayer(back.layer)
+        host.addSublayer(front.layer)
+
+        for i in 0..<frames {
+            let t = CGFloat(i) / CGFloat(frames - 1)
+            back.pose(t)
+            front.pose(t)
+            ctx.saveGState()
+            // Top frame first, so the sheet reads downward like the sweep does.
+            ctx.translateBy(x: 0, y: sheetH - (size.height + gap) * CGFloat(i) - size.height)
+            ctx.setFillColor(NSColor(calibratedWhite: 0.11, alpha: 1).cgColor)
+            ctx.fill(CGRect(origin: .zero, size: size))
+            host.render(in: ctx)
+            ctx.restoreGState()
+        }
+
+        guard let image = ctx.makeImage() else { return }
+        let rep = NSBitmapImageRep(cgImage: image)
+        rep.size = NSSize(width: sheetW, height: sheetH)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        Log.info("wipe sheet → \(path) (\(frames) frames of \(Int(size.width))×\(Int(size.height)))")
     }
 
     /// Take the sweep down and give the real rows back. Idempotent, and the only
@@ -245,8 +311,9 @@ enum ChipWipe {
     /// (`layoutContent`), so a message a row shorter than the one it replaces
     /// still shares its first row's pixels. Centring would slide every row of the
     /// old picture half the difference and turn a swap into a jump.
-    private static func picture(_ frame: Frame, in size: CGSize,
-                               scale: CGFloat, keeping: Side) -> CALayer {
+    private static func picture(_ frame: Frame, in size: CGSize, scale: CGFloat,
+                                keeping: Side, animated: Bool)
+                                -> (layer: CALayer, pose: (CGFloat) -> Void) {
         let inset = size.height - frame.size.height
         let layer = CALayer()
         layer.frame = CGRect(x: 0, y: inset, width: frame.size.width, height: frame.size.height)
@@ -259,7 +326,12 @@ enum ChipWipe {
         // it would recompute `bounds` and `position` from the rectangle given and
         // throw away both the oversized span the rotation needs and the animation
         // riding on `position`.
-        layer.mask = sweep(size: size, scale: scale, keeping: keeping, inset: inset)
+        let path = travel(size: size)
+        let axis = size.height / 2 - inset
+        let edge = sweep(size: size, scale: scale, keeping: keeping)
+        edge.position = CGPoint(x: path.from, y: axis)
+        if animated { edge.add(slide(from: path.from, to: path.to, y: axis, lead: 0), forKey: "sweep") }
+        layer.mask = edge
 
         // **The light is masked by the words, so only the words brighten.** A
         // white band laid straight over the chip would be a translucent stripe
@@ -275,31 +347,146 @@ enum ChipWipe {
         // words *at once* wherever it straddled the seam, which on two different
         // strings is two different words superimposed and reads as a smear
         // rather than as a line.
+        var lit: CALayer?
+        var stripe: CALayer?
         if let stencil = stencil(frame, scale: scale) {
             let glow = CALayer()
             glow.frame = CGRect(origin: .zero, size: frame.size)
             glow.contentsScale = scale
             glow.mask = stencil
-            glow.addSublayer(band(size: size, scale: scale, inset: inset))
+            let bar = band(size: size, scale: scale)
+            bar.position = CGPoint(x: path.from + bandLead, y: axis)
+            glow.addSublayer(bar)
             // Up and down at the ends, or the band is switched on at the chip's
             // left edge and cut off at its right — a light that is switched on is
             // a different event from a light that arrives.
-            let fade = CAKeyframeAnimation(keyPath: "opacity")
-            fade.values = [0.0, 1.0, 1.0, 0.0]
-            fade.keyTimes = [0.0, 0.15, 0.8, 1.0]
-            fade.duration = duration
-            fade.fillMode = .forwards
-            fade.isRemovedOnCompletion = false
             glow.opacity = 0
-            glow.add(fade, forKey: "fade")
+            if animated {
+                bar.add(slide(from: path.from, to: path.to, y: axis, lead: bandLead), forKey: "sweep")
+                let fade = CAKeyframeAnimation(keyPath: "opacity")
+                fade.values = glowKeys.map { NSNumber(value: Double($0.value)) }
+                fade.keyTimes = glowKeys.map { NSNumber(value: Double($0.at)) }
+                fade.duration = duration
+                fade.fillMode = .forwards
+                fade.isRemovedOnCompletion = false
+                glow.add(fade, forKey: "fade")
+            }
             layer.addSublayer(glow)
+            lit = glow
+            stripe = bar
         }
+
+        // **The same numbers the animations ride on, as a function of time** —
+        // so `shoot` photographs the effect rather than an impression of it. A
+        // second implementation of the motion is a second thing to keep in step;
+        // this one is the same three assignments the CA animations make, made by
+        // hand at one instant.
+        let pose: (CGFloat) -> Void = { t in
+            let travelled = path.from + (path.to - path.from) * ease(t)
+            edge.position = CGPoint(x: travelled, y: axis)
+            stripe?.position = CGPoint(x: travelled + bandLead, y: axis)
+            lit?.opacity = Float(glowOpacity(at: t))
+        }
+
+        // **A row that no longer fits is faded out, not guillotined** (2026-09-09).
+        //
+        // The chip hugs its current state, so a two-row `🔴 Listening... [HQ]` /
+        // `petclinic@main` is 23pt taller than the one-row `🗑️ Dictation
+        // aborted` that replaces it — and the window has already resized by the
+        // time the sweep plays. Top-aligned and clipped to the host, the second
+        // row was therefore **cut through the middle of its letters** and sat
+        // there sliced for the whole third of a second, in every frame before
+        // the edge reached it. That is the "strange" part of what Victor was
+        // looking at, and it is not something a sweep can be blamed for: nothing
+        // about a line crossing the chip says the row under it should end in a
+        // horizontal cut.
+        //
+        // Nothing can *show* the extra row — the window is the size it is — so
+        // the honest thing is to let it leave rather than to sever it. A
+        // vertical ramp over the last few points of what fits reads as the row
+        // going out of frame, which is what is actually happening.
+        guard inset < -0.5, let ramp = bottomFade(frame.size, visible: size.height, scale: scale)
+        else { return (layer, pose) }
+        let holder = CALayer()
+        holder.frame = layer.frame
+        // The mask on the picture is in the picture's own coordinates and its
+        // bounds do not change, so re-homing the layer inside a holder leaves the
+        // sweep exactly where it was.
+        layer.frame = CGRect(origin: .zero, size: frame.size)
+        holder.addSublayer(layer)
+        holder.mask = ramp
+        return (holder, pose)
+    }
+
+    /// How many points the overflowing picture takes to disappear at the bottom.
+    private static let fadeHeight: CGFloat = 12
+
+    /// A mask that is opaque over the picture and ramps to nothing across the
+    /// bottom `fadeHeight` of what the chip can actually show.
+    private static func bottomFade(_ size: CGSize, visible: CGFloat, scale: CGFloat) -> CALayer? {
+        guard size.height > visible, size.height > 0 else { return nil }
+        // In the picture's own y-up coordinates, the chip shows everything above
+        // this line and clips the rest.
+        let cut = size.height - visible
+        let layer = CAGradientLayer()
+        layer.frame = CGRect(origin: .zero, size: size)
+        layer.contentsScale = scale
+        layer.startPoint = CGPoint(x: 0.5, y: 0)
+        layer.endPoint = CGPoint(x: 0.5, y: 1)
+        let clear = NSColor.white.withAlphaComponent(0).cgColor
+        let solid = NSColor.white.withAlphaComponent(1).cgColor
+        layer.colors = [clear, clear, solid, solid]
+        layer.locations = [0,
+                           NSNumber(value: Double(cut / size.height)),
+                           NSNumber(value: Double(min(1, (cut + fadeHeight) / size.height))),
+                           1]
         return layer
+    }
+
+    /// How far ahead of the erasing edge the bright band rides, in points.
+    private static var bandLead: CGFloat { bandWidth * leadFraction }
+
+    /// The band's opacity over the sweep, as `(time, value)` stops.
+    private static let glowKeys: [(at: CGFloat, value: CGFloat)] =
+        [(0, 0), (0.15, 1), (0.8, 1), (1.0, 0)]
+
+    private static func glowOpacity(at t: CGFloat) -> CGFloat {
+        let t = min(max(t, 0), 1)
+        for i in 1..<glowKeys.count {
+            let a = glowKeys[i - 1], b = glowKeys[i]
+            guard t <= b.at else { continue }
+            let span = b.at - a.at
+            let f = span > 0 ? (t - a.at) / span : 1
+            return a.value + (b.value - a.value) * f
+        }
+        return glowKeys.last?.value ?? 0
+    }
+
+    /// CoreAnimation's `easeInEaseOut`, which is the cubic Bézier (0.42, 0,
+    /// 0.58, 1), solved for y at x = t by Newton.
+    ///
+    /// Written out because `shoot` has to place the layers at an instant by hand
+    /// and a sheet drawn from a *different* curve than the one that ships would
+    /// be a picture of something nobody sees.
+    private static func ease(_ t: CGFloat) -> CGFloat {
+        let c1: CGFloat = 0.42, c2: CGFloat = 0.58
+        func curve(_ u: CGFloat, _ p1: CGFloat, _ p2: CGFloat) -> CGFloat {
+            let m = 1 - u
+            return 3 * m * m * u * p1 + 3 * m * u * u * p2 + u * u * u
+        }
+        var u = min(max(t, 0), 1)
+        for _ in 0..<8 {
+            let dx = 3 * (1 - u) * (1 - u) * c1 + 6 * (1 - u) * u * (c2 - c1) + 3 * u * u * (1 - c2)
+            guard Swift.abs(dx) > 1e-6 else { break }
+            u -= (curve(u, c1, c2) - t) / dx
+            u = min(max(u, 0), 1)
+        }
+        return curve(u, 0, 1)
     }
 
     /// The travelling boundary, as a mask: opaque on `keeping`'s side, clear on
     /// the other, sliding from one end of `travel` to the other.
-    private static func sweep(size: CGSize, scale: CGFloat, keeping: Side, inset: CGFloat) -> CALayer {
+    private static func sweep(size: CGSize, scale: CGFloat, keeping: Side) -> CALayer {
         let span = 2 * (size.width + size.height) + 200
         let edge = softEdge / span
         // Both stops are white — one at zero alpha — rather than `NSColor.clear`,
@@ -320,17 +507,13 @@ enum ChipWipe {
         layer.locations = [NSNumber(value: 0.0), NSNumber(value: 0.5 - Double(edge)),
                            NSNumber(value: 0.5 + Double(edge)), NSNumber(value: 1.0)]
         layer.transform = rotation
-        let path = travel(size: size)
-        let axis = size.height / 2 - inset
-        layer.position = CGPoint(x: path.from, y: axis)
-        layer.add(slide(from: path.from, to: path.to, y: axis, lead: 0), forKey: "sweep")
         return layer
     }
 
     /// The bright band: a stripe of white that fades out on both of its own
     /// flanks, so it has no edges of its own to be seen. The only edge in this
     /// effect is the one doing the wiping.
-    private static func band(size: CGSize, scale: CGFloat, inset: CGFloat) -> CALayer {
+    private static func band(size: CGSize, scale: CGFloat) -> CALayer {
         let span = 2 * (size.width + size.height) + 200
         let layer = CAGradientLayer()
         layer.bounds = CGRect(x: 0, y: 0, width: bandWidth, height: span)
@@ -344,15 +527,10 @@ enum ChipWipe {
         // on the stroke, which is what "a bit brighter" looks like on ink that
         // was white to begin with.
         layer.colors = [NSColor.white.withAlphaComponent(0).cgColor,
-                        NSColor.white.withAlphaComponent(0.90).cgColor,
+                        NSColor.white.withAlphaComponent(0.55).cgColor,
                         NSColor.white.withAlphaComponent(0).cgColor]
         layer.locations = [NSNumber(value: 0.0), NSNumber(value: 0.5), NSNumber(value: 1.0)]
         layer.transform = rotation
-        let path = travel(size: size)
-        let lead = bandWidth * leadFraction
-        let axis = size.height / 2 - inset
-        layer.position = CGPoint(x: path.from + lead, y: axis)
-        layer.add(slide(from: path.from, to: path.to, y: axis, lead: lead), forKey: "sweep")
         return layer
     }
 

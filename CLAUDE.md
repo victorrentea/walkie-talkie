@@ -1812,11 +1812,38 @@ is a gesture he was making anyway; this makes it the whole gesture.
 - **So a Chrome page is still the shutter's job**, and that is the one real gap.
   ⌘⇧-click is the better answer there anyway: it addresses a page element as an
   element rather than as loose text.
-- **A selection has to settle before it is filed.** Dragging grows it under the
-  cursor — `Hel`, `Hello wor`, `Hello world` — and a poll that filed the first
-  thing it saw would put a fragment in the message *and* the whole line beside
-  it. A text has to come back **twice in a row** to count, which costs one tick
-  and removes the class.
+- **A selection has to settle before it is filed: three identical reads in a
+  row.** Dragging grows it under the cursor — `Hel`, `Hello wor`, `Hello world`
+  — and a poll that filed the first thing it saw would put a fragment in the
+  message *and* the whole line beside it. Victor's rule and his words for what
+  three unchanged reads mean: *"3 selecții identice = m-am oprit"*. At a **one
+  second** tick (*"pune 1s în loc de 0,6, să nu fie grabă"* — it shipped at 0.6
+  for an hour) that is two seconds of a hand that has stopped, which is a much
+  stronger statement and costs nothing that matters: the sentence is still being
+  spoken.
+- **The stamp is when it was *first* seen, not when it was confirmed** —
+  *"reține și timestampul selecției"*. The two seconds spent making sure are the
+  watcher's business; the offset in the message says where in the sentence the
+  highlight happened, and filing it two seconds late would put every automatic
+  selection behind the words it belongs to. Measured: a ⌘A two seconds into a
+  dictation comes out `0:02`, not `0:04`.
+- **One last read when the microphone closes** — *"la finele dictării preiei
+  selecția activă încă o dată, să nu fi selectat exact pe final"*. The settle
+  rule has a cost, and it is exactly at the end: a highlight made in the last two
+  seconds never gets its three reads, and that is precisely the moment he selects
+  the thing he has just finished describing. No settling there, deliberately —
+  the drag is over, or he would not have stopped talking — but `polledSeen` still
+  applies, so the highlight that has been up all sentence is not filed twice.
+  `finalSelectionRead` posts to the same serial queue the ticks run on, so it
+  lands after any read in flight, and what it has to beat is a round trip through
+  the helper: a second at the least, against an AX call measured in milliseconds.
+  Blocking the main thread for the AX timeout at the instant the microphone
+  closes would be the worse trade — that is the frame the recording row is being
+  replaced in.
+  **`/test/dictation` makes the same call**, with the send hung off it, because
+  the route hands a transcript over on the spot where a real one follows a
+  decode: without that the one part of the watcher that only runs at the close
+  would be the one part nothing could reach from a desk.
 - **Once each, per dictation.** `polledSeen` is *"dacă l-ai mai văzut, îl
   ignori"*: a highlight left on screen is read every tick and filed on none of
   them after the first. A **set**, not a last-value check, so going back to
@@ -1851,11 +1878,13 @@ is a gesture he was making anyway; this makes it the whole gesture.
   my selection"* has to be answerable from the log.
 
 **Verified end to end** (TextEdit, a bound scratch terminal at a shell prompt so
-the delivery was refused and the outbox line still written): dictation opened
-with nothing selected; ⌘A filed 67 chars three seconds later; ⌘A again filed
-nothing; a different range filed a second entry — and the envelope came out with
-`[selected: …]` and `[selected 0:22: …]` and **no shots clause at all**, which is
-the whole point.
+the delivery was refused and the outbox line still written): a dictation opened
+with nothing selected; ⌘A was filed three reads later and **stamped `0:02`**,
+where it was seen and not where it was confirmed; ⌘A again filed nothing; and a
+range selected a fraction of a second before the close came out as
+`👁 selection watched at the close`. The envelope carried both — `[selected: …]`
+and `[selected 0:07: …]` — with **no shots clause at all**, which is the whole
+point.
 
 ## Shots live in Caches, one folder per relay session
 
@@ -4360,6 +4389,69 @@ clipped by its own ink and its own side of the line, because a single glow over
 the union of both lit the outgoing and the incoming words *at once* wherever it
 crossed the seam: on two different strings that is two words superimposed, and it
 reads as a smear rather than as a line.
+
+### What the cancel actually looked like, and the two things wrong with it (2026-09-09)
+
+Reported by Victor as *"apare dictation cancelled și de pe aia strălucește D-ul,
+cumva, mult straniu — nu-mi place cum arată"*. Both faults were visible in the
+first contact sheet and neither was guessable from the code.
+
+**The row that no longer fits was being guillotined.** The chip hugs its current
+state, so `🔴 Listening... [HQ]` over `petclinic@main` is 23pt taller than the
+one-row `🗑️ Dictation aborted` that replaces it — and the window has already
+resized by the time the sweep plays. Top-aligned and clipped to the host, the
+second row was therefore **cut through the middle of its letters** and sat there
+sliced for the whole third of a second, in every frame before the edge reached
+it. Nothing about a line crossing the chip says the row under it should end in a
+horizontal cut; that is the "strange" part he was looking at, and the sweep was
+being blamed for it.
+
+Nothing can *show* the extra row — the window is the size it is — so the fix is
+to let it leave rather than sever it: a vertical ramp over the last `fadeHeight`
+(12pt) of what fits, which reads as the row going out of frame, which is what is
+actually happening. It is a mask on a holder layer wrapping the picture, since
+the picture's own mask is already the sweep and a layer has one.
+
+**And the band was a flare, not a brightening.** 26pt wide at 0.90 alpha put a
+white blob over two glyphs of *both* strings at the seam — where the outgoing
+`Lis` and the incoming `Dic` are already superimposed by the cross-fade — so the
+first letter of the new message arrived inside a bright smudge. That is the D.
+It is now **13pt at 0.55**, which is what *"a bit brighter"* asks for, and the
+soft edge went 7pt → 3pt so the two strings ghost across one letter instead of
+two. Compared frame by frame on three sheets before choosing.
+
+### `WT_SHOOT_WIPE` — because this is the least reviewable thing in the app
+
+`WT_SHOOT_WIPE=/tmp/wipe.png ./.build/debug/WalkieTalkie` draws the cancel sweep
+as a strip of 13 frames on a dark ground and quits (`ChipWipe.shoot`,
+`RelayWindow.shootWipe`).
+
+It took a bug report to notice a row being cut in half for a third of a second,
+dozens of times a day, and that is the whole argument. The chip is invisible to
+every screen capture (`sharingType`), the sweep lasts 0.32s, and it is drawn in
+**layers** — so `RelayWindow.snapshot`, which draws the *view* tree and stands a
+wipe down before it does, cannot see it either. Reviewing a change meant
+provoking a cancel and watching, twelve times, and being sure of nothing. Same
+argument as `docs/overlay-states.html` and `WT_SHOOT_MENU`, same answer: the real
+layers drawing themselves.
+
+- **`CALayer.render(in:)` honours `mask`** — checked with a throwaway program
+  before any of this was written, because the entire effect is two masked
+  pictures and a stencil, and a renderer that ignored masks would have produced a
+  confident lie. (It ignores *animations*, which is why the next point exists.)
+- **The motion is posed, not animated.** `picture()` returns its layer **and** a
+  `pose(t)` that sets the same three values the CA animations set — the edge's
+  position, the band's, the glow's opacity — so the sheet is the effect at an
+  instant rather than an impression of it. `ease(t)` is CoreAnimation's
+  `easeInEaseOut` written out (the cubic Bézier `0.42, 0, 0.58, 1`, solved by
+  Newton), because a sheet drawn from a different curve than the one that ships
+  is a picture of something nobody sees.
+- **On a dark ground.** The chip is bare and its ink is white with a halo: on
+  white the brightening is invisible, on transparency it is unjudgeable. A
+  terminal is what this actually sits on.
+- **It drives the two layouts by hand**, not through `flash(_:)` — that hands the
+  sweep to `rememberChip`/`wipe`, which plays it on screen over a third of a
+  second, which is the thing that cannot be photographed.
 
 **The picture it sweeps away is taken at the top of `layoutContent`, not at the
 flash**, and that is the one piece of this that is not about drawing. Cancelling

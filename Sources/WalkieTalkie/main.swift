@@ -59,6 +59,19 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_MENU"] {
     exit(0)
 }
 
+// Draw the chip's oblique wipe as a strip of frames and quit — the only way to
+// look at an effect that lasts a third of a second, is drawn in layers, and
+// lives in a window no screen capture can contain. See `ChipWipe.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_WIPE"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let overlay = RelayWindow()
+    let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+        .map { NSWorkspace.shared.icon(forFile: $0.path) }
+    icon?.size = NSSize(width: 18, height: 18)
+    overlay.shootWipe(to: out, label: "petclinic@main", icon: icon)
+    exit(0)
+}
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an

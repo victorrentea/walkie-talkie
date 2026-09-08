@@ -575,7 +575,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
-            self.send(kind: "dictation", text: text, app: "test")
+            // The last read of the sentence, exactly as `stopLocalRecording`
+            // makes it — otherwise the one part of the watcher that only runs at
+            // the close is the one part no route can reach.
+            self.finalSelectionRead { self.send(kind: "dictation", text: text, app: "test") }
         }
         // The spawn's transcript, entering where a spoken one does — with the
         // destination armed first, exactly as the ⇧-wheel press arms it.
@@ -1092,6 +1095,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopLocalRecording() {
         localRecording = false
+        // **One last look at what is highlighted**, before `syncBorrowedGestures`
+        // below takes the watcher down — a highlight made in the last seconds of
+        // a sentence never gets its three settling reads, and that is exactly
+        // when he selects the thing he has just described. Cancelling does not
+        // do this: everything that dictation gathered is being thrown away.
+        finalSelectionRead()
         // **Read and consumed here**, so the async transcript that lands a second
         // later goes where the *press* said it would, whatever the menu has been
         // clicked into since. Same rule `Message.spawn` follows.
@@ -2647,12 +2656,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   one case AX does not expose and the reason the shutter grew the ⌘C in
     ///   the first place. Mouse 4 is still the answer there, and so is ⌘⇧-click,
     ///   which addresses a page element properly rather than as loose text.
-    /// - **It has to settle before it is filed.** A selection made by dragging
-    ///   grows under the cursor — `Hel`, `Hello wor`, `Hello world` — and a poll
-    ///   that filed the first thing it saw would put a fragment in the message
-    ///   and the whole line beside it. So a text has to come back **twice in a
-    ///   row** before it counts, which costs one tick of latency and removes the
-    ///   entire class.
+    /// - **It has to settle before it is filed: three identical reads in a row.**
+    ///   A selection made by dragging grows under the cursor — `Hel`,
+    ///   `Hello wor`, `Hello world` — and a poll that filed the first thing it
+    ///   saw would put a fragment in the message and the whole line beside it.
+    ///   Victor's rule, and his words for what three unchanged reads mean:
+    ///   *"3 selecții identice = m-am oprit"*. At a 1s tick that is two seconds
+    ///   of a hand that has stopped moving, which is a much stronger statement
+    ///   than one second and costs nothing that matters — the sentence is still
+    ///   being spoken.
+    /// - **The stamp is when it was *first* seen, not when it was confirmed.**
+    ///   *"reține și timestampul selecției"*. Waiting two seconds to be sure is
+    ///   the watcher's business; the offset in the message is supposed to say
+    ///   where in the sentence the highlight happened, and filing it two seconds
+    ///   late would put every automatic selection behind the words it belongs
+    ///   to.
+    /// - **One last read when the microphone closes**, whatever it has or has
+    ///   not settled into: *"la finele dictării preiei selecția activă încă o
+    ///   dată, să nu fi selectat exact pe final"*. The settle rule is a filter
+    ///   against fragments and it has a cost — a highlight made in the last two
+    ///   seconds of a sentence would never be confirmed, and that is exactly the
+    ///   moment he selects the thing he has just finished describing. There is
+    ///   no fragment risk at the end: the drag is over, or he would not have
+    ///   stopped talking.
     /// - **Once each, per dictation.** `polledSeen` is what *"dacă l-ai mai
     ///   văzut, îl ignori"* is: a highlight left on screen is read every tick
     ///   and filed on none of them after the first. It is a set rather than a
@@ -2668,11 +2694,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   with nothing highlighted takes the first thing he selects as its
     ///   subject, which is `fileSelection`'s existing rule and is exactly right
     ///   here: he starts talking, then selects the thing he is talking about.
-    private static let selectionPollSeconds: TimeInterval = 0.6
+    /// **One second, not the 0.6 it shipped at.** Victor: *"pune 1s în loc de
+    /// 0,6, să nu fie grabă"*. Nothing downstream of this is in a hurry — the
+    /// sentence is still being spoken — and three ticks at a second apart is a
+    /// far better statement about a hand having stopped than three at 0.6.
+    private static let selectionPollSeconds: TimeInterval = 1.0
+
+    /// How many identical reads in a row mean the hand has stopped.
+    private static let selectionSettleReads = 3
 
     /// Reset per dictation, and touched **only** on `selectionQueue`, which is
-    /// serial — so the two of them need no lock of their own.
-    private var polledSettling: String?
+    /// serial — so none of them needs a lock of its own.
+    ///
+    /// `polledSettling` keeps **when the text was first seen** along with the
+    /// text, because that is the offset the message carries: the two seconds
+    /// spent making sure are the watcher's problem, not the transcript's.
+    private var polledSettling: (text: String, since: Date, reads: Int)?
     private var polledSeen: Set<String> = []
     private var selectionWatch: DispatchSourceTimer?
     private let selectionQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.selection")
@@ -2719,11 +2756,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard !polledSeen.contains(text) else { return }
-        guard text == polledSettling else { polledSettling = text; return }
+        guard var settling = polledSettling, settling.text == text else {
+            polledSettling = (text: text, since: Date(), reads: 1)
+            return
+        }
+        settling.reads += 1
+        polledSettling = settling
+        guard settling.reads >= Self.selectionSettleReads else { return }
 
+        take(text, firstSeen: settling.since, opened: opened, how: "watched")
+    }
+
+    /// **The last read of a dictation, when the microphone closes.**
+    ///
+    /// The settle rule needs `selectionSettleReads` seconds of a hand that has
+    /// stopped, and a highlight made in the last of those would never be
+    /// confirmed — which is precisely the moment he selects the thing he has
+    /// just finished describing. Victor: *"la finele dictării preiei selecția
+    /// activă încă o dată, să nu fi selectat exact pe final"*.
+    ///
+    /// **No settling here**, deliberately: the drag is over, or he would not
+    /// have stopped talking. `polledSeen` still applies, so the highlight that
+    /// has been on screen all sentence is not filed a second time.
+    ///
+    /// **Off the main thread and not waited on.** It is posted to the same
+    /// serial queue the ticks run on, so it lands after any read already in
+    /// flight, and the transcript it has to beat is a round trip through the
+    /// helper — a second at the very least against an AX call measured in
+    /// milliseconds. Blocking the main thread for up to the AX timeout at the
+    /// instant the microphone closes would be the worse trade: that is the frame
+    /// the recording row is being replaced in.
+    private func finalSelectionRead(then: (() -> Void)? = nil) {
+        selectionQueue.async { [weak self] in
+            // `then` is `/test/dictation`'s only way to model the tail of a real
+            // dictation: there, the transcript follows the microphone closing by
+            // a decode — a second at the very least — while the route hands one
+            // over on the spot, so without somewhere to hang the send it would
+            // race this read and lose every time.
+            defer { if let then = then { DispatchQueue.main.async(execute: then) } }
+            guard let self = self else { return }
+            self.stateLock.lock()
+            let opened = self.dictationStartedAt
+            self.stateLock.unlock()
+            guard let opened = opened else { return }
+            guard let text = SelectionCapture.readQuiet(), !text.isEmpty else { return }
+            guard !self.polledSeen.contains(text) else { return }
+            self.take(text, firstSeen: Date(), opened: opened, how: "watched at the close")
+        }
+    }
+
+    /// File one watched highlight. On `selectionQueue`.
+    private func take(_ text: String, firstSeen: Date, opened: Date, how: String) {
         polledSeen.insert(text)
-        let offset = Date().timeIntervalSince(opened)
-        Log.info("👁 selection watched at \(Self.stamp(offset)) — \(text.count) chars, taken without a shot")
+        polledSettling = nil
+        // **Stamped from when it was first seen**, not from now: the settling is
+        // the watcher making sure, and a stamp two seconds behind the highlight
+        // would put it after the words it belongs to.
+        let offset = firstSeen.timeIntervalSince(opened)
+        Log.info("👁 selection \(how) at \(Self.stamp(offset)) — \(text.count) chars, taken without a shot")
         fileSelection(text, at: offset, opened: opened, announceOnRepeat: false)
     }
 

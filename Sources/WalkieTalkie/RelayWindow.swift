@@ -3673,6 +3673,31 @@ private let frontLabel = NSTextField(labelWithString: "")
         ChipWipe.play(over: root, from: source)
     }
 
+    /// **Draw the cancel sweep as a strip of frames and quit** —
+    /// `WT_SHOOT_WIPE=/tmp/wipe.png`. See `ChipWipe.shoot` for why.
+    ///
+    /// The state it photographs is the one Victor reported: a dictation running
+    /// at a bound terminal, replaced by `🗑️ Dictation aborted`. It drives the
+    /// two layouts by hand rather than through `flash(_:)`, because `flash`
+    /// hands the sweep to `rememberChip`/`wipe`, which plays it on screen over a
+    /// third of a second — the very thing that cannot be photographed.
+    func shootWipe(to path: String, label: String, icon: NSImage?) {
+        setBound(label: label, folder: label, icon: icon)
+        setListening(true)
+        pinListenWarmth(1)
+        layoutContent()
+        guard let before = ChipWipe.capture(root) else { return }
+        setListening(false)
+        // Straight into the flash's own state, without `flash(_:)`: this is the
+        // one caller that wants the two layouts and *not* the animation between
+        // them. `chipBefore` is cleared so the sweep `layoutContent` remembers
+        // cannot also be played on the next hop through the main queue.
+        flashMessage = "🗑️ Dictation aborted"
+        layoutContent()
+        chipBefore = nil
+        ChipWipe.shoot(over: root, from: before, to: path)
+    }
+
     /// Internal for the same reason `beginPromptEdit` is: the ✕ is a state, and
     /// a state that cannot be reached from `OverlayStates` cannot be documented.
     func setHovering(_ value: Bool) {

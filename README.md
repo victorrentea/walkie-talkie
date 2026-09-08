@@ -34,8 +34,10 @@ mouse button** or **F3** attaches extra screenshots as you talk — the count go
 up is the receipt.
 
 **Highlighting something is enough — you do not have to press anything.** While a
-dictation is running the relay reads whatever is selected a couple of times a
-second and files each new highlight once, so `select the paragraph, say what to
+dictation is running the relay reads whatever is selected once a second and files
+each new highlight once — after three identical reads, so a selection made by
+dragging is not filed halfway through, and once more when the microphone closes,
+so one made in the last second is not missed. `Select the paragraph, say what to
 do with it` is the whole gesture. It reads through Accessibility only, so it
 never touches your clipboard and never posts a keystroke — the cost is that a
 selection inside a **Chrome page** is invisible to it, which is what the back
