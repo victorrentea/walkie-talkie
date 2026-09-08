@@ -534,38 +534,40 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // column for a day — two columns, and rows with an entry in neither
         // straddling the gap — until (2026-09-06) the key equivalents went and
         // ⌘⌃P moved in here with the wheel. What is drawn is the whole legend.
+        // **The vocabulary: an emoji for the button, a plain arrow for the
+        // movement.** The emoji ones name a button by where it sits on the mouse
+        // — `⬅️` and `➡️` are the left and right buttons, and since the two side
+        // buttons are stacked, `🔼` is the forward one and `🔽` the back one.
+        // A gesture made by holding a side button and moving the mouse writes the
+        // button first and the direction after it as a text arrow (`🔼 →`), which
+        // is a different weight and colour on screen from the boxed emoji and so
+        // cannot be misread as a second button.
+        //
+        // The wheel's `🛞` is gone from every row here, and with it the chord
+        // rows `⬅️ + 🛞` and `➡️ + 🛞`: since 2026-09-09 this app takes no mouse
+        // button at all. See *The side buttons speak in function keys*.
         gestureRows = [
-            (bind, bind.title, "⬅️ + 🛞"),
-            (disconnect, disconnect.title, "➡️ + 🛞"),
-            (startDictation, startDictation.title, "🛞"),
-            // **One way in, and it is the bare wheel clicked twice** — Victor's
-            // replacement (2026-09-05) for the 2s hold of the day before, which
-            // lost every race to the 1s cancel-hold on the same button. `➡️ + 🛞
-            // 1s` rode beside it until 2026-09-06 and is gone with the chord.
-            //
-            // Right under `Start Dictation`'s own `🛞`, which is the pair the
-            // order is for: one click of the wheel talks to what is bound, two
-            // talk to a session that is not open yet.
-            (newSession, newSession.title, "🛞🛞"),
-            (stopRecording, stopRecording.title, "🛞"),
-            (cancelDictation, cancelDictation.title, "🛞 2s"),
-            // **The one key chord left, drawn like the mouse ones.** It used to
-            // ride as a real `keyEquivalent`, which put it in AppKit's own
-            // right-hand column — so the menu had two shortcut columns, one for
-            // the three keys and one for the wheel, with rows that had neither
-            // spanning the gap between them. Victor asked for one column
-            // (2026-09-06): ⌘⌃B and ⌘⌃D lost their key equivalents outright, and
-            // this one is written here instead. Nothing is lost by it — none of
-            // the three ever fired *as* a key equivalent (the app is never key,
-            // so they only worked with the menu already open); the chords
-            // themselves are the event tap's, see `HotkeyTap`.
-            // **Bare chords — no qualifier.** Both legends said "while
-            // dictating" until Victor had the words out (2026-09-04, minutes
-            // after they replaced the @🎙️ marker he had out first); the two
-            // rows are disabled legends read at leisure, and the condition is
-            // the section they sit in, not words on the row.
+            (bind, bind.title, "🔼 ↓"),
+            (disconnect, disconnect.title, "🔽 ↓"),
+            (startDictation, startDictation.title, "🔼 →"),
+            // Right under `Start Dictation`'s own `🔼 →`, which is the pair the
+            // order is for: one direction talks to what is bound, the one above
+            // it talks to a session that is not open yet.
+            (newSession, newSession.title, "🔼 ↑"),
+            // The same gesture as Start: it is one toggle, and writing it twice
+            // is how the menu says so without a sentence.
+            (stopRecording, stopRecording.title, "🔼 →"),
+            // The mirror direction of the one that starts it — the two gestures
+            // that open and abandon a sentence are one hand movement, reversed.
+            (cancelDictation, cancelDictation.title, "🔼 ←"),
+            // **The caret dictation finally has a legend.** It never had one:
+            // it lived on mouse 5, which the menu had no glyph for, so the only
+            // place the gesture was written down was a doc comment. It is a
+            // plain click of the forward button, and it only means anything
+            // while the row above it is ticked.
+            (replaceWispr, replaceWispr.title, "🔼"),
             (pasteLast, pasteLast.title, "⌘⌃P"),
-            (shot, shot.title, "⬇️"),
+            (shot, shot.title, "🔽"),
             (pickLegend, pickLegend.title, "⌘⇧ + ⬅️"),
         ]
         layOutGestures(in: menu)

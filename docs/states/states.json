@@ -17,7 +17,7 @@
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
-    "when" : "From ⌘⌃B (or the wheel chord) until something happens.",
+    "when" : "From ⌘⌃B (or 🔼 ↓) until something happens.",
     "width" : 48
   },
   {
@@ -41,7 +41,7 @@
     "shape" : "chip",
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
-    "when" : "the wheel clicked twice: the dictation goes to a terminal that does not exist yet.",
+    "when" : "🔼 ↑ — the forward button held, mouse moved up: the dictation goes to a terminal that does not exist yet.",
     "width" : 190
   },
   {
@@ -98,7 +98,7 @@
     "shape" : "chip",
     "slug" : "listening",
     "title" : "Dictating",
-    "when" : "From the wheel click until he clicks it again — the bulk of every dictation.",
+    "when" : "From 🔼 → until he makes it again — the bulk of every dictation.",
     "width" : 169
   },
   {
@@ -230,7 +230,7 @@
     "shape" : "chip",
     "slug" : "transcribing",
     "title" : "Waiting on the model",
-    "when" : "Between the wheel click that ends the sentence and the panel that shows what it heard.",
+    "when" : "Between the 🔼 → that ends the sentence and the panel that shows what it heard.",
     "width" : 169
   },
   {
@@ -278,7 +278,7 @@
     "shape" : "chip",
     "slug" : "flash-cancelled",
     "title" : "Dictation cancelled",
-    "when" : "The instant the wheel has been held 2 s mid-sentence — 1.5 s, then half a second of dissolve.",
+    "when" : "The instant 🔼 ← is made mid-sentence — 1.5 s, then half a second of dissolve.",
     "width" : 184
   },
   {

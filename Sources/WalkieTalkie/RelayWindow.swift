@@ -617,14 +617,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// The other states are still one row: they are reports, not invitations.
     private var statusLines: [(glyph: NSImage?, text: NSAttributedString, ink: CGFloat)] {
-        // **In the field, the wheel is Send.** Editing is the one panel state
-        // with no clock running, so nothing goes out until he says so — and his
-        // hand is on the mouse, having just clicked the words to open the field.
-        // The button beside the transcript already says `⏎ Send`; this says the
-        // other way, which is the one he cannot see from the keyboard.
-        if editingPrompt {
-            return Self.showsGestureHints ? [(Self.mouseWheelGlyph, plain("send"), iconInk)] : []
-        }
+        // **Editing has no mouse gesture left to advertise.** It used to: the
+        // wheel clicked while the field was open meant Send, which was worth a
+        // row because editing is the one panel state with no clock running and
+        // his hand is on the mouse, having just clicked the words to open the
+        // field. The wheel was handed back on 2026-09-09 (*The side buttons speak
+        // in function keys*), and nothing took that job — the button beside the
+        // transcript still says `⏎ Send`, and now that is the whole truth.
+        if editingPrompt { return [] }
         guard sentPrompt == nil else { return [] }
         // **The two waits, at the size every other icon on the chip is.** They
         // are the only states in which Victor is *waiting on this app*, and for
@@ -1948,7 +1948,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// of the mouse* — but it cannot say **this button while that one is held**,
     /// which is what rebinding now is. A drawing can, and it is also his own
     /// mouse rather than whichever one Apple ships this year.
-    private static let mouseWheelGlyph = Glyphs.mouse(height: iconInk, pressed: .wheel)
     private static let mouseBackGlyph = Glyphs.mouse(height: iconInk, pressed: .back)
 
     /// **The two rows that teach a gesture draw the mouse nearly twice icon

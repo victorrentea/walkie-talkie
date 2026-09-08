@@ -131,10 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// wrong in the one moment he looks at the row. It drops back to zero if the
     /// capture actually fails, which is the only case where zero is the truth.
     private var contextShotPending = false
-    /// The bare-wheel dictation whose context shot is taken at the wheel's
-    /// release rather than at the press (`startLocalRecording(deferContext:)`,
-    /// consumed by `onWheelRelease`).
-    private var contextAtWheelRelease = false
 
     private let stateLock = NSLock()
 
@@ -365,12 +361,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalCancel = { [weak self] in
             DispatchQueue.main.async { self?.cancelLocalRecording() }
         }
-        hotkeys.onWheelBind = { [weak self] in self?.bindFrontmostTerminal(toggle: false) != nil }
-        // Right held + the wheel. **The same call the menu's Disconnect row
-        // makes**, so the gesture cannot end up meaning something subtly other
-        // than the row that documents it — including the chip's burst, which is
-        // the only thing on screen that says it happened.
-        hotkeys.onWheelUnbind = { [weak self] in self?.unbindTerminal() }
+        // ⬆️ held, mouse moved down. **No toggle**, exactly as the left-plus-wheel
+        // chord it replaces: the gesture is made while pointing at the terminal he
+        // means, and making it twice means "again", never "let go".
+        hotkeys.onGestureBind = { [weak self] in self?.bindFrontmostTerminal(toggle: false) != nil }
+        // ⬇️ held on the **back** button, mouse moved down. **The same call the
+        // menu's Disconnect row makes**, so the gesture cannot end up meaning
+        // something subtly other than the row that documents it — including the
+        // chip's burst, which is the only thing on screen that says it happened.
+        hotkeys.onGestureUnbind = { [weak self] in self?.unbindTerminal() }
         // The menu's copy of the spawn chord. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
@@ -416,57 +415,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleLocalRecording() }
         }
-        // **The bare wheel at rest** — distinct from the toggle above because its
-        // press is only half a verdict: a second click on its heels turns the
-        // dictation into a spawn, so the context shot waits for the release
-        // (`onWheelRelease`) and pictures the screen his finger left.
-        hotkeys.onWheelDictate = { [weak self] in
-            DispatchQueue.main.async { self?.startLocalRecording(deferContext: true) }
-        }
-        // **The wheel clicked a second time: convert the dictation to a spawn.**
-        // Same recording, same words — only the destination changes: the terminal
-        // it opens in does not exist yet, so the folder menu is offered exactly
-        // as at a fresh spawn press.
-        // **The same double click made at rest** — nothing bound, no dictation
-        // to convert, so this one *opens* one that is a spawn from its first
-        // sample. `startLocalRecording(spawn:)` is the whole implementation:
-        // `spawnPending` is set before the `hasDestination` gate is read, which
-        // is exactly how a spawn is allowed through the gate a bare dictation is
-        // not — see its doc comment. `deferContext` is on for the same reason it
-        // is on the bare wheel: the picture wanted is the screen his finger
-        // *left*, so the second click's release is what asks for it.
-        hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
+        // ⬆️ held, mouse moved up — **dictate at a session that does not exist
+        // yet.** A gesture of its own, where from 2026-09-05 it was the wheel
+        // clicked twice converting a dictation already in flight: the wheel had
+        // one press to spend and no working hold, so the second click was the
+        // only spare gesture on it. This button has four directions, so the spawn
+        // gets one outright and needs nothing to reinterpret.
+        //
+        // The context shot is taken at the press like every other dictation's.
+        // `deferContext` went with the wheel: it existed because the wheel's
+        // *release* was the moment the picture wanted — the screen his finger had
+        // left, before a second click could land — and a gesture that ends with
+        // the mouse already moved has no such moment.
+        hotkeys.onGestureSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 guard !self.localRecording, !self.recordWhenModelReady else { return }
-                self.startLocalRecording(spawn: true, deferContext: true)
-            }
-        }
-        hotkeys.onWheelDoubleSpawn = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                // **`recordWhenModelReady` counts as a dictation.** On a cold
-                // model the first click has not opened the microphone yet — it
-                // banked the gesture and is waiting on the weights — and the
-                // second click lands half a second later, long before that. The
-                // resumed start reads `spawnPending`, so setting it here is
-                // exactly how the conversion survives the wait.
-                guard self.localRecording || self.recordWhenModelReady else { return }
-                guard !self.spawnPending, !self.pasteMode else { return }
-                self.spawnPending = true
-                self.spawnFolder = nil
-                self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
-                self.offerSpawnFolders()
-            }
-        }
-        // The deferred context shot's cue — see `onWheelDictate`.
-        hotkeys.onWheelRelease = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self, self.contextAtWheelRelease else { return }
-                self.contextAtWheelRelease = false
-                // Ended under the finger (menu, ⌘⌃D) — no sentence, no picture.
-                guard self.localRecording else { return }
-                self.captureContext()
+                self.startLocalRecording(spawn: true)
             }
         }
         // The forward side button, in Replace Wispr mode — shaped exactly like
@@ -489,15 +454,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onBindHotkey = { [weak self] in _ = self?.bindFrontmostTerminal() }
         hotkeys.onPasteLast = { [weak self] in
             DispatchQueue.main.async { self?.pasteLastDictation() }
-        }
-        hotkeys.onMouse5Double = { [weak self] in
-            guard let self = self else { return }
-            // The first click of the pair has already opened the microphone if
-            // the local engine is up. Close it: a double click is by definition
-            // faster than `MicRecorder.minimumDuration`, so the recording is
-            // dropped by the guard there rather than transcribed and sent.
-            if self.localRecording { self.stopLocalRecording() }
-            _ = self.bindFrontmostTerminal()
         }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
         hotkeys.onPromptEscape = { [weak self] in self?.overlay.cancelHeldPrompt() }
@@ -816,12 +772,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// clock, and, if he had already clicked, **wiping the folder he chose**
     /// with the `spawnFolder = nil` below and popping the menu back up.
     ///
-    /// `deferContext` is the bare wheel at rest: its context shot is taken at
-    /// the **release**, not the press, so the picture is of the screen his
-    /// finger left — and a second click, which turns this dictation into a
-    /// spawn, has not landed yet (Victor, 2026-09-04/05).
-    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
-                                     deferContext: Bool = false) {
+    /// **The context shot is always taken at the press.** `deferContext` used to
+    /// hold it back to the wheel's *release*, so the picture was of the screen
+    /// his finger left before a second click could turn the dictation into a
+    /// spawn. Both the wheel and that second click went on 2026-09-09; a gesture
+    /// that ends with the mouse already moved has no release worth waiting for.
+    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -954,17 +910,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stateLock.unlock()
             armOrphanFlush()
         } else {
-            if deferContext {
-                // The audio's zero stays the press — shot offsets count from
-                // where the listening started — but the picture itself waits
-                // for the wheel's release: see `onWheelDictate`.
-                stateLock.lock()
-                dictationStartedAt = Date()
-                stateLock.unlock()
-                contextAtWheelRelease = true
-            } else {
-                captureContext()
-            }
+            captureContext()
         }
         listening = true
         syncBorrowedGestures()
@@ -1053,7 +999,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingScreen = nil
         dictationInFlight = false
         contextShotPending = false
-        contextAtWheelRelease = false
         stateLock.unlock()
 
         publishShotCount()
@@ -1390,10 +1335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingSelection = nil
             pendingExtraSelections = []
             contextShotPending = true
-            // The zero of every offset in this dictation. The bare wheel sets it
-            // at the *press* already (its shot defers to the release, the audio
-            // does not — see `startLocalRecording(deferContext:)`); everyone else
-            // takes it now, the moment the context shot is booked.
+            // The zero of every offset in this dictation, set the moment the
+            // context shot is booked.
             if dictationStartedAt == nil {
                 dictationStartedAt = Date()
                 pendingShotOffsets = []

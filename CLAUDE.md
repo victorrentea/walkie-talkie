@@ -2373,7 +2373,89 @@ session — and until this row existed that cost was a number in a comment, whic
 is exactly where a fact nobody can check belongs. It doubles as proof the helper
 is alive: a dead one has no footprint and the row goes back to its bare name.
 
+### The side buttons speak in function keys (2026-09-09)
+
+**This app takes no mouse button at all any more.** The wheel is handed back,
+both side buttons arrive as keystrokes, and the two sections below are history.
+
+**What was measured, because it settles an argument the notes had wrong.** The
+forward button was said to reach the tap as an ~18ms down-and-up pair however
+long it was held, with the Bolt receiver, Logi's agent or Wispr Flow blamed for
+throwing the duration away. All three are wrong:
+
+- **There is no Bolt receiver.** The M650 is on **Bluetooth LE**, direct.
+- **It is not 18ms — it is nothing at all.** A probe reading the raw HID input
+  reports *below every event tap*, next to a `.cghidEventTap` listener, saw the
+  wheel perfectly (`WHEEL ▼ … ▲ ținut 5272 ms`) and saw the side buttons **not
+  once**, held or clicked.
+- **Killing Logi Options+ changes nothing.** With `com.logi.cp-dev-mgr` booted
+  out of launchd and the agent confirmed dead, the side buttons were still
+  silent. The divert lives in the mouse, not in the agent — and on Bluetooth LE
+  a diverted press leaves over Logitech's own GATT service, which is not the HID
+  path, so nothing on the Mac can see it.
+- **Wispr Flow is not it either**, by the same test.
+
+So there is no hold to detect, and no lower layer to reach for. What Options+
+*sends* is a different matter, and that is the way in: with a diverted button it
+synthesises an ordinary event, which the tap sees like any other — caught in the
+act, `TAP tastă ▼ code=124 (pid 75980)`, pid 75980 being `logioptionsplus_agent`.
+
+**The design that follows.** Each side button is set to Options+ **custom
+gestures**, and every gesture is a **Keyboard shortcut** of our choosing. That
+buys five sentences per button — a click, and held-while-moving in four
+directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
+
+| gesture | chord | what it does |
+|---|---|---|
+| 🔼 → | ⌃⌥⌘F10 | start the dictation, or end the one open (the same call ⌘⌃D makes) |
+| 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away |
+| 🔼 ↓ | ⌃⌥⌘F9 | bind the terminal in front — **no toggle** |
+| 🔼 ↑ | ⌃⌥⌘F8 | dictate at a session that does not exist yet |
+| 🔼 | ⌃⌥⌘F7 | dictate at the caret — **only while Replace Wispr is ticked** |
+| 🔽 ↓ | ⌃⌥⌘F12 | unbind — the menu's Disconnect |
+| 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
+| 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
+
+**The numbers are duplicated in two places and must not drift**: Options+'s own
+custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`. Change one and the
+gesture goes to whatever app claims that chord instead — silently, since a chord
+nothing handles is a chord nothing complains about.
+
+**The glyph vocabulary in the menu.** An emoji names the button by where it sits
+on the mouse — `⬅️` `➡️` are the left and right buttons, and because the side
+buttons are stacked, `🔼` is the forward one and `🔽` the back one. The movement
+is a **thin text arrow** after it (`🔼 →`), Victor's call: a different weight and
+colour from the boxed emoji, so it cannot be misread as a second button.
+
+**What this bought, beyond the button.** The wheel is the browser's again.
+*The wheel is the relay's* below states the price of the old design plainly —
+while something is bound, which is hours, middle-click stops opening links in
+new tabs in Chrome and closing them in VS Code. That price is now zero, and it
+was Victor's reason for the whole move: *"ideea e sa evit sa emit middle click,
+caci folosesc middle click sa inchid de ex taburi chrome/vsc."*
+
+**Two things were lost and neither is worth mourning.** The wheel clicked while
+the prompt panel is open used to mean Send — ⏎ still does, and the button beside
+the transcript says so. And `deferContext` went: the bare wheel's context shot
+waited for the *release*, so the picture was of the screen his finger left before
+a second click could turn the dictation into a spawn. A gesture that ends with
+the mouse already moved has no such moment, and the spawn is its own direction
+now rather than a conversion.
+
+**The back button's Return is posted by this app now.** It used to be typed
+upstream — LinearMouse, then Victor Addons' `BackButtonEnter` — and this tap's
+only job was to *withhold* it mid-dictation and take the picture instead. Options+
+owns the button, so nothing upstream types anything: `HotkeyTap.postReturn` makes
+it, stamped with `backButtonStamp` so the tap can tell it from a Return Victor
+typed. **If that branch is ever removed, the key he submits with all day stops
+existing.**
+
 ### The wheel is the relay's; mouse 5 is nobody's (except in Replace Wispr)
+
+> **Superseded on 2026-09-09** by *The side buttons speak in function keys*
+> above. Kept for the reasoning, not the behaviour: nothing below this line is
+> still wired up — the wheel is untouched and both side buttons arrive as chords.
+
 
 Until 2026-08-29 the relay took **mouse 5** — the same button the dictation app
 it then depended on used for push-to-talk — so every dictation began with the
@@ -2415,6 +2497,13 @@ menu's Disconnect. A toggle earns its keep on a key with no off switch; it is a
 trap on a gesture that has two.
 
 ### Double-clicking the wheel turns the dictation into a spawn (2026-09-05)
+
+> **Superseded on 2026-09-09.** The spawn is 🔼 ↑ — the forward button held and
+> the mouse moved up — and is a gesture of its own rather than a conversion of a
+> dictation already in flight. The measurement in this section is what made the
+> side buttons look unusable; *The side buttons speak in function keys* corrects
+> it.
+
 
 The side-button holds are dead, and the evidence killed them. The forward
 button first: measured on presses Victor was deliberately holding, it reaches
