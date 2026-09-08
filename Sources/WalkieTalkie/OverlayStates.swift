@@ -206,10 +206,11 @@ enum OverlayStates {
 
             Shot(slug: "transcribing", group: "Dictating", title: "Waiting on the model",
                  when: "Between the wheel click that ends the sentence and the panel that shows what it heard.",
-                 note: "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top.",
+                 note: "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setTranscribing(true)
+                o.pinTranscribeWarmth(0.45)
             },
 
             // ---- flashes: the chip becomes a panel for a few seconds -------
@@ -424,6 +425,7 @@ enum OverlayStates {
         o.setHovering(false)
         o.setListening(false)
         o.setTranscribing(false)
+                o.pinTranscribeWarmth(nil)
         o.setPicks(count: 0, newest: nil)
         o.setShotCount(0)
         o.clearSelection()

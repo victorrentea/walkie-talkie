@@ -134,6 +134,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var warmthTimer: Timer?
     /// Set only by `pinListenWarmth`, i.e. only by `OverlayStates`.
     private var warmthPinned: CGFloat?
+    /// The same, for the wait — `pinTranscribeWarmth`.
+    private var transcribePinned: CGFloat?
     /// How many characters of `Listening...` are lit right now. Kept so the tick
     /// can do nothing at all between steps — the bar changes twelve times in a
     /// sentence and the timer runs fifteen times a second.
@@ -2718,31 +2720,41 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    /// **How much longer, not merely that it is working.** The row said
-    /// `transcribing…` and nothing else, which answers *is it alive* and leaves
-    /// the only question he actually has — *do I wait or do I look away* —
-    /// unanswered for a decode that is a second on a short sentence and ten on a
-    /// long one. The audio's own length is the answer: the model runs at
-    /// **~0.1× realtime**, so a minute of speech is about six seconds of waiting
-    /// and the estimate is that arithmetic done out loud.
+    /// **How much longer — said in ink, not in digits** (2026-09-08).
     ///
-    /// **The factor is learned, not written down** — `DecodeRate`, the 80th
-    /// percentile of the last twenty decodes on this Mac, falling back to the
-    /// 0.12 measured over 442 dictations until there are enough of them. A
-    /// constant is right until the model, the machine or the thermals move under
-    /// it, and none of those announce themselves.
+    /// The row carried the estimate as a number, `Transcribing... 4s`, counting
+    /// down. Victor had it out the same day the bar went in: *"să scoți timpul
+    /// efectiv în secunde arătat de după, e doar stresant. Lasă să se sugereze
+    /// progressbar-ul prin culoarea textului"*.
     ///
-    /// It is deliberately an **estimate that runs out rather than one that
-    /// stalls**: at zero the seconds simply stop being shown and the row goes
-    /// back to `Transcribing…`. A counter that sat at `0s` — or worse, counted
-    /// up — would be the app insisting on a promise it has already broken. The
-    /// percentile rather than the median is the same bargain: over is a pleasant
-    /// surprise, under is the number being wrong every second it is on screen.
-    private var transcribeText: String {
-        guard let deadline = transcribeDeadline else { return Self.transcribeWord }
-        let left = Int(ceil(deadline.timeIntervalSinceNow))
-        return left > 0 ? "\(Self.transcribeWord) \(left)s" : Self.transcribeWord
-    }
+    /// **A countdown is a deadline, and a deadline is a thing to watch.** The
+    /// two say the same fact — `DecodeRate`'s estimate, running out — but they
+    /// ask different things of him. Digits have to be *read*, they change under
+    /// the eye every second, and a number ticking toward zero invites checking
+    /// whether it will get there. The filling word is the same fraction taken in
+    /// at a glance, from the corner of the eye, with nothing to count: it is done
+    /// when there are no dim characters left. That is `listeningWord`'s argument
+    /// exactly — *brightness is judged against what is beside it*, so a count of
+    /// characters beats a number — arriving one row later.
+    ///
+    /// **The estimate is not gone, it is what drives the bar.**
+    /// `transcribeDeadline` and `transcribeSpan` are untouched and
+    /// `transcribeWarmth` is still the fraction they describe; only the readout
+    /// went. So the arithmetic below is still load-bearing: the model runs at
+    /// **~0.1× realtime** and `DecodeRate` fits a line to the last fifty decodes
+    /// on this Mac, because a constant is right until the model, the machine or
+    /// the thermals move under it and none of those announce themselves.
+    ///
+    /// **An estimate that runs out no longer needs saying out loud.** The old
+    /// number stopped being shown at zero rather than sitting at `0s` or counting
+    /// up, which was the app declining to insist on a promise it had broken. The
+    /// bar does that by construction: it simply arrives full and stays there,
+    /// which is what *I am past my own estimate* looks like when it is not a
+    /// number.
+    ///
+    /// **And with no digits the row's width never changes**, which is why the
+    /// ticker below has no relayout branch left: the ink is written straight onto
+    /// the label and nothing on the chip is ever re-measured for a decode.
 
     /// **Three full stops, not `…`** — `listeningWord`'s reason, applied to the
     /// row that is the same slot at the next moment: the word fills a character
@@ -2754,6 +2766,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// estimate**: with no deadline the row is a bare `Transcribing...`, and a
     /// bar that never fills would be promising a progress nobody is measuring.
     private var transcribeWarmth: CGFloat {
+        if let transcribePinned { return transcribePinned }
         guard let deadline = transcribeDeadline, transcribeSpan > 0 else { return 1 }
         let left = deadline.timeIntervalSinceNow
         return CGFloat(min(1, max(0, 1 - left / transcribeSpan)))
@@ -2772,10 +2785,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// answer *how much longer*, the ink answers *nearly there* from the corner
     /// of the eye.
     ///
-    /// **The seconds stay lit throughout.** They are not part of the bar: their
-    /// character count shrinks as the number falls, so a filling ramp over them
-    /// would run backwards at every digit boundary. The word is the bar and the
-    /// number is the readout beside it.
+    /// **The word is the whole row**, since the seconds went: there is nothing
+    /// beside the bar that is not the bar. (They had to be excluded from it while
+    /// they were there — a number's character count *shrinks* as it falls, so a
+    /// filling ramp drawn over the digits would have run backwards at every
+    /// boundary.)
     private var transcribeString: NSAttributedString {
         let lit = transcribeLabel.textColor ?? (anchored ? .white : .secondaryLabelColor)
         // The unlit end, `applyEngineText`'s colours exactly: opaque grey on the
@@ -2799,11 +2813,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             out.append(NSAttributedString(string: String(ch),
                                           attributes: [.font: hintFont,
                                                        .foregroundColor: i < steps ? lit : dim]))
-        }
-        let tail = transcribeText.dropFirst(Self.transcribeWord.count)
-        if !tail.isEmpty {
-            out.append(NSAttributedString(string: String(tail),
-                                          attributes: [.font: hintFont, .foregroundColor: lit]))
         }
         transcribeLit = steps
         return out
@@ -2850,21 +2859,14 @@ private let frontLabel = NSTextField(labelWithString: "")
             // the bar in visible jumps while still being too slow for the last
             // ones. What each tick costs is one `Int` comparison.
             //
-            // **Only the digits are worth a relayout.** They change the row's
-            // width, so they go through `layoutContent`, once a second at most;
-            // the ink changes nothing about the geometry, so it is written
-            // straight onto the label — the rule `startWarmth` follows, for the
-            // reason it gives: this loop must never re-measure every row on the
-            // chip sixty times a decode.
-            var shown = transcribeText
+            // **Nothing here ever relayouts.** It used to, once a second, because
+            // the seconds beside the word changed the row's width; with the
+            // digits gone the row is a fixed string whose ink changes, so the
+            // attributed value goes straight onto the label — the rule
+            // `startWarmth` follows, for the reason it gives: this loop must
+            // never re-measure every row on the chip sixty times a decode.
             let tick = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
                 guard let self = self, self.transcribing else { return }
-                let now = self.transcribeText
-                if now != shown {
-                    shown = now
-                    self.layoutContent()
-                    return
-                }
                 let steps = Int((CGFloat(Self.transcribeWord.count) * self.transcribeWarmth).rounded())
                 guard steps != self.transcribeLit else { return }
                 self.transcribeLabel.attributedStringValue = self.transcribeString
@@ -2927,6 +2929,20 @@ private let frontLabel = NSTextField(labelWithString: "")
         warmthPinned = value.map { CGFloat(max(0, min(1, $0))) }
         if warmthPinned != nil { stopWarmth() }
         applyEngineText()
+    }
+
+    /// The same freeze for the wait, and it became necessary the day the seconds
+    /// came off the row.
+    ///
+    /// While `Transcribing... 4s` carried a number, a photograph of this state
+    /// said what it was about whatever moment it was taken at. Now the fill is
+    /// the *only* thing that varies, and `setTranscribing(true)` with no audio
+    /// behind it means no deadline, which `transcribeWarmth` answers with a full
+    /// bar — so the catalogue's one picture of the wait would have been the one
+    /// frame in which nothing is waiting.
+    func pinTranscribeWarmth(_ value: Double?) {
+        transcribePinned = value.map { CGFloat(max(0, min(1, $0))) }
+        if transcribing { transcribeLabel.attributedStringValue = transcribeString }
     }
 
     /// How many pictures this dictation is carrying, the automatic context capture

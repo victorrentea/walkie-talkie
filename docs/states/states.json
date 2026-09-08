@@ -202,7 +202,7 @@
     "group" : "Dictating",
     "height" : 69,
     "image" : "transcribing.png",
-    "note" : "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top.",
+    "note" : "The one row left in which Victor is waiting on the app — `preparing`, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.",
     "shape" : "chip",
     "slug" : "transcribing",
     "title" : "Waiting on the model",
@@ -387,7 +387,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 640
+    "width" : 576
   },
   {
     "alpha" : 1,

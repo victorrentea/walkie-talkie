@@ -856,7 +856,7 @@ place and `petclinic@main` slides to the second row. Victor: *"aș vrea ca
 listening cu bila roșie să înlocuiască microfonul — să fie primul rând, iar
 terminalul conectat să fie al doilea"*.
 
-The waits go with it — `⏳ Transcribing... 4s` is the same slot at the next moment
+The waits go with it — `⏳ Transcribing...` is the same slot at the next moment
 (*"la fel în toate"*). The spawn is unaffected: `spawnCollapsed` already drops
 the destination row and rides ✨ in front of `Listening…`, which is this order
 with the second row taken out. **Only the chip.** The held panel keeps its title
@@ -1051,23 +1051,51 @@ bar; `listening-cold` and `listening-warming` pin their own.
 
 #### The wait fills too (2026-09-08)
 
-`Transcribing... 4s` is drawn the same way, on Victor's ask — *"la fel vrea să
+`Transcribing...` is drawn the same way, on Victor's ask — *"la fel vrea să
 colorezi transcribing, să-l colorezi de la întunecat la mai aprins, ca pe post de
 progress bar"*. Same instrument, pointed at the one wait that has a **deadline**:
 `DecodeRate` has already promised a number of seconds, so unlike the dictation
-there is a real fraction to draw, and the row was already counting it down in
-digits. The bar is that countdown said in the way the eye reads without stopping.
+there is a real fraction to draw. The bar is that promise said in the way the eye
+reads without stopping.
 
-- **The word is the bar; the seconds are a readout beside it** and stay lit
-  throughout. Their character count *shrinks* as the number falls, so a ramp over
-  them would run backwards at every digit boundary.
+**And the seconds are gone, hours later the same day.** The row was
+`Transcribing... 4s`, counting down beside the filling word, and Victor had the
+number out as soon as he had lived with both: *"să scoți timpul efectiv în
+secunde arătat de după, e doar stresant. Lasă să se sugereze progressbar-ul prin
+culoarea textului"*.
+
+- **A countdown is a deadline, and a deadline is a thing to watch.** The two say
+  the same fact and ask different things of him: digits have to be *read*, they
+  change under the eye every second, and a number falling toward zero invites
+  checking whether it will get there — mid-dictation, an inch from what he is
+  working on. The filling word is the same fraction taken in at a glance, with
+  nothing to count: it is done when there are no dim characters left. That is
+  `listeningWord`'s own argument — *brightness is judged against what is beside
+  it*, so a count of characters beats a number — arriving one row later.
+- **The estimate did not go, only its readout.** `transcribeDeadline`,
+  `transcribeSpan` and `DecodeRate`'s fitted line are untouched and are what the
+  bar is drawn from. Everything written below about how that number is arrived at
+  is still live; it is now spoken in ink.
+- **An estimate that runs out no longer needs saying out loud.** The number
+  stopped being shown at zero rather than sitting at `0s` or counting up, which
+  was the app declining to insist on a promise it had broken. The bar does that
+  by construction: it arrives full and stays there.
 - **`Transcribing...`, three full stops**, for `Listening...`'s reason: an
   ellipsis is one glyph and would light in one step.
-- **Fifteen ticks a second, and only the digits are worth a relayout.** They
-  change the row's width, so they go through `layoutContent`, at most once a
-  second; the ink changes no geometry, so it is written straight onto the label —
-  `startWarmth`'s bargain, and this loop must never re-measure every row on the
-  chip sixty times a decode.
+- **Fifteen ticks a second, and nothing relayouts at all.** It used to, once a
+  second, because the digits changed the row's width; with them gone the row is a
+  fixed string whose ink changes, so the attributed value goes straight onto the
+  label — `startWarmth`'s bargain, and this loop must never re-measure every row
+  on the chip sixty times a decode. Taking the number off *removed* a relayout
+  rather than costing one.
+- **`pinTranscribeWarmth` had to exist the moment the digits went.** While the
+  row carried a number, a photograph of this state said what it was about
+  whatever instant it was taken at. Now the fill is the only thing that varies —
+  and `setTranscribing(true)` with no audio behind it has no deadline, which
+  `transcribeWarmth` answers with a **full** bar, so the catalogue's one picture
+  of the wait would have been the one frame in which nothing is waiting. The
+  `transcribing` shot pins 0.45, exactly as `listening-cold` and
+  `listening-warming` pin theirs.
 - **The ✨ goes in as a picture here too.** This row was still putting a raw emoji
   into an attributed string on a label carrying a halo, which is the failure
   written down two sections up — so a *spawn* dictation's wait was one mark and no
@@ -1867,10 +1895,12 @@ reintroduce any of it.** If a fallback recogniser is ever wanted, it is a second
   gesture he had to remember to repeat. `recordWhenModelReady` is set only when
   the **hold** asked for the load: a load started by a bind is Victor pointing the
   relay at a terminal, a different sentence, and must not open the microphone.
-- **The wait says how long, not only that it is waiting** (since 2026-09-02).
-  `Transcribing... 4s` counts down from the audio's own length × a factor, and the
-  rounding up is deliberate: over is a pleasant surprise, under is a number that
-  is wrong every second it is on screen.
+- **The wait says how long, not only that it is waiting** (since 2026-09-02) —
+  **in ink since 2026-09-08**, when the digits came off and the filling word took
+  the job over whole (*The wait fills too*). What follows is how the number
+  behind the bar is arrived at; it was on screen as `Transcribing... 4s` for six
+  days. The rounding up was deliberate and still is: over is a pleasant surprise,
+  under is a promise that is wrong every second it is on screen.
 
   **The estimate is a line fitted to the last fifty decodes**
   (`DecodeRate.swift`). Every decode files the audio it was handed, the seconds
@@ -2797,7 +2827,7 @@ the folder is *always* `~/workspace`, which is the whole point of the gesture, a
 the icon names an app he is not looking at yet, so the row spent a line beside his
 cursor saying one thing he already knew. *"Pune doar steluțe în fața butonului de
 listening și nu mai afișa primul rând."* The ✨ now rides in front of `Listening…`
-(and `Transcribing… 4s`), and `RelayWindow.spawnCollapsed` is the switch.
+(and `Transcribing...`), and `RelayWindow.spawnCollapsed` is the switch.
 
 - **The 🔴 keeps the glyph column.** A frozen recording row is indistinguishable
   from a hung app, which is the one thing the pulse is here to rule out, and it
@@ -3033,7 +3063,7 @@ already were.
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening...`, `Transcribing... 4s`, the picks he has
+the pulse, `Listening...`, `Transcribing...`, the picks he has
 actually made, the destination. (`Preparing…` was on that list until 2026-09-06,
 when the model started loading at launch and the state stopped being one he could
 be waiting on.)
