@@ -282,6 +282,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var sources: [String: String] = [:]
         let app: String?
         let elements: [ElementPick]
+        /// When the microphone opened, kept so `terminalLine` can stamp each
+        /// picked element with *where in the sentence* he clicked it.
+        ///
+        /// Carried rather than looked up at delivery, for `spawn`'s reason: the
+        /// panel holds every prompt for seconds and the next dictation may have
+        /// started — and `dictationStartedAt` is cleared the moment this message
+        /// is built. It is optional because a `screenshot` message has no
+        /// dictation behind it, and an unstamped pick is better than a wrong one.
+        var startedAt: Date?
         /// This one opens its own terminal instead of being typed into a bound
         /// one. Carried here rather than read off `spawnPending` at delivery,
         /// because the two are seconds apart — the panel holds every prompt — and
@@ -2356,6 +2365,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pruneStalePicks()
         let picks = pendingPicks
         pendingPicks = []
+        // Read before it is cleared, and for the reason `Message.startedAt`
+        // exists: it is the zero every pick's stamp is measured from, and one
+        // line later there is nothing left to measure against.
+        let since = dictationStartedAt
         dictationStartedAt = nil
         dictationInFlight = false
         stateLock.unlock()
@@ -2369,10 +2382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         var parts: [String] = [words]
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
-        if !picks.isEmpty {
-            let named = picks.map { Self.namePick($0) }
-            parts.append("[pointed at: \(named.joined(separator: " · "))]")
-        }
+        if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
         guard parts.count > 1 else { return words }
         // The words, a blank line, then one clause per line — `terminalLine`'s
         // shape, for `terminalLine`'s reason: he reads this one too, and more
@@ -2422,10 +2432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
-        if !m.elements.isEmpty {
-            let named = m.elements.map { namePick($0) }
-            parts.append("[pointed at: \(named.joined(separator: " · "))]")
-        }
+        if let clause = picksClause(m.elements, since: m.startedAt) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
         // textele ajutătoare să fie fiecare începând pe rând nou"*).
@@ -2793,26 +2800,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingPicks.removeAll { $0.at < cutoff }
     }
 
-    /// One element, as the message names it: the selector, what it said, and —
-    /// when he dragged it — where he dragged it to.
+    /// **Everything he ⌘⇧-clicked in Chrome, in one clause: when, what, and on
+    /// which page** (2026-09-09).
     ///
-    /// **The move is spelled out in words rather than as a pair of fields**,
-    /// because the whole clause is read by an agent as a sentence and by Victor
-    /// as a receipt, and *moves from 120,340 to 500,200* is the same instruction
-    /// in both readings. His own wording for it: *"spune în text: divul acela se
-    /// mută de la XY la XY, coordonata originală cu colțul stânga sus"*.
+    /// ```
+    /// [elements I picked in Chrome, on https://shop.example/cart, oldest first,
+    ///  each stamped with when in the sentence I clicked it:
+    ///  0:12 div#cart > span.price (1.299,00 lei) ·
+    ///  0:21 button.buy-button (Cumpără acum), moved from 120,340 to 500,205 …]
+    /// ```
+    ///
+    /// It read `[pointed at: <path> (<text>)]` until then, and Victor named all
+    /// three things missing from it in one breath: *"dacă se aleg mai multe
+    /// elemente pe parcursul dictării, ele trebuie toate să fie capturate
+    /// împreună cu timpul la care au fost clickate … și nu «pointed at» ca text,
+    /// trebuie să-i spui că picked element in Chrome … și să-i spui și URL-ul
+    /// paginii în care ai făcut pick, nu doar path-ul, că nu e relevant"*.
+    ///
+    /// - **The stamps** are the same reading the held panel has always shown and
+    ///   the message never did — and they are the half that orders a sentence
+    ///   against its own pointing. `−0:08` is normal and not an edge case:
+    ///   pointing usually comes *before* the words, since he finds the thing and
+    ///   then says what to do with it.
+    /// - **The page, because a selector without one is not an address.**
+    ///   `div#cart > span.price` resolves in any number of documents, and the
+    ///   agent's first move on receiving one is to find out which — a question
+    ///   already answered in `pick.url` and simply never said out loud.
+    /// - **Factored out when they all came from one page**, which is the usual
+    ///   case and the difference between one URL and five copies of one. The same
+    ///   bargain `shotsClause` strikes with the directory, and it says something
+    ///   true besides: these all came from the same page. Mixed, each entry
+    ///   carries its own.
+    /// - **`picked … in Chrome` rather than `pointed at`.** The old wording named
+    ///   the gesture; this one names what arrived, which is a DOM element from a
+    ///   browser and not a direction.
+    /// - **The move is spelled out in words** rather than as a pair of fields,
+    ///   because the clause is read by an agent as a sentence and by Victor as a
+    ///   receipt, and *moved from 120,340 to 500,205* is the same instruction in
+    ///   both readings — his own wording: *"se mută de la XY la XY, coordonata
+    ///   originală cu colțul stânga sus"*.
     ///
     /// Shared by `terminalLine` and `caretLine` — the two envelopes name picks
     /// identically on purpose, and the day they stopped doing so would be the
     /// day a caret dictation quietly lost half of what it was carrying.
-    private static func namePick(_ pick: ElementPick) -> String {
-        var line = pick.path
-        if let text = pick.text, !text.isEmpty { line += " (\(clampForTerminal(text, 60)))" }
-        if let move = pick.move {
-            line += " — moves from \(move.from.x),\(move.from.y)"
-                  + " to \(move.to.x),\(move.to.y) (page coordinates, top-left)"
+    private static func picksClause(_ picks: [ElementPick], since: Date?) -> String? {
+        guard !picks.isEmpty else { return nil }
+        let urls = Set(picks.map { $0.url ?? "" })
+        // One page and every pick actually carrying it: an empty URL among them
+        // means one entry would silently inherit another's page.
+        let shared = urls.count == 1 ? urls.first.flatMap { $0.isEmpty ? nil : $0 } : nil
+
+        let named = picks.map { pick -> String in
+            var line = ""
+            if let stamp = stamp(pick.at, since: since) { line += stamp + " " }
+            line += pick.path
+            if let text = pick.text, !text.isEmpty { line += " (\(clampForTerminal(text, 60)))" }
+            if shared == nil, let url = pick.url, !url.isEmpty { line += " on \(url)" }
+            if let move = pick.move {
+                line += ", moved from \(move.from.x),\(move.from.y)"
+                      + " to \(move.to.x),\(move.to.y) (top-left, page coordinates)"
+            }
+            return line
         }
-        return line
+
+        var head = picks.count == 1 ? "element I picked in Chrome" : "elements I picked in Chrome"
+        if let shared = shared { head += ", on \(shared)" }
+        if picks.count > 1 { head += ", oldest first" }
+        if since != nil {
+            head += picks.count > 1 ? ", each stamped with when in the sentence I clicked it"
+                                    : ", stamped with when in the sentence I clicked it"
+        }
+        return "[\(head): \(named.joined(separator: " · "))]"
+    }
+
+    /// Where in the sentence something happened, as `m:ss` — or `−m:ss` when it
+    /// happened before the microphone opened, which for a pick is the ordinary
+    /// order rather than an oddity. Nil with no dictation to measure against.
+    private static func stamp(_ at: Date, since: Date?) -> String? {
+        guard let since = since else { return nil }
+        let seconds = Int(at.timeIntervalSince(since).rounded())
+        let sign = seconds < 0 ? "−" : ""
+        let abs = Swift.abs(seconds)
+        return String(format: "%@%d:%02d", sign, abs / 60, abs % 60)
     }
 
     /// Keep the overlay's `🎯 ×N` honest, and name the newest one — the count says
@@ -2852,12 +2921,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// before you started talking.
     private static func pickLines(_ picks: [ElementPick], since: Date?) -> [String] {
         let shown = picks.prefix(maxPickLines)
+        // The same `stamp` the message uses, so the panel and the envelope can
+        // never disagree about where in the sentence a pick happened.
         var lines = shown.map { pick -> String in
-            guard let since = since else { return "• \(pick.tag)" }
-            let seconds = Int(pick.at.timeIntervalSince(since).rounded())
-            let sign = seconds < 0 ? "−" : ""
-            let abs = Swift.abs(seconds)
-            return String(format: "• %@%d:%02d %@", sign, abs / 60, abs % 60, pick.tag)
+            guard let at = stamp(pick.at, since: since) else { return "• \(pick.tag)" }
+            return "• \(at) \(pick.tag)"
         }
         if picks.count > shown.count { lines.append("• +\(picks.count - shown.count) more") }
         return lines
@@ -3065,7 +3133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = Message(kind: kind, text: text, selection: selection,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
-                              app: app, elements: picks, spawn: spawn,
+                              app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory)
 
         // Show what is about to go out — selection included, since that is part

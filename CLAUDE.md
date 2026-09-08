@@ -275,7 +275,8 @@ The shots travel as **paths, not a `📸 ×2` count**:
 the panel's preview is written for Victor, who needs only to know they landed,
 while this is written for an agent, which can do nothing with a number and
 everything with something to `Read`. `[selected: …]`, `[look at: …]`,
-`[context: …]`, `[pointed at: …]` are the same split the outbox makes in keys,
+`[context: …]`, `[elements I picked in Chrome: …]` are the same split the outbox
+makes in keys,
 and they are what replaces the skill, which is no longer there
 to explain what a field called `screen` is for.
 
@@ -3104,7 +3105,7 @@ for byte as it always did.
 ```
 schimbă prețul ăsta și butonul de sub el
 
-[pointed at: div#cart > span.price (1.299,00 lei) · button.buy-button (Cumpără acum)]
+[elements I picked in Chrome, on https://shop.example/cart, oldest first, each stamped with when in the sentence I clicked it: 0:12 div#cart > span.price (1.299,00 lei) · 0:21 button.buy-button (Cumpără acum)]
 ```
 
 `AppDelegate.caretLine` is `terminalLine` with everything **automatic** taken out
@@ -3115,7 +3116,7 @@ and everything **deliberate** kept, in the wording it already has — his line w
 | clause | terminal | caret |
 |---|---|---|
 | the words | ✓ | ✓ |
-| `[the shots I took: …]`, `[pointed at: …]` | ✓ | ✓ — identical wording |
+| `[the shots I took: …]`, `[elements I picked in Chrome: …]` | ✓ | ✓ — identical wording |
 | the context frame, `[Focused window: …]` | ✓ | — none is taken |
 | `[selected: …]` | ✓ | — no ⌘C is posted at his own field |
 | `[this text was dictated in RO or EN…]` | ✓ | — |
@@ -4523,8 +4524,9 @@ translucent, doar chenarul, fără nimic … și când îl las, la mouse-up, com
 unde a ajuns elementul"*.
 
 ```
-[pointed at: div#cart > span.price (1.299,00 lei) — moves from 120,340 to 500,205
- (page coordinates, top-left)]
+[element I picked in Chrome, on https://shop.example/cart, stamped with when in the
+ sentence I clicked it: 0:12 div#cart > span.price (1.299,00 lei), moved from
+ 120,340 to 500,205 (top-left, page coordinates)]
 ```
 
 **Nothing in the page is touched**, which is what makes this safe on somebody's
@@ -4621,6 +4623,50 @@ that is easy to hit:
   bare selector with nothing in it to recognise. `elementText()` takes the
   rendered text when there is any, the selected option's label for a `<select>`,
   and the control's `value` otherwise.
+
+### The clause: when, what, and on which page (2026-09-09)
+
+```
+[elements I picked in Chrome, on https://shop.example/cart, oldest first, each
+ stamped with when in the sentence I clicked it: 0:12 div#cart > span.price
+ (1.299,00 lei) · 0:21 button.buy-button (Cumpără acum), moved from 120,340 to
+ 500,205 (top-left, page coordinates)]
+```
+
+It read `[pointed at: <path> (<text>)]` until then, and Victor named all three
+things missing from it in one breath: *"dacă se aleg mai multe elemente pe
+parcursul dictării, ele trebuie toate să fie capturate împreună cu timpul la care
+au fost clickate … și nu «pointed at» ca text, trebuie să-i spui că picked
+element in Chrome … și să-i spui și URL-ul paginii în care ai făcut pick, nu doar
+path-ul, că nu e relevant"*. `AppDelegate.picksClause`, shared by `terminalLine`
+and `caretLine`.
+
+- **Every pick was already carried; the *stamps* were not.** The list has been
+  complete since the queue existed — what the message dropped was *when*, which
+  the held panel has shown all along (`pickLines`). That is the half that orders
+  a sentence against its own pointing, and `−0:08` is the normal case rather than
+  an oddity: he finds the thing, then says what to do with it. Both readings now
+  come out of one `stamp(_:since:)`, so the panel and the envelope cannot drift.
+- **The zero had to be carried to get there.** `dictationStartedAt` is cleared as
+  the message is built and the panel holds the prompt for seconds afterwards, so
+  `Message.startedAt` travels for `Message.spawn`'s reason: the fact is true at
+  the press and unavailable at delivery.
+- **The page, because a selector without one is not an address.**
+  `div#cart > span.price` resolves in any number of documents, and an agent's
+  first move on being handed one is to work out which — a question already
+  answered in `pick.url` and simply never said out loud.
+- **Factored out when they all came from one page**, which is the usual case and
+  the difference between one URL and five copies of one. The same bargain
+  `shotsClause` strikes with the shots' directory, and it says something true
+  besides. Mixed pages put the URL on each entry, and an entry whose URL is
+  missing blocks the factoring outright — otherwise it would silently inherit
+  another entry's page.
+- **`picked … in Chrome`, not `pointed at`.** The old wording named the gesture;
+  this one names what arrived, which is a DOM element out of a browser and not a
+  direction.
+- **Singular and plural are both written**, because the clause is a sentence and
+  `elements I picked … oldest first: 0:12 button` for one pick reads as a list
+  with something missing from it.
 
 ### Why the row names the newest pick
 

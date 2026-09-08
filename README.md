@@ -89,12 +89,25 @@ extract the tax calculation out of this method
 🎯 0:21 div#cart > span.price
 ```
 
+What reaches the agent names every element you clicked, when in the sentence you
+clicked it, and the page it came from:
+
+```
+[elements I picked in Chrome, on https://shop.example/cart, oldest first, each
+ stamped with when in the sentence I clicked it: 0:12 div#cart > span.price
+ (1.299,00 lei) · 0:21 button.buy-button (Cumpără acum)]
+```
+
+A negative stamp is normal — you usually find the thing before you say what to do
+with it. The URL is factored out when every pick came from the same page and
+written per element when they did not.
+
 **⌘⇧-drag says where you would move it, and moves nothing.** Press on an element
 with the chord held and drag: only the outline travels, translucent and dashed,
 the cursor closes into a `grabbing` hand, and the label follows it with the
-coordinate you are aiming at. Let go and the message reads
-`div#cart > span.price (1.299,00 lei) — moves from 120,340 to 500,205 (page
-coordinates, top-left)`. The page itself is never touched — what the agent gets
+coordinate you are aiming at. Let go and that element's entry gains
+`, moved from 120,340 to 500,205 (top-left, page coordinates)`. The page itself
+is never touched — what the agent gets
 is an instruction to carry out in the source, not a change the next render would
 throw away.
 
