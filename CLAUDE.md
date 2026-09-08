@@ -1308,10 +1308,21 @@ borrowed and then handed straight back. Since 2026-09-02 it also raises the
 **corner beacon** — same switch, same window, and the reason it is that switch
 and not a fourth place `listening` is written down.
 
-**Neither gesture is borrowed in Replace Wispr** (`live && !pasteMode`). Both are
-taken in order to *add to a message* — a picture, an element in a page — and that
-mode has no message: there is one string and it goes where the caret is. Leaving
-mouse 4 alone is also the whole of "the back button gives Enter".
+**Both are borrowed in Replace Wispr too, since 2026-09-08** (`live`, full stop).
+They were not, on the argument that both gestures exist to *add to a message* and
+that mode has no message — one string, going where the caret is. Victor overruled
+the premise rather than the conclusion: *"chiar dacă pornesc dictare la caret …
+să poți să agăți și poze și elemente, exact ca la o dictare țintită către un
+terminal"*. A paste **is** a message; it is simply one whose recipient is
+whatever holds the caret, which is routinely another agent — a web chat, an
+editor's assistant — where a frame and a selector are worth exactly what they are
+worth in a terminal. See *Replace Wispr* for what the paste then carries.
+
+**The cost is the back button, and it is the cost this app always pays.** In that
+mode it gave Return (*"pe butonul de Back să dea Enter"*) because nothing was
+borrowing it. It is the shutter now, for the length of a sentence — the same
+narrow window every other dictation borrows it in, keyed on `listening` and not
+on the mode, so outside it Victor Addons goes on typing Return with it.
 
 ## The music pauses for the length of a dictation
 
@@ -2931,9 +2942,9 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
 |---|---|---|
 | gesture | 🛞 | the forward side button |
 | destination | the bound terminal | wherever the caret is |
-| what travels | words, shots, selections, picks | the words |
+| what travels | words, shots, selections, picks | the words, plus any shot or pick he took |
 | review | the held prompt, 3–5 s | none — it is pasted |
-| back button | the shutter | untouched: Return |
+| back button | the shutter | the shutter (was Return until 2026-09-08) |
 
 - **The forward button, and not the wheel.** The wheel is the relay's whole
   vocabulary — dictate, cancel, bind, disconnect, spawn — and every one of those
@@ -2960,7 +2971,11 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   to be read by an agent beside the words; here there is no agent and no message.
   The real reason is the selection probe that comes with it: it posts a ⌘C into
   whatever field he is about to dictate into, and this is the one mode where that
-  field is the whole subject.
+  field is the whole subject. **This survives 2026-09-08 unchanged** — the
+  shutter and the picker are live here now, but nothing *automatic* is: he asked
+  for both in the same breath (*"nu trebuie să facă poză originală"*).
+- **The shutter and the ⌘⇧-pick work here, since 2026-09-08** — see *What a
+  caret dictation carries* below.
 - **The chip says `at the caret` behind the drawn map pin**, in the slot a spawn
   uses and for the spawn's reason: the bound terminal is still there, and for the
   length of this sentence the words are not going to it.
@@ -2997,6 +3012,69 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   `StatusItem.isReplaceWispr` at launch **without** going through
   `setReplaceWispr`: that call flashes the overlay, and a restored mode is not an
   event to announce.
+### What a caret dictation carries (2026-09-08)
+
+**The shutter and the ⌘⇧-pick are live in Replace Wispr, and what he attaches is
+pasted with the words.** Attach nothing and it pastes the transcript alone, byte
+for byte as it always did.
+
+```
+schimbă prețul ăsta și butonul de sub el
+
+[pointed at: div#cart > span.price (1.299,00 lei) · button.buy-button (Cumpără acum)]
+```
+
+`AppDelegate.caretLine` is `terminalLine` with everything **automatic** taken out
+and everything **deliberate** kept, in the wording it already has — his line was
+*"nu trebuie să facă poză originală și nu trebuie să vină cu tot sufixul standard
+… dar să pot să fac poză, în care caz poate să arate ca cel obișnuit"*:
+
+| clause | terminal | caret |
+|---|---|---|
+| the words | ✓ | ✓ |
+| `[the shots I took: …]`, `[pointed at: …]` | ✓ | ✓ — identical wording |
+| the context frame, `[Focused window: …]` | ✓ | — none is taken |
+| `[selected: …]` | ✓ | — no ⌘C is posted at his own field |
+| `[this text was dictated in RO or EN…]` | ✓ | — |
+
+- **Why the paths stay and the language hint goes.** Both are addressed to a
+  reader; the difference is who is certain to be one. A frame's path and a CSS
+  selector are inert text to anything that is not an agent — noise in a commit
+  message, but noise he asked for by pressing a shutter. The hint is
+  unconditional ceremony on every sentence, and this mode's whole claim is that
+  what he says is what gets typed: a stray sentence about mis-hearing pasted into
+  a Slack message is the mode failing at its one job.
+- **The selection is the one attachment deliberately not offered.**
+  `SelectionCapture.read` falls back to a synthetic ⌘C, and here the field under
+  the caret is the one he is dictating *into* — the exact harm that kept the
+  automatic capture out of this mode from the start. `plusOneShot` therefore
+  skips `stashExtraSelection`, and reads the flag **at the gesture**: a shutter
+  pressed a beat before the wheel closes the microphone would otherwise find
+  `pasteMode` already cleared by `stopLocalRecording`'s first line and post the
+  ⌘C after all.
+- **The bookkeeping had to be opened by hand.** `captureContext` is what normally
+  sets `dictationInFlight` (which makes `plusOneShot` *attach* a frame rather than
+  send it off alone) and `dictationStartedAt` (the zero every shot is named from),
+  and this mode never calls it. Without both, a shot taken at the caret would be
+  named by wall-clock and then dropped for want of a destination.
+- **`caretLine` clears `pendingScreen` even though it can never be set.** It calls
+  `shotsClause(screen: nil)` regardless, so a frame that *did* arrive would
+  silently survive to be attached to the next sentence. One line, and it stops
+  the method depending on a fact about its callers.
+- **Both `/test` routes now honour the mode**, which is how any of this was
+  checked at a desk: `/test/dictation/start` opens a *caret* dictation when
+  Replace Wispr is on (otherwise it falls at `captureContext`'s first gate
+  whenever nothing is bound — the state this mode is designed for), and
+  `/test/dictation` pastes `caretLine` instead of calling `send`. Verified end to
+  end through `/pick`: two picks in, the envelope above out, and the next
+  sentence bare — the queue drains.
+- **It cost a crash to learn, and the lesson is old.** The first version of that
+  start route called `overlay.setSpawnDestination` directly, and `ElementPicker`'s
+  callbacks run on its **listener thread** — `layoutContent` sets a window frame,
+  and off the main queue that took the whole app down with a `SIGTRAP` inside
+  `NSWMWindowCoordinator`. Every AppKit call in a picker callback needs its own
+  hop; `captureContext` never had the problem because it already does one.
+
 - **The transcript is on the clipboard as well as at the caret**
   (`pasteText`, which ⌘⌃P now shares), so a paste that landed somewhere unhelpful
   is one ⌘V of his own away from being fixed. `lastDictation` is set too: a

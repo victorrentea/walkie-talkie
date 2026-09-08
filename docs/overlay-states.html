@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 36 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 37 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -189,8 +189,18 @@
         </header>
         <div class="shot"><img src="states/replace-wispr.png" width="153" height="69" style="opacity:0.8" alt="Replace Wispr — this one goes to the caret"></div>
         <p class="when">The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.</p>
-        <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.</p>
+        <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own, and no ⌘⇧ hint unless Chrome is in front.</p>
         <code class="slug">replace-wispr</code>
+      </section>
+      <section class="card" id="replace-wispr-attached">
+        <header>
+          <h3>…and he attached things to it anyway</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">239×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/replace-wispr-attached.png" width="239" height="93" style="opacity:0.8" alt="…and he attached things to it anyway"></div>
+        <p class="when">The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.</p>
+        <p class="note">It borrowed nothing before, on the argument that both gestures add to a <em>message</em> and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — and what gets pasted carries <code>[the shots I took: …]</code> and <code>[pointed at: …]</code> in the wording the terminal already uses. What it still does not carry is anything <strong>automatic</strong>: no opening frame, no <code>[Focused window: …]</code>, no quoted selection (reading one means posting a ⌘C into the very field he is dictating into) and no <code>dictated aloud</code> hint. Attach nothing and it pastes the words alone, byte for byte as before.</p>
+        <code class="slug">replace-wispr-attached</code>
       </section>
       <section class="card" id="typing">
         <header>
@@ -464,9 +474,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -503,7 +513,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 7477b69 · 08 Sep 2026 · built 08 Sep 2026, 18:25
+  Generated from <code>OverlayStates.swift</code> · repo at a830d5a · 08 Sep 2026 · built 08 Sep 2026, 19:51
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

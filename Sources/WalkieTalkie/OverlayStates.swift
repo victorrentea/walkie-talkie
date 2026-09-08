@@ -101,11 +101,23 @@ enum OverlayStates {
 
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Nothing else on the chip changes: no shots row, because this mode takes no pictures, and no ⌘⇧ hint, because it borrows nothing from Chrome.",
+                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own, and no ⌘⇧ hint unless Chrome is in front.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
+            },
+
+            Shot(slug: "replace-wispr-attached", group: "At rest",
+                 title: "…and he attached things to it anyway",
+                 when: "The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.",
+                 note: "It borrowed nothing before, on the argument that both gestures add to a *message* and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — and what gets pasted carries `[the shots I took: …]` and `[pointed at: …]` in the wording the terminal already uses. What it still does not carry is anything **automatic**: no opening frame, no `[Focused window: …]`, no quoted selection (reading one means posting a ⌘C into the very field he is dictating into) and no `dictated aloud` hint. Attach nothing and it pastes the words alone, byte for byte as before.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
+                o.setListening(true)
+                o.setShotCount(2)
+                o.setPicks(count: 2, newest: "div#cart > span.price")
             },
 
             Shot(slug: "typing", group: "At rest", title: "He started typing",

@@ -498,16 +498,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the real path and not a shortcut through it.
         picker.onTestDictationStart = { [weak self] in
             guard let self = self else { return }
-            self.captureContext()
+            // **In Replace Wispr it opens a *caret* dictation**, which is the
+            // only way the mode's new half — the shutter and the picker, live
+            // here since 2026-09-08 — is reachable from a desk. Without this the
+            // route falls at `captureContext`'s first gate whenever nothing is
+            // bound, which is exactly the state this mode is designed to be used
+            // in. It mirrors `startLocalRecording(paste:)`: the flag first,
+            // because `hasDestination` is what the gates below ask, then the
+            // bookkeeping that makes a shot attach rather than fly off on its
+            // own, and no context frame and no ⌘C.
+            let paste = self.replaceWispr
+            if paste {
+                self.pasteMode = true
+                self.stateLock.lock()
+                self.dictationInFlight = true
+                self.dictationStartedAt = Date()
+                self.pendingShotOffsets = []
+                self.stateLock.unlock()
+                self.armOrphanFlush()
+            } else {
+                self.captureContext()
+            }
+            // **Every AppKit call here is on the main queue, including the chip's
+            // destination row.** This closure runs on `ElementPicker`'s listener
+            // thread, and `setSpawnDestination` reaches `layoutContent`, which
+            // sets a window frame — done off main it took the whole app down with
+            // a `SIGTRAP` inside `NSWMWindowCoordinator` the first time this
+            // branch ran. The `captureContext` path never had the problem
+            // because it does its own hop; this one had to be given one.
             DispatchQueue.main.async {
+                if paste {
+                    self.overlay.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
+                }
                 self.listening = true
                 self.syncBorrowedGestures()
                 self.overlay.setListening(true)
                 self.publishShotCount()
+                self.publishPicks()
             }
         }
         picker.onTestDictation = { [weak self] text in
-            self?.send(kind: "dictation", text: text, app: "test")
+            guard let self = self else { return }
+            // **It goes to the caret when that is where a real one would go.**
+            // The route's whole claim is that a fabricated transcript enters
+            // exactly where a spoken one does, and after 2026-09-08 that stopped
+            // being true for Replace Wispr: the caret path now builds an envelope
+            // of its own (`caretLine`), and routing the test straight into `send`
+            // meant the one branch that had just grown a shape nobody could look
+            // at was also the one branch no test could reach.
+            //
+            // `replaceWispr` (the mode) rather than `pasteMode` (this sentence's
+            // destination): nothing has opened a microphone here, so there is no
+            // sentence in flight to have decided anything.
+            guard !self.replaceWispr else {
+                let line = self.caretLine(words: text)
+                // Consumed here the way `stopLocalRecording` consumes it, so a
+                // route that opened a caret dictation does not leave the flag —
+                // and with it `hasDestination` — standing after the words land.
+                self.pasteMode = false
+                DispatchQueue.main.async {
+                    self.listening = false
+                    self.syncBorrowedGestures()
+                    self.overlay.setListening(false)
+                    self.overlay.setSpawnDestination(nil)
+                    self.overlay.clearSelection()
+                    self.pasteText(line)
+                }
+                return
+            }
+            self.send(kind: "dictation", text: text, app: "test")
         }
         // The spawn's transcript, entering where a spoken one does — with the
         // destination armed first, exactly as the ⇧-wheel press arms it.
@@ -862,7 +921,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // something that is over. Replace Wispr included — it takes no selection
         // of its own, and one left lying around must not outlive it either.
         abandonDictation("a new dictation started")
-        if !paste {
+        if paste {
+            // **No picture, but the dictation is open.** The automatic frame
+            // stays gone — Victor was explicit that this mode takes none — and
+            // with it the ⌘C probe that comes with `captureContext`, which is the
+            // half that actually matters: it posts a keystroke into the very
+            // field he is dictating into.
+            //
+            // What `captureContext` *also* does is book the sentence, and that
+            // has to happen anyway now that the shutter works here:
+            // `dictationInFlight` is what makes `plusOneShot` attach a frame
+            // rather than send it off on its own, and `dictationStartedAt` is the
+            // zero every shot is named from. Without them a shot taken at the
+            // caret would be named by wall-clock and then dropped for want of a
+            // destination.
+            stateLock.lock()
+            dictationInFlight = true
+            dictationStartedAt = Date()
+            pendingShotOffsets = []
+            stateLock.unlock()
+            armOrphanFlush()
+        } else {
             if deferContext {
                 // The audio's zero stays the press — shot offsets count from
                 // where the listening started — but the picture itself waits
@@ -1128,11 +1207,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // remove. The transcript is on the clipboard either way, which is the
             // safety net if the caret has moved on.
             guard !paste else {
+                let line = self.caretLine(words: r.text)
                 DispatchQueue.main.async {
                     // The words have landed; the row that named where they were
                     // going has nothing left to say.
                     self.overlay.setSpawnDestination(nil)
-                    self.pasteText(r.text)
+                    self.overlay.clearSelection()
+                    self.pasteText(line)
                 }
                 return
             }
@@ -1433,15 +1514,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a gesture that is no longer live, or off while one still is. Main thread only.
     private func syncBorrowedGestures() {
         let live = hasDestination && listening
-        // **Nothing is borrowed for a dictation going to the caret.** Both of
-        // these buttons are taken from other software for the length of a
-        // sentence, and both are taken to *add to a message* — a screenshot,
-        // an element in a page. This mode has no message: there is one string and
-        // it goes where the caret is. Leaving mouse 4 alone is also the whole of
-        // "the back button gives Enter": untouched, LinearMouse types Return with
-        // it, which is what it does every other minute of the day.
-        hotkeys.dictating = live && !pasteMode
-        picker.dictating = live && !pasteMode
+        // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
+        // then, and the argument was that both buttons are taken in order to
+        // *add to a message* while that mode has no message — one string, going
+        // where the caret is. Victor overruled the premise rather than the
+        // conclusion: *"chiar dacă pornesc dictare la caret … să poți să agăți și
+        // poze și elemente, exact ca la o dictare țintită către un terminal"*. A
+        // paste **is** a message; it is simply one whose recipient is whatever
+        // has the caret — routinely another agent, in a web chat or an editor's
+        // assistant, where a frame and a selector are worth exactly what they are
+        // worth in a terminal.
+        //
+        // **The price is the back button, and it is the price this app always
+        // pays.** In this mode it gave Return (*"pe butonul de Back să dea
+        // Enter"*) because nothing was borrowing it; now it is the shutter for
+        // the length of a sentence, exactly as it is in every other dictation.
+        // The window is the same narrow one — `listening`, not the mode — so
+        // outside it LinearMouse and Victor Addons go on typing Return with it.
+        hotkeys.dictating = live
+        picker.dictating = live
         // **The corner beacon rides the same switch**, and deliberately on
         // `listening` rather than on `live`: it answers *is it hearing me?*, and
         // the microphone is either open or it is not — where the words then go
@@ -2181,6 +2272,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "[this text was dictated in RO or EN and transcribed by a local Whisper — "
         + "it can hallucinate a fluent sentence that was never said]"
 
+    /// **What a Replace Wispr dictation actually pastes: the words, and only
+    /// what he deliberately attached** (2026-09-08).
+    ///
+    /// The mode used to paste the transcript and nothing else, because it had
+    /// nothing else — no shutter, no picker. Victor turned both on here (*"să
+    /// poți să agăți și poze și elemente"*) and drew the line himself in the same
+    /// breath: *"nu trebuie să facă poză originală și nu trebuie să vină cu tot
+    /// sufixul standard … dar să pot să fac poză, în care caz poate să arate ca
+    /// cel obișnuit"*.
+    ///
+    /// So this is `terminalLine` with everything **automatic** taken out and
+    /// everything **deliberate** kept, in the shape it already has:
+    ///
+    /// | clause | terminal | caret |
+    /// |---|---|---|
+    /// | the words | ✓ | ✓ |
+    /// | `[look at: …]`, `[pointed at: …]` | ✓ | ✓ — identical wording |
+    /// | the context frame, `[Focused window: …]` | ✓ | — none is taken |
+    /// | `[selected: …]` | ✓ | — no ⌘C is posted at his own field |
+    /// | `[this text was dictated in RO or EN…]` | ✓ | — |
+    ///
+    /// **Why the language hint goes and the paths stay.** Both are addressed to a
+    /// reader, and the difference is who is certain to be one. A frame's path and
+    /// a CSS selector are inert text to anything that is not an agent — noise in
+    /// a commit message, but noise he asked for by pressing a shutter. The hint
+    /// is the opposite: it is unconditional ceremony on every sentence, and this
+    /// mode's whole claim is that what he says is what gets typed. A stray
+    /// sentence about mis-hearing pasted into a Slack message is the mode failing
+    /// at its one job.
+    ///
+    /// **Nothing is appended when he attached nothing**, which is the common case
+    /// and is byte-for-byte what this mode did before.
+    private func caretLine(words: String) -> String {
+        stateLock.lock()
+        let shots = pendingShots
+        pendingShots = []
+        pendingShotOffsets = []
+        let sources = shotSources
+        shotSources = [:]
+        // **No context frame rides this envelope, and it is cleared rather than
+        // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
+        // in every real path through here — but `shotsClause` is called with
+        // `screen: nil` regardless, so one that *did* arrive (a `/test` route
+        // that opened the dictation the terminal way) would survive to be
+        // attached to the next sentence. Dropping it is one line and closes the
+        // leak; leaving it would make this method depend on a fact about its
+        // callers.
+        pendingScreen = nil
+        contextShotPending = false
+        pruneStalePicks()
+        let picks = pendingPicks
+        pendingPicks = []
+        dictationStartedAt = nil
+        dictationInFlight = false
+        stateLock.unlock()
+
+        // The orphan timer was armed when the dictation opened, and these shots
+        // have just been claimed — left running it would fire mid-next-sentence
+        // and drop what that one had gathered.
+        DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
+        publishShotCount()
+        publishPicks()
+
+        var parts: [String] = [words]
+        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
+        if !picks.isEmpty {
+            let named = picks.map { pick -> String in
+                guard let text = pick.text, !text.isEmpty else { return pick.path }
+                return "\(pick.path) (\(Self.clampForTerminal(text, 60)))"
+            }
+            parts.append("[pointed at: \(named.joined(separator: " · "))]")
+        }
+        guard parts.count > 1 else { return words }
+        // The words, a blank line, then one clause per line — `terminalLine`'s
+        // shape, for `terminalLine`'s reason: he reads this one too, and more
+        // often than he reads that one, since it lands in a field in front of him.
+        return words + "\n\n" + parts.dropFirst().joined(separator: "\n")
+    }
+
     private static func terminalLine(_ m: Message) -> String {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
@@ -2489,6 +2659,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sampled here with the moment and the cursor, not in the background
         // block below: this is the window he pressed the shutter *at*.
         let source = WindowContext.describe()
+        // **Read at the gesture, like everything else here.** `stopLocalRecording`
+        // clears `pasteMode` on its first line, so a shutter pressed a moment
+        // before the wheel closes the microphone would find it already false by
+        // the time the block below runs — and would then post a ⌘C into the very
+        // field this mode exists not to touch.
+        let toCaret = pasteMode
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce(cursor: cursor, cycleMarker: true)
@@ -2510,7 +2686,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // run and returned, the caret and the highlight it sat in have both
             // moved on. A selection read after the picture would be a selection
             // from after the picture.
-            if let offset = offset { self.stashExtraSelection(at: offset) }
+            //
+            // **Never in Replace Wispr.** `SelectionCapture.read` falls back to a
+            // synthetic ⌘C, and in this mode the field under the caret is the one
+            // he is dictating *into* — posting a keystroke at it is the exact harm
+            // that kept the automatic capture out of this mode in the first place.
+            // He asked for pictures and elements here, which cost nothing they are
+            // not asked for; a highlight is read by reaching into his text.
+            if let offset = offset, !toCaret { self.stashExtraSelection(at: offset) }
 
             guard let path = ScreenCapture.grab(cursor: cursor, offset: offset) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
