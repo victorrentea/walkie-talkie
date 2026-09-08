@@ -581,6 +581,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // quits, and 1.5 GB of weights is a long detour to take for a picture.
         if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil { startWhisper() }
 
+        // **And the spawn menu's bottom half, if nobody has measured it today.**
+        // Same shape as the load above and for the same reason: it is a login
+        // item, so the two seconds are free here and would otherwise be charged
+        // to the first spawn of the day. `refreshIfStale` is one `stat` when the
+        // answer is fresh, which is what makes it safe to also ask at the
+        // gesture — see `RecentProjects`.
+        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil { RecentProjects.refreshIfStale() }
+
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" { runDemo() }
         // Photograph every state and quit — see `OverlayStates`, and
         // `docs/shoot-overlay-states.sh`, which is what actually runs this.
@@ -789,7 +797,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // same slot, and the same argument, a spawn uses: for the length of this
         // sentence the words are not going where the chip has been saying they
         // go, and this line's whole job is to get that right.
-        if paste { overlay.setSpawnDestination("⌨️ at the caret") }
+        // **The pin, not a keyboard.** ⌨️ named the *input* — which is the
+        // one thing a dictation never uses — where the row's whole job is to
+        // say **where** the words land. A map pin is the mark this chip
+        // already uses for a destination it is aimed at (`RelayWindow.pinGlyph`,
+        // the drawn one: `Glyphs.mapPin`, an oval drawn down to a point with a
+        // hole through it, and not 📍, which Apple draws as a thumbtack). It
+        // rides the icon column like every other destination's icon, which is
+        // what takes it out of the words.
+        if paste { overlay.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph) }
         guard whisper.ready else {
             // **Rare, now that the load runs at launch**: this is either the
             // first seconds after login or a launch load that failed and is
@@ -862,9 +878,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **Ask which folder, without making it a question he has to answer.**
     ///
     /// The menu appears where the mouse was when he started talking, names the
-    /// five repos he starts sessions in, and takes itself off screen three
-    /// seconds later. Not answering it is the ordinary case and costs nothing:
-    /// the spawn opens in `~/workspace`, which is what it has always done.
+    /// repos he pinned plus the five he has most recently been working in, and
+    /// takes itself off screen three seconds later. Not answering it is the
+    /// ordinary case and costs nothing: the spawn opens in `~/workspace`, which
+    /// is what it has always done.
     ///
     /// **The pick is only taken while the spawn is still pending.** The menu
     /// outlives short sentences — three seconds is longer than some dictations —
@@ -1028,7 +1045,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     self.overlay.setTranscribing(false)
                     self.clearSpawn()
-                    self.overlay.flash("⚠️ the model returned nothing — that dictation is lost", duration: 8)
+                    // **`No words detected`, and nothing else** — Victor's
+                    // ask, 2026-09-08. It read `⚠️ the model returned nothing
+                    // — that dictation is lost`, which is three sentences
+                    // where one is a fact: what the recogniser did with the
+                    // audio is the app's business, and *that dictation is
+                    // lost* names a loss he can do nothing about. The one
+                    // thing he acts on is that nothing was heard, which also
+                    // says the only thing to do about it — say it again.
+                    self.overlay.flash("No words detected", duration: 8)
                 }
                 Log.error("local recording produced no transcript")
                 try? FileManager.default.removeItem(at: wav)

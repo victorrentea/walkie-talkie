@@ -51,6 +51,14 @@ while let arg = args.next() {
 // permission.
 relaunchThroughLaunchServicesIfNeeded()
 
+// Draw the spawn folder menu into a PNG and quit — the only way to look at a
+// panel that no screen capture can contain. See `SpawnFolderMenu.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_MENU"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    SpawnFolderMenu.shoot(to: out)
+    exit(0)
+}
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an

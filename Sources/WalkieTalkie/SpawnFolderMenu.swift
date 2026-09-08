@@ -30,40 +30,73 @@ import AppKit
 /// **It is not an `NSMenu`.** `popUp` runs a nested tracking run loop, which
 /// would freeze the pulsing 🔴 and the chip's own cursor-following for as long as
 /// it is up, and it offers neither a timed dismissal nor a fade.
+///
+/// # Two halves, and a line between them (2026-09-08)
+///
+/// The list was six names hardcoded here — the projects Victor happened to be
+/// working on the afternoon it was written. He asked for the other half:
+/// *"determin care sunt proiectele în care am lucrat … să le adaugi sub o linie
+/// separatoare … pe lângă cele fixate de sus"*. So:
+///
+/// ```
+///   Start Claude in…
+///   petclinic                    ★     ← pinned, alphabetical
+///   walkie-talkie                ★
+///   ─────────────────────────────
+///   petclinic-pr                 ☆     ← measured, alphabetical
+///   victor-skills-private        ☆
+/// ```
+///
+/// Above the line is `PinnedProjects`, which is his own decision and survives
+/// everything. Below it is `RecentProjects` — the five repos he has burned the
+/// most tokens in over the last fortnight, read off Claude Code's own
+/// transcripts by `helpers/recent_projects.py`. **The star moves a row between
+/// the two**, and clicking one does *not* close the menu: it is a change to what
+/// the menu is, not an answer to what it asks.
+///
+/// **Chosen by rank, shown alphabetically**, both on his instruction — *"în
+/// ordine descrescătoare după… nu, alfabetic"*. The measurement decides which
+/// five; the eye gets a list it can find a name in. A leaderboard that reorders
+/// itself between two openings puts the row he reached for last time somewhere
+/// else.
+///
+/// **Unpinning is not a delete.** A row taken off the pinned half falls into the
+/// recent half if it qualifies, and disappears if it does not — *"acel proiect
+/// să apară în lista de proiecte recente, doar dacă am deschis recent în acel
+/// folder vreo muncă"*. That is `RecentProjects.offered` with the pin removed,
+/// and it needs no code of its own here: the qualification is already what the
+/// bottom half means.
 enum SpawnFolderMenu {
 
-    /// One row: the folder it opens, and where that is.
+    /// One row: the folder it opens, where that is, and which side of the line
+    /// it is on.
     struct Choice {
         let name: String
         let path: String
+        var pinned: Bool = false
     }
 
-    /// **Victor's projects, in the order he named them**, under `~/workspace`.
+    /// **The rows, in the order they are drawn**: the pinned half first, then
+    /// the recent half, each sorted alphabetically. The separator goes between
+    /// them, and only if both halves have something in them.
     ///
-    /// A hardcoded list and not a listing of the workspace: that folder holds
-    /// ~150 directories, nearly all of them course material (see the workspace's
-    /// own `CLAUDE.md`), and a menu of 150 rows is not a menu. These are the
-    /// projects he starts sessions in.
-    ///
-    /// **The trust prompt does not apply to them, and that was checked rather
-    /// than assumed.** The reason the spawn directory was frozen at `~/workspace`
-    /// is that Claude Code stops on *"do you trust this folder"* in a directory
-    /// it has never been started from, which costs the sentence already spoken.
-    /// Every one of them carries `hasTrustDialogAccepted` in `~/.claude.json` —
-    /// he works in them by hand every day, which is the same reason they are on
-    /// this list.
-    /// A folder that does not exist is dropped rather than offered: the launcher
-    /// falls back to `$HOME` on a failed `cd`, which is the one destination
-    /// nobody meant.
-    static let choices: [Choice] = ["victor-macos-addons", "training-assistant",
-                                    "walkie-talkie", "victor-vsc", "petclinic",
-                                    "human-review"]
-        .map { Choice(name: $0, path: workspace + "/" + $0) }
-        .filter { FileManager.default.fileExists(atPath: $0.path) }
-
-    private static var workspace: String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("workspace").path
+    /// **The trust prompt does not apply to either half, and neither half is a
+    /// guess.** The reason the spawn directory was frozen at `~/workspace` is
+    /// that Claude Code stops on *"do you trust this folder"* in a directory it
+    /// has never been started from, which costs the sentence already spoken. A
+    /// pinned folder is one he works in by hand; a recent one is, by
+    /// construction, a folder a Claude Code session has already run in — which
+    /// is the same fact the trust flag records. A folder that no longer exists
+    /// is dropped by both halves rather than offered: the launcher falls back to
+    /// `$HOME` on a failed `cd`, which is the one destination nobody meant.
+    static func rows() -> (pinned: [Choice], recent: [Choice]) {
+        let pins = PinnedProjects.paths()
+        let pinned = pins
+            .map { Choice(name: ($0 as NSString).lastPathComponent, path: $0, pinned: true) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let recent = RecentProjects.offered(excluding: Set(pins))
+            .map { Choice(name: $0.name, path: $0.path, pinned: false) }
+        return (pinned, recent)
     }
 
     /// **Three and a half seconds solid, then a second of fade — unless the
@@ -93,6 +126,20 @@ enum SpawnFolderMenu {
     private static let pad: CGFloat = 8
     /// The inset of a row's text inside its own highlight.
     static let rowInset: CGFloat = 10
+    /// The star's box, at the trailing edge of every row.
+    ///
+    /// **On the right, which is where a favourite toggle lives** — mail, IDE
+    /// bookmarks, everything that has ever had one. It is also what keeps the
+    /// folder names in one flush-left column: the names are what he is aiming
+    /// at, and a glyph in front of them would push each one in by the width of
+    /// something he is not reading.
+    static let starSize: CGFloat = 16
+    /// The gap between the longest name and the star column, so a row that fills
+    /// its width does not run into the glyph.
+    private static let starGap: CGFloat = 12
+    /// The line itself: a hairline, inset to the rows' own edges so it reads as
+    /// dividing the list rather than crossing the panel.
+    private static let separatorHeight: CGFloat = 9
     private static let radius: CGFloat = 10
     /// How far off the pointer the corner sits — `RelayWindow.anchorGap`'s width,
     /// mirrored, since this hangs off the other side of the cursor.
@@ -107,6 +154,15 @@ enum SpawnFolderMenu {
 
     private static var panel: NSPanel?
     private static var timer: Timer?
+    /// The rows as they are currently drawn. Computed once when the menu opens
+    /// and again on every star, so a toggle relays out against what it just
+    /// changed rather than re-reading the disk mid-gesture.
+    private static var rendered: (pinned: [Choice], recent: [Choice]) = ([], [])
+    /// Where the panel's **top-left** corner is, kept so a rebuild can put it
+    /// back there. A menu that grows or shrinks under the hand must not move the
+    /// rows the hand is already over, and it hangs *below* the pointer — so the
+    /// top edge is the one that has to stay still.
+    private static var anchor: NSPoint = .zero
     private static var chosen: ((Choice) -> Void)?
     /// The hand on the menu, which suspends the fade — see `solidSeconds`.
     private static var hovered = false
@@ -128,7 +184,12 @@ enum SpawnFolderMenu {
             return
         }
         hide()
-        guard !choices.isEmpty else { return }
+        // **Ask for a fresh ranking on the way past.** One `stat`, and on the
+        // one day in a hundred it says the file is stale, a detached process
+        // this app never waits on. See `RecentProjects.refreshIfStale`.
+        RecentProjects.refreshIfStale()
+        rendered = rows()
+        guard !rendered.pinned.isEmpty || !rendered.recent.isEmpty else { return }
         chosen = pick
 
         let size = measure()
@@ -160,7 +221,10 @@ enum SpawnFolderMenu {
         // `RecordingBeacon` and the chip itself follow.
         p.sharingType = .none
         p.contentView = root
-        p.setFrameOrigin(origin(for: size, at: point))
+        let where_ = origin(for: size, at: point)
+        p.setFrameOrigin(where_)
+        // The top-left corner, which is what a rebuild puts back — see `rebuild`.
+        anchor = NSPoint(x: where_.x, y: where_.y + size.height)
         p.alphaValue = 1
         p.orderFrontRegardless()
         panel = p
@@ -238,12 +302,17 @@ enum SpawnFolderMenu {
     // MARK: - Layout
 
     private static func measure() -> NSSize {
-        let widest = choices
+        let all = rendered.pinned + rendered.recent
+        let widest = all
             .map { ($0.name as NSString).size(withAttributes: [.font: rowFont]).width }
             .max() ?? 0
         let headerWidth = (header as NSString).size(withAttributes: [.font: headerFont]).width
-        let width = max(widest, headerWidth) + 2 * (pad + rowInset)
-        let height = 2 * pad + headerHeight + CGFloat(choices.count) * rowHeight
+        // The star sits inside every row, so the rows have to be wide enough for
+        // the longest name *and* the glyph; the header has no star and is
+        // measured on its own.
+        let width = max(widest + starGap + starSize, headerWidth) + 2 * (pad + rowInset)
+        let divider = (rendered.pinned.isEmpty || rendered.recent.isEmpty) ? 0 : separatorHeight
+        let height = 2 * pad + headerHeight + CGFloat(all.count) * rowHeight + divider
         return NSSize(width: ceil(width), height: ceil(height))
     }
 
@@ -261,17 +330,23 @@ enum SpawnFolderMenu {
         blur.autoresizingMask = [.width, .height]
         root.addSubview(blur)
 
-        // Cocoa's y grows upwards, so the rows are laid out from the bottom and
-        // the header ends up on top.
+        // Cocoa's y grows upwards, so the groups are laid out bottom-up — the
+        // recent half first, then the line, then the pinned half, and the header
+        // ends up on top.
         var y = pad
-        for choice in choices.reversed() {
-            let row = FolderRow(frame: NSRect(x: pad, y: y,
-                                              width: size.width - 2 * pad, height: rowHeight),
-                                choice: choice, font: rowFont)
-            row.onClick = { take($0) }
-            root.addSubview(row)
-            y += rowHeight
+        for choice in rendered.recent.reversed() { y = add(choice, at: y, size: size, to: root) }
+        if !rendered.pinned.isEmpty && !rendered.recent.isEmpty {
+            let line = NSView(frame: NSRect(x: pad + rowInset, y: y + (separatorHeight - 1) / 2,
+                                            width: size.width - 2 * (pad + rowInset), height: 1))
+            line.wantsLayer = true
+            // A hairline in the label's own ink at a tenth of its weight: it has
+            // to be visible over the blur in both appearances and must not read
+            // as a row of its own.
+            line.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.22).cgColor
+            root.addSubview(line)
+            y += separatorHeight
         }
+        for choice in rendered.pinned.reversed() { y = add(choice, at: y, size: size, to: root) }
 
         let label = NSTextField(labelWithString: header)
         label.font = headerFont
@@ -283,6 +358,86 @@ enum SpawnFolderMenu {
 
         return root
     }
+
+    private static func add(_ choice: Choice, at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
+        let row = FolderRow(frame: NSRect(x: pad, y: y,
+                                          width: size.width - 2 * pad, height: rowHeight),
+                            choice: choice, font: rowFont)
+        row.onClick = { take($0) }
+        row.onStar = { starred($0) }
+        root.addSubview(row)
+        return y + rowHeight
+    }
+
+    // MARK: - The star
+
+    /// **A star toggles a pin and leaves the menu up.** It is a change to what
+    /// the menu *is*, not an answer to what it asks — Victor's ask spells that
+    /// out (*"dacă debifezi steluța, fără să se închidă dialogul"*), and it is
+    /// the only reading that works: the reason to pin a project is so that it is
+    /// there the next time, and a star that dismissed the menu would make him
+    /// re-open it to use what he had just arranged.
+    ///
+    /// It rebuilds rather than redraws, because the row it was clicked on has
+    /// just moved to the other side of the line — which is the visible half of
+    /// what a star means, and the only confirmation the gesture gets.
+    private static func starred(_ choice: Choice) {
+        PinnedProjects.toggle(choice.path)
+        rendered = rows()
+        rebuild()
+    }
+
+    /// Lay the panel out again around the same top-left corner, and give the
+    /// clock back its full solid period.
+    ///
+    /// **The clock restarts because a star is engagement.** The fade exists to
+    /// say the menu was optional and to get it out of the way of a sentence
+    /// already being spoken; a hand that has just arranged the list is a hand
+    /// about to use it, and taking the menu away three seconds after it opened
+    /// would be taking it away mid-gesture. (Hovering already suspends the
+    /// clock, so in practice this matters for the moment the pointer leaves.)
+    private static func rebuild() {
+        guard let p = panel else { return }
+        let size = measure()
+        p.contentView = build(size: size)
+        p.setFrame(NSRect(x: anchor.x, y: anchor.y - size.height,
+                          width: size.width, height: size.height),
+                   display: true)
+        // The hand is on the menu, so an in-flight fade has to be reversed as
+        // well as re-timed — the same invalidate-then-reverse `setHovered` does.
+        generation += 1
+        p.alphaValue = 1
+        timer?.invalidate()
+        solidOver = false
+        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in
+            solidOver = true
+            if !hovered { fade() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    /// The glyph, drawn once per state and cached: a rebuild makes a new view
+    /// for every row, and asking the symbol catalogue on each of them is work
+    /// for a picture that never changes.
+    ///
+    /// **SF Symbols and not a Unicode star**, which is the call `StatusItem`
+    /// already made for `mappin` / `mappin.slash`: this is an on/off *pair*, and
+    /// a pair whose halves are drawn by two different hands reads as two
+    /// unrelated marks. ★ and ☆ are also at the mercy of whatever face the
+    /// system falls back to.
+    static func star(filled: Bool) -> NSImage? {
+        if let cached = starCache[filled] { return cached }
+        let config = NSImage.SymbolConfiguration(pointSize: starSize - 2, weight: .regular)
+        let image = NSImage(systemSymbolName: filled ? "star.fill" : "star",
+                            accessibilityDescription: filled ? "pinned" : "not pinned")?
+            .withSymbolConfiguration(config)
+        image?.isTemplate = true
+        starCache[filled] = image
+        return image
+    }
+
+    private static var starCache: [Bool: NSImage?] = [:]
 
     /// **Down and to the right of the pointer** — Victor's ask, 2026-09-06,
     /// replacing the down-and-*left* he asked for on 09-04. That one was picked
@@ -350,11 +505,21 @@ private final class FolderRow: NSView {
     private let font: NSFont
     private var hot = false
     var onClick: ((SpawnFolderMenu.Choice) -> Void)?
+    var onStar: ((SpawnFolderMenu.Choice) -> Void)?
 
     init(frame: NSRect, choice: SpawnFolderMenu.Choice, font: NSFont) {
         self.choice = choice
         self.font = font
         super.init(frame: frame)
+        let box = NSRect(x: frame.width - SpawnFolderMenu.rowInset - SpawnFolderMenu.starSize,
+                         y: (frame.height - SpawnFolderMenu.starSize) / 2,
+                         width: SpawnFolderMenu.starSize, height: SpawnFolderMenu.starSize)
+        let star = StarButton(frame: box, pinned: choice.pinned)
+        star.onClick = { [weak self] in
+            guard let self else { return }
+            self.onStar?(self.choice)
+        }
+        addSubview(star)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -382,8 +547,15 @@ private final class FolderRow: NSView {
                                        owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true }
+    // The star sits inside the row, so the pointer resting on it is still on the
+    // row — which is what keeps the highlight up while he reaches for it, and is
+    // why these two are not `mouseEntered`-exclusive.
+    override func mouseEntered(with event: NSEvent) { hot = true; setStarHot(true); needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hot = false; setStarHot(false); needsDisplay = true }
+
+    private func setStarHot(_ on: Bool) {
+        for v in subviews { (v as? StarButton)?.rowHot = on }
+    }
 
     // The app is `.accessory` and never active, so *every* click here is a first
     // mouse. Without this the first one would be spent activating nothing.
@@ -391,4 +563,90 @@ private final class FolderRow: NSView {
 
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?(choice) }
+}
+
+// MARK: - The star
+
+/// **The pin, as a thing to click.** A subview rather than a region tested
+/// inside `FolderRow.mouseUp`, because the two clicks mean opposite things —
+/// one opens a session and dismisses the menu, the other rearranges the menu and
+/// keeps it up — and a hit test that got the boundary wrong by two points would
+/// start a session he did not ask for. A subview cannot get it wrong: the window
+/// server decides.
+///
+/// An unpinned row's star is **dim but always drawn**, never revealed on hover.
+/// It is the only thing on this menu that has to be *discovered*, and a control
+/// that appears when the pointer is already on it is one he has to find by
+/// accident first.
+private final class StarButton: NSView {
+    private let pinned: Bool
+    var onClick: (() -> Void)?
+    /// Whether the row underneath is highlighted, which flips the ink the way
+    /// the row's own text flips.
+    var rowHot = false { didSet { if rowHot != oldValue { needsDisplay = true } } }
+
+    init(frame: NSRect, pinned: Bool) {
+        self.pinned = pinned
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image = SpawnFolderMenu.star(filled: pinned) else { return }
+        // Filled reads as a state and hollow as an offer, so the hollow one is
+        // additionally held back in weight — otherwise five equally solid
+        // outlines below the line look like five half-pinned projects.
+        let ink: NSColor = rowHot ? .white
+            : (pinned ? .labelColor : NSColor.labelColor.withAlphaComponent(0.35))
+        // **The tint has to happen inside an image of its own.** A template
+        // image drawn straight ignores the fill colour, and the obvious repair —
+        // draw it, then `fill(using: .sourceAtop)` over the same rectangle —
+        // paints the *whole box*, because the destination it composites against
+        // is the row and the blur behind it, both opaque. The stars came out as
+        // five solid squares. `NSImage(size:flipped:)` hands the handler a
+        // transparent backing of its own, so `.sourceAtop` there can only reach
+        // the glyph's own pixels.
+        let box = NSRect(origin: .zero, size: bounds.size)
+        let tinted = NSImage(size: box.size, flipped: false) { rect in
+            image.draw(in: rect)
+            ink.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.draw(in: box)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
+// MARK: - Looking at it
+
+/// **Draw the menu into a PNG and quit** — `WT_SHOOT_MENU=/tmp/menu.png`.
+///
+/// This panel is `sharingType = .none`, like everything else this app puts near
+/// the pointer, so **no screen capture can contain it**: the one route to seeing
+/// a layout change was to make a spawn dictation and look with your own eyes,
+/// inside three and a half seconds, at a menu that then faded. That is the same
+/// problem `docs/overlay-states.html` was built to solve for the chip, and the
+/// same answer — the real views drawing themselves — minus the catalogue, since
+/// this one has a single layout rather than 36 states.
+///
+/// It paid for itself immediately: the star came out as five solid squares (see
+/// `StarButton.draw`), which is invisible in code review and obvious in a
+/// picture.
+extension SpawnFolderMenu {
+    static func shoot(to path: String) {
+        rendered = rows()
+        let size = measure()
+        let root = build(size: size)
+        root.wantsLayer = true
+        guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return }
+        root.cacheDisplay(in: root.bounds, to: rep)
+        if let data = rep.representation(using: .png, properties: [:]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
 }

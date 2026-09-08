@@ -34,6 +34,10 @@ cp "$BIN" "$MACOS/$APP_NAME"
 # falls back to <repo>/helpers for a `swift build` run, so both work unswitched.
 mkdir -p "$CONTENTS/Resources"
 cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
+# The spawn menu's recent-projects half is measured by this one, run in the
+# background at most once a day. `RecentProjects.helperPath` looks here first and
+# falls back to <repo>/helpers, exactly as the whisper helper does.
+cp "$DIR/helpers/recent_projects.py" "$CONTENTS/Resources/recent_projects.py"
 
 # The menu bar item's two faces: the device alone at rest, the full icon with its
 # ring once the relay is pointed at a terminal. Copied rather than declared as SPM

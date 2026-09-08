@@ -2482,19 +2482,14 @@ pornesc dictarea"*. The fixed destination costs the first sentence of every new
 session — said out loud, to name the repo, so the agent can `cd` into it — and
 that sentence is the same five words every time.
 
-- **The list is hardcoded, and the trust prompt does not reach it.**
-  `~/workspace` holds ~150 directories, nearly all of them course material, so a
-  listing is not a menu. `victor-macos-addons`, `training-assistant`,
-  `walkie-talkie`, `victor-vsc`, `petclinic`, and `human-review` since
-  2026-09-08 — checked, not assumed: every one of them carries
-  `hasTrustDialogAccepted` in `~/.claude.json`, which is the same fact as
-  *he works in them by hand every day*, which is why they are on the list. A
-  folder that is not on disk is dropped rather than offered, since the launcher
-  falls back to `$HOME` on a failed `cd` and that is the one destination nobody
-  meant. **Adding a row is adding a name here**: the menu sizes itself to what
-  it holds, so nothing else has to change — but the fade's clock does not grow
-  with the list, and a list long enough to outrun three and a half seconds of
-  reading is a different design, not a longer array.
+- **The list is not hardcoded any more** — see *Two halves, and a line between
+  them* below. It was, for four days: six names in Swift, chosen because they
+  were the projects he was working on the afternoon it was written. `~/workspace`
+  holds ~150 directories, nearly all of them course material, so a *listing* is
+  still not a menu; what replaced the constant is a measurement, not a `ls`. A
+  folder that is not on disk is dropped rather than offered by both halves, since
+  the launcher falls back to `$HOME` on a failed `cd` and that is the one
+  destination nobody meant.
 - **Three and a half seconds solid, then a second of fade — unless the hand is
   on it.** His numbers, and the first of them was two for half an hour: two is
   not long enough to read a half-dozen names, decide and travel to one while a sentence
@@ -2568,6 +2563,149 @@ that sentence is the same five words every time.
   not share with a binding, namely that the session does not exist yet. Passing
   the icon is what turns the row on, so the default `~/workspace` is untouched.
   New state, so `docs/overlay-states.html` has a new `Shot` (`spawn-folder`).
+
+### Two halves, and a line between them (2026-09-08)
+
+**The menu names the projects he pinned, then a separator, then the five repos
+he has actually been working in most over the last fortnight.**
+
+```
+  Start Claude in…
+  human-review              ★
+  petclinic                 ★
+  training-assistant        ★     ← PinnedProjects — his decision
+  victor-macos-addons       ★
+  victor-vsc                ★
+  walkie-talkie             ★
+  ─────────────────────────
+  petclinic-main            ☆
+  petclinic-pr              ☆     ← RecentProjects — measured
+  victor-phone-addons       ☆
+  victor-skills             ☆
+  victor-skills-private     ☆
+```
+
+Victor's ask: *"analizând conversațiile pe care le-am avut cu Claude-ul, cu un
+script … să determin care sunt proiectele în care am lucrat … să le adaugi sub o
+linie separatoare"*.
+
+**A hardcoded list is wrong the week after, and wrong silently.** The six names
+were right the day they were written and are the wrong six by the time anything
+reminds him — and the cost of a project missing from the menu is exactly the cost
+the menu was built to remove: the first sentence of every session started in it,
+spoken out loud to tell the agent where it is.
+
+#### Where the bottom half comes from
+
+`helpers/recent_projects.py` reads **Claude Code's own transcripts**
+(`~/.claude/projects/*/*.jsonl`) and ranks the git repos he has burned tokens in.
+Where he has been working is a fact already written on this disk, next to the
+`usage` block that says what it cost.
+
+- **Token burn, and the metric turned out not to matter.** *"am promptat mult,
+  sau am ars mult stoc, nu știu exact cum"* — so it was measured three ways over
+  his real 14-day window: weighted cost (output ×5, cache-creation ×1.25, input
+  ×1, cache-read ×0.1), raw output tokens, and number of prompts. **All three
+  name the same top five**, with only 4th and 5th swapping. There is nothing here
+  to tune, and a later reader should not spend an afternoon believing there is.
+- **`cwd` is read per record, not per session**, so a session that `cd`s between
+  repos attributes honestly to both. **Everything under `~/workspace/<x>/` rolls
+  up to `<x>`**, which is the only non-obvious line in the script: sessions run in
+  `petclinic/petclinic-backend/.codecity-tool` and in
+  `agentic-how/.claude-worktrees/…`, and left alone the first of those ranked
+  *seventh in its own right*, splitting the work of the project that ranked first.
+  The rollup also makes worktrees and nested tool checkouts free rather than a
+  case to handle. Outside `~/workspace` the git root stands alone; outside `$HOME`
+  there is nothing — those are `/private/tmp` scratchpads, a session's litter.
+- **It is cheap, which is half the ask** (*"nu vreau să mănânci token ca să
+  evaluezi unde s-au petrecut mulți token … dar nici să execuți asta la fiecare
+  click"*). Nothing calls a model. ~1 GB across ~800 transcripts scans in **1.9
+  seconds**, because a line reaches the JSON parser only after a raw byte scan
+  finds `"assistant"` in it — a small minority of them. That is cheap enough that
+  **there is no cache and no incremental read offset**, which is two classes of
+  bug not written.
+- **Apple's `/usr/bin/python3`, deliberately** — the script is pure stdlib, so
+  `Transcriber.pythonPath`'s probe for an interpreter carrying `mlx_whisper`
+  would cost several process launches to answer a question this does not ask.
+- **Run at most once a day, in the background, and never waited on.**
+  `RecentProjects.refreshIfStale` is a single `stat`; on the one day in a hundred
+  it says the file is stale it launches a detached process. It is asked at
+  **launch and at the gesture**, because neither covers how this app is used
+  alone: it is a login item that can stay up a week (launch is not often enough)
+  and it can be restarted five times in an afternoon (launch alone would rescan
+  five times — the age check is what prevents that). The menu that triggers a
+  scan shows yesterday's answer; today's lands for the next one, and nothing
+  about a fortnight's ranking is urgent enough to justify a menu that appears two
+  seconds after the sentence started.
+- **The file holds every qualifying project, not the top five.** The menu takes
+  its five *after* removing the pinned ones, and a pin comes off at any moment —
+  a file of five would mean an unpinned project vanishing until tomorrow's scan,
+  which is precisely the case he named.
+
+#### The star
+
+**Clicking it moves a row across the line, and does not close the menu.** A star
+is a change to what the menu *is*, not an answer to what it asks — and the reason
+to pin something is so that it is there next time, so a star that dismissed the
+menu would make him reopen it to use what he had just arranged. The clock
+restarts on a toggle, because a hand that has just arranged the list is a hand
+about to use it.
+
+- **Unpinning is not a delete.** The row falls into the recent half if it
+  qualifies and disappears if it does not — *"acel proiect să apară în lista de
+  proiecte recente, doar dacă am deschis recent în acel folder vreo muncă"*. That
+  needs no code: it is `RecentProjects.offered` with the pin removed, and the
+  qualification is already what the bottom half means.
+- **Chosen by rank, shown alphabetically**, both halves alphabetical — his
+  instruction, corrected mid-sentence (*"în ordine descrescătoare după… nu,
+  alfabetic"*). The measurement decides *which five*; the eye gets a list it can
+  find a name in without reading all of it. A leaderboard that reorders itself
+  between two openings puts the row he reached for last time somewhere else.
+- **On the right**, where a favourite toggle lives in everything that has one.
+  It also keeps the folder names in one flush-left column — the names are what he
+  aims at, and a glyph in front would push each one in by the width of something
+  he is not reading.
+- **SF Symbols `star` / `star.fill`**, the call `StatusItem` already made for
+  `mappin` / `mappin.slash`: this is an on/off *pair*, and a pair whose halves are
+  drawn by two different hands reads as two unrelated marks.
+- **The hollow star is dim but always drawn**, never revealed on hover: it is the
+  only thing on this menu that has to be *discovered*, and a control that appears
+  when the pointer is already on it is one he finds by accident first.
+- **A subview, not a region tested inside the row's `mouseUp`.** The two clicks
+  mean opposite things — one opens a session and dismisses the menu, the other
+  rearranges it and keeps it up — and a hit test off by two points would start a
+  session he did not ask for. A subview cannot get the boundary wrong.
+- **A rebuild keeps the panel's top-left corner** (`anchor`), since the menu
+  hangs *below* the pointer: anchoring the bottom would slide every row out from
+  under the hand that just clicked one.
+- **The pins are seeded from the six that were hardcoded.** A fresh install shows
+  him the menu he already knows, with a star beside each row explaining how it got
+  that way. `~/.walkie-talkie/pinned-projects.json`; a pinned folder that is
+  missing is dropped from the menu but **kept in the file** — an external disk or
+  a checkout he will make again should not cost him the pin. Only a click removes
+  one.
+
+#### `WT_SHOOT_MENU` — because this panel cannot be photographed either
+
+`WT_SHOOT_MENU=/tmp/menu.png ./.build/debug/WalkieTalkie` draws the menu into a
+PNG and quits (`SpawnFolderMenu.shoot`). It is `sharingType = .none` like
+everything else near the pointer, so the only way to review a layout change was
+to make a spawn dictation and look with your own eyes, within three and a half
+seconds, at something that then faded. Same problem `docs/overlay-states.html`
+solves for the chip and the same answer — the real views drawing themselves —
+minus the catalogue, since this panel has one layout rather than 36 states.
+
+It paid for itself on the first run: the stars came out as **five solid
+squares**. Drawing a template `NSImage` and then `fill(using: .sourceAtop)` over
+the same rectangle paints the whole box, because what it composites against is
+the row and the blur behind it, both opaque. The tint has to happen inside an
+`NSImage(size:flipped:)` of its own, whose backing is transparent. That is
+invisible in review and obvious in a picture.
+
+**The clock did not grow with the list, and that is a live question.** Eleven
+rows is nearly twice what 3.5 seconds was timed against. Hovering suspends the
+fade and a click lands during it, so it is answerable; if it starts to feel
+rushed, the number to change is `solidSeconds`.
 
 **The window flies into the chip, 2.5s after it opens** — the same `BindFlight`
 every bind plays (`AppDelegate.flySpawnedWindow`). A spawn is the one destination
