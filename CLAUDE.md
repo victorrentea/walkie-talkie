@@ -45,7 +45,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-38 of them — each with the moment it appears and why it looks the way it does. It
+39 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -54,7 +54,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 38 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 39 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -1928,11 +1928,11 @@ is a gesture he was making anyway; this makes it the whole gesture.
   nothing reads as one that missed — while a **poll** that finds the same text
   has found nothing, and a row flickering once a second about an unchanged
   highlight is the opposite of a receipt.
-- **Not in Replace Wispr.** `caretLine` carries no `[selected: …]` at all, since
-  the field under the caret is the one he is dictating *into*, so a watcher there
-  would gather text nothing would ever send. `syncBorrowedGestures` passes
-  `live && !pasteMode` — and a bind that converts a caret dictation mid-sentence
-  therefore switches the watcher **on** at the same moment, which is right.
+- **In Replace Wispr too, since 2026-09-09.** It was `live && !pasteMode`, on
+  the argument that `caretLine` carried no `[selected: …]` so a watcher there
+  would gather text nothing would ever send. Victor took the premise away rather
+  than the conclusion — see *Replace Wispr* — and `syncBorrowedGestures` now
+  passes a bare `live`.
 - **The first one still fills the frozen slot.** A dictation that opened with
   nothing highlighted takes the first thing he selects as its subject — that is
   `fileSelection`'s existing rule and it is exactly the shape of this feature: he
@@ -3323,7 +3323,7 @@ everything else near the pointer, so the only way to review a layout change was
 to make a spawn dictation and look with your own eyes, within three and a half
 seconds, at something that then faded. Same problem `docs/overlay-states.html`
 solves for the chip and the same answer — the real views drawing themselves —
-minus the catalogue, since this panel has one layout rather than 38 states.
+minus the catalogue, since this panel has one layout rather than 39 states.
 
 It paid for itself on the first run: the stars came out as **five solid
 squares**. Drawing a template `NSImage` and then `fill(using: .sourceAtop)` over
@@ -3551,8 +3551,8 @@ and everything **deliberate** kept, in the wording it already has — his line w
 |---|---|---|
 | the words | ✓ | ✓ |
 | `[the shots I took: …]`, `[elements I picked in Chrome: …]` | ✓ | ✓ — identical wording |
+| `[selected: …]` | ✓ | ✓ — identical wording, since 2026-09-09 |
 | the context frame, `[Focused window: …]` | ✓ | — none is taken |
-| `[selected: …]` | ✓ | — no ⌘C is posted at his own field |
 | `[this text was dictated in RO or EN…]` | ✓ | — |
 
 - **Why the paths stay and the language hint goes.** Both are addressed to a
@@ -3562,14 +3562,24 @@ and everything **deliberate** kept, in the wording it already has — his line w
   unconditional ceremony on every sentence, and this mode's whole claim is that
   what he says is what gets typed: a stray sentence about mis-hearing pasted into
   a Slack message is the mode failing at its one job.
-- **The selection is the one attachment deliberately not offered.**
-  `SelectionCapture.read` falls back to a synthetic ⌘C, and here the field under
-  the caret is the one he is dictating *into* — the exact harm that kept the
-  automatic capture out of this mode from the start. `plusOneShot` therefore
-  skips `stashExtraSelection`, and reads the flag **at the gesture**: a shutter
-  pressed a beat before the wheel closes the microphone would otherwise find
-  `pasteMode` already cleared by `stopLocalRecording`'s first line and post the
-  ⌘C after all.
+- **The selection joined them on 2026-09-09**, and it was the one attachment
+  this mode refused. Victor's ask: *"even during the dictation at the caret, not
+  bound to a terminal, I still want to capture selection of text during the
+  dictation"*. What refused it was an argument about the **probe**, not about
+  the highlight — `SelectionCapture.read` falls back to a synthetic ⌘C and the
+  field under the caret is the one he is dictating *into* — and that argument
+  only ever covered the *automatic* capture, which this mode still does not do.
+  A highlight that gets here was read by a shutter press or watched settling for
+  two seconds, and both are gestures he made. So `plusOneShot` calls
+  `stashExtraSelection` here too (it is the only route that sees a highlight in
+  a **Chrome page**, where the watcher's AX read is blind), and
+  `syncSelectionWatch` is passed a bare `live`.
+- **The one thing to keep in mind is what the caret is sitting in.** The watcher
+  reads through Accessibility, and in this mode the focused field is the field
+  the words are about to be pasted into — so a selection he made *there* to be
+  replaced by the dictation is a selection this will file. It has to settle over
+  two seconds first, which is longer than that gesture survives in practice, and
+  the chip says `“ selecting …` before a word is pasted.
 - **The bookkeeping had to be opened by hand.** `captureContext` is what normally
   sets `dictationInFlight` (which makes `plusOneShot` *attach* a frame rather than
   send it off alone) and `dictationStartedAt` (the zero every shot is named from),
@@ -3790,8 +3800,12 @@ already were.
 condition-gated exception below. Every row whose job was to name an input is off:
 `ReBind` and `dictate` at rest, `send` while editing the transcript, the shutter
 beside the pulse. What is left on the chip is everything that reports *state*:
-the pulse, `Listening...`, `Transcribing...`, the picks he has
-actually made, the destination. (`Preparing…` was on that list until 2026-09-06,
+the pulse, `Listening...`, `Transcribing...`, the destination, and the tally of
+what this dictation is carrying — frames, highlights, picks (*The tally*). The
+shots row came back on 2026-09-09 carrying **only its count**; the mouse and
+`+ selection` beside it are still behind `showsGestureHints`, and that legend
+replaces the count rather than sharing the line with it.
+(`Preparing…` was on that list until 2026-09-06,
 when the model started loading at launch and the state stopped being one he could
 be waiting on.)
 
@@ -3874,6 +3888,60 @@ outlives the message belongs at the foot of it — and a row that shuffles up an
 down as a highlight comes and goes is a row he has to find again every time,
 beside a cursor he is not looking at.
 
+### The tally: what this dictation is carrying, read down the icon column (2026-09-09)
+
+```
+🔴 Listening... [HQ] (2m)
+[Terminal] petclinic@main
+📸 ×3
+“  public Order placeOrder(Cart…      → ×2 after four seconds
+[chrome] ×3 ⤢
+```
+
+Victor's ask: *"an emoji of the camera and the number representing how many
+pictures have been taken for this dictation … basically an overview of how many
+elements in Chrome, how many pictures and selection text blocks were captured
+during the current dictation. If any, of course."*
+
+**The `📸 ×N` row is back**, and for a different reason than the one that removed
+it. It went when the red vignette and the cursor mark took over as the shot's
+receipt — those land at the moment of the gesture, which is a better answer to
+*did that press take* than a number he has to look down at. But that is not the
+question three minutes and four presses into a dictation: *what am I about to
+send* is, and until the held panel opens the total exists nowhere.
+
+- **`×N`, nothing at zero** — *"if any, of course"*. In a bound dictation it says
+  `×1` from the first frame, because he took that picture by starting to talk
+  (`publishShotCount`); in Replace Wispr, which takes no automatic frame, the row
+  appears the moment he presses the shutter.
+- **The overview is the icon column read downwards**, not a fourth row restating
+  the other three. All three rows already share `glyphBox`, so the counts line up
+  under each other and each is two characters wide.
+- **It shows through the decode as well as the sentence** — `RelayWindow.gathering`
+  is `listening || transcribing`, which is Victor's *"during dictation on
+  whatever state"*: what he attached does not stop being attached while he waits
+  for the words. The **invitation** half of the Chrome row stays on `listening`
+  alone, since ⌘⇧ goes back to the browser the instant the microphone closes and
+  a row offering it then would be a lie about which gestures are live.
+
+**And the Chrome row collapses like the selection row above it**, four seconds
+after the newest pick: *"the Chrome icon should also be followed only by the ×2
+… I don't want to see the div thing here"*. It is the same bargain one row up,
+for the same reason — the selector answers *did the click catch the button or the
+div around it* at the instant it lands, and after that it is the longest string
+the chip can carry, restating something already checked beside a cursor he is
+trying to work with. The clock restarts on every pick, because every pick is a
+new answer to that question.
+
+**`⤢` after the count means one of them was dragged** — Victor's *"diagonal
+2-sided arrow … next to the number, to tell whether there is any move element"*.
+It is a fact about the **queue**, not about the newest entry (`publishPicks` asks
+`contains { $0.move != nil }`), which is exactly the kind of thing a count cannot
+say about the things it counted: the message carries *move it to here* and not
+only *this element*. Typed rather than drawn, in the row's own font, so it reads
+as punctuation beside the number rather than as a second picture on a row that
+already has one.
+
 Row heights, for checking a layout change without seeing it: title 21, and every
 other row on the chip — engine, shots, ⌘⇧-picked and the selection — 22, with
 `rowGap` 2 between them. **The chip's rows are all the same height on purpose**:
@@ -3904,7 +3972,7 @@ rep itself at a fixed 2×. The page lays each picture out at its size in **point
 (`build-overlay-states.py` writes `width=`/`height=` from the manifest), so the
 extra pixels are sharpness and nothing else moves.
 
-- `./docs/shoot-overlay-states.sh` → all 38 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 39 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies

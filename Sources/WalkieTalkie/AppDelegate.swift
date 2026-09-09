@@ -1702,9 +1702,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // with a track playing over it, which is the one thing the pause exists
         // to stop. Same switch as the beacon, and for the same reason.
         music.setActive(listening)
-        // **The watcher wants `live` minus the caret**, since `caretLine` carries
-        // no highlight at all — see `pollSelection`.
-        syncSelectionWatch(live && !pasteMode)
+        // **The watcher runs in Replace Wispr too, since 2026-09-09.** It was
+        // `live && !pasteMode`, on the argument that `caretLine` carried no
+        // highlight at all so a watcher there would gather text nothing would
+        // ever send. Victor took the premise away rather than the conclusion —
+        // *"even during the dictation at the caret … I still want to capture
+        // selection of text during the dictation"* — and `caretLine` now carries
+        // `[selected: …]` exactly as `terminalLine` does. The paste is a message
+        // whose recipient is whatever holds the caret, which is routinely another
+        // agent; a highlight is worth there what it is worth in a terminal.
+        //
+        // **The one thing to keep in mind is what the caret is sitting in.** The
+        // watcher reads through Accessibility, and in this mode the field with
+        // the caret is the field he is dictating *into* — so a selection he made
+        // there to be replaced by the dictation is a selection this will file.
+        // It has to settle over two seconds first, which is longer than that
+        // gesture survives in practice, and the receipt says so on the chip
+        // before a word is pasted.
+        syncSelectionWatch(live)
     }
 
     // MARK: - The bound terminal
@@ -2575,8 +2590,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// |---|---|---|
     /// | the words | ✓ | ✓ |
     /// | `[look at: …]`, `[pointed at: …]` | ✓ | ✓ — identical wording |
+    /// | `[selected: …]` | ✓ | ✓ — identical wording, since 2026-09-09 |
     /// | the context frame, `[Focused window: …]` | ✓ | — none is taken |
-    /// | `[selected: …]` | ✓ | — no ⌘C is posted at his own field |
     /// | `[this text was dictated in RO or EN…]` | ✓ | — |
     ///
     /// **Why the language hint goes and the paths stay.** Both are addressed to a
@@ -2587,6 +2602,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// mode's whole claim is that what he says is what gets typed. A stray
     /// sentence about mis-hearing pasted into a Slack message is the mode failing
     /// at its one job.
+    ///
+    /// **The highlights joined them on 2026-09-09**, on Victor's ask — *"even
+    /// during the dictation at the caret … I still want to capture selection of
+    /// text during the dictation"*. They were the one deliberate attachment this
+    /// envelope refused, and the refusal was really about the *probe*: nothing
+    /// automatic runs in this mode, so nothing reaches into the field he is
+    /// dictating into unasked. A highlight that got here was either read by a
+    /// shutter press or watched settling for two seconds, and both are gestures
+    /// he made.
     ///
     /// **Nothing is appended when he attached nothing**, which is the common case
     /// and is byte-for-byte what this mode did before.
@@ -2610,6 +2634,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pruneStalePicks()
         let picks = pendingPicks
         pendingPicks = []
+        // **Taken, not left behind.** They are cleared here for the reason every
+        // other field on this envelope is: what is not consumed by the sentence
+        // that gathered it rides the next one.
+        let selection = pendingSelection
+        let extraSelections = pendingExtraSelections
+        pendingSelection = nil
+        pendingExtraSelections = []
         // Read before it is cleared, and for the reason `Message.startedAt`
         // exists: it is the zero every pick's stamp is measured from, and one
         // line later there is nothing left to measure against.
@@ -2626,6 +2657,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         publishPicks()
 
         var parts: [String] = [words]
+        // **In `terminalLine`'s order and `terminalLine`'s wording**, down to the
+        // stamp on the extras: he pastes this into another agent as often as into
+        // a commit message, and two envelopes that carry the same fact in two
+        // shapes are two things to learn instead of one.
+        if let selection = selection, !selection.isEmpty {
+            parts.append("[selected: \(Self.clampForTerminal(selection))]")
+        }
+        for extra in extraSelections {
+            parts.append("[selected \(Self.stamp(extra.at)): \(Self.clampForTerminal(extra.text))]")
+        }
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
         if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
         guard parts.count > 1 else { return words }
@@ -3139,12 +3180,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sampled here with the moment and the cursor, not in the background
         // block below: this is the window he pressed the shutter *at*.
         let source = WindowContext.describe()
-        // **Read at the gesture, like everything else here.** `stopLocalRecording`
-        // clears `pasteMode` on its first line, so a shutter pressed a moment
-        // before the wheel closes the microphone would find it already false by
-        // the time the block below runs — and would then post a ⌘C into the very
-        // field this mode exists not to touch.
-        let toCaret = pasteMode
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce(cursor: cursor, cycleMarker: true)
@@ -3167,13 +3202,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // moved on. A selection read after the picture would be a selection
             // from after the picture.
             //
-            // **Never in Replace Wispr.** `SelectionCapture.read` falls back to a
-            // synthetic ⌘C, and in this mode the field under the caret is the one
-            // he is dictating *into* — posting a keystroke at it is the exact harm
-            // that kept the automatic capture out of this mode in the first place.
-            // He asked for pictures and elements here, which cost nothing they are
-            // not asked for; a highlight is read by reaching into his text.
-            if let offset = offset, !toCaret { self.stashExtraSelection(at: offset) }
+            // **In Replace Wispr too, since 2026-09-09.** It was skipped there,
+            // because `SelectionCapture.read` falls back to a synthetic ⌘C and
+            // the field under the caret is the one he is dictating *into*. That
+            // objection was really about the *automatic* probe, which fires on
+            // every press of the wheel with no subject behind it; this one is a
+            // deliberate press with a deliberate subject, and it is the only
+            // route that sees a highlight in a **Chrome page** at all — which is
+            // where the watcher's Accessibility read is blind. ⌘C reads and
+            // changes nothing, and the clipboard is put back.
+            if let offset = offset { self.stashExtraSelection(at: offset) }
 
             guard let path = ScreenCapture.grab(cursor: cursor, offset: offset) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
@@ -3339,8 +3377,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pruneStalePicks()
         let count = pendingPicks.count
         let newest = pendingPicks.last?.short
+        // **Any of them, not the newest.** The row settles into a bare count, and
+        // *one of these was dragged somewhere* is exactly the thing a count
+        // cannot say about the things it counted.
+        let moved = pendingPicks.contains { $0.move != nil }
         stateLock.unlock()
-        DispatchQueue.main.async { [weak self] in self?.overlay.setPicks(count: count, newest: newest) }
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.setPicks(count: count, newest: newest, moved: moved)
+        }
     }
 
     /// The elements line(s): one per thing he pointed at, in the order he pointed

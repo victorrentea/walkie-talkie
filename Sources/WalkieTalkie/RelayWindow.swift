@@ -277,6 +277,28 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Elements ⌘-picked in Chrome, waiting on a sentence.
     private var pickCount = 0
     private var pickNewest: String?
+    /// **The row has given the newest selector its seconds and collapsed to
+    /// `×N`** — the reading the selection row above it already had, arriving
+    /// here on 2026-09-09 on Victor's ask: *"the Chrome icon should also be
+    /// followed only by the ×2 … I don't want to see the div thing here"*.
+    ///
+    /// The two questions are the same pair, one row apart. At the instant a pick
+    /// lands he is asking *did the click catch the button or the div wrapped
+    /// around it*, and the tail of the selector is the whole answer; once he has
+    /// read it the only open question is whether any of them fell out, which the
+    /// count answers on its own. The selector is the longest string the chip can
+    /// carry, and it was carrying it for the rest of the sentence — a wall of
+    /// punctuation beside the cursor, an inch from what he is reading.
+    private var pickSettled = false
+    private var pickAnnounceWork: DispatchWorkItem?
+    /// Any of the picks waiting on this sentence was **dragged** — ⌘⇧ held, the
+    /// element moved, dropped somewhere else — so the message says where it
+    /// should go as well as what it is.
+    ///
+    /// It is a fact about the whole queue rather than about the newest entry:
+    /// the count is what the row is now, and this is the one thing a count
+    /// cannot say about the things it counted.
+    private var pickMoved = false
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
@@ -693,16 +715,46 @@ private let frontLabel = NSTextField(labelWithString: "")
         return a
     }
 
-    /// The recording row shows **only while dictating** — the one window in which
-    /// there is a recording to report and in which the back button does
-    /// anything.
-    private var recordText: String? {
-        guard listening else { return nil }
-        // The count went first and the hint went second, which leaves the row
-        // with nothing of its own to say — the pulse and `Listening…`
-        // directly above it carry the whole of "a dictation is open".
-        guard Self.showsGestureHints else { return nil }
-        return ""   // the row is drawn from `shotHintText`; see `layoutContent`
+    /// **A dictation is still being assembled** — the microphone is open, or it
+    /// has closed and the model is chewing. The three rows that say what this
+    /// message is *carrying* are on for both halves of that, because both halves
+    /// are the same message: what he attached does not stop being attached while
+    /// he waits for the words.
+    ///
+    /// Victor's phrasing for it: *"display in the tooltip, during dictation on
+    /// whatever state"*.
+    private var gathering: Bool { listening || transcribing }
+
+    /// **`📸 ×2` — how many frames this dictation is carrying.**
+    ///
+    /// The count was the shot's only receipt and went when the red vignette and
+    /// the cursor mark took that job over at the moment of the gesture; the row
+    /// then had nothing of its own to say and went with it. Victor asked for the
+    /// number back on 2026-09-09, and for a different reason than the one that
+    /// removed it: *"an emoji of the camera and the number representing how many
+    /// pictures have been taken for this dictation … an overview of how many
+    /// elements in Chrome, how many pictures and selection text blocks were
+    /// captured during the current dictation. If any, of course."*
+    ///
+    /// **The vignette answers *did that press land*; this answers *what am I
+    /// about to send*.** Those are different questions and only the first of
+    /// them is answered at the instant of the gesture. Three minutes and four
+    /// presses into a dictation, the only place the total exists is the panel
+    /// that has not opened yet.
+    ///
+    /// **`×N`, and nothing when N is zero** — *"if any, of course"*. The camera
+    /// in the icon column is what the number is about, so the row is two
+    /// characters wide and lines up with the `×N` on the two rows under it: the
+    /// overview he asked for is that column read downwards, not a fourth row
+    /// restating the other three.
+    ///
+    /// The gesture legend keeps its own switch (`showsGestureHints`, off) and
+    /// still owns the row when it is on: it is a legend, and a legend replaces
+    /// the count rather than sharing the line with it.
+    private var shotsText: NSAttributedString? {
+        if Self.showsGestureHints, listening { return Self.shotHintText(font: hintFont) }
+        guard gathering, shotCount > 0 else { return nil }
+        return plain("×\(shotCount)")
     }
 
     /// What is happening, and what is doing it — beside the pulse that says it is
@@ -900,15 +952,35 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// ⌘⇧ belongs to Chrome again, and a row saying otherwise is a lie about which
     /// gestures are live.
     private var pickText: NSAttributedString? {
-        guard listening else { return nil }
+        guard gathering else { return nil }
         // The invitation, but only with Chrome in front — see `chromeFront`.
         // Once he has picked something the row belongs to the picks and stays
         // whatever app he has switched to: they are travelling with this
         // dictation, and that is a fact about the message, not about the window.
-        guard pickCount > 0 else { return chromeFront ? Self.pickHint(font: hintFont) : nil }
-        guard let newest = pickNewest, !newest.isEmpty else { return plain("×\(pickCount)") }
-        return plain("×\(pickCount) \(Self.fit(newest, 34))")
+        //
+        // **The invitation is `listening`'s alone.** Once the microphone has
+        // closed ⌘⇧ belongs to Chrome again, so offering it through the decode
+        // would be a lie about which gestures are live — while the *count* is a
+        // fact about the message and stays for as long as the message does.
+        guard pickCount > 0 else {
+            return (listening && chromeFront) ? Self.pickHint(font: hintFont) : nil
+        }
+        // **The count, then the drag mark, then — for four seconds — the newest
+        // selector.** `⤢` is Victor's *"diagonal 2-sided arrow … next to the
+        // number, to tell whether there is any move element"*: a drag is the one
+        // thing a pick carries that a count cannot describe, and it is drawn as
+        // the arrow every UI on this machine already uses for *this thing moves*.
+        var head = "×\(pickCount)"
+        if pickMoved { head += " " + Self.moveMark }
+        guard !pickSettled, let newest = pickNewest, !newest.isEmpty else { return plain(head) }
+        return plain("\(head) \(Self.fit(newest, 34))")
     }
+
+    /// U+2921, the northeast-and-southwest arrow. Typed rather than drawn: it is
+    /// a plain arrow in the row's own font, so it reads as punctuation beside the
+    /// number rather than as a fourth picture on a chip that already has one
+    /// glyph per row.
+    private static let moveMark = "⤢"
 
     /// Keep the tail, drop the head. A selector's last steps are the element; its
     /// first steps are the page, which he is looking at.
@@ -1456,8 +1528,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // string with a smaller, lowered glyph in it, and `measure` knows only
         // one font. Same reason the ⌘-pick row has always measured this way.
         var recordWidth: CGFloat = 0
-        if recordText != nil {
-            recordInfo.attributedStringValue = Self.shotHintText(font: hintFont)
+        if let shots = shotsText {
+            recordInfo.attributedStringValue = shots
             recordInfo.sizeToFit()
             recordWidth = glyphColumn + recordDotGap + ceil(recordInfo.frame.width)
         }
@@ -1646,8 +1718,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // Then what the message is carrying: while he is talking this is the row
         // that changes, and the one he glances down at to check that the shot he
         // just took landed.
-        if recordText != nil {
-            recordInfo.attributedStringValue = Self.shotHintText(font: hintFont)
+        if let shots = shotsText {
+            recordInfo.attributedStringValue = shots
             recordInfo.sizeToFit()
             layoutGlyphRow(recordRow, glyph: shotGlyph, label: recordInfo, width: innerWidth)
             recordRow.isHidden = false
@@ -3270,16 +3342,50 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()          // the number can widen the row
     }
 
-    /// How many elements are ⌘-picked and waiting, and what the newest one was.
+    /// How many elements are ⌘-picked and waiting, what the newest one was, and
+    /// whether any of them was dragged.
     ///
     /// No `reposition()` here, unlike `setListening`: a pick happens while his
     /// hand is in Chrome, and yanking the chip back under the cursor mid-gesture
     /// would move something in the corner of his eye for no reason. The row
     /// simply appears where the chip already is.
-    func setPicks(count: Int, newest: String?) {
-        guard pickCount != count || pickNewest != newest else { return }
+    ///
+    /// **The selector gets `selectionHold` seconds and then the row is the count
+    /// alone** — see `pickSettled`. The clock restarts on every pick, because
+    /// every pick is a new answer to *did that click catch what I meant*; it is
+    /// the same shape, and the same timer, as the row above.
+    func setPicks(count: Int, newest: String?, moved: Bool = false) {
+        guard pickCount != count || pickNewest != newest || pickMoved != moved else { return }
+        let isNew = pickNewest != newest || count > pickCount
         pickCount = count
         pickNewest = newest
+        pickMoved = moved
+
+        if isNew {
+            pickAnnounceWork?.cancel()
+            pickSettled = false
+            if count > 0, newest?.isEmpty == false {
+                let settle = DispatchWorkItem { [weak self] in
+                    guard let self = self, self.pickCount > 0 else { return }
+                    self.pickSettled = true
+                    self.layoutContent()
+                }
+                pickAnnounceWork = settle
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.selectionHold, execute: settle)
+            } else {
+                pickAnnounceWork = nil
+            }
+        }
+        layoutContent()
+    }
+
+    /// `OverlayStates` shoots a state in the millisecond it sets it up, so the
+    /// four seconds never pass there — the same reason `pinSelectionSettled`
+    /// exists, for the row underneath it.
+    func pinPickSettled() {
+        pickAnnounceWork?.cancel()
+        pickAnnounceWork = nil
+        pickSettled = pickCount > 0
         layoutContent()
     }
 

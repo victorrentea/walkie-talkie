@@ -88,6 +88,7 @@ enum OverlayStates {
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setSpawnDestination("✨ workspace", mark: "✨")
                 o.setListening(true)
+                o.setShotCount(1)
             },
 
             Shot(slug: "spawn-folder", group: "Dictating", title: "…and he picked which folder",
@@ -97,11 +98,12 @@ enum OverlayStates {
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setSpawnDestination("training-assistant", mark: "✨", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
             },
 
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own, and no ⌘⇧ hint unless Chrome is in front.",
+                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
@@ -111,13 +113,16 @@ enum OverlayStates {
             Shot(slug: "replace-wispr-attached", group: "At rest",
                  title: "…and he attached things to it anyway",
                  when: "The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.",
-                 note: "It borrowed nothing before, on the argument that both gestures add to a *message* and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — and what gets pasted carries `[the shots I took: …]` and `[pointed at: …]` in the wording the terminal already uses. What it still does not carry is anything **automatic**: no opening frame, no `[Focused window: …]`, no quoted selection (reading one means posting a ⌘C into the very field he is dictating into) and no `dictated aloud` hint. Attach nothing and it pastes the words alone, byte for byte as before.",
+                 note: "It borrowed nothing before, on the argument that both gestures add to a *message* and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — the tally included — and what gets pasted carries `[the shots I took: …]`, `[selected: …]` and `[elements I picked in Chrome: …]` in the wording the terminal already uses. **The highlights joined them on 2026-09-09**, on his ask: they were the one deliberate attachment this envelope refused, and the refusal was really about the *probe* rather than about the highlight. What it still does not carry is anything **automatic**: no opening frame, no `[Focused window: …]` and no `dictated aloud` hint. Attach nothing and it pastes the words alone, byte for byte as before.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
                 o.setShotCount(2)
                 o.setPicks(count: 2, newest: "div#cart > span.price")
+                o.setSelection(selection, count: 2)
+                o.pinSelectionSettled()
+                o.pinPickSettled()
             },
 
             Shot(slug: "typing", group: "At rest", title: "He started typing",
@@ -127,10 +132,11 @@ enum OverlayStates {
 
             Shot(slug: "listening", group: "Dictating", title: "Dictating",
                  when: "From 🔼 → until he makes it again (🛞 with Logi gestures off) — the bulk of every dictation.",
-                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there. **The blue `HQ` after it is what the bar filling means**, said in two letters: past three voiced seconds the wrong-language mode is at its floor and the median WER of a short clip has halved, so the tag is a claim about *this* dictation rather than the gold star it replaced, which only said well done and left him to remember what for. It pops out when the last dot lights — a thing that moves is caught in peripheral vision, which is where this row spends its life.",
+                 note: "**The destination is named here**, and only here — the chip has been a bare 🎙️ all day, and now it wears the destination's own icon too; and the moment the microphone opens it spells out the terminal the words are going to, in time for him to ⌘⌃B somewhere else mid-sentence if it is the wrong one. The pulsing 🔴 says *now*, `Listening…` says what. The model id used to follow it and now lives only in the menu: it is a setting, and a setting restated beside the cursor all day pays rent to be read twice a month. **This is the bar full** — three voiced seconds in, every character of `Listening...` lit, and it stays that way for the rest of the sentence; the two shots below it are what the same row looks like on the way there. **The blue `HQ` after it is what the bar filling means**, said in two letters: past three voiced seconds the wrong-language mode is at its floor and the median WER of a short clip has halved, so the tag is a claim about *this* dictation rather than the gold star it replaced, which only said well done and left him to remember what for. It pops out when the last dot lights — a thing that moves is caught in peripheral vision, which is where this row spends its life. **`📸 ×1` from the first frame**: he took that picture by starting to talk, and the count is back on 2026-09-09 because the vignette answers *did that press land* while this answers *what am I about to send* — which is a different question three minutes and four presses in.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
             },
 
             Shot(slug: "listening-long", group: "Dictating", title: "Two minutes in",
@@ -139,6 +145,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.pinListenElapsed(2)
             },
 
@@ -148,6 +155,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.pinListenWarmth(0)
             },
 
@@ -157,6 +165,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.pinListenWarmth(0.5)
             },
 
@@ -166,16 +175,29 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.setChromeFront(true)
             },
 
             Shot(slug: "listening-picks", group: "Dictating", title: "Dictating, with elements picked",
                  when: "After the first ⌘⇧-click in Chrome, whatever app he switches to afterwards.",
-                 note: "The invitation gives way to the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. A bare `×3` would only confirm what he already believes.",
+                 note: "The invitation gives way to the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. **For four seconds** — the row below is where it ends up.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.setPicks(count: 2, newest: "div#cart > span.price")
+            },
+
+            Shot(slug: "listening-picks-settled", group: "Dictating", title: "…and four seconds later, with one dragged",
+                 when: "Every pick ends here — the selector has had its seconds and the row is the count alone. One of these three was ⌘⇧-dragged.",
+                 note: "`×3` and nothing else, which is Victor\'s ask of 2026-09-09: *\"the Chrome icon should also be followed only by the ×2 … I don\'t want to see the div thing here\"*. It is the selection row\'s bargain one row up, arriving here for the same reason: the selector answers *did the click catch the button or the div around it* at the instant it lands, and after that it is the longest string on the chip restating something already checked, beside a cursor he is trying to work with. **`⤢` is the one thing a count cannot say** — that one of them was dragged, i.e. that the message carries *move it here* and not only *this element*.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
+                o.setListening(true)
+                o.setShotCount(1)
+                o.setPicks(count: 3, newest: "div#cart > span.price", moved: true)
+                o.pinPickSettled()
             },
 
             Shot(slug: "listening-selection", group: "Dictating", title: "Dictating, carrying a highlight",
@@ -184,6 +206,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.setSelection(selection)
             },
 
@@ -193,6 +216,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.setSelection(selection, count: 3)
                 o.pinSelectionSettled()
             },
@@ -203,15 +227,17 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.setSelection(selection, count: 2, announced: true)
             },
 
             Shot(slug: "listening-everything", group: "Dictating", title: "Dictating, everything at once",
-                 when: "Rare, and the widest the chip ever gets: browser in front, picks made, a highlight riding along.",
-                 note: "Four rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time.",
+                 when: "Rare, and the widest the chip ever gets: browser in front, three frames taken, picks made, a highlight riding along.",
+                 note: "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(3)
                 o.setChromeFront(true)
                 o.setPicks(count: 3, newest: "main.content > button.buy-button")
                 o.setSelection(selection, count: 2)
@@ -224,6 +250,7 @@ enum OverlayStates {
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setListening(true)
+                o.setShotCount(1)
                 o.flash("⚠️ screenshot failed", duration: 60)
             },
 
@@ -233,6 +260,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
                 o.setTranscribing(true)
+                o.setShotCount(1)
                 o.pinTranscribeWarmth(0.45)
             },
 
