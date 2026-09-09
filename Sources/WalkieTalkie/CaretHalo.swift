@@ -80,59 +80,67 @@ final class CaretHalo {
     /// at, which is the one place it has to work: he is reading something else
     /// while he talks.
     private static let core: CGFloat = 150
-    /// How far the glow reaches past the core, as a multiple of it. The tail is
-    /// what makes it a halo rather than a hoop — see `profile`.
-    private static let reach: CGFloat = 1.45
-    /// The panel has to hold the whole tail: a gradient clipped by its own
+    /// How far the glow reaches either side of the core, as a multiple of it.
+    /// Twice what the halo shipped at (Victor, 2026-09-09: *"2× mai lat … mai
+    /// gros adică"*), and now the **same** number on both sides — see `profile`.
+    private static let spread: CGFloat = 0.66
+    /// The panel has to hold the whole falloff: a gradient clipped by its own
     /// window ends in a hard circular edge, which is the one thing this shape
     /// must not have.
-    private static var side: CGFloat { (core * reach).rounded() * 2 + 4 }
+    private static var side: CGFloat { (core * (1 + spread)).rounded() * 2 + 4 }
 
     /// **The halo's cross-section**, as `(distance from the pointer ÷ core,
-    /// colour)` — read straight off the reference picture Victor sent
-    /// (2026-09-09, *"ca un halou"*).
+    /// alpha)`. One colour, and symmetric about the core.
     ///
-    /// Three things in that picture are what make it read as light rather than
-    /// as a drawn band, and all three are in this table:
+    /// It was neither for an hour. It was read off the reference picture Victor
+    /// sent — a near-white inner rim, a gold body, an amber tail, and a long
+    /// outer falloff against a short inner one — and he took all of that back
+    /// the same evening: *"să nu fie multi-color. doar galben, gradient similar
+    /// de opacitate și înăuntru și afară"*.
     ///
-    /// - **The bright edge is the inner one**, very nearly white and warm, with
-    ///   the deeper gold sitting outside it. That is how a glow round a hole
-    ///   behaves and it is the opposite of a stroked ring, which is brightest in
-    ///   the middle of its own width.
-    /// - **The outer falloff is long and the inner one short.** The hole stays
-    ///   clean — which matters here for a reason the picture does not know
-    ///   about: what is inside it is the pointer and whatever he is aiming it
-    ///   at.
-    /// - **Nothing has an edge.** Every stop either starts or ends at zero
-    ///   alpha, so there is no radius at which the alpha steps.
+    /// **The picture was of a picture, and this is a signal.** In that image the
+    /// hues are what make it read as *light* — a photograph of a glow, looked at
+    /// on its own. This is drawn over Victor's actual work at a fraction of an
+    /// opacity, and there a second and third hue do not survive being that faint:
+    /// they read as a smudge with a colour cast, and on a dark editor the white
+    /// rim came out grey. One colour at one falloff is the same shape with
+    /// nothing left in it that the opacity can spoil.
     ///
-    /// **It is drawn rather than shipped as that PNG**, which was the literal
-    /// reading of *"uite o imagine de folosit"*. The picture has an opaque light
-    /// grey background baked into it, so over a dark editor — where this spends
-    /// half its life — it would be a grey square with a halo in it. A gradient
-    /// has real transparency, costs no asset, is resolution-free, and takes the
-    /// panel's own opacity when the swell brightens it.
-    private static let profile: [(CGFloat, NSColor)] = [
-        (0.00, glow(1.00, 0.97, 0.86, 0)),
-        (0.78, glow(1.00, 0.97, 0.86, 0)),
-        (0.88, glow(1.00, 0.92, 0.68, 0.55)),
-        (0.95, glow(1.00, 0.90, 0.62, 0.95)),   // the bright inner rim
-        (1.05, glow(1.00, 0.78, 0.28, 0.90)),   // gold, the body
-        (1.18, glow(0.98, 0.65, 0.15, 0.45)),
-        (1.32, glow(0.96, 0.60, 0.12, 0.15)),
-        (1.45, glow(0.96, 0.60, 0.12, 0)),
+    /// **Symmetric for the same reason.** The asymmetry was borrowed from how a
+    /// glow behaves round a bright hole, and there is no bright hole here — what
+    /// is in the middle is the pointer. A band that is heavier on one side reads
+    /// as a ring lit from somewhere, which is a fact about a light source that
+    /// does not exist.
+    ///
+    /// Every stop is still zero at one end, so there is no radius at which the
+    /// alpha steps.
+    private static let profile: [(CGFloat, CGFloat)] = [
+        (1 - spread,       0),
+        (1 - spread / 2,   0.45),
+        (1,                1),
+        (1 + spread / 2,   0.45),
+        (1 + spread,       0),
     ]
 
-    private static func glow(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat) -> NSColor {
-        NSColor(srgbRed: r, green: g, blue: b, alpha: a)
-    }
+    /// **One yellow, and nothing else.** `NSColor.systemYellow` is deliberately
+    /// not used: it is a dynamic colour that shifts with the appearance, and
+    /// this is drawn over whatever is on screen rather than over the app's own
+    /// surfaces — it has to be the same gold on a white page and on a dark
+    /// terminal.
+    private static let ink = NSColor(srgbRed: 1.0, green: 0.82, blue: 0.25, alpha: 1)
 
-    /// What it looks like while he is talking: there, and no more than that.
-    private static let rest: CGFloat = 0.10
-    /// And once he has stopped. Half-opaque is loud for something riding the
-    /// pointer, which is the point — by then it is the only thing on screen
-    /// asking the question.
-    private static let alert: CGFloat = 0.50
+    /// **Nothing at all while he is talking.** It was 10%, on the argument that
+    /// a mark present and ignorable is one he learns to recognise before he ever
+    /// needs it. Victor set it to zero the same evening, and the argument does
+    /// not survive the halo being 300pt across: at that size a tenth of an
+    /// opacity is no longer a faint mark, it is a wash over everything under his
+    /// hand, all sentence, every sentence. What is left is the thing it was
+    /// always for — it arrives when he stops, which is when the question is
+    /// live.
+    private static let rest: CGFloat = 0
+    /// And once he has stopped. 15%, down from 50%: at this size and this
+    /// spread, half an opacity of gold is a lamp switched on over his work.
+    private static let alert: CGFloat = 0.15
     /// How long a silence has to last before the ring reads it as a stop rather
     /// than as him thinking mid-sentence.
     private static let patience: TimeInterval = 2
@@ -243,7 +251,7 @@ final class CaretHalo {
         ring.startPoint = CGPoint(x: 0.5, y: 0.5)
         ring.endPoint = CGPoint(x: 1, y: 1)
         let half = side / 2
-        ring.colors = profile.map { $0.1.cgColor }
+        ring.colors = profile.map { ink.withAlphaComponent($0.1).cgColor }
         ring.locations = profile.map { NSNumber(value: Double(min(1, $0.0 * core / half))) }
         return ring
     }
@@ -296,7 +304,11 @@ extension CaretHalo {
         let side = Self.side
         let cell = NSSize(width: side, height: side)
         let grounds: [NSColor] = [NSColor(white: 0.11, alpha: 1), NSColor(white: 0.97, alpha: 1)]
-        let alphas: [CGFloat] = [rest, alert]
+        // **`rest` is not shown, because `rest` is now zero** and a blank
+        // column judges nothing. What is worth looking at is the loudest it
+        // ever gets beside the profile itself at full strength, which is the
+        // only way to see the falloff at all once it is drawn at 15%.
+        let alphas: [CGFloat] = [alert, 1]
         let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(alphas.count),
                                          height: cell.height * CGFloat(grounds.count)))
         sheet.lockFocus()

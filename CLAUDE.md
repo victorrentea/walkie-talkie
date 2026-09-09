@@ -3678,9 +3678,10 @@ worth as a sample.
 
 ### The ring round the pointer, when the destination is not a place (2026-09-09)
 
-**Whenever a dictation is headed for the caret, a golden halo is drawn round the
-pointer — 10% opaque while he talks, swelling to 50% once he stops.**
-`CaretHalo.swift`, switched from `syncBorrowedGestures` beside the beacon.
+**Whenever a dictation is headed for the caret, a wide yellow halo swells round
+the pointer once he stops talking — nothing at all while he is still talking,
+15% at its loudest.** `CaretHalo.swift`, switched from `syncBorrowedGestures`
+beside the beacon.
 
 Victor's ask: *"when this mode is activated … draw a little halo ring around the
 mouse … about 100 pixels, to warn me that I need to basically pick somewhere to
@@ -3702,11 +3703,17 @@ A ring is read at the edge of vision without being read at all, and what it is
 drawn round is the thing he has to move.
 
 - **Silence is the trigger, and that is the whole design.** While he is talking
-  the paste is not imminent and the ring has nothing to ask, so it sits at 10%:
-  present, ignorable, there to be recognised later rather than read now.
-  Stopping is the signal — the sentence is about to be pasted, and it is the
-  last moment placing the caret is still free. Quiet exactly while he is busy,
-  insistent exactly when he is not.
+  the paste is not imminent and the halo has nothing to ask, so there is nothing
+  on screen. Stopping is the signal — the sentence is about to be pasted, and it
+  is the last moment placing the caret is still free. Absent exactly while he is
+  busy, present exactly when he is not.
+- **Zero at rest, and it was 10% for an hour.** The argument for 10% was that a
+  mark present and ignorable is one he learns to recognise before he ever needs
+  it. That does not survive the halo being 300pt across: at that size a tenth of
+  an opacity is not a faint mark, it is a wash over everything under his hand,
+  all sentence, every sentence. **15% at the top rather than 50%** for the same
+  reason — half an opacity of gold at this spread is a lamp switched on over his
+  work.
 - **Two seconds before it starts**, because the gaps *inside* a sentence are
   ordinary: he pauses to think mid-dictation constantly, and a ring brightening
   on every breath would be a light flashing at the corner of his eye for the
@@ -3742,6 +3749,25 @@ drawn round is the thing he has to move.
   it. It crosses Victor Addons' capture yellow and that costs nothing — that one
   is a full-screen vignette lasting a second, this is a halo round the pointer
   lasting a sentence.
+- **One colour, and symmetric — the reference picture was of a picture.** It
+  was read off Victor's image and shipped with a near-white inner rim, a gold
+  body, an amber tail and a long outer falloff against a short inner one; he
+  took all of it back the same evening (*"să nu fie multi-color. doar galben,
+  gradient similar de opacitate și înăuntru și afară"*). In that image the hues
+  are what make it read as *light*, looked at on its own; here it is drawn over
+  his actual work at a fraction of an opacity, and a second and third hue do not
+  survive being that faint — they read as a smudge with a colour cast, and on a
+  dark editor the white rim came out grey. The asymmetry went with them: it was
+  borrowed from how a glow behaves round a bright hole, and there is no bright
+  hole here — what is in the middle is the pointer. A band heavier on one side
+  reads as a ring lit from somewhere, which is a fact about a light source that
+  does not exist.
+- **`spread` is one number**, the falloff either side of the core, and doubling
+  it is the whole of *"2× mai lat … mai gros adică"*.
+- **`NSColor.systemYellow` is deliberately not used.** It is dynamic and shifts
+  with the appearance, and this is drawn over whatever is on screen rather than
+  over the app's own surfaces: it has to be the same gold on a white page and on
+  a dark terminal.
 - **100pt was answering the wrong question.** It was picked as the smallest
   circle that still reads as one round a 20pt cursor — right for a mark *on* the
   pointer, and this is not that: it is the only thing on screen saying where a
@@ -3750,12 +3776,9 @@ drawn round is the thing he has to move.
   150pt out.
 - **A radial gradient, not a stroked ring**, because the whole shape is a
   falloff and a `CAShapeLayer`'s stroke has one alpha across its width. The
-  cross-section is `CaretHalo.profile`, read off Victor's reference picture:
-  **the bright edge is the inner one** (which is how a glow round a hole behaves
-  and the opposite of a stroke, brightest in the middle of its own width), a
-  **long outer tail and a short inner one** so the hole stays clean — what is in
-  the hole is the pointer and whatever he is aiming it at — and **no stop that
-  is not zero at one end**, so there is no radius at which the alpha steps.
+  cross-section is `CaretHalo.profile`: peak at the core, zero at `core ±
+  spread`, half-way in between, and **no stop that is not zero at one end**, so
+  there is no radius at which the alpha steps.
 - **Drawn rather than shipped as that PNG**, which was the literal reading of
   *"uite o imagine de folosit"*. The picture has an opaque light-grey background
   baked into it, so over a dark editor — where this spends half its life — it
@@ -3789,10 +3812,15 @@ picture he sent*.
 
 **Two grounds, because this shape spends its life over both** and one that reads
 on a white page can vanish on a dark editor; that is exactly the fault that took
-it off blue. It paid for itself on the first run twice over — the band was so
-wide it read as a filled disc rather than a ring, and **the sheet itself was
-lying**, applying the opacity to the host view *and* to the draw, so the resting
-column came out at 1% and looked like a bug in the gradient.
+it off blue. The columns are **15% and 100%** — what he actually sees, beside
+the profile at full strength, which is the only way to judge a falloff drawn at
+a seventh of an opacity. `rest` is not a column: it is zero now, and a blank
+square judges nothing.
+
+It paid for itself on the first run twice over — the band was so wide it read as
+a filled disc rather than a ring, and **the sheet itself was lying**, applying
+the opacity to the host view *and* to the draw, so one column came out at 1% and
+looked like a bug in the gradient.
 
 **Verified end to end** by driving the real chord — ⌃⌥⌘F7 posted at a desk, the
 gesture Options+ sends — with Replace Wispr on, reading the panel back off the
