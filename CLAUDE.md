@@ -3707,13 +3707,17 @@ drawn round is the thing he has to move.
   on screen. Stopping is the signal — the sentence is about to be pasted, and it
   is the last moment placing the caret is still free. Absent exactly while he is
   busy, present exactly when he is not.
-- **Zero at rest, and it was 10% for an hour.** The argument for 10% was that a
-  mark present and ignorable is one he learns to recognise before he ever needs
-  it. That does not survive the halo being 300pt across: at that size a tenth of
-  an opacity is not a faint mark, it is a wash over everything under his hand,
-  all sentence, every sentence. **15% at the top rather than 50%** for the same
-  reason — half an opacity of gold at this spread is a lamp switched on over his
-  work.
+- **5% at rest, arrived at from both directions in one evening.** It was 10%,
+  on the argument that a mark present and ignorable is one he learns to
+  recognise before he ever needs it — a number chosen for a 100pt ring, and one
+  that does not survive the halo being 300pt across: at that size a tenth of an
+  opacity is not a faint mark, it is a wash over everything under his hand, all
+  sentence, every sentence. So Victor set it to **zero**, and then, minutes
+  later, to **five**. Zero was the overcorrection: it is the halo *arriving*
+  that says the paste is imminent, and something has to be there for the arrival
+  to be a change in — with nothing at rest the swell is a shape materialising
+  out of empty desktop, which is a bigger event than the thing it reports.
+  **15% at the top rather than 50%** for the first of those reasons.
 - **Two seconds before it starts**, because the gaps *inside* a sentence are
   ordinary: he pauses to think mid-dictation constantly, and a ring brightening
   on every breath would be a light flashing at the corner of his eye for the
@@ -3812,10 +3816,9 @@ picture he sent*.
 
 **Two grounds, because this shape spends its life over both** and one that reads
 on a white page can vanish on a dark editor; that is exactly the fault that took
-it off blue. The columns are **15% and 100%** — what he actually sees, beside
+it off blue. The columns are **5%, 15% and 100%** — the two states, beside
 the profile at full strength, which is the only way to judge a falloff drawn at
-a seventh of an opacity. `rest` is not a column: it is zero now, and a blank
-square judges nothing.
+a twentieth of an opacity.
 
 It paid for itself on the first run twice over — the band was so wide it read as
 a filled disc rather than a ring, and **the sheet itself was lying**, applying

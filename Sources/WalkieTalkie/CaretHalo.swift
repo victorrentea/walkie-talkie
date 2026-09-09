@@ -129,17 +129,23 @@ final class CaretHalo {
     /// terminal.
     private static let ink = NSColor(srgbRed: 1.0, green: 0.82, blue: 0.25, alpha: 1)
 
-    /// **Nothing at all while he is talking.** It was 10%, on the argument that
-    /// a mark present and ignorable is one he learns to recognise before he ever
-    /// needs it. Victor set it to zero the same evening, and the argument does
-    /// not survive the halo being 300pt across: at that size a tenth of an
-    /// opacity is no longer a faint mark, it is a wash over everything under his
-    /// hand, all sentence, every sentence. What is left is the thing it was
-    /// always for — it arrives when he stops, which is when the question is
-    /// live.
-    private static let rest: CGFloat = 0
-    /// And once he has stopped. 15%, down from 50%: at this size and this
-    /// spread, half an opacity of gold is a lamp switched on over his work.
+    /// **5% while he is talking** — the faintest this has ever drawn itself, and
+    /// arrived at from both directions in one evening.
+    ///
+    /// It was **10%**, on the argument that a mark present and ignorable is one
+    /// he learns to recognise before he ever needs it. That number was chosen
+    /// for a 100pt ring and did not survive the halo becoming 300pt across: at
+    /// that size a tenth of an opacity is not a faint mark, it is a wash over
+    /// everything under his hand, all sentence, every sentence. So Victor set it
+    /// to **zero** — and then, minutes later, to five.
+    ///
+    /// Zero was the overcorrection. It is the halo *arriving* that says the
+    /// paste is imminent, and something has to be there for the arrival to be a
+    /// change in — with nothing at rest, the swell is a shape materialising out
+    /// of empty desktop, which is a bigger event than the thing it reports. At
+    /// 5% it is at the edge of visible: enough to have been there, not enough to
+    /// be in the way.
+    private static let rest: CGFloat = 0.05
     private static let alert: CGFloat = 0.15
     /// How long a silence has to last before the ring reads it as a stop rather
     /// than as him thinking mid-sentence.
@@ -304,11 +310,10 @@ extension CaretHalo {
         let side = Self.side
         let cell = NSSize(width: side, height: side)
         let grounds: [NSColor] = [NSColor(white: 0.11, alpha: 1), NSColor(white: 0.97, alpha: 1)]
-        // **`rest` is not shown, because `rest` is now zero** and a blank
-        // column judges nothing. What is worth looking at is the loudest it
-        // ever gets beside the profile itself at full strength, which is the
-        // only way to see the falloff at all once it is drawn at 15%.
-        let alphas: [CGFloat] = [alert, 1]
+        // The two states there are, and then the profile at full strength —
+        // which is the only way to judge a falloff at all once it is drawn at a
+        // twentieth of an opacity.
+        let alphas: [CGFloat] = [rest, alert, 1]
         let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(alphas.count),
                                          height: cell.height * CGFloat(grounds.count)))
         sheet.lockFocus()
