@@ -1,7 +1,7 @@
 import AppKit
 
-/// **A microphone in Wispr Flow's own badge slot, on the screen the pointer is
-/// on, for as long as the relay is listening.**
+/// **A microphone on the bottom edge of the screen the pointer is on, halfway
+/// across, lit by his own voice, for as long as the relay is listening.**
 ///
 /// The chip already says a dictation is running — the pulsing 🔴 and the
 /// `Listening...` bar — and it says it *beside the cursor*, which is the one
@@ -11,30 +11,28 @@ import AppKit
 /// with it. The one state that must never be in doubt — *is it still hearing
 /// me?* — was the state with the least dependable receipt.
 ///
-/// ## It lives where he already looks, which is not where it was
+/// ## It has moved twice, and each move was a smaller claim about his eyes
 ///
 /// It spent a week as a 150pt microphone in the **top-right corner** of every
-/// display, on the reasoning that a corner is the one part of a screen nothing
-/// is ever laid out against and that big is what makes an indicator readable
-/// across a room. Both halves were true and both missed the point, which Victor
-/// made on 2026-09-07: *"emoji-ul acela de microfon vreau să îl pui în locul
-/// badge-ului lui Wispr Flow, în aceeași poziție, că mă uit mereu la el
-/// acolo"*.
+/// display, then a fortnight as a 19pt one **in Wispr Flow's own badge slot**,
+/// on the reasoning Victor gave on 2026-09-07: *"mă uit mereu la el acolo"* —
+/// the eye goes to the practised place, not the objectively visible one, so an
+/// indicator in the slot his eyes already travel to costs him nothing to read.
 ///
-/// **The eye does not go to the best place, it goes to the practised one.** He
-/// has been dictating through Wispr Flow for a year and has spent that year
-/// glancing at one specific spot in the menu bar to find out whether the
-/// microphone is open. An indicator that is objectively more visible somewhere
-/// else is still an indicator he has to remember to look for; one in the slot
-/// his eyes already travel to costs him nothing to read. That is a stronger
-/// argument than size, and it is why this went from 150pt to 19.
+/// **What that argument left out is that the slot belonged to somebody else.**
+/// Its coordinate was Wispr Flow's badge, asked of the window server on every
+/// appearance and every pointer move; when Wispr's badge stopped publishing at
+/// the end of a dictation the query answered nothing, a hardcoded fallback
+/// answered somewhere else, and the microphone moved across the bar on its own.
+/// That is the *"pleacă … ca un glonț, undeva spre sus"* Victor reported on
+/// 2026-09-09, along with where he wanted it instead — drawn on a screenshot
+/// rather than described: **84pt on the bottom edge, centred**.
 ///
-/// **The slot is measured, not written down.** `anchor(on:)` asks the window
-/// server where Wispr Flow's badge actually is on that screen and puts this one
-/// there. Hardcoding the coordinate would be hardcoding *how many status items
-/// happen to sit to its right*, which changes when anything at all is added to
-/// the menu bar — and the failure would be silent and would look exactly like
-/// this feature not working.
+/// **And the bottom edge is nobody's.** `anchor(on:)` is now `midX` and
+/// `minY + 8` of the screen and asks nothing of anything. The practised-place
+/// argument is spent along with the slot, but it has been replaced by something
+/// stronger than a habit: at 84pt, lit by his voice, it is not an indicator he
+/// has to find.
 ///
 /// ## One screen, the pointer's
 ///
@@ -49,19 +47,27 @@ import AppKit
 ///
 /// The panel already ignores mouse events, so a click was always getting
 /// through to whatever is under it. What it did not do is let him *see* what he
-/// was aiming at — and what is under it is, by construction, Wispr Flow's own
-/// badge. So the pointer arriving inside it takes it off screen until the
-/// pointer leaves: *"dacă mouse-ul merge peste el, dispare ca să pot să dau
-/// click sub el"*.
+/// was aiming at — and at 84pt on the bottom edge that is a good deal more of
+/// his screen than a badge in the menu bar was. So the pointer arriving inside
+/// it takes it off screen until the pointer leaves. He asked for it twice, a
+/// fortnight apart and in the same words: *"dacă mouse-ul merge peste el,
+/// dispare ca să pot să dau click sub el"*, and again on 2026-09-09 — *"să
+/// dispară ca să pot să dau click sub el liniștit, fără să mă stresez"*.
 ///
-/// **A slow pulse, not a blink.** 1.0 → 0.15 and back over 1.2s each way, which
-/// is the 🔴's tempo and chosen for the 🔴's reason: anything brisker is
-/// something flashing in the corner of the eye of a man trying to think, and
-/// this one is up for the whole minute a dictation to an agent lasts. What the
-/// motion buys is the difference between a live indicator and a picture of one —
-/// a frozen microphone is indistinguishable from a hung app, which is precisely
-/// the failure it is here to rule out. At 19pt the pulse is doing more work than
-/// it used to, since size is no longer carrying any of it.
+/// **A slow pulse under a voice-driven opacity.** The pulse is 1.0 → 0.5 and
+/// back over 1.2s each way — the 🔴's tempo, chosen for the 🔴's reason:
+/// anything brisker is something flashing in the corner of the eye of a man
+/// trying to think, and this one is up for the whole minute a dictation to an
+/// agent lasts. What the motion buys is the difference between a live indicator
+/// and a picture of one; a frozen microphone is indistinguishable from a hung
+/// app, which is precisely the failure it is here to rule out.
+///
+/// Over that, the panel's own alpha rides `MicRecorder.level`: bright while he
+/// is speaking, down to `quiet` when he stops — *"să fie mai opac atunci când e
+/// mai mult volum … să facă fade când nu mai pronunț nimic"*. The two answer
+/// different questions, which is why they are two opacities and not one: *is it
+/// hearing me right now*, and *is this thing still running*. The pulse got
+/// shallower when the voice arrived, since the drama is the voice's job now.
 ///
 /// **One panel per screen still**, even though only one is ever up: a window
 /// belongs to a single display (`com.apple.spaces spans-displays` is off by
@@ -78,49 +84,41 @@ import AppKit
 /// aiming at were verified.
 final class RecordingBeacon {
 
-    /// The badge, and it is deliberately tiny. Wispr Flow's own is 21 × 24
-    /// (measured, 2026-09-07); Victor asked for *"un pic mai mic"*, so the box
-    /// is 19 and the glyph inside it 16 — a hair under the thing it is standing
-    /// beside rather than a second one competing with it.
-    private static let strip: CGFloat = 19
-    private static let ink: CGFloat = 16
-    /// **It flies out of the pointer**, and the badge is where it lands.
+    /// **The size and the spot are both Victor's, drawn rather than described**
+    /// (2026-09-09): he marked a rounded square on a screenshot of his own
+    /// screen — centred on the X axis, sitting on the bottom edge — and asked
+    /// for *"și ca mărime și ca poziție"*. Measured off that mark it is 84pt a
+    /// side with about 8 under it, which is what these are.
     ///
-    /// The slot is the right place for it to *live* and the wrong place for it
-    /// to *appear*: a microphone materialising in a menu bar he is not looking
-    /// at is a thing he finds later, if at all. The gesture that started the
-    /// dictation happened under his hand, so that is where the receipt starts —
-    /// the same sentence `BindFlight` says about a window, run for a state
-    /// instead of a target: *what you just did now lives up there.*
-    ///
-    /// It **shrinks** now where it used to grow, which is the bind flight's own
-    /// direction and reads the same way: a thing under the hand becoming a mark
-    /// in the corner.
-    private static let flightDuration: CFTimeInterval = 0.45
+    /// It is four times the badge it used to be because nothing is standing
+    /// beside it any more to be polite to: in the menu bar it was a 19pt mark
+    /// among other 19pt marks, and on an empty edge that reads as a speck.
+    private static let strip: CGFloat = 84
+    private static let ink: CGFloat = 68
+    /// How far the box floats over the bottom edge of the screen. Off
+    /// `frame`, not `visibleFrame`: his Dock is not at the bottom, and the spot
+    /// he drew is the screen's own edge rather than the content area's.
+    private static let bottomInset: CGFloat = 8
+    /// **The flight out of the pointer is gone** (2026-09-09). It used to take
+    /// off from the cursor and shrink into the menu bar, on the argument that a
+    /// microphone materialising in a bar he is not looking at is a thing he
+    /// finds later, if at all. Victor reported it as noise — *"pleacă de la
+    /// mouse … ca un glonț, undeva spre sus"* — and the argument does not
+    /// survive the move: the box lands on the bottom edge at 84pt, which is not
+    /// somewhere he has to be *shown*, and a shape crossing his screen every
+    /// time he starts talking is a cost paid per sentence for a fact he learns
+    /// once. It fades up in place instead.
+    private static let fadeIn: CFTimeInterval = 0.2
     /// It waits out the red cursor target first (`CaptureFlash.markerDuration`),
-    /// because the two would otherwise bloom out of the same pixels at the same
-    /// instant and read as one confused shape. A beat later the pointer is
-    /// uncovered again and the microphone has somewhere to come *from*.
+    /// so the two do not bloom at the same instant and read as one confused
+    /// shape. It also means a dictation that ends inside that beat — under
+    /// `MicRecorder.minimumDuration`, i.e. a misfire — never puts anything up.
     private static let leadIn: CFTimeInterval = CaptureFlash.markerDuration + 0.05
-    /// The size it leaves the pointer at. Bigger than where it lands, and bigger
-    /// than the badge is by enough to be seen leaving: a 19pt mark that starts
-    /// at 19pt does not read as having travelled.
-    private static let takeoff: CGFloat = 34
     /// How far the pointer has to be from the badge before it comes back — the
     /// badge's own box plus this. A bare containment test flickers it on and off
     /// while he works along the menu bar; a margin makes leaving a decision
     /// rather than a jitter.
     private static let clearance: CGFloat = 8
-
-    /// Where Wispr Flow's badge sits when it cannot be found — because it is not
-    /// running, or because it has stopped publishing a window.
-    ///
-    /// Measured from the real thing on all four of Victor's displays: 513pt from
-    /// the right edge on each external monitor and 532 on the built-in, i.e. it
-    /// is the same handful of status items on every bar. 513 is the one that is
-    /// right three times out of four, and being a few points off in a fallback
-    /// nothing is expected to reach is the correct amount of wrong.
-    private static let fallbackInsetFromRight: CGFloat = 513
 
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
     private var recording = false
@@ -134,6 +132,12 @@ final class RecordingBeacon {
     /// stays on one screen costs a comparison and nothing else.
     private var shownOn: CGDirectDisplayID?
     private var hiddenByPointer = false
+    /// **How loud he is, asked of whoever is holding the microphone.** A closure
+    /// rather than a reference to `MicRecorder`, for the reason every other seam
+    /// in this app is a closure: the beacon marks *the relay is listening*, and
+    /// what is listening is the app delegate's business, not this class's.
+    var level: (() -> Float)?
+    private var levelTimer: Timer?
 
     func start() {
         // Displays come and go — a projector at a workshop, the desk monitors
@@ -147,6 +151,7 @@ final class RecordingBeacon {
     func stop() {
         if let o = observer { NotificationCenter.default.removeObserver(o) }
         observer = nil
+        stopWatchingLevel()
         releasePointer()
         recording = false
         for (_, panel) in panels { panel.orderOut(nil) }
@@ -160,7 +165,7 @@ final class RecordingBeacon {
     func setRecording(_ on: Bool) {
         guard recording != on else { return }
         recording = on
-        guard on else { flown = false; releasePointer(); sync(); return }
+        guard on else { flown = false; stopWatchingLevel(); releasePointer(); sync(); return }
         // Nothing on screen for the length of the cursor mark. A dictation that
         // ends inside that beat — under `MicRecorder.minimumDuration`, i.e. a
         // misfire — never puts anything up at all, which is the correct amount
@@ -243,7 +248,7 @@ final class RecordingBeacon {
             // the sentence is *this gesture, under your hand, now lives up
             // there*, which is only true of the bar on the screen the hand is on.
             if let cursor = cursor, NSMouseInRect(cursor, screen.frame, false) {
-                fly(panel, on: screen, from: cursor)
+                appear(panel, on: screen)
             } else {
                 panel.orderOut(nil)
             }
@@ -255,88 +260,40 @@ final class RecordingBeacon {
         applyPointer()
     }
 
-    /// Put the panel down at the pointer, then animate it whole into the badge
-    /// slot at its final size.
-    ///
-    /// `setFrame` on the animator rather than a layer transform: the panel is
-    /// what has to end up in the slot, and animating a layer inside a window
-    /// that is already there would fly a picture across a screen the window is
-    /// invisibly covering the whole time.
-    private func fly(_ panel: NSPanel, on screen: NSScreen, from cursor: NSPoint) {
-        let small = Self.takeoff
-        panel.setFrame(NSRect(x: (cursor.x - small / 2).rounded(),
-                              y: (cursor.y - small / 2).rounded(),
-                              width: small, height: small), display: false)
+    /// Put the panel where it lives and bring it up out of nothing. The alpha
+    /// is handed to `watchLevel` the moment the fade is over, so the first thing
+    /// he says lights it.
+    private func appear(_ panel: NSPanel, on screen: NSScreen) {
+        panel.setFrame(Self.anchor(on: screen), display: false)
         panel.alphaValue = 0
         panel.orderFront(nil)
         pulse(panel)
-        let target = Self.anchor(on: screen)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Self.flightDuration
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = Self.fadeIn
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
-            panel.animator().setFrame(target, display: true)
-        }
+            panel.animator().alphaValue = Self.quiet
+        }, completionHandler: { [weak self] in self?.watchLevel(panel) })
     }
 
     private func place(_ panel: NSPanel, on screen: NSScreen) {
         panel.setFrame(Self.anchor(on: screen), display: false)
     }
 
-    /// **Wispr Flow's badge on this screen, asked of the window server.**
+    /// **The bottom edge, halfway across.** A constant of the screen and nothing
+    /// else — which is the second reason for the move, under Victor's own.
     ///
-    /// It publishes one small window per display at menu-bar height
-    /// (`layer` 25, 21 × 24 or so). Both halves of the filter matter: the owner
-    /// name alone would also match its 512 × 586 `Status` panel, and a size
-    /// filter alone would match half the menu bar.
-    ///
-    /// `CGWindowListCopyWindowInfo` speaks **CG global coordinates** — y
-    /// downwards from the top-left of the primary display — and everything this
-    /// class does is in Cocoa's, so the flip is the load-bearing line. It agrees
-    /// with Cocoa only on the primary screen, which is the same trap
-    /// `TerminalBinding.cocoaRect` is written under and which stays invisible
-    /// until a second monitor is plugged in.
-    ///
-    /// Bounds are readable without Screen Recording; only the *pixels* need it,
-    /// and nothing here reads pixels.
+    /// The slot it used to aim at was *Wispr Flow's badge*, asked of the window
+    /// server on every appearance and on every pointer move. That made this
+    /// badge's home a property of another app's menu-bar item: when Wispr's
+    /// badge went away at the end of a dictation the query answered nothing, the
+    /// hardcoded fallback answered somewhere else, and the microphone jumped
+    /// across the bar for no reason he could see. Nothing here asks anybody
+    /// anything now.
     private static func anchor(on screen: NSScreen) -> NSRect {
         let side = strip
-        // Under the menu bar's own baseline: the badge is centred in the bar's
-        // height rather than hung off `visibleFrame`, which is the bar's bottom
-        // edge and would put a 19pt mark half into the content below it.
-        let barTop = screen.frame.maxY
-        let barBottom = screen.visibleFrame.maxY
-        let centred = barBottom + (barTop - barBottom - side) / 2
-
-        if let slot = wisprBadge(on: screen) {
-            return NSRect(x: (slot.midX - side / 2).rounded(),
-                          y: (slot.midY - side / 2).rounded(),
-                          width: side, height: side)
-        }
-        return NSRect(x: (screen.frame.maxX - fallbackInsetFromRight - side / 2).rounded(),
-                      y: centred.rounded(), width: side, height: side)
-    }
-
-    private static func wisprBadge(on screen: NSScreen) -> NSRect? {
-        let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        guard let windows = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]]
-        else { return nil }
-        // CG's origin is the top-left of the *primary* display — the one whose
-        // Cocoa frame starts at zero — not of the union of all of them.
-        let primary = NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens.first
-        guard let flipAbout = primary?.frame.maxY else { return nil }
-
-        for w in windows {
-            guard let owner = w[kCGWindowOwnerName as String] as? String,
-                  owner.localizedCaseInsensitiveContains("wispr"),
-                  let layer = w[kCGWindowLayer as String] as? Int, layer > 0,
-                  let b = w[kCGWindowBounds as String] as? [String: CGFloat],
-                  let x = b["X"], let y = b["Y"], let w0 = b["Width"], let h0 = b["Height"],
-                  w0 <= 60, h0 <= 60 else { continue }
-            let rect = NSRect(x: x, y: flipAbout - y - h0, width: w0, height: h0)
-            if NSMouseInRect(NSPoint(x: rect.midX, y: rect.midY), screen.frame, false) { return rect }
-        }
-        return nil
+        return NSRect(x: (screen.frame.midX - side / 2).rounded(),
+                      y: (screen.frame.minY + bottomInset).rounded(),
+                      width: side, height: side)
     }
 
     private func makePanel(id: CGDirectDisplayID) -> NSPanel {
@@ -384,13 +341,50 @@ final class RecordingBeacon {
         layer.removeAnimation(forKey: "beacon")
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 1.0
-        fade.toValue = 0.15
+        fade.toValue = 0.5
         fade.duration = 1.2
         fade.autoreverses = true
         fade.repeatCount = .infinity
         fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer.add(fade, forKey: "beacon")
     }
+
+    /// **The panel's own opacity follows his voice; the pulse underneath it says
+    /// the app is alive.** Two opacities multiplied, and they answer two
+    /// different questions — *is it hearing me right now* and *is this thing
+    /// still running*. Victor asked for both in one sentence: *"să se aprindă,
+    /// să fie mai opac, atunci când e mai mult volum pe audio. Să facă fade când
+    /// nu mai pronunț nimic"*.
+    ///
+    /// **It never goes out.** Silence lands it at `quiet`, not at zero: the one
+    /// state this exists to rule out is a microphone that has stopped hearing
+    /// him, and an indicator that disappears when he pauses is indistinguishable
+    /// from one that died. The fade is a dimming, not an exit.
+    ///
+    /// Set flat rather than animated. `MicRecorder.level` is already smoothed on
+    /// the audio thread with an attack and a release chosen for the eye, and a
+    /// second animation over it would only add lag to a light whose whole job is
+    /// to be simultaneous with a voice.
+    private func watchLevel(_ panel: NSPanel) {
+        levelTimer?.invalidate()
+        guard let level = level else { panel.alphaValue = 1; return }
+        let tick = Timer(timeInterval: 1.0 / 20, repeats: true) { [weak self, weak panel] _ in
+            guard let self = self, let panel = panel, self.recording else { return }
+            let loud = CGFloat(max(0, min(1, level())))
+            panel.alphaValue = Self.quiet + (1 - Self.quiet) * loud
+        }
+        levelTimer = tick
+        RunLoop.main.add(tick, forMode: .common)
+    }
+
+    private func stopWatchingLevel() {
+        levelTimer?.invalidate()
+        levelTimer = nil
+    }
+
+    /// What silence looks like. Dim enough that a pause reads as a pause, bright
+    /// enough to still be a light — see `watchLevel`.
+    private static let quiet: CGFloat = 0.35
 
     private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
         screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID

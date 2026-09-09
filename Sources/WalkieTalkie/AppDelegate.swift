@@ -742,6 +742,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         picker.start()
         music.start()
+        // The same seam the chip's warmth ramp is fed through one line up, and
+        // the same reason: the beacon lights on his voice, and which recorder is
+        // holding the microphone is this delegate's business, not its own.
+        beacon.level = { [weak self] in self?.mic.level ?? 0 }
         beacon.start()
 
         // Nothing is bound yet, and a marker left by a relay that was killed

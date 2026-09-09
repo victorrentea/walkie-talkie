@@ -64,6 +64,35 @@ final class MicRecorder {
     }
     private var voiced: TimeInterval = 0
 
+    /// **How loud he is right now, 0…1** — the readout `RecordingBeacon` lights
+    /// on, updated on the audio thread with every buffer.
+    ///
+    /// Deliberately *not* a second meter: it is the same per-hop RMS and the
+    /// same adaptive floor `voiced` is counted against, read as a distance
+    /// rather than as a yes/no. So the beacon brightens on exactly what the
+    /// transcript will call speech — a fan that never clears the bar never
+    /// lights it either, on the built-in microphone or on the receiver, which is
+    /// the whole reason the floor is tracked instead of fixed.
+    ///
+    /// **Fast up, slow down**, and that asymmetry is the point: a syllable has
+    /// to reach full brightness inside the buffer it arrives in or the light
+    /// lags his voice visibly, while a light that drops as fast as it rises
+    /// strobes on the gaps *inside* a word. 35% of the way down per buffer is a
+    /// tail of roughly a quarter-second — long enough to ride through a
+    /// consonant, short enough that the fade at the end of a sentence reads as
+    /// him having stopped.
+    var level: Float {
+        lock.lock(); defer { lock.unlock() }
+        return live
+    }
+    private var live: Float = 0
+    /// The dynamic range the light is spread over, in dB above the voiced bar.
+    /// 18 dB is ordinary speech's own span at a desk: under it the loud half of
+    /// a sentence would sit pinned at full brightness with nothing left to say.
+    private static let levelRange: Float = 18
+    /// How much of the gap to the new value a quieter buffer closes. See `level`.
+    private static let levelRelease: Float = 0.35
+
     /// The noise floor this recording is being judged against, tracked rather
     /// than fixed.
     ///
@@ -192,6 +221,7 @@ final class MicRecorder {
         // commit that added the meter and found on the forward button the same
         // afternoon (2026-09-07); the button was innocent.
         voiced = 0
+        live = 0
         noiseFloor = -1
         isRecording = true
         Log.info("mic: recording through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
@@ -278,6 +308,9 @@ final class MicRecorder {
         guard count >= hop else { return }
 
         var seconds: TimeInterval = 0
+        // The buffer's loudest hop, not its average: a buffer is a fifth of a
+        // second at most and a syllable inside it should light the beacon whole.
+        var loudest: Float = 0
         lock.lock()
         var floor = noiseFloor
         for start in stride(from: 0, through: count - hop, by: hop) {
@@ -291,9 +324,12 @@ final class MicRecorder {
             else { floor += (rms - floor) * 0.02 }             // slow release
             let bar = max(Self.voicedAbsoluteFloor, floor * pow(10, Self.voicedOverFloor / 20))
             if rms > bar { seconds += Double(hop) / 16000 }
+            let over = 20 * log10(rms / bar)
+            loudest = max(loudest, min(1, max(0, over / Self.levelRange)))
         }
         noiseFloor = floor
         voiced += seconds
+        live = loudest > live ? loudest : live + (loudest - live) * Self.levelRelease
         lock.unlock()
     }
 }

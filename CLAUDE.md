@@ -4484,11 +4484,11 @@ answered it, rides the pointer and is hidden the moment he types.
   next `cd`. `cursor color` is the one per-tab property nothing else claims, and
   is where that idea would have to go if the status line ever proves not enough.
 
-## The beacon: a microphone in Wispr Flow's own badge slot (2026-09-07)
+## The beacon: a microphone on the bottom edge, lit by his voice (2026-09-09)
 
-**On the screen the pointer is on, 19pt, in the menu bar where Wispr Flow puts
-its own badge, pulsing 🎙️ for exactly as long as the microphone is open**
-(`RecordingBeacon.swift`) — and it flies there out of the pointer.
+**On the screen the pointer is on, 84pt, centred on the bottom edge, pulsing 🎙️
+for exactly as long as the microphone is open — and brightening with his voice**
+(`RecordingBeacon.swift`).
 
 The chip already says this — the pulsing 🔴 and the `Listening...` bar — and it
 says it *beside the cursor*, which is the one place Victor is not looking while
@@ -4497,7 +4497,14 @@ full-screen window up, and macOS hides the pointer the moment he touches the
 keyboard, taking the chip with it. The state that must never be in doubt — *is it
 still hearing me?* — had the least dependable receipt in the app.
 
-### It moved from a 150pt corner, and the reason is not aesthetics
+### It has moved twice, and the second move took the slot back off Wispr
+
+**The two subsections below are the badge-slot era, 2026-09-07 to 09-09**, and
+they are kept because the argument in the first one is still the best thing
+written down here about where an indicator belongs. What ended it is at the
+bottom of them.
+
+#### It moved from a 150pt corner, and the reason is not aesthetics
 
 It spent a week as a **150pt microphone in the top-right corner of every
 display**, on two arguments that are both true: a corner is the one part of a
@@ -4535,6 +4542,62 @@ size, and it is why this went from 150pt to 19.
 - **Bounds need no Screen Recording permission**; only pixels do, and nothing
   here reads pixels.
 
+#### And then off Wispr's badge entirely (2026-09-09)
+
+**The practised-place argument was right and still lost, because the slot
+belonged to somebody else.** `anchor(on:)` asked the window server for Wispr
+Flow's badge on every appearance *and every pointer move*. When Wispr's badge
+stopped publishing — which it does at the end of a dictation — the query answered
+nothing, the 513pt fallback answered somewhere else, and the microphone moved
+across the bar on its own. Victor: *"uneori pleacă de la mouse după ce termin
+dictarea și începe transcrierea … ca un glonț, undeva spre sus"*.
+
+**Where it went instead was drawn, not described.** He marked a rounded square on
+a screenshot of his own screen and said *"și ca mărime și ca poziție"*: centred
+on the X axis, sitting on the bottom edge. Measured off the mark — **84pt a side,
+8pt of air under it**, `screen.frame.midX` and `frame.minY`, not `visibleFrame`
+(his Dock is not at the bottom, and the edge he drew is the screen's).
+
+- **It asks nothing of anybody now**, which is the whole repair: two numbers off
+  `NSScreen` cannot answer differently because another app closed a window.
+- **84pt because nothing is standing beside it to be polite to.** In the menu bar
+  it was a 19pt mark among 19pt marks; on an empty edge that reads as a speck.
+- **The flight is gone.** It used to take off from the cursor and shrink into the
+  bar — see *What did not change*, which no longer says so. The argument for it
+  was that a microphone materialising in a menu bar is a thing he finds later, if
+  at all; at 84pt on the bottom edge there is nothing to find, and a shape
+  crossing the screen every time he starts talking is a cost paid per sentence
+  for a fact learned once. It fades up in place over 0.2s.
+
+#### And his voice is what lights it
+
+**Two opacities multiplied, answering two questions.** The layer keeps the slow
+pulse — *is this thing still running* — and the panel's own alpha rides
+`MicRecorder.level`: *is it hearing me right now*. Victor asked for both in one
+breath: *"să se aprindă, să fie mai opac atunci când e mai mult volum pe audio.
+Să facă fade când nu mai pronunț nimic"*.
+
+- **It never goes out.** Silence lands it at 0.35, not at zero. The one state
+  this exists to rule out is a microphone that has stopped hearing him, and an
+  indicator that disappears when he pauses is indistinguishable from one that
+  died. The fade is a dimming, not an exit.
+- **The pulse got shallower** — 1.0 → 0.5 rather than 1.0 → 0.15 — since the
+  drama is the voice's job now, and two deep swings multiplied would black it out
+  on every trough of a quiet sentence.
+- **The level is not a second meter.** `MicRecorder.level` is the same per-hop
+  RMS and the same adaptive noise floor `voicedSeconds` is counted against, read
+  as a distance over the voiced bar rather than as a yes/no, spread over 18 dB.
+  So the beacon brightens on exactly what the transcript will call speech: a fan
+  that never clears the bar never lights it either, on the built-in microphone or
+  on the DJI receiver — which is what the tracked floor is for (`InputDevice`:
+  same room, 16552 against 855).
+- **Fast up, slow down.** A syllable reaches full brightness inside the buffer it
+  arrives in, and a quieter buffer closes 35% of the gap — a tail of about a
+  quarter-second, long enough to ride through a consonant and short enough that
+  the fade at the end of a sentence reads as him having stopped. Smoothed on the
+  audio thread, set flat by a 20 Hz timer: a second animation over it would only
+  add lag to a light whose whole job is to be simultaneous with a voice.
+
 ### One screen, the pointer's — and it gets out of the way
 
 It was every display at once, which is right for a corner nobody clicks and wrong
@@ -4561,26 +4624,21 @@ and taken down with it.
 
 ### What did not change
 
-- **It flies out of the pointer**, 0.55s after the microphone opens
-  (`CaptureFlash.markerDuration` plus a beat, so the red cursor target is not
-  blooming out of the same pixels at the same instant). The slot is the right
-  place for it to *live* and the wrong place for it to *appear*: a microphone
-  materialising in a menu bar he is not looking at is a thing he finds later, if
-  at all. It **shrinks** now where it used to grow — 34pt to 19 — which is
-  `BindFlight`'s own direction and reads the same way.
-- **A dictation that ends inside that beat never puts anything up at all**, which
-  is the correct ceremony for a gesture that did not happen.
-- **The pulse**: 1.0 → 0.15 and back over 1.2s each way, the 🔴's tempo for the
-  🔴's reason. At 19pt it is doing more work than it used to, since size is no
-  longer carrying any of it.
+- **It still waits 0.55s** before showing anything (`CaptureFlash.markerDuration`
+  plus a beat, so the red cursor target is not blooming at the same instant), and
+  **a dictation that ends inside that beat never puts anything up at all** —
+  which is the correct ceremony for a gesture that did not happen. Only the
+  flight that used to follow that wait is gone.
+- **The pulse's tempo**: 1.2s each way, the 🔴's, for the 🔴's reason. Its depth
+  changed with the voice arriving — see above.
 - **One panel per screen** even though only one is up: a window belongs to a
   single display and a panel built for one keeps that display's scale and Space
   behaviour. `.statusBar` level and `fullScreenAuxiliary`, so a full-screen
   window does not bury it and it draws *over* the bar rather than under it.
 - **Never in a screenshot** (`sharingType = .none`) — the relay photographs the
   screen during the very dictation this marks. So it cannot be checked with a
-  screenshot; what is checkable is the geometry, which is how both this and the
-  slot it aims at were verified.
+  screenshot; what is checkable is the geometry, through
+  `CGWindowListCopyWindowInfo`.
 - **`syncBorrowedGestures` is still the switch**, on `listening` rather than
   `live`: it answers *is it hearing me?*, and where the words go is the chip's
   question.
