@@ -54,20 +54,28 @@ import AppKit
 /// dispare ca să pot să dau click sub el"*, and again on 2026-09-09 — *"să
 /// dispară ca să pot să dau click sub el liniștit, fără să mă stresez"*.
 ///
-/// **A slow pulse under a voice-driven opacity.** The pulse is 1.0 → 0.5 and
-/// back over 1.2s each way — the 🔴's tempo, chosen for the 🔴's reason:
-/// anything brisker is something flashing in the corner of the eye of a man
-/// trying to think, and this one is up for the whole minute a dictation to an
-/// agent lasts. What the motion buys is the difference between a live indicator
-/// and a picture of one; a frozen microphone is indistinguishable from a hung
-/// app, which is precisely the failure it is here to rule out.
+/// **The voice is the only thing that moves it.** It rests, still, at `quiet`,
+/// and rides `MicRecorder.level` up to full while he speaks — *"by default not
+/// blink, but stay there very transparent … and then when I speak, blink in sync
+/// with the volume of my voice, so that I can see when I am actually being
+/// recorded"* (2026-09-09).
 ///
-/// Over that, the panel's own alpha rides `MicRecorder.level`: bright while he
-/// is speaking, down to `quiet` when he stops — *"să fie mai opac atunci când e
-/// mai mult volum … să facă fade când nu mai pronunț nimic"*. The two answer
-/// different questions, which is why they are two opacities and not one: *is it
-/// hearing me right now*, and *is this thing still running*. The pulse got
-/// shallower when the voice arrived, since the drama is the voice's job now.
+/// There **was** a second opacity under this one: a free-running 1.0 → 0.5 pulse
+/// at 1.2s each way, the 🔴's tempo, multiplied by the voice-driven alpha. The two
+/// were said to answer different questions — *is it hearing me right now* and *is
+/// this thing still running* — and the pulse was there because a frozen microphone
+/// is indistinguishable from a hung app. That argument is what `quiet` is now set
+/// from, and it is why the pulse could go: **the voice answers both questions, and
+/// answers the second one better.** A timer-driven blink proves a timer is running;
+/// it proves nothing about the audio path, and a beacon blinking cheerfully over a
+/// dead microphone is the exact failure it claimed to rule out. One that lifts when
+/// he speaks cannot be faked by anything except a working capture — and it is
+/// checked at the only moment the answer matters, which is while he is talking.
+///
+/// What it costs is the resting state: still, and dim enough to be ignorable.
+/// `quiet` is therefore set to **the dimmest the old blink already went** (0.35
+/// alpha × the pulse's 0.5 floor), so nothing on screen got brighter — the light
+/// simply stopped moving when nobody is talking.
 ///
 /// **One panel per screen still**, even though only one is ever up: a window
 /// belongs to a single display (`com.apple.spaces spans-displays` is off by
@@ -224,7 +232,6 @@ final class RecordingBeacon {
         } else {
             place(panel, on: screen)
             panel.orderFront(nil)
-            pulse(panel)
         }
         shownOn = id
         hiddenByPointer = over
@@ -267,7 +274,6 @@ final class RecordingBeacon {
         panel.setFrame(Self.anchor(on: screen), display: false)
         panel.alphaValue = 0
         panel.orderFront(nil)
-        pulse(panel)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Self.fadeIn
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -333,28 +339,12 @@ final class RecordingBeacon {
         return panel
     }
 
-    /// Restarted rather than resumed on every appearance, so a badge that comes
-    /// back after a display change or after the pointer moved off it starts from
-    /// full strength instead of wherever the last cycle left the layer.
-    private func pulse(_ panel: NSPanel) {
-        guard let layer = panel.contentView?.layer else { return }
-        layer.removeAnimation(forKey: "beacon")
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1.0
-        fade.toValue = 0.5
-        fade.duration = 1.2
-        fade.autoreverses = true
-        fade.repeatCount = .infinity
-        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        layer.add(fade, forKey: "beacon")
-    }
-
-    /// **The panel's own opacity follows his voice; the pulse underneath it says
-    /// the app is alive.** Two opacities multiplied, and they answer two
-    /// different questions — *is it hearing me right now* and *is this thing
-    /// still running*. Victor asked for both in one sentence: *"să se aprindă,
-    /// să fie mai opac, atunci când e mai mult volum pe audio. Să facă fade când
-    /// nu mai pronunț nimic"*.
+    /// **The panel's opacity is his voice, and nothing else.** One opacity now,
+    /// not two multiplied: *"să se aprindă, să fie mai opac, atunci când e mai
+    /// mult volum pe audio. Să facă fade când nu mai pronunț nimic"*, and then
+    /// *"by default not blink … and then when I speak, blink in sync with the
+    /// volume of my voice"*. The pulse that used to run underneath it is gone —
+    /// see the type comment for why the voice is the better liveness proof.
     ///
     /// **It never goes out.** Silence lands it at `quiet`, not at zero: the one
     /// state this exists to rule out is a microphone that has stopped hearing
@@ -382,9 +372,14 @@ final class RecordingBeacon {
         levelTimer = nil
     }
 
-    /// What silence looks like. Dim enough that a pause reads as a pause, bright
-    /// enough to still be a light — see `watchLevel`.
-    private static let quiet: CGFloat = 0.35
+    /// What silence looks like: still, and as faint as this badge has ever been.
+    ///
+    /// **0.175 is not a new number** — it is exactly where the old pulse's floor
+    /// already took it (`quiet` 0.35 × the fade's 0.5), i.e. the dimmest this has
+    /// ever drawn itself. Asked for "as transparent as it's minimally now", that
+    /// is the honest reading: keep the faintest frame the blink used to pass
+    /// through and stop passing through the brighter ones.
+    private static let quiet: CGFloat = 0.175
 
     private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
         screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
