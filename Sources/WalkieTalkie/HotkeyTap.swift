@@ -1247,8 +1247,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // it. The bind is **not** gated on the mode — it is the one gesture
             // that says where words go, and it has to work whichever way the
             // next sentence is headed. Outside the mode and with nothing held
-            // the chord is handed on rather than eaten, so Options+ can be
-            // pointed at something else without this app quietly eating it.
+            // the same click means the same sentence in the other engine's
+            // hands: it types Wispr Flow's hands-free chord — see
+            // `postWisprHandsFree`. So the chord is eaten in every branch now,
+            // where it used to be handed on when nothing here wanted it.
             case VK_F7:
                 // Our own bookkeeping can go stale — a release this tap never
                 // saw would leave the button held for good and read every plain
@@ -1260,8 +1262,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
                     return nil
                 }
-                guard replaceWispr else { return Unmanaged.passUnretained(event) }
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                guard replaceWispr else {
+                    Log.info("🎙️ forward button — Wispr Flow's hands-free toggle")
+                    Self.postWisprHandsFree()
+                    return nil
+                }
                 DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
                 return nil
 
@@ -1364,6 +1370,71 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
+    /// **Wispr Flow's hands-free toggle, typed by this app.** The forward button
+    /// clicked outside Replace Wispr starts Wispr's dictation, and clicked again
+    /// ends it. The chord is `fn ⌃ Space` — what Wispr calls `popo` and stores
+    /// as `"49+59+63"` under `prefs.user.shortcuts` in `~/Library/Application
+    /// Support/Wispr Flow/config.json`. **That file is the source, not the
+    /// settings screen**, which draws the same three keys and says nothing about
+    /// what it matches on.
+    ///
+    /// **Wispr cannot be given the button directly, and that is the whole reason
+    /// this exists.** The button is diverted inside the mouse (*The side buttons
+    /// speak in function keys*), so Wispr's hotkey recorder never sees a mouse
+    /// button at all; and the ⌃⌥⌘F-key Options+ synthesises instead is refused
+    /// too — *"Shortcut must include a modifier key or a valid mouse button"*,
+    /// on 🔽 → (⌃⌥⌘F5), a chord nothing here claims and therefore one that does
+    /// reach it. So Wispr keeps a keyboard shortcut recorded by hand, and the
+    /// button arrives at it through this app.
+    ///
+    /// **The two modifiers go down as keys, not merely as flags on the Space.**
+    /// Wispr stores the chord as three *keycodes* — 49 Space, 59 Control, 63 fn
+    /// — which reads like a listener watching keys go down, the way `uiohook`
+    /// reports them, and a bare Space wearing the flags might never look pressed
+    /// to it. Four extra events buy correctness under either reading.
+    ///
+    /// It waits the Options+ chord out first for the reason `postReturn`
+    /// documents at length: this runs in the tap callback for F7, the one
+    /// instant ⌃⌥⌘ are on the wire, and the window server merges them into
+    /// anything posted then — ⌃⌥⌘ fn Space is not the chord Wispr listens for.
+    static func postWisprHandsFree() {
+        DispatchQueue.global().async {
+            usleep(settleForOptionsPlus)
+            let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            var waited = 0
+            while !CGEventSource.flagsState(.combinedSessionState).intersection(watched).isEmpty,
+                  waited < 40 {
+                usleep(5_000)
+                waited += 1
+            }
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = backButtonStamp
+            let held: CGEventFlags = [.maskSecondaryFn, .maskControl]
+
+            // A modifier going down or coming up is a `flagsChanged` carrying
+            // the state the keyboard is *left in*, not the key's own bit.
+            func modifier(_ key: CGKeyCode, leaving state: CGEventFlags) {
+                guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+                else { return }
+                e.type = .flagsChanged
+                e.flags = state
+                e.post(tap: .cghidEventTap)
+            }
+
+            modifier(VK_FN, leaving: .maskSecondaryFn)
+            modifier(VK_CONTROL, leaving: held)
+            if let down = CGEvent(keyboardEventSource: source, virtualKey: VK_SPACE, keyDown: true),
+               let up   = CGEvent(keyboardEventSource: source, virtualKey: VK_SPACE, keyDown: false) {
+                down.flags = held
+                up.flags = held
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
+            modifier(VK_CONTROL, leaving: .maskSecondaryFn)
+            modifier(VK_FN, leaving: [])
+        }
+    }
+
 
     /// Is this pid the mouse remapper — i.e. is that Return a button press in
     /// disguise?
@@ -1414,4 +1485,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// with room over it, and far below what a finger notices between the click
     /// and the prompt going.
     private static let settleForOptionsPlus: UInt32 = 45_000
+
+    /// The three keys of Wispr Flow's hands-free chord, written in the same
+    /// numbers Wispr's own config stores them in: `"49+59+63"`.
+    private static let VK_SPACE:   CGKeyCode = 49
+    private static let VK_CONTROL: CGKeyCode = 59
+    private static let VK_FN:      CGKeyCode = 63
 }

@@ -2485,10 +2485,49 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 | 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away |
 | 🔼 ↑ | ⌃⌥⌘F8 | dictate at a session that does not exist yet |
 | ◀️ held, then 🔼 | ⌃⌥⌘F7 | **bind** the terminal in front — no toggle |
-| 🔼 | ⌃⌥⌘F7 | dictate at the caret — **only while Replace Wispr is ticked** |
+| 🔼 | ⌃⌥⌘F7 | dictate at the caret: this app's microphone with Replace Wispr ticked, **Wispr Flow's** without it |
 | 🔽 ↓ | ⌃⌥⌘F12 | unbind — the menu's Disconnect |
 | 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
 | 🔼 ↓ · 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F9 · F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
+
+#### The forward click starts Wispr Flow too, because Wispr cannot take the button (2026-09-09)
+
+**The click means one sentence in both modes.** With Replace Wispr ticked it
+opens this app's own microphone at the caret, as it always did; unticked, the
+caret belongs to Wispr Flow and the same click types **Wispr's** hands-free
+chord instead of being handed on. `postWisprHandsFree`.
+
+**The chord is `fn ⌃ Space`, and it was read out of Wispr's own config rather
+than off its settings screen** — `prefs.user.shortcuts` in `~/Library/
+Application Support/Wispr Flow/config.json`, where it is stored as
+`"49+59+63": "popo"`. The same file names the others, which is worth knowing the
+next time one of them is wanted: `"54+61": "ptt"` (push to talk, ⌘→ held with
+⌥→), `"178+59+63": "lens"` (Command Mode), `"53+59": "dismiss"`.
+
+**Why the app has to be in the middle at all.** Victor asked Wispr for the
+button directly first, and it cannot have it:
+
+- The button is diverted **inside the mouse** and never reaches the Mac as a
+  button — the measurement above — so Wispr's recorder has nothing to record.
+- The ⌃⌥⌘F-key Options+ synthesises instead is refused as well: *"Shortcut must
+  include a modifier key or a valid mouse button"*, tried on **🔽 →** (⌃⌥⌘F5), a
+  free row that this tap provably passes through, so the chord did reach Wispr
+  and was turned down there. The likely reason is the one measured for
+  `postReturn`: Options+ never *presses* ⌃⌥⌘, it stamps them into the F-key's
+  flags, so anything reading live modifier state sees a bare function key.
+
+So Wispr keeps a shortcut recorded by hand at the keyboard, and the button
+reaches it through here.
+
+**The modifiers are pressed as keys, not just stamped as flags.** Wispr stores
+the chord as three keycodes — 49 Space, 59 Control, 63 fn — which reads like a
+listener watching keys go down rather than one reading an event's flags. So the
+fn and the Control go out as real `flagsChanged` events around the Space. Four
+events instead of two, and correct under either reading.
+
+**And it waits `settleForOptionsPlus` first**, exactly like `postReturn` and for
+exactly that reason: it is posted from the tap callback for F7, while Options+
+has ⌃⌥⌘ on the wire, and ⌃⌥⌘ fn Space is not what Wispr is listening for.
 
 #### The bind is a chord again: hold the left button, click the forward one (2026-09-09)
 
