@@ -2445,18 +2445,34 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 | 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
 | 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
 
-**The posted Return has to have its flags wiped, and that cost a morning
-(2026-09-09).** `postReturn` runs inside the tap callback for the chord's own
-F6 — i.e. while Options+ still holds ⌃⌥⌘ down — and a `CGEvent` born from a
-`.hidSystemState` source inherits whatever modifiers are held at that instant.
-Measured with a listen-only tap: the Return reached the front app as
-`code=36 mods=CTRL+OPT+CMD`, which Terminal passes to Claude Code as ⌥⏎, i.e. a
-**newline in the prompt instead of the send** — Victor's *"îmi dă un fel de
-carriage return, nu intră complet"*. Setting `flags = []` on both halves brings
-it back as a bare Return (verified the same way, `mods=none`). The remapper that
-typed this Return until that morning, `KeySimulator` in victor-macos-addons,
-never had the bug because it assigns `flags` explicitly. Anything else this app
-posts *while a chord is held* has the same trap waiting.
+**The posted Return has to wait for the chord to wear off, and it took three
+tries to get right (2026-09-09).** `postReturn` runs inside the tap callback for
+the chord's own F6 — the one instant Options+ has ⌃⌥⌘ on the wire — and the
+Return reached the front app wearing them: `code=36 mods=CTRL+OPT+CMD` on a
+listen-only tap. Terminal hands that to Claude Code as ⌥⏎, so the button stopped
+sending the prompt and started inserting blank lines instead. Two fixes were
+measured before the one that holds:
+
+- **Clearing the event's own flags is not enough.** `down.flags = []` came out
+  clean against a *synthesised* chord and dirty against the real button. While
+  the modifiers are live the window server merges the current state back into a
+  posted key whatever the event says — the trap
+  `KeySimulator.waitForModifiersReleased` exists for in victor-macos-addons.
+- **Asking the system to wait for them is not enough either**, and this is the
+  part that is genuinely surprising: `CGEventSource.flagsState` answers *clean*
+  through the whole window. **Options+ never presses ⌃⌥⌘ as keys** — it stamps
+  them into the F6 event's flags and sends one flags-cleared event afterwards.
+  A poll on modifier state therefore falls straight through, and the Return went
+  out 2 ms after the F6, still inside the merge window.
+- **What works is sleeping past that trailing event.** The gap from the F6 to
+  the flags-cleared event measured 12, 15 and 22 ms across presses;
+  `settleForOptionsPlus` is 45 ms, off the tap thread, with the modifier poll
+  kept *after* it for modifiers Victor is really holding. Nothing is noticeable
+  between the click and the prompt going.
+
+The same merge is visible on the selection watcher's ⌘C when it happens to fire
+inside that window (`code=8 mods=CTRL+OPT+CMD`, caught on the same tap), so any
+key this app posts near a gesture has the trap waiting.
 
 **The numbers are duplicated in two places and must not drift**: Options+'s own
 custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`. Change one and the

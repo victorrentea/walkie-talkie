@@ -1277,26 +1277,58 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// Victor typed — the stamp is why the event does not come back round and
     /// get read as a gesture.
     ///
-    /// **The flags are cleared, and without that the Return is not a Return.**
-    /// A `CGEvent` born from a `.hidSystemState` source inherits the modifiers
-    /// held at that instant — and this one is created *inside the tap callback
-    /// for the chord's own F6*, i.e. while Options+ still has ⌃⌥⌘ down. Measured
-    /// 2026-09-09 with a listen-only tap: the Return reached the front app as
-    /// `mods=CTRL+OPT+CMD`, which Terminal hands to Claude Code as ⌥⏎ — a
-    /// newline in the prompt instead of the send. That is the whole symptom
-    /// Victor reported ("îmi dă un fel de carriage return, nu intră complet").
-    /// Zeroing both halves' flags brings it back as a bare Return, verified the
-    /// same way. `KeySimulator` in victor-macos-addons, which typed this Return
-    /// until today, never had the bug because it sets `flags` explicitly.
+    /// **It waits for ⌃⌥⌘ to come up first, and without that it is not a Return
+    /// at all.** This is called from the tap callback for the chord's own F6 —
+    /// i.e. at the one instant Options+ is *holding* all three modifiers — and a
+    /// key posted then reaches the front app as ⌃⌥⌘Return, which Terminal gives
+    /// Claude Code as ⌥⏎: a newline in the prompt instead of the send. That is
+    /// the symptom Victor reported ("nu-ți trimite promptul, ci dă spații
+    /// goale").
+    ///
+    /// **Clearing the event's own flags does not do it**, which is the part
+    /// worth writing down. `down.flags = []` was tried first and measured clean
+    /// against a *synthesised* chord — and then measured dirty against the real
+    /// button, `mods=CTRL+OPT+CMD` on the wire (2026-09-09, listen-only tap).
+    /// While the modifier keys are genuinely down, the window server merges the
+    /// live state back into a posted key whatever the event says; the same trap
+    /// `KeySimulator.waitForModifiersReleased` exists for in victor-macos-addons.
+    /// So the only fix is to let go of the moment: off the tap thread, poll
+    /// until the keyboard comes clean, then type. Measured on this Mac, Options+
+    /// releases 11 ms after the F6 — far below anything a finger notices.
+    ///
+    /// **The wait is a fixed sleep, and asking the system instead does not
+    /// work** — the second wrong fix, so it is written down. `CGEventSource
+    /// .flagsState` answers *clean* through this whole window: Options+ never
+    /// presses ⌃⌥⌘ as keys, it stamps them into the F6 event's own flags and
+    /// sends one flags-cleared event afterwards. So a poll on the modifier state
+    /// falls straight through and the Return goes out 2 ms after the F6, still
+    /// inside the window where the merge happens. What *is* measurable is the
+    /// gap to that trailing event: 12, 15 and 22 ms across the presses caught on
+    /// the tap. `settleForOptionsPlus` is that gap with room over it.
+    ///
+    /// The poll is kept *after* the sleep for the other case — real modifiers
+    /// Victor is physically holding — and is capped, posting anyway when the cap
+    /// runs out: if he is really leaning on ⌘ the button still has to do
+    /// something, and a late Return beats none.
     static func postReturn() {
-        let source = CGEventSource(stateID: .hidSystemState)
-        source?.userData = backButtonStamp
-        guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: true),
-              let up   = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: false) else { return }
-        down.flags = []
-        up.flags = []
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        DispatchQueue.global().async {
+            usleep(settleForOptionsPlus)
+            let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            var waited = 0
+            while !CGEventSource.flagsState(.combinedSessionState).intersection(watched).isEmpty,
+                  waited < 40 {
+                usleep(5_000)
+                waited += 1
+            }
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = backButtonStamp
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: true),
+                  let up   = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: false) else { return }
+            down.flags = []
+            up.flags = []
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
     }
 
 
@@ -1343,4 +1375,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// version of that app still running against the old wiring is recognised
     /// rather than fought.
     private static let backButtonStamp: Int64 = 0x7774_4241_434B_0000
+
+    /// How long `postReturn` lets the ⌃⌥⌘ that Options+ stamped on the chord
+    /// wear off before it types. Measured 12–22 ms on this Mac; 45 ms is that
+    /// with room over it, and far below what a finger notices between the click
+    /// and the prompt going.
+    private static let settleForOptionsPlus: UInt32 = 45_000
 }
