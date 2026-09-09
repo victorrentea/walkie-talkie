@@ -33,6 +33,15 @@ selected is captured and frozen for the whole dictation, and either the **back
 mouse button** or **F3** attaches extra screenshots as you talk — the count going
 up is the receipt.
 
+**A picture can be a region rather than a screen.** Hold the **wheel** and drag
+while a dictation is running: the screen dims, a box follows the pointer, ⌘ moves
+it whole, ⌥ draws it from its middle and Esc calls it off. What joins the message
+is that rectangle — named `area-00:38(1200x800px).jpg`, so what receives it knows
+the edges are yours and not the display's, and costing the pixels you framed
+instead of the pixels your monitor has. It is Victor Addons' own crop, literally:
+both apps now draw it out of one shared package. A middle **click** is untouched
+— nothing is taken until the pointer has moved six points.
+
 **Highlighting something is enough — you do not have to press anything.** While a
 dictation is running the relay reads whatever is selected once a second and files
 each new highlight once — after three identical reads, so a selection made by

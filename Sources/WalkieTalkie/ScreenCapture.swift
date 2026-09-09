@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import VictorMacKit
 
 /// Screenshots the display under the cursor into `~/Library/Caches/…/shots`.
 ///
@@ -63,6 +64,66 @@ enum ScreenCapture {
         writeHandoverCopy(of: final)
         prune()
         return final.path
+    }
+
+    /// **A region he dragged out, rather than the display he was looking at.**
+    ///
+    /// The whole-screen frame is the default and is very often mostly
+    /// irrelevant: 800px of handover is spent on a desktop when a panel would
+    /// do, and the agent has to *find* the thing in it before it can read it. A
+    /// crop is the same gesture pointed at one answer — and it costs the pixels
+    /// it contains rather than the pixels the monitor has.
+    ///
+    /// `rect` is in global Cocoa coordinates, on `screen`, already chosen and
+    /// already rounded to whole points by `CropSelectionOverlay`.
+    ///
+    /// **The name is `area-`, and the whole point is that it is not `shot-`.**
+    /// An agent is handed both kinds in one list; the frame it gets is a
+    /// rectangle of pixels with nothing in it saying whether the edges are the
+    /// edges of a screen. `shotsClause` says so once in the clause, and the
+    /// prefix is what each entry says for itself.
+    ///
+    /// The pointer is deliberately **not** in this name, where a full-screen
+    /// shot carries it. There it answers "which of these thousand things was he
+    /// pointing at"; here he answered that by dragging a box round it, and the
+    /// pointer is merely the corner he happened to let go on. What takes its
+    /// place is the size, which is the one fact about a crop that is not
+    /// obvious from looking at it.
+    static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?) -> String? {
+        // Provisional, for the same reason `grab` names provisionally: the pixel
+        // reading in the final name is measured off the file, which does not
+        // exist yet.
+        let file = Outbox.shotsDir.appendingPathComponent("area-\(stem(offset)).jpg")
+        guard CropCapture.capture(rect, on: screen, to: file) else {
+            Log.error("could not crop the selected area (Screen Recording permission?)")
+            return nil
+        }
+        let final = tagSize(of: file, offset: offset)
+        writeHandoverCopy(of: final)
+        prune()
+        return final.path
+    }
+
+    /// `area-00:38(1200x800px).jpg` — measured off the JPEG, never multiplied
+    /// out of the screen's backing scale, for `tagCursor`'s reason.
+    private static func tagSize(of file: URL, offset: TimeInterval?) -> URL {
+        guard let size = pixelSize(of: file) else { return file }
+        let tagged = unique(file.deletingLastPathComponent()
+            .appendingPathComponent("area-\(stem(offset))(\(Int(size.width))x\(Int(size.height))px).jpg"))
+        do {
+            try FileManager.default.moveItem(at: file, to: tagged)
+            return tagged
+        } catch {
+            Log.error("could not name \(tagged.lastPathComponent): \(error)")
+            return file
+        }
+    }
+
+    /// True for a frame `grabArea` wrote. Read off the name because the name is
+    /// also what says it to the agent — a second flag beside the path would be a
+    /// second thing to keep in step with it.
+    static func isArea(_ path: String) -> Bool {
+        (path as NSString).lastPathComponent.hasPrefix("area-")
     }
 
     /// The width of the copy the **agent** is given. Victor still gets the retina
@@ -234,7 +295,9 @@ enum ScreenCapture {
         }
     }
 
-    /// A `-2`, `-3`… before the extension if that name is taken.
+    /// A `-2`, `-3`… before the extension if that name is taken. Both names go
+    /// through it — two crops of the same size at the same offset collide the
+    /// same way two shots from an unmoved pointer do.
     ///
     /// The per-session folder keeps one run's shots away from another's, and the
     /// pointer position makes two shots at the same offset differ in almost every

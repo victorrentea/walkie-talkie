@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import ApplicationServices
+import VictorMacKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -489,6 +490,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
+        hotkeys.onAreaShot = { [weak self] anchor, at in self?.areaShot(from: anchor, at: at) }
+        // Main, because it touches the overlay's own state; and `async`, because
+        // this arrives on the tap thread mid-gesture.
+        hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleLocalRecording() }
         }
@@ -2840,8 +2845,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // end in a full stop, so the separator between the last shot and the
         // context frame stopped being a separator. Titles are arbitrary text;
         // the brackets are the only delimiter here that they cannot forge.
-        let note = "Each is \(ScreenCapture.handoverWidth)px wide; "
+        var note = "Each is at most \(ScreenCapture.handoverWidth)px wide; "
             + "drop the -small for the full-resolution original."
+        // **The one thing a frame cannot say about itself.** A picture of a
+        // region and a picture of a display are both a rectangle of pixels, and
+        // nothing inside either says whether its edges are the edges of a
+        // screen — so an agent handed a crop reads it as a whole desktop that
+        // happens to be small, and a small desktop is a display it should be
+        // looking around in. Said once, in the clause, and carried per frame by
+        // the `area-` its name starts with.
+        if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
+            note += " Anything named `area-` is a region I dragged a box around, "
+                + "not the whole screen — its edges are mine, not the display's."
+        }
 
         // Nothing but the automatic frame — 168 of the 180 dictations in the
         // outbox look like this. One short clause and no ceremony.
@@ -3267,6 +3283,113 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.send(kind: "screenshot", paths: [path])
         }
+    }
+
+    // MARK: - The region he dragged out
+
+    /// The words on the selection overlay. **English**, like every other string
+    /// this app renders — the chip and everything near it go on a projector in
+    /// front of an international room. Victor Addons draws the same overlay in
+    /// Romanian, which is exactly why the strings are a parameter of
+    /// `CropSelectionStyle` rather than a constant inside the shared module.
+    ///
+    /// The hint itself is never shown here: it belongs to the flavour that waits
+    /// for a drag to start, and this one arrives with one already under way.
+    private static let cropStyle = CropSelectionStyle(
+        hint: "drag an area  ·  ⌘ move  ·  ⌥ from centre  ·  Esc cancels",
+        movingSuffix: "✥ move",
+        centeredSuffix: "⦿ centre")
+
+    /// **The wheel, dragged while he is talking: a region of the screen instead
+    /// of the whole display.**
+    ///
+    /// A dictation's frames are the expensive half of the message — 800px of
+    /// handover and a picture the agent has to *look through* before it can read
+    /// anything — and most of what is in them is the desk around the answer. The
+    /// shutter cannot help with that: it photographs a display because a press
+    /// is a moment, not a shape. A drag is a shape, and it is the same hand
+    /// already on the same mouse.
+    ///
+    /// **The dictation keeps running behind it.** Nothing here touches the
+    /// microphone, the countdown or the chip: he is still mid-sentence, which is
+    /// the whole point — he says *"this bit here"* and drags a box round it
+    /// while saying it.
+    ///
+    /// **There is no red vignette and no cursor mark**, which every other
+    /// capture in this app fires. Those exist to say *a picture was taken, and
+    /// here is where you were pointing* about something that happened in a
+    /// millisecond with nothing on screen to show for it. This one he watched
+    /// himself draw, at the pixels he drew it around; a flash lit over them
+    /// afterwards would be the same news, later, on top of the thing he framed.
+    /// It is the same call Victor made in Victor Addons, where the crop's yellow
+    /// border went the same day.
+    ///
+    /// `takenAt` is the **press**, not the release: the shot is named by where
+    /// in the sentence he reached for it, and framing a box carefully is a
+    /// second or two he should not be charged for.
+    private func areaShot(from anchor: NSPoint, at takenAt: Date) {
+        guard hasDestination else { return }
+        // Sampled with the gesture, like the shutter's: by the time the box is
+        // drawn the front window may be one he switched to in order to frame it.
+        let source = WindowContext.describe()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // **Main, and not the tap thread.** The overlay puts a panel up per
+            // screen and sets window frames; the same mistake made in an
+            // `ElementPicker` callback took the whole app down with a `SIGTRAP`
+            // inside `NSWMWindowCoordinator`.
+            CropSelectionOverlay.begin(button: .middle, from: anchor, style: Self.cropStyle) { selection in
+                guard let selection = selection else {
+                    // Esc, a right-click, or a drag that turned out to be a
+                    // twitch. Nothing was filed and nothing is said: he called it
+                    // off, and an app reporting his own cancellation back to him
+                    // is the tidy-up-announcement `checkAlive` already refuses.
+                    Log.info("✂️ area selection cancelled")
+                    return
+                }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.fileArea(selection, takenAt: takenAt, source: source)
+                }
+            }
+        }
+    }
+
+    /// The tail of `plusOneShot`, for a rectangle instead of a display: name it
+    /// by where in the sentence it was taken, attach it to the dictation in
+    /// flight, and let the chip count it.
+    private func fileArea(_ selection: CropSelectionOverlay.Selection,
+                          takenAt: Date, source: String?) {
+        stateLock.lock()
+        let openNow = dictationInFlight
+        let startedAt = dictationStartedAt
+        stateLock.unlock()
+        let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
+
+        guard let path = ScreenCapture.grabArea(selection.rect, on: selection.screen, offset: offset) else {
+            DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
+            return
+        }
+
+        stateLock.lock()
+        let attaching = dictationInFlight
+        if let source = source { shotSources[path] = source }
+        if attaching {
+            pendingShots.append(path)
+            pendingShotOffsets.append(takenAt.timeIntervalSince(dictationStartedAt ?? takenAt))
+        }
+        let count = pendingShots.count
+        stateLock.unlock()
+
+        guard attaching else {
+            // The sentence ended while he was framing. The picture is still
+            // worth having on its own — same rule the shutter follows.
+            send(kind: "screenshot", paths: [path])
+            return
+        }
+        armOrphanFlush()
+        Log.info("✂️ area attached to in-flight dictation (\(count) picture(s) so far)")
+        publishShotCount()
     }
 
     // MARK: - Picked elements

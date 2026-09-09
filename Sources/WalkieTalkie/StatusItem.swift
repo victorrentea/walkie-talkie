@@ -166,6 +166,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// until there is one, like every other row that cannot act right now.
     private let pasteLast = NSMenuItem(title: "Paste last prompt", action: nil, keyEquivalent: "")
     private let shot = NSMenuItem(title: "Take Screenshot", action: nil, keyEquivalent: "")
+    /// **The other half of the shutter, and the only reason the wheel is
+    /// touched at all in Logi mode.** A legend like the two rows around it: the
+    /// gesture is a drag, which is not a thing a menu can perform.
+    private let areaShot = NSMenuItem(title: "Select Screen Area", action: nil, keyEquivalent: "")
     /// **A legend row, and the only one here that is not a command.** ⌘⇧-click
     /// happens inside Chrome, in a page this app cannot reach from a menu — but
     /// it is a gesture the relay takes over, it used to be advertised on the chip
@@ -473,6 +477,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         shot.action = #selector(shotClicked)
         shot.target = self
         shot.isEnabled = false
+        areaShot.image = Self.emojiIcon("✂️")
+        areaShot.isEnabled = false
         pickLegend.image = Self.emojiIcon("✋")
         pickLegend.isEnabled = false
         // **A line between where the words go and what happens while they are
@@ -504,6 +510,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // above that actually do something when clicked (Victor, 2026-09-04).
         menu.addItem(.separator())
         menu.addItem(shot)
+        menu.addItem(areaShot)
         menu.addItem(pickLegend)
 
         menu.addItem(.separator())
@@ -577,9 +584,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // is a different weight and colour on screen from the boxed emoji and so
         // cannot be misread as a second button.
         //
-        // The wheel's `🛞` is gone from every row here, and with it the chord
-        // rows `⬅️ + 🛞` and `➡️ + 🛞`: since 2026-09-09 this app takes no mouse
-        // button at all. See *The side buttons speak in function keys*.
+        // The wheel's `🛞` went from every row here on 2026-09-09, along with
+        // the chord rows `⬅️ + 🛞` and `➡️ + 🛞` — see *The side buttons speak in
+        // function keys*. It is back in exactly one, `Select Screen Area`, and
+        // the distinction that lets it be is that a **drag** is not a click:
+        // middle-click-to-close-a-tab is untouched.
         // **The vocabulary: an emoji for the button, a thin arrow for the
         // movement.** The emoji names a button by where it sits on the mouse —
         // `◀️` and `▶️` are the left and right buttons, and because the two side
@@ -618,6 +627,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
             (replaceWispr, replaceWispr.title, "🔼", "🖱️5"),
             (pasteLast, pasteLast.title, "⌘⌃P", "⌘⌃P"),
             (shot, shot.title, "🔽", "🔽"),
+            // **The wheel is back in this column, in one row.** Everything else
+            // it used to say is gone from Logi mode — but a *drag* is not a
+            // click, so this one costs the middle click nothing. Written as the
+            // button and then the movement, the vocabulary the side-button rows
+            // already use, except that the direction is whichever way he draws
+            // the box.
+            (areaShot, areaShot.title, "🛞 drag", "🛞 drag"),
             // **No `+`, and the button drawn rather than spelled** (Victor,
             // 2026-09-09): the modifiers and the click are one continuous
             // gesture — hold ⌘⇧ and click — not two things added together, and

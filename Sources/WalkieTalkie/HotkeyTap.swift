@@ -34,10 +34,29 @@ private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
 /// borrowing it for the hours a terminal stays bound was the standing price of
 /// the old design. That price is now zero.
 ///
+/// **One exception, and it costs nothing that price was about**: a wheel
+/// *drag* made while a dictation is running selects a region of the screen
+/// (`areaDrag`). A click is still a click — the press goes straight past this
+/// tap in both modes and Chrome closes its tab — and only once the hand has
+/// travelled past `areaDragThreshold` is anything taken.
+///
 final class HotkeyTap {
 
     /// The cursor at the instant of the gesture — what he was pointing at.
     var onScreenshot: ((NSPoint) -> Void)?
+
+    /// **The wheel, dragged while dictating: a region instead of the display.**
+    /// The corner the drag started from, and the moment the wheel went down —
+    /// which is the moment the picture belongs to, exactly as the shutter's
+    /// `takenAt` is the press and not the subprocess.
+    var onAreaShot: ((NSPoint, Date) -> Void)?
+
+    /// **The wheel came up and this tap ate the event.** The selection is
+    /// finished by the button, and the overlay watches the button through
+    /// session state — which a swallowed release never reaches, so it would
+    /// otherwise sit there dimming the screen with the finger long since up.
+    /// Measured, on the first run of this gesture.
+    var onAreaEnd: (() -> Void)?
 
     /// The wheel, clicked on its own — **or ⌘⌃D**: start the recording, or end
     /// the one that is open. A toggle and not a push-to-talk — a dictation at an agent runs to a
@@ -342,6 +361,33 @@ final class HotkeyTap {
     private var wheelLeftChord = false
     private var wheelHold: DispatchWorkItem?
 
+    // MARK: - The wheel drag that selects a region
+
+    /// Where the wheel went down, while it is still an open question whether
+    /// this is a click or a drag. Cleared at the release, and never set by a
+    /// press that already meant something else (a chord, a prompt on screen).
+    private var areaAnchor: NSPoint?
+    /// The same corner as `CGEvent.location` reads it — global, y **down** from
+    /// the primary display's top. The threshold is measured against this and not
+    /// against the Cocoa anchor, because an event carries the position it was
+    /// *made* at while `NSEvent.mouseLocation` answers where the pointer is by
+    /// the time the tap asks. They differ by one event, which is nothing to a
+    /// hand and everything to a burst of posted events — the arm was silently
+    /// skipped for a drag delivered faster than the pointer could be read.
+    private var areaAnchorCG: CGPoint = .zero
+    private var areaPressedAt = Date()
+    /// The drag crossed the threshold: the overlay is up, and this press is the
+    /// crop's from here to the release.
+    private var areaCropping = false
+
+    /// **How far the hand has to travel before a middle click stops being one.**
+    /// It is the same 6 points `CropSelectionOverlay` refuses to call a
+    /// selection, and for the same reason — below that it is a click that
+    /// slipped. It also has to be small enough that the overlay is up by the
+    /// time he is drawing the box he means, since everything before it is a
+    /// corner recorded and nothing on screen.
+    private static let areaDragThreshold: CGFloat = 6
+
     /// **How close the wheel's second click has to land** for the dictation the
     /// first one started to become a spawn (Victor, 2026-09-05).
     ///
@@ -387,6 +433,100 @@ final class HotkeyTap {
     /// a window in which neither is true is a middle-up handed to an app that
     /// never saw the middle-down — the orphan-event bug this file guards against
     /// everywhere else.
+    /// **The wheel dragged while a dictation is open: select a region.**
+    ///
+    /// Answers whether the event must be swallowed. Called from **both** gesture
+    /// modes, before either of them decides anything else about the wheel, and
+    /// it is written to be inert in every state but the one it is for.
+    ///
+    /// The shape of it is Victor's answer to the one thing this gesture costs:
+    /// the press is **passed through**, so a middle click that never becomes a
+    /// drag still closes a Chrome tab, and only the release of a press that
+    /// *did* become one is swallowed. The app underneath is then holding a
+    /// middle-down it will never see the up for — the orphan this file guards
+    /// against twice — and that is the deliberate trade, taken with the
+    /// alternatives on the table: eating every middle click for the length of
+    /// every dictation, or reviving the replay that was deleted on 2026-09-06.
+    /// Nothing measured acts on a middle-up that never arrives; a middle-down
+    /// that never arrives loses the click he made.
+    ///
+    /// **It is judged on the tap thread and nowhere else**, which is what makes
+    /// the swallow decision raceless: the drag that arms the crop and the
+    /// release that ends it are the same serial stream of events.
+    private func areaDrag(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        guard event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE else { return false }
+
+        switch type {
+        case .otherMouseDown:
+            areaAnchor = nil
+            areaCropping = false
+            // **Bare, and with no chord underneath it.** ⌘ and ⌥ mean something
+            // *inside* the selection — move the box, draw it from its middle —
+            // but at the press they are the spawn's modifier and would be two
+            // gestures on one press. A press the chords or a held prompt have
+            // already spoken for is not available either.
+            let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
+                    && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
+            guard dictating, bare, !promptHeld, !leftIsHeld, !rightIsHeld else { return false }
+            areaAnchor = NSEvent.mouseLocation
+            areaAnchorCG = event.location
+            areaPressedAt = Date()
+            return false
+
+        case .otherMouseDragged:
+            if areaCropping { return true }
+            guard let anchor = areaAnchor, dictating else { return false }
+            let now = event.location
+            guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return false }
+            areaCropping = true
+            // **With *Use Logi Gestures* off the press was swallowed and still
+            // means something** — a dictation to end, and a 2s timer that would
+            // cancel it. Claiming it is what takes both away: the release then
+            // finds `tapped` false and fires nothing, and the timer's own
+            // `claimWheelPress` comes back empty. In Logi mode the press was
+            // passed through, so this claims nothing and costs nothing.
+            _ = claimWheelPress()
+            wheelHold?.cancel()
+            wheelHold = nil
+            Log.info("✂️ wheel dragged while dictating — selecting an area")
+            let at = areaPressedAt
+            DispatchQueue.global().async { [weak self] in self?.onAreaShot?(anchor, at) }
+            return true
+
+        case .otherMouseUp:
+            let cropping = areaCropping
+            areaAnchor = nil
+            areaCropping = false
+            // **The press's own bookkeeping is finished here, because this
+            // release never reaches the branch that normally finishes it.** With
+            // *Use Logi Gestures* off the press was swallowed and `wheelArmed`
+            // was set by the claim above; left standing it would swallow the
+            // release of the *next* middle press — one this file passed through
+            // — and hand the app underneath an up it never saw a down for. That
+            // is the orphan-event bug, and it is the third place this file has
+            // had to be told about it. In Logi mode none of these were ever set
+            // and clearing them costs nothing.
+            if cropping {
+                wheelArmed = false
+                wheelDown = false
+                wheelLeftChord = false
+                wheelHold?.cancel()
+                wheelHold = nil
+            }
+            // **Say so, because swallowing it is what makes it unsayable.** The
+            // overlay ends the selection on the button coming up and reads the
+            // button the only way a panel can — session state — which this
+            // `return nil` keeps the event out of.
+            if cropping { onAreaEnd?() }
+            // Only a press that became a crop is ours. A plain click's release
+            // goes back out after the press that also went out.
+            return cropping
+
+        default:
+            return false
+        }
+    }
+
     private func claimWheelPress() -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }
         guard wheelDown else { return false }
@@ -474,6 +614,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                  | CGEventMask(1 << CGEventType.flagsChanged.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.otherMouseUp.rawValue)
+                 // **Drags, for the one gesture that is a drag.** A middle press
+                 // cannot be told from a middle click at the press — the
+                 // difference is whether the hand then moves — so the only place
+                 // the question can be answered is in the events between them.
+                 // Everything that is not a middle drag goes straight back out.
+                 | CGEventMask(1 << CGEventType.otherMouseDragged.rawValue)
                  | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.leftMouseUp.rawValue)
                  | CGEventMask(1 << CGEventType.rightMouseDown.rawValue)
@@ -532,8 +678,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             case .leftMouseUp:
                 leftDownAt = 0
                 return Unmanaged.passUnretained(event)
-            case .rightMouseDown, .rightMouseUp,
-                 .otherMouseDown, .otherMouseUp:
+            case .rightMouseDown, .rightMouseUp:
+                return Unmanaged.passUnretained(event)
+            case .otherMouseDown, .otherMouseUp, .otherMouseDragged:
+                // A stale `leftDownAt` would read as a chord and refuse the
+                // drag; `areaDrag` asks about both buttons, so it gets the same
+                // reconciliation the wheel's own chords get below.
+                reconcileButtons()
+                // **The one thing this mode takes, and only once it is a drag.**
+                // Everything else about the wheel — the click that closes a tab
+                // — goes past untouched, which is the whole reason this mode
+                // exists.
+                if areaDrag(type, event) { return nil }
                 return Unmanaged.passUnretained(event)
             default:
                 break
@@ -564,6 +720,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if type == .rightMouseUp {
                 rightDownAt = 0
                 return Unmanaged.passUnretained(event)
+            }
+
+            // **The region drag, before the wheel's own five meanings.** It is
+            // the only branch that reads `.otherMouseDragged`, and the only one
+            // that can take a press back from the meaning it already had — see
+            // `areaDrag`, where the claim is made.
+            if type == .otherMouseDown || type == .otherMouseUp || type == .otherMouseDragged {
+                reconcileButtons()
+                if areaDrag(type, event) { return nil }
+                if type == .otherMouseDragged { return Unmanaged.passUnretained(event) }
             }
 
             if type == .otherMouseDown || type == .otherMouseUp {

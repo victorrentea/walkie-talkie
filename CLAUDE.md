@@ -1426,6 +1426,13 @@ Mouse 4 and ⌘⇧-click in Chrome both belong to other software the rest of the
 and `syncBorrowedGestures()` is the single switch that takes them and gives them
 back. The two sections below are one argument applied twice.
 
+**A third rides the same switch since 2026-09-10, and takes far less**: a wheel
+*drag* selects a region of the screen (*The wheel, dragged*). It is keyed on the
+same `dictating` this method pushes to the tap, so it cannot outlive a sentence
+either — but where these two take a whole button for the length of one, that one
+takes nothing until the hand has moved six points, and a middle **click** is
+handed back untouched.
+
 Since 2026-08-28 the same switch also **pauses Chrome's music** (`MusicBridge`,
 below). It is not a gesture, but it is the same window and the same argument: for
 the length of a sentence, something that belongs to the rest of the machine is
@@ -1561,6 +1568,200 @@ Return that is a button in disguise now carries a stamp in
 `BackButtonEnter.post` and read here. **The literal is duplicated across the two
 repos and must not drift.** Restart order is now irrelevant: whichever tap is
 first, the shot is taken exactly once.
+
+## The wheel, dragged: a region instead of the display (2026-09-10)
+
+**While a dictation is running — bound, unbound, or headed for the caret — the
+wheel held down and dragged selects a rectangle of the screen, and that
+rectangle is what joins the pictures.** The dimming, the box, ⌘ to move it whole,
+⌥ to draw it from its middle, Esc to call it off: all of it is **Victor Addons'
+crop**, because it is now literally the same code in both apps
+(`victor-mac-kit`).
+
+Victor's ask: *"if I click and drag the mouse wheel, it should behave exactly as
+taking a screenshot of an area of the screen using the macOS add-on, with the
+same behaviour of moving the window. Try to reuse, make a common module reused by
+both projects … I don't need the yellow border around the picture, and as a
+matter of fact I don't want the border at all either in the macOS add-ons — the
+point is to get that picture attached to the pictures, but I should say this is
+not the full screen, this is a selected area."*
+
+**Why it earns a gesture of its own.** The shutter photographs a *display*
+because a press is a moment and not a shape, and most of what comes back is the
+desk around the answer: 800px of handover spent on a desktop, and an agent that
+has to find the thing before it can read it. A drag is a shape. It is the same
+hand on the same mouse, mid-sentence, saying *this bit here* while drawing a box
+round it.
+
+### The shared module, and why it is a path dependency
+
+`~/workspace/victor-mac-kit` — `CropGeometry` (the arithmetic, unit-tested),
+`CropSelectionOverlay` (the panels and the 60 Hz poll) and `CropCapture` (the
+rectangle → a JPEG, by capturing the whole display and cropping at its real pixel
+scale, because `screencapture -R` answers *"could not create image from display
+with rect"* on macOS 15.7 for every rectangle it is given).
+
+Both apps declare `.package(path: "../victor-mac-kit")`, so a fresh clone of
+either needs the sibling beside it. That is the trade for being able to edit the
+shared gesture and rebuild the app in one step — no push, no version bump, no
+resolve — and both apps are only ever built on this Mac, from local.
+
+**The two apps disagree about exactly two things**, and both are parameters:
+
+- **The words**, `CropSelectionStyle`. Victor Addons speaks Romanian on screen;
+  this overlay is English, per *UI language: English only* — it goes on a
+  projector in front of an international room.
+- **Which button is being dragged with**, `begin(button:from:)`. Addons holds
+  ⌃P, lets go, and then draws a box with the left button. Here the drag is
+  **already under way** — the wheel is down and the hand is moving — so the
+  corner it started from is handed in and the box is live on the first frame.
+
+Two things were fixed on the way out rather than copied faithfully: `CropPanel`
+now refuses `constrainFrameRect`, so the selection can reach the top 25 points of
+a screen instead of being quietly pushed below the menu bar (the trap `BindFlight`
+and `CaretHalo` are already written under), and the panels are
+`sharingType = .none` so the dimming cannot land in the picture even if the beat
+before the capture is ever shortened.
+
+### The press goes through; only a release that became a crop is taken
+
+A middle press cannot be told from a middle click at the press — the difference
+is whether the hand then moves — so `HotkeyTap.areaDrag` records the corner, hands
+the event straight back, and takes nothing until the pointer has travelled
+`areaDragThreshold` (6 points, the same distance `CropSelectionOverlay` refuses to
+call a selection). **Verified with a listen-only tap tail-appended behind this
+one**: a plain middle click during a dictation reaches the app underneath as a
+`DOWN` and an `UP`, with nothing logged here — which is the whole promise of
+*Use Logi Gestures*, since middle-click-to-close-a-tab is what that mode exists to
+protect.
+
+The cost is stated rather than hidden: once the drag is taken, the app underneath
+is left holding a middle-down it will never see the up for — the orphan this file
+guards against twice. Victor chose it over the two alternatives on the table,
+which were eating **every** middle click for the length of every dictation, and
+reviving the replay deleted on 2026-09-06.
+
+**With *Use Logi Gestures* off the press was swallowed and already means
+something** — a dictation to end, and a 2 s timer that would cancel it — so the
+drag *claims* it (`claimWheelPress`, the same claim the release and the hold race
+for) and cancels the timer. The release then finds `tapped` false and fires
+nothing. That branch also clears `wheelArmed` / `wheelDown` itself, because the
+release never reaches the branch that normally clears them: left standing, they
+would swallow the release of the **next** middle press — one this file passed
+through — which is the orphan bug written a third time.
+
+### A swallowed release is invisible to the overlay, and that is measured
+
+The overlay ends the selection when the driving button comes up, and it reads the
+button the only way a panel with no key window can — `CGEventSource.buttonState`.
+**A release this tap swallows never reaches that state.** First run of the
+gesture: the finger came up, the box stopped following, and the dimming stayed on
+the screen with `buttonState` still answering *down*, its only way out being Esc.
+Worse than a stuck panel, the window server then behaved as though a drag were in
+progress, and a `swift` one-liner run to diagnose it hung for two minutes.
+
+So the tap says so: `onAreaEnd` → `CropSelectionOverlay.endDrag()`. A release that
+lands **before** the panels are on screen is kept for `begin` for half a second —
+long enough for the hop, short enough that a stale one cannot end the next
+selection before it starts — because the two arrive by different routes and a
+flick beats the overlay onto the screen.
+
+**The threshold is measured off the event, not off `NSEvent.mouseLocation`.** An
+event carries the position it was *made* at; the pointer answers where it is by
+the time the tap asks. They differ by one event, which is nothing to a hand and
+everything to a burst of posted events — the arm was silently skipped for a drag
+delivered faster than the pointer could be read, which is exactly the shape every
+test of this gesture has.
+
+### No border, and no vignette either
+
+The red vignette and the cursor mark exist to say *a picture was taken, and here
+is where you were pointing* about something that happened in a millisecond with
+nothing on screen to show for it. This one he watched himself draw, at the pixels
+he drew it around. A mark lit over them afterwards is the same news, later, on top
+of the thing he framed — which is also the argument that took
+`ScreenCaptureFlash.flash(around:)` out of **Victor Addons** in the same change,
+on Victor's instruction. The full-screen flash stays there: one keypress, no
+gesture, nothing else to say it happened.
+
+### `area-00:38(1200x800px).jpg`, and one sentence in the clause
+
+It rides in the same list as the shots, in the same order, because *sequence is
+what these messages are made of* — but an agent handed a rectangle of pixels has
+nothing in it saying whether those edges are a screen's. So the name says
+`area-` and the clause says once, only when one is present:
+
+```
+Anything named `area-` is a region I dragged a box around, not the whole screen —
+its edges are mine, not the display's.
+```
+
+- **The pointer is deliberately not in the name**, where a full-screen shot
+  carries it (*The shot's name is when in the sentence and where the mouse was*).
+  There it answers *which of these thousand things was he pointing at*; here he
+  answered that by dragging a box round it, and the pointer is merely the corner
+  he let go on. Its place is taken by the size, which is the one fact about a crop
+  that is not obvious from looking at it — and it is measured off the JPEG, never
+  multiplied out of the screen's backing scale, for `tagCursor`'s reason.
+- **`ScreenCapture.isArea` reads the prefix** rather than a flag beside the path,
+  because the name is also what says it to the agent, and a second copy of that
+  fact is a second thing to keep in step with it.
+- **The handover copy is unchanged**: 800px on the long edge, so a crop smaller
+  than that travels at its own size. The note now says *at most* 800px wide, which
+  it always should have.
+- **The menu gains a legend row**, `Select Screen Area — 🛞 drag`, permanently
+  disabled like `Take Screenshot` and `Pick Element in Chrome`: *The chip teaches
+  nothing; the menu does*, and this is the one row that puts `🛞` back in the Logi
+  column — which it can, because a drag is not a click.
+
+**The chip is untouched**: a crop counts in `📸 ×N` like any other picture, so
+`docs/overlay-states.html` needs no new `Shot` and was not rebuilt. The one new
+string is a failure flash, `⚠️ area capture failed`, which is the state
+`listening-flash` already photographs (`⚠️ screenshot failed`) with different
+words in it.
+
+### It cost a real bug in the paste path, found by this gesture refusing to fire
+
+`TerminalBinding.tap(key:command:)` — what `pressPaste` and therefore every
+Replace Wispr dictation, every ⌘⌃P and every blind-paste delivery go through —
+**stamped ⌘ onto the V's key events and never released it**. `CGEventSource`
+reports whatever the last event's flags said, so a ⌘V whose last event is a key-up
+*with ⌘ on it* leaves the session believing ⌘ is held: measured at `0x00100000`
+after a single paste, and it stayed.
+
+It self-heals the moment Victor touches a real key, which is why it had never been
+reported. Two things read that state and are wrong until he does.
+`postWisprHandsFree` waits for the watched modifiers to clear before sending
+Wispr's chord — i.e. it spins its full 200 ms allowance after every paste — and
+**every gesture gated on `bare` refuses while it stands**, which is how this was
+found: a wheel drag declining to select an area, silently, straight after a caret
+dictation had pasted. The same stale ⌘ would refuse the mouse-4 shutter.
+
+The fix is the shape `postWisprHandsFree` already documents — a modifier going
+down or coming up is a `flagsChanged` carrying the state the keyboard is *left
+in*, not the key's own bit — and it is verified: `0x20100000` before, `0x20000000`
+after, and a crop taken straight after a paste now arms.
+
+### Verified end to end
+
+Driven with real events rather than a fabricated transcript, because the whole
+gesture is the mouse:
+
+- **A crop is a crop.** An 800×500-point drag came back as `1600x1000px`, and
+  cross-checked against an independent whole-display `screencapture` cut at the
+  pixels the region should map to: **correlation 0.997** — which is what settles
+  the Cocoa→image y flip and the retina scale, the one thing a picture cannot be
+  judged on by eye.
+- **The envelope.** Two crops in one dictation came out in order, stamped by
+  offset, named by what was in front of him, with the `area-` sentence appended
+  once.
+- **The plain click survives** — `DOWN`/`UP` seen downstream, nothing logged here.
+- **Both gesture modes.** With *Use Logi Gestures* off the whole gesture is
+  swallowed (nothing downstream) and neither the 2 s cancel nor the release's
+  *end the dictation* fired.
+- **A flick past the threshold and released in the same millisecond** ends as a
+  cancelled selection rather than a stuck panel, and **Esc mid-drag** cancels with
+  no file written and no panel left.
 
 ## The shot's name is *when in the sentence* and *where the mouse was*
 
@@ -2619,6 +2820,12 @@ while something is bound, which is hours, middle-click stops opening links in
 new tabs in Chrome and closing them in VS Code. That price is now zero, and it
 was Victor's reason for the whole move: *"ideea e sa evit sa emit middle click,
 caci folosesc middle click sa inchid de ex taburi chrome/vsc."*
+
+**One thing came back to the wheel on 2026-09-10 and costs none of that**: a
+*drag* of it, while a dictation is running, selects a region of the screen. The
+press goes straight past this tap and so does the release of a press that never
+moved, so the click that closes a tab is untouched — see *The wheel, dragged: a
+region instead of the display*.
 
 **Two things were lost and neither is worth mourning.** The wheel clicked while
 the prompt panel is open used to mean Send — ⏎ still does, and the button beside
@@ -4366,6 +4573,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
 | `Take Screenshot` | 📷 | `⬇️` |
+| `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
 | `Replace WisprFlow` | a `checkmark` when on, **nothing** when off | the forward side button (see *Replace Wispr*) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
