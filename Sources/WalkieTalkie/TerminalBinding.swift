@@ -900,17 +900,49 @@ final class TerminalBinding {
     /// key at the frontmost app" is enough.
     static func pressPaste() { tap(key: 0x09, command: true) }
 
+    /// **The ⌘ is pressed and released as a key, not only stamped on the V.**
+    ///
+    /// Stamping was all this did until 2026-09-10, and it left the session's
+    /// modifier state carrying ⌘ after every paste: `CGEventSource.flagsState`
+    /// reports whatever the last event's flags said, so a ⌘V whose last event is
+    /// a key-up *with ⌘ on it* is a keyboard the window server believes is still
+    /// holding ⌘. Measured after one Replace Wispr paste: `0x00100000`, and it
+    /// stayed there.
+    ///
+    /// It self-heals the moment Victor touches a real key, which is why nothing
+    /// ever reported it — but two things in this app read that state and are
+    /// wrong until he does. `postWisprHandsFree` waits for the watched
+    /// modifiers to clear before it sends Wispr's chord, i.e. it spins its full
+    /// 200ms allowance after every paste; and every gesture gated on `bare`
+    /// refuses while it stands — which is how this was found, with a wheel drag
+    /// declining to select an area straight after a caret dictation had pasted.
+    ///
+    /// The shape is `postWisprHandsFree`'s, and the comment there is the rule: a
+    /// modifier going down or coming up is a `flagsChanged` carrying the state
+    /// the keyboard is *left in*, not the key's own bit.
     private static func tap(key: CGKeyCode, command: Bool) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)
+
+        func modifier(_ key: CGKeyCode, leaving state: CGEventFlags) {
+            guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true) else { return }
+            e.type = .flagsChanged
+            e.flags = state
+            e.post(tap: .cghidEventTap)
+        }
+
         if command {
             down?.flags = .maskCommand
             up?.flags = .maskCommand
+            modifier(VK_COMMAND, leaving: .maskCommand)
         }
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+        if command { modifier(VK_COMMAND, leaving: []) }
     }
+
+    private static let VK_COMMAND: CGKeyCode = 0x37
 
     // MARK: - What is running there
 
