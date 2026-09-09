@@ -72,6 +72,15 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_WIPE"] {
     exit(0)
 }
 
+// Draw the caret halo on a dark ground and a light one, at both its opacities,
+// and quit — the only way to judge a falloff on a panel no screen capture can
+// contain. See `CaretHalo.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    CaretHalo.shoot(to: out)
+    exit(0)
+}
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an

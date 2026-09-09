@@ -3676,25 +3676,24 @@ prompt: `captureLocal` runs before the branch. These are Victor's own words in h
 own voice, and which destination they were headed for says nothing about their
 worth as a sample.
 
-### The ring round the pointer, when there is nowhere else to point (2026-09-09)
+### The ring round the pointer, when the destination is not a place (2026-09-09)
 
-**While a caret dictation is running with nothing bound, a 100pt ring is drawn
-round the pointer — 10% opaque while he talks, swelling to 50% once he stops.**
+**Whenever a dictation is headed for the caret, a golden halo is drawn round the
+pointer — 10% opaque while he talks, swelling to 50% once he stops.**
 `CaretHalo.swift`, switched from `syncBorrowedGestures` beside the beacon.
 
-Victor's ask: *"when this mode is activated, when I'm not bound, draw a little
-halo ring around the mouse … about 100 pixels, to warn me that I need to
-basically pick somewhere to paste it … by default it's 10% … but grows in
-opacity up to 50% after two seconds of low voice … over another two seconds"*.
+Victor's ask: *"when this mode is activated … draw a little halo ring around the
+mouse … about 100 pixels, to warn me that I need to basically pick somewhere to
+paste it … by default it's 10% … but grows in opacity up to 50% after two
+seconds of low voice … over another two seconds"*.
 
 **Every other destination this app has is a thing he pointed at and a thing the
 chip names.** A terminal's icon and `petclinic@main`, a folder off the menu, ✨
 for a session that does not exist yet. `at caret` is a name too, and that is
 exactly the problem — it is the one destination that is not a place but
-*wherever the focus happens to be when the words arrive*. Unbound there is no
-second answer either, so a sentence spoken with the focus in the wrong window is
-pasted into the wrong window, found afterwards, with nothing having said so at
-the time.
+*wherever the focus happens to be when the words arrive*. A sentence spoken with
+the focus in the wrong window is pasted into the wrong window, found afterwards,
+with nothing having said so at the time.
 
 **The chip cannot carry this**, and that is why the ring is round the pointer
 rather than beside it. The chip rides the cursor and macOS hides the cursor the
@@ -3722,14 +3721,47 @@ drawn round is the thing he has to move.
   cannot run on while the microphone is shut.
 - **`pasteMode`, not `replaceWispr`** — this sentence's destination, not the
   menu tick. A bind made mid-sentence takes `pasteMode` away and the ring goes
-  with it, which is right: there is a destination now, and the chip is naming
-  it. `!isBound` is Victor's own condition and is the difference between a caret
-  he has to place and one with a terminal behind it.
-- **Blue, this app's one colour that has never meant an event.** Red is *this
-  went to the agent* and yellow is *Victor Addons captured it*; both announce
-  something that just happened. This announces nothing — it is a standing fact
-  about where the next sentence lands, the same reading the `HQ` tag took blue
-  for one row up.
+  with it, which is right: there is a terminal now, and the chip is naming it.
+- **And `pasteMode` alone.** It shipped as `pasteMode && !isBound`, on the
+  reading that a binding is a second answer to *where do these words go*. It is
+  not: in this mode they go to the caret whether or not a terminal is bound, so
+  the one sentence the ring exists to prevent is exactly as available bound as
+  unbound. Victor, correcting it within the hour: *"nu ne-legat e cheia, ci dacă
+  transcriu at caret (legat sau nu)"*. If anything the bound case is the worse
+  one — the chip carries a terminal's name and icon all day, so `at caret` is
+  the row that has to be **noticed** changing.
+- **It shipped as a thin blue ring and lasted about an hour**, on this file's
+  standing argument that blue is the one colour here that has never announced an
+  *event*. Victor replaced it within the hour — *"inelul să fie galben, raza de
+  3× mai mare și grosimea 5× mai mare, dar cu fade out spre exterior și
+  interior"*, then a reference picture and *"ca un halou"*. The colour argument
+  left out where this particular mark lives: over whatever he is working in, at
+  10%, in the corner of his eye. Blue at a tenth is the first thing to vanish
+  against a dark editor; gold is the most luminous of the signal colours and
+  survives being that faint, which for a warning is the property that decides
+  it. It crosses Victor Addons' capture yellow and that costs nothing — that one
+  is a full-screen vignette lasting a second, this is a halo round the pointer
+  lasting a sentence.
+- **100pt was answering the wrong question.** It was picked as the smallest
+  circle that still reads as one round a 20pt cursor — right for a mark *on* the
+  pointer, and this is not that: it is the only thing on screen saying where a
+  whole sentence is about to land. At 100pt and 10% it was polite to the point of
+  being missable, which is the failure it exists to prevent. The core now sits at
+  150pt out.
+- **A radial gradient, not a stroked ring**, because the whole shape is a
+  falloff and a `CAShapeLayer`'s stroke has one alpha across its width. The
+  cross-section is `CaretHalo.profile`, read off Victor's reference picture:
+  **the bright edge is the inner one** (which is how a glow round a hole behaves
+  and the opposite of a stroke, brightest in the middle of its own width), a
+  **long outer tail and a short inner one** so the hole stays clean — what is in
+  the hole is the pointer and whatever he is aiming it at — and **no stop that
+  is not zero at one end**, so there is no radius at which the alpha steps.
+- **Drawn rather than shipped as that PNG**, which was the literal reading of
+  *"uite o imagine de folosit"*. The picture has an opaque light-grey background
+  baked into it, so over a dark editor — where this spends half its life — it
+  would be a grey square with a halo in it. A gradient has real transparency,
+  costs no asset, is resolution-free, and takes the panel's own opacity when the
+  swell brightens it.
 - **`RelayPanel`, not `NSPanel`.** `constrainFrameRect` drags a borderless
   window back onto the display and under the menu bar, which for something
   pinned to the pointer is precisely wrong — at the top of the screen it would
@@ -3743,13 +3775,30 @@ drawn round is the thing he has to move.
   it is standing over. It therefore cannot be reviewed with a screenshot;
   `CGWindowListCopyWindowInfo` is what it was verified through.
 - **Both edges are logged** (`◯ caret halo on/off`), for the selection
-  watcher's reason: none of the three conditions behind it is visible on screen,
-  so *"why did the ring not come up"* has to be answerable from the file.
+  watcher's reason: neither condition behind it is visible on screen, so *"why
+  did the halo not come up"* has to be answerable from the file.
+
+#### `WT_SHOOT_HALO` — because a falloff cannot be judged from code
+
+`WT_SHOOT_HALO=/tmp/halo.png ./.build/debug/WalkieTalkie` draws the halo on a
+dark ground and a light one, at both its opacities, and quits
+(`CaretHalo.shoot`). Same argument as `WT_SHOOT_MENU` and `WT_SHOOT_WIPE`: the
+panel is `sharingType = .none`, so the only other way to look at it was to start
+a caret dictation — which answers *is it there* and not *does it look like the
+picture he sent*.
+
+**Two grounds, because this shape spends its life over both** and one that reads
+on a white page can vanish on a dark editor; that is exactly the fault that took
+it off blue. It paid for itself on the first run twice over — the band was so
+wide it read as a filled disc rather than a ring, and **the sheet itself was
+lying**, applying the opacity to the host view *and* to the draw, so the resting
+column came out at 1% and looked like a bug in the gradient.
 
 **Verified end to end** by driving the real chord — ⌃⌥⌘F7 posted at a desk, the
-gesture Options+ sends — with nothing bound and Replace Wispr on, reading the
-panel back off the window server: `108×108 alpha=0.100` centred on the cursor
-while silent for a second, `0.426` at about three seconds, `0.500` from four on.
+gesture Options+ sends — with Replace Wispr on, reading the panel back off the
+window server: `108×108 alpha=0.100` centred on the cursor while silent for a
+second, `0.426` at about three seconds, `0.500` from four on. Re-checked bound
+after the condition came out.
 
 ## A bind mid-sentence changes the recipient
 

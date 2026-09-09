@@ -1702,10 +1702,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // point at.** `pasteMode` rather than `replaceWispr`, so it is about
         // *this sentence's* destination and not about the menu tick — a bind
         // made mid-sentence takes `pasteMode` away and the ring goes with it,
-        // which is right: there is a destination now, and the chip is naming it.
-        // `!isBound` is Victor's own condition, and it is the difference between
-        // a caret he has to place and one that has a terminal behind it.
-        caretHalo.setActive(listening && pasteMode && !isBound)
+        // which is right: there is a terminal now, and the chip is naming it.
+        //
+        // **And nothing else.** It shipped as `pasteMode && !isBound`, on the
+        // reading that a binding is a second answer to *where do these words
+        // go*. It is not: in this mode they go to the caret whether or not a
+        // terminal is bound, so the one sentence the ring exists to prevent —
+        // spoken with the focus in the wrong window — is exactly as available
+        // bound as unbound. Victor, correcting it the same day: *"nu ne-legat e
+        // cheia, ci dacă transcriu at caret (legat sau nu)"*. If anything the
+        // bound case is the worse one: the chip has a terminal's name and icon
+        // on it all day, so `at caret` is the row that has to be *noticed*
+        // changing.
+        caretHalo.setActive(listening && pasteMode)
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the beacon does rather than a flag of its own.
         publishBinding(terminal.target)
