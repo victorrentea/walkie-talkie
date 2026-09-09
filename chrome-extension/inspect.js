@@ -46,6 +46,11 @@
   // hold, so the spinner is only ever seen by a hold that is genuinely a hold.
   const SPINNER_MS = 150;
 
+  // **How long the refusal stays up.** Long enough to read six words at the
+  // moment the hand is still on the keys, short enough that it is gone before it
+  // becomes furniture.
+  const REFUSE_MS = 1600;
+
   // How far the pointer has to travel with the button down before this is a drag
   // and not a click. Four pixels is the usual threshold for the distinction and
   // is under the tremor of a deliberate press.
@@ -71,6 +76,7 @@
   let mouse = { x: 0, y: 0 };
   let ui = null;            // built on the first hold that lasts long enough
   let spinTimer = 0;
+  let refuseTimer = 0;
   // The arm's probe, started with the hold rather than after it — see beginHold.
   let probing = null;
   // A press that may become a drag: the element, where the button went down, the
@@ -222,6 +228,10 @@
           pointer-events: none;
         }
         @keyframes wt-spin { to { transform: rotate(360deg); } }
+        /* The refusal has no element to outline — it is *about* there being no
+           pick — so the box goes and the label stands alone at the cursor. */
+        .refused .box { display: none; }
+        .refused .tag { max-width: none; white-space: normal; }
         .hidden { display: none; }
       </style>
       <div class="spin hidden"></div>
@@ -280,7 +290,8 @@
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) return hide();
 
-    ui.wrap.classList.remove('hidden');
+    ui.wrap.classList.remove('hidden', 'refused');
+    clearTimeout(refuseTimer);
     Object.assign(ui.box.style, {
       left: `${r.left}px`, top: `${r.top}px`,
       width: `${r.width}px`, height: `${r.height}px`,
@@ -308,7 +319,33 @@
   const escapeHTML = (s) => String(s).replace(/[&<>"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  function hide() { if (ui) ui.wrap.classList.add('hidden'); }
+  function hide() {
+    clearTimeout(refuseTimer);
+    if (ui) { ui.wrap.classList.add('hidden'); ui.wrap.classList.remove('refused'); }
+  }
+
+  /// **The refusal, said out loud.** The probe answered *no relay is dictating*,
+  /// and until this existed that answer was spelled by the spinner quietly going
+  /// away — indistinguishable from the extension being broken, which is how it
+  /// was read: *"deseori când încerc să fac demo … nu-mi funcționează, nici în
+  /// nicio pagină, nici după refresh … nu știu ce greșesc"* (2026-09-09).
+  ///
+  /// Nothing is wrong in the page, and no refresh can help: ⌘⇧ is borrowed only
+  /// while a dictation is running *and* the relay has somewhere to send it
+  /// (`hasDestination && listening` in `syncBorrowedGestures`), and outside that
+  /// window `/ping` answers 503 on purpose so ⌘⇧-click stays Chrome's. The one
+  /// thing missing was saying which of the two it is, where the eye already is.
+  function refuse() {
+    hideSpinner();
+    if (!ui) ui = buildUI();
+    ui.wrap.classList.add('refused');
+    ui.wrap.classList.remove('hidden', 'picked');
+    ui.tag.innerHTML =
+      '<b>⚠ no dictation</b> <i>— ⌘⇧ is Chrome&rsquo;s until the relay is recording</i>';
+    Object.assign(ui.tag.style, { left: `${mouse.x + 16}px`, top: `${mouse.y + 16}px` });
+    clearTimeout(refuseTimer);
+    refuseTimer = setTimeout(hide, REFUSE_MS);
+  }
 
   // ------------------------------------------------------------------ state
 
@@ -347,7 +384,10 @@
     if (armed || !heldSince || poisoned) return;
 
     const live = await (probing || askRelay());
-    if (!live || !heldSince || poisoned) return hideSpinner();
+    // A hold that was let go of, or turned into a shortcut, wanted nothing and is
+    // told nothing. A hold still being held was a real ask, and gets an answer.
+    if (!heldSince || poisoned) return hideSpinner();
+    if (!live) return refuse();
 
     armed = true;
     hideSpinner();
