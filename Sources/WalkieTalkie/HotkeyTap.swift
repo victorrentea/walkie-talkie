@@ -1276,11 +1276,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// `backButtonStamp` so this tap's own branches can tell it from a Return
     /// Victor typed — the stamp is why the event does not come back round and
     /// get read as a gesture.
+    ///
+    /// **The flags are cleared, and without that the Return is not a Return.**
+    /// A `CGEvent` born from a `.hidSystemState` source inherits the modifiers
+    /// held at that instant — and this one is created *inside the tap callback
+    /// for the chord's own F6*, i.e. while Options+ still has ⌃⌥⌘ down. Measured
+    /// 2026-09-09 with a listen-only tap: the Return reached the front app as
+    /// `mods=CTRL+OPT+CMD`, which Terminal hands to Claude Code as ⌥⏎ — a
+    /// newline in the prompt instead of the send. That is the whole symptom
+    /// Victor reported ("îmi dă un fel de carriage return, nu intră complet").
+    /// Zeroing both halves' flags brings it back as a bare Return, verified the
+    /// same way. `KeySimulator` in victor-macos-addons, which typed this Return
+    /// until today, never had the bug because it sets `flags` explicitly.
     static func postReturn() {
         let source = CGEventSource(stateID: .hidSystemState)
         source?.userData = backButtonStamp
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: true),
               let up   = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: false) else { return }
+        down.flags = []
+        up.flags = []
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
     }

@@ -2445,6 +2445,19 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 | 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
 | 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
 
+**The posted Return has to have its flags wiped, and that cost a morning
+(2026-09-09).** `postReturn` runs inside the tap callback for the chord's own
+F6 — i.e. while Options+ still holds ⌃⌥⌘ down — and a `CGEvent` born from a
+`.hidSystemState` source inherits whatever modifiers are held at that instant.
+Measured with a listen-only tap: the Return reached the front app as
+`code=36 mods=CTRL+OPT+CMD`, which Terminal passes to Claude Code as ⌥⏎, i.e. a
+**newline in the prompt instead of the send** — Victor's *"îmi dă un fel de
+carriage return, nu intră complet"*. Setting `flags = []` on both halves brings
+it back as a bare Return (verified the same way, `mods=none`). The remapper that
+typed this Return until that morning, `KeySimulator` in victor-macos-addons,
+never had the bug because it assigns `flags` explicitly. Anything else this app
+posts *while a chord is held* has the same trap waiting.
+
 **The numbers are duplicated in two places and must not drift**: Options+'s own
 custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`. Change one and the
 gesture goes to whatever app claims that chord instead — silently, since a chord
