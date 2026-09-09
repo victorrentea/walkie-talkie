@@ -17,7 +17,7 @@
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
-    "when" : "From ⌘⌃B (or 🔼 ↓, or ◀️ + 🛞 with Logi gestures off) until something happens.",
+    "when" : "From ⌘⌃B (or ◀️ + 🔼, or ◀️ + 🛞 with Logi gestures off) until something happens.",
     "width" : 48
   },
   {

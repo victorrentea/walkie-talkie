@@ -519,6 +519,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
+        // **Bind a named session** — the restore half of a restart, never a
+        // gesture. It skips everything `bindFrontmostTerminal` does *because*
+        // somebody pressed something: no toggle (a caller putting a binding back
+        // must not find it there and let it go), no bind flight and no flash (an
+        // app that has just replaced itself is not announcing a gesture Victor
+        // made), and no `wakePointer` — he is not necessarily at the machine.
+        picker.onBindTTY = { [weak self] tty in
+            guard let self = self, let bound = self.terminal.bind(tty: tty) else { return nil }
+            Log.info("📍 re-bound to \(bound.address) by request")
+            DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+            return Self.describe(bound)
+        }
         // The same call the loopback route makes, from the key Victor actually
         // presses. Already off the main thread — the tap dispatches globally —
         // which this needs: it spends several subprocesses working out what it

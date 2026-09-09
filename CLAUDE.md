@@ -609,6 +609,7 @@ port scheme for a caller to guess between, and buys nothing.
 | route | what it does |
 |---|---|
 | `POST /bind` | bind the frontmost terminal; 409 if there is nothing bindable. Called on the terminal already bound it **unbinds** instead, answering `{"unbound": true}` |
+| `POST /bind` `{"tty": "ttys004"}` | bind **that** session instead of the front one — no toggle, no flight, no flash. The restore half of a restart; see *Restarting keeps the binding* |
 | `POST /unbind` | stop — the relay goes inert (see *Unbound is inert*) |
 | `GET /target` | the current binding, read-only |
 | `POST /test/dictation` | `{"text": "…"}` — a fabricated transcript, entering exactly where a real one does |
@@ -626,6 +627,41 @@ and a bind that only worked mid-sentence would be one he could never make.
 prompt, the countdown, the outbox line, the delivery — was otherwise reachable
 only by talking into a microphone, which made the one part of this app that types
 into a live session the one part nobody could test at a desk.
+
+### Restarting keeps the binding, and never interrupts a sentence (2026-09-09)
+
+`./relay-restart.sh` — and `docs/shoot-overlay-states.sh`, which stands the
+installed app down to draw the catalogue, goes through the same two functions.
+Victor's rule, in two halves said ten minutes apart: *"niciodată să nu mai dai
+restart la Walkie Talkie … în dictare — oprești și aștepți să se termine
+dictarea, să se livreze, abia apoi faci restart"*, then *"legat dar nu în
+dictare poți să-l restartezi totuși, ideal ar fi să-l re-legi la același
+terminal automat"*.
+
+**A dictation in flight is a stop; a binding is a thing to put back.** The
+restart is ordered from inside a session this app types into, so it is the one
+destructive act here that is invisible to whoever ordered it: audio already
+spoken is gone, and the binding is dropped under him with nothing on screen
+saying why. It cost one on 2026-09-09, when the shoot script restarted the app
+while he was bound.
+
+- **Both facts come from `~/.walkie-talkie/bound-tty`**, the marker the status
+  line already reads: absent unbound, `ttysNNN` bound, `ttysNNN listening`
+  while the microphone is open. One `cat` rather than an HTTP round trip, and
+  it is written from the two switches that own those facts, so it cannot
+  disagree with the chip. It is read **before** anything stands the app down —
+  launch clears it.
+- **Six seconds after the row stops saying `listening`.** The microphone
+  closing is not the end of the sentence: the decode and the held panel come
+  after it, and those are what deliver the words.
+- **The restore addresses a tty, not the front window**, which is why the route
+  had to exist: at the end of a build the frontmost window is whatever the build
+  was watched in — precisely not the session that was bound. It is never a
+  toggle, and it plays no flight and no flash: an app that has just replaced
+  itself is not announcing a gesture Victor made.
+- **A `.keystroke` target has no tty and cannot be restored**, the same hole the
+  status line's microphone badge has. The script says so and the app is running
+  either way.
 
 ### ⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)
 
@@ -2547,7 +2583,9 @@ to on a Mac that needs it.
 
 - **Ticked, the default.** The side buttons arrive as ⌃⌥⌘F3…F12 and every mouse
   button is passed straight through — one comparison in `HotkeyTap.handle` and
-  out again.
+  out again. The left button is *watched* on the way past (when it went down is
+  the other half of the bind chord) and, like everywhere else in that file,
+  never taken.
 - **Unticked.** The pre-2026-09-09 wiring, whole: the wheel carries the
   dictation, holds cancel, the left and right buttons are chord modifiers, mouse
   4 is the shutter and mouse 5 drives Replace Wispr.

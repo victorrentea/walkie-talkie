@@ -596,7 +596,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // is the wheel and `+` joins a held modifier button to it. `restyleGestures`
         // picks, and it runs whenever the tick changes as well as on every open.
         gestureRows = [
-            (bind, bind.title, "🔼 ↓", "◀️ + 🛞"),
+            (bind, bind.title, "◀️ + 🔼", "◀️ + 🛞"),
             (disconnect, disconnect.title, "🔽 ↓", "▶️ + 🛞"),
             (startDictation, startDictation.title, "🔼 →", "🛞"),
             // Right under `Start Dictation`'s own gesture, which is the pair the

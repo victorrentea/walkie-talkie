@@ -157,6 +157,16 @@ final class ElementPicker {
     /// has been since the second endpoint, is the relay's loopback control
     /// surface; the picker is its first tenant, not its purpose.
     var onBind: (() -> [String: Any]?)?
+    /// Bind a **named** tty rather than whatever is in front — `POST /bind`
+    /// with `{"tty": "ttys004"}`.
+    ///
+    /// It exists for the one caller that knows which session it means and
+    /// cannot point at it: the build script, which puts the binding back after
+    /// it has replaced the app underneath it. Victor's rule, 2026-09-09 —
+    /// restarting while a terminal is bound is fine, *"ideal ar fi să-l re-legi
+    /// la același terminal automat"* — and the frontmost window at the end of a
+    /// build is whatever the build was watched in, which is exactly not it.
+    var onBindTTY: ((String) -> [String: Any]?)?
     var onUnbind: (() -> Void)?
     /// The current binding, for `GET /target` — so a caller can ask without
     /// changing anything.
@@ -311,6 +321,17 @@ final class ElementPicker {
         // a session, and a bind that only worked mid-sentence would be a bind he
         // could never make.
         case ("POST", "/bind"):
+            // A named tty is a different question from "whatever is in front",
+            // and it is never a toggle: the caller is restoring a binding, not
+            // pointing at something, so finding that session already bound is a
+            // success rather than a request to let go of it.
+            if let body = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+               let tty = body["tty"] as? String, !tty.isEmpty {
+                guard let described = onBindTTY?(tty) else {
+                    return respond(conn, 409, ["ok": false, "error": "no terminal on \(tty)"])
+                }
+                return respond(conn, 200, ["ok": true].merging(described) { _, new in new })
+            }
             guard let described = onBind?() else {
                 return respond(conn, 409, ["ok": false, "error": "nothing bindable is in front"])
             }

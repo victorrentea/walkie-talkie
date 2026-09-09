@@ -518,9 +518,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         //
         // With the flag off, everything below is the pre-2026-09-09 wiring,
         // unchanged.
+        //
+        // **The left button is the one exception, and it is watched rather than
+        // taken.** Since the bind moved onto ⬅️ held + the forward button
+        // clicked, this mode needs the same one fact the wheel's chord needed:
+        // *when did the left button go down*. The event is handed straight back
+        // either way — nothing in this file may ever swallow one.
         if useLogiGestures {
             switch type {
-            case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+            case .leftMouseDown:
+                leftDownAt = CACurrentMediaTime()
+                return Unmanaged.passUnretained(event)
+            case .leftMouseUp:
+                leftDownAt = 0
+                return Unmanaged.passUnretained(event)
+            case .rightMouseDown, .rightMouseUp,
                  .otherMouseDown, .otherMouseUp:
                 return Unmanaged.passUnretained(event)
             default:
@@ -1193,15 +1205,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
                 return nil
 
-            // ⬇️ — point the relay at the terminal in front. **No toggle**, like
-            // the left-plus-wheel chord it replaces: the gesture is made while
-            // pointing at the terminal he means, and the ordinary reason to make
-            // it twice is not being sure the first one landed.
-            case VK_F9:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
-                return nil
-
             // ⬆️ — dictate at a session that does not exist yet: the spawn, which
             // used to be the wheel clicked twice. A gesture of its own again,
             // rather than a conversion of a dictation already in flight, because
@@ -1219,14 +1222,44 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }
                 return nil
 
-            // The forward button **clicked**, with no movement — the microphone
-            // for a dictation that goes to the caret. Gated on the mode alone,
-            // exactly as it was when this lived on mouse 5: a dictation aimed at
-            // the caret carries its own destination, so *Unbound is inert* has
-            // nothing to say about it. Outside the mode the chord is handed on
-            // rather than eaten, so Options+ can be pointed at something else
-            // without this app quietly eating it.
+            // The forward button **clicked** — two readings, told apart by the
+            // left button.
+            //
+            // **⬅️ held, then the forward button: bind** (2026-09-09). It was
+            // 🔼 ↓ — the forward button held while the mouse moved down — and
+            // Victor replaced it with the chord for what the hand is already
+            // doing: *"it's more natural, click to focus the thing and then grab
+            // it"*. Pointing at a terminal starts with a click into it, so the
+            // button that says *this window* is already down when the gesture is
+            // made; a drag downwards says nothing about which window it means.
+            // It is the left-plus-wheel chord returning with the forward button
+            // where the wheel was, which is also why it is judged the same way —
+            // `leftIsHeld`, i.e. the button genuinely down and down for
+            // `chordHoldSeconds`, so a click that merely overlaps the gesture is
+            // not one. **No toggle**, like the chord it descends from: the
+            // ordinary reason to make it twice is not being sure the first one
+            // landed.
+            //
+            // With the left button up it is the microphone for a dictation that
+            // goes to the caret, gated on the mode alone exactly as it was when
+            // this lived on mouse 5: a dictation aimed at the caret carries its
+            // own destination, so *Unbound is inert* has nothing to say about
+            // it. The bind is **not** gated on the mode — it is the one gesture
+            // that says where words go, and it has to work whichever way the
+            // next sentence is headed. Outside the mode and with nothing held
+            // the chord is handed on rather than eaten, so Options+ can be
+            // pointed at something else without this app quietly eating it.
             case VK_F7:
+                // Our own bookkeeping can go stale — a release this tap never
+                // saw would leave the button held for good and read every plain
+                // click as a bind.
+                reconcileButtons()
+                if leftIsHeld {
+                    if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                    Log.info("🎯 ⬅️ held + forward button — binding")
+                    DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
+                    return nil
+                }
                 guard replaceWispr else { return Unmanaged.passUnretained(event) }
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }

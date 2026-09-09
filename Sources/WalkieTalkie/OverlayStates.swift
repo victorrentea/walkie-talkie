@@ -68,7 +68,7 @@ enum OverlayStates {
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "bound-idle", group: "At rest", title: "Bound, standing by",
-                 when: "From ⌘⌃B (or 🔼 ↓, or ◀️ + 🛞 with Logi gestures off) until something happens.",
+                 when: "From ⌘⌃B (or ◀️ + 🔼, or ◀️ + 🛞 with Logi gestures off) until something happens.",
                  note: "A microphone, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. **The same glyph for every destination**: at rest the only thing worth saying is *armed*, and bound has to look different from unbound, where there is no chip at all. Which terminal it is, is a menu away.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
