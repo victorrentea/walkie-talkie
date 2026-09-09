@@ -77,10 +77,28 @@ final class MicRecorder {
     /// **Fast up, slow down**, and that asymmetry is the point: a syllable has
     /// to reach full brightness inside the buffer it arrives in or the light
     /// lags his voice visibly, while a light that drops as fast as it rises
-    /// strobes on the gaps *inside* a word. 35% of the way down per buffer is a
-    /// tail of roughly a quarter-second — long enough to ride through a
-    /// consonant, short enough that the fade at the end of a sentence reads as
-    /// him having stopped.
+    /// strobes on the gaps *inside* a word.
+    ///
+    /// **The fall takes three seconds, and it used to take a quarter of one.**
+    /// It was 35% of the remaining gap per buffer — a tail chosen so that "the
+    /// fade at the end of a sentence reads as him having stopped", which is the
+    /// right length for a *readout* and the wrong one for a *beacon*. Victor
+    /// reported the consequence on 2026-09-09: *"I find myself speaking a lot to
+    /// keep it open"* — the light went out between his sentences, so the thing
+    /// that is supposed to say *I am still hearing you* was answering a question
+    /// about the last 200ms instead. Three seconds is his number, said twice
+    /// (*"about, let's say, two seconds … let's put it even three seconds"*), and
+    /// it comfortably outlasts a pause for breath.
+    ///
+    /// **Linear, not the one-pole it was.** An exponential's last stretch is a
+    /// crawl nobody can time, so "three seconds" would have had to mean three
+    /// time constants and a footnote; a fixed rate means the light falls from
+    /// full to dark in exactly `levelFallSeconds` and from half in half that,
+    /// which is the sentence he asked for. It is also what makes the rate
+    /// independent of how big a buffer the hardware happens to hand us: the drop
+    /// is `dt / levelFallSeconds`, so a device delivering 4096-frame buffers and
+    /// one delivering 512 fade at the same speed. The old coefficient was per
+    /// *buffer* and therefore silently faster or slower on a different device.
     var level: Float {
         lock.lock(); defer { lock.unlock() }
         return live
@@ -90,8 +108,10 @@ final class MicRecorder {
     /// 18 dB is ordinary speech's own span at a desk: under it the loud half of
     /// a sentence would sit pinned at full brightness with nothing left to say.
     private static let levelRange: Float = 18
-    /// How much of the gap to the new value a quieter buffer closes. See `level`.
-    private static let levelRelease: Float = 0.35
+    /// How long the light takes to fall from full brightness to nothing with
+    /// nobody talking. See `level` for why it is three seconds and why it is a
+    /// duration rather than a per-buffer coefficient.
+    private static let levelFallSeconds: Float = 3
 
     /// The noise floor this recording is being judged against, tracked rather
     /// than fixed.
@@ -329,7 +349,10 @@ final class MicRecorder {
         }
         noiseFloor = floor
         voiced += seconds
-        live = loudest > live ? loudest : live + (loudest - live) * Self.levelRelease
+        // Up instantly, down at a fixed rate — measured against the audio's own
+        // clock, not against however many buffers the device chose to send.
+        let dt = Float(count) / 16000
+        live = max(loudest, live - dt / Self.levelFallSeconds)
         lock.unlock()
     }
 }

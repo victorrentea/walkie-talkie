@@ -4592,11 +4592,26 @@ Să facă fade când nu mai pronunț nimic"*.
   on the DJI receiver — which is what the tracked floor is for (`InputDevice`:
   same room, 16552 against 855).
 - **Fast up, slow down.** A syllable reaches full brightness inside the buffer it
-  arrives in, and a quieter buffer closes 35% of the gap — a tail of about a
-  quarter-second, long enough to ride through a consonant and short enough that
-  the fade at the end of a sentence reads as him having stopped. Smoothed on the
-  audio thread, set flat by a 20 Hz timer: a second animation over it would only
-  add lag to a light whose whole job is to be simultaneous with a voice.
+  arrives in; silence takes it back to nothing over **three seconds**
+  (`MicRecorder.levelFallSeconds`). Smoothed on the audio thread, set flat by a
+  20 Hz timer: a second animation over it would only add lag to a light whose
+  whole job is to be simultaneous with a voice.
+- **The fall was a quarter of a second until 2026-09-09, and that made him talk
+  to keep the light on.** It closed 35% of the gap per buffer, a tail chosen so
+  that "the fade at the end of a sentence reads as him having stopped" — the
+  right length for a *readout* of the last 200ms and the wrong one for a beacon
+  whose sentence is *I am still hearing you*. Victor: *"I find myself speaking a
+  lot to keep it open … it's gonna fade out in about, let's say, two seconds …
+  let's put it even three seconds"*. Three seconds outlasts a pause for breath,
+  which a quarter of one does not.
+- **Linear, where it used to be a one-pole.** An exponential's last stretch is a
+  crawl nobody can time, so "three seconds" would have had to mean three time
+  constants and a footnote; a fixed rate falls from full to dark in exactly
+  `levelFallSeconds`, and from half in half that. It also makes the speed a fact
+  about the audio rather than about the hardware: the drop is
+  `dt / levelFallSeconds`, so a device handing over 4096-frame buffers and one
+  handing over 512 fade alike, where the old per-buffer coefficient was silently
+  faster on one of them.
 
 ### One screen, the pointer's — and it gets out of the way
 
