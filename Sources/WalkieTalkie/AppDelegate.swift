@@ -3158,7 +3158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that the shutter grabbed the right paragraph arrived in the terminal,
         // a sentence too late to reselect.
         DispatchQueue.main.async { [weak self] in
-            self?.overlay.setSelection(text, count: total, announced: true)
+            self?.overlay.setSelection(text, count: total)
         }
     }
 

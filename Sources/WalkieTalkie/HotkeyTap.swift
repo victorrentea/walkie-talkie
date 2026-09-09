@@ -1271,6 +1271,23 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
                 return nil
 
+            // 🔽 → — Wispr Flow's hands-free toggle **while Replace Wispr is
+            // ticked**, which is the one mode where the forward button cannot
+            // offer it: there the click is this app's own microphone at the
+            // caret, and Victor still wants Wispr reachable without going to the
+            // menu to untick anything. Same chord, same `postWisprHandsFree`.
+            //
+            // Gated, and it stays a free row outside the mode on purpose: with
+            // Replace Wispr unticked the forward click already *is* this verb,
+            // and two gestures for one verb is the thing the Options+ screen has
+            // room for and the hand does not.
+            case VK_F5:
+                guard replaceWispr else { return Unmanaged.passUnretained(event) }
+                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                Log.info("🎙️ 🔽 → — Wispr Flow's hands-free toggle")
+                Self.postWisprHandsFree()
+                return nil
+
             // The back button **clicked** — a picture while a dictation is
             // running, and Return at every other moment.
             //

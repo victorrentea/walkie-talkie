@@ -2488,7 +2488,8 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 | 🔼 | ⌃⌥⌘F7 | dictate at the caret: this app's microphone with Replace Wispr ticked, **Wispr Flow's** without it |
 | 🔽 ↓ | ⌃⌥⌘F12 | unbind — the menu's Disconnect |
 | 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
-| 🔼 ↓ · 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F9 · F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
+| 🔽 → | ⌃⌥⌘F5 | Wispr Flow's hands-free toggle — **only while Replace Wispr is ticked**, a free row otherwise |
+| 🔼 ↓ · 🔽 ↑ · 🔽 ← | ⌃⌥⌘F9 · F4 · F3 | assigned in Options+, unclaimed here — free rows |
 
 #### The forward click starts Wispr Flow too, because Wispr cannot take the button (2026-09-09)
 
@@ -2496,6 +2497,12 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 opens this app's own microphone at the caret, as it always did; unticked, the
 caret belongs to Wispr Flow and the same click types **Wispr's** hands-free
 chord instead of being handed on. `postWisprHandsFree`.
+
+**And 🔽 → is the same toggle from the other side.** With Replace Wispr ticked
+the forward click is spoken for — it is this app's own microphone at the caret —
+so the one mode that hides Wispr behind a menu tick gets a gesture of its own
+back. Outside the mode it stays a free row rather than a second way in: the
+forward click already *is* this verb there.
 
 **The chord is `fn ⌃ Space`, and it was read out of Wispr's own config rather
 than off its settings screen** — `prefs.user.shortcuts` in `~/Library/

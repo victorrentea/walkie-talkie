@@ -248,9 +248,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// How many highlights the dictation is carrying, frozen one included. Zero
     /// when there is no selection row at all.
     private var selectionCount = 0
-    /// The selection row is announcing a highlight the shutter just caught, and
-    /// says `selecting` in front of it while the words are still up.
-    private var selectionAnnounced = false
     /// The row has given the highlight its seconds and collapsed to `×N`.
     ///
     /// **The words are dropped, not shortened.** A highlight is read once, at
@@ -1561,7 +1558,7 @@ private let frontLabel = NSTextField(labelWithString: "")
                 selectionHead = "×\(selectionCount)"
                 selectionBody = ""
             } else {
-                selectionHead = selectionAnnounced ? "selecting " : ""
+                selectionHead = ""
                 selectionBody = Self.fitHead(singleLine(selection), 34)
             }
             applySelectionText()
@@ -3010,23 +3007,23 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// one line; a stack of them would push the chip over the work it is riding
     /// on.
     ///
-    /// `announced` is the shutter saying it just read this one off the screen.
-    /// It is **not** a flash: a flash is a panel, and the rule that keeps the
-    /// F3 receipt out of one — taking a picture mid-sentence must not throw a
-    /// window across his work — applies with equal force to a highlight caught
-    /// by the same press. So the receipt goes on the row that was going to
-    /// carry the text anyway, and the row is what changes for a beat. It also
-    /// costs no width: this row is laid out to the panel and never measured
-    /// into it, so `selecting` plus his own words truncates at whatever the
-    /// rows above it already made the chip, which is exactly as much of the
-    /// highlight as fits without the chip growing over what he is reading.
-    func setSelection(_ text: String?, count: Int = 1, announced: Bool = false) {
+    /// **A highlight the shutter just caught is not announced in words** — the
+    /// row carrying his own words back *is* the receipt, and it appears where
+    /// there was nothing a moment ago. It said `selecting` in front of them
+    /// until 2026-09-09; Victor had the verb removed, and the row is the same
+    /// row either way, so nothing here now distinguishes a highlight the
+    /// shutter read from one the opening probe found.
+    ///
+    /// It is deliberately **not** a flash: a flash is a panel, and the rule that
+    /// keeps the shot receipt out of one — taking a picture mid-sentence must
+    /// not throw a window across his work — applies with equal force to a
+    /// highlight caught by the same press.
+    func setSelection(_ text: String?, count: Int = 1) {
         selection = (text?.isEmpty == false) ? text : nil
         selectionCount = selection == nil ? 0 : max(1, count)
 
         selectionAnnounceWork?.cancel()
         selectionAnnounceWork = nil
-        selectionAnnounced = announced && selection != nil
         // **Every highlight gets the same seconds, announced or not.** The
         // opening probe's is as new to him as one the shutter read — it is
         // whatever he happened to have selected when he started talking — so
@@ -3036,7 +3033,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         if selection != nil {
             let settle = DispatchWorkItem { [weak self] in
                 guard let self = self, self.selection != nil else { return }
-                self.selectionAnnounced = false
                 self.selectionSettled = true
                 self.layoutContent()
             }
@@ -3057,7 +3053,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     func pinSelectionSettled() {
         selectionAnnounceWork?.cancel()
         selectionAnnounceWork = nil
-        selectionAnnounced = false
         selectionSettled = selection != nil
         layoutContent()
     }
