@@ -240,6 +240,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// about to open for itself, or the caret.
     private var hasDestination: Bool { isBound || spawnPending || pasteMode }
 
+    /// **When the last bind Victor actually pressed for landed**, and the grace
+    /// it buys the sentence that follows it.
+    ///
+    /// Pointing the relay at a terminal is a statement about where the next
+    /// words go, so words said a breath later belong to it — even when the
+    /// gesture that opened the microphone was the forward button's, which in
+    /// Replace Wispr means *the caret*. Measured over his own afternoon
+    /// (`relay.log`, 2026-09-09): every dictation opened 2–3s after a bind came
+    /// out at the caret and had to be pasted by hand — 11:51:32 bound ttys014
+    /// and 11:51:34 dictated at the caret, 11:55:45 bound ttys009 and 11:55:48
+    /// the same — while the one opened nine seconds later was the bound gesture
+    /// and went where he meant. His ask: *"rezolvă race-ul ăsta ca să pot
+    /// imediat ce am legat terminalul să pot și începe dictarea"*.
+    ///
+    /// It is the rule *A bind mid-sentence changes the recipient* already runs
+    /// on, reaching a few seconds **earlier**: there the chord lands while the
+    /// words are being spoken and takes the destination back; here it landed
+    /// just before the first of them, which the sentence could not otherwise
+    /// know about.
+    ///
+    /// **Consumed by the first dictation that reads it** (`takeBindGrace`), so a
+    /// caret dictation started deliberately a minute later is untouched, and so
+    /// is the second one inside the same window. One sentence inherits a bind —
+    /// it is not a mode, and Replace Wispr's tick is never touched.
+    private var boundAt: Date?
+
+    /// How long a bind speaks for the sentence after it. Long enough for the
+    /// hand to travel from the chord to the gesture that opens the microphone
+    /// (2–3s, measured), short enough that it cannot be lived in.
+    private static let bindGrace: TimeInterval = 5
+
+    /// **A bind is still resolving.** `bindFrontmostTerminal` spends one to two
+    /// seconds of `osascript` working out what it is looking at (measured:
+    /// 11:50:15 pressed, 11:50:17 bound), and for the whole of that `isBound` is
+    /// false — so a dictate gesture made in that window fell through
+    /// `hasDestination` and did nothing at all, with nothing said about it. That
+    /// is the other half of the same complaint, and the literal race in it.
+    private var bindInFlight = false
+
+    /// A dictate gesture that arrived while a bind was still resolving. Banked
+    /// exactly as `recordWhenModelReady` banks one made against a model that is
+    /// still loading, and for that flag's reason: the intention is unambiguous,
+    /// and asking him to make it again means noticing nothing happened first.
+    private var recordWhenBound = false
+
+    /// Does the bind he just made speak for the sentence about to start?
+    ///
+    /// Reading it **consumes** it, which is what keeps this a grace and not a
+    /// mode. A bind still in flight answers yes without spending anything: the
+    /// caller then opens an ordinary dictation, which banks itself on
+    /// `recordWhenBound` and starts when the terminal is known.
+    private func takeBindGrace() -> Bool {
+        if bindInFlight { return true }
+        guard isBound, let at = boundAt, Date().timeIntervalSince(at) < Self.bindGrace else { return false }
+        boundAt = nil
+        return true
+    }
+
     /// A dictation is running. Main thread only, and kept here rather than read
     /// back off the overlay because it is half of what decides whether mouse 4 and
     /// ⌘-click belong to the relay or to the software they were borrowed from
@@ -514,6 +572,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if self.localRecording { self.stopLocalRecording() }
+                // **A bind he has just made outranks the caret.** The forward
+                // button means *wherever the caret is*, which is the vaguest
+                // destination this app has, and seconds ago he named a precise
+                // one with a gesture whose whole content is where the words go.
+                // See `boundAt` for the afternoon that measured it.
+                else if self.takeBindGrace() {
+                    Log.info("🎙️ forward button just after a bind — dictating at the terminal, not the caret")
+                    self.startLocalRecording()
+                }
                 else { self.startLocalRecording(paste: true) }
             }
         }
@@ -893,7 +960,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Unreachable in practice for a bare wheel — it is only the relay's while
         // `syncLocalCapture` says so, and that needs a binding — but the gate is
         // repeated here because this is the path that opens the microphone.
-        guard hasDestination else { return }
+        //
+        // **A bind still resolving is a destination**, banked rather than
+        // dropped: `bindFrontmostTerminal` takes a second or two of `osascript`,
+        // and a press made in that window used to fall through here and leave
+        // nothing — no recording, no message, no line in the log. A spawn and a
+        // caret dictation carry their own destination and never reach this.
+        guard hasDestination else {
+            if bindInFlight, !spawn, !paste {
+                recordWhenBound = true
+                Log.info("🎙️ dictate pressed while the bind was still resolving — holding it")
+            }
+            return
+        }
         if spawn {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
             // **As early as the press allows** — Victor's ask, 2026-09-04, and it
@@ -1681,12 +1760,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// no off switch; it is a trap on a gesture that has two.
     private func bindFrontmostTerminal(toggle: Bool = true) -> [String: Any]? {
         var front: NSRunningApplication?
-        DispatchQueue.main.sync { front = NSWorkspace.shared.frontmostApplication }
+        DispatchQueue.main.sync {
+            front = NSWorkspace.shared.frontmostApplication
+            // The next second or two is spent in `osascript`, and `isBound` is
+            // false for all of it. See `bindInFlight`.
+            bindInFlight = true
+        }
         // Read before binding: `bind` replaces the target, and what decides
         // between "point somewhere new" and "stop" is what it *was*.
         let previous = terminal.target?.handle
         guard let front = front, let bound = terminal.bind(app: front) else {
-            DispatchQueue.main.async { [weak self] in self?.overlay.flash("⚠️ nothing bindable in front", duration: 3) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.bindInFlight = false
+                // A gesture banked on this bind goes with it: there is no
+                // terminal for it to have been waiting for, and opening the
+                // microphone at nothing is exactly what *Unbound is inert* is.
+                self.recordWhenBound = false
+                self.overlay.flash("⚠️ nothing bindable in front", duration: 3)
+            }
             return nil
         }
 
@@ -1732,6 +1824,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 BindFlight.cancel()
                 Log.info("⌘⌃B on the bound target — unbinding")
+                // Letting go is the opposite of naming a destination: whatever
+                // the grace and the banked press were about is over.
+                self?.bindInFlight = false
                 self?.unbindTerminal()
             }
             return ["unbound": true, "label": bound.label, "address": bound.address]
@@ -1790,7 +1885,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // answer arrived a frame later. Showing it up front gives the
             // rectangle something to aim at, and it now slides underneath and
             // disappears there: the window that was captured is *this* label.
+            self.bindInFlight = false
+            // **The sentence he starts now belongs to this terminal** — see
+            // `boundAt`. Stamped on the gesture route only: `picker.onBindTTY`,
+            // the restore half of a restart, is not somebody pressing something.
+            self.boundAt = Date()
             self.showBound(bound)
+            // The press that arrived while this was resolving, honoured now that
+            // there is somewhere for it to go — on the next hop, so the chip and
+            // the menu are already naming the destination when the microphone
+            // opens.
+            if self.recordWhenBound {
+                self.recordWhenBound = false
+                Log.info("🎙️ bind landed — opening the microphone the press was waiting for")
+                DispatchQueue.main.async { self.startLocalRecording() }
+            }
             guard let frame = bound.sourceFrame else {
                 if let unguarded = unguarded { self.overlay.flash(unguarded, duration: 3) }
                 return
@@ -1885,6 +1994,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // going on holding the wheel and the microphone.
         defer { syncLocalCapture(); syncBorrowedGestures() }
         guard let target = target else {
+            // Nothing to inherit and nothing to wait for any more.
+            boundAt = nil
+            recordWhenBound = false
             overlay.setBound(label: nil)
             status.setDestination(nil, icon: nil)
             publishBinding(nil)

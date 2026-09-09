@@ -659,6 +659,15 @@ while he was bound.
   was watched in — precisely not the session that was bound. It is never a
   toggle, and it plays no flight and no flash: an app that has just replaced
   itself is not announcing a gesture Victor made.
+- **The retry waits ten seconds for an answer, not one** (2026-09-09). A bind is
+  one to two `osascript` round trips and the route answers only when it has
+  finished, so `curl -m 1` timed out on a bind that had **succeeded** — and the
+  loop, reading that as a failure, bound again, and again: seven re-binds over 70
+  seconds after a single restart, measured. Each one is a deliberate bind, so one
+  stole a binding Victor had made by hand in the meantime and another redirected
+  a caret dictation he had just started. The retry is for a port that is not open
+  yet, which fails in milliseconds; it must never fire against a bind still
+  running.
 - **A `.keystroke` target has no tty and cannot be restored**, the same hole the
   status line's microphone badge has. The script says so and the app is running
   either way.
@@ -3672,6 +3681,61 @@ the destination is already on the `Message` (that is what `Message.spawn` is
 for), and a bind during the hold changes nothing about the sentence in front of
 him. The seconds are few and the rule is the simpler one to hold: *the recipient
 is whoever the relay is pointed at when the microphone closes.*
+
+### …and so does the sentence that starts right after one (2026-09-09)
+
+**A bind speaks for the next five seconds.** A dictation opened inside them goes
+to the terminal that was just bound — even when the gesture that opened it was
+the forward button's, which in Replace Wispr means *the caret*. Victor's ask:
+*"rezolvă race-ul ăsta ca să pot imediat ce am legat terminalul să pot și începe
+dictarea"*.
+
+**It is the rule above, reaching a few seconds earlier.** There the chord lands
+while the words are being spoken and takes the destination back; here it landed a
+breath *before* the first of them, which is a fact the sentence had no way to
+know. Both are the same sentence: a bind is the one gesture whose whole content
+is where the words go, so it outranks a mode that answers *wherever the caret
+is*.
+
+His own afternoon is the measurement (`relay.log`, 2026-09-09): 11:51:32 bound
+ttys014 and 11:51:34 dictated — at the caret; 11:55:45 bound ttys009 and 11:55:48
+dictated — at the caret, 292 characters pasted into whatever had focus instead of
+going to the agent he had just pointed at. The one he opened nine seconds later
+(11:53:49 → 11:53:58) was the deliberate dictate gesture and went where he meant.
+Every failure is a gesture made **two or three seconds** after a bind.
+
+- **Consumed by the first dictation that reads it** (`takeBindGrace`), so it is a
+  grace and not a mode: a caret dictation started a minute later is untouched, so
+  is the second one inside the same window, and `replaceWispr` — the tick, what
+  the button means — is never written. Same rule the mid-sentence take-back
+  follows for the same reason.
+- **Five seconds**, which is the 2–3s measured plus the hand. Long enough to
+  cover the travel from the chord to the button, short enough that it cannot be
+  lived in.
+- **Armed on the gesture route only** — in `bindFrontmostTerminal`, not in
+  `showBound`. `picker.onBindTTY`, the restore half of a restart, is not somebody
+  pressing something, and a relay that has just replaced itself must not redirect
+  the first thing he says afterwards.
+
+**And a bind still resolving is a destination.** That is the literal race in the
+report: `bindFrontmostTerminal` spends one to two seconds of `osascript` working
+out what it is looking at (measured: 11:50:15 pressed, 11:50:17 bound), and for
+all of it `isBound` is false — so a dictate gesture made in that window fell
+through `hasDestination` and did **nothing at all**, silently, with not even a
+line in the log. It is banked on `recordWhenBound` and honoured when the terminal
+is known, exactly as `recordWhenModelReady` banks a press made against a model
+that is still loading, and for that flag's reason: the intention is unambiguous,
+and asking him to make it again means noticing nothing happened first. A bind
+that finds nothing bindable drops the banked press with it.
+
+**Verified end to end** by driving the real chord — ⌃⌥⌘F7 is a keystroke, so the
+gesture Options+ sends can be posted at a desk, which is what makes this path
+testable at all without a hand on the mouse. Bound, then the button: `🎙️ forward
+button just after a bind — dictating at the terminal, not the caret`, with the
+selection watcher and the context frame a bound dictation gets. The button
+pressed 0.25s into a bind: `holding it`, then `bind landed — opening the
+microphone the press was waiting for`. And with a binding in place but no fresh
+bind, the same button still opens a caret dictation — no watcher, no frame.
 
 ## ⌘⌃P pastes the last dictation
 

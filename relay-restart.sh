@@ -53,12 +53,23 @@ relay_bound_tty() {
 # bound, so this addresses it by tty. The relay takes a few seconds to open its
 # port; a bind that never lands is reported and nothing else — the app is
 # running either way.
+#
+# **Ten seconds per attempt, not one** (2026-09-09). A bind is one to two
+# `osascript` round trips and the route answers only when it has finished, so
+# `-m 1` timed out on a bind that had *succeeded* — and the loop, seeing a
+# failure, bound again, and again: seven re-binds over 70 seconds after one
+# restart, measured. That is not merely noisy. Each one is a deliberate bind, so
+# one of them stole a binding Victor had made by hand in the meantime and another
+# redirected a caret dictation he had just started (`showBound` takes a paste
+# back when a bind lands mid-sentence). The retry is for a port that is not open
+# yet, which fails in milliseconds; it must never fire against a bind still
+# running.
 relay_rebind() {
   local tty="${1:-}" port
   [ -n "$tty" ] || return 0
   for _ in $(seq 1 20); do
     for port in 8917 8918 8919; do
-      if curl -fsS -m 1 -X POST "127.0.0.1:$port/bind" -d "{\"tty\":\"$tty\"}" >/dev/null 2>&1; then
+      if curl -fsS -m 10 -X POST "127.0.0.1:$port/bind" -d "{\"tty\":\"$tty\"}" >/dev/null 2>&1; then
         echo "→ re-bound to $tty"
         return 0
       fi
