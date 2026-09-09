@@ -3768,6 +3768,23 @@ drawn round is the thing he has to move.
   does not exist.
 - **`spread` is one number**, the falloff either side of the core, and doubling
   it is the whole of *"2× mai lat … mai gros adică"*.
+- **The reference PNG was keyed out and measured, and lost.** Asked twice
+  whether the white background could not simply be removed (*"chiar nu poți
+  scoate bg alb să fie transparent?"*), so it was: the ground is a flat
+  `(246,246,246)`, which makes the classic unmultiply exact — `a = 1 −
+  min(P/B)`, then `C = (P − (1−a)·B) / a` — and it recovers clean gold with the
+  swirls and the sparkle intact. **At 100% it is the better picture. At 15% it
+  is nothing at all**, and at 5% less than that: a glow authored on white takes
+  its brightness *from* the white, so with the white gone what is left over a
+  dark editor is olive mud, and over a light one it disappears. The source's own
+  compression artefacts also become visible once the low-alpha pixels are
+  divided back up. A third try — his texture as a mask, the app's gold through
+  it — was blown out white on dark at full strength and mud at 15%, i.e. no
+  better. The drawn gradient wins for one reason: it is a smooth falloff, so it
+  looks the same at a twentieth of an opacity as at full, which is the only
+  regime this thing ever runs in. Victor picked it with the contact sheet in
+  front of him. **Do not re-key that image**; if the halo is ever wanted with
+  texture, the opacities have to go up with it.
 - **`NSColor.systemYellow` is deliberately not used.** It is dynamic and shifts
   with the appearance, and this is drawn over whatever is on screen rather than
   over the app's own surfaces: it has to be the same gold on a white page and on
