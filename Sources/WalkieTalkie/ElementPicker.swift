@@ -194,6 +194,10 @@ final class ElementPicker {
     /// forward-button path is untestable.
     var onTestReplaceWispr: ((Bool) -> Void)?
 
+    /// Ask every connected Chrome extension to reload itself; the answer is how
+    /// many were listening. Wired to `MusicBridge.reloadExtensions`.
+    var onReloadExtension: (() -> Int)?
+
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
     var describeEngine: (() -> [String: Any])?
@@ -303,6 +307,27 @@ final class ElementPicker {
         case ("GET", "/ping"):
             guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }
             respond(conn, 200, ["ok": true, "session": SessionLabel.value])
+
+        // **Ungated, unlike `/ping` right above it — and that is the whole point
+        // of it being a second route.** `/ping` answers *may I borrow ⌘⇧*, which
+        // is true only inside a dictation; this one answers *is the app running*,
+        // which the extension needs in order to decide whether opening the music
+        // socket will be a connection or a red line on its Errors page. Asking
+        // `/ping` for that conflated the two, and the socket that carries the
+        // dictation window — and now the reload — was therefore only openable
+        // *during* a dictation, i.e. after the edge it exists to deliver.
+        case ("GET", "/up"):
+            respond(conn, 200, ["ok": true, "session": SessionLabel.value, "dictating": dictating])
+
+        // Reload the unpacked Chrome extension, from the one place that can:
+        // inside Chrome. `curl -X POST localhost:8917/chrome/reload` after an
+        // edit to `inspect.js`, and the running content scripts are the new
+        // ones on the next page load.
+        case ("POST", "/chrome/reload"):
+            let asked = onReloadExtension?() ?? 0
+            respond(conn, asked > 0 ? 200 : 503,
+                    ["ok": asked > 0, "asked": asked,
+                     "error": asked > 0 ? "" : "no Chrome extension connected to the music bridge"])
 
         case ("POST", "/pick"):
             guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }

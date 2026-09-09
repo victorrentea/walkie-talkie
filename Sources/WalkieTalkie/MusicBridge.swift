@@ -83,6 +83,34 @@ final class MusicBridge {
         }
     }
 
+    /// Tell every connected extension to reload itself, and say how many heard.
+    ///
+    /// **Why this rides the music socket rather than a channel of its own.** It
+    /// is the only thing the app already pushes *to* Chrome; a second listener
+    /// for one message a day would be a second port to bind, gate and explain.
+    /// The extension's half is three lines in `relay.js`.
+    ///
+    /// **Why it exists at all.** Nothing outside Chrome can press Reload on
+    /// `chrome://extensions` — that page is closed to extensions and to
+    /// automation both — so until now every edit to `inspect.js` ended with a
+    /// manual click, and an edit that was *not* clicked looked exactly like an
+    /// edit that did not work. We are already inside the browser; we can just
+    /// ask. Same manoeuvre as Victor Addons' `/chrome/extension/reload`.
+    ///
+    /// Synchronous because the caller is an HTTP handler that has to put the
+    /// count in its reply — and because a reload the extension performs is a
+    /// socket that drops half a millisecond later, which would race an async
+    /// read of `connections`.
+    @discardableResult
+    func reloadExtensions() -> Int {
+        queue.sync {
+            guard !connections.isEmpty else { return 0 }
+            broadcast("{\"type\":\"reload\"}")
+            Log.info("🔄 asked \(connections.count) Chrome extension(s) to reload themselves")
+            return connections.count
+        }
+    }
+
     // MARK: - Internals
 
     private func stateJSON() -> String {

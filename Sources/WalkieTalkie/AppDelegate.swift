@@ -652,6 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestReplaceWispr = { [weak self] on in
             DispatchQueue.main.async { self?.setReplaceWispr(on, fromMenu: false) }
         }
+        picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
         picker.describeEngine = { [weak self] in
             ["engine": "whisper", "ready": self?.whisper.ready ?? false]
         }

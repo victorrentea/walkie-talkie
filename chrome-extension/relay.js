@@ -36,6 +36,26 @@ async function ask(port, path, init) {
   }
 }
 
+/// Is the app running *at all*? A different question from `probe()`, and it took
+/// a bug to notice: `probe()` asks `/ping`, which the relay refuses outside a
+/// dictation on purpose, so gating the music socket on it meant the socket could
+/// only ever open *during* a dictation — after the `active:true` edge it exists
+/// to receive. The music therefore paused only when an alarm happened to fire
+/// mid-sentence, which is exactly as reliable as it sounds.
+///
+/// `/up` answers whenever the app is up, so the socket is open before the edge.
+/// It keeps the property the gate was introduced for: a refused *fetch* is
+/// caught and silent, while a refused *WebSocket* is a permanent line on the
+/// extension's Errors page.
+let aliveAt = 0, aliveWas = false;
+async function alive() {
+  if (Date.now() - aliveAt < PROBE_TTL_MS) return aliveWas;
+  const answers = await Promise.all(PORTS.map((p) => ask(p, '/up')));
+  aliveAt = Date.now();
+  aliveWas = answers.some(Boolean);
+  return aliveWas;
+}
+
 async function probe() {
   if (Date.now() - cached.at < PROBE_TTL_MS) return cached;
 
@@ -167,13 +187,13 @@ async function resumeWhatWePaused() {
   console.log('[walkie-music] resumed', (pausedTabs || []).length, 'tab(s)');
 }
 
-// The only way in. Connects if — and only if — the app answers on one of the
-// picker's ports; otherwise it leaves the field empty and waits for the alarm.
+// The only way in. Connects if — and only if — the app answers `/up` on one of
+// the picker's ports; otherwise it leaves the field empty and waits for the
+// alarm.
 async function ensureMusic() {
   if (musicSocket &&
       (musicSocket.readyState === WebSocket.OPEN || musicSocket.readyState === WebSocket.CONNECTING)) return;
-  const { ports } = await probe();
-  if (ports.length) openMusicSocket();
+  if (await alive()) openMusicSocket();
 }
 
 function openMusicSocket() {
@@ -187,6 +207,15 @@ function openMusicSocket() {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
     if (msg.type === 'ping') return;   // keeps this worker resident
+    // **Reload on request from the app.** `chrome://extensions` is closed to
+    // extensions and to automation, so an edit to `inspect.js` used to end with
+    // a click by hand — and an edit that was not clicked looked exactly like an
+    // edit that did not work. We are inside the browser; we can just do it.
+    // Sent by `POST 127.0.0.1:8917/chrome/reload`.
+    if (msg.type === 'reload') {
+      console.log('[walkie] reloading on request from the relay');
+      return chrome.runtime.reload();
+    }
     if (msg.type !== 'dictation') return;
     // The relay replays the state on connect, so this is also how a worker that
     // was torn down mid-dictation learns it still owes a resume.
