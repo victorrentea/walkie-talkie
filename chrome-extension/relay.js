@@ -47,12 +47,15 @@ async function ask(port, path, init) {
 /// It keeps the property the gate was introduced for: a refused *fetch* is
 /// caught and silent, while a refused *WebSocket* is a permanent line on the
 /// extension's Errors page.
-let aliveAt = 0, aliveWas = false;
+/// The answer is kept whole rather than reduced to a bool, because `/up` also
+/// carries **which half of the gate is open** — `listening` and `bound` — and
+/// that is the one thing a refused ⌘⇧ could never say.
+let aliveAt = 0, aliveWas = null;
 async function alive() {
   if (Date.now() - aliveAt < PROBE_TTL_MS) return aliveWas;
   const answers = await Promise.all(PORTS.map((p) => ask(p, '/up')));
   aliveAt = Date.now();
-  aliveWas = answers.some(Boolean);
+  aliveWas = answers.find(Boolean) || null;
   return aliveWas;
 }
 
@@ -193,7 +196,7 @@ async function resumeWhatWePaused() {
 async function ensureMusic() {
   if (musicSocket &&
       (musicSocket.readyState === WebSocket.OPEN || musicSocket.readyState === WebSocket.CONNECTING)) return;
-  if (await alive()) openMusicSocket();
+  if (await alive()) openMusicSocket();   // the app is up; the gate is not our question here
 }
 
 function openMusicSocket() {
@@ -253,7 +256,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     // Free reconnect: a hold that finds the picker alive has just proved the
     // music bridge is too, without waiting for the alarm.
     ensureMusic();
-    probe().then((c) => respond({ live: c.ports.length > 0, sessions: c.sessions }));
+    probe().then(async (c) => {
+      const live = c.ports.length > 0;
+      // Only when the answer is no: the reason costs another round trip, and a
+      // yes has nothing to explain.
+      respond({ live, sessions: c.sessions, why: live ? null : await alive() });
+    });
     return true;      // the answer comes later
   }
   if (msg?.type === 'pick') {

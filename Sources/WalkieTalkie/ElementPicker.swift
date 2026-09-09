@@ -222,6 +222,31 @@ final class ElementPicker {
         set { stateLock.lock(); dictatingFlag = newValue; stateLock.unlock() }
     }
     private var dictatingFlag = false
+
+    /// The two halves of `dictating`, kept apart for one reason: **so a refusal
+    /// can say which one is missing.** `dictating` is `hasDestination &&
+    /// listening`, and a false read of it used to be reported as the undivided
+    /// "no", which left exactly one question standing — *was the terminal bound,
+    /// or was I simply not recording?* Victor asked it in those words on
+    /// 2026-09-09 (*"nu știu dacă [terminalul] aveam pornit"*), and nothing in
+    /// the app or the extension could answer it.
+    ///
+    /// Under the same lock as `dictating` and written on the same edge, so the
+    /// three can never disagree about the same instant.
+    var listening: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return listeningFlag }
+        set { stateLock.lock(); listeningFlag = newValue; stateLock.unlock() }
+    }
+    private var listeningFlag = false
+
+    /// Is there anywhere for a dictation to go — a bound terminal, a pending
+    /// spawn, or paste mode (`AppDelegate.hasDestination`).
+    var bound: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return boundFlag }
+        set { stateLock.lock(); boundFlag = newValue; stateLock.unlock() }
+    }
+    private var boundFlag = false
+
     private let stateLock = NSLock()
 
     /// Tried in order. Several relays can be up at once (one per agent session),
@@ -317,7 +342,8 @@ final class ElementPicker {
         // dictation window — and now the reload — was therefore only openable
         // *during* a dictation, i.e. after the edge it exists to deliver.
         case ("GET", "/up"):
-            respond(conn, 200, ["ok": true, "session": SessionLabel.value, "dictating": dictating])
+            respond(conn, 200, ["ok": true, "session": SessionLabel.value,
+                                "dictating": dictating, "listening": listening, "bound": bound])
 
         // Reload the unpacked Chrome extension, from the one place that can:
         // inside Chrome. `curl -X POST localhost:8917/chrome/reload` after an

@@ -79,6 +79,9 @@
   let refuseTimer = 0;
   // The arm's probe, started with the hold rather than after it — see beginHold.
   let probing = null;
+  // What the relay said when it refused: `{listening, bound}`, or null when the
+  // app is not running at all. Read by `refuse()`.
+  let refusal = null;
   // A press that may become a drag: the element, where the button went down, the
   // element's box and the scroll at that instant, and whether it has moved yet.
   let drag = null;
@@ -340,8 +343,15 @@
     if (!ui) ui = buildUI();
     ui.wrap.classList.add('refused');
     ui.wrap.classList.remove('hidden', 'picked');
+    // **Name the half that was missing.** The gate is `bound && listening`, and
+    // until this the refusal was the undivided no — which is precisely the
+    // question that could not be answered from the outside: *was the terminal
+    // bound, or was I simply not recording?*
     ui.tag.innerHTML =
-      '<b>⚠ no dictation</b> <i>— ⌘⇧ is Chrome&rsquo;s until the relay is recording</i>';
+      !refusal      ? '<b>⚠ Walkie Talkie is not running</b>'
+      : !refusal.bound     ? '<b>⚠ no terminal bound</b> <i>— bind one, then dictate</i>'
+      : !refusal.listening ? '<b>⚠ not recording</b> <i>— ⌘⇧ is Chrome&rsquo;s outside a dictation</i>'
+      : '<b>⚠ the relay refused the pick</b>';
     Object.assign(ui.tag.style, { left: `${mouse.x + 16}px`, top: `${mouse.y + 16}px` });
     clearTimeout(refuseTimer);
     refuseTimer = setTimeout(hide, REFUSE_MS);
@@ -376,8 +386,11 @@
   /// probe outside a dictation, so the window in which the gesture is borrowed is
   /// the window in which the overlay is on screen saying so.
   async function askRelay() {
-    try { return (await chrome.runtime.sendMessage({ type: 'probe' }))?.live === true; }
-    catch { return false; }   // no extension context, no relay, no arm
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'probe' });
+      refusal = r?.why || null;
+      return r?.live === true;
+    } catch { refusal = null; return false; }   // no extension context, no relay, no arm
   }
 
   async function tryArm() {

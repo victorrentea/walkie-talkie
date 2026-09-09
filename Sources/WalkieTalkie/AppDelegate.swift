@@ -1600,6 +1600,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // outside it LinearMouse and Victor Addons go on typing Return with it.
         hotkeys.dictating = live
         picker.dictating = live
+        // The halves as well as the verdict, so a refused ⌘⇧ can name the one
+        // that was missing rather than saying an undivided no — see
+        // `ElementPicker.listening`.
+        picker.listening = listening
+        picker.bound = hasDestination
         // **The corner beacon rides the same switch**, and deliberately on
         // `listening` rather than on `live`: it answers *is it hearing me?*, and
         // the microphone is either open or it is not — where the words then go
