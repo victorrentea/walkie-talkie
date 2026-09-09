@@ -2967,6 +2967,16 @@ that sentence is the same five words every time.
   edges to be told apart, and a target needs a ground to sit on. It is also the
   only thing this app puts near the cursor that does **not** follow it — it stays
   where the sentence started, so the hand can travel to it.
+- **The pointer is a hand over a row** (2026-09-09, Victor's ask), the same
+  convention `inspect.js` follows in Chrome with `grab`: this is something to
+  take. The arrow says nothing, and over rows made of text the pointer reads as
+  an I-beam — which is the one thing this panel never offers, since it never
+  becomes key and there is nothing to type into. It goes on a `.cursorUpdate`
+  tracking area and **not** in `resetCursorRects`: cursor rects are reset by the
+  *key* window, so on a panel deliberately never key they never fire at all,
+  while `.activeAlways` on a tracking area is what makes a background app's
+  cursor stick. The area covers the star too, which is right — it is the other
+  thing on the row that is clicked.
 - **Below and to the left of the pointer** — measured at 10pt on each axis. The
   chip hangs below-*right* (`RelayWindow.anchorGap`), and a menu underneath a chip
   chasing the same cursor cannot be clicked. It flips to the other side of the

@@ -543,9 +543,23 @@ private final class FolderRow: NSView {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       options: [.mouseEnteredAndExited, .cursorUpdate,
+                                                 .activeAlways, .inVisibleRect],
                                        owner: self))
     }
+
+    /// **A pointing hand over a row**, the same convention `inspect.js` follows
+    /// in Chrome with `grab`: this is something to take, not text to select. The
+    /// arrow says nothing, and over a row drawn with text in it the pointer can
+    /// read as an I-beam — which is the one thing this panel never offers, since
+    /// it never becomes key and there is nothing to type into.
+    ///
+    /// **Through the tracking area, not `resetCursorRects`.** Cursor rects are
+    /// reset by the *key* window, and this panel is deliberately never one, so
+    /// they would simply never fire. `.activeAlways` on a `.cursorUpdate` area is
+    /// what makes a background app's cursor stick. The area covers the star as
+    /// well, which is right — it is the other thing on the row that is clicked.
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     // The star sits inside the row, so the pointer resting on it is still on the
     // row — which is what keeps the highlight up while he reaches for it, and is
