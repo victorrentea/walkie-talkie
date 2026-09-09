@@ -2063,12 +2063,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// from the mouse going to the terminal, and should start as soon as the
     /// terminal window is displayed. Faster a bit."*
     ///
-    /// Backwards is the honest direction here. A bind is *that window is now this
-    /// chip* — he pointed at something and the chip is the answer. A spawn is the
-    /// reverse sentence: the words are already spoken, and what he does not know
-    /// is **where they went**. A rectangle leaving the pointer and arriving on a
-    /// window he has not looked at yet is a direction to look in; the same
-    /// rectangle flying the other way is an answer to a question nobody asked.
+    /// Away from the chip is the honest direction here. A bind is *that window is
+    /// now this chip* — he pointed at something and the chip is the answer. A
+    /// spawn is the reverse sentence: the words are already spoken, and what he
+    /// does not know is **where they went**. Something leaving the words he just
+    /// read and arriving on a window he has not looked at yet is a direction to
+    /// look in; the same shape flying the other way is an answer to a question
+    /// nobody asked.
+    ///
+    /// **And since 2026-09-09 it is the window itself that travels, not a frame
+    /// around nothing** (`spawnSeed`): a little terminal is born under the
+    /// dialog, the destination in miniature and carrying its pixels, and grows
+    /// over a second until it lands on the real one pixel for pixel. The two
+    /// outlined flights refuse a picture because they end on a window he is
+    /// *reading*; this one ends on a window that did not exist a second ago.
     ///
     /// **It used to wait a flat 1.25s** — `do script` returns as soon as Terminal
     /// has a window, so the shell is still starting and a picture taken then is a
@@ -2111,9 +2119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let farewell = self.overlay.promptFarewell
                     self.overlay.promptFarewell = nil
                     if let farewell = farewell, farewell.width > 1 {
-                        BindFlight.fly(from: farewell, to: { frame },
-                                       seconds: Self.spawnFlightSeconds,
-                                       outlined: true, tail: Self.spawnFlightRest)
+                        BindFlight.fly(from: Self.spawnSeed(under: farewell, like: frame),
+                                       to: { frame }, picturing: frame,
+                                       seconds: Self.spawnGrowSeconds,
+                                       tail: Self.spawnFlightRest)
                         // **The outline leaves first; the dialog goes after it.**
                         // These two ran on the same instant, and that is exactly
                         // what made the gesture unreadable: at t=0 the outline
@@ -2141,11 +2150,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         // No panel to leave from, so nothing to hold back for.
                         self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
                         // A spawn that never showed a panel has only the chip to
-                        // leave from, which is the flight this used to be.
-                        BindFlight.fly(from: frame, to: { [weak self] in
-                            self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
-                        }, seconds: Self.spawnFlightSeconds, reversed: true,
-                           outlined: true, tail: Self.spawnFlightRest)
+                        // be born under — the same window growing out of the
+                        // pointer instead of out of the dialog, which is where
+                        // Victor first put it before he corrected himself.
+                        let chip = self.overlay.chipFrame
+                        let anchor = chip.isEmpty
+                            ? CGRect(origin: NSEvent.mouseLocation, size: .zero) : chip
+                        BindFlight.fly(from: Self.spawnSeed(under: anchor, like: frame),
+                                       to: { frame }, picturing: frame,
+                                       seconds: Self.spawnGrowSeconds,
+                                       tail: Self.spawnFlightRest)
                     }
                 }
             } else {
@@ -2194,7 +2208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// same number as `spawnFlightRest` at the other end of the same flight: the
     /// panel empties out over half a second here, the outline dissolves over half
     /// a second there, and the travel between them is the 0.7s of
-    /// `spawnFlightSeconds` — so the whole gesture is a fade, a flight and a fade
+    /// `spawnGrowSeconds` — so the whole gesture is a fade, a flight and a fade
     /// with nothing left hanging at either end.
     private static let spawnPanelFade: TimeInterval = 0.5
 
@@ -2217,11 +2231,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 300ms — the loop exits on the first answer, not on the clock.
     private static let spawnWindowWait: TimeInterval = 4
 
-    /// **A shorter second.** The bind's flight is the answer to a press and is
-    /// watched; this one plays while the eye is still travelling to a window that
-    /// has just appeared somewhere else, and at a full second it was still going
-    /// when he got there.
-    private static let spawnFlightSeconds: CFTimeInterval = 0.7
+    /// **A shorter second**, for the flight to a terminal that was already open.
+    /// The bind's flight is the answer to a press and is watched; this one is a
+    /// receipt for words that have already gone, glanced at on the way back to
+    /// work, and at a full second it was still going when he got there.
+    ///
+    /// The **spawn** used to share it and no longer does — see
+    /// `spawnGrowSeconds`: that one is not a receipt, it is the window being
+    /// carried to where it now lives, and a thing being carried is watched.
+    private static let sendFlightSeconds: CFTimeInterval = 0.7
+
+    /// **The second the little terminal spends growing** (Victor, 2026-09-09:
+    /// *"slowly move it out of the screen in about … one second"*). Longer than
+    /// the send flight beside it, because this one is not glanced at: it is the
+    /// only thing on screen that says *which* of the monitors around him the
+    /// session he just dictated into has gone to, and it says it by travelling
+    /// the whole way there.
+    private static let spawnGrowSeconds: CFTimeInterval = 1.0
+
+    /// How tall the little terminal is when it is born, and how far under the
+    /// dialog it sits. Its **width comes from the window it will become**, so it
+    /// is that window in miniature rather than a rectangle of this app's own
+    /// proportions — the shape is half of what makes it read as a terminal at
+    /// 96 points, the picture inside it being the other half.
+    private static let spawnSeedHeight: CGFloat = 96
+    private static let spawnSeedGap: CGFloat = 12
+
+    /// **A little terminal window, born just under `anchor`.**
+    ///
+    /// Victor, 2026-09-09: *"from the dialogue … it creates a terminal right
+    /// under it and then slowly move it out of the screen … rather than having
+    /// that just the frame flying out"*. A spawn is the one destination he never
+    /// pointed at — the window opens on a monitor beside him while he is looking
+    /// at the dialog — and an outline arriving there says *somewhere over
+    /// there*. A picture of the window itself, growing out from under the words
+    /// he just read and landing pixel for pixel on the real thing, says *this,
+    /// and it is now there*. It is the bind flight's own argument for carrying
+    /// pixels, which the two outlined flights refuse for the opposite reason:
+    /// those end on a window he is **reading**, where a copy pasted over it
+    /// covers the destination it is pointing at, and this one ends on a window
+    /// that did not exist a second ago and has nothing to cover.
+    ///
+    /// Clamped into the anchor's own screen, so a dialog low on a short display
+    /// still gets a terminal that is on screen to be seen leaving.
+    private static func spawnSeed(under anchor: CGRect, like window: CGRect) -> CGRect {
+        let aspect = window.height > 1 ? window.width / window.height : 1.5
+        let height = spawnSeedHeight
+        let width = max(1, height * aspect)
+        var rect = CGRect(x: anchor.midX - width / 2,
+                          y: anchor.minY - spawnSeedGap - height,
+                          width: width, height: height)
+        let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
+        if let visible = screen?.visibleFrame {
+            rect.origin.y = max(rect.minY, visible.minY + spawnSeedGap)
+            rect.origin.x = min(max(rect.minX, visible.minX + spawnSeedGap),
+                                max(visible.minX, visible.maxX - width - spawnSeedGap))
+        }
+        return rect
+    }
 
     /// The dictation that was going to open a terminal is over — delivered,
     /// cancelled, or never transcribed. Main thread only: it draws.
@@ -3665,7 +3732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DispatchQueue.main.async {
                 BindFlight.fly(from: frame, to: { destination },
-                               seconds: Self.spawnFlightSeconds,
+                               seconds: Self.sendFlightSeconds,
                                outlined: true, tail: Self.spawnFlightRest)
                 // **The outline leaves, then the dialog fades** — the same beat
                 // the spawn flight keeps, and for its reason: at t=0 the outline

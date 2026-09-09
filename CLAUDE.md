@@ -2438,12 +2438,46 @@ directions — as chords nothing on macOS ships: ⌃⌥⌘ + a function key.
 |---|---|---|
 | 🔼 → | ⌃⌥⌘F10 | start the dictation, or end the one open (the same call ⌘⌃D makes) |
 | 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away |
-| 🔼 ↓ | ⌃⌥⌘F9 | bind the terminal in front — **no toggle** |
 | 🔼 ↑ | ⌃⌥⌘F8 | dictate at a session that does not exist yet |
+| ◀️ held, then 🔼 | ⌃⌥⌘F7 | **bind** the terminal in front — no toggle |
 | 🔼 | ⌃⌥⌘F7 | dictate at the caret — **only while Replace Wispr is ticked** |
 | 🔽 ↓ | ⌃⌥⌘F12 | unbind — the menu's Disconnect |
 | 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
-| 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
+| 🔼 ↓ · 🔽 ↑ · 🔽 ← · 🔽 → | ⌃⌥⌘F9 · F4 · F3 · F5 | assigned in Options+, unclaimed here — free rows |
+
+#### The bind is a chord again: hold the left button, click the forward one (2026-09-09)
+
+It was **🔼 ↓** — the forward button held while the mouse moved down — for the
+one day the function-key set had existed. Victor's ask, and his reason: *"let's
+go for holding the left button of the mouse, the main button, and clicking on
+the forward mouse button — it's more natural, click to focus the thing and then
+grab it"*.
+
+**The hand is already doing half of it.** Pointing the relay at a terminal
+begins with clicking into that terminal, so the button that says *this window*
+is down at the moment the gesture is made; a downward drag says nothing about
+which window it means, and it is a direction that has to be remembered rather
+than one the motion already contains. It is the **left-plus-wheel chord
+returning**, with the forward button where the wheel was — which is why it is
+judged the same way: `leftIsHeld`, i.e. the button genuinely down (the window
+server is asked as well as our own bookkeeping) and down for `chordHoldSeconds`,
+so a left click that merely overlaps the gesture is not one.
+
+- **It shares F7 with the caret dictation**, and the left button is the whole
+  difference. That is safe because a *click* leaves nothing held: `leftDownAt`
+  is cleared at the release, so the ordinary sequence — click into a field to
+  place the caret, then click the forward button to dictate into it — is
+  untouched.
+- **The bind is not gated on Replace Wispr**, though the caret dictation on the
+  same key is. It is the gesture that says *where the words go*, so it has to
+  work whichever way the next sentence is headed.
+- **F9 is a free row now**, not a second way in. "Instead of", not "as well as":
+  two gestures for one verb is the thing the Options+ screen has room for and the
+  hand does not.
+- **The left button is watched in Logi mode too, and never taken.** That mode
+  hands every mouse event straight back one comparison later; the one fact it
+  now records on the way past is when the left button went down. Nothing in
+  `HotkeyTap` may ever swallow one — it is how the Mac is used.
 
 **The posted Return has to wait for the chord to wear off, and it took three
 tries to get right (2026-09-09).** `postReturn` runs inside the tap callback for
@@ -3062,6 +3096,57 @@ that sentence is the same five words every time.
   the icon is what turns the row on, so the default `~/workspace` is untouched.
   New state, so `docs/overlay-states.html` has a new `Shot` (`spawn-folder`).
 
+### The little terminal grows out of the dialog (2026-09-09)
+
+**A spawn no longer sends an outline to the new window — it sends the window.**
+A small terminal is born just under the pre-send dialog, carrying a picture of
+the session that has opened, and grows over a second until it lands on the real
+one pixel for pixel.
+
+Victor's ask: *"from the dialogue … it creates a terminal right under it and
+then slowly move it out of the screen in about … one second, rather than having
+that just the frame flying out. Attention: this only applies for creating new
+terminals — if the message goes to an existing one, the frame thing keeps"*.
+
+**It is the bind flight's own argument for carrying pixels, arriving late.**
+That flight ends *small, at the cursor*, so the pixels are what identify which
+window became the chip. The two outlined flights end **on** a window at full
+size — and that is why they refuse a picture: the destination is something
+Victor is *reading*, and a copy pasted over it covers the very thing it is
+pointing at. A spawn's destination did not exist a second ago and has nothing to
+cover, so the objection does not reach it, and what is left is the picture doing
+what it does best. **Only the spawn changes**: `sendFlight`, to a terminal that
+was already open, is untouched.
+
+- **It lands invisibly, and that is the effect.** The picture is grabbed from
+  the *destination* rectangle, so at the end of the travel it lies pixel for
+  pixel on what is already there — the same seam the bind flight opens with, run
+  backwards. What is left to dissolve is the white border, over
+  `spawnFlightRest`.
+- **`BindFlight.fly` grew one parameter for it**, `picturing:`, defaulting to
+  `source`. Every other flight photographs the rectangle it leaves; this is the
+  one case where the pixels come from the far end.
+- **The seed is the destination in miniature** — `AppDelegate.spawnSeed`, 96pt
+  tall with **the window's own aspect ratio**, 12pt under the anchor and clamped
+  into that anchor's screen. The shape is half of what makes it read as a
+  terminal at that size, the picture inside it the other half; a rectangle of
+  this app's own proportions would read as another chip.
+- **One second, not the send flight's 0.7** (`spawnGrowSeconds` against
+  `sendFlightSeconds`, which is what `spawnFlightSeconds` was renamed to when
+  the two parted company). A receipt for words that have already gone is glanced
+  at on the way back to work; this one is the only thing on screen that says
+  *which of the monitors around him* the session went to, and it says it by
+  travelling the whole way there.
+- **No `reversed:` anywhere in a spawn any more.** Both branches now run
+  forwards, from a seed to the window. The panel-less fallback anchors under the
+  chip instead of under the dialog, so the two are one sentence with two
+  starting points rather than two animations.
+- **The grab has the limit it always had**: `CGWindowListCreateImage` on a
+  screen rectangle returns what is on that patch of screen, so a destination
+  window buried under something else is photographed with whatever is on top. On
+  the path this is written for the window has just been tiled into a free cell
+  on a lateral monitor, so there is nothing on top of it.
+
 ### Two halves, and a line between them (2026-09-08)
 
 **The menu names the projects he pinned, then a separator, then the five repos
@@ -3206,7 +3291,9 @@ fade and a click lands during it, so it is answerable; if it starts to feel
 rushed, the number to change is `solidSeconds`.
 
 **The window flies into the chip, 2.5s after it opens** — the same `BindFlight`
-every bind plays (`AppDelegate.flySpawnedWindow`). A spawn is the one destination
+every bind plays (`AppDelegate.flySpawnedWindow`). Since 2026-09-09 it is that
+window *carrying its own pixels*, growing out from under the dialog — see
+*The little terminal grows out of the dialog*. A spawn is the one destination
 Victor never pointed at: the window appears on its own, somewhere he was not
 looking, while his hand is still on the mouse. Every other way a session becomes
 a destination answers itself with a picture of that window travelling to the
@@ -5084,11 +5171,30 @@ Terminal felt like, which in practice is on top of whatever he is reading on the
 built-in Retina display. `SpawnTerminal.board()` and `slot(for:on:avoiding:)`
 decide instead:
 
-- **an external display attached** → the window is **tiled** across every
-  non-Retina screen, left to right. *"tile them somehow so that they don't overlap
-  with others… use all the monitors you have around"*.
+- **an external display beside the laptop** → the window is **tiled** across
+  every non-Retina screen *lateral to the primary*, left to right. *"tile them
+  somehow so that they don't overlap with others… use all the monitors you have
+  around"*.
 - **nothing but the Retina display** → there is nowhere to move it to, so it opens
-  **behind** instead. The window still exists and `adoptSpawnedWindow` still binds
+  **behind** instead.
+
+**The screen above is not one of them, since 2026-09-09** — Victor: *"start the
+terminals on the lateral screens, not on the screen above"*. At home the built-in
+display has three identical Dells around it: one left (`x = -1920`), one right
+(`x = 1728`) and **one stacked directly above** it (`-89, 1117`), and that third
+one was taking a third of the spawns. A screen over the laptop is the one place
+on that desk he has to lift his eyes off the keyboard to read, so a session
+opening there is a session he has to go and find — the exact failure the tiling
+was written to remove, moved from the Retina display to the one above it.
+
+**"Lateral" is measured, not named.** A screen is *stacked* when it shares more
+than half of **its own** width with the primary's horizontal span; stacked
+screens are dropped. Two consequences are deliberate: the primary is never
+stacked, so a desk of nothing but external monitors still tiles across all of
+them; and a sliver of overlap — two monitors side by side but nudged — is
+*beside*, not above, which is why the test is a share of the width rather than
+any overlap at all. Verified against the four real displays: the two side Dells
+kept, the one above dropped, the Retina one dropped as before. The window still exists and `adoptSpawnedWindow` still binds
   it a beat later — delivery goes through `do script … in <tab>`, which does not
   need the window in front.
 
@@ -5159,9 +5265,9 @@ otherwise animate it back up). Any **relayout** ends the hold (`endSpawnHold`, a
 the top of `layoutContent`): a new dictation or a flash is newer state than this
 picture, and newer state wins the chip.
 
-**The outline then leaves the dialog** — `BindFlight.fly(from: promptFarewell,
-to: { window })`, which is *the same call the send flight makes*, so the two
-panel→terminal flights are one animation with two callers. It flies the moment
+**The little terminal then leaves the dialog** — `BindFlight.fly(from:
+spawnSeed(under: promptFarewell, like: window), to: { window }, picturing:
+window)`, the same call the send flight makes with two arguments changed. It flies the moment
 `adoptSpawnedWindow` finds the window, and **the dialog holds still for a quarter
 of a second before it starts to fade** (`spawnPanelFadeDelay`, then
 `releaseSpawnPanel` over `spawnPanelFade` = 0.5s).
@@ -5190,9 +5296,10 @@ has to exist and have coordinates first. That is also why the panel is *held*
 rather than dismissed when the prompt resolves — it is being kept alive for a
 moment that has not happened yet.
 
-**The old backwards flight is still there, as the fallback**, for a spawn that
-never showed a panel — there is then nothing but the chip to leave from. What
-follows is why it was built that way, and it is still the argument for that case.
+**The fallback is the same flight born under the chip**, for a spawn that never
+showed a panel — there is then nothing but the pointer to leave from, which is
+where Victor first put it before he corrected himself. What follows is why the
+direction was chosen, and it is still the argument for both.
 
 *"the animation should be backwards, from the mouse going to the terminal, and
 should start as soon as the terminal window is displayed. Faster a bit."* —

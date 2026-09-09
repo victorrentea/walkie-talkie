@@ -193,6 +193,24 @@ enum SpawnTerminal {
     /// the window still exists and `adoptSpawnedWindow` still binds it, since
     /// delivery is `do script … in <tab>` and never needs a window in front.
     ///
+    /// **The lateral displays only, since 2026-09-09** — Victor's ask: *"start
+    /// the terminals on the lateral screens, not on the screen above"*. At home
+    /// he has three identical Dells around the built-in one: two beside it and
+    /// **one stacked directly above** it, and the third was getting a third of
+    /// the spawns. A screen above the laptop is the one place on that desk he
+    /// has to lift his eyes off the keyboard to read, so a session that opens
+    /// there is a session he has to go and find — which is exactly the failure
+    /// the tiling was written to remove, moved from the Retina display to the
+    /// one over it.
+    ///
+    /// "Lateral" is measured, not named: a screen is **stacked** when it shares
+    /// more than half of its own width with the primary's horizontal span, and
+    /// stacked screens are dropped. The primary itself is never stacked, so a
+    /// desk of nothing but external monitors still tiles across all of them.
+    /// Overlapping by a sliver — two monitors set side by side but nudged — is
+    /// beside, not above, which is why this is a share of the width and not a
+    /// test for any overlap at all.
+    ///
     /// `visibleFrame`, not `frame`, so a menu bar or a Dock on a display is not
     /// tiled over.
     private static func board() -> [Box] {
@@ -204,8 +222,15 @@ enum SpawnTerminal {
             // origin — wherever it sits in the list.
             let primary = screens.first { $0.frame.origin == .zero } ?? screens[0]
             let pivot = primary.frame.maxY
+            // Above or below the primary rather than beside it — see the note.
+            let stacked = { (screen: NSScreen) -> Bool in
+                guard screen !== primary else { return false }
+                let shared = min(screen.frame.maxX, primary.frame.maxX)
+                           - max(screen.frame.minX, primary.frame.minX)
+                return shared > screen.frame.width / 2
+            }
             found = screens
-                .filter { $0.backingScaleFactor < 2 }
+                .filter { $0.backingScaleFactor < 2 && !stacked($0) }
                 .map { screen -> Box in
                     let f = screen.visibleFrame
                     return Box(x: Int(f.minX.rounded()),

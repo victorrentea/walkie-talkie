@@ -205,9 +205,21 @@ enum BindFlight {
     /// so its own view's drawing was the only picture of it in existence — and
     /// with that flight outlined, nothing was left to hand a picture in.
     ///
+    /// **`picturing` is where the pixels come from, when that is not `source`.**
+    /// A bind grabs the window it is leaving, which is why this defaults to
+    /// `source` and why nothing else needed it for a month. The spawn's grow
+    /// flight is the one case where the two part company: the little terminal
+    /// born under the dialog is a picture of the window it is *going to*, so it
+    /// carries the destination's rectangle and arrives on it pixel for pixel.
+    ///
+    /// It is the same screen grab either way, with the same limit: what comes
+    /// back is what is on that patch of screen, so a destination window sitting
+    /// under something else is photographed with whatever is on top of it.
+    ///
     /// `tail` holds it on the destination afterwards while it fades to nothing.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
+                    picturing: CGRect? = nil,
                     seconds: CFTimeInterval = duration,
                     reversed: Bool = false,
                     outlined: Bool = false,
@@ -222,7 +234,7 @@ enum BindFlight {
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
         // actually on it.
-        let picture = outlined ? nil : grab(source)
+        let picture = outlined ? nil : grab(picturing ?? source)
         hasPicture = picture != nil
         hollow = outlined
 
