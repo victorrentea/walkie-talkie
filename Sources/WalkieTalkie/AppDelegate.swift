@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// running — see `RecordingBeacon`. The chip says the same thing beside the
     /// cursor, which is the one place he is not looking while he talks.
     private let beacon = RecordingBeacon()
+    private let caretHalo = CaretHalo()
 
     /// Keeps every dictation's **recording** beside the model's reading of it,
     /// so a recogniser can be measured on Victor's own voice later. It changes
@@ -653,7 +654,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // because it does its own hop; this one had to be given one.
             DispatchQueue.main.async {
                 if paste {
-                    self.overlay.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
+                    self.overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph)
                 }
                 self.listening = true
                 self.syncBorrowedGestures()
@@ -747,6 +748,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // holding the microphone is this delegate's business, not its own.
         beacon.level = { [weak self] in self?.mic.level ?? 0 }
         beacon.start()
+        // The ring round the pointer swells on silence rather than on volume,
+        // so it asks the recorder a different question — see
+        // `MicRecorder.quietSeconds` for why it is not read off `level`.
+        caretHalo.quietSeconds = { [weak self] in self?.mic.quietSeconds ?? 0 }
 
         // Nothing is bound yet, and a marker left by a relay that was killed
         // rather than quit would claim otherwise until the first bind.
@@ -1016,7 +1021,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `stopLocalRecording`. A start that is neither a spawn nor a paste
         // takes the row down, since a caret left over from a decode that never
         // came back would name a destination this sentence is not going to.
-        if paste { overlay.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph) }
+        if paste { overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph) }
         else if !spawn { overlay.setSpawnDestination(nil) }
         guard whisper.ready else {
             // **Rare, now that the load runs at launch**: this is either the
@@ -1693,6 +1698,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the microphone is either open or it is not — where the words then go
         // is the chip's question, not this one.
         beacon.setRecording(listening)
+        // **The ring round the pointer, on the one dictation with no place to
+        // point at.** `pasteMode` rather than `replaceWispr`, so it is about
+        // *this sentence's* destination and not about the menu tick — a bind
+        // made mid-sentence takes `pasteMode` away and the ring goes with it,
+        // which is right: there is a destination now, and the chip is naming it.
+        // `!isBound` is Victor's own condition, and it is the difference between
+        // a caret he has to place and one that has a terminal behind it.
+        caretHalo.setActive(listening && pasteMode && !isBound)
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the beacon does rather than a flag of its own.
         publishBinding(terminal.target)

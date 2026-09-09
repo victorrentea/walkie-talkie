@@ -106,7 +106,7 @@ enum OverlayStates {
                  note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
+                o.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
             },
 
@@ -116,7 +116,7 @@ enum OverlayStates {
                  note: "It borrowed nothing before, on the argument that both gestures add to a *message* and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — the tally included — and what gets pasted carries `[the shots I took: …]`, `[selected: …]` and `[elements I picked in Chrome: …]` in the wording the terminal already uses. **The highlights joined them on 2026-09-09**, on his ask: they were the one deliberate attachment this envelope refused, and the refusal was really about the *probe* rather than about the highlight. What it still does not carry is anything **automatic**: no opening frame, no `[Focused window: …]` and no `dictated aloud` hint. Attach nothing and it pastes the words alone, byte for byte as before.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", icon: terminal)
-                o.setSpawnDestination("at the caret", icon: RelayWindow.pinGlyph)
+                o.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
                 o.setShotCount(2)
                 o.setPicks(count: 2, newest: "div#cart > span.price")

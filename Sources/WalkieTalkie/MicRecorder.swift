@@ -104,6 +104,25 @@ final class MicRecorder {
         return live
     }
     private var live: Float = 0
+
+    /// **How long it has been since he last said anything**, in seconds of
+    /// audio — the signal `CaretHalo` swells on.
+    ///
+    /// Deliberately *not* read off `level`. That readout falls linearly over
+    /// three seconds by design (see above), so "quiet" measured through it is
+    /// "quiet, plus however loud the last syllable happened to be" — the lag
+    /// would be two and a half seconds after a shout and nothing after a
+    /// murmur. This is the **voiced bar itself**, the same test `voicedSeconds`
+    /// counts and the same one the beacon's brightness is spread over: a hop
+    /// clears it or it does not, and the clock restarts when one does.
+    ///
+    /// Counted in audio, not in wall clock, so it cannot run on while the
+    /// microphone is closed or while buffers are late.
+    var quietSeconds: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return quiet
+    }
+    private var quiet: TimeInterval = 0
     /// The dynamic range the light is spread over, in dB above the voiced bar.
     /// 18 dB is ordinary speech's own span at a desk: under it the loud half of
     /// a sentence would sit pinned at full brightness with nothing left to say.
@@ -241,6 +260,7 @@ final class MicRecorder {
         // commit that added the meter and found on the forward button the same
         // afternoon (2026-09-07); the button was innocent.
         voiced = 0
+        quiet = 0
         live = 0
         noiseFloor = -1
         isRecording = true
@@ -331,6 +351,11 @@ final class MicRecorder {
         // The buffer's loudest hop, not its average: a buffer is a fifth of a
         // second at most and a syllable inside it should light the beacon whole.
         var loudest: Float = 0
+        // Any voiced hop anywhere in this buffer restarts the quiet clock. Per
+        // buffer rather than per hop because the whole buffer is at most a fifth
+        // of a second, which is far below the two seconds anything downstream
+        // cares about.
+        var spoke = false
         lock.lock()
         var floor = noiseFloor
         for start in stride(from: 0, through: count - hop, by: hop) {
@@ -343,12 +368,13 @@ final class MicRecorder {
             if floor < 0 || rms < floor { floor = rms }        // instant attack
             else { floor += (rms - floor) * 0.02 }             // slow release
             let bar = max(Self.voicedAbsoluteFloor, floor * pow(10, Self.voicedOverFloor / 20))
-            if rms > bar { seconds += Double(hop) / 16000 }
+            if rms > bar { seconds += Double(hop) / 16000; spoke = true }
             let over = 20 * log10(rms / bar)
             loudest = max(loudest, min(1, max(0, over / Self.levelRange)))
         }
         noiseFloor = floor
         voiced += seconds
+        quiet = spoke ? 0 : quiet + Double(count) / 16000
         // Up instantly, down at a fixed rate — measured against the audio's own
         // clock, not against however many buffers the device chose to send.
         let dt = Float(count) / 16000

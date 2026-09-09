@@ -888,7 +888,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
 | the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
-| dictating in Replace Wispr | the drawn map pin + `at the caret` — the same slot a spawn takes, and for the same reason |
+| dictating in Replace Wispr | the drawn map pin + `at caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
 cycling 1→2→3→1, and there was a glass-shine sweep every 5s to go with it. All of
@@ -3452,7 +3452,7 @@ listening și nu mai afișa primul rând."* The ✨ now rides in front of `Liste
 - **The held panel keeps its title row.** It is parked in a corner, read whole,
   and *where these words are about to go* is exactly what a panel with a Cancel
   button on it has to say out loud.
-- **Only the spawn.** Replace Wispr's `at the caret` names a destination that
+- **Only the spawn.** Replace Wispr's `at caret` names a destination that
   genuinely varies, so it keeps its row — which is why the mark is passed in
   (`setSpawnDestination(_:mark:)`) rather than sliced off the label.
 
@@ -3529,7 +3529,7 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   `Message.spawn` already follows.
 - **…but a bind mid-sentence overrules it**, since 2026-09-09: the left-plus-wheel
   chord made while a caret dictation is running sends the words to that terminal
-  instead, and the chip stops saying `at the caret`. The mode itself is untouched.
+  instead, and the chip stops saying `at caret`. The mode itself is untouched.
   See *A bind mid-sentence changes the recipient*.
 - **No context shot, and that is not only a saving.** The automatic frame exists
   to be read by an agent beside the words; here there is no agent and no message.
@@ -3540,7 +3540,13 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   for both in the same breath (*"nu trebuie să facă poză originală"*).
 - **The shutter and the ⌘⇧-pick work here, since 2026-09-08** — see *What a
   caret dictation carries* below.
-- **The chip says `at the caret` behind the drawn map pin**, in the slot a spawn
+- **`at caret`, not `at the caret`** (2026-09-09, Victor's ask). The article was
+  doing nothing: every other destination row on the chip is a bare name —
+  `petclinic@main`, `workspace` — and a definite article in front of one of them
+  reads as prose where the rest of the column is labels. It is also the row this
+  mode leans on hardest, since it is the only destination that is not a place.
+
+- **The chip says `at caret` behind the drawn map pin**, in the slot a spawn
   uses and for the spawn's reason: the bound terminal is still there, and for the
   length of this sentence the words are not going to it.
 
@@ -3571,7 +3577,7 @@ textul transcris… în fapt, cum face Wispr Flow acum."*
   not a setting he drifts into — it is how he dictates for a whole stretch of
   work, and re-ticking it every launch is a tax charged on the one gesture that
   exists to save typing. The tick is one click away and the chip says
-  `at the caret` on every sentence it takes, so a mode left on is visible
+  `at caret` on every sentence it takes, so a mode left on is visible
   before a word is spoken. `AppDelegate` seeds the flag and the tap from
   `StatusItem.isReplaceWispr` at launch **without** going through
   `setReplaceWispr`: that call flashes the overlay, and a restored mode is not an
@@ -3670,6 +3676,81 @@ prompt: `captureLocal` runs before the branch. These are Victor's own words in h
 own voice, and which destination they were headed for says nothing about their
 worth as a sample.
 
+### The ring round the pointer, when there is nowhere else to point (2026-09-09)
+
+**While a caret dictation is running with nothing bound, a 100pt ring is drawn
+round the pointer — 10% opaque while he talks, swelling to 50% once he stops.**
+`CaretHalo.swift`, switched from `syncBorrowedGestures` beside the beacon.
+
+Victor's ask: *"when this mode is activated, when I'm not bound, draw a little
+halo ring around the mouse … about 100 pixels, to warn me that I need to
+basically pick somewhere to paste it … by default it's 10% … but grows in
+opacity up to 50% after two seconds of low voice … over another two seconds"*.
+
+**Every other destination this app has is a thing he pointed at and a thing the
+chip names.** A terminal's icon and `petclinic@main`, a folder off the menu, ✨
+for a session that does not exist yet. `at caret` is a name too, and that is
+exactly the problem — it is the one destination that is not a place but
+*wherever the focus happens to be when the words arrive*. Unbound there is no
+second answer either, so a sentence spoken with the focus in the wrong window is
+pasted into the wrong window, found afterwards, with nothing having said so at
+the time.
+
+**The chip cannot carry this**, and that is why the ring is round the pointer
+rather than beside it. The chip rides the cursor and macOS hides the cursor the
+moment he touches the keyboard — which is precisely the gesture this is about.
+A ring is read at the edge of vision without being read at all, and what it is
+drawn round is the thing he has to move.
+
+- **Silence is the trigger, and that is the whole design.** While he is talking
+  the paste is not imminent and the ring has nothing to ask, so it sits at 10%:
+  present, ignorable, there to be recognised later rather than read now.
+  Stopping is the signal — the sentence is about to be pasted, and it is the
+  last moment placing the caret is still free. Quiet exactly while he is busy,
+  insistent exactly when he is not.
+- **Two seconds before it starts**, because the gaps *inside* a sentence are
+  ordinary: he pauses to think mid-dictation constantly, and a ring brightening
+  on every breath would be a light flashing at the corner of his eye for the
+  length of every sentence — the failure that keeps the `HQ` tag's pop
+  edge-triggered.
+- **`MicRecorder.quietSeconds`, not `level`.** The beacon's readout falls
+  linearly over three seconds by design, so "quiet" measured through it would be
+  "quiet, plus however loud the last syllable was" — two and a half seconds of
+  lag after a shout and none after a murmur. This is the **voiced bar itself**,
+  the same test `voicedSeconds` counts: a hop clears it or it does not, and the
+  clock restarts when one does. Counted in audio rather than wall clock, so it
+  cannot run on while the microphone is shut.
+- **`pasteMode`, not `replaceWispr`** — this sentence's destination, not the
+  menu tick. A bind made mid-sentence takes `pasteMode` away and the ring goes
+  with it, which is right: there is a destination now, and the chip is naming
+  it. `!isBound` is Victor's own condition and is the difference between a caret
+  he has to place and one with a terminal behind it.
+- **Blue, this app's one colour that has never meant an event.** Red is *this
+  went to the agent* and yellow is *Victor Addons captured it*; both announce
+  something that just happened. This announces nothing — it is a standing fact
+  about where the next sentence lands, the same reading the `HQ` tag took blue
+  for one row up.
+- **`RelayPanel`, not `NSPanel`.** `constrainFrameRect` drags a borderless
+  window back onto the display and under the menu bar, which for something
+  pinned to the pointer is precisely wrong — at the top of the screen it would
+  shove the ring off the cursor to keep it whole. Same trap `BindFlight` and
+  `UnbindPop` are written under.
+- **Global *and* local mouse monitors**, like the chip: the chip is riding the
+  same cursor and is not click-through, so without the local half the ring would
+  stop dead every time the pointer crossed it.
+- **Never in a screenshot** (`sharingType = .none`) — the shutter is live in
+  Replace Wispr, so this would otherwise be a blue ring burned into the frames
+  it is standing over. It therefore cannot be reviewed with a screenshot;
+  `CGWindowListCopyWindowInfo` is what it was verified through.
+- **Both edges are logged** (`◯ caret halo on/off`), for the selection
+  watcher's reason: none of the three conditions behind it is visible on screen,
+  so *"why did the ring not come up"* has to be answerable from the file.
+
+**Verified end to end** by driving the real chord — ⌃⌥⌘F7 posted at a desk, the
+gesture Options+ sends — with nothing bound and Replace Wispr on, reading the
+panel back off the window server: `108×108 alpha=0.100` centred on the cursor
+while silent for a second, `0.426` at about three seconds, `0.500` from four on.
+
 ## A bind mid-sentence changes the recipient
 
 The left-plus-wheel chord works **while a dictation is running**, and it
@@ -3710,7 +3791,7 @@ on the same three conditions — a paste in flight, a recording running, and a
   make a bind a hidden way to switch it off, discoverable only by finding it
   already off.
 - **The chip is the other half of the ask.** `setSpawnDestination(nil)` takes the
-  map pin and `at the caret` down, and the line the bind writes a moment later —
+  map pin and `at caret` down, and the line the bind writes a moment later —
   the destination app's icon and `petclinic@main` — is the top row again, which
   is the honest answer to where the words go. Same reason the spawn's row is
   taken back rather than left to be wrong for the rest of the sentence.
