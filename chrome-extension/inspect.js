@@ -51,6 +51,11 @@
   // becomes furniture.
   const REFUSE_MS = 1600;
 
+  // **The longest the arm may wait on the service worker.** Generous next to the
+  // 400ms round trip a woken worker needs, and short enough that the gesture
+  // fails inside the hold rather than after it.
+  const PROBE_BUDGET_MS = 1500;
+
   // How far the pointer has to travel with the button down before this is a drag
   // and not a click. Four pixels is the usual threshold for the distinction and
   // is under the tremor of a deliberate press.
@@ -387,7 +392,18 @@
   /// the window in which the overlay is on screen saying so.
   async function askRelay() {
     try {
-      const r = await chrome.runtime.sendMessage({ type: 'probe' });
+      // **Raced, because an unanswered `sendMessage` never settles.** The worker
+      // keeps the port open when its listener returns true, so a reply that is
+      // never sent — a service worker that died mid-probe, a `probe()` that
+      // rejected before reaching `respond` — leaves this `await` pending for
+      // good, and `tryArm` never reaches the line that takes the spinner down.
+      // That is a spinner sitting on the page for the rest of the tab's life,
+      // reported today as *"rămâne rotița de încărcare permanent … doar e un
+      // loading acolo"*. No answer inside the budget is an answer: no.
+      const r = await Promise.race([
+        chrome.runtime.sendMessage({ type: 'probe' }),
+        new Promise((r) => setTimeout(() => r(null), PROBE_BUDGET_MS)),
+      ]);
       refusal = r?.why || null;
       return r?.live === true;
     } catch { refusal = null; return false; }   // no extension context, no relay, no arm
@@ -589,6 +605,20 @@
     // Only while one is actually up: `ui` outlives every arm, and a style write
     // on every mousemove for a hidden node is a cost paid all day for nothing.
     if (heldSince && !armed) placeSpinner();
+    // Belt and braces: whatever left a spinner up, a pointer moving with no hold
+    // behind it proves the gesture is over.
+    else if (!heldSince) hideSpinner();
+    // **The chord, re-read from the event.** `armed` used to be taken down only
+    // by a keyup, a blur or a poisoning keydown — and a keyup reaches the
+    // *focused* frame only. The arm that a mousemove put up inside an iframe
+    // (the second way in, below) therefore had no way down at all: it stayed
+    // armed, and every mousedown, click and contextmenu over it went on being
+    // swallowed by the loop at the bottom of this file. A page that will not
+    // let you select anything, with nothing on screen saying why.
+    //
+    // Every mousemove carries the live modifier state, so the armed path can
+    // check the same thing the unarmed one below already checks.
+    if (armed && !(e.metaKey && e.shiftKey)) return disarm();
     if (armed) return hover(e.clientX, e.clientY);
 
     // The second way in, and the one that matters inside an iframe: keystrokes go
