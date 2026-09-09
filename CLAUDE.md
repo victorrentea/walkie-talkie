@@ -3815,9 +3815,17 @@ drawn round is the thing he has to move.
   same cursor and is not click-through, so without the local half the ring would
   stop dead every time the pointer crossed it.
 - **Never in a screenshot** (`sharingType = .none`) — the shutter is live in
-  Replace Wispr, so this would otherwise be a blue ring burned into the frames
-  it is standing over. It therefore cannot be reviewed with a screenshot;
-  `CGWindowListCopyWindowInfo` is what it was verified through.
+  Replace Wispr, so this would otherwise be a gold halo burned into the very
+  frames it is standing over, at the widest thing this app draws. Asked about
+  directly (*"în pozele făcute să nu intre acest ring"*) and **verified twice**,
+  because the flag is easy to write and impossible to see:
+  `screencapture -l <its window id>` answers *could not create image from
+  window*, the same refusal the overlay gives; and a whole-screen
+  `screencapture` taken with the halo up shows **no gold annulus at the
+  pointer** — mean R−B in the core band is −19.03 against −17.20 well outside
+  it, i.e. ordinary content variation, where 5% of this gold would have added
+  about +11. It therefore cannot be *reviewed* with a screenshot either, which
+  is what `WT_SHOOT_HALO` is for.
 - **Both edges are logged** (`◯ caret halo on/off`), for the selection
   watcher's reason: neither condition behind it is visible on screen, so *"why
   did the halo not come up"* has to be answerable from the file.
