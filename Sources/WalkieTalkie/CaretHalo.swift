@@ -226,6 +226,16 @@ final class CaretHalo {
     /// target that has already moved.
     private static let tick: TimeInterval = 1.0 / 20
 
+    /// **Off `sharingType = .none` for a demo, and only for a demo.**
+    ///
+    /// The panel is invisible to every screen capture on purpose (see the class
+    /// note), which is also why *"show me that it animates"* has no answer: a
+    /// recording of it is a recording of the desktop behind it. `WT_HALO_DEMO`
+    /// flips this, and nothing else does — what it puts on screen is the halo
+    /// over an empty desktop with no dictation running, so there is nothing in
+    /// the frame the flag could leak.
+    static var capturable = false
+
     private var panel: RelayPanel?
     private var monitors: [Any] = []
     private var timer: Timer?
@@ -460,6 +470,11 @@ final class CaretHalo {
             ring.locations = profile.map { NSNumber(value: Double(min(1, $0.0 * core / half))) }
             return ring
         }
+        if design == .storm {
+            // Not through `patternCache`: this one is a layer tree with a mask
+            // and a running animation, not a still image.
+            if let film = filmLayer(side: side) { return film }
+        }
         let layer = CALayer()
         layer.frame = CGRect(x: 0, y: 0, width: side, height: side)
         // **Cached per design.** The panel asks for one, but the contact sheet
@@ -470,8 +485,9 @@ final class CaretHalo {
         if let done = patternCache[key] {
             layer.contents = done
         } else {
-            let made = design == .storm ? artwork(side: side)
-                                        : strokes(side: side, design: design)
+            // `.storm` only reaches here when its sheet is missing, and then it
+            // is the fallback texture rather than nothing.
+            let made = strokes(side: side, design: design == .storm ? .codex3 : design)
             patternCache[key] = made
             layer.contents = made
         }
@@ -479,126 +495,180 @@ final class CaretHalo {
         return layer
     }
 
-    /// **The picture, resampled onto the band and faded by the same envelope.**
+    /// **The picture, resampled onto the band, masked by the same envelope, and
+    /// running as a film.**
     ///
-    /// Three things happen here and only three, which is the point — everything
-    /// else about the halo is meant to be unable to tell that the band is a
-    /// bitmap now.
+    /// Victor, on seeing the still: *"nu e animat!! trebuie să fie multiframe: cu
+    /// frame-urile decupate din imaginea pe care ți-am dat-o … trebuie să pară că
+    /// se animă ca un clip, nu doar fade in, fade out"*. The swell was never the
+    /// animation — it is the *state*. The ring itself has to crackle.
     ///
-    /// 1. **It is measured, not positioned by hand.** The alpha channel gives a
-    ///    centroid and an alpha-weighted mean radius, and the picture is scaled
-    ///    so that radius lands on `core` and that centroid on the pointer. A
-    ///    ring drawn a few pixels off-centre in a 580px PNG — this one is —
-    ///    would otherwise sit visibly off the cursor, and a replacement picture
-    ///    at another size or another ring thickness would need new numbers here.
-    ///    It needs none: swap the file and it lands in the same place.
-    /// 2. **`alpha(atRadius:)` multiplies it**, exactly as it multiplies every
-    ///    drawn texture. The picture has its own falloff and it is a good one,
-    ///    but it is a falloff to *transparent-ish*, not to nothing, and the one
-    ///    thing this shape may never have is a rim. Mapped as above its band
-    ///    covers 0.6–1.4 core, so the envelope is flat through the whole bright
-    ///    body and only takes hold in the outer glow and the inner haze — the
-    ///    fade he asked for, applied where the picture was already fading.
-    /// 3. **The light is matched by opacity, not by gain.** Integrated against
-    ///    the envelope the picture carries ~0.46× the reference band's flux, and
-    ///    the drawn designs make that up by scaling their coverage — which here
-    ///    would clip: most of this band is already near opaque, so any gain above
-    ///    ~1.1 flattens the filaments into a solid annulus, the single feature
-    ///    the picture was chosen for. So the deficit is handed to the *panel*
-    ///    instead (`artworkGain`, applied to `rest` and `alert`), where
-    ///    multiplying cannot saturate anything.
-    private static func artwork(side: CGFloat) -> CGImage? {
-        guard let url = artworkURL,
+    /// So the asset is a **sprite sheet**: `caret-halo-5x5.png`, the 25 frames of
+    /// his GIF keyed off black, packed row-major, at their own 236px. The grid is
+    /// read out of the file name (`-<cols>x<rows>`, absent meaning a single
+    /// frame), which is the whole of the configuration — drop a different sheet
+    /// in with a different grid in its name and it plays.
+    ///
+    /// Four things happen, and only four:
+    ///
+    /// 1. **The film is measured once, not per frame.** The frames share a
+    ///    centroid and a ring radius by construction, and measuring each one
+    ///    separately would let the ring *breathe* — a wobble of a pixel or two
+    ///    per frame, which on a mark this size reads as the halo pulsing in and
+    ///    out of true. So the alpha is averaged across all 25 first, and the one
+    ///    transform that puts that mean ring on `core` is used for every frame.
+    /// 2. **The envelope is a mask, not a pixel pass.** With 25 frames the
+    ///    per-pixel multiply the single still used would be 25× the work at
+    ///    launch for a result the GPU gives away: a radial `CAGradientLayer`
+    ///    built from the *same* `profile` masks the whole film at once. Same
+    ///    falloff, one layer, and the frames stay untouched images.
+    /// 3. **Discrete keyframes, at the GIF's own 20fps.** `.discrete` because
+    ///    lightning does not tween — an interpolated cross-fade between two
+    ///    crackles is a blur, which is exactly the *fade* he was objecting to.
+    /// 4. **The light is still matched on the panel** (`artworkGain`), measured
+    ///    on the mean frame for the reason in point 1.
+    private static func filmLayer(side: CGFloat) -> CALayer? {
+        guard let (url, cols, rows) = artworkFile(),
               let file = NSImage(contentsOf: url),
-              let image = file.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            // Loud, and still a halo: the ring is a warning about where a whole
-            // sentence is going, so a missing asset must not be the reason there
-            // is nothing round the pointer.
-            Log.info("◯ caret halo: caret-halo.png not found — drawing \(Design.codex3.rawValue) instead")
-            return strokes(side: side, design: .codex3)
+              let sheet = file.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            Log.info("◯ caret halo: no caret-halo sheet found — drawing \(Design.codex3.rawValue) instead")
+            return nil
         }
+        let cw = sheet.width / cols, ch = sheet.height / rows
+        guard cw > 0, ch > 0 else { return nil }
 
-        // Where the ring is in the file, in the file's own pixels. Row 0 of a
-        // bitmap context is the *top* row, so the centroid comes out in
-        // top-down coordinates and has to be flipped before it can be used as a
-        // drawing origin — worth the two lines: the error is a picture that
-        // hangs slightly below the pointer, which looks like a bug in `follow`.
-        let sw = image.width, sh = image.height
-        guard let probe = CGContext(data: nil, width: sw, height: sh, bitsPerComponent: 8,
-                                    bytesPerRow: sw * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let probeData = ({ () -> UnsafeMutableRawPointer? in
-                  probe.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(sw), height: CGFloat(sh)))
-                  return probe.data
-              })() else { return nil }
-        let src = probeData.bindMemory(to: UInt8.self, capacity: sw * sh * 4)
+        // Every cell, row-major, which is the order they were packed in and so
+        // the order the GIF ran in. `cropping` shares the sheet's pixels.
+        var frames: [CGImage] = []
+        for r in 0..<rows {
+            for c in 0..<cols {
+                guard let cell = sheet.cropping(to: CGRect(x: c * cw, y: r * ch, width: cw, height: ch))
+                else { continue }
+                frames.append(cell)
+            }
+        }
+        guard !frames.isEmpty else { return nil }
+
+        // The mean frame's alpha, in the cell's own pixels: the sheet drawn once
+        // and accumulated cell by cell.
+        guard let probe = CGContext(data: nil, width: sheet.width, height: sheet.height,
+                                    bitsPerComponent: 8, bytesPerRow: sheet.width * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        probe.draw(sheet, in: CGRect(x: 0, y: 0, width: CGFloat(sheet.width), height: CGFloat(sheet.height)))
+        guard let raw = probe.data else { return nil }
+        let buf = raw.bindMemory(to: UInt8.self, capacity: sheet.width * sheet.height * 4)
+        var mean = [CGFloat](repeating: 0, count: cw * ch)
+        for r in 0..<rows {
+            for c in 0..<cols {
+                for y in 0..<ch {
+                    for x in 0..<cw {
+                        let sx = c * cw + x, sy = r * ch + y
+                        mean[y * cw + x] += CGFloat(buf[(sy * sheet.width + sx) * 4 + 3]) / 255
+                    }
+                }
+            }
+        }
+        let cells = CGFloat(cols * rows)
+        for i in 0..<mean.count { mean[i] /= cells }
+
+        // Centroid and alpha-weighted mean radius, in cell pixels counted from
+        // the *top* — which is how a bitmap context's rows run, and so has to be
+        // flipped before it can be a drawing origin.
         var mass: CGFloat = 0, mx: CGFloat = 0, my: CGFloat = 0
-        for y in 0..<sh {
-            for x in 0..<sw {
-                let a = CGFloat(src[(y * sw + x) * 4 + 3])
+        for y in 0..<ch {
+            for x in 0..<cw {
+                let a = mean[y * cw + x]
                 guard a > 0 else { continue }
                 mass += a; mx += a * CGFloat(x); my += a * CGFloat(y)
             }
         }
         guard mass > 0 else { return nil }
-        let cx = mx / mass, cy = CGFloat(sh) - my / mass
+        let cx = mx / mass, cyTop = my / mass
         var spanned: CGFloat = 0
-        for y in 0..<sh {
-            for x in 0..<sw {
-                let a = CGFloat(src[(y * sw + x) * 4 + 3])
+        for y in 0..<ch {
+            for x in 0..<cw {
+                let a = mean[y * cw + x]
                 guard a > 0 else { continue }
-                spanned += a * hypot(CGFloat(x) - cx, CGFloat(sh) - CGFloat(y) - cy)
+                spanned += a * hypot(CGFloat(x) - cx, CGFloat(y) - cyTop)
             }
         }
         let meanRadius = spanned / mass
         guard meanRadius > 1 else { return nil }
+        let k = core / meanRadius                       // points per source pixel
 
-        let scale: CGFloat = 2
-        let px = Int((side * scale).rounded())
-        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8,
-                                  bytesPerRow: px * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
-        ctx.scaleBy(x: scale, y: scale)
-        ctx.interpolationQuality = .high
-        let k = core / meanRadius
-        ctx.draw(image, in: CGRect(x: side / 2 - cx * k, y: side / 2 - cy * k,
-                                   width: CGFloat(sw) * k, height: CGFloat(sh) * k))
-
-        guard let data = ctx.data else { return nil }
-        let buf = data.bindMemory(to: UInt8.self, capacity: px * px * 4)
-        let mid = CGFloat(px) / 2
-        var pictureFlux: CGFloat = 0, referenceFlux: CGFloat = 0
-        for y in 0..<px {
-            for x in 0..<px {
-                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
-                let fade = alpha(atRadius: hypot(dx, dy) / scale)
-                referenceFlux += fade
-                pictureFlux += CGFloat(buf[(y * px + x) * 4 + 3]) / 255 * fade
+        // Flux against the band, integrated in source pixels — each of which
+        // covers k² points once mapped.
+        var pictureFlux: CGFloat = 0
+        for y in 0..<ch {
+            for x in 0..<cw {
+                let r = hypot(CGFloat(x) - cx, CGFloat(y) - cyTop) * k
+                pictureFlux += mean[y * cw + x] * alpha(atRadius: r) * k * k
+            }
+        }
+        var referenceFlux: CGFloat = 0
+        let half = side / 2
+        for y in 0..<Int(side) {
+            for x in 0..<Int(side) {
+                referenceFlux += alpha(atRadius: hypot(CGFloat(x) - half, CGFloat(y) - half))
             }
         }
         artworkGain = min(3, referenceFlux / max(pictureFlux, 1))
-        Log.info(String(format: "◯ caret halo picture: ring r=%.0fpx → %.0fpt, %.2f× the band's flux, panel ×%.2f",
-                        meanRadius, core, pictureFlux / max(referenceFlux, 1), artworkGain))
+        Log.info(String(format: "◯ caret halo film: %d frames of %dpx, ring r=%.0fpx → %.0fpt, %.2f× the band's flux, panel ×%.2f",
+                        frames.count, cw, meanRadius, core, pictureFlux / max(referenceFlux, 1), artworkGain))
 
-        // The envelope, applied to all four channels — the buffer is
-        // premultiplied, so scaling the colour with the alpha is what keeps it
-        // that way, and is also the only version that does not leave a fringe of
-        // full-strength ink round a vanishing alpha.
-        for y in 0..<px {
-            for x in 0..<px {
-                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
-                let fade = alpha(atRadius: hypot(dx, dy) / scale)
-                guard fade < 1 else { continue }
-                let i = (y * px + x) * 4
-                for c in 0..<4 { buf[i + c] = UInt8(CGFloat(buf[i + c]) * fade) }
-            }
+        let container = CALayer()
+        container.frame = CGRect(x: 0, y: 0, width: side, height: side)
+
+        let film = CALayer()
+        film.contentsGravity = .resize
+        film.magnificationFilter = .trilinear
+        // The cell, scaled by `k` and hung so its centroid is on the pointer.
+        // `ch - cyTop` is the flip: the measurement counts rows down, the frame
+        // counts points up.
+        film.frame = CGRect(x: half - cx * k,
+                            y: half - (CGFloat(ch) - cyTop) * k,
+                            width: CGFloat(cw) * k, height: CGFloat(ch) * k)
+        film.contents = frames[0]
+        if frames.count > 1 {
+            let reel = CAKeyframeAnimation(keyPath: "contents")
+            reel.values = frames
+            reel.calculationMode = .discrete
+            reel.duration = Double(frames.count) / fps
+            reel.repeatCount = .infinity
+            // **Removed on completion off, and the model value left at frame 0.**
+            // The panel is ordered out between dictations rather than rebuilt, so
+            // an animation that tidied itself away would leave a still ring the
+            // second time the halo came up.
+            reel.isRemovedOnCompletion = false
+            film.add(reel, forKey: "reel")
         }
-        return ctx.makeImage()
+        container.addSublayer(film)
+
+        // The envelope, as the mask the whole film runs behind.
+        let fade = CAGradientLayer()
+        fade.type = .radial
+        fade.frame = container.bounds
+        fade.startPoint = CGPoint(x: 0.5, y: 0.5)
+        fade.endPoint = CGPoint(x: 1, y: 1)
+        fade.colors = profile.map { NSColor(white: 1, alpha: $0.1).cgColor }
+        fade.locations = profile.map { NSNumber(value: Double(min(1, $0.0 * core / half))) }
+        container.mask = fade
+        return container
     }
 
+    /// **A third of the GIF's own rate** — Victor, on watching it run at 20fps:
+    /// *"mai lentă animația 3×"*. The frames were authored for a clip that is
+    /// looked *at*; this one runs an inch from what he is reading while he
+    /// dictates, and at 20fps a crackle that fast is a flicker in the corner of
+    /// the eye rather than a mark that happens to be alive. At 6.7fps the same
+    /// 25 frames take 3.75s to come round, which is slow enough to read as
+    /// movement and not as noise.
+    private static let fps = 20.0 / 3
+
     /// **How much the panel is brightened to carry the picture's light**, set
-    /// when the bitmap is built and 1 for every drawn design. See point 3 above.
+    /// when the film is built and 1 for every drawn design.
     private(set) static var artworkGain: CGFloat = 1
 
     /// The panel opacity for one of the two states, with that gain in it.
@@ -614,29 +684,40 @@ final class CaretHalo {
         min(0.6, base * (design == .storm ? artworkGain : 1))
     }
 
-    /// Where the picture lives: in the bundle when installed, in `assets/` when
-    /// the binary is run straight out of `.build` — which is how the contact
-    /// sheet is shot. Same resolution `Transcriber.helperPath` does, for the same
-    /// reason: a developer run and an installed run without a switch between
-    /// them. `WT_HALO_IMAGE` overrides both, so a candidate picture can be tried
-    /// without touching the repo.
-    private static var artworkURL: URL? {
+    /// **The film and its grid, from the file name.** `caret-halo-5x5.png` is
+    /// twenty-five frames packed five across; a name without the suffix is a
+    /// single frame, which is what makes a still and a film the same code path.
+    ///
+    /// Found the way `whisper_helper.py` is: `Bundle.main` when installed,
+    /// `assets/` walking up from the binary when run out of `.build` — which is
+    /// how the contact sheet is shot — and `WT_HALO_IMAGE` overriding both, so a
+    /// candidate sheet can be tried without touching the repo.
+    private static func artworkFile() -> (URL, Int, Int)? {
         var candidates: [URL] = []
         if let override = ProcessInfo.processInfo.environment["WT_HALO_IMAGE"] {
             candidates.append(URL(fileURLWithPath: override))
         }
+        let names = ["caret-halo-5x5.png", "caret-halo.png"]
         if let res = Bundle.main.resourcePath {
-            candidates.append(URL(fileURLWithPath: res).appendingPathComponent("caret-halo.png"))
+            for n in names { candidates.append(URL(fileURLWithPath: res).appendingPathComponent(n)) }
         }
         let exe = URL(fileURLWithPath: CommandLine.arguments[0],
                       relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             .standardizedFileURL.resolvingSymlinksInPath()
         var dir = exe.deletingLastPathComponent()
         for _ in 0..<4 {
-            candidates.append(dir.appendingPathComponent("assets/caret-halo.png"))
+            for n in names { candidates.append(dir.appendingPathComponent("assets/\(n)")) }
             dir = dir.deletingLastPathComponent()
         }
-        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+        else { return nil }
+        // `…-<cols>x<rows>` at the end of the stem, or one frame.
+        let stem = url.deletingPathExtension().lastPathComponent
+        guard let dash = stem.range(of: "-", options: .backwards) else { return (url, 1, 1) }
+        let parts = stem[dash.upperBound...].split(separator: "x")
+        guard parts.count == 2, let c = Int(parts[0]), let r = Int(parts[1]), c > 0, r > 0
+        else { return (url, 1, 1) }
+        return (url, c, r)
     }
 
     /// **The strokes, drawn once and faded by the same curve the gradient uses.**
@@ -1029,7 +1110,7 @@ final class CaretHalo {
         p.ignoresMouseEvents = true
         p.level = .statusBar
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        p.sharingType = .none
+        p.sharingType = Self.capturable ? .readOnly : .none
 
         let view = NSView(frame: NSRect(x: 0, y: 0, width: side, height: side))
         view.wantsLayer = true
@@ -1042,6 +1123,30 @@ final class CaretHalo {
 }
 
 // MARK: - Looking at it
+
+extension CaretHalo {
+    /// **The halo on the real screen, round the real pointer, without a
+    /// dictation** — `WT_HALO_DEMO=20 ./.build/debug/WalkieTalkie`.
+    ///
+    /// `shoot` answers *what does the picture look like*; this answers the other
+    /// half, which a still cannot: *does it move*. It runs the actual panel with
+    /// the actual timeline — `quietSeconds` is a clock rather than a microphone,
+    /// wrapped to the 6s of one full cycle, so what is on screen is 2s at rest,
+    /// 2s of swell, 2s alarmed, over and over.
+    ///
+    /// It is the only path that sets `capturable`, so it is also the only way a
+    /// screenshot of this app can contain the ring — which is what makes the
+    /// swell provable rather than merely asserted.
+    static func demo(seconds: Double) {
+        capturable = true
+        let halo = CaretHalo()
+        let started = Date()
+        halo.quietSeconds = { Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 6) }
+        halo.setActive(true)
+        Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in exit(0) }
+        NSApplication.shared.run()
+    }
+}
 
 /// **Draw the halo onto a dark ground and a light one, and quit** —
 /// `WT_SHOOT_HALO=/tmp/halo.png`.

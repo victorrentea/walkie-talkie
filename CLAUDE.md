@@ -4379,64 +4379,83 @@ by the red circle**, i.e. a gradient inside the region that is supposed to be
 uniformly opaque. `sqrt` of the lane puts the count in proportion to r; the
 density is then constant and the envelope is the only thing shaping the light.
 
-#### What ships now: the picture itself (2026-09-10)
+#### What ships now: his picture, and it runs as a film (2026-09-10)
 
-Victor sent an electric blue-and-magenta lightning ring and said *"use this as
-the halo when dictating at caret … faded out dynamically by the same rules"*. So
-the band is his PNG (`assets/caret-halo.png`, `Design.storm`) and **nothing else
-moved**: same `core`, same plateau envelope, same 2s of patience and 2s of swell.
-Every drawn texture stays behind `WT_HALO_DESIGN`, `smooth` still the reference
-row on the sheet.
+Victor sent an electric blue-and-magenta lightning ring: *"use this as the halo
+when dictating at caret … faded out dynamically by the same rules"*. It shipped
+as a still for an hour and he rejected it on sight — *"nu e animat!! trebuie să
+fie multiframe: cu frame-urile decupate din imaginea pe care ți-am dat-o … tre
+să pară că se animă ca un clip, nu doar fade in, fade out"*.
 
-**This is the second picture and the first that worked, and the difference is the
-file.** The September reference was a glow *authored on white* — keying the
-background out left olive mud on a dark editor, because the brightness had been
-coming from the white all along (the *do not re-key that image* note above still
-stands, and is about that file). This one arrives with a real alpha channel and
-saturated ink over nothing: nothing to unmultiply, nothing borrowing light from a
-ground that is about to be removed.
+**The swell was never the animation.** It is the *state*: quiet while he talks,
+insistent once he stops. What he was asking for is the ring being *alive* while
+it sits there, which is a different axis entirely — and the still could not have
+it at any opacity.
 
-It also **supersedes *doar galben* rather than breaking it**. One hue was the
-answer to three shades of gold reading as a smudge at a twentieth of an opacity;
-blue and magenta at full saturation are opposite ends of the spectrum and hold
-their identity at 16%, which the contact sheet shows on both grounds.
+So the asset is **`assets/caret-halo-5x5.png`**: the 25 frames of his GIF
+(`neon-electric-ring.gif`, 236px, authored at 20fps), keyed off black and packed
+five across. Keying off black is exact where keying off white was not — a glow on
+black *is* its own premultiplied form, so `a = max(r,g,b)` recovers it with
+nothing to divide back up. That is the whole difference between this and the
+September reference that came out olive mud on a dark editor.
 
-Three things happen in `CaretHalo.artwork`, and only three:
+Around it, `CaretHalo.filmLayer` and nothing else moved — same `core`, same
+plateau envelope, same 2s of patience and 2s of swell:
 
-- **It is measured, not placed.** The alpha channel gives a centroid and an
-  alpha-weighted mean radius (`206px` for this file), and the picture is scaled
-  so that radius lands on `core` (105pt) and that centroid on the pointer.
-  Swapping the file needs no new numbers. The centroid comes out of a bitmap
-  context in **top-down** rows and has to be flipped before it is a drawing
-  origin — get that wrong and the ring hangs below the cursor, which looks like a
-  bug in `follow`.
-- **The same envelope multiplies it.** Mapped as above the picture's band covers
-  ~0.6-1.4 core, so the plateau is flat through its whole bright body and the
-  ramps only take hold in the outer glow and the inner haze — the fade he asked
-  for, applied where the picture was already fading, and the guarantee that this
-  shape still has no rim.
-- **The missing light is paid on the panel, not in the bitmap.** Integrated
-  against the envelope the picture carries **0.46x** the reference band's flux.
-  The drawn designs make that up by scaling coverage, which here would clip: most
-  of this band is already near opaque, so any gain over ~1.1 flattens the
-  filaments into a solid annulus — the one feature it was chosen for. So
-  `artworkGain` (2.16 for this file, capped at 3) multiplies `rest` and `alert`
-  instead, where nothing can saturate: **16.2% and 48.6%** on screen, the same
-  light as 7.5%/22.5% of the gold band. The 0.6 ceiling on the result is a rail
-  against a very sparse replacement picture and must not bite on a normal one —
-  clamping the alarmed state is exactly how the flux match would get undone.
+- **The film is measured once, not per frame.** The alpha of all 25 is averaged,
+  and the one transform that puts that mean ring's radius (86px) on `core`
+  (105pt) is used for every frame. Measuring each separately would let the ring
+  breathe a pixel or two per frame, which on a mark this size reads as the halo
+  pulsing in and out of true.
+- **The envelope is a mask, not a pixel pass.** A radial `CAGradientLayer` built
+  from the same `profile` masks the whole film. With 25 frames the per-pixel
+  multiply the still used would be 25× the launch cost for something the GPU
+  gives away.
+- **Discrete keyframes on `contents`.** Lightning does not tween: an interpolated
+  cross-fade between two crackles is a blur, which is the *fade* he was
+  objecting to. `isRemovedOnCompletion = false`, because the panel is ordered out
+  between dictations rather than rebuilt — an animation that tidied itself away
+  would leave a still ring the second time the halo came up.
+- **The grid comes out of the file name** (`-<cols>x<rows>`, absent meaning one
+  frame), which is the whole of the configuration: a still and a film are then
+  the same code path, and a different sheet plays by being dropped in.
+- **The light is still matched on the panel.** The film carries 0.51× the band's
+  flux, so `artworkGain` is 1.98 and the two states run at **14.8% and 44.5%**,
+  the same light as 7.5%/22.5% of the gold band. It is paid in panel opacity
+  rather than in the bitmap because most of this band is already near opaque:
+  any gain in the pixels flattens the filaments into a solid annulus, which is
+  the one feature the picture was chosen for.
 
-`Log` carries the measurement the first time the panel is built (`caret halo
-picture: ring r=206px -> 105pt, 0.46x the band's flux, panel x2.16`), which is
-the whole diagnostic if a replacement file ever lands wrong.
+**And it runs at a third of the GIF's rate** — *"mai lentă animația 3×"*, watched
+live at 20fps. The frames were authored for a clip that is looked *at*; this one
+lives an inch from what he is reading while he dictates, and that fast it is a
+flicker at the edge of vision rather than a mark that happens to be alive. 25
+frames at 6.7fps come round in 3.75s.
 
-**The file is found the way `whisper_helper.py` is**: `Bundle.main` when
-installed, `assets/` walking up from the binary when run out of `.build` — which
-is how the contact sheet is shot — and `WT_HALO_IMAGE` overrides both, so a
-candidate picture can be tried without touching the repo. A missing file logs and
-falls back to `codex3` rather than to nothing: the ring is a warning about where
-a whole sentence is going, so an absent asset must not be the reason there is
-none.
+#### `WT_HALO_DEMO` — the answer to *does it actually move*
+
+`WT_HALO_DEMO=25 ./.build/debug/WalkieTalkie` puts the real panel round the real
+pointer for 25 seconds with **no dictation**, driving `quietSeconds` off a clock
+wrapped to one 6s cycle, so what is on screen is 2s at rest, 2s of swell, 2s
+alarmed, repeating.
+
+**It is the only thing that sets `CaretHalo.capturable`** (`sharingType`
+`.readOnly` instead of `.none`), and that is the point: the panel is invisible to
+every screen capture by design, so *"show me that it animates"* otherwise has no
+answer — a recording of it is a recording of the desktop behind it. Nothing is
+leaked by the exception: the demo has no dictation, no transcript and no chip in
+the frame.
+
+Measured through it on 2026-09-10, which is the shape of the proof to repeat:
+
+- `CGWindowListCopyWindowInfo` on the panel, twice a second: `352×352` pinned at
+  the pointer, alpha `0.148 · 0.165 · 0.239 · 0.313 · 0.388 · 0.445 · 0.445 …
+  0.148`, i.e. rest, two seconds of ramp, the plateau, and the wrap. The swell,
+  from outside the app.
+- Six `screencapture` shots of the display the pointer was on, cropped to that
+  same rect: the ring in every one and **a different pattern of filaments in
+  each**, mean absolute difference 1.0–1.6 over the crop with the alpha barely
+  moving between them. That is the film, and it is the half a still cannot show.
 
 #### `WT_SHOOT_HALO` — because a falloff cannot be judged from code
 

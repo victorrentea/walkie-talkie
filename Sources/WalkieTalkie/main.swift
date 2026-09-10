@@ -81,6 +81,14 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
     exit(0)
 }
 
+// The halo round the pointer for a fixed number of seconds, cycling its swell,
+// and capturable — the only way to *watch* a panel that no screen recording can
+// contain. See `CaretHalo.demo`.
+if let spec = ProcessInfo.processInfo.environment["WT_HALO_DEMO"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    CaretHalo.demo(seconds: Double(spec) ?? 20)
+}
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an
