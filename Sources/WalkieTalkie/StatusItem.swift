@@ -96,15 +96,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// chord make.
     var onBind: (() -> Void)?
 
-    /// **The rows of *Rebind to*, asked for at the instant the submenu opens.**
+    /// **The rows of *Rebind to*, asked for at the instant the list is opened.**
     ///
     /// Asked and not told, like the footprint and the recording flag above — but
     /// for a stronger reason than either: building these costs an AppleScript
     /// round trip across every Terminal.app window, and Victor's condition on the
     /// whole feature was that the *menu bar* stay instant (*"se poate calcula
-    /// conținutul acelui meniu doar când apăs pe el să-l expandezi"*). A
-    /// submenu's delegate is the one hook AppKit fires late enough to honour
-    /// that: `menuWillOpen` on the parent is already too early.
+    /// conținutul acelui meniu doar când apăs pe el să-l expandezi"*). Clicking
+    /// the row is the moment that honours it; `menuWillOpen` on the menu that
+    /// carries the row is already too early.
     var rebindRows: (() -> [RebindHistory.Row])?
 
     /// Picked from a row of *Rebind to* — point the relay back at that tty.
@@ -156,25 +156,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// might mean are exactly the ones he has already spoken to, they are few,
     /// and each one already carries a title its agent keeps rewriting to say what
     /// it is doing. See `RebindHistory`.
-    private let rebind = NSMenuItem(title: "Rebind to", action: nil, keyEquivalent: "")
-    private let rebindMenu = NSMenu()
-    /// **Retained deliberately**: `NSMenu.delegate` is a weak reference, and a
-    /// delegate that is only handed over is deallocated before the submenu it was
-    /// meant to fill is ever opened.
-    private let rebindDelegate = LazyMenuDelegate()
-
-    /// Fills a submenu the moment before AppKit draws it, and not one instant
-    /// earlier.
+    /// **It pops the list up rather than carrying it as a submenu, and the reason
+    /// is the rest of the menu.** Attached as a submenu this row was correct and
+    /// cost nothing to open — but AppKit reserves the disclosure-arrow gutter on
+    /// **every row of the menu** the moment one item has a submenu, and this menu
+    /// spends its right-hand side on the gesture column that `layOutGestures`
+    /// lines up. One arrow moved all of it (Victor, 2026-09-10: *"a fugit toată
+    /// coloana de meniuri din cauza >"*).
     ///
-    /// **Its own object rather than another branch in `StatusItem`.** This class
-    /// is already the main menu's delegate, and `menuWillOpen` there refreshes
-    /// the header, the Whisper rows and the gesture column — work that has
-    /// nothing to say about a submenu and would then be paid twice per open,
-    /// on the exact path this feature promised to keep cheap.
-    private final class LazyMenuDelegate: NSObject, NSMenuDelegate {
-        var build: ((NSMenu) -> Void)?
-        func menuNeedsUpdate(_ menu: NSMenu) { build?(menu) }
-    }
+    /// A popped-up menu keeps everything the submenu was for — it is still built
+    /// at the instant it is asked for, never when the menu bar is clicked — and
+    /// the `…` is what the row says instead of the arrow.
+    private let rebind = NSMenuItem(title: "Rebind to…", action: nil, keyEquivalent: "")
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
@@ -467,10 +460,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // this one points at something that is *not* in front — the case neither
         // of the other two can express, and the common one by the afternoon.
         rebind.image = Self.symbolIcon("clock.arrow.circlepath", tint: Self.pinRed)
-        rebind.submenu = rebindMenu
-        rebindMenu.autoenablesItems = false
-        rebindDelegate.build = { [weak self] menu in self?.fillRebindMenu(menu) }
-        rebindMenu.delegate = rebindDelegate
+        rebind.action = #selector(rebindListClicked)
+        rebind.target = self
         menu.addItem(rebind)
 
         // The wheel already ends a recording — this is the same call, for the
@@ -1021,13 +1012,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }
 
-    /// **Build the rows, now that the submenu is about to be drawn.**
+    /// **The list, built and shown where the pointer already is.**
     ///
-    /// Rebuilt from scratch every time rather than patched: the elapsed times
-    /// have all moved, the titles are whatever the agents are calling themselves
-    /// this second, and a dozen rows are cheaper to make than to reconcile.
-    private func fillRebindMenu(_ menu: NSMenu) {
-        menu.removeAllItems()
+    /// Dispatched rather than run inline: the click that gets here is still
+    /// closing the menu it came from, and a second menu put up inside that
+    /// closing lands under it and takes no clicks.
+    @objc private func rebindListClicked() {
+        let at = NSEvent.mouseLocation
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // `in: nil` — the point is in screen coordinates, which is what the
+            // pointer's own location already is.
+            self.buildRebindMenu().popUp(positioning: nil, at: at, in: nil)
+        }
+    }
+
+    /// **Built from scratch every time it is asked for**, never patched: the
+    /// elapsed times have all moved, the titles are whatever the agents are
+    /// calling themselves this second, and a dozen rows are cheaper to make than
+    /// to reconcile.
+    private func buildRebindMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
         let rows = rebindRows?() ?? []
         guard !rows.isEmpty else {
             // A submenu that comes up empty reads as a bug. Say what is true
@@ -1036,7 +1042,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             let empty = NSMenuItem(title: "Nothing bound yet", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
-            return
+            return menu
         }
         for row in rows {
             let entry = NSMenuItem(title: row.title, action: #selector(rebindClicked(_:)), keyEquivalent: "")
@@ -1052,6 +1058,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             entry.representedObject = row.tty
             menu.addItem(entry)
         }
+        return menu
     }
 
     @objc private func rebindClicked(_ sender: NSMenuItem) {
@@ -1079,10 +1086,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// changes with the branch, and the only moment it has to be right is the
     /// moment he is looking at it.
     func menuWillOpen(_ menu: NSMenu) {
-        // **Only the menu itself.** AppKit sends this for submenus too, and every
-        // line below is about the top-level rows; the whole point of *Rebind to*
-        // being lazy is lost if opening it re-runs the header and the gesture
-        // column as well.
+        // **Only the menu itself.** AppKit sends this to any menu this object is
+        // the delegate of, and every line below is about the top-level rows — a
+        // popped-up list re-running the header and the gesture column would be
+        // work done for nothing, on the one path this feature promised to keep
+        // cheap.
         guard menu === item.menu else { return }
         SessionLabel.refresh()
         applyHeader()

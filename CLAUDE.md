@@ -601,13 +601,17 @@ being thrown away.
   those on a menu open would be felt. It doubles as the liveness check: a tty the
   history remembers and the map does not is a closed window, and its row is
   greyed rather than deleted behind him.
-- **Lazy on the submenu, not on the menu.** Victor's condition on the whole
-  feature: *"să nu dureze timp la click-ul pe iconița din menu bar"*. `menuWillOpen`
-  on the parent is too early, so the submenu carries its own tiny delegate
-  (`LazyMenuDelegate`) and `menuWillOpen` now returns immediately for anything
-  that is not the top-level menu. **The delegate is a stored property** —
-  `NSMenu.delegate` is weak, and one only handed over is deallocated before the
-  submenu is ever opened.
+- **A popped-up list, not a submenu — and the arrow is why.** Victor's condition
+  on the feature was that the menu bar stay instant (*"să nu dureze timp la
+  click-ul pe iconița"*), which a submenu honours perfectly. It was still wrong:
+  **AppKit reserves the disclosure-arrow gutter on every row of a menu as soon as
+  one item has a submenu**, and the right-hand side of this menu is the gesture
+  column `layOutGestures` lines up. One arrow moved all of it — *"a fugit toată
+  coloana de meniuri din cauza >"*. So the row is `Rebind to…`, it builds an
+  `NSMenu` on click and `popUp`s it at the pointer, and nothing about the
+  laziness changes. **The pop-up is dispatched**, not run inline: the click is
+  still closing the menu it came from, and a menu put up inside that closing
+  lands underneath it and takes no clicks.
 - **Plain titles, deliberately.** An attributed title stops AppKit dimming a
   disabled row (see the note above `layOutGestures`), and the rows that cannot be
   clicked — the one already bound, a closed window, an IDE panel with no
