@@ -1623,7 +1623,7 @@ and `CaretHalo` are already written under), and the panels are
 `sharingType = .none` so the dimming cannot land in the picture even if the beat
 before the capture is ever shortened.
 
-### The press goes through; only a release that became a crop is taken
+### The release matches the press, and in Logi mode both go through
 
 A middle press cannot be told from a middle click at the press — the difference
 is whether the hand then moves — so `HotkeyTap.areaDrag` records the corner, hands
@@ -1635,11 +1635,23 @@ one**: a plain middle click during a dictation reaches the app underneath as a
 *Use Logi Gestures*, since middle-click-to-close-a-tab is what that mode exists to
 protect.
 
-The cost is stated rather than hidden: once the drag is taken, the app underneath
-is left holding a middle-down it will never see the up for — the orphan this file
-guards against twice. Victor chose it over the two alternatives on the table,
-which were eating **every** middle click for the length of every dictation, and
-reviving the replay deleted on 2026-09-06.
+**The release goes out too, and it took a wedged pointer to learn why.** Victor
+chose *pass the press, swallow the release* over the two alternatives on the
+table — eating every middle click for the length of every dictation, or reviving
+the replay deleted on 2026-09-06 — and swallowing the release turns out not to be
+available at all. **A press that went out puts the button *down* in session
+state, and a release this tap eats never takes it back up.** Measured the hard
+way: a crop at 00:23 left `CGEventSource.buttonState` answering *middle: down*
+**seven hours later**, and what Victor had for those hours was a VS Code editor
+tab stuck to his cursor, because as far as the window server was concerned a drag
+had been in progress since the night before.
+
+So the rule is **ours only if the press was ours** (`areaPressPassed`). In Logi
+mode the press goes out and so does the release, and the app underneath gets a
+middle-down and a middle-up with the movement between them removed — a click it
+ignores, because the two ends are in different places. With *Use Logi Gestures*
+off the wheel's own branch swallows the press, so this swallows the release, and
+the pair stays matched. Neither mode can leave the OS holding a button.
 
 **With *Use Logi Gestures* off the press was swallowed and already means
 something** — a dictation to end, and a 2 s timer that would cancel it — so the
@@ -1650,21 +1662,32 @@ release never reaches the branch that normally clears them: left standing, they
 would swallow the release of the **next** middle press — one this file passed
 through — which is the orphan bug written a third time.
 
-### A swallowed release is invisible to the overlay, and that is measured
+### A tap with an opinion about the button makes the overlay's poll useless
 
 The overlay ends the selection when the driving button comes up, and it reads the
 button the only way a panel with no key window can — `CGEventSource.buttonState`.
-**A release this tap swallows never reaches that state.** First run of the
-gesture: the finger came up, the box stopped following, and the dimming stayed on
-the screen with `buttonState` still answering *down*, its only way out being Esc.
-Worse than a stuck panel, the window server then behaved as though a drag were in
-progress, and a `swift` one-liner run to diagnose it hung for two minutes.
+That is right for Victor Addons' left-button drag, which nothing intercepts, and
+it is wrong here **in both directions at once**, one per gesture mode:
 
-So the tap says so: `onAreaEnd` → `CropSelectionOverlay.endDrag()`. A release that
-lands **before** the panels are on screen is kept for `begin` for half a second —
-long enough for the hop, short enough that a stale one cannot end the next
-selection before it starts — because the two arrive by different routes and a
-flick beats the overlay onto the screen.
+- **A swallowed release never reaches that state**, so the selection never ends.
+  First run of the gesture: the finger came up, the box stopped following, and
+  the dimming stayed on the screen with `buttonState` still answering *down*, its
+  only way out being Esc — and a `swift` one-liner run to diagnose it hung for
+  two minutes behind the drag the window server thought was in progress.
+- **A swallowed press never puts it *down***, so with *Use Logi Gestures* off the
+  very first tick would find the button up and end a selection that had not
+  started. That one hid behind the other for a day: the wheel-mode crop was
+  measured working, and it was working because the state was **already** stuck
+  true from a Logi-mode drag four minutes earlier.
+
+So the overlay stops looking. A drag handed in through `begin(from:)` is
+`driven` — the button is the caller's to report, `onAreaEnd` →
+`CropSelectionOverlay.endDrag()` is the report, and Esc or the right button stay
+as the ways out that do not depend on the caller still being alive. A release
+that lands **before** the panels are on screen is kept for `begin` for half a
+second — long enough for the hop, short enough that a stale one cannot end the
+next selection before it starts — because the two arrive by different routes and
+a flick beats the overlay onto the screen.
 
 **The threshold is measured off the event, not off `NSEvent.mouseLocation`.** An
 event carries the position it was *made* at; the pointer answers where it is by
@@ -1756,9 +1779,12 @@ gesture is the mouse:
   offset, named by what was in front of him, with the `area-` sentence appended
   once.
 - **The plain click survives** — `DOWN`/`UP` seen downstream, nothing logged here.
-- **Both gesture modes.** With *Use Logi Gestures* off the whole gesture is
-  swallowed (nothing downstream) and neither the 2 s cancel nor the release's
-  *end the dictation* fired.
+- **Both gesture modes, each from a clean button state and each leaving one.**
+  `left/right/center` all `false` before and after the crop, in Logi mode and
+  with the flag off — the assertion the seven-hour stuck button exists to make.
+  With *Use Logi Gestures* off the press and the release are both swallowed
+  (nothing downstream) and neither the 2 s cancel nor the release's *end the
+  dictation* fired.
 - **A flick past the threshold and released in the same millisecond** ends as a
   cancelled selection rather than a stuck panel, and **Esc mid-drag** cancels with
   no file written and no panel left.

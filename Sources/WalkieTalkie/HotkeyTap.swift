@@ -379,6 +379,16 @@ final class HotkeyTap {
     /// The drag crossed the threshold: the overlay is up, and this press is the
     /// crop's from here to the release.
     private var areaCropping = false
+    /// **Did the press go out?** The release has to match it, and which it was
+    /// depends on the gesture mode: in Logi mode this branch hands the press
+    /// straight back, while with the flag off the wheel's own branch below
+    /// swallows it. Passing a release whose press was swallowed hands the app
+    /// underneath an orphan; swallowing a release whose press went out leaves
+    /// the window server believing the button is still down — which it does,
+    /// for hours, dragging whatever the press landed on around behind the
+    /// cursor. Measured on 2026-09-10, seven hours after the crop that caused
+    /// it, with an editor tab stuck to the pointer.
+    private var areaPressPassed = false
 
     /// **How far the hand has to travel before a middle click stops being one.**
     /// It is the same 6 points `CropSelectionOverlay` refuses to call a
@@ -471,6 +481,7 @@ final class HotkeyTap {
             areaAnchor = NSEvent.mouseLocation
             areaAnchorCG = event.location
             areaPressedAt = Date()
+            areaPressPassed = useLogiGestures
             return false
 
         case .otherMouseDragged:
@@ -513,14 +524,15 @@ final class HotkeyTap {
                 wheelHold?.cancel()
                 wheelHold = nil
             }
-            // **Say so, because swallowing it is what makes it unsayable.** The
-            // overlay ends the selection on the button coming up and reads the
-            // button the only way a panel can — session state — which this
-            // `return nil` keeps the event out of.
+            // **Say so, because the overlay is no longer allowed to look.** A
+            // drag handed in is one the tap owns from both ends, so the panel
+            // stops polling session button state and waits to be told — see
+            // `CropSelectionOverlay.driven`, and the two ways that poll is wrong
+            // once a tap has an opinion about the button.
             if cropping { onAreaEnd?() }
-            // Only a press that became a crop is ours. A plain click's release
-            // goes back out after the press that also went out.
-            return cropping
+            // **The release matches the press, always.** Ours only if the press
+            // was ours; out if the press went out, whatever happened in between.
+            return cropping && !areaPressPassed
 
         default:
             return false
