@@ -291,7 +291,7 @@
     "slug" : "flash-cancelled",
     "title" : "Dictation cancelled",
     "when" : "The instant 🔼 ← is made mid-sentence (🛞 held 2 s with Logi gestures off) — 1.5 s, then half a second of dissolve.",
-    "width" : 184
+    "width" : 127
   },
   {
     "alpha" : 0.80000000000000004,

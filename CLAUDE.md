@@ -4233,6 +4233,48 @@ Round two is drawn against those findings and is what `Design` holds now —
 - **`waves` draws the falloff twice**, in the alpha and in the stroke width:
   6pt at the core down to 2pt at the rim.
 
+Round two was measured too, and lost differently. **Only `slots` reached the
+reference** (flux 0.99×, blurred peak 42 against 41) and it did so by *being* the
+reference with holes in it — while filling the dark core with twelve converging
+wedges, which is the one structural property that makes this a ring **around** the
+pointer rather than a shape **under** it. Everything else sat at 0.07–0.38× and
+five of six had no resting state at all on white. Two further findings worth
+keeping:
+
+- **The ring family converged on the incumbent rather than diverging from each
+  other.** After a peripheral blur, `smooth`, `rings`, `waves` and `slots`
+  correlate 0.97–1.00: not three concentric designs plus a reference, but the
+  reference at four brightnesses. Ring *count* is a parameter, not a design —
+  and a parameter where more is always better has one right answer.
+- **`stipple` reads as a selection marquee.** Two concentric dotted circles is
+  the grammar of marching ants and drop targets everywhere on the machine; an
+  affordance says *click me*, and this mark's whole job is to point attention
+  away from itself.
+
+Round three took the one prescription the review gave — **mass out of geometry,
+never out of alpha** — and doubled `waves`' stroke to 10pt at the core. It is the
+most interesting failure of the four rounds: foveally a clearly ringed object
+(sharp correlation 0.245 with the reference), peripherally the reference's own
+signature (blurred 0.964), which is exactly the *lines up close, halo from the
+corner of the eye* the brief asks for. It still came in **3.4× short of the
+light**, and at 10pt a stroke is a band rather than a *liniuță* — four thick
+concentric bands with dark gaps read as a **bullseye**, which aims where the halo
+is meant to be ambient.
+
+**The structural conclusion, and it is the useful part.** The smooth band covers
+**20.4%** of its disc at peak brightness; strokes over the same annulus top out at
+**9–15%** before they stop reading as strokes, and by then they are already at the
+reference's peak brightness, so there is no alpha left to spend. **Adding lines to
+nothing cannot reach the halo's visibility — the brief as stated is
+unsatisfiable**, and that boundary has now been tested from both sides.
+
+`ripple` is the inverse and is where this is resting: **the band at full mass with
+its alpha modulated ±25% by a radial sinusoid**, five cycles, enveloped to flat at
+both rims. Flux stays ~1.00× because it is the halo minus a little rather than
+nothing plus a lot; the resting state survives because it *is* the resting state;
+and it reads as concentric banding without becoming a target, because no radius
+ever goes dark. It is `slots`' mass-preserving move without `slots`' gear.
+
 **One trap worth keeping.** The first review measured stroke widths off the
 *downscaled* contact sheet and reported 2–3px against a brief asking 3–5; the
 render is 4× larger than the sheet, so those were 8px strokes. Its **flux**

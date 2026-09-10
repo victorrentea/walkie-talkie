@@ -283,6 +283,24 @@ final class CaretHalo {
         /// peripheral visibility — is the reference's, and the stylisation is in
         /// the gaps.
         case slots
+        /// **The band itself, with the lines taken *out* of its brightness.**
+        ///
+        /// Three rounds of drawing strokes onto nothing established the ceiling:
+        /// the smooth band covers 20.4% of its disc at peak brightness, and
+        /// strokes over the same annulus top out at 9–15% before they stop
+        /// looking like strokes — so a texture built *up* from lines is short of
+        /// light by 2.6× with no headroom left, because its strokes are already
+        /// at the reference's peak. The brief as stated is unsatisfiable.
+        ///
+        /// This is it inverted: start at the reference's own mass and modulate
+        /// the alpha ±25% with a radial sinusoid. Flux stays ~1.00× because it is
+        /// the halo minus a little, rather than nothing plus a lot; the resting
+        /// state survives because it *is* the resting state; and it reads as
+        /// concentric banding — stylised with lines — without becoming a
+        /// bullseye, because the gaps never go dark. `slots` proved the
+        /// mass-preserving half works and failed only because its cuts were 100%
+        /// deep and reached the core.
+        case ripple
     }
 
     /// Which one is live. `WT_HALO_DESIGN=spokes` runs the app with a candidate
@@ -448,6 +466,15 @@ final class CaretHalo {
                 }
             }
 
+        case .ripple:
+            // No strokes at all: the annulus solid, and the lines are put in by
+            // the modulation in the alpha pass below.
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.fillEllipse(in: CGRect(x: c.x - outer, y: c.y - outer, width: outer * 2, height: outer * 2))
+            ctx.setBlendMode(.clear)
+            ctx.fillEllipse(in: CGRect(x: c.x - inner, y: c.y - inner, width: inner * 2, height: inner * 2))
+            ctx.setBlendMode(.normal)
+
         case .slots:
             // The band, solid, with twelve radial slots cut out of it. Everything
             // else here throws away 30-90% of the reference's light to make room
@@ -507,7 +534,9 @@ final class CaretHalo {
                 let i = (y * px + x) * 4
                 guard coverage > 0 else { buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 0; continue }
                 let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
-                let a = min(1, coverage * gain * alpha(atRadius: sqrt(dx * dx + dy * dy) / scale))
+                let radius = sqrt(dx * dx + dy * dy) / scale
+                var a = min(1, coverage * gain * alpha(atRadius: radius))
+                if design == .ripple { a *= ripple(atRadius: radius) }
                 buf[i]     = UInt8(max(0, min(255, r * a * 255)))
                 buf[i + 1] = UInt8(max(0, min(255, g * a * 255)))
                 buf[i + 2] = UInt8(max(0, min(255, b * a * 255)))
@@ -515,6 +544,19 @@ final class CaretHalo {
             }
         }
         return ctx.makeImage()
+    }
+
+    /// **The lines, as a dip in brightness rather than a stroke.** Five cycles
+    /// across the band at ±25%: deep enough to be seen as banding up close,
+    /// shallow enough that no radius is ever dark, which is what keeps the shape
+    /// a glow rather than a target. Its own falloff to flat at the rim, so the
+    /// modulation cannot put a hard edge where the halo's whole point is that it
+    /// has none.
+    private static func ripple(atRadius r: CGFloat) -> CGFloat {
+        let t = (r - core * (1 - spread)) / (core * spread * 2)
+        guard t > 0, t < 1 else { return 1 }
+        let envelope = sin(t * .pi)          // zero at both rims, one in the middle
+        return 1 + 0.25 * envelope * cos(t * 5 * 2 * .pi)
     }
 
     /// How much a sparse pattern may be brightened to match the band's light.
