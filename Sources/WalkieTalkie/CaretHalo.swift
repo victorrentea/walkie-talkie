@@ -301,6 +301,10 @@ final class CaretHalo {
         /// mass-preserving half works and failed only because its cuts were 100%
         /// deep and reached the core.
         case ripple
+        /// **Four from Codex (GPT-5.5), on Victor's ask** — given the same brief,
+        /// the same geometry, and the list of everything already tried and
+        /// measured, so they had to be new rather than merely different.
+        case codex1, codex2, codex3, codex4
     }
 
     /// Which one is live. `WT_HALO_DESIGN=spokes` runs the app with a candidate
@@ -355,7 +359,18 @@ final class CaretHalo {
         }
         let layer = CALayer()
         layer.frame = CGRect(x: 0, y: 0, width: side, height: side)
-        layer.contents = strokes(side: side, design: design)
+        // **Cached per design.** The panel asks for one, but the contact sheet
+        // asks for every design six times over, and each answer is a million
+        // pixels stroked, blurred and integrated — 72 of those is a minute of
+        // waiting for a picture that has a dozen different things in it.
+        let key = "\(design.rawValue)-\(Int(side))"
+        if let done = patternCache[key] {
+            layer.contents = done
+        } else {
+            let made = strokes(side: side, design: design)
+            patternCache[key] = made
+            layer.contents = made
+        }
         layer.contentsGravity = .resize
         return layer
     }
@@ -493,6 +508,115 @@ final class CaretHalo {
                 ctx.strokePath()
             }
             ctx.setBlendMode(.normal)
+
+        case .codex1:
+            // Tangential reed-field: dense short concentric linelets at many radii, staggered so blur preserves a soft annular mass.
+            // No line crosses the band radially, keeping the centre empty and avoiding sunburst motion.
+            ctx.saveGState()
+            ctx.setLineCap(.round)
+            for i in 0..<18 {
+                let t = CGFloat(i) / 17
+                let r = inner + band * t
+                let crown = 1 - abs(r - core) / (band * 0.5)
+                let count = 26 + Int(18 * max(0, crown))
+                let width: CGFloat = i % 3 == 0 ? 5 : 4
+                let phase = CGFloat(i * 37).truncatingRemainder(dividingBy: 360) * .pi / 180
+                for j in 0..<count {
+                    if (j + i * 2) % 7 == 0 { continue }
+                    let a = phase + CGFloat(j) * 2 * .pi / CGFloat(count)
+                    let len = 14 + 22 * crown + CGFloat((j * 11 + i * 5) % 9)
+                    ctx.saveGState()
+                    ctx.translateBy(x: c.x, y: c.y)
+                    ctx.rotate(by: a)
+                    ctx.setLineWidth(width)
+                    ctx.move(to: CGPoint(x: r, y: -len * 0.5))
+                    ctx.addLine(to: CGPoint(x: r, y: len * 0.5))
+                    ctx.strokePath()
+                    ctx.restoreGState()
+                }
+            }
+            ctx.restoreGState()
+
+        case .codex2:
+            // Nested broken contour bands: chunky arc fragments overlap like contour marks, giving high fill without forming a progress ring.
+            // Each radius uses uneven fragment lengths and missing beats, so the texture has no clock axes or handedness.
+            ctx.saveGState()
+            ctx.setLineCap(.round)
+            for i in 0..<15 {
+                let t = CGFloat(i) / 14
+                let r = inner + band * t
+                let crown = max(0, 1 - abs(r - core) / (band * 0.5))
+                let count = 18 + Int(12 * crown)
+                let width: CGFloat = i % 2 == 0 ? 5 : 4
+                let phase = CGFloat((i * i * 19) % 360) * .pi / 180
+                for j in 0..<count {
+                    if (j * 3 + i) % 10 == 0 { continue }
+                    let base = phase + CGFloat(j) * 2 * .pi / CGFloat(count)
+                    let sweep = (0.075 + 0.06 * crown) * (0.75 + CGFloat((j + i) % 5) * 0.11)
+                    let drift = CGFloat(((j * 13 + i * 7) % 9) - 4) * 0.006
+                    ctx.setLineWidth(width)
+                    ctx.addArc(center: c, radius: r, startAngle: base + drift, endAngle: base + sweep + drift, clockwise: false)
+                    ctx.strokePath()
+                }
+            }
+            ctx.restoreGState()
+
+        case .codex3:
+            // Staggered radial stitch marks: short local spokes sit in concentric rows, dense near the peak but never bridge the whole halo.
+            // The alternating rows break any sunburst read while still surviving peripheral blur as a textured ring.
+            ctx.saveGState()
+            ctx.setLineCap(.round)
+            for i in 0..<11 {
+                let row = CGFloat(i) / 10
+                let mid = inner + band * row
+                let crown = max(0, 1 - abs(mid - core) / (band * 0.5))
+                let count = 34 + Int(18 * crown)
+                let width: CGFloat = i % 2 == 0 ? 4 : 5
+                let span = 11 + 16 * crown
+                let phase = CGFloat((i * 29 + 17) % 360) * .pi / 180
+                for j in 0..<count {
+                    if (j + i) % 6 == 0 { continue }
+                    let wobble = CGFloat(((j * 17 + i * 23) % 7) - 3) * 1.8
+                    let r0 = max(inner + 5, mid - span * 0.5 + wobble)
+                    let r1 = min(outer - 5, mid + span * 0.5 + wobble)
+                    let a = phase + CGFloat(j) * 2 * .pi / CGFloat(count)
+                    spoke(a, from: r0, to: r1, width: width)
+                }
+            }
+            ctx.restoreGState()
+
+        case .codex4:
+            // Brick-weave halo: small rounded chord strokes occupy alternating radial lanes, like annular masonry rather than rings.
+            // The lanes overlap enough for blur to hold the halo shape, while the broken offsets keep it non-directional.
+            ctx.saveGState()
+            ctx.setLineCap(.round)
+            for lane in 0..<9 {
+                let laneT = CGFloat(lane) / 8
+                let laneCenter = inner + band * laneT
+                let crown = max(0, 1 - abs(laneCenter - core) / (band * 0.5))
+                let rows = lane % 2 == 0 ? 3 : 2
+                let count = 20 + Int(16 * crown)
+                for row in 0..<rows {
+                    let r = laneCenter + CGFloat(row - rows / 2) * 6
+                    if r <= inner + 4 || r >= outer - 4 { continue }
+                    let width: CGFloat = row == 1 ? 5 : 4
+                    let phase = (CGFloat(lane * 41 + row * 73) * .pi / 180) + (lane % 2 == 0 ? 0 : .pi / CGFloat(count))
+                    for j in 0..<count {
+                        if (j * 5 + lane + row) % 11 == 0 { continue }
+                        let a = phase + CGFloat(j) * 2 * .pi / CGFloat(count)
+                        let len = 18 + 19 * crown + CGFloat((j * 7 + lane * 3 + row) % 6)
+                        ctx.saveGState()
+                        ctx.translateBy(x: c.x, y: c.y)
+                        ctx.rotate(by: a)
+                        ctx.setLineWidth(width)
+                        ctx.move(to: CGPoint(x: r, y: -len * 0.5))
+                        ctx.addLine(to: CGPoint(x: r, y: len * 0.5))
+                        ctx.strokePath()
+                        ctx.restoreGState()
+                    }
+                }
+            }
+            ctx.restoreGState()
         }
 
         guard let data = ctx.data else { return nil }
@@ -558,6 +682,8 @@ final class CaretHalo {
         let envelope = sin(t * .pi)          // zero at both rims, one in the middle
         return 1 + 0.25 * envelope * cos(t * 5 * 2 * .pi)
     }
+
+    private static var patternCache: [String: CGImage?] = [:]
 
     /// How much a sparse pattern may be brightened to match the band's light.
     /// Past this it stops being a faint texture and becomes thin hard lines,
