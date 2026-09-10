@@ -439,6 +439,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.
         status.onDisconnect = { [weak self] in self?.unbindTerminal() }
+        // **Both halves run when the submenu opens, not when the menu does.**
+        // `liveTitles` is an AppleScript round trip over every Terminal.app
+        // window — cheap once, and paid on the gesture that asks for the list.
+        status.rebindRows = { [weak self] in
+            guard let self = self else { return [] }
+            return RebindHistory.shared.rows(live: TerminalBinding.liveTitles(),
+                                             boundAddress: self.terminal.target?.address)
+        }
+        // **The same route the restart takes** (`picker.onBindTTY`), and for the
+        // same reason: this is a binding being *restored*, not a gesture pointing
+        // at the window in front. So no toggle — finding it already bound must not
+        // let go of it — and the bind runs off the main thread, because it spends
+        // itself in `osascript`.
+        status.onRebind = { [weak self] tty in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let self = self else { return }
+                guard let bound = self.terminal.bind(tty: tty) else {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.overlay.flash("⚠️ no terminal on \(tty)", duration: 3)
+                    }
+                    return
+                }
+                Log.info("📍 re-bound to \(bound.address) from the menu")
+                DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+            }
+        }
         status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment
@@ -2505,7 +2531,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A window this app opened that Terminal will not name is a bind that
             // cannot be made — but the sentence still landed there, so the flight
             // is still worth playing on its own.
-            let bound = self.terminal.bind(tty: tty)
+            // ✨ — this window did not exist a second ago, and the *Rebind to*
+            // menu marks the ones this app opened itself.
+            let bound = self.terminal.bind(tty: tty, spawned: true)
             DispatchQueue.main.async { if let bound = bound { self.showBound(bound) } }
         }
     }

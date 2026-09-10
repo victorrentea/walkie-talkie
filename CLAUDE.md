@@ -554,6 +554,81 @@ quick presses bind it and then let it go.
 Verified across all three cases: bind, re-point to a second tab (the first tab is
 let go), press again on that tab (nothing bound, app still running).
 
+### Rebind to: the destinations already spoken to, most recent first (2026-09-10)
+
+Victor's problem, said plainly: *"am o problemă constantă — nu mai știu în ce
+terminal am făcut ce task"*. Fifteen to twenty Claude Code sessions in
+Terminal.app by the afternoon, and the window that was fixing the Bluetooth
+keep-alive is somewhere behind PowerPoint.
+
+**The first design was a model, and it was the wrong one.** A Spotlight-style box
+that took a typed description and had Haiku pick the session. Two measurements
+killed it before a line was written: `claude -p` on this Mac costs **13 s for
+sonnet and 17 s for haiku** (`TranscriptDistiller`, and the cost is the CLI's
+startup, not the model), and both Anthropic keys in the secrets file are out of
+credit. Victor's replacement is better than what it replaced: *"strict ceva
+recent, fără niciun LLM, fără nicio căutare prin transcripturi"*.
+
+**Because the answer never needed a model.** The destination he is looking for is
+one he has already spoken to, there are a dozen at most, and each one already
+carries a title its own agent keeps rewriting to say what it is doing — Claude
+Code writes `✳ victor-macos-addons — Copilot logo alternating display` into the
+tab, and that *is* the summary. Nothing had to be generated; it only had to stop
+being thrown away.
+
+- **`RebindHistory`** is a log of bindings, not a scan of the machine. A session
+  never bound does not appear, which is also what keeps the list readable.
+  Keyed by `address` (`ttys016`, `%3`, `IntelliJ IDEA`), capped at twelve, and
+  persisted to `~/.walkie-talkie/rebind-history.json` — *"persistența, vreau"* —
+  because this app is relaunched several times an hour while it is worked on, and
+  a list that emptied each time would be empty exactly when it is needed.
+- **The elapsed time is stamped in three places, and that is the whole
+  correctness of it.** A binding ends in three ways: `unbind()`, a delivery that
+  comes back `targetGone` (which calls `unbind()` itself), and — the common one —
+  **a bind that displaces it**, which passes through neither. `TerminalBinding`
+  now has one private `adopt`, and every bind goes through it. Stamping only in
+  `unbind()` would have had every row Victor moved away from claim it was let go
+  of hours later, when the app finally quit.
+- **✨ means this app opened the window.** Passed at the single call site that
+  spawns one (`adoptSpawnedWindow` → `bind(tty:spawned: true)`) rather than
+  inferred, and **sticky**: re-binding a spawned window later does not make it
+  stop having been spawned. The star is `✨` and not `★` because `★` is already
+  spoken for in `SpawnFolderMenu`, where it moves a row between pinned and
+  recent — two stars with different meanings in two menus of one app.
+- **One AppleScript for every title, at the instant the submenu opens.**
+  `TerminalBinding.liveTitles()` answers `ttysNNN → title` for the whole machine
+  in ~30 ms, which is about what a *single* `title(forTTY:)` costs, and a dozen of
+  those on a menu open would be felt. It doubles as the liveness check: a tty the
+  history remembers and the map does not is a closed window, and its row is
+  greyed rather than deleted behind him.
+- **Lazy on the submenu, not on the menu.** Victor's condition on the whole
+  feature: *"să nu dureze timp la click-ul pe iconița din menu bar"*. `menuWillOpen`
+  on the parent is too early, so the submenu carries its own tiny delegate
+  (`LazyMenuDelegate`) and `menuWillOpen` now returns immediately for anything
+  that is not the top-level menu. **The delegate is a stored property** —
+  `NSMenu.delegate` is weak, and one only handed over is deallocated before the
+  submenu is ever opened.
+- **Plain titles, deliberately.** An attributed title stops AppKit dimming a
+  disabled row (see the note above `layOutGestures`), and the rows that cannot be
+  clicked — the one already bound, a closed window, an IDE panel with no
+  Terminal.app tab to find — are exactly the ones that have to read as disabled.
+
+#### `bind(tty:)` normalises the tty, and that fixed a silent bug
+
+Callers hand it both spellings: `SpawnTerminal` returns `/dev/ttys014`, while
+`POST /bind` carries the short `ttys014` that `relay-restart.sh` reads out of
+`bound-tty`. **Every AppleScript in `TerminalBinding` compares against
+Terminal.app's own answer, which is the path** — the title, the window frame and
+the delivery all test `tty of t is …`.
+
+So the short form built a `Target` that *looked* bound and could never find its
+tab again: no title, no window frame, and the restart script told `→ re-bound to
+ttys014` on a binding whose first delivery would come back `targetGone`. It had
+been that way since the restart route was written (2026-09-09). One
+`devicePath()` at the single door a caller-supplied tty comes through; proven by
+the first rebind after the fix logging `window at 765,561 945×516` where it had
+previously logged `frame unknown`.
+
 ### A terminal that was closed lets go of the binding by itself (2026-09-07)
 
 The 10s tick that re-reads the bound window's name now also asks whether it is
@@ -4431,6 +4506,67 @@ live at 20fps. The frames were authored for a clip that is looked *at*; this one
 lives an inch from what he is reading while he dictates, and that fast it is a
 flicker at the edge of vision rather than a mark that happens to be alive. 25
 frames at 6.7fps come round in 3.75s.
+
+#### It turns while it is up, and it collapses into the pointer when it goes (2026-09-10)
+
+Victor, in one sentence with two halves: *"când se oprește dictarea … lightning-ul
+acela din jur, haloul de lightning, să se micșoreze către mouse, făcând fade pe
+ultimele 20% din drum. Și în timp ce e activ, să aibă o mișcare de rotație în
+jurul mouse-ului continuă"*.
+
+**The turn is the one motion that has the cursor as its subject.** The film
+already crackles — 25 frames coming round every 3.75s — and that says *alive*
+while saying nothing about the thing it is drawn round. A rotation does, because
+the centre is the only part of the picture that does not move, and the centre is
+the pointer. One revolution takes **16s**: 41pt/s at the rim, slower than a hand
+moves and an 84° drift over one loop of the film. Anything brisker is a thing
+spinning next to what he is reading — the objection that already took the film
+down to a third of its authored rate. Clockwise, which is `CursorMarker`'s
+direction and the app's only other rotation.
+
+**The collapse replaces `orderOut`.** A mark that simply stops being drawn says
+only that: it stopped. Shrinking into the pointer says where the sentence is
+going — everything this ring has been warning about converges on the point it
+converges on — and it lands at the moment the microphone closes, a decode ahead
+of the paste. Half a second, on `BindFlight`'s argument at a smaller scale: a
+receipt glanced at on the way back to work, not a gesture to be studied.
+
+- **The fade is the last fifth of the *travel*, not of the time**, and under any
+  curve but a straight line those are different instants. Both the scale and the
+  ink are therefore sampled against one eased progress (smoothstep, 24 steps) and
+  the fade keyed off that. For the first four fifths the ring does nothing but get
+  smaller, at whatever brightness the swell had left it — so it reads as one
+  motion rather than as a dissolve that happens to shrink.
+- **It keeps chasing the pointer while it collapses.** The hand is usually already
+  moving toward wherever the words are going, and a ring shrinking onto the spot
+  the pointer has left converges on nothing. Same reason `BindFlight` re-reads the
+  cursor every frame instead of sampling it once. The mouse monitors therefore
+  outlive `hide` by those 0.5s, which is why `show` installs them only when there
+  are none — a dictation opening inside the collapse would otherwise leak a pair.
+- **Two layers, because two animations on one `transform` overwrite rather than
+  compose.** That is written down in `CursorMarker`, whose bloom and quarter turn
+  had to become a single `CATransform3D` for exactly this reason. Here the pair is
+  worse than that one — the spin never ends and the collapse is one-shot — so they
+  are simply given a layer each: a `stage` that scales, the halo underneath that
+  turns. The stage is ours rather than the view's backing layer, which AppKit
+  resets on any layout it feels like doing.
+- **Neither animation writes a model value.** The spin is `isRemovedOnCompletion
+  = false` for the film reel's reason (the panel is reused between dictations, so
+  a self-tidying animation would leave a ring that turns for one sentence and
+  stands still for every one after). The collapse fills forwards and is removed
+  on the beat the panel is ordered out, so the layer snaps back to full size
+  unseen — it has to, or the next dictation's ring comes up at 2% of its size.
+- **A `show` arriving mid-collapse takes it back whole**, animations removed and
+  a generation counter invalidating the delayed `orderOut` — otherwise the old
+  collapse's tidy-up puts the *new* dictation's ring away half a second after it
+  came up.
+- **It ends at 2%, not at zero.** Four points across is below the ink of the
+  filaments it is made of, so it is gone as a picture before it is gone as a
+  number, and a layer scaled to nothing has no defined last frame.
+
+**`WT_HALO_DEMO` now ends with it** rather than with `exit(0)`: the collapse is
+the half of this that no still can show and that a demo cut off mid-frame cannot
+either, so the last half-second of every demo is the ring going where it goes.
 
 #### `WT_HALO_DEMO` — the answer to *does it actually move*
 

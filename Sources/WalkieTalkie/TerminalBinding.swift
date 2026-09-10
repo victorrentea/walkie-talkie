@@ -81,10 +81,26 @@ final class TerminalBinding {
         /// match, and matched nothing silently.
         var tty: String? {
             let short: (String) -> String = { ($0 as NSString).lastPathComponent }
+            return deviceTTY.map(short)
+        }
+
+        /// **The same tty in the other spelling — `/dev/ttysNNN`.**
+        ///
+        /// Both exist because both are load-bearing, and neither converts for
+        /// free at the point of use: `tty` above is the short form the status
+        /// line and `~/.claude/cwd` are written in, and this is the device path
+        /// **AppleScript compares a tab's `tty` against**. Every script in this
+        /// file — the title, the window frame, the delivery — tests
+        /// `tty of t is …`, and Terminal.app answers those with the path. A
+        /// short name handed to any of them matches nothing, silently.
+        ///
+        /// This is what `RebindHistory` stores, so a row can be handed straight
+        /// back to `bind(tty:)`.
+        var deviceTTY: String? {
             switch self {
-            case .terminalApp(let tty):   return short(tty)
-            case .tmux(_, let tty):       return short(tty)
-            case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }.map(short)
+            case .terminalApp(let tty):   return tty
+            case .tmux(_, let tty):       return tty
+            case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }
             case .keystroke:              return nil
             }
         }
@@ -249,9 +265,8 @@ final class TerminalBinding {
         }
 
         guard let bound = bound else { return nil }
-        lock.lock(); current = bound; lock.unlock()
-        let where_ = bound.sourceFrame.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" } ?? "frame unknown"
-        Log.info("📍 bound to \(bound.label) (\(bound.address)) — window at \(where_)")
+        // Pointed at a window that was already on screen — never a ✨ row.
+        adopt(bound, spawned: false)
         return bound
     }
 
@@ -263,14 +278,54 @@ final class TerminalBinding {
     ///
     /// Runs subprocesses — call it off the main thread, like every other bind.
     @discardableResult
-    func bind(tty: String) -> Target? {
-        guard let bound = terminalTarget(tty: tty, title: Self.title(forTTY: tty),
+    /// `spawned` says which of the two it was, and travels no further than
+    /// `RebindHistory`: a window this app opened is marked ✨ in *Rebind to*, and
+    /// nothing about the binding itself differs.
+    ///
+    /// **The tty is normalised first, and that fixes a live bug.** Callers hand
+    /// this both spellings — `SpawnTerminal` returns `/dev/ttys014`, while
+    /// `POST /bind` carries the short `ttys014` that `relay-restart.sh` reads out
+    /// of `bound-tty` — and every AppleScript below compares against the path
+    /// Terminal.app reports, which is the long one. A short name therefore built
+    /// a `Target` that looked bound, answered the restart script with success,
+    /// and could never find its tab again: no title, no window frame, and a first
+    /// delivery that came back `targetGone`. Normalising here rather than in each
+    /// script keeps the fix at the one door a caller-supplied tty comes through.
+    func bind(tty: String, spawned: Bool = false) -> Target? {
+        let device = Self.devicePath(tty)
+        guard let bound = terminalTarget(tty: device, title: Self.title(forTTY: device),
                                          fallbackName: "Terminal", bundleID: "com.apple.Terminal")
         else { return nil }
-        lock.lock(); current = bound; lock.unlock()
+        adopt(bound, spawned: spawned)
+        return bound
+    }
+
+    /// `ttys014` → `/dev/ttys014`; anything already a path is left alone.
+    private static func devicePath(_ tty: String) -> String {
+        tty.hasPrefix("/") ? tty : "/dev/" + (tty as NSString).lastPathComponent
+    }
+
+    /// **The one place the binding changes**, and so the one place the history is
+    /// told about it.
+    ///
+    /// Both halves of the move are recorded: the target being let go of gets its
+    /// `unboundAt` stamped, and the new one goes to the top of the list. Doing it
+    /// here rather than at each call site is what makes the elapsed time in the
+    /// menu true — a bind that *displaces* another never passes through
+    /// `unbind()`, and stamping only there would leave every terminal Victor
+    /// moved away from claiming it was let go of hours later, when the app
+    /// finally quit.
+    private func adopt(_ bound: Target, spawned: Bool) {
+        lock.lock()
+        let previous = current
+        current = bound
+        lock.unlock()
+        if let previous = previous, previous.address != bound.address {
+            RebindHistory.shared.released(previous)
+        }
+        RebindHistory.shared.adopted(bound, spawned: spawned)
         let where_ = bound.sourceFrame.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" } ?? "frame unknown"
         Log.info("📍 bound to \(bound.label) (\(bound.address)) — window at \(where_)")
-        return bound
     }
 
     /// Terminal.app: ask it for the tty of the tab in front, then find out what
@@ -455,7 +510,10 @@ final class TerminalBinding {
         let had = current
         current = nil
         lock.unlock()
-        if let had = had { Log.info("📍 unbound from \(had.label) (\(had.address))") }
+        if let had = had {
+            Log.info("📍 unbound from \(had.label) (\(had.address))")
+            RebindHistory.shared.released(had)
+        }
         // Let the editor drop its end too, so a window that is never bound again
         // is not holding a reference to a terminal for the rest of its life.
         if case .ide(let handle) = had?.handle { IDEBridge.release(handle) }
@@ -584,6 +642,51 @@ final class TerminalBinding {
         let parts = out.components(separatedBy: "\t")
         guard let tty = parts.first, tty.hasPrefix("/dev/") else { return nil }
         return (tty, clean(parts.count > 1 ? parts[1] : nil))
+    }
+
+    /// **Every open Terminal.app tab, as `ttysNNN` → the title it is showing.**
+    ///
+    /// One round trip for the whole machine, which is the difference between a
+    /// submenu that opens and one that stalls: `title(forTTY:)` beside this costs
+    /// an `osascript` launch *each*, and the *Rebind to* list asks about a dozen
+    /// ttys at once. Measured on this Mac with sixteen windows open, the script
+    /// below answers in about 30 ms — roughly what a single one of the others
+    /// costs.
+    ///
+    /// **It doubles as the liveness check, and that is why the menu needs no
+    /// second question.** A tty the history remembers and this map does not is a
+    /// window that has been closed; its row stays, greyed, rather than being
+    /// deleted behind Victor's back.
+    ///
+    /// **Keyed short**, because that is what a row is matched by — and the `try`
+    /// is per window: a window being torn down while the script walks it throws,
+    /// and without the guard one closing tab would cost the whole list.
+    static func liveTitles() -> [String: String] {
+        let script = """
+        tell application "Terminal"
+            set out to ""
+            repeat with w in windows
+                try
+                    repeat with t in tabs of w
+                        set theTitle to ""
+                        try
+                            set theTitle to custom title of t
+                        end try
+                        set out to out & (tty of t) & "\t" & theTitle & linefeed
+                    end repeat
+                end try
+            end repeat
+            return out
+        end tell
+        """
+        guard let out = osascript(script) else { return [:] }
+        var titles: [String: String] = [:]
+        for line in out.components(separatedBy: "\n") {
+            let parts = line.components(separatedBy: "\t")
+            guard parts.count >= 2, parts[0].hasPrefix("/dev/") else { continue }
+            titles[(parts[0] as NSString).lastPathComponent] = clean(parts[1]) ?? ""
+        }
+        return titles
     }
 
     /// The title of whichever tab is showing this tty — the refresh counterpart

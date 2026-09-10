@@ -226,6 +226,55 @@ final class CaretHalo {
     /// target that has already moved.
     private static let tick: TimeInterval = 1.0 / 20
 
+    /// **One turn round the pointer, and it takes sixteen seconds.**
+    ///
+    /// Victor, 2026-09-10: *"în timp ce e activ, să aibă o mișcare de rotație în
+    /// jurul mouse-ului continuă"*. The film already crackles in place — 25
+    /// frames of lightning, coming round every 3.75s — and that says *alive*
+    /// without saying anything about the pointer it is drawn round. A rotation
+    /// does: it is the one motion that has the cursor as its subject, because
+    /// the centre is the only part of the picture that stays still.
+    ///
+    /// Sixteen seconds is 41pt/s at the rim, which is slower than a hand moves
+    /// and slower than the crackle it rides on — an 84° drift over one loop of
+    /// the film. Anything brisker turns a mark he is meant to see out of the
+    /// corner of his eye into a thing spinning next to what he is reading, which
+    /// is the objection that already took the film itself down to a third of its
+    /// authored rate.
+    ///
+    /// Clockwise, which is `CursorMarker`'s direction and the app's only other
+    /// rotation. Nothing rests on it beyond the two agreeing.
+    private static let spin: TimeInterval = 16
+
+    /// **How long the ring takes to collapse into the pointer when it goes.**
+    ///
+    /// *"când se oprește dictarea … să se micșoreze către mouse, făcând fade pe
+    /// ultimele 20% din drum"*. It used to be `orderOut` — there one frame, gone
+    /// the next — and a mark that vanishes says only that it stopped being
+    /// drawn. Shrinking says where the sentence went: everything this ring has
+    /// been warning about converges on the point it converges on.
+    ///
+    /// Half a second, on `BindFlight`'s argument at a smaller scale: this is a
+    /// receipt glanced at on the way back to work, not a gesture to be studied,
+    /// and the words are still a decode away from being pasted behind it.
+    private static let collapse: TimeInterval = 0.5
+
+    /// The last fifth of the **travel** — not of the time — is where it fades.
+    ///
+    /// Those are two different instants under any curve but a straight line, and
+    /// his sentence is about the way in ("din drum"), so both halves are sampled
+    /// against the same eased progress and the fade is keyed off that. Which
+    /// also settles what the ring does for the first four fifths: nothing but
+    /// get smaller, at the brightness the swell had left it at, so the collapse
+    /// is read as one motion rather than as a dissolve that happens to shrink.
+    private static let collapseFade: CGFloat = 0.2
+
+    /// Not to zero: a layer scaled to nothing is a layer whose last drawn frame
+    /// is undefined, and 2% of 210pt is four points — below the ink of the
+    /// filaments it is made of, so it is gone as a picture before it is gone as
+    /// a number.
+    private static let collapseEnd: CGFloat = 0.02
+
     /// **Off `sharingType = .none` for a demo, and only for a demo.**
     ///
     /// The panel is invisible to every screen capture on purpose (see the class
@@ -237,9 +286,26 @@ final class CaretHalo {
     static var capturable = false
 
     private var panel: RelayPanel?
+    /// The layer the collapse is played on. It sits between the panel's own view
+    /// and the halo so that the two motions never share a matrix: **this one
+    /// scales, the halo underneath turns**, and Core Animation rebuilds
+    /// `transform` from the model value for each animation it is given — two
+    /// animations on one layer's transform overwrite rather than compose, which
+    /// is written down in `CursorMarker` and is why its bloom and its quarter
+    /// turn had to become a single `CATransform3D`. Two layers is the other way
+    /// out of the same trap, and the cheaper one here: the spin never stops and
+    /// the collapse is one-shot, so there is no pair to keep in step.
+    private var stage: CALayer?
     private var monitors: [Any] = []
     private var timer: Timer?
     private var live = false
+    /// A collapse in flight, and which one. The generation is what a `show`
+    /// arriving mid-collapse invalidates: the panel is reused between
+    /// dictations, so the delayed `orderOut` at the end of the old collapse
+    /// would otherwise put the *new* dictation's ring away half a second after
+    /// it came up.
+    private var closingGeneration = 0
+    private var closing = false
 
     /// **How long since he last said anything**, asked of whoever is holding the
     /// microphone. A closure for the reason `RecordingBeacon.level` is one: what
@@ -262,6 +328,15 @@ final class CaretHalo {
 
     private func show() {
         let panel = self.panel ?? makePanel()
+        // **A collapse still in the air is taken back whole**, before anything
+        // else: he stopped and started again inside half a second, and what has
+        // to be on screen is a full-size ring at rest, not the tail of the last
+        // one. Removing the animations is enough — neither writes a model value,
+        // so the layer is already at identity underneath them.
+        closing = false
+        closingGeneration &+= 1
+        stage?.removeAnimation(forKey: "collapse")
+        stage?.removeAnimation(forKey: "collapse-ink")
         // After `makePanel`, never before: building the layer is what measures
         // the picture and so what sets `artworkGain`.
         panel.alphaValue = Self.opacity(Self.rest)
@@ -273,14 +348,21 @@ final class CaretHalo {
         // the chip is riding the same cursor and is not click-through, so
         // without the local half the ring would stop dead whenever the pointer
         // crossed it.
-        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged,
-                                             .rightMouseDragged, .otherMouseDragged]
-        if let m = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
-            self?.follow()
-        }) { monitors.append(m) }
-        if let m = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] e in
-            self?.follow(); return e
-        }) { monitors.append(m) }
+        //
+        // **Only if there are none.** They outlive a `hide` now, because the
+        // collapse has to keep chasing the pointer, so a dictation opening
+        // inside those 0.5s would otherwise install a second pair and leave the
+        // first pair leaked for the life of the process.
+        if monitors.isEmpty {
+            let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged,
+                                                 .rightMouseDragged, .otherMouseDragged]
+            if let m = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+                self?.follow()
+            }) { monitors.append(m) }
+            if let m = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] e in
+                self?.follow(); return e
+            }) { monitors.append(m) }
+        }
 
         let t = Timer(timeInterval: Self.tick, repeats: true) { [weak self] _ in self?.refresh() }
         timer = t
@@ -289,12 +371,68 @@ final class CaretHalo {
         RunLoop.main.add(t, forMode: .common)
     }
 
+    /// **It shrinks into the pointer rather than stopping being drawn.**
+    ///
+    /// The swell stops here — the timer goes and the panel keeps the alpha the
+    /// silence had brought it to — so what moves during the collapse is the
+    /// picture's size, and its ink only over the last fifth of the way in.
     private func hide() {
         timer?.invalidate()
         timer = nil
-        for m in monitors { NSEvent.removeMonitor(m) }
-        monitors = []
-        panel?.orderOut(nil)
+
+        guard panel != nil, let stage = stage else {
+            for m in monitors { NSEvent.removeMonitor(m) }
+            monitors = []
+            self.panel?.orderOut(nil)
+            return
+        }
+
+        closing = true
+        closingGeneration &+= 1
+        let generation = closingGeneration
+
+        // **Sampled, both of them, against one eased progress.** `u` is how far
+        // in it has travelled and `t` is how much of the half-second has gone;
+        // they are the same number only for a straight line, and the ask is
+        // about the travel. Smoothstep rather than the Bézier `ChipWipe` solves
+        // by Newton: they are indistinguishable at this length, and this one is
+        // an expression.
+        let steps = 24
+        var scale: [CGFloat] = [], ink: [CGFloat] = []
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let u = t * t * (3 - 2 * t)
+            scale.append(1 - u * (1 - Self.collapseEnd))
+            ink.append(u < 1 - Self.collapseFade ? 1 : (1 - u) / Self.collapseFade)
+        }
+
+        let shrink = CAKeyframeAnimation(keyPath: "transform.scale")
+        shrink.values = scale
+        shrink.duration = Self.collapse
+        // **Held at the last frame, and never written into the model.** The
+        // panel is ordered out on the beat this ends, so a layer snapping back
+        // to full size underneath is invisible — and it has to snap back, or the
+        // next dictation's ring would come up 2% of its size.
+        shrink.fillMode = .forwards
+        shrink.isRemovedOnCompletion = false
+        stage.add(shrink, forKey: "collapse")
+
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.values = ink
+        fade.duration = Self.collapse
+        fade.fillMode = .forwards
+        fade.isRemovedOnCompletion = false
+        stage.add(fade, forKey: "collapse-ink")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapse) { [weak self] in
+            guard let self = self, self.closingGeneration == generation, !self.live else { return }
+            self.closing = false
+            for m in self.monitors { NSEvent.removeMonitor(m) }
+            self.monitors = []
+            self.panel?.orderOut(nil)
+            stage.removeAnimation(forKey: "collapse")
+            stage.removeAnimation(forKey: "collapse-ink")
+        }
     }
 
     /// Centred on the pointer, every time the pointer reports. Off the events
@@ -303,7 +441,12 @@ final class CaretHalo {
     /// window-move round trip, and a ring that lags is a ring that is visibly
     /// not *round* anything.
     private func follow() {
-        guard live, let panel = panel else { return }
+        // **Through the collapse as well**, which is the whole of *towards the
+        // mouse*: the hand is usually already moving toward wherever the words
+        // are going, and a ring shrinking onto the spot the pointer has left is
+        // converging on nothing. Same reason `BindFlight` re-reads the cursor
+        // every frame instead of sampling it once.
+        guard live || closing, let panel = panel else { return }
         let p = NSEvent.mouseLocation
         panel.setFrameOrigin(NSPoint(x: (p.x - Self.side / 2).rounded(),
                                      y: (p.y - Self.side / 2).rounded()))
@@ -1114,7 +1257,33 @@ final class CaretHalo {
 
         let view = NSView(frame: NSRect(x: 0, y: 0, width: side, height: side))
         view.wantsLayer = true
-        view.layer?.addSublayer(Self.haloLayer(side: side))
+        // **A stage of our own, rather than the view's backing layer.** AppKit
+        // owns that one and resets its transform on any layout it feels like
+        // doing; the collapse would then be undone mid-flight by something with
+        // no opinion about the halo at all.
+        let stage = CALayer()
+        stage.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        let halo = Self.haloLayer(side: side)
+        // **The turn goes on the halo, not on the stage** — see `stage` for why
+        // the two motions may not share a layer. Its box is the whole panel, so
+        // its centre is the pointer, and the picture inside is hung with its own
+        // centroid on that same point: the rotation therefore has no radius to
+        // wobble around. The envelope goes round with it and cannot tell,
+        // because a radial mask turned about its centre is the same mask.
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = 0
+        turn.toValue = -2 * Double.pi
+        turn.duration = Self.spin
+        turn.repeatCount = .infinity
+        // Like the film's own reel, and for the film's own reason: the panel is
+        // ordered out between dictations rather than rebuilt, so an animation
+        // that tidied itself away would leave a ring that turns for one sentence
+        // and stands still for every one after it.
+        turn.isRemovedOnCompletion = false
+        halo.add(turn, forKey: "spin")
+        stage.addSublayer(halo)
+        view.layer?.addSublayer(stage)
+        self.stage = stage
         p.contentView = view
 
         panel = p
@@ -1143,7 +1312,15 @@ extension CaretHalo {
         let started = Date()
         halo.quietSeconds = { Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 6) }
         halo.setActive(true)
-        Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in exit(0) }
+        // **It ends the way a dictation ends, not with `exit(0)`.** The collapse
+        // is the half of this that no still can show and that a demo cut off
+        // mid-frame cannot either — so the last half-second of every demo is the
+        // ring going where it goes, and a capture taken then is the only proof
+        // available that it does.
+        Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in
+            halo.setActive(false)
+            Timer.scheduledTimer(withTimeInterval: collapse + 0.3, repeats: false) { _ in exit(0) }
+        }
         NSApplication.shared.run()
     }
 }
