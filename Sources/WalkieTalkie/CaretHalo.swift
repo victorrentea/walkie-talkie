@@ -1,8 +1,15 @@
 import AppKit
 import QuartzCore
 
-/// **A golden halo round the pointer whenever a dictation is headed for the
-/// caret — faint while he talks, and swelling once he stops.**
+/// **A halo round the pointer whenever a dictation is headed for the caret —
+/// faint while he talks, and swelling once he stops.**
+///
+/// Since 2026-09-10 the ring itself is a **picture** — `assets/caret-halo.png`,
+/// the electric blue-and-magenta ring Victor picked — resampled so its band sits
+/// exactly where the drawn one's did and faded by exactly the same rules. Every
+/// texture that came before it is still here, behind `WT_HALO_DESIGN`, and the
+/// geometry, the envelope and the swell below are unchanged: only what fills the
+/// band is different.
 ///
 /// Victor's ask, 2026-09-09: *"when this mode is activated … draw a little halo
 /// ring around the mouse … about 100 pixels, to warn me that I need to basically
@@ -245,7 +252,9 @@ final class CaretHalo {
 
     private func show() {
         let panel = self.panel ?? makePanel()
-        panel.alphaValue = Self.rest
+        // After `makePanel`, never before: building the layer is what measures
+        // the picture and so what sets `artworkGain`.
+        panel.alphaValue = Self.opacity(Self.rest)
         follow()
         panel.orderFrontRegardless()
 
@@ -294,7 +303,8 @@ final class CaretHalo {
         guard live, let panel = panel else { return }
         let quiet = quietSeconds?() ?? 0
         let t = max(0, min(1, (quiet - Self.patience) / Self.swell))
-        panel.alphaValue = Self.rest + (Self.alert - Self.rest) * CGFloat(t)
+        let rest = Self.opacity(Self.rest), alert = Self.opacity(Self.alert)
+        panel.alphaValue = rest + (alert - rest) * CGFloat(t)
     }
 
     // MARK: - Designs
@@ -360,6 +370,32 @@ final class CaretHalo {
         /// the same geometry, and the list of everything already tried and
         /// measured, so they had to be new rather than merely different.
         case codex1, codex2, codex3, codex4
+        /// **Not drawn at all: `assets/caret-halo.png`, and what ships.**
+        ///
+        /// Everything above answers *what can be drawn that reads like the
+        /// reference*; this is the reference. Victor, 2026-09-10: *"use this as
+        /// the halo when dictating at caret … faded out dynamically by the same
+        /// rules"* — so the band is his picture and the rules around it are
+        /// untouched: the same radius, the same envelope, the same 5%→22.5%
+        /// swell on silence.
+        ///
+        /// **This is the second time a picture was tried and the first time it
+        /// worked**, and the difference is the file rather than the idea. The
+        /// reference sent in September was a glow *authored on white*: keying the
+        /// background out left olive mud on a dark editor, because the brightness
+        /// had been coming from the white all along. This one arrives with a real
+        /// alpha channel and saturated ink — blue and magenta filaments over
+        /// nothing — so there is nothing to unmultiply and nothing that was
+        /// borrowing light from a ground that is about to be removed.
+        ///
+        /// It also settles the *"doar galben"* rule by superseding it rather than
+        /// breaking it. One hue was the answer to hues that read as a smudge at a
+        /// twentieth of an opacity; these two do not, because they are opposite
+        /// ends of the spectrum at full saturation rather than three shades of the
+        /// same gold, and the picture keeps its structure at any alpha for the
+        /// same reason the smooth gradient did — the detail is *in* the falloff,
+        /// not laid on top of it.
+        case storm
     }
 
     /// Which one is live. `WT_HALO_DESIGN=spokes` runs the app with a candidate
@@ -373,9 +409,15 @@ final class CaretHalo {
     /// every design drawn here was either concentric or a full-band sunburst,
     /// and this is neither. `smooth`, the gradient band that shipped for a day,
     /// stays as the reference the contact sheet is judged against.
+    /// **`storm` ships since 2026-09-10** — Victor's picture, which is where a
+    /// day of drawing textures was always headed. `codex3`, the reeds that
+    /// shipped for an afternoon, and `smooth`, the gradient band that shipped for
+    /// a day, both stay: the first because it is the best thing this file drew on
+    /// its own, the second because it is the reference the contact sheet is
+    /// judged against.
     static let design: Design = {
         guard let name = ProcessInfo.processInfo.environment["WT_HALO_DESIGN"],
-              let picked = Design(rawValue: name) else { return .codex3 }
+              let picked = Design(rawValue: name) else { return .storm }
         return picked
     }()
 
@@ -428,12 +470,173 @@ final class CaretHalo {
         if let done = patternCache[key] {
             layer.contents = done
         } else {
-            let made = strokes(side: side, design: design)
+            let made = design == .storm ? artwork(side: side)
+                                        : strokes(side: side, design: design)
             patternCache[key] = made
             layer.contents = made
         }
         layer.contentsGravity = .resize
         return layer
+    }
+
+    /// **The picture, resampled onto the band and faded by the same envelope.**
+    ///
+    /// Three things happen here and only three, which is the point — everything
+    /// else about the halo is meant to be unable to tell that the band is a
+    /// bitmap now.
+    ///
+    /// 1. **It is measured, not positioned by hand.** The alpha channel gives a
+    ///    centroid and an alpha-weighted mean radius, and the picture is scaled
+    ///    so that radius lands on `core` and that centroid on the pointer. A
+    ///    ring drawn a few pixels off-centre in a 580px PNG — this one is —
+    ///    would otherwise sit visibly off the cursor, and a replacement picture
+    ///    at another size or another ring thickness would need new numbers here.
+    ///    It needs none: swap the file and it lands in the same place.
+    /// 2. **`alpha(atRadius:)` multiplies it**, exactly as it multiplies every
+    ///    drawn texture. The picture has its own falloff and it is a good one,
+    ///    but it is a falloff to *transparent-ish*, not to nothing, and the one
+    ///    thing this shape may never have is a rim. Mapped as above its band
+    ///    covers 0.6–1.4 core, so the envelope is flat through the whole bright
+    ///    body and only takes hold in the outer glow and the inner haze — the
+    ///    fade he asked for, applied where the picture was already fading.
+    /// 3. **The light is matched by opacity, not by gain.** Integrated against
+    ///    the envelope the picture carries ~0.46× the reference band's flux, and
+    ///    the drawn designs make that up by scaling their coverage — which here
+    ///    would clip: most of this band is already near opaque, so any gain above
+    ///    ~1.1 flattens the filaments into a solid annulus, the single feature
+    ///    the picture was chosen for. So the deficit is handed to the *panel*
+    ///    instead (`artworkGain`, applied to `rest` and `alert`), where
+    ///    multiplying cannot saturate anything.
+    private static func artwork(side: CGFloat) -> CGImage? {
+        guard let url = artworkURL,
+              let file = NSImage(contentsOf: url),
+              let image = file.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            // Loud, and still a halo: the ring is a warning about where a whole
+            // sentence is going, so a missing asset must not be the reason there
+            // is nothing round the pointer.
+            Log.info("◯ caret halo: caret-halo.png not found — drawing \(Design.codex3.rawValue) instead")
+            return strokes(side: side, design: .codex3)
+        }
+
+        // Where the ring is in the file, in the file's own pixels. Row 0 of a
+        // bitmap context is the *top* row, so the centroid comes out in
+        // top-down coordinates and has to be flipped before it can be used as a
+        // drawing origin — worth the two lines: the error is a picture that
+        // hangs slightly below the pointer, which looks like a bug in `follow`.
+        let sw = image.width, sh = image.height
+        guard let probe = CGContext(data: nil, width: sw, height: sh, bitsPerComponent: 8,
+                                    bytesPerRow: sw * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let probeData = ({ () -> UnsafeMutableRawPointer? in
+                  probe.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(sw), height: CGFloat(sh)))
+                  return probe.data
+              })() else { return nil }
+        let src = probeData.bindMemory(to: UInt8.self, capacity: sw * sh * 4)
+        var mass: CGFloat = 0, mx: CGFloat = 0, my: CGFloat = 0
+        for y in 0..<sh {
+            for x in 0..<sw {
+                let a = CGFloat(src[(y * sw + x) * 4 + 3])
+                guard a > 0 else { continue }
+                mass += a; mx += a * CGFloat(x); my += a * CGFloat(y)
+            }
+        }
+        guard mass > 0 else { return nil }
+        let cx = mx / mass, cy = CGFloat(sh) - my / mass
+        var spanned: CGFloat = 0
+        for y in 0..<sh {
+            for x in 0..<sw {
+                let a = CGFloat(src[(y * sw + x) * 4 + 3])
+                guard a > 0 else { continue }
+                spanned += a * hypot(CGFloat(x) - cx, CGFloat(sh) - CGFloat(y) - cy)
+            }
+        }
+        let meanRadius = spanned / mass
+        guard meanRadius > 1 else { return nil }
+
+        let scale: CGFloat = 2
+        let px = Int((side * scale).rounded())
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8,
+                                  bytesPerRow: px * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.interpolationQuality = .high
+        let k = core / meanRadius
+        ctx.draw(image, in: CGRect(x: side / 2 - cx * k, y: side / 2 - cy * k,
+                                   width: CGFloat(sw) * k, height: CGFloat(sh) * k))
+
+        guard let data = ctx.data else { return nil }
+        let buf = data.bindMemory(to: UInt8.self, capacity: px * px * 4)
+        let mid = CGFloat(px) / 2
+        var pictureFlux: CGFloat = 0, referenceFlux: CGFloat = 0
+        for y in 0..<px {
+            for x in 0..<px {
+                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
+                let fade = alpha(atRadius: hypot(dx, dy) / scale)
+                referenceFlux += fade
+                pictureFlux += CGFloat(buf[(y * px + x) * 4 + 3]) / 255 * fade
+            }
+        }
+        artworkGain = min(3, referenceFlux / max(pictureFlux, 1))
+        Log.info(String(format: "◯ caret halo picture: ring r=%.0fpx → %.0fpt, %.2f× the band's flux, panel ×%.2f",
+                        meanRadius, core, pictureFlux / max(referenceFlux, 1), artworkGain))
+
+        // The envelope, applied to all four channels — the buffer is
+        // premultiplied, so scaling the colour with the alpha is what keeps it
+        // that way, and is also the only version that does not leave a fringe of
+        // full-strength ink round a vanishing alpha.
+        for y in 0..<px {
+            for x in 0..<px {
+                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
+                let fade = alpha(atRadius: hypot(dx, dy) / scale)
+                guard fade < 1 else { continue }
+                let i = (y * px + x) * 4
+                for c in 0..<4 { buf[i + c] = UInt8(CGFloat(buf[i + c]) * fade) }
+            }
+        }
+        return ctx.makeImage()
+    }
+
+    /// **How much the panel is brightened to carry the picture's light**, set
+    /// when the bitmap is built and 1 for every drawn design. See point 3 above.
+    private(set) static var artworkGain: CGFloat = 1
+
+    /// The panel opacity for one of the two states, with that gain in it.
+    ///
+    /// The ceiling is a rail and nothing more: a replacement picture sparse
+    /// enough to need the full 3× would otherwise be asking for a two-thirds
+    /// opaque ring over his work, which is the objection that took the resting
+    /// opacity from 10% to zero in the first place. It must not bite on a normal
+    /// picture — clamping the alarmed state is exactly how the flux match this
+    /// gain exists to make would get undone, leaving a swell that is quieter
+    /// than the one it replaced.
+    static func opacity(_ base: CGFloat, for design: Design = design) -> CGFloat {
+        min(0.6, base * (design == .storm ? artworkGain : 1))
+    }
+
+    /// Where the picture lives: in the bundle when installed, in `assets/` when
+    /// the binary is run straight out of `.build` — which is how the contact
+    /// sheet is shot. Same resolution `Transcriber.helperPath` does, for the same
+    /// reason: a developer run and an installed run without a switch between
+    /// them. `WT_HALO_IMAGE` overrides both, so a candidate picture can be tried
+    /// without touching the repo.
+    private static var artworkURL: URL? {
+        var candidates: [URL] = []
+        if let override = ProcessInfo.processInfo.environment["WT_HALO_IMAGE"] {
+            candidates.append(URL(fileURLWithPath: override))
+        }
+        if let res = Bundle.main.resourcePath {
+            candidates.append(URL(fileURLWithPath: res).appendingPathComponent("caret-halo.png"))
+        }
+        let exe = URL(fileURLWithPath: CommandLine.arguments[0],
+                      relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            .standardizedFileURL.resolvingSymlinksInPath()
+        var dir = exe.deletingLastPathComponent()
+        for _ in 0..<4 {
+            candidates.append(dir.appendingPathComponent("assets/caret-halo.png"))
+            dir = dir.deletingLastPathComponent()
+        }
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     /// **The strokes, drawn once and faded by the same curve the gradient uses.**
@@ -480,7 +683,9 @@ final class CaretHalo {
         }
 
         switch design {
-        case .smooth:
+        case .smooth, .storm:
+            // Neither is drawn from strokes: `smooth` returns a gradient layer
+            // and `storm` a resampled picture, both before this is ever called.
             break
 
         case .bands:
@@ -894,8 +1099,18 @@ extension CaretHalo {
                 // sheet, which is the exact way a contact sheet can lie.
                 if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                     host.cacheDisplay(in: host.bounds, to: rep)
+                    // **The picture's row is drawn at the picture's opacity.**
+                    // `storm` makes its missing flux up on the panel rather than
+                    // in the bitmap, so a sheet that used the bare `rest` for
+                    // every row would show it at half the light it actually runs
+                    // at — which is the one thing a contact sheet exists to get
+                    // right. Read after the layer is built: that is what sets
+                    // it. The last column is the profile at full strength and
+                    // takes no gain — it is there to judge the falloff, not the
+                    // state.
+                    let lit = alpha < 1 ? opacity(alpha, for: design) : alpha
                     NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }
-                        .draw(in: box, from: .zero, operation: .sourceOver, fraction: alpha)
+                        .draw(in: box, from: .zero, operation: .sourceOver, fraction: lit)
                 }
                 // The name, so a sheet of seven near-identical circles can be
                 // talked about at all.

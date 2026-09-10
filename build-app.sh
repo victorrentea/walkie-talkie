@@ -45,6 +45,12 @@ cp "$DIR/helpers/recent_projects.py" "$CONTENTS/Resources/recent_projects.py"
 cp "$DIR/assets/walkie-idle.png" "$CONTENTS/Resources/walkie-idle.png"
 cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
 
+# The caret halo's picture — the ring itself, rather than a shape drawn in code.
+# Same reason as above: no SPM resources on this target, so the bundle is
+# assembled by hand. `CaretHalo` also finds it in `assets/` when the binary is
+# run straight out of `.build`, which is how the contact sheet is shot.
+cp "$DIR/assets/caret-halo.png" "$CONTENTS/Resources/caret-halo.png"
+
 # The Finder / Spotlight / Get Info icon, built here from the *bound* picture —
 # the device inside its orange ring. It was the idle one for two days, on the
 # argument that the ring means "bound to a terminal right now" and an app icon

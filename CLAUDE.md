@@ -4379,6 +4379,65 @@ by the red circle**, i.e. a gradient inside the region that is supposed to be
 uniformly opaque. `sqrt` of the lane puts the count in proportion to r; the
 density is then constant and the envelope is the only thing shaping the light.
 
+#### What ships now: the picture itself (2026-09-10)
+
+Victor sent an electric blue-and-magenta lightning ring and said *"use this as
+the halo when dictating at caret … faded out dynamically by the same rules"*. So
+the band is his PNG (`assets/caret-halo.png`, `Design.storm`) and **nothing else
+moved**: same `core`, same plateau envelope, same 2s of patience and 2s of swell.
+Every drawn texture stays behind `WT_HALO_DESIGN`, `smooth` still the reference
+row on the sheet.
+
+**This is the second picture and the first that worked, and the difference is the
+file.** The September reference was a glow *authored on white* — keying the
+background out left olive mud on a dark editor, because the brightness had been
+coming from the white all along (the *do not re-key that image* note above still
+stands, and is about that file). This one arrives with a real alpha channel and
+saturated ink over nothing: nothing to unmultiply, nothing borrowing light from a
+ground that is about to be removed.
+
+It also **supersedes *doar galben* rather than breaking it**. One hue was the
+answer to three shades of gold reading as a smudge at a twentieth of an opacity;
+blue and magenta at full saturation are opposite ends of the spectrum and hold
+their identity at 16%, which the contact sheet shows on both grounds.
+
+Three things happen in `CaretHalo.artwork`, and only three:
+
+- **It is measured, not placed.** The alpha channel gives a centroid and an
+  alpha-weighted mean radius (`206px` for this file), and the picture is scaled
+  so that radius lands on `core` (105pt) and that centroid on the pointer.
+  Swapping the file needs no new numbers. The centroid comes out of a bitmap
+  context in **top-down** rows and has to be flipped before it is a drawing
+  origin — get that wrong and the ring hangs below the cursor, which looks like a
+  bug in `follow`.
+- **The same envelope multiplies it.** Mapped as above the picture's band covers
+  ~0.6-1.4 core, so the plateau is flat through its whole bright body and the
+  ramps only take hold in the outer glow and the inner haze — the fade he asked
+  for, applied where the picture was already fading, and the guarantee that this
+  shape still has no rim.
+- **The missing light is paid on the panel, not in the bitmap.** Integrated
+  against the envelope the picture carries **0.46x** the reference band's flux.
+  The drawn designs make that up by scaling coverage, which here would clip: most
+  of this band is already near opaque, so any gain over ~1.1 flattens the
+  filaments into a solid annulus — the one feature it was chosen for. So
+  `artworkGain` (2.16 for this file, capped at 3) multiplies `rest` and `alert`
+  instead, where nothing can saturate: **16.2% and 48.6%** on screen, the same
+  light as 7.5%/22.5% of the gold band. The 0.6 ceiling on the result is a rail
+  against a very sparse replacement picture and must not bite on a normal one —
+  clamping the alarmed state is exactly how the flux match would get undone.
+
+`Log` carries the measurement the first time the panel is built (`caret halo
+picture: ring r=206px -> 105pt, 0.46x the band's flux, panel x2.16`), which is
+the whole diagnostic if a replacement file ever lands wrong.
+
+**The file is found the way `whisper_helper.py` is**: `Bundle.main` when
+installed, `assets/` walking up from the binary when run out of `.build` — which
+is how the contact sheet is shot — and `WT_HALO_IMAGE` overrides both, so a
+candidate picture can be tried without touching the repo. A missing file logs and
+falls back to `codex3` rather than to nothing: the ring is a warning about where
+a whole sentence is going, so an absent asset must not be the reason there is
+none.
+
 #### `WT_SHOOT_HALO` — because a falloff cannot be judged from code
 
 `WT_SHOOT_HALO=/tmp/halo.png ./.build/debug/WalkieTalkie` draws the halo on a
@@ -4395,9 +4454,12 @@ like the halo.
 
 **Two grounds, because this shape spends its life over both** and one that reads
 on a white page can vanish on a dark editor; that is exactly the fault that took
-it off blue. The columns are **5%, 15% and 100%** — the two states, beside
-the profile at full strength, which is the only way to judge a falloff drawn at
-a twentieth of an opacity.
+it off blue. The columns are **the two states and 100%** — the profile at full
+strength being the only way to judge a falloff drawn at a twentieth of an
+opacity. The state columns carry each row's own `opacity(_:for:)`, so the
+picture's row is drawn at the 16%/49% it actually runs at rather than at the bare
+7.5%/22.5%; the full-strength column takes no gain, since it is there to judge
+the falloff and not the state.
 
 It paid for itself on the first run twice over — the band was so wide it read as
 a filled disc rather than a ring, and **the sheet itself was lying**, applying
