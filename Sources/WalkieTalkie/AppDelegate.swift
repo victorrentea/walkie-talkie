@@ -491,6 +491,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
         hotkeys.onAreaShot = { [weak self] anchor, at in self?.areaShot(from: anchor, at: at) }
+        // One line per selection, in the app's own log: how many frames the box
+        // was actually drawn in, and the longest it went without one. It took a
+        // bug report to ask that question the first time.
+        CropSelectionOverlay.log = { Log.info($0) }
         // Main, because it touches the overlay's own state; and `async`, because
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }

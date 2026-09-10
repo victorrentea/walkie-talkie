@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import VictorMacKit
 
 private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let ptr = userInfo else { return Unmanaged.passUnretained(event) }
@@ -391,12 +392,19 @@ final class HotkeyTap {
     private var areaPressPassed = false
 
     /// **How far the hand has to travel before a middle click stops being one.**
-    /// It is the same 6 points `CropSelectionOverlay` refuses to call a
-    /// selection, and for the same reason — below that it is a click that
-    /// slipped. It also has to be small enough that the overlay is up by the
-    /// time he is drawing the box he means, since everything before it is a
-    /// corner recorded and nothing on screen.
-    private static let areaDragThreshold: CGFloat = 6
+    ///
+    /// Victor's rule for this gesture, and it is the whole of it: *"ar trebui să
+    /// ignori click/dublu-click de wheel — doar drag ne interesează."* A click
+    /// is never perfectly still, and a double click is two of them in quick
+    /// succession over whatever he happens to be reading, so the number has to
+    /// be comfortably past a hand's tremor rather than at the edge of it. It was
+    /// 6 for a day — the same distance `CropSelectionOverlay` refuses to call a
+    /// selection — which is the right floor for *"is this box worth
+    /// capturing?"* and too fine for *"did he mean to drag at all?"*.
+    ///
+    /// Nothing is lost by waiting: the corner was recorded at the press, so the
+    /// only thing these points buy is the moment the dimming appears.
+    private static let areaDragThreshold: CGFloat = 12
 
     /// **How close the wheel's second click has to land** for the dictation the
     /// first one started to become a spawn (Victor, 2026-09-05).
@@ -485,7 +493,17 @@ final class HotkeyTap {
             return false
 
         case .otherMouseDragged:
-            if areaCropping { return true }
+            if areaCropping {
+                // **The box follows the events, not a timer.** Every one of
+                // these is about to be swallowed, so the overlay would otherwise
+                // be left polling `NSEvent.mouseLocation` from a main-thread
+                // timer for a position this thread already has in its hand — and
+                // a box that stops following the hand while the wheel is held is
+                // exactly what that timer looks like when it is starved.
+                let where_ = event.location
+                DispatchQueue.main.async { CropSelectionOverlay.dragMoved(toCG: where_) }
+                return true
+            }
             guard let anchor = areaAnchor, dictating else { return false }
             let now = event.location
             guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return false }

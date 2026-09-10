@@ -1616,20 +1616,33 @@ resolve — and both apps are only ever built on this Mac, from local.
   **already under way** — the wheel is down and the hand is moving — so the
   corner it started from is handed in and the box is live on the first frame.
 
-Two things were fixed on the way out rather than copied faithfully: `CropPanel`
-now refuses `constrainFrameRect`, so the selection can reach the top 25 points of
-a screen instead of being quietly pushed below the menu bar (the trap `BindFlight`
-and `CaretHalo` are already written under), and the panels are
-`sharingType = .none` so the dimming cannot land in the picture even if the beat
-before the capture is ever shortened.
+One thing was fixed on the way out rather than copied faithfully: `CropPanel` now
+refuses `constrainFrameRect`, so the selection can reach the top 25 points of a
+screen instead of being quietly pushed below the menu bar — the trap `BindFlight`
+and `CaretHalo` are already written under.
+
+**And one thing was broken on the way out and put back.** The panels were given
+`sharingType = .none` for an afternoon, as belt and braces over the beat that
+already separates them coming down from the shutter. Everything else this app
+draws near the pointer is invisible to capture for a good reason; this is the one
+surface that must not be, because it is the one a person **aims** with. With the
+flag on, the selection could not be reviewed by a screenshot, by a remote pair of
+hands, or by anything but eyes on the glass at the instant it happens — which is
+exactly how a box that had stopped following the mouse went unnoticed. The beat
+is what keeps the dimming out of the picture, and always was.
 
 ### The release matches the press, and in Logi mode both go through
 
 A middle press cannot be told from a middle click at the press — the difference
 is whether the hand then moves — so `HotkeyTap.areaDrag` records the corner, hands
 the event straight back, and takes nothing until the pointer has travelled
-`areaDragThreshold` (6 points, the same distance `CropSelectionOverlay` refuses to
-call a selection). **Verified with a listen-only tap tail-appended behind this
+`areaDragThreshold`. **12 points**, on Victor's rule: *"ar trebui să ignori
+click/dublu-click de wheel — doar drag ne interesează."* It was 6 for a day, which
+is the right floor for *is this box worth capturing* (it is the same distance the
+overlay refuses to call a selection) and too fine for *did he mean to drag at
+all* — a click is never perfectly still. Nothing is lost by waiting, because the
+corner was recorded at the press: the extra points buy only the moment the
+dimming appears. **Verified with a listen-only tap tail-appended behind this
 one**: a plain middle click during a dictation reaches the app underneath as a
 `DOWN` and an `UP`, with nothing logged here — which is the whole promise of
 *Use Logi Gestures*, since middle-click-to-close-a-tab is what that mode exists to
@@ -1695,6 +1708,34 @@ the time the tap asks. They differ by one event, which is nothing to a hand and
 everything to a burst of posted events — the arm was silently skipped for a drag
 delivered faster than the pointer could be read, which is exactly the shape every
 test of this gesture has.
+
+### The box follows the events, not a timer (2026-09-10)
+
+Reported on the first real drag: *"nu văd live chenarul selectat în timp ce țin
+jos wheel-ul — văd doar un chenar mic inițial și apoi, când dau release, cel
+final."*
+
+**It was not reproducible with posted events**, and that is the tell rather than
+a dead end. A `driven` drag has every one of its motion events swallowed by this
+tap before any window sees them, so the overlay was polling
+`NSEvent.mouseLocation` from a 60 Hz `Timer` on the main run loop for a position
+**the tap already had in its hand**. A timer is a request for a turn; a box that
+stops following the hand while the button is held and catches up the instant it
+is released is precisely what not getting one looks like. Measured here at 72
+frames a second and a worst gap of 20 ms, which is exactly why the synthetic
+version never showed it: the machine under a posted drag is not the machine
+under a real one.
+
+So the position is **pushed** — `CropSelectionOverlay.dragMoved(toCG:)` on every
+swallowed drag event, drawing on arrival — and the timer keeps only what it alone
+can see: Esc, the right button, and ⌘/⌥. The pointer read that remains is the
+fallback for a poll tick with nothing pushed yet.
+
+**And every selection now writes one line saying whether the box was drawn**:
+`✂️ selection over 5.0s — 362 frames (59 pushed, 303 polled), worst gap 20ms`.
+It took a bug report to ask that question the first time; the answer is now in
+the log before anyone thinks to ask it again. `CropSelectionOverlay.log` is the
+module's one diagnostic hook, pointed at each app's own logger.
 
 ### No border, and no vignette either
 
