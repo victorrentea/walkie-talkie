@@ -128,11 +128,34 @@ relay *pushes*, so the editor listens.
   *application*, which is exactly the granularity that was never the problem.
 - **A per-run secret gates it**, unlike the Chrome endpoint. That one hands over
   a CSS selector; this one types a line into a shell and presses Return.
-- **VS Code targets are now guarded.** `/bind` returns the shell's pid, the
-  relay resolves a tty from it and runs the same `foregroundIsShell` test it
-  runs on a Terminal.app tab — verified refusing `rm -rf build` with zsh at the
-  prompt. **IntelliJ's are not yet**: the reworked terminal does not hand back a
-  process through `ttyConnector`, so `shellPID` comes back nil there.
+- **Both editors' targets are guarded**, since 2026-09-10. `/bind` returns the
+  shell's pid, the relay resolves a tty from it and runs the same
+  `foregroundIsShell` test it runs on a Terminal.app tab — verified refusing
+  `rm -rf build` on VS Code with zsh at the prompt, and on IntelliJ refusing
+  `echo THIS MUST NEVER RUN` the same way.
+
+  **IntelliJ was the exception for three weeks, and the reason was one unwrapped
+  proxy.** Its connector is a `com.jetbrains.rdserver.terminal.BackendTtyConnector`
+  even for a local tab with `terminalEngine=CLASSIC`, and this file recorded that
+  as *the reworked terminal does not hand back a process*. It does:
+  `BackendTerminalRunner.createTtyConnector` builds the ordinary
+  `PtyProcessTtyConnector` and wraps it, and the wrapper is a `ProxyTtyConnector`
+  whose entire content is a `getConnector()` returning the original — read out of
+  the IDE's own bytecode rather than guessed at. `shellPid` searched the
+  *wrapper's* hierarchy for `getProcess`, found nothing, and answered nil. It
+  unwraps first now (`RelayTerminalService.unwrapProxy`, by method name, since
+  the plugin compiles against neither the terminal plugin's interface nor the
+  remote-dev module), and IntelliJ answers a real pid: `shellPID: 9323`, matching
+  the zsh on that tab's tty.
+
+  **What Victor actually saw was the warning**, reported as *"nu mai merge să fac
+  bind de la terminalul de IntelliJ, îmi zice No Shell Guard"* — and the bind was
+  working the whole time. Since 2026-08-28 the positive bind flash is gone
+  (*the chip says the folder at that exact instant*), so on the one target that
+  could not be guarded the **only** thing the gesture drew was a `⚠️`. A
+  successful bind and a failed one looked the same, and the successful one looked
+  worse. Now there is no flash on IntelliJ either, which is what every other
+  target's success has looked like all along.
 - **No pid means unguarded, not refused.** Fail-closed is right for a tty target;
   here it would trade an announced weakness for a feature that does nothing,
   since every IDE target was unguarded before this existed. `isGuarded` is false
@@ -270,6 +293,20 @@ the delivery disappears silently, with no error anywhere. `singleLine` still
 normalises whitespace *inside* each line, so a transcript arriving with its own
 breaks cannot fragment the sentence: the structure is the app's, never the
 recogniser's.
+
+**And a third, learned the hard way on 2026-09-10: the far end has to *parse*
+the JSON.** Every delivery into an IntelliJ terminal between that 09-07 change
+and 09-10 arrived as one run-on line with a literal `\n\n` in the middle of it —
+the words, two visible backslash-n, then all five clauses. The relay was right:
+`IDEBridge.send` serialises with `JSONSerialization`, so a real newline goes out
+correctly escaped. The IntelliJ plugin's `/send` picked the string back out with
+a regex and unescaped exactly two sequences, `\"` and `\\`, so `\n` came
+through as two characters. VS Code's extension calls `JSON.parse` and never had
+it, which is why this was an IntelliJ-only fault and why it hid behind the shell
+guard's `⚠️` in the same report. Measured by reading the bytes the pty actually
+received, before and after. `RelayTerminalService.unescapeJson` handles the whole
+escape set now, in one left-to-right pass — the old pair was also wrong in its
+order, turning `\\"` into a bare quote.
 
 The shots travel as **paths, not a `📸 ×2` count**:
 the panel's preview is written for Victor, who needs only to know they landed,
