@@ -4281,6 +4281,49 @@ render is 4× larger than the sheet, so those were 8px strokes. Its **flux**
 numbers were unaffected — area-averaging preserves them — and they are the ones
 that mattered. When a sheet is downscaled for review, say by how much.
 
+#### What ships: `codex3`, and the envelope became a plateau (2026-09-10)
+
+**Victor picked it out of the gallery of twelve** — short radial reeds that stop
+short of the centre, drawn by **Codex (GPT-5.5)** against the same brief and the
+same kill list. It is the one texture nothing here arrived at over four rounds:
+everything drawn on this side was either concentric or a full-band sunburst, and
+this is neither. Its reeds are *short* — they do not span the band, so they never
+line up into rays from a common origin, which is exactly what made `spokes` read
+as a badge.
+
+**And the envelope became a plateau, because he drew it.** He marked up a render
+with two circles — green at **r 103**, red at **r 193** — and asked for it to be
+fully opaque only between them, with the fade to either side much more
+pronounced: *"să fie full opac doar între cercul verde și cercul roșu … poza tre
+să aibă transparență parțială pe periferie/interior"*.
+
+That is not a tweak, it changes what the shape *is*. A single peak at the core is
+a **glow**: one bright radius with everything else on the way to it. A plateau is
+a **band with soft edges**: a wide region that simply is the halo, and two ramps
+that stop it having one. For a texture made of many small marks the plateau is
+the honest envelope — with a peak, the marks near the core are lit and the rest
+are on a gradient toward not existing, so the field reads as a ring with a bright
+middle rather than as a field.
+
+`plateauInner` / `plateauOuter` are named constants because **two things read
+them**: the envelope, and the texture's own code, which spreads its reeds across
+the plateau and thins them into the ramps. A number that appears in a drawing and
+in the alpha multiplying it must not be able to drift.
+
+**The correction went back to Codex's own session** (`codex exec resume --last`),
+which is worth writing down as a working method: it still had the brief, the kill
+list and its own reasoning, so the ask was three lines rather than a page, and
+what came back was its design rebalanced rather than a fresh one that happened to
+look similar.
+
+**One thing it got wrong is arithmetic, not design, and was fixed here.** Its
+reeds were spread evenly *in radius*, which is not evenly *in space*: an annulus
+at r has 2πr of circumference to fill, so a constant count per radius thins out as
+it goes. Measured on the first render — mean ink peaking at r≈130 and **40% down
+by the red circle**, i.e. a gradient inside the region that is supposed to be
+uniformly opaque. `sqrt` of the lane puts the count in proportion to r; the
+density is then constant and the envelope is the only thing shaping the light.
+
 #### `WT_SHOOT_HALO` — because a falloff cannot be judged from code
 
 `WT_SHOOT_HALO=/tmp/halo.png ./.build/debug/WalkieTalkie` draws the halo on a

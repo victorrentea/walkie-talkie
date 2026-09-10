@@ -114,12 +114,41 @@ final class CaretHalo {
     ///
     /// Every stop is still zero at one end, so there is no radius at which the
     /// alpha steps.
+    /// **A plateau since 2026-09-10, not a peak** — Victor drew it. He marked a
+    /// render of the chosen texture with two circles and said it should be fully
+    /// opaque *only* between them, with the fade to either side much more
+    /// pronounced: *"să fie full opac doar între cercul verde și cercul roșu …
+    /// poza tre să aibă transparență parțială pe periferie/interior"*. Measured
+    /// off his markup: green at **r 103**, red at **r 193**, which in multiples
+    /// of the core radius is 0.687 and 1.287.
+    ///
+    /// **What that changes is what the shape *is*.** A single peak at the core
+    /// is a glow — one bright radius with everything else on the way to it. A
+    /// plateau is a *band* with soft edges: a wide region that is simply the
+    /// halo, and two ramps that stop it having an edge. That is the honest
+    /// envelope for a texture made of many small marks, because with a peak the
+    /// marks nearest the core are lit and the rest are on a gradient toward not
+    /// existing — the field reads as a ring with a bright middle rather than as
+    /// a field.
+    ///
+    /// The two ramps are 0.347 and 0.373 core-units wide, i.e. not quite equal.
+    /// They come from circles he drew by hand and are left as measured: the
+    /// asymmetry is a third of a percent of the radius and no eye will find it,
+    /// where rounding them to a matched pair would be preferring tidiness to
+    /// what he actually asked for.
+    /// The two radii he drew, as multiples of the core. **Named because two
+    /// things read them**: the envelope below, and the texture's own code, which
+    /// distributes its marks evenly across the plateau and thins them out into
+    /// the ramps. A number that appears in a drawing and in the alpha that
+    /// multiplies it is a number that must not be able to drift.
+    static let plateauInner: CGFloat = 0.687   // his green circle, r 103
+    static let plateauOuter: CGFloat = 1.287   // his red circle, r 193
+
     private static let profile: [(CGFloat, CGFloat)] = [
-        (1 - spread,       0),
-        (1 - spread / 2,   0.45),
-        (1,                1),
-        (1 + spread / 2,   0.45),
-        (1 + spread,       0),
+        (1 - spread,     0),
+        (plateauInner,   1),
+        (plateauOuter,   1),
+        (1 + spread,     0),
     ]
 
     /// **One yellow, and nothing else.** `NSColor.systemYellow` is deliberately
@@ -312,9 +341,15 @@ final class CaretHalo {
     /// contact sheet answers *what does it look like*, and this answers the
     /// question that actually decides it, which is whether it is still bearable
     /// an inch from the work after the twentieth sentence.
+    /// **`codex3` ships, since 2026-09-10.** Victor picked it out of the gallery
+    /// of twelve — short radial reeds that stop short of the centre — and it is
+    /// the one texture in the set that no round of this arrived at on its own:
+    /// every design drawn here was either concentric or a full-band sunburst,
+    /// and this is neither. `smooth`, the gradient band that shipped for a day,
+    /// stays as the reference the contact sheet is judged against.
     static let design: Design = {
         guard let name = ProcessInfo.processInfo.environment["WT_HALO_DESIGN"],
-              let picked = Design(rawValue: name) else { return .smooth }
+              let picked = Design(rawValue: name) else { return .codex3 }
         return picked
     }()
 
@@ -562,28 +597,59 @@ final class CaretHalo {
             ctx.restoreGState()
 
         case .codex3:
-            // Staggered radial stitch marks: short local spokes sit in concentric rows, dense near the peak but never bridge the whole halo.
-            // The alternating rows break any sunburst read while still surviving peripheral blur as a textured ring.
-            ctx.saveGState()
+            // Rebalanced for the 103...193 plateau: uniform reed density through the opaque band, with sparser/shorter reeds in both fade ramps.
+            // Staggered short radial dashes keep the centre empty and avoid a continuous ring or sunburst read.
+            ctx.setStrokeColor(CGColor(gray: 1, alpha: 1))
             ctx.setLineCap(.round)
-            for i in 0..<11 {
-                let row = CGFloat(i) / 10
-                let mid = inner + band * row
-                let crown = max(0, 1 - abs(mid - core) / (band * 0.5))
-                let count = 34 + Int(18 * crown)
-                let width: CGFloat = i % 2 == 0 ? 4 : 5
-                let span = 11 + 16 * crown
-                let phase = CGFloat((i * 29 + 17) % 360) * .pi / 180
-                for j in 0..<count {
-                    if (j + i) % 6 == 0 { continue }
-                    let wobble = CGFloat(((j * 17 + i * 23) % 7) - 3) * 1.8
-                    let r0 = max(inner + 5, mid - span * 0.5 + wobble)
-                    let r1 = min(outer - 5, mid + span * 0.5 + wobble)
-                    let a = phase + CGFloat(j) * 2 * .pi / CGFloat(count)
-                    spoke(a, from: r0, to: r1, width: width)
-                }
+
+            let plateauIn = core * plateauInner
+            let plateauOut = core * plateauOuter
+            let fadeIn: CGFloat = inner
+            let fadeOut: CGFloat = outer
+
+            func reed(_ a: CGFloat, _ r0: CGFloat, _ r1: CGFloat, _ w: CGFloat) {
+                guard r0 >= inner + 1, r1 <= outer - 1, r1 > r0 else { return }
+                spoke(a, from: r0, to: r1, width: w)
             }
-            ctx.restoreGState()
+
+            // **The lane is area-weighted, and without that the plateau is not
+            // flat.** Reeds spread evenly *in radius* thin out as they go, since
+            // an annulus at r has circumference 2πr to fill — measured on the
+            // first render, the band peaked at r≈130 and was 40% down by the
+            // red circle, which is a gradient inside the region that is supposed
+            // to be uniformly opaque. `sqrt` of the lane puts the count in
+            // proportion to r, so the *density* is constant and the envelope is
+            // the only thing shaping the light.
+            for i in 0..<168 {
+                let a = CGFloat(i) * (.pi * 2 / 168) + CGFloat((i * 37) % 19) * 0.003
+                let u = CGFloat((i * 29) % 100) / 99
+                // The inverse CDF of a density proportional to r, which is
+                // `sqrt(a² + u(b² − a²))` and **not** `a + sqrt(u)(b − a)` —
+                // the latter was tried first and overshot, moving the peak from
+                // r≈130 out to r≈180 and leaving a trough where the band starts.
+                let r = sqrt(plateauIn * plateauIn + u * (plateauOut * plateauOut - plateauIn * plateauIn))
+                let len = CGFloat(13 + ((i * 17) % 15))
+                let w = CGFloat(3 + ((i * 11) % 3))
+                reed(a, r - len * 0.48, r + len * 0.52, w)
+            }
+
+            for i in 0..<44 {
+                let a = CGFloat(i) * (.pi * 2 / 44) + CGFloat((i * 41) % 23) * 0.009
+                let t = CGFloat((i * 31) % 100) / 99
+                let r = fadeIn + 10 + pow(t, 0.72) * (plateauIn - fadeIn - 13)
+                let len = CGFloat(5 + ((i * 13) % 10))
+                let w = CGFloat(3 + ((i * 7) % 2))
+                reed(a, r - len * 0.38, r + len * 0.62, w)
+            }
+
+            for i in 0..<50 {
+                let a = CGFloat(i) * (.pi * 2 / 50) + CGFloat((i * 43) % 29) * 0.008
+                let t = CGFloat((i * 23) % 100) / 99
+                let r = plateauOut + 7 + pow(t, 1.35) * (fadeOut - plateauOut - 15)
+                let len = CGFloat(6 + ((i * 19) % 11))
+                let w = CGFloat(3 + ((i * 5) % 2))
+                reed(a, r - len * 0.50, r + len * 0.50, w)
+            }
 
         case .codex4:
             // Brick-weave halo: small rounded chord strokes occupy alternating radial lanes, like annular masonry rather than rings.
@@ -780,7 +846,12 @@ extension CaretHalo {
         // of proposals with nothing to be different *from* is one nobody can
         // judge — and the question being asked of it is precisely whether the
         // spokes still feel like the halo.
-        let designs = Design.allCases
+        // **One design when one is named.** The sheet is twelve million pixels
+        // stroked, blurred and integrated; iterating on a single texture through
+        // the whole catalogue is two minutes a look. `WT_HALO_DESIGN=codex3`
+        // narrows it to the reference and that one.
+        let designs = ProcessInfo.processInfo.environment["WT_HALO_DESIGN"] == nil
+            ? Design.allCases : [.smooth, design]
         let columns = alphas.count * grounds.count
         let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(columns),
                                          height: cell.height * CGFloat(designs.count)))
