@@ -145,8 +145,13 @@ final class CaretHalo {
     /// of empty desktop, which is a bigger event than the thing it reports. At
     /// 5% it is at the edge of visible: enough to have been there, not enough to
     /// be in the way.
-    private static let rest: CGFloat = 0.05
-    private static let alert: CGFloat = 0.15
+    /// **×1.5 on 2026-09-10** (Victor: *"overall, să fie haloul 1.5× mai
+    /// opac"*), which is the second correction in the same direction: 10 → 0 →
+    /// 5 → 7.5. The spoked designs are part of why it can afford it — a pattern
+    /// of thin lines covers a fraction of the pixels a solid band does, so the
+    /// same nominal alpha is a far lighter wash over the work underneath.
+    private static let rest: CGFloat = 0.075
+    private static let alert: CGFloat = 0.225
     /// How long a silence has to last before the ring reads it as a stop rather
     /// than as him thinking mid-sentence.
     private static let patience: TimeInterval = 2
@@ -237,6 +242,74 @@ final class CaretHalo {
         panel.alphaValue = Self.rest + (Self.alert - Self.rest) * CGFloat(t)
     }
 
+    // MARK: - Designs
+
+    /// **What the halo is made of.** Victor, 2026-09-10: *"cercul halou … să fie
+    /// alcătuit din «spițe»: linii de 3-5 px grosime concentrice, mai
+    /// transparente spre interior și exterior, exact ca haloul ca feeling, dar
+    /// stilizat cu liniuțe."*
+    ///
+    /// Every one of them is the **same falloff** — `profile`, unchanged — with
+    /// a different pattern of strokes underneath it. That is what makes them
+    /// comparable at all: they differ in texture and in nothing else, so a
+    /// choice between them is a choice about texture rather than about which
+    /// one happens to be brighter.
+    enum Design: String, CaseIterable {
+        /// The band as it shipped: a smooth radial gradient, no strokes. Kept as
+        /// the reference row on the contact sheet — a set of proposals with
+        /// nothing to be different *from* is a set nobody can judge.
+        case smooth
+        /// **Three thick feathered bands.** The literal reading of the brief that
+        /// can also survive being looked *past*: 5pt strokes with soft edges,
+        /// spaced about a stroke apart, so the low frequencies the periphery
+        /// actually sees are still there.
+        case bands
+        /// Seven thin rings across the band — the same idea at the other end of
+        /// the thickness/count trade.
+        case rings
+        /// Rings whose **width** carries the falloff as well as their alpha:
+        /// fat at the core, hairline at the edges. The only design where the
+        /// profile is drawn rather than multiplied in.
+        case waves
+        /// Radial spokes crossing the whole band, the literal reading of
+        /// *spițe* — the one texture orthogonal to every ring above.
+        case spokes
+        /// Dots rather than dashes, on three radii. A dot has no direction and
+        /// no handedness, which is what keeps it from reading as a spinner or a
+        /// compass — the failure that killed half of round one.
+        case stipple
+        /// **The lines cut out of the band rather than drawn on it.** The smooth
+        /// halo with a dozen radial slots taken out of it: the mass — and so the
+        /// peripheral visibility — is the reference's, and the stylisation is in
+        /// the gaps.
+        case slots
+    }
+
+    /// Which one is live. `WT_HALO_DESIGN=spokes` runs the app with a candidate
+    /// so it can be lived with over a real dictation before it is chosen — a
+    /// contact sheet answers *what does it look like*, and this answers the
+    /// question that actually decides it, which is whether it is still bearable
+    /// an inch from the work after the twentieth sentence.
+    static let design: Design = {
+        guard let name = ProcessInfo.processInfo.environment["WT_HALO_DESIGN"],
+              let picked = Design(rawValue: name) else { return .smooth }
+        return picked
+    }()
+
+    /// **The falloff, sampled.** `profile` is a handful of stops in multiples of
+    /// the core radius; this is the same curve as a function, so a pattern of
+    /// strokes can be faded by exactly what the gradient fades by.
+    static func alpha(atRadius r: CGFloat) -> CGFloat {
+        let t = r / core
+        guard t > profile.first!.0, t < profile.last!.0 else { return 0 }
+        for i in 1..<profile.count where t <= profile[i].0 {
+            let (t0, a0) = profile[i - 1], (t1, a1) = profile[i]
+            let f = (t - t0) / max(t1 - t0, 0.0001)
+            return a0 + (a1 - a0) * f
+        }
+        return 0
+    }
+
     /// **A radial gradient, not a stroked path**, because the whole shape is a
     /// falloff: a `CAShapeLayer`'s stroke has one alpha across its width and
     /// would give the hard hoop the picture is emphatically not.
@@ -250,16 +323,237 @@ final class CaretHalo {
     /// Built here rather than inline in `makePanel` so `shoot` draws the same
     /// layer the panel does — a contact sheet of a *different* gradient would be
     /// worse than none.
-    static func haloLayer(side: CGFloat) -> CAGradientLayer {
-        let ring = CAGradientLayer()
-        ring.type = .radial
-        ring.frame = CGRect(x: 0, y: 0, width: side, height: side)
-        ring.startPoint = CGPoint(x: 0.5, y: 0.5)
-        ring.endPoint = CGPoint(x: 1, y: 1)
-        let half = side / 2
-        ring.colors = profile.map { ink.withAlphaComponent($0.1).cgColor }
-        ring.locations = profile.map { NSNumber(value: Double(min(1, $0.0 * core / half))) }
-        return ring
+    static func haloLayer(side: CGFloat, design: Design = design) -> CALayer {
+        guard design != .smooth else {
+            let ring = CAGradientLayer()
+            ring.type = .radial
+            ring.frame = CGRect(x: 0, y: 0, width: side, height: side)
+            ring.startPoint = CGPoint(x: 0.5, y: 0.5)
+            ring.endPoint = CGPoint(x: 1, y: 1)
+            let half = side / 2
+            ring.colors = profile.map { ink.withAlphaComponent($0.1).cgColor }
+            ring.locations = profile.map { NSNumber(value: Double(min(1, $0.0 * core / half))) }
+            return ring
+        }
+        let layer = CALayer()
+        layer.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        layer.contents = strokes(side: side, design: design)
+        layer.contentsGravity = .resize
+        return layer
+    }
+
+    /// **The strokes, drawn once and faded by the same curve the gradient uses.**
+    ///
+    /// The pattern is stroked in white into a scratch bitmap and then multiplied,
+    /// pixel by pixel, by `alpha(atRadius:)`. Doing it that way rather than
+    /// giving each stroke its own alpha is what keeps the promise the whole
+    /// family rests on — *mai transparente spre interior și exterior* — true
+    /// **along** a line as well as across the set of them: a spoke crosses every
+    /// radius in the band, so a per-stroke alpha would make it a bar of one
+    /// brightness, which is the hard hoop this shape has always refused.
+    ///
+    /// It also means the antialiasing is paid for once, in the stroking, and the
+    /// result is a still image: no shape layers to composite, nothing to
+    /// re-rasterise while the panel chases the pointer.
+    private static func strokes(side: CGFloat, design: Design) -> CGImage? {
+        let scale: CGFloat = 2
+        let px = Int((side * scale).rounded())
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8,
+                                  bytesPerRow: px * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.setLineCap(.butt)
+        ctx.setStrokeColor(NSColor.white.cgColor)
+        ctx.setAllowsAntialiasing(true)
+
+        let c = CGPoint(x: side / 2, y: side / 2)
+        let inner = core * (1 - spread), outer = core * (1 + spread)
+        let band = outer - inner
+
+        func ring(_ r: CGFloat, width: CGFloat, dash: [CGFloat] = [], phase: CGFloat = 0) {
+            ctx.setLineWidth(width)
+            ctx.setLineDash(phase: phase, lengths: dash)
+            ctx.addEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
+            ctx.strokePath()
+        }
+        func spoke(_ angle: CGFloat, from r0: CGFloat, to r1: CGFloat, width: CGFloat) {
+            ctx.setLineDash(phase: 0, lengths: [])
+            ctx.setLineWidth(width)
+            ctx.move(to: CGPoint(x: c.x + cos(angle) * r0, y: c.y + sin(angle) * r0))
+            ctx.addLine(to: CGPoint(x: c.x + cos(angle) * r1, y: c.y + sin(angle) * r1))
+            ctx.strokePath()
+        }
+
+        switch design {
+        case .smooth:
+            break
+
+        case .bands:
+            // Three, at the full 5pt, one stroke-width apart. Round one drew
+            // everything hairline-thin and the whole set lost 86-94% of its
+            // contrast to a mild peripheral blur where the smooth reference lost
+            // 14% — a line has to be *thick* to survive being seen out of the
+            // corner of an eye, which is the one place this mark is ever seen.
+            for i in 0..<3 {
+                ring(inner + band * (CGFloat(i) + 0.5) / 3, width: 5)
+            }
+
+        case .rings:
+            let n = 7
+            for i in 0..<n { ring(inner + band * (CGFloat(i) + 0.5) / CGFloat(n), width: 4) }
+
+        case .waves:
+            // **The falloff drawn twice**: in the alpha, like every other design
+            // here, and in the stroke *width* — 10pt at the core down to 3pt at
+            // the rim. Measured, this is the one line design whose blurred radial
+            // signature is the smooth halo's exactly (correlation 1.00), which is
+            // to say it is the only one that is still the same object.
+            //
+            // **The width is where the missing light comes from, and that is the
+            // whole point.** At 5pt it carried a quarter of the reference's flux
+            // and the arithmetic fix — four times the alpha — would have put the
+            // pair at 30%/90%, a wash over his work and the exact objection that
+            // took the halo off 10% in the first place. Mass out of geometry
+            // leaves 7.5%/22.5% untouched and keeps the signature that makes this
+            // one worth having.
+            let n = 4
+            for i in 0..<n {
+                let t = (CGFloat(i) + 0.5) / CGFloat(n)
+                let r = inner + band * t
+                let closeness = 1 - abs(t - 0.5) * 2
+                ring(r, width: 3 + 7 * closeness)
+            }
+
+        case .spokes:
+            // 30 of them, at 5pt. The falloff does the rest: a spoke is
+            // brightest where it passes the core and gone at both ends, so the
+            // set reads as a ring made of radial strokes rather than as a star.
+            for i in 0..<30 { spoke(CGFloat(i) * .pi / 15, from: inner, to: outer, width: 5) }
+
+        case .stipple:
+            // Three radii, dots sized by how close the radius is to the core, so
+            // the texture beads rather than breaking. Isotropic by construction.
+            for i in 0..<3 {
+                let t = (CGFloat(i) + 0.5) / 3
+                let r = inner + band * t
+                let d = 4 + 3 * (1 - abs(t - 0.5) * 2)
+                let n = max(12, Int((2 * .pi * r) / (d * 2.6)))
+                for k in 0..<n {
+                    let a = CGFloat(k) * 2 * .pi / CGFloat(n)
+                    ctx.setLineDash(phase: 0, lengths: [])
+                    ctx.fillEllipse(in: CGRect(x: c.x + cos(a) * r - d / 2,
+                                               y: c.y + sin(a) * r - d / 2,
+                                               width: d, height: d))
+                }
+            }
+
+        case .slots:
+            // The band, solid, with twelve radial slots cut out of it. Everything
+            // else here throws away 30-90% of the reference's light to make room
+            // for the stylisation; this one keeps it and puts the little lines in
+            // the gaps instead.
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.fillEllipse(in: CGRect(x: c.x - outer, y: c.y - outer, width: outer * 2, height: outer * 2))
+            ctx.setBlendMode(.clear)
+            ctx.fillEllipse(in: CGRect(x: c.x - inner, y: c.y - inner, width: inner * 2, height: inner * 2))
+            for i in 0..<12 {
+                let a = CGFloat(i) * .pi / 6
+                ctx.setLineWidth(9)
+                ctx.setLineDash(phase: 0, lengths: [])
+                ctx.move(to: CGPoint(x: c.x + cos(a) * (inner - 2), y: c.y + sin(a) * (inner - 2)))
+                ctx.addLine(to: CGPoint(x: c.x + cos(a) * (outer + 2), y: c.y + sin(a) * (outer + 2)))
+                ctx.strokePath()
+            }
+            ctx.setBlendMode(.normal)
+        }
+
+        guard let data = ctx.data else { return nil }
+        let buf = data.bindMemory(to: UInt8.self, capacity: px * px * 4)
+
+        // **Feathered, because a crisp hairline is invisible in the periphery.**
+        // Measured on round one: through a mild peripheral blur the six line
+        // designs lost 86–94% of their contrast against the ground, where the
+        // smooth band lost 14%. A soft-edged stroke keeps the low frequencies
+        // that survive being *looked past*, which is the only way this mark is
+        // ever seen — he is reading something else while he talks.
+        var alphaMap = [CGFloat](repeating: 0, count: px * px)
+        for i in 0..<(px * px) { alphaMap[i] = CGFloat(buf[i * 4 + 3]) / 255 }
+        blur(&alphaMap, side: px, radius: Int((1.2 * scale).rounded()))
+
+        // **And normalised to the same light as the band it replaces.** A pattern
+        // of strokes covers a tenth of the pixels a solid annulus does, so at the
+        // same nominal alpha it is a tenth of the mark — measured at 0.08× to
+        // 0.71× of the shipping halo's flux *at full opacity*. Scaling each
+        // design so the total light matches is what makes "1.5× more opaque"
+        // mean the same thing whichever one is chosen; the cap keeps a very
+        // sparse pattern from being pushed to opaque hairlines, which trades one
+        // kind of invisibility for one kind of harshness.
+        let mid = CGFloat(px) / 2
+        var patternFlux: CGFloat = 0, referenceFlux: CGFloat = 0
+        for y in 0..<px {
+            for x in 0..<px {
+                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
+                let fade = alpha(atRadius: sqrt(dx * dx + dy * dy) / scale)
+                patternFlux += alphaMap[y * px + x] * fade
+                referenceFlux += fade
+            }
+        }
+        let gain = min(fluxCeiling, referenceFlux / max(patternFlux, 1))
+        let r = ink.redComponent, g = ink.greenComponent, b = ink.blueComponent
+        for y in 0..<px {
+            for x in 0..<px {
+                let coverage = alphaMap[y * px + x]
+                let i = (y * px + x) * 4
+                guard coverage > 0 else { buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 0; continue }
+                let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
+                let a = min(1, coverage * gain * alpha(atRadius: sqrt(dx * dx + dy * dy) / scale))
+                buf[i]     = UInt8(max(0, min(255, r * a * 255)))
+                buf[i + 1] = UInt8(max(0, min(255, g * a * 255)))
+                buf[i + 2] = UInt8(max(0, min(255, b * a * 255)))
+                buf[i + 3] = UInt8(max(0, min(255, a * 255)))
+            }
+        }
+        return ctx.makeImage()
+    }
+
+    /// How much a sparse pattern may be brightened to match the band's light.
+    /// Past this it stops being a faint texture and becomes thin hard lines,
+    /// which is a different mark rather than a dimmer one.
+    /// **8×, because 3× was binding on every design and fixing none of them.**
+    /// A pattern filling a fifteenth of the annulus needs more gain than that to
+    /// carry the same light, so the cap was not a safety rail — it was the thing
+    /// defeating the normalisation. It still exists for the case it was written
+    /// for: a pattern sparse enough that matching the flux would mean opaque
+    /// hairlines, which is a different mark rather than a dimmer one.
+    private static let fluxCeiling: CGFloat = 8.0
+
+    /// A separable box blur, run twice — two passes of a box are near enough a
+    /// Gaussian for an edge nobody is meant to resolve, and it costs a handful
+    /// of milliseconds on the one image this draws per launch.
+    private static func blur(_ map: inout [CGFloat], side: Int, radius: Int) {
+        guard radius > 0 else { return }
+        var tmp = [CGFloat](repeating: 0, count: map.count)
+        for _ in 0..<2 {
+            for y in 0..<side {
+                var sum: CGFloat = 0
+                for x in -radius...radius { sum += map[y * side + min(max(x, 0), side - 1)] }
+                for x in 0..<side {
+                    tmp[y * side + x] = sum / CGFloat(radius * 2 + 1)
+                    sum -= map[y * side + min(max(x - radius, 0), side - 1)]
+                    sum += map[y * side + min(max(x + radius + 1, 0), side - 1)]
+                }
+            }
+            for x in 0..<side {
+                var sum: CGFloat = 0
+                for y in -radius...radius { sum += tmp[min(max(y, 0), side - 1) * side + x] }
+                for y in 0..<side {
+                    map[y * side + x] = sum / CGFloat(radius * 2 + 1)
+                    sum -= tmp[min(max(y - radius, 0), side - 1) * side + x]
+                    sum += tmp[min(max(y + radius + 1, 0), side - 1) * side + x]
+                }
+            }
+        }
     }
 
     private func makePanel() -> RelayPanel {
@@ -314,18 +608,28 @@ extension CaretHalo {
         // which is the only way to judge a falloff at all once it is drawn at a
         // twentieth of an opacity.
         let alphas: [CGFloat] = [rest, alert, 1]
-        let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(alphas.count),
-                                         height: cell.height * CGFloat(grounds.count)))
+        // **One row per design, and the current halo is the top row.** A sheet
+        // of proposals with nothing to be different *from* is one nobody can
+        // judge — and the question being asked of it is precisely whether the
+        // spokes still feel like the halo.
+        let designs = Design.allCases
+        let columns = alphas.count * grounds.count
+        let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(columns),
+                                         height: cell.height * CGFloat(designs.count)))
         sheet.lockFocus()
-        for (row, ground) in grounds.enumerated() {
-            for (col, alpha) in alphas.enumerated() {
-                let box = NSRect(x: cell.width * CGFloat(col), y: cell.height * CGFloat(row),
+        for (row, design) in designs.enumerated() {
+            for (i, ground) in grounds.enumerated() {
+            for (j, alpha) in alphas.enumerated() {
+                let col = i * alphas.count + j
+                // Top row first: `NSImage` counts up from the bottom.
+                let box = NSRect(x: cell.width * CGFloat(col),
+                                 y: cell.height * CGFloat(designs.count - 1 - row),
                                  width: cell.width, height: cell.height)
                 ground.setFill()
                 box.fill()
                 let host = NSView(frame: NSRect(origin: .zero, size: cell))
                 host.wantsLayer = true
-                host.layer?.addSublayer(haloLayer(side: side))
+                host.layer?.addSublayer(haloLayer(side: side, design: design))
                 // **The opacity is applied once, in the draw.** Setting it on
                 // the host *as well* squared it — the resting column came out at
                 // 1% and looked like a bug in the gradient rather than in the
@@ -335,6 +639,15 @@ extension CaretHalo {
                     NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }
                         .draw(in: box, from: .zero, operation: .sourceOver, fraction: alpha)
                 }
+                // The name, so a sheet of seven near-identical circles can be
+                // talked about at all.
+                if col == 0 {
+                    (design.rawValue as NSString).draw(
+                        at: NSPoint(x: box.minX + 12, y: box.minY + 12),
+                        withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 22, weight: .bold),
+                                         .foregroundColor: NSColor.white])
+                }
+            }
             }
         }
         sheet.unlockFocus()

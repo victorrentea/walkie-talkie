@@ -887,7 +887,7 @@ from the working directory (inherited from the session, since `/relay` launches
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `🗑️ Dictation aborted` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
+| the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | the drawn map pin + `at caret` — the same slot a spawn takes, and for the same reason |
 
 **Dictating no longer has a title of its own.** It used to be `🎙️ …` with dots
@@ -1736,6 +1736,25 @@ fallback for a poll tick with nothing pushed yet.
 It took a bug report to ask that question the first time; the answer is now in
 the log before anyone thinks to ask it again. `CropSelectionOverlay.log` is the
 module's one diagnostic hook, pointed at each app's own logger.
+
+### The two keys are always on the readout, and light up when they act
+
+`386 × 232   ⌘ move   ⌥ centre`, with the word going from dim white to the accent
+while its key is held. Victor, 2026-09-10: *"legenda «centre» și «move» să fie
+mereu prezentă când fac crop, dar să devină colorate cuvintele când chiar se
+întâmplă."*
+
+They were appended to the size **only while the modifier was down**, which made
+them a readout of something he already knew he was doing — on the one row he
+looks at while framing. As a permanent pair they are the legend for the two keys
+this gesture has, in the place he is already looking, and the colour becomes the
+readout instead. They name the **key** rather than the effect for the same
+reason: `⌘ move` on screen for the whole drag is how ⌘ gets learned, where the
+`✥ move` they used to say is a symbol for something he can already see happening.
+
+The colours live in the attributed string and not on the label, which is the trap
+`RelayWindow.applySelectionText` is written under here: a `foregroundColor` set
+on the layer does not win against the runs.
 
 ### No border, and no vignette either
 
@@ -3226,6 +3245,58 @@ one is — a swallowed right click is a context menu that never opened.
 are returned untouched at the top of `handle`. Nothing in that file may ever
 swallow one.
 
+### A cancelled sentence is kept for five minutes (2026-09-10)
+
+**The audio goes to `~/Library/Caches/…/cancelled/` instead of to `rm`, and the
+menu grows `Recover Cancelled Dictation`.** Victor's ask: *"reține înregistrarea
+audio respectivă pe disk după cancel 5 minute, în caz că vreau totuși s-o
+recuperez + menu entry de rigoare."*
+
+The 2s hold below is the confirmation dialog this gesture does not have, and it
+protects against exactly one thing: the **slip**. It does nothing about the
+change of mind, and a sentence spoken once is gone in a way a screenshot never
+is — he cannot take it again, because the second take is never the same sentence.
+
+- **Five minutes, on a timer in the running process.** Long enough to notice,
+  short enough that this is a safety net and not a second outbox: the file is
+  deleted by the clock whether or not he looks, and a launch empties the folder
+  outright, because the timer and the menu row's enabled state both live in a
+  process that is now gone — a WAV nothing can offer him is his own voice sitting
+  in Caches with no way to ask for it back.
+- **Caches, for the shots' reason**, and a *sibling* of `shots` rather than a
+  child: `ScreenCapture.prune` walks that folder counting `.jpg`s, and a folder
+  of WAVs inside a walk is a folder something else already owns.
+- **One is kept.** A second cancel inside the five minutes replaces the first —
+  the row says *the* cancelled dictation, and a menu that had to ask which one
+  is a menu answering a question nobody has.
+- **The words come back and nothing else.** The frames, the picks and the
+  highlights that dictation had gathered are cleared at the cancel and stay
+  cleared: they are cheap to take again and the screen has moved on, which is
+  the same split `releaseHeld` already makes when it restores picks but not
+  frames.
+- **Where it goes is decided at the recovery, not at the cancel.** The
+  destination the cancelled sentence had is minutes stale — he may have bound
+  something else since, or changed the mode — so it asks the same question a
+  fresh dictation asks when it ends: bound → the terminal, otherwise the caret.
+- **It is a menu row and deliberately not a gesture.** Cancelling is the
+  deliberate act and this is the second thought about it, which happens at the
+  speed of deciding rather than at the speed of a hand; a chord for it would be
+  one more thing the wheel could be misread as doing. `POST /test/recover` is
+  how it is reachable from a desk, for `/test/replace-wispr`'s reason.
+- **The recovered audio is filed in the corpus**, which the cancel path never
+  did: it is a real sample of his voice that now has a transcript beside it.
+
+**Verified end to end**: a caret dictation opened with the real chord, four
+seconds of audio, cancelled — `🗑️ dictation cancelled — 4.0s of audio kept for
+5 min`, one WAV in the folder — then recovered through the route: decoded, filed
+in the corpus, pasted, and the file gone.
+
+**And the flash says `Cancelled`, not `Dictation aborted`** (Victor's ask, the
+same day). The old wording named the thing it happened to, which the chip has
+just spent the whole sentence saying; what a row beside the pointer carries is
+the one word that changed. *Aborted* was also the harsher reading of a verdict
+he now has five minutes to take back.
+
 **Cancelling still costs a 2s hold**, because it is the one verdict that cannot
 be taken back: it throws away a sentence already spoken and there is nothing to
 undo it with — the long press is the confirmation dialog this gesture does not
@@ -4104,6 +4175,70 @@ drawn round is the thing he has to move.
   watcher's reason: neither condition behind it is visible on screen, so *"why
   did the halo not come up"* has to be answerable from the file.
 
+#### Spokes: the halo stylised with lines (2026-09-10, in progress)
+
+Victor: *"cercul halou la dictation at caret să fie alcătuit din «spițe»: linii
+de 3-5 px grosime concentrice, mai transparente spre interior și exterior, exact
+ca haloul ca feeling, dar stilizat cu liniuțe"* — plus *"overall, să fie haloul
+1.5× mai opac"*, which is why `rest` and `alert` are now **7.5% and 22.5%**.
+
+`CaretHalo.Design` is the vocabulary and `WT_HALO_DESIGN=<name>` runs the app
+with a candidate, because a contact sheet answers *what does it look like* and
+the question that decides this one is whether it is still bearable an inch from
+the work at the twentieth sentence. **`smooth` is still what ships**; nothing
+below is live until he picks one.
+
+Every design is the **same falloff** with a different pattern of strokes under
+it, so a choice between them is a choice about texture and nothing else.
+
+**Round one was judged by an adversarial reviewer and lost**, which is the
+useful part. It proposed rings, spokes, weave, compass, spiral and arcs; the
+review measured, rather than looked, and found:
+
+- **Peripheral vision is a low-pass filter, and hairlines have no low
+  frequencies.** Through a mild blur the six lost **86–94%** of their contrast
+  against the ground where the smooth band lost **14%**. This mark is only ever
+  seen out of the corner of an eye — that is not a detail of the brief, it is
+  the brief.
+- **Flux.** Integrated light per design at **100%** against the shipping halo at
+  **22.5%**: spokes 0.71×, rings 0.66×, compass 0.60×, arcs 0.42×, weave 0.31×,
+  spiral 0.08×. A pattern of strokes covers a tenth of the pixels an annulus
+  does, so at the same nominal alpha it is a tenth of the mark — and no opacity
+  setting recovers a fill factor.
+- **Two ideas, four variations.** rings/weave/arcs are concentric circles with
+  dash duty cycle as the only variable, which a blur integrates back into
+  circles; compass is rings + spokes stacked; spiral collapses into arcs once
+  chirality stops being visible, which is below about 30%.
+- **Half of them stopped being a halo.** arcs and spiral read as *loading
+  spinners* — saying *wait* at the exact moment the mark must say *act* —
+  compass has cardinal axes and therefore direction, which an isotropic mark
+  round a pointer must not, and spokes reads as a sunburst badge implying
+  outward motion where this means *land here*.
+
+Round two is drawn against those findings and is what `Design` holds now —
+`bands`, `rings`, `waves`, `spokes`, `stipple`, `slots`:
+
+- **Strokes are 4–5pt and feathered.** The pattern is blurred by ~1.2pt before
+  the falloff is applied, which is the whole answer to the blur measurement: a
+  soft-edged stroke keeps the low frequencies that survive being looked past.
+- **Flux is normalised to the reference.** Each design's total light is measured
+  against the smooth band's and scaled to match, capped at 3× so a sparse
+  pattern cannot become hard opaque hairlines. That is what makes *1.5× more
+  opaque* mean the same thing whichever design is chosen.
+- **`slots` inverts the figure and the ground**: the solid band with twelve
+  radial slots cut out of it, so the mass — and the peripheral visibility — is
+  the reference's and the stylisation is in the gaps.
+- **`stipple` is dots rather than dashes.** A dot has no direction and no
+  handedness, which is what kept the spinner and compass readings out of it.
+- **`waves` draws the falloff twice**, in the alpha and in the stroke width:
+  6pt at the core down to 2pt at the rim.
+
+**One trap worth keeping.** The first review measured stroke widths off the
+*downscaled* contact sheet and reported 2–3px against a brief asking 3–5; the
+render is 4× larger than the sheet, so those were 8px strokes. Its **flux**
+numbers were unaffected — area-averaging preserves them — and they are the ones
+that mattered. When a sheet is downscaled for review, say by how much.
+
 #### `WT_SHOOT_HALO` — because a falloff cannot be judged from code
 
 `WT_SHOOT_HALO=/tmp/halo.png ./.build/debug/WalkieTalkie` draws the halo on a
@@ -4112,6 +4247,11 @@ dark ground and a light one, at both its opacities, and quits
 panel is `sharingType = .none`, so the only other way to look at it was to start
 a caret dictation — which answers *is it there* and not *does it look like the
 picture he sent*.
+
+**One row per design since 2026-09-10**, with the shipping halo as the top row:
+a sheet of proposals with nothing to be different *from* is one nobody can judge,
+and the question being asked of the spokes is precisely whether they still feel
+like the halo.
 
 **Two grounds, because this shape spends its life over both** and one that reads
 on a white page can vanish on a dark editor; that is exactly the fault that took
@@ -4639,6 +4779,7 @@ Since 2026-09-01 each command carries a picture in the menu's icon column.
 | `Start dictation to new claude` | ✨ | `🛞🛞` |
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
+| `Recover Cancelled Dictation` | `arrow.uturn.backward` | |
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
@@ -5348,7 +5489,7 @@ through and then it wipes the text out, or replaces it with another text"*.
 **It exists because the chip's whole vocabulary is one row being swapped for
 another**, and a swap made in a single frame is indistinguishable from a redraw.
 Cancelling is the case that makes it obvious: `🔴 Listening…` is gone and
-`🗑️ Dictation aborted` is there, with nothing on screen saying the second
+`🗑️ Cancelled` is there, with nothing on screen saying the second
 *replaced* the first — which is exactly the fact a cancel has to carry, since the
 thing that went away is the sentence he had just spoken. What was there before
 was a half-second alpha dissolve on the message **leaving** and nothing at all on
@@ -5384,7 +5525,7 @@ it announces has been read.
 length of it.** The obvious build — one picture of the old content erased over
 the live new content — is wrong in a way that only shows on a message longer than
 the one it replaces: the chip's background is transparent, so wherever the old
-picture has no ink the new row is already showing through it, `Dictation aborted`
+picture has no ink the new row is already showing through it, `Cancelled`
 sticking its tail out past `Listening…` from the first frame, on the side the
 line has not reached yet. Two masked pictures over an `alphaValue`-muted view
 tree is the only arrangement in which the region ahead of the line is honestly
@@ -5430,7 +5571,7 @@ first contact sheet and neither was guessable from the code.
 
 **The row that no longer fits was being guillotined.** The chip hugs its current
 state, so `🔴 Listening... [HQ]` over `petclinic@main` is 23pt taller than the
-one-row `🗑️ Dictation aborted` that replaces it — and the window has already
+one-row `🗑️ Cancelled` that replaces it — and the window has already
 resized by the time the sweep plays. Top-aligned and clipped to the host, the
 second row was therefore **cut through the middle of its letters** and sat there
 sliced for the whole third of a second, in every frame before the edge reached
@@ -5488,7 +5629,7 @@ layers drawing themselves.
 **The picture it sweeps away is taken at the top of `layoutContent`, not at the
 flash**, and that is the one piece of this that is not about drawing. Cancelling
 is four calls in one call stack — `setListening(false)`, `clearSelection()`, then
-`flash("🗑️ Dictation aborted")` — and the first two each relayout the chip.
+`flash("🗑️ Cancelled")` — and the first two each relayout the chip.
 Nothing is *rendered* in between, since Core Animation commits once at the end of
 the turn, so what Victor sees leave is `🔴 Listening…`; but a capture taken at the
 flash draws the views as they are *by then*, which is the collapsed `🎙️` nobody
@@ -5899,7 +6040,7 @@ is no current dictation."* Two independent leaks, both fixed:
 1. **Cancel never put the row down.** `cancelLocalRecording` clears
    `pendingSelection` under the lock, but the row showing it is the overlay's own
    copy and nothing else there touches it — `setListening(false)` does not, and
-   the `🗑️ Dictation aborted` flash draws *over* the chip rather than resetting
+   the `🗑️ Cancelled` flash draws *over* the chip rather than resetting
    it. Every other exit already called `overlay.clearSelection()` (`commit` before
    the panel opens, `flushOrphaned` for the ones that died); cancel was the one
    route that did not, so the last highlight sat beside the cursor with no

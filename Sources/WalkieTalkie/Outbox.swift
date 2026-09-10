@@ -98,10 +98,26 @@ enum Outbox {
 
     static var shotsDir = cacheRoot.appendingPathComponent(sessionStamp)
 
+    /// **Where a cancelled dictation's audio waits out its five minutes.**
+    ///
+    /// A sibling of `shots`, not a child: `ScreenCapture.prune` walks `cacheRoot`
+    /// and counts every `.jpg` under it, and a folder of WAVs inside that walk is
+    /// a folder something else is already responsible for. Caches for the shots'
+    /// reason — it is a staging area with an expiry measured in minutes, and the
+    /// system reclaiming it early costs nothing anyone will miss.
+    static var cancelledDir = cacheRoot.deletingLastPathComponent()
+        .appendingPathComponent("cancelled")
+
     private static let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.outbox")
 
     static func prepare() {
         adoptLegacyHome()
+        // **A kept cancellation does not survive a launch.** The five minutes are
+        // held by a timer in the running process and the menu row is driven by
+        // what that process remembers, so a WAV left behind by a quit or a crash
+        // is a file nothing can offer him — and it is his own voice, sitting in
+        // Caches, with no way to ask for it back.
+        try? FileManager.default.removeItem(at: cancelledDir)
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: shotsDir, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: outboxURL.path) {

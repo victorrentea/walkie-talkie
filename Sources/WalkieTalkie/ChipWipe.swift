@@ -13,7 +13,7 @@ import QuartzCore
 ///
 /// **Why the chip needed a transition at all.** Every message beside the pointer
 /// is one row being swapped for another — `🔴 Listening…` becomes
-/// `🗑️ Dictation aborted` becomes the chip again — and a swap made in a single
+/// `🗑️ Cancelled` becomes the chip again — and a swap made in a single
 /// frame is indistinguishable from a redraw. Nothing on screen says the second
 /// row *replaced* the first, which is exactly the fact a cancel has to carry:
 /// the sentence he was recording is the thing that just went away. What was
@@ -154,7 +154,7 @@ enum ChipWipe {
         // live new content, and it is wrong in a way that only shows on a message
         // longer than the one it replaces: the chip's background is transparent,
         // so wherever the old picture has no ink the *new* row is already visible
-        // through it — `Dictation aborted` sticking its tail out past
+        // through it — `Cancelled` sticking its tail out past
         // `Listening…` from the first frame, on the side the edge has not reached
         // yet. Two masked pictures and a muted view tree is the only arrangement
         // in which the region ahead of the line is honestly *only* the old chip.

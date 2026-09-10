@@ -194,6 +194,10 @@ final class ElementPicker {
     /// forward-button path is untestable.
     var onTestReplaceWispr: ((Bool) -> Void)?
 
+    /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
+    /// is otherwise reachable only by clicking a row.
+    var onTestRecover: (() -> Void)?
+
     /// Ask every connected Chrome extension to reload itself; the answer is how
     /// many were listening. Wired to `MusicBridge.reloadExtensions`.
     var onReloadExtension: (() -> Int)?
@@ -407,6 +411,13 @@ final class ElementPicker {
         case ("POST", "/test/dictation/start"):
             onTestDictationStart?()
             respond(conn, 200, ["ok": true, "listening": true])
+
+        // **The menu's undo for a cancel, from a desk.** The row is the only way
+        // in, and a menu row is the one input nothing here can produce — the
+        // same reason `/test/replace-wispr` exists one case down.
+        case ("POST", "/test/recover"):
+            onTestRecover?()
+            respond(conn, 200, ["ok": true])
 
         // The mode behind the forward button — see `onTestReplaceWispr`.
         case ("POST", "/test/replace-wispr"):

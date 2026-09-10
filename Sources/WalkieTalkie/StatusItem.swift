@@ -77,6 +77,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// out wrong before it was ever worth transcribing.
     var onCancelDictation: (() -> Void)?
 
+    /// **Undo for the one verdict that could not be undone.** A cancel keeps its
+    /// audio in Caches for five minutes; this transcribes it and sends it where a
+    /// sentence would go now. Greyed out when there is nothing within the five
+    /// minutes, which is nearly always — see `isRecoverable`.
+    var onRecoverDictation: (() -> Void)?
+    /// Is there a cancelled sentence still inside its five minutes? Asked when
+    /// the menu opens, like every other flag here, because that is the one
+    /// moment the answer has to be right.
+    var isRecoverable: (() -> Bool)?
+
     /// Picked from **Start Dictation** — open the microphone, the same thing
     /// mouse 5 does. The other end of the pair that already had two ways out and
     /// only one way in.
@@ -140,6 +150,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
+    /// The undo of the row above it, and directly under it for that reason.
+    private let recoverDictation = NSMenuItem(title: "Recover Cancelled Dictation",
+                                              action: nil, keyEquivalent: "")
     /// A dictation whose destination is a terminal that does not exist yet — it
     /// opens in `~/workspace`, which the title no longer spells out: the folder
     /// never varies, so it was a word the row spent on something already known,
@@ -437,6 +450,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // by accident. Without it the only way out of a bad recording was to
         // stop it, watch it transcribe, and cancel the panel — three steps and a
         // model run for something he already knew he did not want.
+        recoverDictation.image = Self.symbolIcon("arrow.uturn.backward")
+        recoverDictation.action = #selector(recoverDictationClicked)
+        recoverDictation.target = self
+        recoverDictation.isEnabled = false
         cancelDictation.image = Self.emojiIcon("🗑️")
         cancelDictation.action = #selector(cancelDictationClicked)
         cancelDictation.target = self
@@ -504,6 +521,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(newSession)
         menu.addItem(stopRecording)
         menu.addItem(cancelDictation)
+        menu.addItem(recoverDictation)
         // **A line between the verbs that end a dictation and the two legends.**
         // Take Screenshot and Pick Element are both disabled rows now — gestures
         // written down, not commands — so they sit apart from the three rows
@@ -786,6 +804,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         startDictation.isEnabled = isBound && !recording
         stopRecording.isEnabled = recording
         cancelDictation.isEnabled = recording
+        // Not while one is running: two transcripts arriving at one panel is an
+        // ordering problem there is no reason to create from a menu.
+        recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)
         // The one row that does not ask about a binding — it brings its own
         // destination. Only a dictation already running takes it away: the row
         // *starts* one, and the sentence already open is re-aimed by the wheel's
@@ -940,6 +961,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func stopRecordingClicked() { onStopRecording?() }
     @objc private func cancelDictationClicked() { onCancelDictation?() }
+    @objc private func recoverDictationClicked() { onRecoverDictation?() }
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }
     @objc private func newSessionClicked() { onNewSession?() }

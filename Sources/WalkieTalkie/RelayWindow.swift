@@ -3767,7 +3767,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// **Why it cannot simply be read at the flash.** Cancelling a dictation is
     /// four calls in one call stack — `setListening(false)`, `clearSelection()`,
-    /// then `flash("🗑️ Dictation aborted")` — and each of the first two relayouts
+    /// then `flash("🗑️ Cancelled")` — and each of the first two relayouts
     /// the chip. Nothing is *rendered* in between (Core Animation commits once,
     /// at the end of the turn), so what Victor sees go away is `🔴 Listening…`;
     /// but a `cacheDisplay` taken at the flash draws the views as they are by
@@ -3816,7 +3816,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// `WT_SHOOT_WIPE=/tmp/wipe.png`. See `ChipWipe.shoot` for why.
     ///
     /// The state it photographs is the one Victor reported: a dictation running
-    /// at a bound terminal, replaced by `🗑️ Dictation aborted`. It drives the
+    /// at a bound terminal, replaced by `🗑️ Cancelled`. It drives the
     /// two layouts by hand rather than through `flash(_:)`, because `flash`
     /// hands the sweep to `rememberChip`/`wipe`, which plays it on screen over a
     /// third of a second — the very thing that cannot be photographed.
@@ -3831,7 +3831,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // one caller that wants the two layouts and *not* the animation between
         // them. `chipBefore` is cleared so the sweep `layoutContent` remembers
         // cannot also be played on the next hop through the main queue.
-        flashMessage = "🗑️ Dictation aborted"
+        flashMessage = "🗑️ Cancelled"
         layoutContent()
         chipBefore = nil
         ChipWipe.shoot(over: root, from: before, to: path)

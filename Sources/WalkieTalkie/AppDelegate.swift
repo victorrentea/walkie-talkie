@@ -140,6 +140,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// release worth waiting for and the shot is taken at the press.
     private var contextAtWheelRelease = false
 
+    // MARK: - The cancelled sentence, kept for five minutes
+
+    /// **A cancel throws the audio away, and for five minutes it does not.**
+    ///
+    /// Victor's ask, 2026-09-10: *"reține înregistrarea audio respectivă pe disk
+    /// după cancel 5 minute, în caz că vreau totuși s-o recuperez + menu entry
+    /// de rigoare."*
+    ///
+    /// Cancelling is the one verdict in this app that cannot be taken back —
+    /// which is why it costs a two-second hold, and why that hold is described
+    /// as the confirmation dialog the gesture does not have. The hold protects
+    /// against the *slip*; it does nothing about the change of mind, and a
+    /// sentence spoken once is gone in a way a screenshot never is. Five minutes
+    /// is long enough to notice and short enough that this is a safety net
+    /// rather than a second outbox: the file lives in Caches and is deleted by
+    /// the clock whether or not he looks.
+    ///
+    /// What comes back is **the words and nothing else**. The shots, the picked
+    /// elements and the highlights the cancelled dictation had gathered are
+    /// cleared at the cancel and stay cleared: those are cheap to take again and
+    /// the screen has moved on, which is the same reasoning `releaseHeld` uses
+    /// when it restores picks but not frames.
+    private var cancelledAudio: (url: URL, at: Date, duration: TimeInterval)?
+    private var cancelledSweep: DispatchWorkItem?
+    private static let cancelledGrace: TimeInterval = 300
+
     private let stateLock = NSLock()
 
     /// A dictation that never arrives (nothing was said, or the model returned
@@ -429,6 +455,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // transcribed and sent exactly as if the button had ended it.
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
         status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
+        status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
+        picker.onTestRecover = { [weak self] in
+            // The listener's thread; everything this touches is the main queue's.
+            DispatchQueue.main.async { self?.recoverCancelledDictation() }
+        }
+        status.isRecoverable = { [weak self] in
+            guard let kept = self?.cancelledAudio else { return false }
+            return FileManager.default.fileExists(atPath: kept.url.path)
+        }
         status.onStartDictation = { [weak self] in self?.startLocalRecording() }
         // **On main, like the toggle two lines down.** It was not, and the
         // asymmetry is the whole bug: the tap dispatches globally, so cancelling
@@ -1184,8 +1219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recording = mic.stop()
 
         if let (wav, duration) = recording {
-            try? FileManager.default.removeItem(at: wav)
-            Log.info(String(format: "🗑️ dictation cancelled — %.1fs of audio discarded", duration))
+            keepCancelled(wav: wav, duration: duration)
         } else {
             Log.info("🗑️ dictation cancelled — nothing had been recorded yet")
         }
@@ -1238,7 +1272,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // That title row is gone from flashes now (*A flash replaces the
         // collapsed chip*), so the bin is the row's only picture and says what
         // every other flash's leading emoji says: which kind of thing this is.
-        overlay.flash("🗑️ Dictation aborted", duration: 1.5)
+        // **`Cancelled`, since 2026-09-10** (Victor's ask). `Dictation aborted`
+        // named the thing it happened to, which the chip has just spent the whole
+        // sentence saying; what a row beside the pointer has to carry is the one
+        // word that changed. *Aborted* was also the harsher reading of a verdict
+        // he now has five minutes to take back.
+        overlay.flash("🗑️ Cancelled", duration: 1.5)
+    }
+
+    /// Move the cancelled audio somewhere it will survive the next few minutes,
+    /// and start the clock that removes it.
+    private func keepCancelled(wav: URL, duration: TimeInterval) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: Outbox.cancelledDir, withIntermediateDirectories: true)
+        // Named by the clock rather than by an offset: there is no sentence for
+        // it to be an offset *into* any more, which is the whole of what
+        // cancelling did.
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "HH-mm-ss"
+        let kept = Outbox.cancelledDir.appendingPathComponent("cancelled-\(stamp.string(from: Date())).wav")
+        // **Only one is kept.** A second cancel inside the five minutes replaces
+        // the first: the row says *the* cancelled dictation, and a menu that had
+        // to ask which one is a menu answering a question nobody has.
+        discardCancelled()
+        do {
+            try fm.moveItem(at: wav, to: kept)
+        } catch {
+            Log.error("could not keep the cancelled audio: \(error)")
+            try? fm.removeItem(at: wav)
+            return
+        }
+        cancelledAudio = (url: kept, at: Date(), duration: duration)
+        Log.info(String(format: "🗑️ dictation cancelled — %.1fs of audio kept for %.0f min",
+                        duration, Self.cancelledGrace / 60))
+        let sweep = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            Log.info("🗑️ the cancelled audio's five minutes are up")
+            self.discardCancelled()
+        }
+        cancelledSweep = sweep
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelledGrace, execute: sweep)
+    }
+
+    /// Take the kept audio away — the clock ran out, it has been recovered, or a
+    /// newer cancel has replaced it. Idempotent, and the only place the file is
+    /// removed.
+    private func discardCancelled() {
+        cancelledSweep?.cancel()
+        cancelledSweep = nil
+        if let kept = cancelledAudio { try? FileManager.default.removeItem(at: kept.url) }
+        cancelledAudio = nil
+    }
+
+    /// **The menu's undo for a cancel.** Transcribe the audio that was kept and
+    /// send it exactly as the sentence would have gone had it not been thrown
+    /// away — into the bound terminal, or at the caret when that is where this
+    /// app is currently typing.
+    ///
+    /// It is deliberately **not** a gesture. Cancelling is the deliberate act
+    /// and this is the second thought about it, which happens at the speed of
+    /// deciding rather than at the speed of a hand: a chord for it would be one
+    /// more thing the wheel could be misread as doing.
+    private func recoverCancelledDictation() {
+        guard let kept = cancelledAudio, FileManager.default.fileExists(atPath: kept.url.path) else {
+            overlay.flash("⚠️ nothing to recover")
+            return
+        }
+        guard !localRecording else {
+            // A sentence is in the air; two transcripts arriving at one panel is
+            // the ordering problem `send` already has to solve, and there is no
+            // reason to create it from a menu.
+            overlay.flash("⚠️ finish this dictation first")
+            return
+        }
+        Log.info(String(format: "↩️ recovering %.1fs of cancelled audio", kept.duration))
+        overlay.setTranscribing(true, audio: kept.duration)
+        let decodeStartedAt = Date()
+        whisper.transcribe(wav: kept.url.path) { [weak self] result in
+            guard let self = self else { return }
+            DispatchQueue.main.async { self.overlay.setTranscribing(false) }
+            guard let r = result, !r.text.isEmpty else {
+                Log.error("the recovered audio produced no transcript")
+                DispatchQueue.main.async { self.overlay.flash("No words detected", duration: 8) }
+                return
+            }
+            DecodeRate.record(audio: kept.duration, decode: Date().timeIntervalSince(decodeStartedAt))
+            Log.info("↩️ recovered \(r.text.count) chars")
+            // It is a real sample of his voice with a transcript beside it, which
+            // is the only thing the corpus is for — and it was never filed,
+            // because the cancel path files nothing.
+            self.corpus.captureLocal(wav: kept.url, text: r.text, language: r.language,
+                                     duration: kept.duration, app: "recovered")
+            DispatchQueue.main.async {
+                self.discardCancelled()
+                // **Where it goes is decided now, not then.** The destination the
+                // cancelled sentence had is minutes stale — he may have bound
+                // something else since, or switched the mode — so this asks the
+                // same question a fresh dictation asks at the moment it ends.
+                if self.isBound {
+                    self.send(kind: "dictation", text: r.text, app: "recovered")
+                } else {
+                    self.pasteText(r.text)
+                }
+            }
+        }
     }
 
     private func stopLocalRecording() {
@@ -3301,8 +3439,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for a drag to start, and this one arrives with one already under way.
     private static let cropStyle = CropSelectionStyle(
         hint: "drag an area  ·  ⌘ move  ·  ⌥ from centre  ·  Esc cancels",
-        movingSuffix: "✥ move",
-        centeredSuffix: "⦿ centre")
+        // Named after the keys and always on the readout, lit only while held
+        // — see `CropSelectionStyle.movingSuffix`.
+        movingSuffix: "⌘ move",
+        centeredSuffix: "⌥ centre")
 
     /// **The wheel, dragged while he is talking: a region of the screen instead
     /// of the whole display.**
