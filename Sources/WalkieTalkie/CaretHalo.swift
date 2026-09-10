@@ -79,7 +79,14 @@ final class CaretHalo {
     /// This is a presence in the periphery rather than an ornament to be looked
     /// at, which is the one place it has to work: he is reading something else
     /// while he talks.
-    private static let core: CGFloat = 150
+    /// **105 since 2026-09-10, which is 0.7× what it was** (Victor's ask). The
+    /// texture that replaced the smooth band carries its light in many small
+    /// marks spread over the whole annulus, so at 150 it covered more of the
+    /// screen than the band ever did while saying the same thing — the mark got
+    /// bigger the moment it stopped being a single soft ring. Everything else
+    /// here is expressed in multiples of this, so the plateau, the ramps and the
+    /// panel all follow.
+    private static let core: CGFloat = 105
     /// How far the glow reaches either side of the core, as a multiple of it.
     /// Twice what the halo shipped at (Victor, 2026-09-09: *"2× mai lat … mai
     /// gros adică"*), and now the **same** number on both sides — see `profile`.
@@ -144,12 +151,34 @@ final class CaretHalo {
     static let plateauInner: CGFloat = 0.687   // his green circle, r 103
     static let plateauOuter: CGFloat = 1.287   // his red circle, r 193
 
-    private static let profile: [(CGFloat, CGFloat)] = [
-        (1 - spread,     0),
-        (plateauInner,   1),
-        (plateauOuter,   1),
-        (1 + spread,     0),
-    ]
+    /// **The ramps are curved, not straight** — *"nu poți accentua transparența
+    /// pozei pe interior și exterior și mai mult?"*. A linear ramp is half lit
+    /// at its middle, which over a wide fade is a lot of half-lit picture; a
+    /// gamma of 2.2 puts the same span at **19%** there instead, so the ink
+    /// spends most of the ramp close to gone and only lifts near the plateau.
+    /// The plateau's edges do not move — they are the circles he drew — so what
+    /// changes is only how the picture gets there.
+    ///
+    /// One knob, in one place, read by both the gradient and the texture: the
+    /// stops are generated rather than typed, because a curve written out as
+    /// numbers is a curve nobody can adjust.
+    private static let rampGamma: CGFloat = 2.2
+
+    private static let profile: [(CGFloat, CGFloat)] = {
+        let steps = 5
+        let rim = 1 - spread, brim = 1 + spread
+        var stops: [(CGFloat, CGFloat)] = []
+        for i in 0...steps {                       // inner rim → plateau
+            let t = CGFloat(i) / CGFloat(steps)
+            stops.append((rim + t * (plateauInner - rim), pow(t, rampGamma)))
+        }
+        stops.append((plateauOuter, 1))
+        for i in stride(from: steps - 1, through: 0, by: -1) {   // plateau → outer rim
+            let t = CGFloat(i) / CGFloat(steps)
+            stops.append((brim - t * (brim - plateauOuter), pow(t, rampGamma)))
+        }
+        return stops
+    }()
 
     /// **One yellow, and nothing else.** `NSColor.systemYellow` is deliberately
     /// not used: it is a dynamic colour that shifts with the appearance, and
@@ -725,7 +754,20 @@ final class CaretHalo {
                 guard coverage > 0 else { buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 0; continue }
                 let dx = CGFloat(x) - mid, dy = CGFloat(y) - mid
                 let radius = sqrt(dx * dx + dy * dy) / scale
-                var a = min(1, coverage * gain * alpha(atRadius: radius))
+                // **The envelope is the last multiplication, and the clamp goes
+                // before it.** Written the other way — `min(1, coverage × gain ×
+                // envelope)` — the flux gain destroys the very fade it is meant
+                // to be filling in: at a gain of 2.5 every pixel whose envelope
+                // is above 0.4 saturates, so both ramps are clipped to a hard
+                // edge somewhere inside themselves and the picture ends abruptly
+                // instead of thinning out. Victor saw it immediately — *"the
+                // image itself should be fading out inner/outer"* — and it is
+                // the one arrangement in which the envelope cannot shape the
+                // light at all. Clamping the **ink** and then applying the
+                // envelope means the falloff he drew is exactly the falloff on
+                // screen, whatever the gain.
+                let ink = min(1, coverage * gain)
+                var a = ink * alpha(atRadius: radius)
                 if design == .ripple { a *= ripple(atRadius: radius) }
                 buf[i]     = UInt8(max(0, min(255, r * a * 255)))
                 buf[i + 1] = UInt8(max(0, min(255, g * a * 255)))

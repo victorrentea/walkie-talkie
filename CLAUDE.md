@@ -4310,6 +4310,36 @@ them**: the envelope, and the texture's own code, which spreads its reeds across
 the plateau and thins them into the ramps. A number that appears in a drawing and
 in the alpha multiplying it must not be able to drift.
 
+**Then two corrections on top of it, both from one look at the real thing.**
+
+- **The flux gain was clipping the fade, which is the one arrangement in which
+  the envelope cannot shape the light.** It read `min(1, coverage × gain ×
+  envelope)`, so at a gain of 2.5 every pixel whose envelope was above 0.4
+  saturated: both ramps were cut to a hard edge somewhere inside themselves and
+  the picture *ended* instead of thinning out. Victor saw it at once — *"the
+  image itself should be fading out inner/outer"*. The clamp belongs on the
+  **ink**, with the envelope applied after it, and then the falloff on screen is
+  exactly the falloff drawn.
+- **The ramps are curved rather than straight** — *"nu poți accentua
+  transparența pozei pe interior și exterior și mai mult?"*. A linear ramp is
+  half lit at its middle, which over a wide fade is a lot of half-lit picture;
+  `rampGamma` 2.2 puts that same span at 19%, so the ink spends most of the ramp
+  close to gone and only lifts near the plateau. Measured on the render: the
+  inner ramp's mid-point went from 20% of the band's ink to 6%, the outer from
+  21% to 9%. The plateau's edges do not move — they are the circles he drew.
+
+**And it is 0.7× the size** (`core` 105, was 150), also his. The texture carries
+its light in many small marks spread over the whole annulus, so at the old radius
+it covered more screen than the band ever did while saying the same thing: the
+mark got bigger the moment it stopped being a single soft ring.
+
+**The swell was never broken, and the test route is why it looked it.**
+`/test/dictation/start` opens no microphone, so `MicRecorder.quietSeconds` stays
+at zero and the halo sits at rest for ever — which reads exactly like a fade that
+has stopped working. Driven with a real caret dictation and no speech, the panel
+measures `0.075 · 0.075 · 0.127 · 0.209 · 0.225` at one-second intervals: two
+seconds of patience, two of swell, exactly as designed.
+
 **The correction went back to Codex's own session** (`codex exec resume --last`),
 which is worth writing down as a working method: it still had the brief, the kill
 list and its own reasoning, so the ask was three lines rather than a page, and
