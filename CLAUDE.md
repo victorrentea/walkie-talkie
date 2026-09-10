@@ -4310,7 +4310,32 @@ them**: the envelope, and the texture's own code, which spreads its reeds across
 the plateau and thins them into the ramps. A number that appears in a drawing and
 in the alpha multiplying it must not be able to drift.
 
-**Then two corrections on top of it, both from one look at the real thing.**
+**The envelope settled on his exact spec**: *"a linear, progressive fade out from
+the center 20% of thickness of the ring which is full opacity (before overall
+fadeout at animation time)"*. Full alpha across the **central fifth** of the
+ring's thickness, a straight line to nothing at both rims, and the parenthesis is
+the important half — there are two fades and they compose. This one is spatial
+and fixed, and the temporal one (`rest` → `alert` on silence) is a single alpha
+over the whole panel: what the picture *is*, against what it is *doing*.
+
+It replaced two earlier shapes in one step — a peak at the core, then a wide
+plateau between the two circles he drew with gamma-curved ramps. The result is
+more transparent than the gamma ever made it, because the ramps are simply much
+longer: most of the ring is now fading rather than solid. Measured on the render,
+ink above ground across the radius: 0 at the inner rim, a clean rise to full by
+the plateau, flat across it within 8%, and a linear fall to 0 at the outer rim.
+
+**The texture became one field for the same reason.** Codex had drawn it as a
+dense band between two radii plus two thin scatters outside them, which is what
+the *previous* envelope wanted. Under this one the ring is mostly ramp, so a
+texture concentrating its ink in the middle fifth would leave the fade to be
+carried by a handful of stragglers. The reeds are now uniform across the whole
+ring — area-weighted, since an annulus at r has 2πr to fill — and the envelope
+does all the fading, which is what *linear, progressive* asks for. Its lengths
+are a fraction of the ring's thickness rather than a count of points, so the
+texture survives the halo being resized; it has already been scaled once.
+
+**Two corrections came before that, both from one look at the real thing.**
 
 - **The flux gain was clipping the fade, which is the one arrangement in which
   the envelope cannot shape the light.** It read `min(1, coverage × gain ×

@@ -143,42 +143,39 @@ final class CaretHalo {
     /// asymmetry is a third of a percent of the radius and no eye will find it,
     /// where rounding them to a matched pair would be preferring tidiness to
     /// what he actually asked for.
-    /// The two radii he drew, as multiples of the core. **Named because two
-    /// things read them**: the envelope below, and the texture's own code, which
-    /// distributes its marks evenly across the plateau and thins them out into
-    /// the ramps. A number that appears in a drawing and in the alpha that
-    /// multiplies it is a number that must not be able to drift.
-    static let plateauInner: CGFloat = 0.687   // his green circle, r 103
-    static let plateauOuter: CGFloat = 1.287   // his red circle, r 193
-
-    /// **The ramps are curved, not straight** — *"nu poți accentua transparența
-    /// pozei pe interior și exterior și mai mult?"*. A linear ramp is half lit
-    /// at its middle, which over a wide fade is a lot of half-lit picture; a
-    /// gamma of 2.2 puts the same span at **19%** there instead, so the ink
-    /// spends most of the ramp close to gone and only lifts near the plateau.
-    /// The plateau's edges do not move — they are the circles he drew — so what
-    /// changes is only how the picture gets there.
+    /// **Full opacity across the central fifth of the ring's thickness, and a
+    /// straight line to nothing at both rims.** Victor's spec, and it is exact:
+    /// *"a linear, progressive fade out from the center 20% of thickness of the
+    /// ring which is full opacity (before overall fadeout at animation time)"*.
     ///
-    /// One knob, in one place, read by both the gradient and the texture: the
-    /// stops are generated rather than typed, because a curve written out as
-    /// numbers is a curve nobody can adjust.
-    private static let rampGamma: CGFloat = 2.2
+    /// The parenthesis is the important half. There are **two** fades and they
+    /// compose: this one is *spatial* and fixed — where the ring is solid and
+    /// where it thins — and the temporal one (`rest` → `alert`, on silence) is a
+    /// single alpha over the whole panel. This envelope is what the picture *is*;
+    /// that one is what it is *doing*.
+    ///
+    /// It replaces two earlier shapes in one step. A single peak at the core was
+    /// a glow — one bright radius with everything on the way to it. Then came a
+    /// wide plateau between two circles he drew (r 103 and 193 at the old size),
+    /// with the ramps curved by a gamma to make them more transparent. Both are
+    /// gone: the plateau is now a fifth of the thickness rather than a half, and
+    /// the ramps are **linear**, which he asked for by name. The result is more
+    /// transparent than the gamma ever made it, because the ramps are simply
+    /// much longer — most of the ring is now fading rather than solid.
+    private static let opaqueFraction: CGFloat = 0.20
 
-    private static let profile: [(CGFloat, CGFloat)] = {
-        let steps = 5
-        let rim = 1 - spread, brim = 1 + spread
-        var stops: [(CGFloat, CGFloat)] = []
-        for i in 0...steps {                       // inner rim → plateau
-            let t = CGFloat(i) / CGFloat(steps)
-            stops.append((rim + t * (plateauInner - rim), pow(t, rampGamma)))
-        }
-        stops.append((plateauOuter, 1))
-        for i in stride(from: steps - 1, through: 0, by: -1) {   // plateau → outer rim
-            let t = CGFloat(i) / CGFloat(steps)
-            stops.append((brim - t * (brim - plateauOuter), pow(t, rampGamma)))
-        }
-        return stops
-    }()
+    /// The plateau's edges, in multiples of the core. **Named because the
+    /// texture reads them too** — a number that appears in a drawing and in the
+    /// alpha multiplying it must not be able to drift.
+    static let plateauInner = 1 - spread * opaqueFraction
+    static let plateauOuter = 1 + spread * opaqueFraction
+
+    private static let profile: [(CGFloat, CGFloat)] = [
+        (1 - spread,     0),
+        (plateauInner,   1),
+        (plateauOuter,   1),
+        (1 + spread,     0),
+    ]
 
     /// **One yellow, and nothing else.** `NSColor.systemYellow` is deliberately
     /// not used: it is a dynamic colour that shifts with the appearance, and
@@ -626,58 +623,38 @@ final class CaretHalo {
             ctx.restoreGState()
 
         case .codex3:
-            // Rebalanced for the 103...193 plateau: uniform reed density through the opaque band, with sparser/shorter reeds in both fade ramps.
-            // Staggered short radial dashes keep the centre empty and avoid a continuous ring or sunburst read.
+            // Codex's reed field — short radial strokes that never span the band,
+            // so they cannot line up into rays from a common origin the way a
+            // sunburst does. Its stagger and its hashed jitter are kept verbatim.
+            //
+            // **One field across the whole ring, not three zones.** It arrived as
+            // a dense band between two radii plus two thin scatters outside them,
+            // which is what the *previous* envelope wanted — a wide plateau with
+            // short ramps. Under this one the ring is mostly ramp, so a texture
+            // that concentrated its ink in the middle fifth would leave the fade
+            // to be carried by a handful of stragglers. The ink is uniform and
+            // the envelope does all the fading, which is what *linear,
+            // progressive* asks for.
             ctx.setStrokeColor(CGColor(gray: 1, alpha: 1))
             ctx.setLineCap(.round)
 
-            let plateauIn = core * plateauInner
-            let plateauOut = core * plateauOuter
-            let fadeIn: CGFloat = inner
-            let fadeOut: CGFloat = outer
-
-            func reed(_ a: CGFloat, _ r0: CGFloat, _ r1: CGFloat, _ w: CGFloat) {
-                guard r0 >= inner + 1, r1 <= outer - 1, r1 > r0 else { return }
-                spoke(a, from: r0, to: r1, width: w)
-            }
-
-            // **The lane is area-weighted, and without that the plateau is not
-            // flat.** Reeds spread evenly *in radius* thin out as they go, since
-            // an annulus at r has circumference 2πr to fill — measured on the
-            // first render, the band peaked at r≈130 and was 40% down by the
-            // red circle, which is a gradient inside the region that is supposed
-            // to be uniformly opaque. `sqrt` of the lane puts the count in
-            // proportion to r, so the *density* is constant and the envelope is
-            // the only thing shaping the light.
-            for i in 0..<168 {
-                let a = CGFloat(i) * (.pi * 2 / 168) + CGFloat((i * 37) % 19) * 0.003
+            let lo = inner + 2, hi = outer - 2
+            for i in 0..<260 {
+                let a = CGFloat(i) * (.pi * 2 / 260) + CGFloat((i * 37) % 19) * 0.003
                 let u = CGFloat((i * 29) % 100) / 99
-                // The inverse CDF of a density proportional to r, which is
-                // `sqrt(a² + u(b² − a²))` and **not** `a + sqrt(u)(b − a)` —
-                // the latter was tried first and overshot, moving the peak from
-                // r≈130 out to r≈180 and leaving a trough where the band starts.
-                let r = sqrt(plateauIn * plateauIn + u * (plateauOut * plateauOut - plateauIn * plateauIn))
-                let len = CGFloat(13 + ((i * 17) % 15))
+                // Area-weighted: an annulus at r has 2πr to fill, so a count
+                // spread evenly in *radius* thins out as it goes. This is the
+                // inverse CDF of a density proportional to r — and it is
+                // `sqrt(a² + u(b² − a²))`, not `a + sqrt(u)(b − a)`, which was
+                // tried and moved the peak outward instead of flattening it.
+                let r = sqrt(lo * lo + u * (hi * hi - lo * lo))
+                // Lengths as a fraction of the ring's thickness rather than in
+                // points, so the texture survives the halo being resized — it
+                // has already been scaled by 0.7 once.
+                let len = band * (0.07 + CGFloat((i * 17) % 15) / 15 * 0.07)
                 let w = CGFloat(3 + ((i * 11) % 3))
-                reed(a, r - len * 0.48, r + len * 0.52, w)
-            }
-
-            for i in 0..<44 {
-                let a = CGFloat(i) * (.pi * 2 / 44) + CGFloat((i * 41) % 23) * 0.009
-                let t = CGFloat((i * 31) % 100) / 99
-                let r = fadeIn + 10 + pow(t, 0.72) * (plateauIn - fadeIn - 13)
-                let len = CGFloat(5 + ((i * 13) % 10))
-                let w = CGFloat(3 + ((i * 7) % 2))
-                reed(a, r - len * 0.38, r + len * 0.62, w)
-            }
-
-            for i in 0..<50 {
-                let a = CGFloat(i) * (.pi * 2 / 50) + CGFloat((i * 43) % 29) * 0.008
-                let t = CGFloat((i * 23) % 100) / 99
-                let r = plateauOut + 7 + pow(t, 1.35) * (fadeOut - plateauOut - 15)
-                let len = CGFloat(6 + ((i * 19) % 11))
-                let w = CGFloat(3 + ((i * 5) % 2))
-                reed(a, r - len * 0.50, r + len * 0.50, w)
+                let r0 = max(lo, r - len * 0.48), r1 = min(hi, r + len * 0.52)
+                if r1 > r0 { spoke(a, from: r0, to: r1, width: w) }
             }
 
         case .codex4:
