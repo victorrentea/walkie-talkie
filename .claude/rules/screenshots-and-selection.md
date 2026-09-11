@@ -1,0 +1,98 @@
+---
+paths:
+  - "Sources/WalkieTalkie/ScreenCapture.swift"
+  - "Sources/WalkieTalkie/CaptureFlash.swift"
+  - "Sources/WalkieTalkie/CaptureEffects.swift"
+  - "Sources/WalkieTalkie/CursorMarker.swift"
+  - "Sources/WalkieTalkie/WindowContext.swift"
+  - "Sources/WalkieTalkie/SelectionCapture.swift"
+  - "docs/pointer-line.md"
+  - "evals/**"
+---
+
+# Screenshots and the selection
+
+Covers the shutter: what a shot is named, what travels to the agent, the on-screen confirmation, where files live, and how the highlighted text is read (shutter and watcher). Full history and reasoning: docs/journal.md — see the sections named after each rule below.
+
+## The shot's name
+
+- **Name a shot by offset and pointer, in image pixels.** `shot-01:23(mouse-at-1034x1466px).jpg` — 1m23s into the dictation, pointer at x=1034, y=1466 in *the pixels of that image*, top-left origin (`ScreenCapture.stem` + `tagCursor`). Both facts ride in the name because the path already travels in `paths`; nothing downstream learns a new key. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+- **`00:00` is the automatic context shot, by definition.** A shot with no dictation around it keeps a timestamp instead: "elapsed since the start" of nothing is not a fact. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+- **The colon is legal; the Finder lies about it.** APFS takes `:` and every path handler is POSIX, but the Finder renders it as `/` (`shot-00/00(…)`), so a folder Victor opens by hand reads differently from what the agent sees. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+- **Pixels, without a denominator.** It was a percentage pair (`-cursor-34.2x71.8pct`), then briefly `-cursor-at-1034x1466-of-3024x1890`; Victor dropped the denominator because raw pixels are what he can check against a screen. The consequence is accepted: a downsampled frame needs its own dimensions read back before these numbers mean anything. Do not reintroduce the denominator without asking. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+- **Measure the size off the JPEG header, never compute it from the screen.** `pixelSize(of:)` after `screencapture` returns (no decode); frame × backing scale is a guess that mirrored displays, HiDPI modes and a sleeping external monitor all break. Hence the shot is **named provisionally and renamed afterwards**; a failed rename leaves the provisional name — a shot with no pointer in its name is still a shot. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+- **Do not port Victor Addons' convention onto this one, or the reverse.** Its `2026-08-14_00-34-42_at1200x500.jpg` is in **global CG points** (y down from the primary display's top, negatives normal on a screen to the left) answering "where on the desk"; this one is in **pixels of that image** answering "where in this picture do I look". → journal: *The shot's name is *when in the sentence* and *where the mouse was**
+
+## What travels: the 800 px copy
+
+- **Every capture writes two files; the `-small.jpg` is what travels.** The original as `screencapture` produced it, and a sibling at `ScreenCapture.handoverWidth` (800) wide, used by `ScreenCapture.handover` / `AppDelegate.shotsClause`. The retina original is what Victor opens himself. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **Tokens are in the pixels, not in the JPEG bytes.** An image costs `width × height / 750` tokens once the reading tool has fitted it to 2000 px on the long edge, so a 3456×2234 desktop always lands at ~3450 tokens whatever the JPEG weighs — compressing harder buys nothing. At 1000 px ~860, at 800 px ~550. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **That the small copy is free was measured, not assumed** (`evals/`, 39 runs over two real dictations replayed off the outbox): seven-frame Gmail dictation, accuracy 0.95 either way, 29,349 tokens against 48,350, $0.38 against $0.56; on the "what was I pointing at" fixture the small frames produced byte-identical answers. `evals/text-vs-pixels.md` (2026-08-22, 33 runs) walked the ladder: 6/6 clean at 800, 6/6 at 700, no legibility failure even at 500 px. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **800 is deliberately one rung above what the evidence allows.** 700 is where the measurement points (−51 % a frame instead of −36 %), but three repeats a cell is thin and Victor reads these frames too. Do not take the rest of the saving without a harder fixture — the missing rung is the one that would find a cliff in production instead of in `evals/`. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **Say the width in one place.** `ScreenCapture.handoverWidth` is not private and `AppDelegate.shotsClause` interpolates it; a second literal is how the shipped sentence comes to disagree with the pixels. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **Scale through ImageIO's thumbnail path** (scales during the JPEG decode). The burned-in cursor mark was removed from this path partly because it cost ~100 ms of exactly the decode-and-re-encode this avoids. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **`prune()` counts frames, not files**, and drops the sibling with its frame; counting both would silently halve a cap expressed in pictures. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **The pointer line was measured and deliberately not built.** OCR at the recorded cursor, quoted in the shots clause, held accuracy at 1.00, cut the agent's turns from 12 to 5 and thinking from 3,109 to 1,323 output tokens, one run in three answering without opening a picture. Not here because Victor chose to keep the shutter path short. Read `docs/pointer-line.md` before either building it or re-deriving it. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+- **Order, not timestamps.** The name carries where in the sentence and where the pointer was; the line says the list is oldest first. That was enough for 7-item alignment at 0.95. → journal: *The agent gets an 800px copy, Victor keeps the retina frame*
+
+### Three things that sound like improvements and are not
+
+- **Compacting the line saves nothing.** Factoring the directory out of seven paths (~90 characters a frame) measured *inside the noise* — 50,320 tokens against 48,350, i.e. slightly worse. The compact form was kept anyway for what it **says**, not what it saves: that the list is chronological and that the context frame may be skipped. Do not go looking for tokens in the wording again; they are in the pixels. → journal: *Three things that sound like improvements and are not*
+- **Dropping the automatic context frame costs accuracy** (0.93 against 0.95). It is not a spare. He starts talking about what is *already on his screen*, so it is routinely **picture one of the enumeration** — in the Gmail dictation it is the first of the seven senders. It is offered cheaply with a hint that it can be skipped, never withheld. → journal: *Three things that sound like improvements and are not*
+- **A native-resolution crop at the pointer, offered beside the small frame, scored 0.87** — worse than the small frame alone. Not because the crop is unreadable: because two pictures per shot make the **sequence** harder to hold, and one run came back with the first two shots swapped. Sequence is what these messages are made of. → journal: *Three things that sound like improvements and are not*
+
+## Every frame says which window
+
+- **Read the frontmost app and focused window title with `WindowContext.describe()` and name it beside the file in the line** (`shot-00:31(…)-small.jpg = Google Chrome — Gmail – Inbox (24,277)`). One Accessibility call replaces several hundred tokens of looking, and answers what pixels answer worst: two frames of the same IDE at the same zoom are two different files. → journal: *Every frame says which window it came from*
+- **Sample it at the gesture, never inside the capture.** `screencapture` is a subprocess we wait on; a title read after it returns names the window he *ended up* in front of. Same rule as the cursor and the offset. → journal: *Every frame says which window it came from*
+- **It goes in the line and the outbox, never in the file name.** A window title is arbitrary text with `/`, quotes, colons and eighty characters of headline; sanitising it strips exactly the characters that identify the page. In the outbox it is `sources`, keyed by **base name** (the folder is already in `paths` and `screen`). Truncated from the head at 80 characters (`fitHead`): a title puts its subject first. → journal: *Every frame says which window it came from*
+- **The AX read is duplicated from `TerminalBinding.focusedWindow` on purpose.** That one is about binding (resolves a target, answers with a frame to fly a rectangle from); folding provenance into it would tie two unrelated features to one signature. → journal: *Every frame says which window it came from*
+- **`NSWorkspace.frontmostApplication` is a main-thread question; the hop is `main.sync` guarded by `Thread.isMainThread`.** Every caller is an event tap, a CoreAudio callback or an HTTP listener, and a deadlock in the shutter path is not a bug anyone would enjoy finding later. → journal: *Every frame says which window it came from*
+
+## Capture order and the on-screen mark
+
+- **Flash first.** `CaptureFlash.announce()` at the top of `captureContext` / `plusOneShot`, before the selection probe and before `screencapture`, with the slow work on a background queue. Fired from inside `ScreenCapture.grab` it landed after a clipboard probe that sleeps up to 400 ms and a subprocess — a receipt that far behind the gesture no longer says *now*. Its panel is `sharingType = .none`, so firing first cannot put it in the shot. → journal: *Capture order: flash first*
+- **The cursor mark is on the screen, never in the picture.** `CaptureFlash.markCursor` drops the red target on the desktop for ~2 s on the automatic capture and every back-button shot (both via `announce(cursor:)`). **`CursorMarker` no longer touches the file**: a mark painted into the frame covers the thing being pointed at, an agent cannot know the red circle is not UI, and the burn-in was a second JPEG pass (~100 ms; at quality 1.0 the file came back *larger*). Verified: zero `systemRed` pixels in a 312×312 box around the recorded position, against 949 before. → journal: *The cursor mark is on the screen, never in the picture*
+- **The mark blooms: 0.5× → 3.6×, fading 0.5 → 0, inside half a second** (2026-08-29), and turns a quarter as it does (2026-08-31; the mark is four-fold symmetric, so 90° lands on its own drawing). Scale and rotation travel as **one animation on `transform`**, not `transform.scale` beside `transform.rotation.z` — two animations each rebuild the matrix from the model value and overwrite instead of composing. It runs −90° to 0 so the resting transform stays the plain scale. → journal: *The cursor mark is on the screen, never in the picture*
+- **Size the panel to the mark at its largest**, or the bloom is clipped by its own window a third of the way out. → journal: *The cursor mark is on the screen, never in the picture*
+- **`sharingType = .none`, so it cannot be verified with a screenshot** — the only checks are the drawing itself and Victor's eyes. That the *file* is clean is the checkable half. → journal: *The cursor mark is on the screen, never in the picture*
+- **The 🔴 pulses 1.0 → 0.25 and back, 1.1 s each way — slow on purpose.** Anything brisker is something blinking next to the cursor while he is trying to think. Only the dot animates; the count must stay readable at every instant. → journal: *The cursor mark is on the screen, never in the picture*
+
+## Where shots live
+
+- **Shots go to `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<session-stamp>/`; `--home` does not move them** (it still moves the outbox). Caches is a staging area, never an archive: each retina JPG is a megabyte or two and macOS may purge it under disk pressure — welcome. `/tmp` clears on reboot and a 3-day sweep, neither of which is "when the disk is full". The outbox stays in `~/.walkie-talkie`: a log the system may delete is not a log. → journal: *Shots live in Caches, one folder per relay session*
+- **The pre-Caches pile goes to the Trash on launch, not to `rm`** (`Outbox.retireLegacyShots`). `prune()` walks `cacheRoot` only, so the 300 cap never applied to `~/.walkie-talkie/shots` — 382 MB in 209 retina JPGs when measured. Old outbox lines still name those files; they go when he empties the Trash. → journal: *Shots live in Caches, one folder per relay session*
+- **The per-session folder is what makes the names safe.** Every session produces `shot-00:00(…)` again; the pointer position separates same-offset shots in almost every real case and `unique()` appends `-2` for the rest — "dictate twice without moving the mouse" is not exotic. → journal: *Shots live in Caches, one folder per relay session*
+- **`prune()` keeps the newest 300 across all session folders**, not per folder — a per-folder cap would keep 300 per restart and bound nothing. Emptied session folders are removed; the current one never is. → journal: *Shots live in Caches, one folder per relay session*
+- **Sample the position at the gesture and carry it into `ScreenCapture.grab(cursor:)`; never read it inside.** By the time the capture runs — a clipboard probe and a subprocess later — the hand has moved on. → journal: *Shots live in Caches, one folder per relay session*
+
+## The selection: shutter
+
+- **The shutter files what is highlighted at that moment, stamped with its offset** (`stashExtraSelection`, into `pendingExtraSelections`). `pendingSelection` is unchanged: the subject, frozen at the first non-empty read, never overwritten. Three cases are skipped as noise: nothing highlighted; the same text the frozen slot holds (the common case); the same text as the previous extra. Exception: a dictation that opened with nothing highlighted takes the first mid-sentence highlight into the frozen slot — the subject arriving late. → journal: *The shutter also takes the selection*
+- **The shutter reads with `SelectionCapture.read()`: Accessibility, then a synthetic ⌘C with the clipboard snapshotted and restored.** It was AX-only (`readQuiet`) until 2026-08-31 and the result was that the feature did not work where he actually uses it: a highlight in a Chrome *page* is exactly the case AX cannot see, so every shot over one filed nothing, silently. The ⌘C is a price he asked to pay; with nothing selected the probe is a no-op. → journal: *The shutter also takes the selection*
+- **Extras ride the outbox as `selections`** (`[{at: "0:31", text: …}]`) while `selection` keeps carrying the first one, so nothing reading the queue has to learn a key. In the line they are stamped: `[selected 0:31: …]`. → journal: *The shutter also takes the selection*
+- **`fileSelection(announceOnRepeat:)` is shared with the watcher.** A **press** that found a highlight already carried still earns the `“ selecting …` receipt (a shutter that says nothing reads as one that missed); a **poll** that finds the same text has found nothing. The chip shows the words for four seconds, then `“ ×N`. → journal: *The shutter also takes the selection*
+
+## The selection: watcher (2026-09-09)
+
+- **While a dictation runs, the highlight is read on a 1 s tick with `SelectionCapture.readQuiet` — Accessibility only, never ⌘C.** `AppDelegate.pollSelection`. A synthetic ⌘C once a second, all sentence, would fight his own copying, spend 400 ms of pasteboard wait per tick, and race its own clipboard restore. **A Chrome page therefore remains the shutter's job** (⌘⇧-click is the better answer there anyway). → journal: *A highlight is picked up on its own (2026-09-09)*
+- **File only after three identical reads in a row** — *"3 selecții identice = m-am oprit"*. Dragging grows a selection (`Hel`, `Hello wor`, `Hello world`); filing the first thing seen puts a fragment in the message *and* the whole line beside it. The tick is one second (*"pune 1s în loc de 0,6, să nu fie grabă"*; it shipped at 0.6 for an hour). → journal: *A highlight is picked up on its own (2026-09-09)*
+- **Stamp when first seen, not when confirmed.** Measured: a ⌘A two seconds into a dictation comes out `0:02`, not `0:04`. → journal: *A highlight is picked up on its own (2026-09-09)*
+- **One final read when the microphone closes, with no settling** (`finalSelectionRead`, posted to the same serial queue so it lands after any read in flight). A highlight made in the last two seconds never gets its three reads, and that is precisely when he selects the thing he just described. `polledSeen` still applies. `/test/dictation` makes the same call with the send hung off it, so the close-only path is reachable from a desk. → journal: *A highlight is picked up on its own (2026-09-09)*
+- **`polledSeen` is a set, not a last-value check** — once each per dictation; going back to something selected earlier is not a second entry. Losing the highlight clears what was settling, so re-selecting the same text must settle again. → journal: *A highlight is picked up on its own (2026-09-09)*
+- **Half a second of AX messaging timeout** on both the system-wide element and the focused one; the default allowance is seconds and an app mid-beachball would stall the queue. A serial `DispatchQueue` is the other half: a read that outran its interval delays the next instead of overlapping. → journal: *A highlight is picked up on its own (2026-09-09)*
+- **Drive it from `syncBorrowedGestures` (bare `live`, Replace Wispr included) and log both edges** (`👁 selection watcher on/off`) — *"why did it not pick up my selection"* has to be answerable from the log. → journal: *A highlight is picked up on its own (2026-09-09)*
+
+## The selection: frozen, and not outliving the dictation
+
+- **The first non-empty read wins for the whole dictation.** `stashSelection` bails when `pendingSelection` is already set; `captureContext` clears it only when a *new* dictation opens. Later probes exist only to fill a blank the first one left. → journal: *The selection is frozen for the whole dictation*
+- **Cancel must call `overlay.clearSelection()`** (2026-09-04). `cancelLocalRecording` cleared `pendingSelection` under the lock, but the row is the overlay's own copy and the `🗑️ Cancelled` flash draws *over* the chip; the last highlight sat beside the cursor with no dictation behind it. → journal: *…but it must not outlive it (2026-09-04)*
+- **Probes capture `dictationStartedAt` before probing and drop the result if it changed.** `read()`'s ⌘C polls the pasteboard up to 400 ms; the wheel held through those 400 ms is a cancel, and the probe wrote everything the cancel had cleared straight back — a `pendingSelection` riding the *next* sentence. Nil means the sentence ended, a different instant means a new one began; both `stashSelection` and `stashExtraSelection` check. → journal: *…but it must not outlive it (2026-09-04)*
+
+## Do not
+
+- Do not reintroduce the denominator without asking.
+- Do not port either convention onto the other (image pixels here, global CG points in Victor Addons).
+- Do not take the rest of the saving without a harder fixture.
+- Do not go looking for tokens in the wording again; they are in the pixels.
+- Read `docs/pointer-line.md` before either building the pointer line or re-deriving it.
