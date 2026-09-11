@@ -24,10 +24,16 @@ Stdlib only, and therefore Apple's interpreter — the same call
 import hashlib
 import json
 import os
+import signal
 import sqlite3
 import struct
 import sys
 from datetime import datetime, timezone
+
+# `… | head` closes the pipe under us, and Python's default answer to that is a
+# BrokenPipeError traceback — which reads exactly like a crash in a script whose
+# whole output is three lines anyone would pipe to `head`.
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 HOME = os.path.expanduser("~")
 CORPUS = os.environ.get("VOICE_CORPUS_DIR", os.path.join(HOME, ".walkie-talkie/voice-corpus"))
