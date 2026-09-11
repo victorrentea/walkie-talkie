@@ -189,6 +189,7 @@ The journal contradicts itself over time, because it was written as things chang
   - [The app icon and the build stamp](#the-app-icon-and-the-build-stamp)
   - [The Dock tile is the escape hatch](#the-dock-tile-is-the-escape-hatch)
   - [The mic's own lock is not recursive, and `start` already holds it](#the-mics-own-lock-is-not-recursive-and-start-already-holds-it)
+  - [The ring covers Wispr Flow's dictations too (2026-09-11)](#the-ring-covers-wispr-flows-dictations-too-2026-09-11)
 
 ---
 
@@ -7051,3 +7052,105 @@ afternoon, having just turned Replace Wispr on.
 The fix is to **not** take the lock: inside `start` the state is already private.
 The rule for this file is that `lock` is taken exactly once per public entry
 point, and never again inside one.
+
+## The ring covers Wispr Flow's dictations too (2026-09-11)
+
+The halo had become the microphone's beacon that same day — up for every
+dictation, breathing on the voice, with `RecordingBeacon` deleted under it. Then
+Victor pointed out the hole in the word *every*: it was every dictation **this
+app** runs, and this app is not what he dictates with most of the time.
+
+*"vreau … să apară acest cerc de fulgere în jurul mausului și atunci când
+folosesc, de exemplu, Wispr, ca să dictez"*, and then the reason, which is the
+part that settles it: *"mai este o diferență dacă nu am activat opțiunea de
+înlocuire Wispr Flow; dacă aceasta nu este activată, atunci Wispr trebuie folosit
+în tot, în orice context în care dictez, fie că este terminal, câte terminale noi,
+fie că este binduit … că este la cursor, peste tot"*.
+
+Replace Wispr is a tick that is down far more often than it is up. With it down,
+Wispr Flow is the dictation tool, in every context — into a terminal, into a
+bound one, into a fresh one, into whatever holds the caret. A beacon that is dark
+for the commonest dictation of the day cannot be believed on the rare one: the
+absence of the ring would stop meaning *nothing is listening* and start meaning
+*nothing of mine is listening*, which is not a distinction his eye is making at
+the edge of vision.
+
+So there is **no gate**, in line with the rule already written for the ring: not
+on `pasteMode`, not on a binding, not on the Replace Wispr tick. Wispr's
+microphone is a second way for the same question to be answered yes.
+
+### The signal: one boolean about a pid, and the two that were rejected
+
+`WisprWatch` asks CoreAudio for `kAudioProcessPropertyIsRunningInput` on every
+audio process object whose bundle id starts with `com.electron.wispr-flow` —
+prefix, because Wispr Flow is Electron and spreads over `com.electron.wispr-flow`,
+`.helper` and `.accessibility-mac-app`, and which one holds the device is its
+business and changes between versions.
+
+**This is not the Wispr Flow database coming back.** The standing rule —
+*never reintroduce the Wispr Flow database path* — is about a **recogniser**:
+about this app reading `flow.sqlite`, transcribing the blob it found there and
+swallowing Wispr's own paste. Nothing here reads a word, a file or a transcript.
+It reads the same fact the orange dot in the menu bar is drawn from, and it would
+be equally true of any app that opened the microphone; Wispr Flow is named only
+because it is the one that means *Victor is dictating*.
+
+Two cheaper-looking signals were measured and dropped:
+
+- **The device's `kAudioDevicePropertyDeviceIsRunningSomewhere`** answers *is
+  anybody using the input*, and on this Mac that is permanently yes. Measured
+  2026-09-11 with nothing being dictated: `ai.krisp.krispMac` and
+  `com.rogueamoeba.audiohijack` both at `runningInput = 1`, all day. A flag that
+  is always true is not a signal.
+- **The chord this app already types.** `HotkeyTap.postWisprHandsFree` posts
+  `fn ⌃ Space` on every forward-button click outside Replace Wispr, so the relay
+  does know about one of the ways a Wispr dictation begins. It is still the wrong
+  thing to draw a ring from: it says *a chord went out*, not *the microphone
+  opened*; it is a **toggle**, so the relay's idea of the state drifts the first
+  time Wispr misses one or he ends the dictation from Wispr's own window; and it
+  knows nothing about a dictation he started from the keyboard himself. The
+  device cannot be wrong about this, and nothing else can be right about it.
+
+Listeners rather than a poll, two kinds: one per process on the flag itself, and
+one on the system object's `kAudioHardwarePropertyProcessObjectList` that
+re-subscribes when a client appears or goes away. The second is not optional —
+an Electron helper is only filed as an audio object once it first touches audio,
+so the process that will hold the microphone this afternoon need not exist when
+the app launches.
+
+### The ring breathes, so the relay opens its own microphone alongside
+
+`WisprWatch` can only say *open* or *closed*, and a boolean cannot drive a ring
+whose whole design is that it moves on syllables — a ring breathing on a timer is
+exactly the substitution that killed the beacon's free-running blink. Asked
+whether that was worth a second microphone, Victor said yes: *"Da, deschide
+microfonul"*.
+
+So `MicRecorder.startMetering()` — `start(to: nil)`: the same device, the same
+converter, the same tap, the same 16 kHz mono int16 the meter's constants were
+fitted on, and **no `AVAudioFile`**. There is no path for the audio to be kept
+even by accident; `append` writes only `if let file`, and `stopMetering` throws
+the session away rather than handing a recording back. Nothing reaches the
+corpus, the model or the outbox.
+
+Two apps on one input device is ordinary on macOS — each client taps the hardware
+and neither sees the other, so Wispr's audio is not touched or degraded — and the
+orange dot is already lit by Wispr itself, so nothing new appears in the menu bar.
+
+`wisprMeter` is a **second `MicRecorder`**, not a mode on the first: the two
+sessions are started by different things and can overlap (a wheel dictation
+opened during a Wispr one), and one `AVAudioEngine` has one input tap. Apart,
+the relay's own recording can never be interrupted or re-pointed by something
+another app did. `AppDelegate.voiceMeter` picks between them — the relay's own
+session wins when it is running, because that is the one with a transcript riding
+on it — and it is the only thing `CaretHalo.level` and `.quietSeconds` read.
+
+### And the arrow, because Wispr pastes at the caret
+
+*"Da, ca la at-caret"*. A Wispr dictation ends in a paste wherever the focus
+happens to be, which is the exact failure `DropArrow` was drawn for, so
+`setActive` is called with `atCaret: pasteMode || (wisprDictating && !listening)`
+— the relay's own dictation outranks it on that half only, because while a wheel
+dictation is live the destination is the relay's to name and the chip is naming
+it. The ring itself is `listening || wisprDictating`, with nothing outranking
+anything: the microphone is open either way.

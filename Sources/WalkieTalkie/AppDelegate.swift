@@ -38,6 +38,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the WAV to the model, and nothing outside this app hears the sentence.
     private let mic = MicRecorder()
 
+    /// **A second microphone, open only while Wispr Flow is** — and open for a
+    /// number, never for a recording. See `MicRecorder.startMetering`.
+    ///
+    /// Its own `MicRecorder` rather than a mode on `mic`: the two sessions are
+    /// started by different things, can overlap (a wheel dictation opened during
+    /// a Wispr one), and one `AVAudioEngine` has one input tap. Keeping them
+    /// apart means the relay's own recording can never be interrupted, shortened
+    /// or re-pointed by something another app did.
+    private let wisprMeter = MicRecorder()
+
+    /// Wispr Flow has the microphone open — see `WisprWatch`.
+    private let wisprWatch = WisprWatch()
+
+    /// The last thing `wisprWatch` said, on the main thread where the halo is.
+    private var wisprDictating = false
+
+    /// **Whichever meter is actually hearing him.** The halo asks for a level
+    /// and a silence and does not care which app opened the input; when the
+    /// relay's own dictation is running it is the authority, because that is the
+    /// session with a transcript riding on it.
+    private var voiceMeter: MicRecorder { mic.isRecording ? mic : wisprMeter }
+
     /// A recording is open. Main thread only — it is written and read from the
     /// wheel toggle and the menu, both of which hop to main.
     private var localRecording = false
@@ -850,11 +872,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The same seam the chip's warmth ramp is fed through one line up, and
         // the same reason: the ring lights on his voice, and which recorder is
         // holding the microphone is this delegate's business, not its own.
-        caretHalo.level = { [weak self] in self?.mic.level ?? 0 }
+        caretHalo.level = { [weak self] in self?.voiceMeter.level ?? 0 }
         // And it asks a second question of the same recorder, because the drop
         // arrow is triggered by silence rather than by volume — see
         // `MicRecorder.quietSeconds` for why that is not read off `level`.
-        caretHalo.quietSeconds = { [weak self] in self?.mic.quietSeconds ?? 0 }
+        caretHalo.quietSeconds = { [weak self] in self?.voiceMeter.quietSeconds ?? 0 }
+
+        // **The ring covers Wispr Flow's dictations too, since 2026-09-11.**
+        // Replace Wispr is off most days, and with it off Wispr Flow is what he
+        // dictates into everywhere — *"în orice context în care dictez … că este
+        // la cursor, peste tot"*. A beacon dark for the commonest dictation of
+        // the day is worth nothing on the rare one, so there is no gate: not on
+        // the tick, not on a binding.
+        //
+        // The relay opens its own microphone alongside Wispr's for the length of
+        // it (`wisprMeter`), because the ring breathes on `level` and `WisprWatch`
+        // only knows *open* or *closed*. Nothing is written; see
+        // `MicRecorder.startMetering`.
+        wisprWatch.onChange = { [weak self] on in
+            guard let self else { return }
+            self.wisprDictating = on
+            if on {
+                // Not while the relay is recording for itself: that session is
+                // already metering the same voice, `voiceMeter` prefers it, and
+                // a second engine on the device would buy nothing.
+                if !self.mic.isRecording, let why = self.wisprMeter.startMetering() {
+                    // The ring still comes up — at rest, not breathing. Said out
+                    // loud because a ring that does not move looks exactly like
+                    // a broken swell and is not one.
+                    Log.error("wispr halo: no level — \(why)")
+                }
+            } else {
+                self.wisprMeter.stopMetering()
+            }
+            self.syncBorrowedGestures()
+        }
+        wisprWatch.start()
 
         // Nothing is bound yet, and a marker left by a relay that was killed
         // rather than quit would claim otherwise until the first bind.
@@ -1936,7 +1989,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // implica și că va trebui să arăți … haloul de fulgi de zăpadă și când
         // dictezi cu țintă. Însă, da?"*. What the caret dictation lost is given
         // back by `DropArrow`, in a shape a ring never had.
-        caretHalo.setActive(listening, atCaret: pasteMode)
+        //
+        // **Wispr Flow's microphone counts as `listening`** (2026-09-11) and its
+        // destination counts as the caret, which is what Wispr pastes into. The
+        // relay's own dictation outranks it on `atCaret` only: while a wheel
+        // dictation is live the destination is the relay's to name, and the chip
+        // is naming it.
+        caretHalo.setActive(listening || wisprDictating,
+                            atCaret: pasteMode || (wisprDictating && !listening))
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the ring does rather than a flag of its own.
         publishBinding(terminal.target)

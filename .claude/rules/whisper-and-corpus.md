@@ -26,6 +26,15 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   the `TranscriptionEngine` setting, `HotkeyTap.blockInjection`, and the `POST /engine`,
   `POST /test/corpus` and `POST /test/transcript` routes. If a fallback recogniser is ever wanted, it
   is a second *local* model, not another app's database. → journal: *The recogniser*
+- **`WisprWatch` is not that rule coming back** (2026-09-11). It reads no word, file or transcript —
+  one CoreAudio boolean about a pid, so the halo can be up while Wispr Flow is listening. The rule
+  above is about a *recogniser*; this is the orange dot. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **`MicRecorder.startMetering()` is `start(to: nil)` — the microphone open for a level and nothing
+  else.** Same device, converter, tap and 16 kHz mono int16 the meter was fitted on, and no
+  `AVAudioFile`: `append` writes only `if let file`, `stopMetering` discards. Nothing reaches the
+  corpus, the model or the outbox, and it exists for exactly one caller — the halo, during a Wispr
+  Flow dictation. Two clients on one input device is ordinary on macOS; Wispr's audio is untouched.
+  → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
 - **A daemon, not a subprocess per dictation — measured.** Importing `mlx_whisper` costs 7.4 s and
   the first transcription another 2.8 s for the weights, against 1.3 s once warm; shelling out each
   time would put ten seconds between the end of a sentence and the agent seeing it.

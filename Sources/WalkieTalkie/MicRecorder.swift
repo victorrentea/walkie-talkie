@@ -176,13 +176,41 @@ final class MicRecorder {
         }
     }
 
+    /// **The microphone open for a level and nothing else** — no file, no
+    /// transcript, no corpus entry.
+    ///
+    /// It exists for the one dictation this app does not run: Wispr Flow's. The
+    /// halo breathes on `level` and `WisprWatch` can only say *the microphone is
+    /// open*, not *how loud he is* — a boolean cannot drive a ring that is meant
+    /// to move on syllables, and a ring moving on a timer is the substitution the
+    /// beacon was killed for. So the relay opens the input alongside Wispr, reads
+    /// the meter and throws every sample away.
+    ///
+    /// **Two apps on one input device is ordinary on macOS** — each client gets
+    /// its own tap on the hardware and neither sees the other; Wispr's audio is
+    /// not touched, degraded or diverted. The orange dot is already lit by Wispr
+    /// itself, so nothing new appears in the menu bar either.
+    ///
+    /// Nothing is written anywhere: `start(to: nil)` builds the converter and the
+    /// tap but no `AVAudioFile`, so there is no path for audio to be kept even by
+    /// accident, and `stopMetering` discards instead of handing a recording back.
+    @discardableResult
+    func startMetering() -> String? { start(to: nil) }
+
+    /// Closes a metering session. Deliberately not `stop()`'s return value: there
+    /// is no recording to hand anybody.
+    func stopMetering() { _ = stop() }
+
     /// Opens the microphone and starts writing. Returns the reason on failure.
     ///
     /// The destination is handed in rather than invented here so the caller can
     /// put it where the rest of the per-dictation staging lives, and delete it on
     /// the same path that deletes the others.
+    ///
+    /// **`nil` means meter only** — see `startMetering`, the only caller that
+    /// passes it.
     @discardableResult
-    func start(to destination: URL) -> String? {
+    func start(to destination: URL?) -> String? {
         lock.lock(); defer { lock.unlock() }
         guard !isRecording else { return nil }
 
@@ -224,11 +252,15 @@ final class MicRecorder {
             return "cannot convert \(Int(inFormat.sampleRate))Hz to 16kHz mono"
         }
 
-        do {
-            file = try AVAudioFile(forWriting: destination, settings: outFormat.settings,
-                                   commonFormat: .pcmFormatInt16, interleaved: true)
-        } catch {
-            return "cannot write \(destination.lastPathComponent): \(error.localizedDescription)"
+        if let destination {
+            do {
+                file = try AVAudioFile(forWriting: destination, settings: outFormat.settings,
+                                       commonFormat: .pcmFormatInt16, interleaved: true)
+            } catch {
+                return "cannot write \(destination.lastPathComponent): \(error.localizedDescription)"
+            }
+        } else {
+            file = nil
         }
         converter = conv
         outputFormat = outFormat
@@ -264,7 +296,7 @@ final class MicRecorder {
         live = 0
         noiseFloor = -1
         isRecording = true
-        Log.info("mic: recording through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
+        Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
     }
 
@@ -304,9 +336,14 @@ final class MicRecorder {
     /// silently rather than failing.
     private func append(_ buffer: AVAudioPCMBuffer) {
         lock.lock()
-        guard isRecording, let conv = converter, let outFormat = outputFormat, let file = file else {
+        // **`file` is not in the guard** — a metering session has none, and the
+        // meter below is the whole point of that session. Everything above the
+        // write is shared: the same conversion to 16 kHz mono int16, because the
+        // meter's constants were fitted on exactly that.
+        guard isRecording, let conv = converter, let outFormat = outputFormat else {
             lock.unlock(); return
         }
+        let file = self.file
         lock.unlock()
 
         let ratio = outFormat.sampleRate / buffer.format.sampleRate
@@ -327,8 +364,10 @@ final class MicRecorder {
             if let error = error { Log.error("mic: conversion failed — \(error.localizedDescription)") }
             return
         }
-        do { try file.write(from: out) } catch {
-            Log.error("mic: could not write buffer — \(error.localizedDescription)")
+        if let file {
+            do { try file.write(from: out) } catch {
+                Log.error("mic: could not write buffer — \(error.localizedDescription)")
+            }
         }
         meter(out)
     }

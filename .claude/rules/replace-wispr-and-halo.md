@@ -2,6 +2,7 @@
 paths:
   - "Sources/WalkieTalkie/CaretHalo.swift"
   - "Sources/WalkieTalkie/DropArrow.swift"
+  - "Sources/WalkieTalkie/WisprWatch.swift"
   - "assets/caret-halo-5x5.png"
 ---
 
@@ -165,6 +166,33 @@ no outbox line, no terminal, no prompt panel, no countdown.
   invalidating the delayed `orderOut` — otherwise the old tidy-up puts the new ring away half a
   second after it came up. → journal: *It turns while it is up, and it collapses into the pointer when it goes (2026-09-10)*
 
+## The ring covers Wispr Flow's dictations too (2026-09-11)
+
+- **`WisprWatch` lights the ring while Wispr Flow holds the microphone, with no gate.** Replace
+  Wispr is down most days and with it down Wispr Flow is what he dictates into everywhere — *"în
+  orice context în care dictez … că este la cursor, peste tot"*. Halo active is `listening ||
+  wisprDictating`. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **The signal is `kAudioProcessPropertyIsRunningInput` on every audio process object whose bundle
+  id has the prefix `com.electron.wispr-flow`** — prefix and OR, because Electron spreads over
+  `.helper` and `.accessibility-mac-app` and which one holds the device changes between versions.
+  → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **Never use the device's `DeviceIsRunningSomewhere`** — measured 2026-09-11 with nothing being
+  dictated, `ai.krisp.krispMac` and `com.rogueamoeba.audiohijack` sit at `runningInput = 1` all
+  day. A flag that is always true is not a signal. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **Never draw it from `HotkeyTap.postWisprHandsFree` instead.** That chord is a *toggle this app
+  sends*, so the state drifts the moment Wispr misses one or he stops from Wispr's own window, and
+  it is blind to a dictation started from the keyboard. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **Listen on the process list as well as on each process.** An Electron helper is only filed as an
+  audio object once it first touches audio, so the one that will hold the microphone this afternoon
+  may not exist at launch. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **The ring breathes because the relay opens its own microphone alongside Wispr's**
+  (`MicRecorder.startMetering`, a second `MicRecorder`) — a boolean cannot drive a ring that moves
+  on syllables, and a timer is the substitution the beacon died for. Nothing is written; see the
+  whisper rule. `AppDelegate.voiceMeter` picks the relay's own session when it is running. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+- **`atCaret` is `pasteMode || (wisprDictating && !listening)`** — Wispr pastes at the caret, so the
+  arrow belongs there too (*"Da, ca la at-caret"*); the relay's own live dictation outranks it on
+  that half only, because the chip is naming a destination. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
+
 ## `DropArrow` (2026-09-11)
 
 - **Armed on `pasteMode`, re-read on every `setActive`**, so a ⌘⌃B mid-sentence gives the words a
@@ -222,7 +250,8 @@ no outbox line, no terminal, no prompt panel, no countdown.
 - **Do not re-key the September reference image.** Keyed off its flat `(246,246,246)` white it is
   the better picture at 100 % and nothing at all at 15 %; if the halo is ever wanted with texture,
   the opacities have to go up with it. → journal: *The ring round the pointer, when the destination is not a place (2026-09-09)*
-- **Do not gate the ring on `pasteMode` or `isBound`** — it is the microphone's beacon now. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
+- **Do not gate the ring on `pasteMode` or `isBound`** — it is the microphone's beacon now, and
+  since 2026-09-11 that includes a microphone another app opened. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
 - **Do not breathe the ring on a timer.** A ring breathing on a clock proves a clock is running,
   the substitution that took the beacon's own free-running blink out. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
 - **Do not post a context shot or a ⌘C probe in Replace Wispr.** → journal: *Replace Wispr: the relay as a way to type*
