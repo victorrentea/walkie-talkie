@@ -45,7 +45,7 @@ goes back.
 ## The overlay's states are photographed, and the page is part of the change
 
 `docs/overlay-states.html` shows **every state the chip and the panel can be in** —
-39 of them — each with the moment it appears and why it looks the way it does. It
+40 of them — each with the moment it appears and why it looks the way it does. It
 is generated: the catalogue, the order, the sections and every word of prose live
 in `Sources/WalkieTalkie/OverlayStates.swift`, the pictures are the real views
 drawing themselves through `RelayWindow.snapshot`, and `docs/build-overlay-states.py`
@@ -54,7 +54,7 @@ only lays them out.
 **The rule: no change to the overlay is finished until that page is rebuilt.**
 
 ```sh
-./docs/shoot-overlay-states.sh      # shoots all 39 states, regenerates the HTML
+./docs/shoot-overlay-states.sh      # shoots all 40 states, regenerates the HTML
 ```
 
 That covers a new row, a reworded string, a changed glyph, a different colour, a
@@ -897,70 +897,109 @@ is the opposite gesture: it puts words somewhere else without the overlay ever
 becoming key. `.keystroke` targets are the one place focus moves at all, and it
 moves to the target and straight back.
 
-## Unbound is inert
+## Unbound is inert — retired (2026-09-11)
 
-**With no terminal bound, the app does nothing at all.** No dictation can be
-started, no picture is taken, no mouse button is borrowed, no line is written.
-Since 2026-08-27, `AppDelegate.isBound` (`terminal.target != nil`) gates every
-path that could deliver, plus `syncLocalCapture`, which is what lets the wheel open
-the microphone.
+**The rule is gone. With nothing bound the app now does everything it does
+bound, and the sentence waits for the terminal Victor is about to point at.**
+His ask: *"tot ce pot să fac când sunt legat de un terminal să pot să fac și
+atunci când sunt nelegat, urmând a mă lega ulterior"*.
 
-**One gesture is outside it, since 2026-08-30**: ⌘ + the wheel starts a dictation
-whose destination is a terminal that does not exist yet (*⌘ + the wheel: the
-destination that does not exist yet*). The four gates below now ask
-`hasDestination` — `isBound || spawnPending || pasteMode` (the third since
-2026-09-02, see *Replace Wispr*) — because the reason for the rule is
-that there is nowhere for these words to go, and a spawn is a yes to that
-question, just not yet. `syncLocalCapture` is deliberately **not** widened: the
-bare wheel's claim on the microphone still needs a binding, and the shifted press
-bypasses that flag in the tap rather than pretending to set it.
+`AppDelegate.holdsForBind` is the switch, one `static let`, and it is the one
+word to flip if the hold turns out to be worse than the refusal was.
 
-| gate | unbound |
-|---|---|
-| `captureContext` — flash, selection probe, screen capture | off |
-| `plusOneShot` — mouse 4 | off |
-| `send` — the outbox line and the delivery | off |
-| `syncBorrowedGestures` — mouse 4, ⌘⇧-click in Chrome | off |
-| `syncLocalCapture` — the wheel's claim on the microphone | off |
-| `corpus.captureLocal` | **on** |
+### What the rule was, and why the premise expired
 
-**It is the only such gate now.** Pause used to bail out of the same four places
-and is gone (*Pause is gone*, below).
+From 2026-08-27, `isBound` gated every path that could deliver. It was written
+because the relay had just become a **login item**: it sat there all day, so
+every sentence he spoke into a browser, a chat or a commit message was costing
+him a screenshot, mouse 4 and ⌘⇧-click — **with nowhere for the words to go**.
 
-Why it had to change. The relay used to be started per session by `/relay` and
-live only as long as Victor was dictating at an agent, so "running" and "aimed at
-something" were the same fact and none of this could misfire. Since 2026-08-26 it
-is a **login item** and sits there all day — so every sentence he spoke into a
-browser, a chat or a commit message was getting a screenshot taken of it and was
-losing him mouse 4 and ⌘⇧-click, with nowhere for the words to go. Pause existed
-to stop exactly that, and he was having to press it against an app that had no
-destination anyway — which is why, once this rule was in, pause had nothing left
-to do and went (*Pause is gone*).
+The premise is that last clause, not the binding. A destination that arrives two
+minutes late is still a destination, which is exactly the reading that already
+exempted the two gestures carved out of the rule while it stood: `spawnPending`
+(a session that does not exist yet) and `pasteMode` (the caret). `holdsForBind`
+is the third exemption and it swallows the rule, because it answers the question
+for the remaining case: **later**.
 
-**The outbox goes quiet too, and that is a deliberate loss.** The `/relay` skill's
-original mode was an unbound relay appending to a queue with an agent watching
-it; that mode is gone. Victor was asked directly on 2026-08-27 and chose the
-whole switch over half of it — an outbox filled all day for a watcher that is
-usually not there is not a feature, it is a log of his private dictation. A
-`/relay` session gets its destination the way everything else does now, by
-binding.
+The gesture it exists for is the one Victor described — a thought arriving before
+there is a window for it. Under the old rule the answer was to refuse the
+gesture, so the thought had to survive the walk to a terminal in his head.
 
-**The corpus is the one thing that keeps running**: it is a file on Victor's own
-disk, the samples are what the local model is being judged on, and one dropped
-because he happened to be dictating into a browser cannot be taken again.
+| gate | unbound, before | unbound, now |
+|---|---|---|
+| `captureContext` — flash, selection probe, screen capture | off | **on** |
+| `plusOneShot` — mouse 4 | off | **on** |
+| `areaShot` — the wheel drag | off | **on** |
+| `syncBorrowedGestures` — mouse 4, ⌘⇧-click, the selection watcher | off | **on** |
+| `syncLocalCapture` — the wheel's claim on the microphone | off | **on** |
+| `StatusItem`'s **Start Dictation** row | greyed | **live** |
+| `send` — the delivery | dropped | **held, then delivered** |
+| the outbox line | not written | **written at delivery, not before** |
+| `corpus.captureLocal` | on | on |
 
-**`showBound` is where the switch is thrown**, since it is the one place every
-route into and out of a binding passes through — ⌘⌃B, `POST /unbind`, and a
-target discovered gone at delivery time (`report(.targetGone)`). That last one is
-why it lives there and not in the two callers: a relay whose terminal was closed
-under it must hand the wheel and the microphone back at that moment, not at the
-next deliberate gesture.
+### The outbox half of the 2026-08-27 decision stands
 
-**`/test/dictation` is gated too**, which makes it useless at a desk with nothing
-bound — and is why the spawn needed a route of its own, for the one gesture
-defined by not needing a binding. That is the right reading of a route whose
-whole claim is that it enters exactly where a real transcript does — bind something first, which is what the
-path under test needs anyway.
+That decision is recorded here as Victor being asked directly and choosing the
+whole switch over half of it: *"an outbox filled all day for a watcher that is
+usually not there is not a feature, it is a log of his private dictation."*
+**Nothing about that changes.** A held sentence lives in memory and nowhere
+else — `commit` returns into `holdForBind` *before* `Outbox.send`, and the JSONL
+line is written at the moment of delivery. A relay left unbound all day still
+leaves no log behind it.
+
+### `awaitingBind`: one sentence, five minutes
+
+- **One, not a queue.** A second dictation replaces the first, the way a second
+  cancel replaces the recording being kept for recovery — the chip says *the*
+  sentence being held, and a relay that had to ask which of three to deliver is
+  answering a question nobody has. The one it replaces is not lost: ⌘⌃P still
+  pastes it, because `lastDictation` is set above the hold.
+- **Five minutes**, the same net `Recover Cancelled Dictation` is kept under.
+  Long enough to cross the room and open a terminal, short enough that a
+  sentence from this morning cannot land in an agent he binds this afternoon for
+  something else. On expiry the chip says so — `⏳ held dictation expired — ⌘⌃P
+  to paste it` — because the alternative is a sentence he believes is still on
+  its way.
+- **Released from `showBound`**, which is the one method every route into a
+  binding passes through: ⌘⌃B, the chords, `POST /bind`, the restart's restore,
+  a spawned window adopting itself. **Deliberate or not**, unlike the spawn and
+  caret take-backs two sections down — those guard against the 10s poll stealing
+  a destination, and a poll cannot produce a binding out of nothing, so it can
+  never be the call that releases this.
+- **The chip says it while he talks**: `⏳ bind to send — ⌘⌃B`, in the row every
+  other destination takes, and it names the *gesture* because that is what this
+  destination still is. It comes down the moment a bind lands.
+
+### The one gate whose price is outside this app
+
+`syncLocalCapture` is the one *Unbound is inert* deliberately refused to widen
+even for the spawn and the caret, and widening it is the one part of this change
+that costs something. With **Use Logi Gestures unticked**, the wheel is now the
+relay's for as long as the relay is running — so middle-click stops opening
+links in Chrome and closing tabs in VS Code, which is exactly the cost Victor
+named when he moved the gestures onto the side buttons (*"folosesc middle click
+sa inchid de ex taburi chrome/vsc"*). **In the default mode it costs nothing**:
+`HotkeyTap` hands every mouse button straight back there and dictation is a
+chord on the side buttons. The line to put back to `isBound` is one, and it is
+named in `syncLocalCapture`'s own comment.
+
+Its knock-on: the unbound double-click branch at the bottom of `HotkeyTap`'s
+middle-button chain is now unreachable — the first click opens a dictation and
+sets `wheelDictateAt`, so the second converts it to a spawn in the branch above,
+which is the same gesture arriving at the same place. It is left standing
+because it is what has to work again if `holdsForBind` is flipped back.
+
+### Pause still does not come back
+
+*Pause is gone* (below) rests on this rule, and the reasoning survives its
+retirement — which is worth being explicit about, because it looks like it
+should not. Pause existed to hand the mouse back and stop the app acting on a
+sentence that was not for it. What answers that now is not *Unbound is inert*
+but **Disconnect**, which already exists, is reachable from the chord and the
+menu, and says which terminal it let go of. **Do not reintroduce pause**, and do
+not make `holdsForBind` a menu tick — a tick for it would be pause under another
+name.
+
 
 ## Pause is gone
 
@@ -1553,8 +1592,9 @@ Since 2026-08-28 the same switch also **pauses Chrome's music** (`MusicBridge`,
 below). It is not a gesture, but it is the same window and the same argument: for
 the length of a sentence, something that belongs to the rest of the machine is
 borrowed and then handed straight back. Since 2026-09-02 it also raises the
-**corner beacon** — same switch, same window, and the reason it is that switch
-and not a fourth place `listening` is written down.
+**caret halo** — same switch, same window, and the reason it is that switch and
+not a fourth place `listening` is written down. (It raised the *corner beacon*
+until 2026-09-11, when the halo took that job and the beacon was deleted.)
 
 **Both are borrowed in Replace Wispr too, since 2026-09-08** (`live`, full stop).
 They were not, on the argument that both gestures exist to *add to a message* and
@@ -3830,7 +3870,7 @@ everything else near the pointer, so the only way to review a layout change was
 to make a spawn dictation and look with your own eyes, within three and a half
 seconds, at something that then faded. Same problem `docs/overlay-states.html`
 solves for the chip and the same answer — the real views drawing themselves —
-minus the catalogue, since this panel has one layout rather than 39 states.
+minus the catalogue, since this panel has one layout rather than 40 states.
 
 It paid for itself on the first run: the stars came out as **five solid
 squares**. Drawing a template `NSImage` and then `fill(using: .sourceAtop)` over
@@ -4142,7 +4182,8 @@ worth as a sample.
 **Whenever a dictation is headed for the caret, a wide yellow halo swells round
 the pointer once he stops talking — nothing at all while he is still talking,
 15% at its loudest.** `CaretHalo.swift`, switched from `syncBorrowedGestures`
-beside the beacon.
+beside the beacon — and since 2026-09-11 it is up for every dictation and the
+beacon is gone; see *It is the beacon now*.
 
 Victor's ask: *"when this mode is activated … draw a little halo ring around the
 mouse … about 100 pixels, to warn me that I need to basically pick somewhere to
@@ -4184,7 +4225,9 @@ drawn round is the thing he has to move.
   on every breath would be a light flashing at the corner of his eye for the
   length of every sentence — the failure that keeps the `HQ` tag's pop
   edge-triggered.
-- **`MicRecorder.quietSeconds`, not `level`.** The beacon's readout falls
+- **`MicRecorder.quietSeconds`, not `level`.** (Still true of the silence
+  trigger, which is `DropArrow`'s since 2026-09-11; the ring's own brightness
+  *is* read off `level` now.) The beacon's readout falls
   linearly over three seconds by design, so "quiet" measured through it would be
   "quiet, plus however loud the last syllable was" — two and a half seconds of
   lag after a shout and none after a murmur. This is the **voiced bar itself**,
@@ -4609,6 +4652,131 @@ receipt glanced at on the way back to work, not a gesture to be studied.
 the half of this that no still can show and that a demo cut off mid-frame cannot
 either, so the last half-second of every demo is the ring going where it goes.
 
+#### It is the beacon now, and it breathes on his voice (2026-09-11)
+
+**The ring is up for every dictation, not only a caret one, and its brightness
+and its size both ride `MicRecorder.level`.** It replaces the microphone on the
+bottom edge outright — see *The beacon is gone*.
+
+Victor, in one breath and correcting himself inside it: *"în loc de microfonul
+care apare jos pe centrul ecranului, aș dori ca fulgerele să pulseze în același
+ritm al discuției, cu același fade-out care se întâmplă acum la microfon.
+Acestea ar trebui să pulseze, crescând dimensiunea cu zece la sută. Nu, chiar
+20% față de cât e default, și apoi să se contracte înapoi, în timp ce se rotește
+totodată."* So it is **0.2 and not 0.1**, and the rotation is the `spin` that
+landed the day before.
+
+- **He gave the old reading up knowingly.** The ring's presence *was* the
+  message — `at caret` dictations and nothing else — and making it the beacon
+  spends that: *"asta va implica și că va trebui să arăți fulgii de zăpadă,
+  haloul de fulgi de zăpadă și când dictezi cu țintă. Însă, da? Fac și eu
+  schimbarea asta."* What the caret dictation lost is given back by `DropArrow`,
+  below, in a shape a ring never had.
+- **The envelope is `RecordingBeacon`'s, verbatim**: `floor + (ceiling − floor)
+  × level`, sampled at 20 Hz, with the three-second linear fall living in
+  `MicRecorder`. The numbers are the ring's own and unchanged — `rest` 7.5% and
+  what was `alert` is now `loud` at 22.5%, because what those were calibrated
+  for is *how much of this ring a screen can carry while he works under it*,
+  which the reason for lighting it does not change.
+- **The swell is a scale off the same sample**, so a syllable is one event
+  rather than two effects that coincide — and **from the voice, never from a
+  timer**: a ring breathing on a clock proves a clock is running, which is the
+  exact substitution that took the beacon's own free-running blink out.
+- **Three motions, three layers.** `stage` belongs to the collapse, the film to
+  the spin, the new `pulse` between them to the swell. Core Animation gives a
+  layer one `transform`; this is `CursorMarker`'s rule (*two animations on one
+  transform overwrite rather than compose*) arrived at a third time.
+- **The panel grew by the same 20%.** `side` was measured to hold exactly the
+  falloff at rest, so at full voice the outer glow was being cut off **square**
+  by its own window — the one thing the falloff must not have. Found by the
+  contact sheet, not on screen.
+- **What silence means has flipped, and the two seconds did not.** The ring used
+  to climb over two seconds of quiet; it now falls quiet, because it answers *is
+  the microphone open* rather than *where do these words go*. `patience` and
+  `swell` are unchanged and are `DropArrow`'s schedule now.
+
+#### `DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)
+
+**While a dictation headed for the caret is waiting for him to stop talking, a
+dotted amber arrow fades up above the pointer and marches down into its own
+arrowhead.** `DropArrow.swift`.
+
+*"ca să pot distinge când dictez fără țintă, vreau ca atunci când tac, când nu
+mai vorbesc, să apară o animație … o săgeată punctată cu trei linii și un vârf
+de săgeată în jos din dreptul mouse-ului, care se plimbă cu mouse-ul, ca să
+sugereze cumva că trebuie să lase acel prompt undeva"*.
+
+It exists because the ring stopped being able to say this: a ring on screen now
+means the microphone is open, which is equally true of a sentence headed for a
+bound terminal. An arrow pointing down at the cursor **names the gesture** —
+*put it somewhere* — where a ring only ever said *something is different about
+this one*.
+
+- **The silence schedule is inherited whole**: `CaretHalo.patience` of quiet,
+  then `CaretHalo.swell` to fade in, to a ceiling of 0.75. Two seconds rather
+  than instantly for the old reason — the gaps *inside* a sentence are ordinary,
+  and anything arriving on every breath is a light flashing at the corner of his
+  eye for the length of every sentence.
+- **Armed on `pasteMode`, re-read on every `setActive`**, so a ⌘⌃B mid-sentence
+  gives the words a terminal and the arrow stops asking him to place them. The
+  ring stays up: the microphone is still open.
+- **Three dashes are drawn as five.** The group slides down exactly one period
+  and repeats, so the dash that goes under the head has to be replaced at the
+  top by one that was off the end; a gradient mask fades the top of the shaft,
+  so what reads is three dashes flowing into the arrowhead and nothing arriving
+  from nowhere. Linear, one period a second — a dash that eased would be a dash
+  hesitating.
+- **Amber, over a blue-and-magenta ring**, which is the one hue in the app's
+  palette that cannot be mistaken for part of it at a glance, with a shadow
+  outline so it survives a white page.
+
+**It has a window of its own, and the contact sheet is what proved it had to.**
+It was a layer in the halo's panel — the obvious build, since that window
+already follows the pointer, and two windows chasing one cursor is two chances
+to be a frame apart. But **the halo's window alpha is the voice**, and this
+appears exactly when the voice has stopped: the arrow was being drawn through
+the ring's *floor*, 0.75 × 0.148, i.e. a stain. No layer opacity recovers it,
+because the number it would have to undo is on the window. So it has a panel,
+and `CaretHalo.follow` places both off one `origin()` in one call — the frames
+cannot be a frame apart because there is only one frame.
+
+#### `WT_SHOOT_HALO` also writes an arrow sheet
+
+`WT_SHOOT_HALO=/tmp/halo.png` now leaves `/tmp/halo-arrow.png` beside it: the
+ring at both ends of its swell and the arrow over it, on a dark ground and a
+light one (`CaretHalo.shootArrow`). A second file rather than two more rows,
+because neither is a *design* — the first sheet is a gallery of textures and
+this is one texture in two states with something drawn on top of it.
+
+**It is the only way to look at the arrow at all.** The ring can at least be
+watched through `WT_HALO_DEMO`; the arrow appears two seconds into a silence in
+the middle of a caret dictation, on a `sharingType = .none` window. It earned
+its keep twice on the first run — the clipped window and the crushed arrow are
+both faults it found and neither was visible from the code.
+
+**The arrow is drawn at its own opacity in that sheet**, in a host of its own,
+precisely so the sheet cannot reproduce the bug that gave it a window.
+
+#### Measured, 2026-09-11
+
+Through `WT_HALO_DEMO` on a fabricated sentence — six seconds of syllables at 3 Hz,
+six of silence — read back off the window server, which is what makes any of it
+provable rather than asserted:
+
+- **The ring's alpha** rides the voice between **0.148** and **0.445**, which is
+  `opacity(rest)` and `opacity(loud)` at the film's 1.98 gain, and sits flat at
+  the floor for the whole of the silence. The beacon's envelope, from outside
+  the app.
+- **The swell is 20%**, measured on the arrow sheet as the radius of the lit
+  band's peak: **94.5pt at rest against 113.5pt at full voice, ratio 1.201**.
+  Measured at the *peak* and not at a threshold, because a threshold moves with
+  brightness and the two states differ in both.
+- **The arrow is a second window at the same origin**, fading **0.164 → 0.333 →
+  0.483 → 0.633 → 0.750** over the two seconds after the voice stops, holding at
+  its ceiling, and gone the frame speech resumes — while the ring's own window
+  sat at 0.148 throughout and jumped to 0.436 on the same frame.
+
+
 #### `WT_HALO_DEMO` — the answer to *does it actually move*
 
 `WT_HALO_DEMO=25 ./.build/debug/WalkieTalkie` puts the real panel round the real
@@ -5016,7 +5184,7 @@ rep itself at a fixed 2×. The page lays each picture out at its size in **point
 (`build-overlay-states.py` writes `width=`/`height=` from the manifest), so the
 extra pixels are sharpness and nothing else moves.
 
-- `./docs/shoot-overlay-states.sh` → all 39 states at once, and the page that
+- `./docs/shoot-overlay-states.sh` → all 40 states at once, and the page that
   shows them. This is the one to reach for; the rule that comes with it is at the
   top of this file. A panel's blur is missing from the shot (the window server
   draws it, not the view) and so is the window's alpha, which the page reapplies
@@ -5446,9 +5614,9 @@ other's question.
 Yellow is the state that lasts hours and red the one that lasts a minute, which
 is the same split the chip draws with a folder name against a pulsing 🔴.
 
-**Same problem the corner beacon solves, at the other end of the sentence.** The
-beacon answers *is it hearing me?*; this answers *which of these twenty
-terminals is it aimed at?* — and the chip, which is the only thing that has ever
+**Same problem the caret halo solves, at the other end of the sentence.** The
+halo answers *is it hearing me?* (the corner beacon did until 2026-09-11); this
+answers *which of these twenty terminals is it aimed at?* — and the chip, which is the only thing that has ever
 answered it, rides the pointer and is hidden the moment he types.
 
 - **A file, not the `GET /target` route that already answers this.** The bar
@@ -5484,179 +5652,41 @@ answered it, rides the pointer and is hidden the moment he types.
   next `cd`. `cursor color` is the one per-tab property nothing else claims, and
   is where that idea would have to go if the status line ever proves not enough.
 
-## The beacon: a microphone on the bottom edge, lit by his voice (2026-09-09)
+## The beacon is gone — the halo took its job (2026-09-11)
 
-**On the screen the pointer is on, 84pt, centred on the bottom edge, pulsing 🎙️
-for exactly as long as the microphone is open — and brightening with his voice**
-(`RecordingBeacon.swift`).
+**There is no longer a microphone on the bottom edge of the screen.**
+`RecordingBeacon.swift` is deleted; what answers *is it still hearing me?* is now
+the ring round the pointer, which is up for **every** dictation and breathes on
+his voice. See *The ring round the pointer* for what it does and what that cost.
 
-The chip already says this — the pulsing 🔴 and the `Listening...` bar — and it
-says it *beside the cursor*, which is the one place Victor is not looking while
-he talks: he dictates while reading something on another display, with a
-full-screen window up, and macOS hides the pointer the moment he touches the
-keyboard, taking the chip with it. The state that must never be in doubt — *is it
-still hearing me?* — had the least dependable receipt in the app.
+Victor's ask: *"în loc de microfonul care apare jos pe centrul ecranului, aș
+dori ca fulgerele să pulseze în același ritm al discuției, cu același fade-out
+care se întâmplă acum la microfon"*.
 
-### It has moved twice, and the second move took the slot back off Wispr
+**The argument the beacon was built on is intact and is what moved.** The chip
+says a dictation is running and says it *beside the cursor*, which is the one
+place he is not looking while he talks — he dictates while reading another
+display, with a full-screen window up, and macOS hides the pointer the moment he
+touches the keyboard, taking the chip with it. That is still true, and the halo
+answers it better than an 84pt emoji on the bottom edge did, for one reason the
+beacon spent three weeks failing to find: **it is drawn round the thing his hand
+is on**, so there is no spot to have to look at. The beacon moved twice looking
+for that spot — a 150pt corner, then Wispr Flow's badge slot, then the bottom
+edge — and the halo needs none of them.
 
-**The two subsections below are the badge-slot era, 2026-09-07 to 09-09**, and
-they are kept because the argument in the first one is still the best thing
-written down here about where an indicator belongs. What ended it is at the
-bottom of them.
+What is kept, verbatim, is the **envelope**: a floor plus the voice's share of
+the way to the top, resampled at 20 Hz, with `MicRecorder.level`'s three-second
+linear fall doing the fade-out. `CaretHalo.refresh` is `RecordingBeacon
+.watchLevel` with a scale spent alongside the alpha. Everything written down
+about why that fall is three seconds and why it is linear — *"I find myself
+speaking a lot to keep it open"* — is still live and now lives in `MicRecorder`.
 
-#### It moved from a 150pt corner, and the reason is not aesthetics
+**Two things the beacon had are genuinely gone**, and both were answers to being
+a separate window in a fixed place: the pointer-avoidance (it took itself off
+screen when the cursor came near, so he could click under it) and the one-panel-
+per-display machinery. A mark centred on the cursor cannot be in the way of the
+cursor, and it is on the pointer's screen by construction.
 
-It spent a week as a **150pt microphone in the top-right corner of every
-display**, on two arguments that are both true: a corner is the one part of a
-screen nothing is ever laid out against, and big is what makes an indicator
-readable across a room. Victor replaced it anyway: *"emoji-ul acela de microfon
-vreau să îl pui în locul badge-ului lui Wispr Flow, în aceeași poziție, că mă uit
-mereu la el acolo … un pic mai mic"*.
-
-**The eye does not go to the best place, it goes to the practised one.** A year
-of dictating through Wispr Flow is a year of glancing at one specific spot in the
-menu bar to find out whether the microphone is open. An indicator that is
-objectively more visible somewhere else is still one he has to remember to look
-for; one in the slot his eyes already travel to costs nothing to read. That beats
-size, and it is why this went from 150pt to 19.
-
-- **The slot is measured, not written down.** `anchor(on:)` asks
-  `CGWindowListCopyWindowInfo` where Wispr Flow's badge actually is on that
-  screen — owner name plus `layer > 0` plus a size cap, because the name alone
-  also matches its 512 × 586 `Status` panel. Hardcoding the x would be hardcoding
-  *how many status items happen to sit to its right*, and that failure would be
-  silent and would look exactly like the feature not working. Measured on all
-  four of his displays: 21 × 24 each (37 tall on the built-in), one per screen.
-- **The flip is the load-bearing line.** `CGWindowList` speaks CG global
-  coordinates — y downwards from the top-left of the *primary* display — and
-  everything else here is Cocoa's. They agree only on the primary screen, which
-  is the trap `TerminalBinding.cocoaRect` is already written under and which
-  stays invisible until a second monitor is plugged in. Verified on all four:
-  the badge lands inside the menu bar's own y range on each.
-- **The fallback is 513pt from the right edge**, which is where his Wispr badge
-  sits on three of his four bars (532 on the built-in). It is only reached if
-  Wispr Flow is not running, and being a few points off there is the correct
-  amount of wrong.
-- **19pt box, 16pt glyph** — *"un pic mai mic"* than the 21 × 24 it stands beside,
-  so it reads as one badge rather than two competing.
-- **Bounds need no Screen Recording permission**; only pixels do, and nothing
-  here reads pixels.
-
-#### And then off Wispr's badge entirely (2026-09-09)
-
-**The practised-place argument was right and still lost, because the slot
-belonged to somebody else.** `anchor(on:)` asked the window server for Wispr
-Flow's badge on every appearance *and every pointer move*. When Wispr's badge
-stopped publishing — which it does at the end of a dictation — the query answered
-nothing, the 513pt fallback answered somewhere else, and the microphone moved
-across the bar on its own. Victor: *"uneori pleacă de la mouse după ce termin
-dictarea și începe transcrierea … ca un glonț, undeva spre sus"*.
-
-**Where it went instead was drawn, not described.** He marked a rounded square on
-a screenshot of his own screen and said *"și ca mărime și ca poziție"*: centred
-on the X axis, sitting on the bottom edge. Measured off the mark — **84pt a side,
-8pt of air under it**, `screen.frame.midX` and `frame.minY`, not `visibleFrame`
-(his Dock is not at the bottom, and the edge he drew is the screen's).
-
-- **It asks nothing of anybody now**, which is the whole repair: two numbers off
-  `NSScreen` cannot answer differently because another app closed a window.
-- **84pt because nothing is standing beside it to be polite to.** In the menu bar
-  it was a 19pt mark among 19pt marks; on an empty edge that reads as a speck.
-- **The flight is gone.** It used to take off from the cursor and shrink into the
-  bar — see *What did not change*, which no longer says so. The argument for it
-  was that a microphone materialising in a menu bar is a thing he finds later, if
-  at all; at 84pt on the bottom edge there is nothing to find, and a shape
-  crossing the screen every time he starts talking is a cost paid per sentence
-  for a fact learned once. It fades up in place over 0.2s.
-
-#### And his voice is what lights it
-
-**Two opacities multiplied, answering two questions.** The layer keeps the slow
-pulse — *is this thing still running* — and the panel's own alpha rides
-`MicRecorder.level`: *is it hearing me right now*. Victor asked for both in one
-breath: *"să se aprindă, să fie mai opac atunci când e mai mult volum pe audio.
-Să facă fade când nu mai pronunț nimic"*.
-
-- **It never goes out.** Silence lands it at 0.35, not at zero. The one state
-  this exists to rule out is a microphone that has stopped hearing him, and an
-  indicator that disappears when he pauses is indistinguishable from one that
-  died. The fade is a dimming, not an exit.
-- **The pulse got shallower** — 1.0 → 0.5 rather than 1.0 → 0.15 — since the
-  drama is the voice's job now, and two deep swings multiplied would black it out
-  on every trough of a quiet sentence.
-- **The level is not a second meter.** `MicRecorder.level` is the same per-hop
-  RMS and the same adaptive noise floor `voicedSeconds` is counted against, read
-  as a distance over the voiced bar rather than as a yes/no, spread over 18 dB.
-  So the beacon brightens on exactly what the transcript will call speech: a fan
-  that never clears the bar never lights it either, on the built-in microphone or
-  on the DJI receiver — which is what the tracked floor is for (`InputDevice`:
-  same room, 16552 against 855).
-- **Fast up, slow down.** A syllable reaches full brightness inside the buffer it
-  arrives in; silence takes it back to nothing over **three seconds**
-  (`MicRecorder.levelFallSeconds`). Smoothed on the audio thread, set flat by a
-  20 Hz timer: a second animation over it would only add lag to a light whose
-  whole job is to be simultaneous with a voice.
-- **The fall was a quarter of a second until 2026-09-09, and that made him talk
-  to keep the light on.** It closed 35% of the gap per buffer, a tail chosen so
-  that "the fade at the end of a sentence reads as him having stopped" — the
-  right length for a *readout* of the last 200ms and the wrong one for a beacon
-  whose sentence is *I am still hearing you*. Victor: *"I find myself speaking a
-  lot to keep it open … it's gonna fade out in about, let's say, two seconds …
-  let's put it even three seconds"*. Three seconds outlasts a pause for breath,
-  which a quarter of one does not.
-- **Linear, where it used to be a one-pole.** An exponential's last stretch is a
-  crawl nobody can time, so "three seconds" would have had to mean three time
-  constants and a footnote; a fixed rate falls from full to dark in exactly
-  `levelFallSeconds`, and from half in half that. It also makes the speed a fact
-  about the audio rather than about the hardware: the drop is
-  `dt / levelFallSeconds`, so a device handing over 4096-frame buffers and one
-  handing over 512 fade alike, where the old per-buffer coefficient was silently
-  faster on one of them.
-
-### One screen, the pointer's — and it gets out of the way
-
-It was every display at once, which is right for a corner nobody clicks and wrong
-for a badge in the menu bar: four copies means three sitting on top of three real
-menu bars he is not looking at. The pointer is the best available guess at where
-he is looking — the same assumption the chip is built on — and unlike the chip
-this one survives him typing, because it is not anchored to a pointer macOS hides.
-
-**And the pointer arriving inside it takes it off screen** until it leaves:
-*"dacă mouse-ul merge peste el, dispare ca să pot să dau click sub el"*. The panel
-has always been `ignoresMouseEvents`, so the click was already getting through;
-what it did not do is let him *see* what he was aiming at — and what is under it
-is, by construction, Wispr Flow's own badge. There is `clearance` of 8pt around
-the box, because a bare containment test flickers it on and off while he works
-along the bar.
-
-**A global monitor, not a poll.** `MenuBarMirror` polls `NSScreen.main` every
-500ms because the focused screen posts nothing; the pointer does post, and half a
-second of lag on *get out of the way so I can click* is half a second of clicking
-at something still covered. A global monitor sees only events going to other
-applications, which is every event there is here — the app is `.accessory`, never
-key, and the panel ignores the mouse. It is armed for the length of a dictation
-and taken down with it.
-
-### What did not change
-
-- **It still waits 0.55s** before showing anything (`CaptureFlash.markerDuration`
-  plus a beat, so the red cursor target is not blooming at the same instant), and
-  **a dictation that ends inside that beat never puts anything up at all** —
-  which is the correct ceremony for a gesture that did not happen. Only the
-  flight that used to follow that wait is gone.
-- **The pulse's tempo**: 1.2s each way, the 🔴's, for the 🔴's reason. Its depth
-  changed with the voice arriving — see above.
-- **One panel per screen** even though only one is up: a window belongs to a
-  single display and a panel built for one keeps that display's scale and Space
-  behaviour. `.statusBar` level and `fullScreenAuxiliary`, so a full-screen
-  window does not bury it and it draws *over* the bar rather than under it.
-- **Never in a screenshot** (`sharingType = .none`) — the relay photographs the
-  screen during the very dictation this marks. So it cannot be checked with a
-  screenshot; what is checkable is the geometry, through
-  `CGWindowListCopyWindowInfo`.
-- **`syncBorrowedGestures` is still the switch**, on `listening` rather than
-  `live`: it answers *is it hearing me?*, and where the words go is the chip's
-  question.
 
 ## The prompt is held, not sent
 

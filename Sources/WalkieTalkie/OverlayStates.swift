@@ -101,6 +101,15 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
+            Shot(slug: "bind-to-send", group: "Dictating", title: "Nothing is bound, and he is talking anyway",
+                 when: "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
+                 note: "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `⏳ held — bind a terminal to send it` once the words have left the dictation. **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
+                o.setListening(true)
+                o.setShotCount(1)
+            },
+
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
                  note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.",

@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 39 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 40 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -178,6 +178,16 @@
         <p class="when">After clicking a row in the folder menu, for the rest of that dictation.</p>
         <p class="note"><strong>The chosen folder gets the row a binding would have taken</strong>, behind Terminal&#x27;s own icon — Victor&#x27;s ask, 2026-09-07: <em>&quot;ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie&quot;</em>. The argument that removed this row was that the folder is <em>always</em> <code>~/workspace</code>, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. The ✨ stays one row up, in front of <code>Listening...</code>: it is the fact this destination does not share with a binding — the session does not exist yet.</p>
         <code class="slug">spawn-folder</code>
+      </section>
+      <section class="card" id="bind-to-send">
+        <header>
+          <h3>Nothing is bound, and he is talking anyway</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">162×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bind-to-send.png" width="162" height="93" style="opacity:0.8" alt="Nothing is bound, and he is talking anyway"></div>
+        <p class="when">Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.</p>
+        <p class="note"><strong>The destination row names a gesture rather than a place</strong>, because that is what this destination still is: <em>bind to send</em>, behind the same drawn pin <code>at caret</code> rides behind. It is the fourth answer to <em>where do these words go</em> — a terminal already bound, one it is about to open for itself, the caret, and now <strong>later</strong> (<code>AppDelegate.holdsForBind</code>). The sentence is recorded, shown and read exactly as a bound one is, and <code>commit</code> parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says <code>⏳ held — bind a terminal to send it</code> once the words have left the dictation. <strong>The icon form and not the ✨&#x27;s mark form</strong>: a mark with no icon is <code>spawnCollapsed</code>, which drops the row and rides the glyph in front of <code>Listening...</code>, so the words would never have been drawn.</p>
+        <code class="slug">bind-to-send</code>
       </section>
     </div>
     <h2 id="At rest">At rest</h2>
@@ -533,7 +543,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 635ca0a · 10 Sep 2026 · built 10 Sep 2026, 08:31
+  Generated from <code>OverlayStates.swift</code> · repo at c25d235 · 10 Sep 2026 · built 11 Sep 2026, 19:27
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

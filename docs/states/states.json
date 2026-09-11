@@ -58,6 +58,18 @@
   },
   {
     "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 93,
+    "image" : "bind-to-send.png",
+    "note" : "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `⏳ held — bind a terminal to send it` once the words have left the dictation. **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
+    "shape" : "chip",
+    "slug" : "bind-to-send",
+    "title" : "Nothing is bound, and he is talking anyway",
+    "when" : "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
+    "width" : 162
+  },
+  {
+    "alpha" : 0.80000000000000004,
     "group" : "At rest",
     "height" : 69,
     "image" : "replace-wispr.png",

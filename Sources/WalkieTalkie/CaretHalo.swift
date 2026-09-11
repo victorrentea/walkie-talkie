@@ -1,8 +1,30 @@
 import AppKit
 import QuartzCore
 
-/// **A halo round the pointer whenever a dictation is headed for the caret —
-/// faint while he talks, and swelling once he stops.**
+/// **A halo round the pointer for the whole of every dictation — breathing and
+/// brightening on his own voice, and turning while it does.**
+///
+/// ## It was the caret's alone until 2026-09-11, and now it is the microphone's
+///
+/// It came up for `at caret` dictations and for nothing else, so its presence
+/// *was* the message: these words land wherever the focus happens to be, go and
+/// put the focus somewhere. Victor took that reading away deliberately and knew
+/// what it cost — *"asta va implica și că va trebui să arăți fulgii de zăpadă,
+/// haloul de fulgi de zăpadă și când dictezi cu țintă. Însă, da? Fac și eu
+/// schimbarea asta"* — because the ring is the better **beacon**: it is the one
+/// thing this app draws that is big, alive, and already at the pointer.
+///
+/// So it took `RecordingBeacon`'s job whole, and that class is gone with it:
+/// *"în loc de microfonul care apare jos pe centrul ecranului, aș dori ca
+/// fulgerele să pulseze în același ritm al discuției, cu același fade-out care
+/// se întâmplă acum la microfon"*. `level` is the beacon's envelope verbatim,
+/// spent on `loud` and on `swellScale` at once. The microphone on the bottom
+/// edge answered *is it hearing me?* from a fixed spot he had to look at; this
+/// answers it round the thing his hand is already on.
+///
+/// **What the caret dictation lost, `DropArrow` gives back** — and gives back
+/// better, since an arrow pointing down at the cursor says *put it somewhere*
+/// where a ring only ever said *something is different about this one*.
 ///
 /// Since 2026-09-10 the ring itself is a **picture** — `assets/caret-halo.png`,
 /// the electric blue-and-magenta ring Victor picked — resampled so its band sits
@@ -41,25 +63,40 @@ import QuartzCore
 /// it: a ring is visible at the edge of vision without being read, and what it
 /// is drawn round is the thing he has to move.
 ///
-/// ## The swell is the whole message, and silence is what triggers it
+/// ## The swell used to be the message, and silence used to trigger it
 ///
 /// *"this halo should increase in opacity the moment there is no voice coming
 /// any more … by default it's 10% … but grows up to 50% after two seconds of low
-/// voice … over another two seconds"*.
+/// voice … over another two seconds"* — the ring sat at `rest` all sentence and
+/// climbed over two seconds of quiet, on the argument that **stopping is the
+/// signal**: the sentence just finished is about to be pasted, and that is the
+/// last moment placing the caret is still free.
 ///
-/// While he is talking the paste is not imminent and the ring has nothing to
-/// ask, so it sits at `rest` — present, ignorable, and there to be recognised
-/// later rather than read now. **Stopping is the signal**: the sentence he has
-/// just finished is about to be pasted, and it is the last moment placing the
-/// caret is still free. So the ring is quiet exactly while he is busy and
-/// insistent exactly when he is not, which is the opposite of what a fixed
-/// warning does.
+/// That argument is intact and has simply moved. `DropArrow` keeps its schedule
+/// whole — `patience` then `swell`, both still defined here — and says the thing
+/// in a shape that can only mean one thing. What the ring does with the same
+/// two seconds now is *fall quiet*, because what it is answering is no longer
+/// *where do these words go* but *is the microphone still open*, and the honest
+/// answer to that when nobody is talking is a dim ring rather than a bright one.
 ///
-/// **Two seconds before it starts, not immediately**, because the gaps *inside*
-/// a sentence are ordinary: he pauses to think mid-dictation all the time, and a
-/// ring that brightened on every breath would be a light flashing at the corner
-/// of his eye for the length of every sentence — the same failure that keeps the
-/// `HQ` tag's pop edge-triggered. Two seconds of nothing is a stop.
+/// **The two seconds are still two seconds, and for the old reason**: the gaps
+/// *inside* a sentence are ordinary — he pauses to think mid-dictation all the
+/// time, and anything that arrived on every breath would be a light flashing at
+/// the corner of his eye for the length of every sentence, the same failure that
+/// keeps the `HQ` tag's pop edge-triggered.
+///
+/// ## The breath, and the turn it rides on
+///
+/// *"acestea ar trebui să pulseze, crescând dimensiunea cu … 20% față de cât e
+/// default, și apoi să se contracte înapoi, în timp ce se rotește totodată"*
+/// (2026-09-11). The scale is `swellScale` off `level`, the rotation is the
+/// `spin` that has been here since the day before, and the two are on separate
+/// layers because Core Animation gives a layer one `transform` — see `makePanel`.
+///
+/// **Scale and opacity from one sample**, so a syllable is one event rather than
+/// two effects that coincide. And **from the voice, never from a timer**: a ring
+/// breathing on a clock proves a clock is running, which is exactly the
+/// substitution that took the beacon's own free-running blink out.
 ///
 /// ## What it does not do
 ///
@@ -70,8 +107,8 @@ import QuartzCore
 ///
 /// **Never in a screenshot** (`sharingType = .none`) — the shutter is live in
 /// Replace Wispr, so this would otherwise be a blue ring burned into the very
-/// frames it is standing over. Same rule the beacon, the capture flash and the
-/// menu-bar mirror follow, and the same consequence: it cannot be reviewed with
+/// frames it is standing over. Same rule the capture flash and the menu-bar
+/// mirror follow, and the same consequence: it cannot be reviewed with
 /// a screenshot, only through `CGWindowListCopyWindowInfo` and his own eyes.
 final class CaretHalo {
 
@@ -101,7 +138,15 @@ final class CaretHalo {
     /// The panel has to hold the whole falloff: a gradient clipped by its own
     /// window ends in a hard circular edge, which is the one thing this shape
     /// must not have.
-    private static var side: CGFloat { (core * (1 + spread)).rounded() * 2 + 4 }
+    ///
+    /// **Times `1 + swellScale` since 2026-09-11**, and the contact sheet is
+    /// what found it: at the top of his voice the ring is a fifth larger than
+    /// the box that was measured to hold exactly its falloff, so the outer glow
+    /// was being cut off square by its own window on every loud syllable —
+    /// which is the one thing the sentence above says this shape must not have.
+    /// The window is sized for the biggest the ring ever gets; everything drawn
+    /// inside it is still placed off `core` and `half`, so nothing else moves.
+    static var side: CGFloat { (core * (1 + spread) * (1 + swellScale)).rounded() * 2 + 4 }
 
     /// **The halo's cross-section**, as `(distance from the pointer ÷ core,
     /// alpha)`. One colour, and symmetric about the core.
@@ -213,12 +258,53 @@ final class CaretHalo {
     /// of thin lines covers a fraction of the pixels a solid band does, so the
     /// same nominal alpha is a far lighter wash over the work underneath.
     private static let rest: CGFloat = 0.075
-    private static let alert: CGFloat = 0.225
-    /// How long a silence has to last before the ring reads it as a stop rather
-    /// than as him thinking mid-sentence.
-    private static let patience: TimeInterval = 2
-    /// And how long it then takes to get there.
-    private static let swell: TimeInterval = 2
+    /// **The bright end, and since 2026-09-11 it is reached by talking rather
+    /// than by stopping.**
+    ///
+    /// It was `alert`: the ring sat at `rest` all sentence and climbed here over
+    /// two seconds of silence, because stopping is the moment the paste is
+    /// imminent. That argument has not gone away — it has moved to `DropArrow`,
+    /// which says the same thing in a shape that can only mean one thing, and
+    /// says it only in the mode it is true of.
+    ///
+    /// What the ring does instead is the job the microphone at the bottom of the
+    /// screen used to do. Victor, 2026-09-11: *"în loc de microfonul care apare
+    /// jos pe centrul ecranului, aș dori ca fulgerele să pulseze în același ritm
+    /// al discuției, cu același fade-out care se întâmplă acum la microfon"*.
+    /// The envelope is therefore `RecordingBeacon`'s, verbatim — a floor plus
+    /// the voice's share of the way to the top, resampled at `tick` — and the
+    /// number is unchanged, because what that number was calibrated for is *how
+    /// much of this ring a screen can carry while he works under it*, which the
+    /// reason for lighting it does not change.
+    private static let loud: CGFloat = 0.225
+    /// How long a silence has to last before it reads as a stop rather than as
+    /// him thinking mid-sentence. The ring no longer acts on it — `DropArrow`
+    /// does — but the threshold is the ring's own, kept here because it is the
+    /// same judgement about the same pauses.
+    static let patience: TimeInterval = 2
+    /// And how long the arrow then takes to arrive.
+    static let swell: TimeInterval = 2
+
+    /// **How much bigger the ring gets at the top of his voice.**
+    ///
+    /// Victor, 2026-09-11: *"crescând dimensiunea cu zece la sută. Nu, chiar 20%
+    /// față de cât e default, și apoi să se contracte înapoi, în timp ce se
+    /// rotește totodată"* — he corrected himself mid-sentence, so this is 0.2
+    /// and not 0.1.
+    ///
+    /// It rides the same `level` the opacity does, which is what makes the two
+    /// one gesture rather than two: the ring swells *and* brightens on a
+    /// syllable and falls back between them, at the rate `MicRecorder.level`
+    /// falls. **Scale and not a free-running pulse** for the reason the beacon's
+    /// own timer-blink was taken out: a ring breathing on a timer proves a timer
+    /// is running and says nothing about the audio path, and this one is on
+    /// screen precisely to answer *is it hearing me*.
+    ///
+    /// The spin is untouched and composes with it — the scale is set on a layer
+    /// of its own between `stage` and the rotating film, so neither animation is
+    /// reaching for the same property as the other. The collapse on the way out
+    /// keeps `stage` to itself for the same reason.
+    private static let swellScale: CGFloat = 0.2
 
     /// 20 Hz, the beacon's rate and for the beacon's reason: the value is a
     /// continuous function of how long he has been quiet, so it is *sampled*
@@ -296,6 +382,10 @@ final class CaretHalo {
     /// out of the same trap, and the cheaper one here: the spin never stops and
     /// the collapse is one-shot, so there is no pair to keep in step.
     private var stage: CALayer?
+    /// The layer the voice-driven scale is written on, between `stage` and the
+    /// turning film — see `makePanel` for why each motion gets a layer of its
+    /// own.
+    private var pulse: CALayer?
     private var monitors: [Any] = []
     private var timer: Timer?
     private var live = false
@@ -312,16 +402,37 @@ final class CaretHalo {
     /// is listening is the delegate's business, not this class's.
     var quietSeconds: (() -> TimeInterval)?
 
-    /// On or off. Idempotent, and driven from `syncBorrowedGestures` — the one
-    /// switch every edge of a dictation already passes through, so this cannot
-    /// drift out of step with the chip, the beacon or the borrowed buttons.
-    func setActive(_ on: Bool) {
+    /// **How loud he is right now, 0…1**, asked of the same microphone. This is
+    /// what the ring breathes on since 2026-09-11 — see `loud` and `swellScale`.
+    var level: (() -> Float)?
+
+    /// Whether *this* dictation has somewhere to go.
+    ///
+    /// The ring is up for every dictation now, so it can no longer be the thing
+    /// that says *this one is headed for the caret* — it says *the microphone is
+    /// open*, which is true in both. The distinction moved to `DropArrow`, and
+    /// this is the flag that decides whether the arrow is armed at all.
+    private var atCaret = false
+    private let arrow = DropArrow()
+
+    /// On or off, and whether the words have a destination. Idempotent, and
+    /// driven from `syncBorrowedGestures` — the one switch every edge of a
+    /// dictation already passes through, so this cannot drift out of step with
+    /// the chip or the borrowed buttons.
+    ///
+    /// `atCaret` is read on every call rather than only on the rising edge: a
+    /// ⌘⌃B made mid-sentence gives the words a terminal, and the arrow has to
+    /// stop asking him to place them the moment that happens.
+    func setActive(_ on: Bool, atCaret: Bool = false) {
+        if live == on, self.atCaret == atCaret { return }
+        self.atCaret = atCaret
+        arrow.armed = on && atCaret
         guard live != on else { return }
         live = on
         // Both edges, for the reason the selection watcher logs both: "why did
         // the ring not come up" has to be answerable from the file, and the
-        // three conditions behind it are not all visible on screen.
-        Log.info(on ? "◯ caret halo on — these words go wherever the caret is"
+        // conditions behind it are not all visible on screen.
+        Log.info(on ? "◯ caret halo on — the microphone is open\(atCaret ? ", and these words go wherever the caret is" : "")"
                     : "◯ caret halo off")
         on ? show() : hide()
     }
@@ -340,6 +451,14 @@ final class CaretHalo {
         // After `makePanel`, never before: building the layer is what measures
         // the picture and so what sets `artworkGain`.
         panel.alphaValue = Self.opacity(Self.rest)
+        // The swell and the arrow are both left wherever the last sentence
+        // ended, and a ring that comes up 20% oversized on a syllable nobody has
+        // said yet is the same lie a frozen indicator tells.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pulse?.transform = CATransform3DIdentity
+        CATransaction.commit()
+        arrow.hide()
         follow()
         panel.orderFrontRegardless()
 
@@ -379,6 +498,10 @@ final class CaretHalo {
     private func hide() {
         timer?.invalidate()
         timer = nil
+        // **Straight out, not collapsed.** The ring shrinking into the pointer
+        // says *the sentence went there*; an arrow still asking him to place the
+        // caret while it does would be asking for something already decided.
+        arrow.hide()
 
         guard panel != nil, let stage = stage else {
             for m in monitors { NSEvent.removeMonitor(m) }
@@ -447,17 +570,42 @@ final class CaretHalo {
         // converging on nothing. Same reason `BindFlight` re-reads the cursor
         // every frame instead of sampling it once.
         guard live || closing, let panel = panel else { return }
-        let p = NSEvent.mouseLocation
-        panel.setFrameOrigin(NSPoint(x: (p.x - Self.side / 2).rounded(),
-                                     y: (p.y - Self.side / 2).rounded()))
+        panel.setFrameOrigin(Self.origin())
+        // The arrow's window rides the same origin, in the same call — see
+        // `DropArrow` for why it is a window and why it is not its own monitor.
+        arrow.place(at: Self.origin())
     }
 
+    /// Where a panel the size of this one has to sit for its centre to be the
+    /// pointer. Two windows read it, which is why it is a function.
+    private static func origin() -> NSPoint {
+        let p = NSEvent.mouseLocation
+        return NSPoint(x: (p.x - side / 2).rounded(), y: (p.y - side / 2).rounded())
+    }
+
+    /// **One sample of his voice, spent on two things at once**: how bright the
+    /// ring is and how big it is. `RecordingBeacon`'s envelope for the first —
+    /// a floor plus the voice's share of the way to the top — and the same
+    /// fraction applied to a scale for the second, so the swell and the glow are
+    /// one breath rather than two effects that happen to coincide.
+    ///
+    /// The silence clock is still read, but nothing about the ring depends on it
+    /// any more: it goes to `DropArrow`, which is the mode-specific half of what
+    /// the swell used to say.
     private func refresh() {
         guard live, let panel = panel else { return }
-        let quiet = quietSeconds?() ?? 0
-        let t = max(0, min(1, (quiet - Self.patience) / Self.swell))
-        let rest = Self.opacity(Self.rest), alert = Self.opacity(Self.alert)
-        panel.alphaValue = rest + (alert - rest) * CGFloat(t)
+        let loud = CGFloat(max(0, min(1, level?() ?? 0)))
+        let floor = Self.opacity(Self.rest), ceiling = Self.opacity(Self.loud)
+        panel.alphaValue = floor + (ceiling - floor) * loud
+        // The scale is set on `pulse` and nowhere else — `stage` belongs to the
+        // collapse and the film to the spin, and a layer whose transform is
+        // written from a timer cannot also be the one an animation is holding.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let s = 1 + Self.swellScale * loud
+        pulse?.transform = CATransform3DMakeScale(s, s, 1)
+        CATransaction.commit()
+        arrow.refresh(quiet: quietSeconds?() ?? 0, at: Self.origin())
     }
 
     // MARK: - Designs
@@ -1281,9 +1429,19 @@ final class CaretHalo {
         // and stands still for every one after it.
         turn.isRemovedOnCompletion = false
         halo.add(turn, forKey: "spin")
-        stage.addSublayer(halo)
+        // **A third layer, for a third motion.** `stage` belongs to the collapse
+        // and the film to the spin, and the swell is written from a timer 20
+        // times a second — three claims on one `transform`, where Core Animation
+        // gives each layer exactly one. The rule is `CursorMarker`'s, arrived at
+        // the same way: two animations on one transform overwrite rather than
+        // compose. Its box is the whole panel, so it scales about the pointer.
+        let pulse = CALayer()
+        pulse.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        pulse.addSublayer(halo)
+        stage.addSublayer(pulse)
         view.layer?.addSublayer(stage)
         self.stage = stage
+        self.pulse = pulse
         p.contentView = view
 
         panel = p
@@ -1298,20 +1456,34 @@ extension CaretHalo {
     /// dictation** — `WT_HALO_DEMO=20 ./.build/debug/WalkieTalkie`.
     ///
     /// `shoot` answers *what does the picture look like*; this answers the other
-    /// half, which a still cannot: *does it move*. It runs the actual panel with
-    /// the actual timeline — `quietSeconds` is a clock rather than a microphone,
-    /// wrapped to the 6s of one full cycle, so what is on screen is 2s at rest,
-    /// 2s of swell, 2s alarmed, over and over.
+    /// half, which a still cannot: *does it move*. It runs the actual panel on a
+    /// **fabricated sentence** — an 12s cycle of six seconds of "speech", at
+    /// syllable rate, and six of silence — so one loop shows everything there is
+    /// to see: the ring breathing and brightening on the voice, falling back
+    /// between syllables, and then the drop arrow fading up two seconds into the
+    /// quiet and marching until he starts again.
+    ///
+    /// `atCaret` is on, because the arrow is half of what there is to look at.
     ///
     /// It is the only path that sets `capturable`, so it is also the only way a
-    /// screenshot of this app can contain the ring — which is what makes the
-    /// swell provable rather than merely asserted.
+    /// screenshot of this app can contain the ring — which is what makes any of
+    /// this provable rather than merely asserted.
     static func demo(seconds: Double) {
         capturable = true
         let halo = CaretHalo()
         let started = Date()
-        halo.quietSeconds = { Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 6) }
-        halo.setActive(true)
+        /// Where in the 12s loop we are.
+        let phase = { Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 12) }
+        halo.level = {
+            let t = phase()
+            guard t < 6 else { return 0 }
+            // Three syllables a second, never quite to zero between them — which
+            // is what `MicRecorder.level`'s three-second fall actually looks like
+            // under ordinary speech.
+            return Float(0.25 + 0.75 * abs(sin(t * .pi * 3)))
+        }
+        halo.quietSeconds = { max(0, phase() - 6) }
+        halo.setActive(true, atCaret: true)
         // **It ends the way a dictation ends, not with `exit(0)`.** The collapse
         // is the half of this that no still can show and that a demo cut off
         // mid-frame cannot either — so the last half-second of every demo is the
@@ -1347,7 +1519,7 @@ extension CaretHalo {
         // The two states there are, and then the profile at full strength —
         // which is the only way to judge a falloff at all once it is drawn at a
         // twentieth of an opacity.
-        let alphas: [CGFloat] = [rest, alert, 1]
+        let alphas: [CGFloat] = [rest, loud, 1]
         // **One row per design, and the current halo is the top row.** A sheet
         // of proposals with nothing to be different *from* is one nobody can
         // judge — and the question being asked of it is precisely whether the
@@ -1403,6 +1575,84 @@ extension CaretHalo {
                                          .foregroundColor: NSColor.white])
                 }
             }
+            }
+        }
+        sheet.unlockFocus()
+        guard let tiff = sheet.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        shootArrow(to: (path as NSString).deletingPathExtension + "-arrow.png")
+    }
+
+    /// **The same sheet for the two things the picture gained on 2026-09-11**:
+    /// the ring at both ends of its voice-driven swell, and `DropArrow` over it.
+    ///
+    /// It is a second file rather than two more rows, because neither of these
+    /// is a *design* — the sheet above is a gallery of textures and this is one
+    /// texture in two states with something drawn on top of it.
+    ///
+    /// The arrow is the reason it had to exist at all. The ring can at least be
+    /// watched through `WT_HALO_DEMO`; the arrow only appears two seconds into a
+    /// silence in the middle of a caret dictation, on a panel no screen capture
+    /// can contain — so without this there is no way to look at it that does not
+    /// involve talking into a microphone and then stopping.
+    static func shootArrow(to path: String) {
+        let side = Self.side
+        let cell = NSSize(width: side, height: side)
+        let grounds: [NSColor] = [NSColor(white: 0.11, alpha: 1), NSColor(white: 0.97, alpha: 1)]
+        // Quiet with the arrow up (which is the state that goes together), and
+        // full voice at the top of the swell, which is where the 20% lives.
+        let states: [(String, CGFloat, CGFloat, Bool)] = [
+            ("quiet + arrow", rest, 1, true),
+            ("full voice", loud, 1 + swellScale, false),
+        ]
+        let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(states.count),
+                                         height: cell.height * CGFloat(grounds.count)))
+        sheet.lockFocus()
+        for (row, ground) in grounds.enumerated() {
+            for (col, state) in states.enumerated() {
+                let (name, alpha, scale, arrowUp) = state
+                let box = NSRect(x: cell.width * CGFloat(col),
+                                 y: cell.height * CGFloat(grounds.count - 1 - row),
+                                 width: cell.width, height: cell.height)
+                ground.setFill()
+                box.fill()
+                let host = NSView(frame: NSRect(origin: .zero, size: cell))
+                host.wantsLayer = true
+                // The same three-layer stack `makePanel` builds, posed rather
+                // than animated — `ChipWipe.shoot`'s rule, and for its reason: a
+                // sheet drawn from a different arrangement than the one that
+                // ships is a picture of something nobody sees.
+                let pulse = CALayer()
+                pulse.frame = CGRect(x: 0, y: 0, width: side, height: side)
+                pulse.addSublayer(haloLayer(side: side))
+                pulse.transform = CATransform3DMakeScale(scale, scale, 1)
+                host.layer?.addSublayer(pulse)
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }
+                        .draw(in: box, from: .zero, operation: .sourceOver,
+                              fraction: opacity(alpha))
+                }
+                // **Drawn separately, at its own opacity, because on screen it
+                // is its own window** — compositing it through the ring's would
+                // be the sheet reproducing the bug that gave it one.
+                if arrowUp {
+                    let arrowHost = NSView(frame: NSRect(origin: .zero, size: cell))
+                    arrowHost.wantsLayer = true
+                    arrowHost.layer?.addSublayer(DropArrow.picture())
+                    if let rep = arrowHost.bitmapImageRepForCachingDisplay(in: arrowHost.bounds) {
+                        arrowHost.cacheDisplay(in: arrowHost.bounds, to: rep)
+                        NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }
+                            .draw(in: box, from: .zero, operation: .sourceOver,
+                                  fraction: CGFloat(DropArrow.ceiling))
+                    }
+                }
+                (name as NSString).draw(
+                    at: NSPoint(x: box.minX + 12, y: box.minY + 12),
+                    withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 20, weight: .bold),
+                                     .foregroundColor: NSColor.systemGray])
             }
         }
         sheet.unlockFocus()

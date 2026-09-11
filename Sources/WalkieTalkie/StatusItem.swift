@@ -478,9 +478,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // **Above Stop, because it comes first.** The wheel was the only way in,
         // and it is one button on one specific mouse — the same argument that put
         // Stop here, which had been keeping the menu able to end a dictation it
-        // could not begin. Enabled only while something is bound: unbound the
-        // relay is inert and `startLocalRecording` would refuse anyway, and a row
-        // that silently does nothing is worse than one that says it cannot.
+        // could not begin. **Enabled with nothing bound too, since 2026-09-11**:
+        // it was `isBound`, because unbound the relay was inert and
+        // `startLocalRecording` would have refused anyway — and it no longer
+        // does. A sentence spoken now is held for the terminal Victor is about to
+        // point at (`AppDelegate.holdsForBind`), so the one row that begins a
+        // dictation must not be the one thing still saying it cannot.
         startDictation.image = Self.symbolIcon("mic")
         startDictation.action = #selector(startDictationClicked)
         startDictation.target = self
@@ -848,7 +851,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     private func applyStopRecording() {
         let recording = isRecording?() ?? false
-        startDictation.isEnabled = isBound && !recording
+        startDictation.isEnabled = !recording
         stopRecording.isEnabled = recording
         cancelDictation.isEnabled = recording
         // Not while one is running: two transcripts arriving at one panel is an

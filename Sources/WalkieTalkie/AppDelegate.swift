@@ -15,10 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// resumes exactly that afterwards. Driven from `syncBorrowedGestures`, the
     /// one place that already knows when the window opens and closes.
     private let music = MusicBridge()
-    /// The 🎙️ in the top-right corner of every screen while a dictation is
-    /// running — see `RecordingBeacon`. The chip says the same thing beside the
-    /// cursor, which is the one place he is not looking while he talks.
-    private let beacon = RecordingBeacon()
+    /// **The ring round the pointer for the whole of every dictation**, breathing
+    /// on his voice — see `CaretHalo`. Since 2026-09-11 it is also the answer to
+    /// *is it still hearing me?*, which the chip gives beside the cursor and
+    /// therefore in the one place he is not looking while he talks. The 84pt
+    /// microphone on the bottom edge that used to answer it is gone: *"în loc de
+    /// microfonul care apare jos pe centrul ecranului, aș dori ca fulgerele să
+    /// pulseze în același ritm al discuției"*.
     private let caretHalo = CaretHalo()
 
     /// Keeps every dictation's **recording** beside the model's reading of it,
@@ -265,8 +268,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pasteMode = false
 
     /// Somewhere for this dictation to go: a terminal already bound, one it is
-    /// about to open for itself, or the caret.
-    private var hasDestination: Bool { isBound || spawnPending || pasteMode }
+    /// about to open for itself, the caret — or, since 2026-09-11, one he has
+    /// not pointed at yet (`holdsForBind`).
+    private var hasDestination: Bool { isBound || spawnPending || pasteMode || Self.holdsForBind }
+
+    /// **Whether a dictation spoken with nothing bound is kept for the binding
+    /// that follows it, instead of being refused.**
+    ///
+    /// Victor's ask, 2026-09-11: *"tot ce pot să fac când sunt legat de un
+    /// terminal să pot să fac și atunci când sunt nelegat, urmând a mă lega
+    /// ulterior"*. It is the fourth answer to *where do these words go*, and the
+    /// answer is **later** — see `awaitingBind`.
+    ///
+    /// It retires most of *Unbound is inert*, and it is worth being exact about
+    /// what that rule was and was not. It was written on 2026-08-27 because the
+    /// relay had just become a login item: it sat there all day, so every
+    /// sentence Victor spoke into a browser, a chat or a commit message was
+    /// costing him a screenshot, mouse 4 and ⌘⇧-click, **with nowhere for the
+    /// words to go**. The premise is the last clause, not the binding: a
+    /// destination that arrives two minutes late is still a destination, which
+    /// is the same reading that already exempted the spawn (`spawnPending`, a
+    /// session that does not exist yet) and the caret (`pasteMode`).
+    ///
+    /// **What the 2026-08-27 decision genuinely settled stands untouched**: the
+    /// outbox does not fill up with dictations nobody asked for. A held sentence
+    /// is in memory and nothing else — `commit` writes the JSONL line at the
+    /// moment of delivery and not before — so a relay left unbound all day still
+    /// leaves no log of his private dictation behind it.
+    ///
+    /// A constant rather than a setting: this is how the app behaves now, and a
+    /// menu tick for it would be *Pause* coming back under another name. It is
+    /// here as one word to flip if the hold turns out to be worse than the
+    /// refusal was.
+    static let holdsForBind = true
 
     /// **When the last bind Victor actually pressed for landed**, and the grace
     /// it buys the sentence that follows it.
@@ -814,13 +848,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.start()
         music.start()
         // The same seam the chip's warmth ramp is fed through one line up, and
-        // the same reason: the beacon lights on his voice, and which recorder is
+        // the same reason: the ring lights on his voice, and which recorder is
         // holding the microphone is this delegate's business, not its own.
-        beacon.level = { [weak self] in self?.mic.level ?? 0 }
-        beacon.start()
-        // The ring round the pointer swells on silence rather than on volume,
-        // so it asks the recorder a different question — see
-        // `MicRecorder.quietSeconds` for why it is not read off `level`.
+        caretHalo.level = { [weak self] in self?.mic.level ?? 0 }
+        // And it asks a second question of the same recorder, because the drop
+        // arrow is triggered by silence rather than by volume — see
+        // `MicRecorder.quietSeconds` for why that is not read off `level`.
         caretHalo.quietSeconds = { [weak self] in self?.mic.quietSeconds ?? 0 }
 
         // Nothing is bound yet, and a marker left by a relay that was killed
@@ -979,11 +1012,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Whether the wheel may open the microphone.
     ///
-    /// **Off while nothing is bound**, and that is the whole of it: with no
-    /// destination there is nowhere for a transcript to go, so a recording would
-    /// be a room taped for nobody.
+    /// **On whether or not anything is bound, since 2026-09-11.** It was
+    /// `isBound`, and it was the one gate *Unbound is inert* deliberately
+    /// refused to widen when the spawn and the caret were let through: those two
+    /// bypass the flag in the tap, where the bare wheel cannot. The argument was
+    /// that a recording with nowhere to go is a room taped for nobody, and
+    /// `holdsForBind` is what took the premise away — the words now wait for the
+    /// terminal instead of being dropped on the floor.
+    ///
+    /// **It has a price and the price is outside this app**: with *Use Logi
+    /// Gestures* unticked, the wheel is the relay's for as long as the relay is
+    /// running, so middle-click stops opening links in Chrome and closing tabs
+    /// in VS Code — which is exactly the cost Victor named when he moved the
+    /// gestures onto the side buttons (*"folosesc middle click sa inchid de ex
+    /// taburi chrome/vsc"*). In the **default** mode it costs nothing at all:
+    /// `HotkeyTap` hands every mouse button straight back there and the dictate
+    /// gesture is a chord on the side buttons. If it grates, this line is the
+    /// one to put back to `isBound`.
     private func syncLocalCapture() {
-        hotkeys.localCapture = isBound
+        hotkeys.localCapture = true
         // Deliberately its own flag: the unbind chord is the one gesture that
         // still applies to a relay that is not listening, because what it acts on
         // is the binding rather than the microphone.
@@ -1036,22 +1083,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and may already have been clicked.
         if !resumed { spawnFolder = nil }
         pasteMode = paste
-        // Unreachable in practice for a bare wheel — it is only the relay's while
-        // `syncLocalCapture` says so, and that needs a binding — but the gate is
-        // repeated here because this is the path that opens the microphone.
-        //
-        // **A bind still resolving is a destination**, banked rather than
-        // dropped: `bindFrontmostTerminal` takes a second or two of `osascript`,
-        // and a press made in that window used to fall through here and leave
-        // nothing — no recording, no message, no line in the log. A spawn and a
-        // caret dictation carry their own destination and never reach this.
-        guard hasDestination else {
-            if bindInFlight, !spawn, !paste {
-                recordWhenBound = true
-                Log.info("🎙️ dictate pressed while the bind was still resolving — holding it")
-            }
-            return
-        }
+        // **Always true since `holdsForBind`**, and kept rather than deleted: it
+        // is the gate this path is written under, and the one line to look at if
+        // the hold is ever put back to a refusal. `recordWhenBound` — the bank
+        // for a press made while a bind was still resolving — is unreachable
+        // through it now and stays for `bindFrontmostTerminal`'s own use.
+        guard hasDestination else { return }
         if spawn {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
             // **As early as the press allows** — Victor's ask, 2026-09-04, and it
@@ -1092,6 +1129,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // takes the row down, since a caret left over from a decode that never
         // came back would name a destination this sentence is not going to.
         if paste { overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph) }
+        // **And the sentence with no terminal yet says so**, in the row every
+        // other destination takes. It is the one dictation whose destination is
+        // a thing Victor still has to do, so the row names the gesture rather
+        // than a place — and it is taken back the instant the bind lands, by the
+        // same `setSpawnDestination(nil)` the caret's row goes out through.
+        //
+        // **The icon form, like `at caret`, and deliberately not the ✨'s mark
+        // form**: a `mark` with no icon is `spawnCollapsed`, which drops the row
+        // and rides the glyph in front of `Listening...` — so the words would
+        // never have been drawn at all. The pin is the destination row's own
+        // glyph and this is the destination row; what it is standing in for is
+        // said in the words beside it.
+        if !paste, !spawn, !isBound {
+            overlay.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
+        }
         else if !spawn { overlay.setSpawnDestination(nil) }
         guard whisper.ready else {
             // **Rare, now that the load runs at launch**: this is either the
@@ -1435,7 +1487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // resume edge behind it, the music came back a beat after Victor had
         // stopped talking. Nothing here needs the microphone to be shut — the
         // button is already up and the recording already disowned — so the edge
-        // that the extension, the beacon and the overlay are all waiting on goes
+        // that the extension, the ring and the overlay are all waiting on goes
         // out first, and the teardown happens after it.
         listening = false
         syncBorrowedGestures()
@@ -1866,30 +1918,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `ElementPicker.listening`.
         picker.listening = listening
         picker.bound = hasDestination
-        // **The corner beacon rides the same switch**, and deliberately on
-        // `listening` rather than on `live`: it answers *is it hearing me?*, and
-        // the microphone is either open or it is not — where the words then go
-        // is the chip's question, not this one.
-        beacon.setRecording(listening)
-        // **The ring round the pointer, on the one dictation with no place to
-        // point at.** `pasteMode` rather than `replaceWispr`, so it is about
-        // *this sentence's* destination and not about the menu tick — a bind
-        // made mid-sentence takes `pasteMode` away and the ring goes with it,
-        // which is right: there is a terminal now, and the chip is naming it.
+        // **The ring round the pointer rides the same switch**, and deliberately
+        // on `listening` rather than on `live`: since 2026-09-11 it answers *is
+        // it hearing me?*, and the microphone is either open or it is not —
+        // where the words then go is the chip's question, not this one. That is
+        // the switch the 84pt microphone on the bottom edge used to ride, and
+        // this is now the whole of what became of it.
         //
-        // **And nothing else.** It shipped as `pasteMode && !isBound`, on the
-        // reading that a binding is a second answer to *where do these words
-        // go*. It is not: in this mode they go to the caret whether or not a
-        // terminal is bound, so the one sentence the ring exists to prevent —
-        // spoken with the focus in the wrong window — is exactly as available
-        // bound as unbound. Victor, correcting it the same day: *"nu ne-legat e
-        // cheia, ci dacă transcriu at caret (legat sau nu)"*. If anything the
-        // bound case is the worse one: the chip has a terminal's name and icon
-        // on it all day, so `at caret` is the row that has to be *noticed*
-        // changing.
-        caretHalo.setActive(listening && pasteMode)
+        // **`atCaret` is the second half, and it is `pasteMode`** — this
+        // sentence's destination rather than the menu tick, so a bind made
+        // mid-sentence takes it away and the drop arrow goes with it, which is
+        // right: there is a terminal now, and the chip is naming it. The ring
+        // itself stays, because the microphone is still open.
+        //
+        // The ring used to be gated on `pasteMode` outright, and Victor gave
+        // that reading up knowingly when he made it the beacon: *"asta va
+        // implica și că va trebui să arăți … haloul de fulgi de zăpadă și când
+        // dictezi cu țintă. Însă, da?"*. What the caret dictation lost is given
+        // back by `DropArrow`, in a shape a ring never had.
+        caretHalo.setActive(listening, atCaret: pasteMode)
         // The status line goes yellow → red on the same edge, and reads the same
-        // `listening` the beacon does rather than a flag of its own.
+        // `listening` the ring does rather than a flag of its own.
         publishBinding(terminal.target)
         // **The music pauses for every dictation, and so reads `listening`, not
         // `live`.** It hung off `live` until 2026-09-03, on the argument that an
@@ -1899,7 +1948,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // being open. Unbound, forwarding unbound, Replace Wispr, a test
         // dictation: in all of them he is speaking into this app's microphone
         // with a track playing over it, which is the one thing the pause exists
-        // to stop. Same switch as the beacon, and for the same reason.
+        // to stop. Same switch as the ring, and for the same reason.
         music.setActive(listening)
         // **The watcher runs in Replace Wispr too, since 2026-09-09.** It was
         // `live && !pasteMode`, on the argument that `caretLine` carried no
@@ -2281,6 +2330,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pasteMode = false
             overlay.setSpawnDestination(nil)
         }
+        // **`bind to send — ⌘⌃B` is the row he has just answered.** It goes on
+        // any bind rather than on a deliberate one: unlike the two above, this
+        // row claims nothing about *which* terminal, so there is no destination
+        // for a poll to steal — and it must not be left standing on a dictation
+        // that now has somewhere to go. The row only ever exists while a
+        // dictation is running, so a bind at rest passes through this untouched.
+        if localRecording, !pasteMode, !spawnPending {
+            overlay.setSpawnDestination(nil)
+        }
         let line = target.folder ?? target.appName
         overlay.setBound(label: target.label, folder: line,
                          icon: Self.appIcon(target.bundleID, height: 18))
@@ -2289,6 +2347,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // published here: this is the one method every route into and out of one
         // passes through, so the file cannot drift from the chip.
         publishBinding(target)
+        // **And for exactly that reason, this is where a held sentence goes
+        // out.** Every way a terminal can become the destination ends here, and
+        // what the words have been waiting for is a terminal — not a particular
+        // gesture. Dispatched rather than called inline: `showBound` runs on the
+        // bind's own thread and a delivery is `osascript`.
+        if awaitingBind != nil {
+            DispatchQueue.main.async { [weak self] in self?.releaseAwaitingBind() }
+        }
     }
 
     /// Write the marker the status line reads — see `Outbox.publishBound`.
@@ -3857,7 +3923,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Chrome silent. The extension also resumes on a dead socket, but that is
         // the safety net for a crash, not the way an orderly quit should look.
         music.stop()
-        beacon.stop()
         // A marker outliving the process would put a microphone on a status line
         // with nothing behind it — see `Outbox.publishBound`.
         Outbox.publishBound(tty: nil)
@@ -3892,11 +3957,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // always had, so a dictation that never saw the menu is unchanged.
         let directory = spawnFolder ?? Self.spawnDirectory
         if kind == "dictation" { spawnPending = false; spawnFolder = nil }
-        guard isBound || spawn else {
+        // **A dictation is never dropped for want of a binding any more**
+        // (`holdsForBind`): it is built, shown and read exactly as a bound one
+        // is, and `commit` parks it for the terminal Victor is about to point
+        // at. Everything else here still is — `session_start`, `session_end` and
+        // a bare screenshot are addressed to a watcher of the outbox, and an
+        // outbox with nothing bound is the one thing the 2026-08-27 rule was
+        // actually protecting.
+        guard isBound || spawn || kind == "dictation" else {
             Log.info("unbound — dropped \(kind)")
-            // Dropped, not deferred: nothing this dictation gathered has anywhere
-            // to go, so it must not survive to be attached to the next one.
-            if kind == "dictation" { abandonDictation("nowhere to send it") }
             return
         }
         stateLock.lock()
@@ -4056,6 +4125,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            !text.isEmpty {
             lastDictation = line
         }
+        // **Nothing is written before there is somewhere to write it to.** A
+        // dictation spoken with nothing bound goes to `awaitingBind` and comes
+        // back through this same method the moment a binding lands, at which
+        // point the branch below is taken and the outbox line is the delivered
+        // one. That ordering is the whole of what survives from the 2026-08-27
+        // decision — see `holdsForBind`: the words wait, the log does not fill
+        // up with them. ⌘⌃P still has them, because `lastDictation` is set
+        // above: he said it, so he can paste it, bound or not.
+        if m.kind == "dictation", !m.spawn, !isBound { return holdForBind(m) }
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selections: m.extraSelections.map {
                         ["at": Self.stamp($0.at), "text": $0.text]
@@ -4069,6 +4147,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)
+    }
+
+    // MARK: - Said now, bound later
+
+    /// **A sentence spoken with nothing bound, and the clock it is kept under.**
+    ///
+    /// Victor's ask, 2026-09-11: *"tot ce pot să fac când sunt legat de un
+    /// terminal să pot să fac și atunci când sunt nelegat, urmând a mă lega
+    /// ulterior"* — the second half is the feature. He has a thought before he
+    /// has a window for it, and until now the app's answer was to refuse the
+    /// gesture outright (*Unbound is inert*), which meant the thought had to
+    /// survive the trip to the terminal in his head instead.
+    ///
+    /// **One, not a queue.** A second dictation replaces the first, exactly as a
+    /// second cancel replaces the cancelled recording that is being kept: the
+    /// chip says *the* sentence being held, and a relay that had to ask which of
+    /// three to deliver would be asking a question nobody has. The one it
+    /// replaces is not lost to him — ⌘⌃P still pastes it.
+    ///
+    /// **Five minutes**, the same net `Recover Cancelled Dictation` is kept
+    /// under and for the same reason: long enough to cross the room and open a
+    /// terminal, short enough that a sentence from this morning cannot land in
+    /// an agent he binds this afternoon for something else. A held message
+    /// arriving in the wrong session is worse than one he has to say again.
+    private var awaitingBind: Message?
+    private var awaitingBindExpiry: DispatchWorkItem?
+    private static let bindWait: TimeInterval = 5 * 60
+
+    private func holdForBind(_ m: Message) {
+        // The words have left the dictation, so the row that named where they
+        // were going has nothing left to say — the flash below says the rest,
+        // and after it the chip goes back to being a chip with nothing bound.
+        overlay.setSpawnDestination(nil)
+        awaitingBindExpiry?.cancel()
+        awaitingBind = m
+        let words = (m.text ?? "").split(whereSeparator: { $0.isWhitespace }).count
+        Log.info("⏳ nothing bound — holding \(words) words for the next bind, \(Int(Self.bindWait / 60)) min")
+        let expiry = DispatchWorkItem { [weak self] in
+            guard let self = self, self.awaitingBind != nil else { return }
+            self.awaitingBind = nil
+            Log.info("⏳ held dictation expired — never bound")
+            // Said out loud, because the alternative is a sentence he believes
+            // is still going to arrive somewhere. ⌘⌃P is the way back to it.
+            self.overlay.flash("⏳ held dictation expired — ⌘⌃P to paste it", duration: 4)
+        }
+        awaitingBindExpiry = expiry
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
+        overlay.flash("⏳ held — bind a terminal to send it", duration: 3)
+    }
+
+    /// Called from `showBound`, which is the one place every route into a
+    /// binding passes through — ⌘⌃B, the chords, `POST /bind`, the restart's
+    /// restore and a spawned window adopting itself. All of them are a terminal
+    /// appearing, which is the only thing the held sentence was waiting for.
+    ///
+    /// **Deliberate or not.** The 10s poll calls `showBound` with a binding
+    /// already in place and passes `false`, which is what stops it stealing a
+    /// spawn's destination — but it cannot produce a binding out of nothing, so
+    /// it can never be the call that releases this. Any call that arrives with a
+    /// target when there was none is a bind that happened.
+    private func releaseAwaitingBind() {
+        guard let m = awaitingBind, isBound else { return }
+        awaitingBind = nil
+        awaitingBindExpiry?.cancel()
+        awaitingBindExpiry = nil
+        Log.info("⏳ bound — sending the sentence that was waiting")
+        // Through `commit` again rather than straight to `deliverToTerminal`:
+        // the outbox line has still not been written, and writing it is the
+        // first half of what a delivery is.
+        commit(m)
+        overlay.flash("🎙️ sent — the sentence you were holding", duration: 3)
     }
 
     /// **⌘⌃P — the last dictation, again, wherever the caret is.**

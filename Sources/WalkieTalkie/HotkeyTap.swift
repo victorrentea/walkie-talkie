@@ -1101,6 +1101,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // Swallowed on the press and judged at the release above, because a
                 // tap and a hold are the same event until the finger lifts.
                 //
+                // **`localCapture` is true whether or not anything is bound, since
+                // 2026-09-11** (`AppDelegate.syncLocalCapture`), so in this gesture
+                // mode the wheel is the relay's for as long as the relay is running.
+                // The unbound double-click branch further down is unreachable
+                // through it — the first click now opens a dictation and sets
+                // `wheelDictateAt`, so the second converts it to a spawn up here,
+                // which is the same gesture arriving at the same place. It is left
+                // standing because it is what has to work again if `holdsForBind`
+                // is ever flipped back.
+                //
                 // **⌘ + the wheel used to ride this same branch** and mean "and open
                 // somewhere to put it" — the spawn, without the keyboard-free chord.
                 // Removed at Victor's ask 2026-09-03: the modifier belonged to this
