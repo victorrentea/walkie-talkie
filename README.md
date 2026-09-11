@@ -449,6 +449,29 @@ that one thing (1 collapse instead of 3) and worse at everything else.
 So there is no free win left. The remaining path is a LoRA fine-tune, which is
 what the corpus is for.
 
+#### The audio is ours now, and the label is asked for afterwards
+
+The harvester's ceiling is not its code, it is the deletion it races. So since
+2026-09-11 the corpus is **collected rather than harvested**: `victor-macos-addons`
+records utterance-sized WAVs of Victor's own voice through the workday
+(`whisper-transcribe/corpus_recorder.py`, 🎓 in its Transcribing submenu), gated
+on the same RMS threshold the live transcription uses plus a speech-band check
+and the enrolled voiceprint, and writes them into `<corpus>/mic/`. Wispr is then
+asked to transcribe them **later** — including months later — by being played
+them through a Loopback virtual device while its push-to-talk key is held down.
+
+```bash
+/usr/bin/python3 helpers/mic_corpus_ingest.py   # files → corpus.db, idempotent
+python3 helpers/wispr_probe.py                  # the go/no-go, ~10 min
+python3 helpers/teacher_label.py --limit 20     # one careful batch
+python3 helpers/teacher_label.py --all          # overnight, real time, resumable
+```
+
+**Read `docs/teacher-loopback.md` before running any of it.** The probe is a
+genuine go/no-go — if Wispr will not take played-back audio the idea ends there —
+and the batch synthesises keystrokes into an app that pastes wherever the focus
+is, which has a whole section of its own.
+
 `helpers/corpus_report.py` runs daily, mails a summary every fourteenth day —
 minutes collected, dictations, rate per day, and how far the corpus is from the
 ten hours that a single-speaker fine-tune wants — and does nothing on the other
