@@ -7376,3 +7376,49 @@ which is why `refresh` puts the alpha back through `animator()` while one is in
 flight, and drops `fading` so the old completion handler stands down. `hide()`
 (a bind mid-sentence, the dictation ending) stays a hard cut: nothing is being
 asked for any more, so there is nothing to fade out of.
+
+### The `NSNumber.init` trap that killed it seven seconds in (2026-09-12)
+
+The heads shipped and the app **crashed on the first dictation that raised
+them** — 20:31:39 the microphone opened for a Wispr sentence, 20:31:46 `SIGTRAP`
+in `-[NSApplication _crashOnException:]`, and the relay was simply gone with its
+log ending mid-dictation. Nothing in `relay.log` says anything: an NSException
+thrown inside a `CATransaction` flush is not a Swift error and there is no line
+to write.
+
+The crash report's exception backtrace is the whole story:
+
+```
+QuartzCore  copyFloatVector(NSArray*, bool*)
+QuartzCore  -[CAKeyframeAnimation _setCARenderAnimation:layer:]
+CoreFoundation  ___forwarding___          ← an unrecognised selector
+```
+
+`a.keyTimes = [0, 0.06, 0.22, 1].map(NSNumber.init)` compiles, and the bare
+function reference **resolves to an `NSValue` initialiser**: the array comes out
+full of `NSConcreteValue`, which has no `floatValue`, so `copyFloatVector` sends
+one into the forwarding machinery and out comes an exception on the main thread
+inside a flush. Reproduced in isolation — a bare `CAKeyframeAnimation` added to a
+layer in a window — printing the element classes either side of the change:
+
+```
+.map(NSNumber.init)   keyTimes: NSConcreteValue ×4   exit 133 (SIGTRAP)
+[0, 0.06, 0.22, 1]    keyTimes: __NSCFNumber ×4      exit 0
+```
+
+Bare literals under the `[NSNumber]?` contextual type bridge correctly, and are
+what every other keyframe in this app already uses (`CaptureEffects`,
+`CaptureFlash`, `RelayWindow`) — `ChipWipe` spells out `NSNumber(value:)` where
+the values are computed. The mistake existed in exactly one line in the repo.
+
+**Why the contact sheet said it was fine.** `DropArrow.picture()` is *posed* —
+that is the rule it was written to follow — so it never builds `flash()` at all.
+A static render of six heads is a picture of a shape, and the bug was in a
+`CAKeyframeAnimation` no still can contain.
+
+**`WT_HALO_DEMO` is the regression check, and it would have caught this.** The
+demo arms the arrow (`setActive(true, atCaret: true)`) and drives six seconds of
+fabricated syllables followed by six of silence, so it crosses `patience` at
+t = 8 and raises the heads for real. Measured both ways on 2026-09-12:
+`WT_HALO_DEMO=11` exits **133** with the bug and **0** with it fixed. Anything
+animated in here gets eleven seconds of demo before it gets installed.

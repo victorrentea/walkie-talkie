@@ -230,6 +230,12 @@ no outbox line, no terminal, no prompt panel, no countdown.
   alpha rides 0.148 → 0.445 and sits flat at the floor through silence; six `screencapture` crops
   show a different filament pattern in each (mean abs diff 1.0–1.6) — the film, which no still can
   show. → journal: *`WT_HALO_DEMO` — the answer to *does it actually move**
+- **The sheet cannot catch an animation bug — `WT_HALO_DEMO` is the regression check.**
+  `DropArrow.picture()` is *posed*, so it never builds the flash at all; a static render of the six
+  heads looked perfect on the build that crashed the app 7 s into the first dictation that raised
+  them. `WT_HALO_DEMO=11` arms the arrow and crosses `patience` at t=8: measured 2026-09-12, exit
+  **133** (SIGTRAP) with the bug and **0** with it fixed. Run it after touching anything animated
+  here. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
 - **`WT_SHOOT_HALO=/tmp/halo.png` draws the sheet and quits** — two grounds (dark, light), state
   columns carrying each row's own `opacity(_:for:)` with gain, and a full-strength column with no
   gain, to judge the falloff. It also writes `/tmp/halo-arrow.png` (`CaretHalo.shootArrow`), the
@@ -266,6 +272,13 @@ no outbox line, no terminal, no prompt panel, no countdown.
   the opacities have to go up with it. → journal: *The ring round the pointer, when the destination is not a place (2026-09-09)*
 - **Do not gate the ring on `pasteMode` or `isBound`** — it is the microphone's beacon now, and
   since 2026-09-11 that includes a microphone another app opened. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
+- **Do not write `.map(NSNumber.init)` for `keyTimes` or `values`.** That bare function reference
+  compiles and resolves to an **`NSValue`** initialiser, so the array fills with `NSConcreteValue`,
+  which has no `floatValue`; QuartzCore's `copyFloatVector` then throws an unrecognised-selector
+  **NSException inside the `CATransaction` flush**, which Swift cannot catch — the app dies with
+  `SIGTRAP` in `-[NSApplication _crashOnException:]` and nothing in the relay log says why. Bare
+  literals under a `[NSNumber]?` contextual type bridge correctly (`__NSCFNumber`), and that is what
+  every other keyframe in this app uses. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
 - **Do not breathe the ring on a timer.** A ring breathing on a clock proves a clock is running,
   the substitution that took the beacon's own free-running blink out. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
 - **Do not post a context shot or a ⌘C probe in Replace Wispr.** → journal: *Replace Wispr: the relay as a way to type*

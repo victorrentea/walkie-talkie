@@ -329,7 +329,17 @@ final class DropArrow {
         a.values = [dim, 1.0, dim, dim]
         // Up fast, down over roughly twice as long, then dark for the rest of the
         // cycle — a rise the eye catches and a fall it does not have to watch.
-        a.keyTimes = [0, 0.06, 0.22, 1].map(NSNumber.init)
+        // **Bare literals, never `.map(NSNumber.init)`.** That bare function
+        // reference compiles and resolves to an `NSValue` initialiser, so the
+        // array comes out full of `NSConcreteValue` — no `floatValue` on it —
+        // and QuartzCore's `copyFloatVector` throws an unrecognised-selector
+        // exception inside the `CATransaction` flush. An NSException there is
+        // not catchable from Swift: it killed the app 7 s into the first Wispr
+        // dictation that raised these heads (2026-09-12, `SIGTRAP` in
+        // `-[NSApplication _crashOnException:]`). Under a `[NSNumber]?`
+        // contextual type the literals bridge to `__NSCFNumber` correctly, which
+        // is the form every other keyframe in this app already uses.
+        a.keyTimes = [0, 0.06, 0.22, 1]
         a.duration = cycle
         a.repeatCount = .infinity
         a.calculationMode = .linear
