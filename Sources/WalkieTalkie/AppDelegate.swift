@@ -824,23 +824,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.captureContext()
             }
         }
-        // The forward side button, in Replace Wispr mode — shaped exactly like
-        // a spawn dictation, and ending the same way: whichever gesture opened
+        // The forward side button **clicked** — a dictation at the caret, in
+        // every mode and whatever is bound (2026-09-12). Shaped exactly like a
+        // spawn dictation, and ending the same way: whichever gesture opened
         // the microphone, closing it is closing it, and the destination was
         // decided at the press.
+        //
+        // **The bind grace is gone from here.** For three days the click made
+        // within five seconds of a bind went to the terminal instead, on the
+        // argument that a bind is him naming a precise destination and the
+        // caret is the vaguest one. Victor's vocabulary, restated 2026-09-12:
+        // *"butonul forward pornește dictare la caret (indiferent dacă e legat
+        // ceva); forward + right move: dictare legată"*. The two gestures are
+        // the two destinations, and a click that sometimes means the other one
+        // is a click he cannot trust. `takeBindGrace` still serves the
+        // left-held chord's own dictation.
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if self.listening { self.endDictation() }
-                // **A bind he has just made outranks the caret.** The forward
-                // button means *wherever the caret is*, which is the vaguest
-                // destination this app has, and seconds ago he named a precise
-                // one with a gesture whose whole content is where the words go.
-                // See `boundAt` for the afternoon that measured it.
-                else if self.takeBindGrace() {
-                    Log.info("🎙️ forward button just after a bind — dictating at the terminal, not the caret")
-                    self.startDictation()
-                }
                 else { self.startDictation(paste: true) }
             }
         }
@@ -1183,7 +1185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // of a caret dictation. The sentence is booked either way, or a shot
         // taken mid-dictation would be named by wall-clock and dropped for want
         // of a destination.
-        if isBound || spawnPending {
+        //
+        // **`pasteMode` first** (2026-09-12): the forward click now opens a caret
+        // dictation with a terminal bound, and `isBound` alone would have taken
+        // the picture and posted the ⌘C into the field he is about to dictate
+        // into.
+        if !pasteMode, isBound || spawnPending {
             if contextAtWheelRelease { bookDictation() } else { captureContext() }
         } else {
             bookDictation()
@@ -2469,7 +2476,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setSpawnDestination(nil)
         }
         let line = target.folder ?? target.appName
-        overlay.setBound(label: target.label, folder: line,
+        overlay.setBound(label: target.label, folder: line, title: target.title,
                          icon: Self.appIcon(target.bundleID, height: 18))
         status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 20))
         // Published here for the reason everything else about a binding is
@@ -2995,8 +3002,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// swallowing, arrive looking exactly like a correct transcript. That is the
     /// one failure an agent cannot defend itself against by reading, so it is
     /// told instead — which is what Victor asked for.
+    ///
+    /// **It no longer names the recogniser** (2026-09-12). It said *a local
+    /// Whisper* for as long as that was the only one; since Wispr Flow became
+    /// the default source the same envelope carries its sentences too, and a
+    /// clause naming the wrong engine is a clause the reader has to disbelieve
+    /// — *"elimină bucata aceea din text pentru că acum poate să fie și Wispr
+    /// Flow"*. What the reader needs is that the words were spoken and heard by
+    /// a machine, and that is true of both.
     private static let dictatedHint =
-        "[this text was dictated in RO or EN and transcribed by a local Whisper — "
+        "[this text was dictated in RO or EN and transcribed automatically — "
         + "it can hallucinate a fluent sentence that was never said]"
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only

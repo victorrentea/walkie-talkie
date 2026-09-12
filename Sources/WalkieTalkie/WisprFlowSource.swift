@@ -190,6 +190,9 @@ final class WisprFlowSource: DictationSource {
         hotkeys.onWisprMaybeStarting = { [weak self] why, confident in
             DispatchQueue.main.async { self?.gestureSeen(why, confident: confident) }
         }
+        hotkeys.onWisprMaybeCancelling = { [weak self] in
+            DispatchQueue.main.async { self?.dismissSeen() }
+        }
         hotkeys.onInjectedPaste = { [weak self] from in
             DispatchQueue.main.async { self?.injected(from: from) }
         }
@@ -329,6 +332,40 @@ final class WisprFlowSource: DictationSource {
         // `start(to:)` is a no-op on a session already open, so the confirming
         // edge costs nothing when it arrives.
         startMeter()
+    }
+
+    /// **Victor pressed Wispr's own dismiss (⌃Escape).** The sentence is over
+    /// on Wispr's side and nothing will be pasted, so nothing here may go on
+    /// waiting for it: a capture standing is closed and the ring goes down now,
+    /// not at `settleTimeout`. While the microphone is still open the closing
+    /// edge is still `WisprWatch`'s — `cancelling` makes it report a cancel
+    /// rather than arm a capture, exactly as `cancel()` does after posting the
+    /// same key.
+    private func dismissSeen() {
+        // A guess the microphone never confirmed has no closing edge to wait
+        // for: it is over here and now. Should Wispr open the microphone after
+        // all, that edge opens a fresh dictation, which is what it would be.
+        if speculative {
+            Log.info("🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand before the microphone opened")
+            speculativeDrop?.cancel()
+            speculativeDrop = nil
+            speculative = false
+            isRecording = false
+            endCapture(quiet: true)
+            stopMeter(keep: false)
+            didEnd?(.cancelled(audio: nil, duration: 0))
+            return
+        }
+        if isRecording {
+            Log.info("🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand")
+            cancelling = true
+            endCapture(quiet: true)
+            return
+        }
+        guard capturing else { return }
+        Log.info("🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand while the words were in flight")
+        endCapture(quiet: true)
+        didEnd?(.cancelled(audio: nil, duration: 0))
     }
 
     private func edge(_ on: Bool, measured: Bool) {

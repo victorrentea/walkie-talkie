@@ -115,6 +115,17 @@ final class HotkeyTap {
     ///   and only a beacon on the second.
     var onWisprMaybeStarting: ((String, Bool) -> Void)?
 
+    /// **Wispr Flow's dismiss chord, typed by Victor** — `53+59`, ⌃Escape —
+    /// seen on the wire (2026-09-12). A dictation he throws away from Wispr's
+    /// side pastes nothing, and until this the relay only found that out by
+    /// waiting `settleTimeout` for a ⌘V that was never coming, with the ring's
+    /// lightning on screen the whole time — *"tooltipul dispare relativ repede
+    /// (corect), dar fulgerele rămân pe ecran încă multe secunde în plus
+    /// (greșit)"*. Watched, never taken: the key goes on to Wispr. This app's
+    /// own `postWisprCancel` carries `backButtonStamp` and is not reported —
+    /// the source already knows about that one.
+    var onWisprMaybeCancelling: (() -> Void)?
+
     /// Whether Wispr's push-to-talk pair is currently held, so the ring is asked
     /// for on the edge rather than on every `flagsChanged` while it is down.
     private var wisprPTTDown = false
@@ -1361,6 +1372,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free", true)
             }
         }
+        if type == .keyDown,
+           CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == Self.VK_ESC,
+           event.flags.contains(.maskControl),
+           event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
+           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+            DispatchQueue.main.async { [weak self] in self?.onWisprMaybeCancelling?() }
+        }
 
         // ── Another app's delivery, inside the window it is expected in ─────
         //
@@ -1584,17 +1602,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // ordinary reason to make it twice is not being sure the first one
             // landed.
             //
-            // With the left button up it is the microphone for a dictation that
-            // goes to the caret, gated on the mode alone exactly as it was when
-            // this lived on mouse 5: a dictation aimed at the caret carries its
-            // own destination, so *Unbound is inert* has nothing to say about
-            // it. The bind is **not** gated on the mode — it is the one gesture
-            // that says where words go, and it has to work whichever way the
-            // next sentence is headed. Outside the mode and with nothing held
-            // the same click means the same sentence in the other engine's
-            // hands: it types Wispr Flow's hands-free chord — see
-            // `postWisprHandsFree`. So the chord is eaten in every branch now,
-            // where it used to be handed on when nothing here wanted it.
+            // With the left button up it is **a dictation at the caret — in
+            // both engines, whatever is bound** (2026-09-12). It used to be
+            // gated on Replace Wispr: ticked, this app's microphone at the
+            // caret; unticked, the raw Wispr chord — which opened a dictation
+            // the relay then routed *by state*, i.e. to the bound terminal.
+            // Victor, testing the wrap: *"apăsând butonul forward, click
+            // normal, el tot dictează legat de fereastră … butonul forward
+            // pornește dictare la caret (indiferent dacă e legat ceva)"*. So the
+            // click goes through `startDictation(paste:)` like every other
+            // gesture, and the source — Wispr posting its own chord, or the
+            // local microphone — is the source's business. The bind is **not**
+            // gated on anything either — it is the one gesture that says where
+            // words go. The chord is eaten in every branch.
             case VK_F7:
                 // Our own bookkeeping can go stale — a release this tap never
                 // saw would leave the button held for good and read every plain
@@ -1607,26 +1627,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     return nil
                 }
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                guard replaceWispr else {
-                    Log.info("🎙️ forward button — Wispr Flow's hands-free toggle")
-                    Self.postWisprHandsFree()
-                    return nil
-                }
+                Log.info("🎙️ forward button — a dictation at the caret")
                 DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
                 return nil
 
-            // 🔽 → — Wispr Flow's hands-free toggle **while Replace Wispr is
-            // ticked**, which is the one mode where the forward button cannot
-            // offer it: there the click is this app's own microphone at the
-            // caret, and Victor still wants Wispr reachable without going to the
-            // menu to untick anything. Same chord, same `postWisprHandsFree`.
-            //
-            // Gated, and it stays a free row outside the mode on purpose: with
-            // Replace Wispr unticked the forward click already *is* this verb,
-            // and two gestures for one verb is the thing the Options+ screen has
-            // room for and the hand does not.
+            // 🔽 → — Wispr Flow's **raw** hands-free chord, in both modes since
+            // 2026-09-12. It was gated on Replace Wispr because with the tick
+            // off the forward click already posted this chord; the click is a
+            // caret dictation in every mode now, so this is the one gesture
+            // left that hands the sentence to Wispr and lets the relay route it
+            // by state. Same chord, same `postWisprHandsFree`.
             case VK_F5:
-                guard replaceWispr else { return Unmanaged.passUnretained(event) }
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 Log.info("🎙️ 🔽 → — Wispr Flow's hands-free toggle")
                 Self.postWisprHandsFree()

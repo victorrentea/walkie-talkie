@@ -111,7 +111,7 @@
     "slug" : "listening",
     "title" : "Dictating",
     "when" : "From 🔼 → until he makes it again (🛞 with Logi gestures off) — the bulk of every dictation.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -123,7 +123,7 @@
     "slug" : "listening-long",
     "title" : "Two minutes in",
     "when" : "Any dictation that has been running for a whole minute — and every one that runs for several.",
-    "width" : 204
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -135,7 +135,7 @@
     "slug" : "listening-cold",
     "title" : "The first words — too little speech to trust",
     "when" : "From the instant the microphone opens until about a second of actual speech has arrived.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -147,7 +147,7 @@
     "slug" : "listening-warming",
     "title" : "Halfway — six characters lit",
     "when" : "About a second and a half of speech in. Speech, not seconds: if he stops to think, the bar stops with him.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -159,7 +159,7 @@
     "slug" : "listening-chrome",
     "title" : "Dictating, at a page",
     "when" : "Dictating *and* Chrome is the frontmost app.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -171,7 +171,7 @@
     "slug" : "listening-picks",
     "title" : "Dictating, with elements picked",
     "when" : "After the first ⌘⇧-click in Chrome, whatever app he switches to afterwards.",
-    "width" : 239
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -183,7 +183,7 @@
     "slug" : "listening-picks-settled",
     "title" : "…and four seconds later, with one dragged",
     "when" : "Every pick ends here — the selector has had its seconds and the row is the count alone. One of these three was ⌘⇧-dragged.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -195,7 +195,7 @@
     "slug" : "listening-selection",
     "title" : "Dictating, carrying a highlight",
     "when" : "He had text selected when he started talking, or took a shot with a selection — for the four seconds after it lands.",
-    "width" : 289
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -207,7 +207,7 @@
     "slug" : "listening-selection-multi",
     "title" : "A highlight, four seconds later",
     "when" : "Every highlight ends here — the words have had their seconds and the row is the running count alone. Three of them, here.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -219,7 +219,7 @@
     "slug" : "listening-selection-caught",
     "title" : "The shutter caught a highlight",
     "when" : "For a beat after every side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
-    "width" : 289
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -243,7 +243,7 @@
     "slug" : "listening-flash",
     "title" : "Something went wrong mid-sentence",
     "when" : "A shot that failed, or any flash raised while he is still talking.",
-    "width" : 182
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -255,7 +255,7 @@
     "slug" : "transcribing",
     "title" : "Waiting on the model",
     "when" : "Between the gesture that ends the sentence and the panel that shows what it heard.",
-    "width" : 169
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -447,7 +447,7 @@
     "slug" : "prompt-selection-only",
     "title" : "A highlight with nothing said",
     "when" : "He stashed a selection and said nothing at all.",
-    "width" : 315
+    "width" : 334
   },
   {
     "alpha" : 1,

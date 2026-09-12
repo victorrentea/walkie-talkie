@@ -157,6 +157,10 @@ sits at rest there.
   except a **drag** while dictating, which crops a screen area (2026-09-10). The chords are
   duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. Unticked, the
   wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
+- **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,
+  whatever is bound; 🔼 → = dictate at the **bound** terminal; 🔼 ← = cancel either; 🔼 ↑ = a new
+  session. The relay starts every one of them (`startDictation`); no gesture posts Wispr's chord
+  raw except 🔽 →.
 - **Unbound, the app does everything it does bound** (2026-09-11, `holdsForBind`): the sentence
   is held five minutes for the bind that follows; the chip says `⏳ bind to send — ⌘⌃B`.
 - **The recipient is whoever the relay is pointed at when the microphone closes.** A deliberate
@@ -170,6 +174,9 @@ sits at rest there.
   **nothing downstream may name either of them**: the chip, the halo, the settle, the corpus and
   the destination routing read the protocol only. The Wispr path spent a month with no transcript
   in it precisely because it was a second branch nobody exercised.
+- **The session row says the terminal's title** (2026-09-12): `✳ walkie-talkie — Fix the tax
+  rounding` over `walkie-talkie@main` whenever the target has one (`Target.title`, refreshed on the
+  10 s poll); the folder row stands where there is no terminal to ask.
 - **Wispr Flow is the default and every gesture goes through it** — ⌘⌃D, the wheel, the side
   buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
   picks the local model, which is **retired, not deleted**: no gesture starts it and the weights

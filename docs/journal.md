@@ -197,6 +197,10 @@ The journal contradicts itself over time, because it was written as things chang
   - [The mic's own lock is not recursive, and `start` already holds it](#the-mics-own-lock-is-not-recursive-and-start-already-holds-it)
   - [The ring covers Wispr Flow's dictations too (2026-09-11)](#the-ring-covers-wispr-flows-dictations-too-2026-09-11)
   - [Six heads closing in, instead of one arrow hanging above (2026-09-12)](#six-heads-closing-in-instead-of-one-arrow-hanging-above-2026-09-12)
+- [The forward click is the caret, and the arrow is the terminal (2026-09-12)](#the-forward-click-is-the-caret-and-the-arrow-is-the-terminal-2026-09-12)
+  - [The ring goes down when he dismisses in Wispr (2026-09-12)](#the-ring-goes-down-when-he-dismisses-in-wispr-2026-09-12)
+  - [The session row says the terminal's title (2026-09-12)](#the-session-row-says-the-terminals-title-2026-09-12)
+  - [The envelope names no recogniser (2026-09-12)](#the-envelope-names-no-recogniser-2026-09-12)
 
 ---
 
@@ -7782,3 +7786,87 @@ words rather than playing a WAV into a device nobody is recording:
 
 `--speaker` is the way round it in the meantime: play the clip out loud and let whatever microphone
 Wispr is on hear it. Crude, correct, and the only mode that makes a noise.
+
+## The forward click is the caret, and the arrow is the terminal (2026-09-12)
+
+The evening the wrap shipped Victor tested it from the mouse and found the forward button
+doing the wrong thing: *"apăsând butonul forward, click normal, el tot dictează legat de
+fereastră, când ar fi trebuit să dicteze la cursor"*. The log agreed — every `🎙️ forward
+button — Wispr Flow's hands-free toggle` was followed by `⚡ ring down: routed to
+walkie-talkie`.
+
+**Why.** With Replace Wispr unticked the click did not open a dictation of its own; it posted
+Wispr's chord raw and let the tap notice it (`onWisprMaybeStarting` → `gestureSeen`). A
+dictation the relay did not start has no `pasteMode`, so at the microphone's close
+`latchedAtCaret` read the state — bound → the terminal. That was correct for a sentence *Victor*
+started with Wispr's own chord, and wrong for the one gesture whose whole meaning is *at the
+caret*.
+
+**The vocabulary, restated by Victor in one message and now the rule:**
+
+> butonul forward pornește dictare la caret (indiferent dacă e legat ceva) · forward+right
+> move: dictare legată (dacă e legat ceva) · forward+left move: cancel dictare (la caret sau
+> legată) · forward+up move: dictare în terminal nou · toate indiferent că Wispr sau model
+> local e selectat.
+
+So `VK_F7` goes through `onPasteToggle` → `startDictation(paste: true)` in every mode, and the
+source does the starting: `WisprFlowSource.start()` posts the same chord it always did, with
+`pasteMode` already set — the chip says `at caret`, no context shot, no ⌘C probe, and the ⌘V it
+catches is put through `pasteText` where the caret is. The local model reaches the same line
+through its own `start()`. `VK_F10` (🔼 →) is unchanged and is the bound dictation; `VK_F11` was
+already `cancelDictationInFlight`, which reaches `source.cancel()` in either mode and either
+destination.
+
+Two things went with it. **The five-second bind grace** in `onPasteToggle` — the click made
+just after a bind went to the terminal — is gone from that path: *indiferent dacă e legat
+ceva* leaves no room for a click that sometimes means the other destination. And
+`dictationBegan` tests `pasteMode` before `isBound`: a caret dictation with a terminal bound
+would otherwise have taken the picture and posted the ⌘C into the field he is about to
+dictate into. **🔽 → (`VK_F5`) posts the raw chord in both modes now**, because it is the one
+gesture left that hands the sentence to Wispr and lets the relay route it by state; it had
+been gated on Replace Wispr only because the forward click already did that with the tick off.
+
+### The ring goes down when he dismisses in Wispr (2026-09-12)
+
+*"După ce Wispr Flow termină (ok sau cancelled), tooltipul dispare relativ repede (corect),
+dar fulgerele rămân pe ecran încă multe secunde în plus (greșit)."* The log had the shape:
+`wispr flow closed the microphone` at 21:55:53, then nothing, then `⚡ ring down: timed out
+waiting for the text — 20358 ms`. The chip goes at the close; the ring waits for the words
+(`settleTimeout`, 20 s), and a sentence Wispr discards sends none.
+
+The halo's own collapse is 0.5 s (`CaretHalo.collapse`) — not the animation. Two probes were
+run before touching anything: `CGWindowListCopyWindowInfo` on Wispr's windows (its pill lives
+in a fixed 512×586 `Status` window at layer 1000 whose frame never moves through a dictation —
+no signal) and the Accessibility tree of that window (readable, `AXWebArea` under it; kept as
+the next thing to try for the *Wispr silently produced nothing* case).
+
+What ships is the half that has a keystroke behind it: **Wispr's dismiss is ⌃Escape (`53+59`)
+and the tap sees him type it.** `onWisprMaybeCancelling` → `WisprFlowSource.dismissSeen()`:
+during a speculative opening it ends the guess outright; with the microphone open it sets
+`cancelling` so the closing edge reports `.cancelled` instead of arming a capture; with the
+words in flight it closes the capture and ends the settle. Watched, never taken, and this app's
+own `postWisprCancel` is stamped `backButtonStamp` and not reported. The case that still waits
+the full 20 s is Wispr failing on its own — no ⌘V, no ⌃Escape — and the AX tree is where the
+answer to that will come from.
+
+### The session row says the terminal's title (2026-09-12)
+
+*"Când dictez la o sesiune legată de un terminal, aș vrea să văd pe rândul doi, unde apare
+sesiunea țintă, numele terminalului către care se duce. Numele folderului e un pic vag."*
+
+`Target.title` had been read since the `custom title` work and refreshed on the 10 s poll, and
+never shown: the chip's `identity` returned `boundFolder ?? boundLabel`. Two sessions in one
+repo share `walkie-talkie@master` to the letter; the title Claude Code keeps rewriting —
+`✳ walkie-talkie — Walkie talkie terminal naming` — is the one string on the machine that
+tells them apart, and it already carries the folder in front of the summary. So `setBound`
+takes a `title:`, `identity` prefers it (cut from the head at 44, `fitHead`, because a title
+puts its subject first), and the folder row stands where there is no terminal to ask. The
+menu bar keeps the folder; the *Rebind to…* list already shows every title.
+
+### The envelope names no recogniser (2026-09-12)
+
+`dictatedHint` said *transcribed by a local Whisper*. Since Wispr Flow became the source the
+same envelope wraps its sentences too — *"elimină bucata aceea din text pentru că acum poate
+să fie și Wispr Flow"* — so it says *transcribed automatically*. The clause's job is that the
+words were spoken and heard by a machine; which machine is a claim the reader would have had
+to disbelieve half the time.

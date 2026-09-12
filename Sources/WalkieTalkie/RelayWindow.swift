@@ -328,6 +328,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// from, where the app's own name takes the line rather than inventing a
     /// folder.
     private var boundFolder: String?
+    /// **What the bound terminal calls itself** — `✳ walkie-talkie — Fix the tax
+    /// rounding`, the title Claude Code keeps rewriting as it works — and the
+    /// line the chip prefers over the folder when it has one (2026-09-12).
+    ///
+    /// Victor: *"numele folderului e un pic vag … aș vrea să văd pe rândul doi
+    /// unde apare sesiunea țintă numele terminalului către care se duce"*. Two
+    /// sessions in one repo share `folder@branch` to the letter; the title is
+    /// the only thing on the machine that tells them apart, and it already
+    /// carries the folder in front of the summary. nil where there is no
+    /// terminal to ask, and the folder row stands as before.
+    private var boundTitle: String?
     /// The destination app's own icon — Terminal's, Visual Code's, IntelliJ's —
     /// drawn where the pin used to be.
     ///
@@ -2822,11 +2833,15 @@ private let frontLabel = NSTextField(labelWithString: "")
         // thing this line exists to get right, wrongly.
         if let spawn = spawnLabel { return spawn }
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
-        // `walkie-talkie@main` — the working directory of the session the words are
-        // going to, with its branch when that directory is a repo. The icon beside
-        // it (`titleGlyph`) says which app, so this line never spells out an app
-        // name it can show instead; only a target with no directory to read falls
-        // back to one.
+        // The terminal's own title first — `✳ walkie-talkie — Fix the tax
+        // rounding` names the session, where `walkie-talkie@main` only names the
+        // repo. Cut from the head like every title (`fitHead`): the subject is
+        // at the front. Then the working directory of the session the words are
+        // going to, with its branch when that directory is a repo. The icon
+        // beside it (`titleGlyph`) says which app, so this line never spells
+        // out an app name it can show instead; only a target with no directory
+        // to read falls back to one.
+        if let title = boundTitle, !title.isEmpty { return Self.fitHead(title, 44) }
         return boundFolder ?? boundLabel ?? ""
     }
 
@@ -3093,10 +3108,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    func setBound(label: String?, folder: String? = nil, icon: NSImage? = nil) {
-        guard boundLabel != label || boundFolder != folder || boundIcon !== icon else { return }
+    func setBound(label: String?, folder: String? = nil, title: String? = nil, icon: NSImage? = nil) {
+        guard boundLabel != label || boundFolder != folder || boundTitle != title || boundIcon !== icon
+        else { return }
         boundLabel = label
         boundFolder = label == nil ? nil : folder
+        boundTitle = label == nil ? nil : title
         boundIcon = label == nil ? nil : icon
         refreshTitle()
         layoutContent()
