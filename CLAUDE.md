@@ -1,8 +1,8 @@
 # Walkie Talkie — rules
 
-A macOS overlay that relays Victor's dictation — his own microphone, a local Whisper — into a
-bound terminal, a Claude Code session it spawns, or the caret. `README.md` says what it is and
-how it works.
+A macOS overlay that relays Victor's dictation — **Wispr Flow's microphone since 2026-09-12**,
+a local Whisper behind it — into a bound terminal, a Claude Code session it spawns, or the caret.
+`README.md` says what it is and how it works.
 
 This file holds only what every session needs. Everything else moved on 2026-09-11:
 
@@ -23,6 +23,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `DecodeRate`, `InputDevice`, `VoiceCorpus`, `helpers/`, `evals/` |
+  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `tools/wispr-test.sh` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, the halo asset |
   | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ProjectList`, `helpers/recent_projects.py` |
   | `menu-bar.md` | `StatusItem`, `MenuBarMirror`, `MessageLog`, `AboutPage` |
@@ -63,7 +64,9 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   executable's mtime — the one place that says which build is running.
 - The app is `.regular` (Dock tile — Force Quit is the escape hatch when it hangs — and a minimal
   main menu); nothing in it ever calls `NSApp.activate`.
-- **Dependencies:** `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`; the model is
+- **Dependencies:** **Wispr Flow** (the default source — the relay drives it by posting its own
+  shortcuts and reads its delivery; it does not launch it). For the retired local source,
+  `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`; the model is
   `mlx-community/whisper-large-v3-turbo` (`RELAY_WHISPER_MODEL` overrides). The Chrome
   extension is loaded unpacked by hand (`chrome://extensions` → Developer mode → Load unpacked);
   after any `manifest.json` permission change it needs a **Reload** there or the feature silently
@@ -125,13 +128,15 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /bind` `{"tty": "ttys004"}` | bind that session — no toggle, no flight, no flash (the restart's restore) |
 | `POST /unbind` | let the binding go |
 | `GET /target` | the current binding; `guarded` says whether the shell guard applies |
-| `GET /engine` | which model is loaded and whether it is ready |
+| `GET /engine` | which **source** is live, whether it is ready, whether the wrap is on, and the local model's state |
 | `POST /test/dictation` `{"text": …}` | a fabricated transcript, entering exactly where a real one does (pastes `caretLine` in Replace Wispr) |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero (a caret one in Replace Wispr) |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/wispr` `{"on": true}` | pretend Wispr Flow opened (or closed) the microphone — the ⚡ ring, the chevrons and the ✕'s cancel, without dictating into another app |
-| `POST /test/wispr` `{"hotkey": true}` | pretend Wispr's *start gesture* was pressed — the speculative ring, one step earlier than the microphone |
+| `POST /test/wispr` `{"hotkey": true}` | pretend Wispr's *start gesture* was pressed — the whole dictation opens here, and the microphone edge only confirms it |
+| `POST /test/wispr-handsfree` | post the **real** chord (fn ⌃ Space) — a real Wispr dictation starts. Installed build only: `.build/debug` has no Accessibility grant and `CGEventPost` fails silently |
+| `POST /test/input` `{"name": "…"}` | point the **system's** default input at a device (substring match) and say what it was; with no name it only reports. For `tools/wispr-test.sh` |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
@@ -157,12 +162,49 @@ sits at rest there.
 - **The recipient is whoever the relay is pointed at when the microphone closes.** A deliberate
   bind mid-sentence redirects the words; the 10 s poll never may.
 
+## The dictation source (2026-09-12)
+
+- **One interface, two recognisers.** `DictationSource` — `start` / `stop` / `cancel`,
+  `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` / `didEnd`, plus a `meter`
+  the halo breathes on. `WisprFlowSource` and `LocalWhisperSource` implement it and
+  **nothing downstream may name either of them**: the chip, the halo, the settle, the corpus and
+  the destination routing read the protocol only. The Wispr path spent a month with no transcript
+  in it precisely because it was a second branch nobody exercised.
+- **Wispr Flow is the default and every gesture goes through it** — ⌘⌃D, the wheel, the side
+  buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
+  picks the local model, which is **retired, not deleted**: no gesture starts it and the weights
+  are no longer loaded at launch.
+- **Wrap Wispr Flow** (menu tick, default **on**, `WT_WRAP_WISPR=0` for one run): the relay
+  swallows the ⌘V Wispr posts and inserts the words itself — the bound agent through the held
+  prompt, or the caret through `pasteText`. Off, Wispr pastes where the focus is and the relay
+  only draws the ring, which is what every build before this did.
+- **The dictation opens on the gesture, not on the microphone.** Measured 2026-09-12: 324–674 ms
+  from the chord to Wispr's microphone when warm, **5–6 s** cold. The ring, the chip, the context
+  shot and the music pause all fire on `didBegin`, which the hands-free chord raises directly; the
+  CoreAudio edge **confirms** and never re-opens. `speculativeGrace` is **12 s** (worst measured
+  × 2). Push-to-talk (two held modifiers) is the one ambiguous gesture and raises the beacon only.
+- **The recipient is latched when the microphone closes**, and it is the caret when nothing is
+  bound. `settleTimeout` 20 s, `WisprFlowSource.captureTimeout` 30 s — Wispr's round trip
+  measured avg 2.6 s, max 22.8 s, and a six-second window lost an 81-second sentence.
+- **The corpus goes on growing.** The meter the halo breathes on writes its WAV now, and
+  `VoiceCorpus.captureLocal(engine:)` files it beside Wispr's transcript as `wispr-flow`. Those
+  labels have been through Wispr's formatting pass; `whisper-local` ones are raw.
+- **`tools/wispr-test.sh <file.wav>`** drives one dictation end to end and prints the transcript
+  and the ⚡ timings. It needs **Wispr → Settings → Microphone → Auto-detect** (Wispr's own device
+  id is a salted Chromium hash and is not scriptable); it says so rather than failing silently.
+
 ## Never reintroduce
 
 - **Pause** (gone 2026-09-01) — Disconnect is the "hand the mouse back" gesture; `holdsForBind`
   must never become a menu tick.
-- **Wispr Flow's database** as a recogniser or fallback (gone 2026-08-29). A fallback is a second
-  *local* model.
+- **Wispr Flow's database** as a recogniser or fallback (gone 2026-08-29, restated 2026-09-12 when
+  Wispr became the source). A fallback is a second *local* model. The wrap reads the **pasteboard**,
+  which is where Wispr itself puts the sentence a millisecond before it presses ⌘V — public, and
+  the same place `pasteText` puts its own. No file of Wispr's is opened anywhere in `Sources/`.
+- **`copy_last_text` (⌘⌃C) as a routine transcript path** — off by default since the hour it was
+  written. It hands back *the last text Wispr produced*, which after a failed sentence is the
+  **previous** one, and delivering a five-minute-old paragraph as though he had just said it is
+  worse than losing the sentence. `WT_WISPR_COPY_FALLBACK=1` for whoever wants to work on it.
 - **A typing affordance on the overlay's own surface.** The panel becomes key only while the
   transcript is being edited (`RelayPanel.wantsKey`).
 - **A leash, smoothing filter or spring** on the chip's cursor-following; **a ✕ beside the

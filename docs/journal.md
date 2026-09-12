@@ -7599,3 +7599,186 @@ How it ends depends on whose paste it is:
 through the test routes: a pasteboard write one second into the settle ended it at **1051 ms** with
 *Wispr pasted at the caret*; with nothing written, at **6298 ms** with *timed out waiting for the
 text*.
+
+## Wispr Flow everywhere (2026-09-12)
+
+*"Wispr Flow is the dictation source for everything"* — the caret, a spawned session, and the
+bound terminal that had been the local model's alone since 2026-08-29. Wispr is better at his
+accent, it is already running, and it is what his hand reaches for. The relay's job stops being
+*be a recogniser* and becomes *decide where the words go*.
+
+### One interface, because a second branch is how the first one rots
+
+The two paths did not look alike from the outside and that was the whole problem. The relay's own
+microphone went through `startLocalRecording` / `stopLocalRecording`, produced a transcript and a
+WAV, and everything downstream hung off it. Wispr Flow went through `wisprDictationChanged` and
+produced **a boolean** — the ring knew a microphone was open and nothing else did. The Wispr path
+spent a month with no transcript in it precisely because it was a branch nobody exercised.
+
+So `DictationSource`: `start` / `stop` / `cancel`, `didMaybeBegin` / `didBegin` /
+`didStopListening` / `didTranscribe` / `didEnd`, and a `meter` the halo breathes on.
+`WisprFlowSource` and `LocalWhisperSource` implement it; `AppDelegate` holds one and names neither.
+
+| | `WisprFlowSource` | `LocalWhisperSource` |
+|---|---|---|
+| start | posts Wispr's own hands-free chord | opens `MicRecorder` |
+| begins | on the chord, confirmed by CoreAudio | synchronously, inside `start()` |
+| level | a second `MicRecorder` alongside Wispr's | the recording's own meter |
+| transcript | Wispr's delivery, intercepted | `LocalWhisper` over the WAV |
+| audio | the meter's WAV, kept for the corpus | the recording itself |
+
+`localRecording` became `listening`, and the rename is the point: *is a microphone open* is the
+source's question and `isRecording` answers it, where every gate in `AppDelegate` means *does this
+app have a sentence in flight*. For Wispr those are seconds apart.
+
+### The probe — how Wispr Flow delivers, measured
+
+Nobody knew. The deleted `blockInjection` predated two Wispr versions, and the three candidate
+answers — a synthetic ⌘V, a key-by-key type, an Accessibility insertion — need three different
+mechanisms to catch. So the capture window logs every synthetic key it sees, capped at six lines,
+and the first real dictation answered it:
+
+```
+21:35:59 probe: synthetic key 9 flags 0x20100000 from pid 4904 (Wispr Flow)
+21:35:59 ⌘V from Wispr Flow — 1580 ms after the microphone closed (taken)
+21:35:59 🗣️ wispr transcript via Wispr's ⌘V — 96 chars
+21:36:00 ⌨️ ttys007 foreground=claude — 582 chars
+21:36:00 ⌨️ delivered to the bound terminal
+```
+
+**Keycode 9 is V, `0x20100000` is `maskCommand` with the device-dependent left-⌘ bit, pid 4904 is
+Wispr Flow.** It is a ⌘V, this app's head-inserted session tap sees it before the front app does,
+and swallowing it is the whole wrap. A second sentence measured the same thing at 5926 ms.
+
+An Accessibility insertion would have shown up here as **nothing at all**, which is why the probe
+is armed on every dictation and stays: the day Wispr changes, `relay.log` says so.
+
+### The wrap, and the flag it lives behind
+
+`wrapWispr` (menu tick, on by default): swallow the ⌘V — V with ⌘, from a process whose name says
+Wispr, inside the capture window — read `NSPasteboard`, and deliver the words the way the local
+path always did. Bound: `send(kind: "dictation")`, the held prompt, the shots, the picks, the
+selection. Unbound: `pasteText(caretLine(words:))`, which is the same paste Wispr was about to
+make, one caret later. Off: Wispr pastes where the focus is and the relay only draws the ring.
+
+Victor's own ⌘V carries pid 0 and can never match; this app's own carries `backButtonStamp`. The
+`keyUp` is swallowed with the `keyDown` — an orphaned release is a key the app underneath thinks is
+still down — and the ⌘ itself is left alone, so it goes out and comes back balanced.
+
+**This is not the database coming back.** The pasteboard is where Wispr itself puts the sentence a
+millisecond before it presses the key; `pasteText` puts its own there too. Nothing in `Sources/`
+opens a file of Wispr's.
+
+### The ring shrank away and came back
+
+The first evening's build shipped with the old `wisprSpeculativeGrace` of 1.5 s, and Victor
+reported it within minutes: *"the lightning starts fast, but only later the yellow screenshot
+bubble appears, and there is a pause in which the lightning ring disappears, only to reappear"*.
+
+The log is the whole story:
+
+```
+21:35:41 ⚡ ring up 0.9 ms after fn ⌃ Space (speculative — waiting for the microphone)
+21:35:43 ⚡ ring down: no microphone within 1500 ms of the hotkey
+21:35:47 wispr flow opened the microphone
+21:35:47 ⚡ ring up 29 ms after Wispr Flow opened the microphone
+21:35:47 context screen captured: shot-00:00(...)
+```
+
+**Six seconds from the chord to Wispr's microphone.** Every previously measured gap was warm —
+324, 478, 528, 634, 674 ms, which is what 1.5 s was fitted to. Cold, Electron takes ten times that,
+and the grace expired in the middle of it: ring up, ring *shrinks away*, ring back four seconds
+later with the chip and the screenshot bubble arriving for the first time.
+
+Two fixes, and the second is the one that matters:
+
+1. **`speculativeGrace` is 12 s** — the worst measured open × 2, never under three. A retraction is
+   for a chord Wispr *ignored*, which is rare enough to be worth the patience.
+2. **The dictation opens on the gesture.** `didBegin` fires on the chord, so the ring, the chip,
+   the context shot, the ⌘C probe and the music pause all happen at the same instant; the CoreAudio
+   edge **confirms** and returns. A second `didBegin` would take the halo down and put it back,
+   which is exactly the flicker. Verified through the test routes with a five-second gap:
+
+   ```
+   21:43:22 ⚡ POST /test/wispr {hotkey} — opening the dictation on the gesture
+   21:43:22 ◯ caret halo on   👁 selection watcher on   ⏸️ pausing audible Chrome tabs
+   21:43:22 context screen captured: shot-00:00(...)
+   21:43:27 ⚡ mic edge confirms the ring 5025 ms after the gesture
+   ```
+
+   One `⚡ ring up`, no `ring down` between them.
+
+**Push-to-talk is the exception and stays beacon-only.** It is two held modifiers and nothing else,
+so it fires on any right ⌘⌥ — and a false `didBegin` costs a screenshot and a ⌘C probe posted into
+whatever he is working in. `onWisprMaybeStarting` carries a `confident` flag now; fn ⌃ Space is
+confident, the modifier pair is not.
+
+### Six seconds was not enough for the words either
+
+The same evening, an 81-second dictation was lost: the capture window closed at six seconds and
+Wispr's ⌘V arrived after it, so the relay never saw it. Wispr's round trip measured avg 2.6 s over
+71 dictations, min 0.27, **max 22.8**. So `captureTimeout` is **30 s** and `settleTimeout` is
+**20 s**, and they are deliberately different numbers: the capture is a flag nobody sees and can
+afford to wait, where a ring standing for half a minute would stop meaning anything.
+
+`⚡ ring down: routed to <session>` is the line that says the wrap worked — the bound path ends the
+settle itself now, where the first build left it to time out at eight seconds *after* the words had
+already been delivered.
+
+### `copy_last_text` is written, and off
+
+⌘⌃C (`55+59+8` in Wispr's own config) puts the last transcript on the pasteboard without a
+microphone, and it was the fallback for a delivery the tap never saw. It is off by default from the
+hour it was written, for two reasons: it hands back *the last text Wispr produced* — after a failed
+sentence, the **previous** one, and delivering a five-minute-old paragraph as though he had just
+said it is worse than losing the sentence — and measured once, the chord went out and
+`NSPasteboard.changeCount` never moved. `WT_WISPR_COPY_FALLBACK=1` for whoever wants to work on it.
+
+### The corpus does not die with the local model
+
+`VoiceCorpus` needs a WAV, and the only one the relay wrote came from `stopLocalRecording`. The
+halo's meter — a second `MicRecorder` open alongside Wispr's, there for `level` — deliberately
+threw its session away. It writes a file now, and the label beside it is Wispr's own transcript:
+
+```
+21:37:24 corpus: 21-37-24-wispr434 — 844 KB, 27.0s (wispr-flow)
+```
+
+`captureLocal(engine:)` stamps it, the stem says `wispr` where it used to say `local`, and the
+distinction matters: a `wispr-flow` label has been through Wispr's formatting pass — punctuation,
+capitalisation, its custom dictionary — where a `whisper-local` one is raw recogniser output. An
+absent field is a question a reader asks; a wrong one is an answer they believe.
+
+### The local model is retired, not deleted
+
+No gesture and no menu row starts it, and the weights are no longer loaded at launch — 1.5 GB
+resident for a fallback nobody reaches. It stays selectable (`WT_SOURCE=whisper`) for three reasons
+that are the same reason: the wrap rests on intercepting another app's ⌘V and the day that changes
+there has to be something to fall back to; it is the only recogniser that works with no network;
+and `evals/` scores the corpus against it, so a model that cannot be run is a baseline that cannot
+be measured.
+
+### The harness, and the one setting Victor has to change
+
+`tools/wispr-test.sh <file.wav>` plays a WAV into a virtual input device, triggers a **real** Wispr
+dictation through `POST /test/wispr-handsfree` (the app posts the chord — it has the Accessibility
+grant, the script has none and needs none), waits for the relay to say what it did, and prints the
+transcript with the ⚡ timings. It restores the system input on every path including Ctrl-C, and
+raises the 🔒 hands-off locks for the run.
+
+**It is blocked on one setting.** Wispr's microphone lives in `prefs.user.overrideAudioDeviceId` as
+a Chromium `MediaDeviceInfo.deviceId` — a per-origin salted hash that cannot be computed from a
+device name, in a file Wispr's own process rewrites. But `rankedAudioDevices` contains
+`{"deviceId": "default", "name": "Auto-detect (MacBook Pro)"}`, and with *Auto-detect* picked Wispr
+follows the **system default input**, which is scriptable. `POST /test/input {"name": …}` is the
+scripting (`InputDevice.setSystemDefault`, because `SwitchAudioSource` is not installed on this
+Mac and CoreAudio wants a device id). Until that one setting is changed the preflight says so in
+words rather than playing a WAV into a device nobody is recording:
+
+```
+✗ Wispr microphone is pinned to a device (e671febe…).
+  Victor: Wispr → Settings → Microphone → 'Auto-detect (MacBook Pro)'.
+```
+
+`--speaker` is the way round it in the meantime: play the clip out loud and let whatever microphone
+Wispr is on hear it. Crude, correct, and the only mode that makes a noise.
