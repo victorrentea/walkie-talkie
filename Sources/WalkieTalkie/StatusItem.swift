@@ -390,6 +390,38 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var isLogiGestures: Bool { logiGesturesOn }
     /// The tap has to be told; `AppDelegate` owns that wire.
     var onToggleLogiGestures: ((Bool) -> Void)?
+
+    // ── Wrap Wispr Flow ─────────────────────────────────────────────────────
+
+    /// **Wrap Wispr Flow** — whether the relay takes Wispr's paste and delivers
+    /// the words itself (ticked, the default since 2026-09-12) or lets Wispr
+    /// insert them wherever the focus is and only draws the ring.
+    ///
+    /// It is the switch the whole *Wispr Flow everywhere* change rests on, and
+    /// it is in the menu for the reason the mode it replaces is: if a Wispr
+    /// update changes how it delivers, the failure is a dictation that lands
+    /// nowhere, and the way back has to be one click rather than a rebuild.
+    ///
+    /// **Defaults to on, and that needs saying** because `bool(forKey:)` answers
+    /// false for a key that was never written.
+    private let wrapWispr = NSMenuItem(title: "Wrap Wispr Flow", action: nil, keyEquivalent: "")
+    private var wrapWisprOn: Bool =
+        UserDefaults.standard.object(forKey: StatusItem.wrapWisprKey) as? Bool ?? true
+    private static let wrapWisprKey = "wrapWispr"
+    /// Read once at launch by `AppDelegate`, like `isReplaceWispr`.
+    var isWrapWispr: Bool { wrapWisprOn }
+    var onToggleWrapWispr: ((Bool) -> Void)?
+
+    @objc private func wrapWisprClicked() {
+        wrapWisprOn.toggle()
+        UserDefaults.standard.set(wrapWisprOn, forKey: Self.wrapWisprKey)
+        applyWrapWisprIcon()
+        onToggleWrapWispr?(wrapWisprOn)
+    }
+
+    private func applyWrapWisprIcon() {
+        wrapWispr.image = wrapWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+    }
     /// The other preference key — see the note on `autosendKey`.
     private static let replaceWisprKey = "replaceWispr"
 
@@ -615,6 +647,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         replaceWispr.target = self
         applyReplaceWisprIcon()
         menu.addItem(replaceWispr)
+
+        wrapWispr.action = #selector(wrapWisprClicked)
+        wrapWispr.target = self
+        applyWrapWisprIcon()
+        menu.addItem(wrapWispr)
 
         logiGestures.action = #selector(logiGesturesClicked)
         logiGestures.target = self

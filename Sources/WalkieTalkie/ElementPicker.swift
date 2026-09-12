@@ -214,6 +214,27 @@ final class ElementPicker {
 
     /// `POST /test/cancel` — the ✕'s new meaning: kill the dictation in flight,
     /// whichever app is holding the microphone.
+    /// **The real chord on the wire** — `POST /test/wispr-handsfree` posts
+    /// Wispr Flow's own `fn ⌃ Space` through `HotkeyTap.postWisprHandsFree`, the
+    /// same call the forward button makes. Unlike `/test/wispr` this does not
+    /// fake anything: a real Wispr dictation starts, and the relay learns about
+    /// it exactly as it learns about one Victor started himself.
+    ///
+    /// **Only useful from the installed build.** A `.build/debug` binary has no
+    /// Accessibility grant of its own, so `CGEventPost` does nothing and does it
+    /// silently — see `tools/wispr-test.sh`, which checks before it runs.
+    var onTestWisprHandsFree: (() -> Void)?
+
+    /// `POST /test/input {"name": "…"}` — point the **system's** default input at
+    /// a device, and say what it was before.
+    ///
+    /// The one piece of the end-to-end harness that cannot live in the script:
+    /// `SwitchAudioSource` is not installed on this Mac and the CoreAudio call
+    /// wants a `CFString` and a device id, which this app already has helpers
+    /// for (`InputDevice`). With Wispr's microphone set to *Auto-detect* it is
+    /// what lets a test play a WAV into a virtual device and have Wispr hear it.
+    var onTestInputDevice: ((String) -> [String: Any])?
+
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -461,6 +482,18 @@ final class ElementPicker {
             let on = body?["on"] as? Bool ?? true
             onTestWispr?(on)
             respond(conn, 200, ["ok": true, "wispr": on])
+
+        // The system's default input, for the end-to-end harness — see
+        // `onTestInputDevice`. With no name it only reports.
+        case ("POST", "/test/input"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let name = (body?["name"] as? String) ?? ""
+            respond(conn, 200, ["ok": true].merging(onTestInputDevice?(name) ?? [:]) { _, new in new })
+
+        // The real chord, for the end-to-end harness — see `onTestWisprHandsFree`.
+        case ("POST", "/test/wispr-handsfree"):
+            onTestWisprHandsFree?()
+            respond(conn, 200, ["ok": true, "posted": "fn ctrl space"])
 
         // The ✕'s cancel, from a desk — see `onTestCancelDictation`.
         case ("POST", "/test/cancel"):
