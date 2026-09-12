@@ -195,12 +195,20 @@ def accessibility_ok() -> bool:
     a whole overnight batch would play audio into a device nobody is recording
     and report a hundred timeouts as if Wispr had rejected the channel.
     """
-    try:
-        import Quartz
-
-        return bool(Quartz.AXIsProcessTrusted())
-    except Exception:
-        return False
+    # **`AXIsProcessTrusted` is in ApplicationServices, not Quartz** — and the
+    # pyobjc build on this Mac raises `AttributeError` for the Quartz spelling,
+    # which the bare `except` below then reported as "not trusted". A preflight
+    # that answers *no permission* when it means *wrong import* sends whoever
+    # runs it into System Settings for nothing (2026-09-12).
+    for module in ("ApplicationServices", "HIServices", "Quartz"):
+        try:
+            mod = __import__(module)
+            fn = getattr(mod, "AXIsProcessTrusted", None)
+            if fn is not None:
+                return bool(fn())
+        except Exception:
+            continue
+    return False
 
 
 def paste_sink() -> str | None:
