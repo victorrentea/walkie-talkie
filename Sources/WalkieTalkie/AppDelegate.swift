@@ -66,6 +66,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `start` it is meant to undo.
     private let wisprMeterQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-meter")
 
+    /// **The ring is up on Wispr's keystroke, before its microphone.**
+    ///
+    /// `WisprWatch`'s CoreAudio edge is the truth and still confirms this, but it
+    /// is not the first observable moment: Electron has to wake, put its overlay
+    /// up and open a device before `IsRunningInput` flips. Victor sees that gap
+    /// (2026-09-12: *the ring still comes up late*). `HotkeyTap` already has every
+    /// key event, so the gesture Wispr itself is configured to listen for is
+    /// where the ring goes up, and the microphone edge is where it is believed.
+    private var wisprSpeculative = false
+    /// When that keystroke was seen, so the confirming edge can say how long the
+    /// guess had to wait — and so the log carries both numbers Victor asked for.
+    private var wisprSpeculativeAt: CFAbsoluteTime = 0
+    private var wisprSpeculativeDrop: DispatchWorkItem?
+    /// **How long a guess is allowed to stand unconfirmed.** Long enough for
+    /// Electron to wake up cold, short enough that a ring raised by a chord Wispr
+    /// ignored is gone before it can be believed. A ring that lies is worse than
+    /// a ring that is late, which is why this exists at all.
+    private static let wisprSpeculativeGrace: TimeInterval = 1.5
+
+    /// **The dictation is over but the words have not landed yet.**
+    ///
+    /// Victor, 2026-09-12: the ring and the chevrons go away when the text is
+    /// *inserted*, not when the microphone closes. Between those two is the whole
+    /// of the transcription — Wispr's or this app's — and it is exactly the
+    /// stretch in which he is waiting and has nothing to look at.
+    private var settling = false
+    /// What the ring was saying about the destination when the microphone closed,
+    /// so the chevrons do not disarm underneath the settle.
+    private var settlingAtCaret = false
+    private var settlingFrom: CFAbsoluteTime = 0
+    private var settleGiveUp: DispatchWorkItem?
+    /// Polls the pasteboard while settling a **Wispr** dictation: the insertion is
+    /// another app's ⌘V and there is nothing else of it to observe from here.
+    private var settleWatch: Timer?
+    private var settleClipboardAt = 0
+    /// **The longest the ring waits for words that may never come.** Wispr's
+    /// round trip is ordinarily well under this; past it the honest thing is to
+    /// say the ring was ended by a clock and not by a paste, which the log does.
+    private static let settleTimeout: TimeInterval = 6
+
     /// The last thing `wisprWatch` said, on the main thread where the halo is.
     private var wisprDictating = false
 
@@ -604,6 +644,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.wisprDictationChanged(on, measured: false)
             }
         }
+        picker.onTestWisprHotkey = { [weak self] in
+            DispatchQueue.main.async { self?.wisprMaybeStarting("POST /test/wispr {hotkey}") }
+        }
         picker.onTestCancelDictation = { [weak self] in
             DispatchQueue.main.async {
                 _ = self?.cancelDictationInFlight(reason: "POST /test/cancel")
@@ -624,9 +667,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `com.apple.root.default-qos` and AppKit trapped. Crash log
         // 2026-08-29 11:04:40, EXC_BREAKPOINT, one frame under
         // `cancelLocalRecording`.
+        // **⬅️ — the forward button held and the mouse flicked left** (and the
+        // wheel held, with Logi gestures off) — and since 2026-09-12 it throws a
+        // **Wispr Flow** dictation away too, through the same one call the ✕ and
+        // the menu row make. Victor's ask: the gesture that abandons a sentence
+        // must not depend on which app happens to be hearing it. Local behaviour
+        // is untouched — `cancelDictationInFlight` tries `localRecording` first.
         hotkeys.onLocalCancel = { [weak self] in
-            DispatchQueue.main.async { self?.cancelLocalRecording() }
+            DispatchQueue.main.async {
+                _ = self?.cancelDictationInFlight(reason: "⬅️ forward button flicked left")
+            }
         }
+        hotkeys.onWisprMaybeStarting = { [weak self] why in self?.wisprMaybeStarting(why) }
         // ⬆️ held, mouse moved down. **No toggle**, exactly as the left-plus-wheel
         // chord it replaces: the gesture is made while pointing at the terminal he
         // means, and making it twice means "again", never "let go".
@@ -1041,6 +1093,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Wispr Flow's microphone opened or closed — from `WisprWatch`, or from
     /// `POST /test/wispr`, which is the same edge with no CoreAudio behind it
     /// (`measured: false` keeps the latency line honest).
+    /// **Wispr's start gesture was seen** — put the ring up now and believe it
+    /// later. See `wisprSpeculative`.
+    private func wisprMaybeStarting(_ why: String) {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        guard !listening, !wisprDictating, !wisprSpeculative else { return }
+        wisprSpeculative = true
+        wisprSpeculativeAt = t0
+        endSettling(reason: "a new dictation started", quiet: true)
+        syncBorrowedGestures()
+        Log.info(String(format: "⚡ ring up %.1f ms after %@ (speculative — waiting for the microphone)",
+                        (CFAbsoluteTimeGetCurrent() - t0) * 1000, why))
+        // **A guess that is never taken back is a lie.** A chord Wispr ignored —
+        // it was not running, the shortcut had been changed, the key went to
+        // something else — must not leave a beacon claiming a microphone is open.
+        let drop = DispatchWorkItem { [weak self] in
+            guard let self, self.wisprSpeculative, !self.wisprDictating else { return }
+            self.wisprSpeculative = false
+            self.wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
+            Log.info(String(format: "⚡ ring down: no microphone within %.0f ms of the hotkey",
+                            Self.wisprSpeculativeGrace * 1000))
+            self.syncBorrowedGestures()
+        }
+        wisprSpeculativeDrop?.cancel()
+        wisprSpeculativeDrop = drop
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.wisprSpeculativeGrace, execute: drop)
+        // The meter comes up with the guess, so the ring breathes from the first
+        // syllable rather than from whenever CoreAudio gets round to the edge.
+        // `start(to:)` is a no-op on a session already open, so the confirming
+        // edge below costs nothing when it arrives.
+        guard !mic.isRecording else { return }
+        wisprMeterQueue.async { [weak self] in _ = self?.wisprMeter.startMetering() }
+    }
+
+    /// **The ring goes down when the words land, not when the microphone shuts.**
+    ///
+    /// Between the two is the transcription, and for a Wispr dictation that is
+    /// another app's round trip — a second or two in which Victor is waiting and
+    /// the beacon used to be already dark. The insertion is the event; this is
+    /// what waits for it.
+    ///
+    /// - Parameter atCaret: what the ring was saying about the destination, kept
+    ///   so the chevrons do not disarm underneath the settle.
+    /// - Parameter watchClipboard: for a **Wispr** dictation the paste is another
+    ///   app's ⌘V and there is nothing of it to observe from here except the
+    ///   pasteboard changing under it — Wispr writes the transcript there and
+    ///   presses ⌘V, exactly as `pasteText` does. The relay's own dictations do
+    ///   not need it: they call `endSettling` from the paste itself.
+    private func beginSettling(atCaret: Bool, watchClipboard: Bool) {
+        settling = true
+        settlingAtCaret = atCaret
+        settlingFrom = CFAbsoluteTimeGetCurrent()
+        settleClipboardAt = NSPasteboard.general.changeCount
+        syncBorrowedGestures()
+
+        settleWatch?.invalidate()
+        settleWatch = nil
+        if watchClipboard {
+            let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                guard let self, self.settling else { return }
+                guard NSPasteboard.general.changeCount != self.settleClipboardAt else { return }
+                self.endSettling(reason: "Wispr pasted at the caret")
+            }
+            settleWatch = t
+            RunLoop.main.add(t, forMode: .common)
+        }
+
+        settleGiveUp?.cancel()
+        let giveUp = DispatchWorkItem { [weak self] in
+            self?.endSettling(reason: "timed out waiting for the text")
+        }
+        settleGiveUp = giveUp
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleTimeout, execute: giveUp)
+    }
+
+    /// The words landed, or gave up, or a new dictation overtook this one.
+    /// Says which, and how long after the microphone closed — the one line that
+    /// makes *"the ring went away too early"* answerable from the file.
+    private func endSettling(reason: String, quiet: Bool = false) {
+        guard settling else { return }
+        settling = false
+        settlingAtCaret = false
+        settleWatch?.invalidate()
+        settleWatch = nil
+        settleGiveUp?.cancel()
+        settleGiveUp = nil
+        if !quiet {
+            Log.info(String(format: "⚡ ring down: %@ — %.0f ms after the recording ended",
+                            reason, (CFAbsoluteTimeGetCurrent() - settlingFrom) * 1000))
+        }
+        syncBorrowedGestures()
+    }
+
     private func wisprDictationChanged(_ on: Bool, measured: Bool) {
         wisprDictating = on
         if on {
@@ -1054,6 +1198,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // needs no level to be drawn: `show()` puts it at `rest` and the
             // 20 Hz timer picks the swell up on its very next tick, which is
             // 50 ms later at worst and needs no ordering with this.
+            // **The guess was right** — keep the ring, stop the clock that would
+            // have taken it away, and say how far ahead of the microphone the
+            // keystroke actually was. That number is the whole point of the
+            // speculative path and is the one Victor asked to see.
+            if wisprSpeculative {
+                wisprSpeculativeDrop?.cancel()
+                wisprSpeculativeDrop = nil
+                wisprSpeculative = false
+                Log.info(String(format: "⚡ mic edge confirms the ring %.0f ms after the hotkey",
+                                (CFAbsoluteTimeGetCurrent() - wisprSpeculativeAt) * 1000))
+            }
+            endSettling(reason: "a new dictation started", quiet: true)
             syncBorrowedGestures()
             // Only for an edge that actually came off CoreAudio — the test
             // route enters below the watcher and would otherwise print the
@@ -1077,9 +1233,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
+            // **The microphone closing is not the end of the dictation** — the
+            // words are still in flight. The ring stays up until Wispr pastes
+            // them, or until `settleTimeout` says nothing is coming. A cancel
+            // has already cleared `wisprCancelling` past this point and takes
+            // the ring down at once, which is right: there are no words.
+            if wisprCancelling {
+                wisprCancelling = false
+                endSettling(reason: "cancelled", quiet: true)
+            } else {
+                beginSettling(atCaret: true, watchClipboard: true)
+            }
             syncBorrowedGestures()
         }
     }
+
+    /// Set by `cancelDictationInFlight` so the closing edge that Wispr's Escape
+    /// produces a moment later knows there is nothing to wait for.
+    private var wisprCancelling = false
 
     /// **A wheel hold is waiting on the model**, and the microphone opens the
     /// instant it is up. See where it is set, in `startLocalRecording`.
@@ -1484,10 +1655,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelLocalRecording()
             return true
         }
-        if wisprDictating {
-            Log.info("🗑️ Wispr Flow dictation cancelled via \(reason) — posting Escape")
+        if wisprDictating || wisprSpeculative {
+            Log.info("🗑️ Wispr Flow dictation cancelled via \(reason) — posting ⌃Escape")
+            wisprCancelling = true
             HotkeyTap.postWisprCancel()
             overlay.flash("✕ cancelled", duration: 2.0)
+            // **A cancelled sentence has no words to wait for**, so the ring goes
+            // now rather than settling. The speculative half is dropped with it:
+            // a cancel made before Wispr's microphone ever opened must not leave
+            // a guess standing.
+            endSettling(reason: "cancelled", quiet: true)
+            if wisprSpeculative {
+                wisprSpeculativeDrop?.cancel()
+                wisprSpeculative = false
+                wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
+                Log.info("⚡ ring down: cancelled before the microphone opened")
+            }
+            syncBorrowedGestures()
             return true
         }
         return false
@@ -1495,6 +1679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelLocalRecording() {
         guard localRecording else { return }
+        endSettling(reason: "cancelled", quiet: true)
         localRecording = false
         pasteMode = false
         clearSpawn()
@@ -1703,6 +1888,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that the extension, the ring and the overlay are all waiting on goes
         // out first, and the teardown happens after it.
         listening = false
+        // **A caret dictation's ring waits for the paste** (2026-09-12), the same
+        // rule Wispr's now follows: the microphone closing is not the end, the
+        // words landing is. `watchClipboard: false` because this one *is* the
+        // paste — `pasteText` ends the settle itself and needs no guessing from
+        // the outside.
+        //
+        // A **bound** dictation is deliberately not settled: its words go through
+        // the held prompt, which is up to seven seconds of countdown with a panel
+        // on screen already saying so. A ring hanging over that is a second
+        // indicator for a state that has one, and it would outlive
+        // `settleTimeout` besides.
+        if pasteMode { beginSettling(atCaret: true, watchClipboard: false) }
         syncBorrowedGestures()
         overlay.setListening(false)
 
@@ -1710,6 +1907,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let (wav, duration) = recording else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
+            endSettling(reason: "nothing was recorded")
             clearSpawn()
             // The wheel double-click that binds a terminal lands here every time:
             // it opens the microphone and closes it inside the minimum duration,
@@ -2155,8 +2353,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // relay's own dictation outranks it on `atCaret` only: while a wheel
         // dictation is live the destination is the relay's to name, and the chip
         // is naming it.
-        caretHalo.setActive(listening || wisprDictating,
-                            atCaret: pasteMode || (wisprDictating && !listening))
+        // **Four ways for the ring to be up, and they are four different
+        // claims.** `listening` and `wisprDictating` are *a microphone is open*;
+        // `wisprSpeculative` is *the key that opens one has just been pressed*
+        // (dropped again after `wisprSpeculativeGrace` if no microphone follows);
+        // `settling` is *it closed, and the words have not landed yet*.
+        caretHalo.setActive(listening || wisprDictating || wisprSpeculative || settling,
+                            atCaret: pasteMode
+                                     || ((wisprDictating || wisprSpeculative) && !listening)
+                                     || (settling && settlingAtCaret))
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the ring does rather than a flag of its own.
         publishBinding(terminal.target)
@@ -4522,10 +4727,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         Log.info("📋 \(text.count) chars on the clipboard — pasting at the caret")
+        // The insertion the ring has been waiting for, said at the ⌘V rather than
+        // at the transcript: the words are on screen when the key goes out, not
+        // when the model handed them over.
         if delay == 0 {
             TerminalBinding.pressPaste()
+            endSettling(reason: "pasted at the caret")
         } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { TerminalBinding.pressPaste() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                TerminalBinding.pressPaste()
+                self?.endSettling(reason: "pasted at the caret")
+            }
         }
     }
 

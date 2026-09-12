@@ -85,6 +85,34 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
+    /// **Wispr Flow is probably about to start listening** — its own start
+    /// gesture, seen on the wire, ahead of any microphone opening.
+    ///
+    /// `WisprWatch`'s CoreAudio edge is the *truth* and stays the thing the ring
+    /// is confirmed on, but it is not the *first* thing: between Victor's finger
+    /// and `kAudioProcessPropertyIsRunningInput` sits Electron waking up, an
+    /// overlay window and a device open, and he can see the gap. The keystroke
+    /// that asks for it is the earliest observable moment there is, and this app
+    /// already has every key event in its hands.
+    ///
+    /// Both of Wispr Flow's start gestures, read out of its own
+    /// `~/Library/Application Support/Wispr Flow/config.json`
+    /// (`prefs.user.shortcuts`, key = keycodes joined by `+`):
+    ///
+    /// | shortcut | code | what |
+    /// |---|---|---|
+    /// | `49+59+63` | `popo` | fn ⌃ Space — the hands-free toggle (`postWisprHandsFree` posts exactly this) |
+    /// | `54+61` | `ptt` | right ⌘ + right ⌥ held — push-to-talk |
+    ///
+    /// **Watched, never taken**: both go straight back out. This is a guess and
+    /// is labelled one — `AppDelegate` drops the ring again if no microphone
+    /// opens within `wisprSpeculativeGrace`.
+    var onWisprMaybeStarting: ((String) -> Void)?
+
+    /// Whether Wispr's push-to-talk pair is currently held, so the ring is asked
+    /// for on the edge rather than on every `flagsChanged` while it is down.
+    private var wisprPTTDown = false
+
     /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
     /// at the window in front. Same call ⌘⌃B makes, including its toggle: made on
@@ -1253,6 +1281,35 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
         }
 
+        // ── Wispr Flow's own start gestures, watched and never taken ─────────
+        //
+        // Above the `keyDown` gate because half of it is a `flagsChanged`: Wispr's
+        // push-to-talk is two modifiers and nothing else, so it never produces a
+        // key down at all. See `onWisprMaybeStarting`.
+        if type == .flagsChanged {
+            let raw = event.flags.rawValue
+            // Device-dependent bits, because the pair is specifically the **right**
+            // ⌘ and the **right** ⌥: `.maskCommand` alone would fire on every ⌘ in
+            // the session. `NX_DEVICERCMDKEYMASK` / `NX_DEVICERALTKEYMASK`.
+            let ptt = (raw & Self.deviceRightCommand) != 0 && (raw & Self.deviceRightOption) != 0
+            if ptt != wisprPTTDown {
+                wisprPTTDown = ptt
+                if ptt {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onWisprMaybeStarting?("right ⌘⌥ — Wispr push-to-talk")
+                    }
+                }
+            }
+        }
+        if type == .keyDown,
+           CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == Self.VK_SPACE,
+           event.flags.contains(.maskSecondaryFn), event.flags.contains(.maskControl),
+           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+            DispatchQueue.main.async { [weak self] in
+                self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free")
+            }
+        }
+
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
@@ -1636,9 +1693,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// into), the `hidSystemState` source and the `backButtonStamp` so this
     /// app's own tap knows the keystroke is its own and lets it through.
     ///
-    /// **Bare, with no flags at all.** Wispr's cancel is the key on its own;
-    /// posting it under whatever `flagsState` happens to say would be a
-    /// different chord on a bad day.
+    /// **⌃Escape, and the Control is not optional.** Wispr Flow's own config
+    /// (`prefs.user.shortcuts`) files `53+59` as `dismiss` — Escape (53) plus
+    /// Control (59) — the same place `49+59+63` files the hands-free chord this
+    /// app already posts. A bare Escape is *not* that shortcut; it is whatever
+    /// the app under the caret does with Escape. The Control goes out as a real
+    /// `flagsChanged` around the key, exactly as `postWisprHandsFree` sends fn
+    /// and Control, and nothing else is left on the wire.
     static func postWisprCancel() {
         DispatchQueue.global().async {
             usleep(settleForOptionsPlus)
@@ -1651,13 +1712,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
             let source = CGEventSource(stateID: .hidSystemState)
             source?.userData = backButtonStamp
-            guard let down = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: false)
-            else { return }
-            down.flags = []
-            up.flags = []
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+            let held: CGEventFlags = [.maskControl]
+
+            func modifier(_ key: CGKeyCode, leaving state: CGEventFlags) {
+                guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+                else { return }
+                e.type = .flagsChanged
+                e.flags = state
+                e.post(tap: .cghidEventTap)
+            }
+
+            modifier(Self.VK_CONTROL, leaving: held)
+            if let down = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: true),
+               let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: false) {
+                down.flags = held
+                up.flags = held
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
+            modifier(Self.VK_CONTROL, leaving: [])
         }
     }
 
@@ -1755,6 +1828,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// Escape, for `postWisprCancel` — Wispr Flow's *discard this*. Static
     /// beside the chord's keys rather than reusing the instance `VK_ESCAPE` the
     /// tap reads, because a static method cannot see that one.
+    /// `NX_DEVICERCMDKEYMASK` / `NX_DEVICERALTKEYMASK` — the bits that say
+    /// *which* ⌘ and *which* ⌥, which `CGEventFlags` has no names for. Wispr's
+    /// push-to-talk is the right-hand pair specifically (`54+61`), and matching
+    /// on `.maskCommand` instead would put the ring up on every ⌘⌥ in the day.
+    private static let deviceRightCommand: UInt64 = 0x000010
+    private static let deviceRightOption: UInt64 = 0x000040
+
     private static let VK_ESC:     CGKeyCode = 53
     private static let VK_SPACE:   CGKeyCode = 49
     private static let VK_CONTROL: CGKeyCode = 59

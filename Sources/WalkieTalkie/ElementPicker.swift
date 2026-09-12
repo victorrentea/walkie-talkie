@@ -206,6 +206,12 @@ final class ElementPicker {
     /// edge does, so a pass here is a pass for a real Wispr dictation.
     var onTestWispr: ((Bool) -> Void)?
 
+    /// `POST /test/wispr {"hotkey": true}` — Wispr's *start gesture*, one step
+    /// earlier than its microphone. It cannot be reached any other way at a
+    /// desk: the real path is `HotkeyTap`'s event tap, which needs an
+    /// Accessibility grant a `.build/debug` binary does not have.
+    var onTestWisprHotkey: (() -> Void)?
+
     /// `POST /test/cancel` — the ✕'s new meaning: kill the dictation in flight,
     /// whichever app is holding the microphone.
     var onTestCancelDictation: (() -> Void)?
@@ -448,6 +454,10 @@ final class ElementPicker {
         // Wispr Flow's microphone, faked — see `onTestWispr`.
         case ("POST", "/test/wispr"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            if body?["hotkey"] as? Bool == true {
+                onTestWisprHotkey?()
+                return respond(conn, 200, ["ok": true, "hotkey": true])
+            }
             let on = body?["on"] as? Bool ?? true
             onTestWispr?(on)
             respond(conn, 200, ["ok": true, "wispr": on])

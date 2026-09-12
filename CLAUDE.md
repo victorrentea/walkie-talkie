@@ -131,6 +131,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/wispr` `{"on": true}` | pretend Wispr Flow opened (or closed) the microphone — the ⚡ ring, the chevrons and the ✕'s cancel, without dictating into another app |
+| `POST /test/wispr` `{"hotkey": true}` | pretend Wispr's *start gesture* was pressed — the speculative ring, one step earlier than the microphone |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |

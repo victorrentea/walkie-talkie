@@ -257,6 +257,57 @@ when the first level sample arrives, not when the first word is transcribed.
   `patience`, so *every* Wispr dictation with a two-second pause took the app down at the instant
   they were due. → journal: *The ring is up before anything is opened (2026-09-12)*
 
+## The ring is up on Wispr's keystroke, not its microphone (2026-09-12, second pass)
+
+Moving the ring ahead of `startMetering` was not enough — Victor still saw it arrive late. The
+CoreAudio edge is the *truth* but not the *first* moment: Electron has to wake, raise its overlay
+and open a device before `IsRunningInput` flips.
+
+- **`HotkeyTap.onWisprMaybeStarting` fires on Wispr Flow's own start gestures, read out of its own
+  config** — `~/Library/Application Support/Wispr Flow/config.json`, `prefs.user.shortcuts`, keyed
+  by keycodes joined with `+`: **`49+59+63` = `popo`** (fn ⌃ Space, the hands-free toggle
+  `postWisprHandsFree` already posts) and **`54+61` = `ptt`** (right ⌘ + right ⌥ held,
+  push-to-talk). Watched, never taken. → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
+- **Push-to-talk is two modifiers and produces no `keyDown`** — it is a `flagsChanged`, and the
+  test has to be on the **device-dependent** bits (`NX_DEVICERCMDKEYMASK` 0x10,
+  `NX_DEVICERALTKEYMASK` 0x40). `.maskCommand`/`.maskAlternate` would raise the ring on every ⌘⌥ in
+  the day. → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
+- **A speculative ring must be able to be taken back.** `wisprSpeculativeGrace` 1.5 s: if no
+  microphone follows the keystroke, the ring goes down and says so. A beacon that lies is worse
+  than one that is late — that is the whole reason the CoreAudio edge stayed the confirmation.
+  → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
+- **Both numbers are logged**: `⚡ ring up <n> ms after <gesture> (speculative …)` and
+  `⚡ mic edge confirms the ring <n> ms after the hotkey`. Measured through the test route, the
+  first is **0.6–0.7 ms**. → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
+- **The meter comes up with the guess**, not with the confirmation, so the ring breathes from the
+  first syllable. `start(to:)` is a no-op on a session already open, so the confirming edge costs
+  nothing. → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
+
+## The ring goes down when the words land (2026-09-12)
+
+Victor: the ⚡ ring and the chevrons go away when the text is **inserted**, not when the microphone
+closes. Between the two is the whole transcription — the stretch in which he is waiting.
+
+- **`settling` is a fourth reason for the ring to be up**, beside `listening`, `wisprDictating` and
+  `wisprSpeculative`, and it carries `settlingAtCaret` so the chevrons do not disarm underneath it.
+  → journal: *The ring goes down when the words land (2026-09-12)*
+- **A Wispr paste is another app's ⌘V; the pasteboard's `changeCount` is the only thing there is to
+  observe.** Polled at 20 Hz *only while settling*. Wispr writes the transcript there and presses
+  ⌘V, exactly as `pasteText` does. → journal: *The ring goes down when the words land (2026-09-12)*
+- **The relay's own caret dictation ends its settle from `pasteText`**, at the ⌘V and not at the
+  transcript: the words are on screen when the key goes out. `watchClipboard: false` there — it
+  *is* the paste and needs no guessing. → journal: *The ring goes down when the words land (2026-09-12)*
+- **A bound dictation is deliberately not settled.** Its words go through the held prompt, up to
+  seven seconds of countdown with a panel already saying so; a ring over that is a second indicator
+  for a state that has one, and it would outlive `settleTimeout` besides. → journal: *The ring goes down when the words land (2026-09-12)*
+- **`settleTimeout` 6 s, and the log says which ended it** — `⚡ ring down: <reason> — <n> ms after
+  the recording ended`, one of *pasted at the caret* / *Wispr pasted at the caret* / *timed out
+  waiting for the text* / *nothing was recorded*. That line is what makes "the ring went away too
+  early" answerable from the file. → journal: *The ring goes down when the words land (2026-09-12)*
+- **A cancel never settles.** There are no words to wait for, so the ring goes at once
+  (`wisprCancelling` tells the closing edge that follows Wispr's Escape not to start one).
+  → journal: *The ring goes down when the words land (2026-09-12)*
+
 ## The ✕ cancels the dictation (2026-09-12)
 
 - **The ✕ on the overlay cancels the dictation in flight, and only ends the session when there is
@@ -264,11 +315,19 @@ when the first level sample arrives, not when the first word is transcribed.
   *during* a dictation — so at the one moment it is reachable it must mean *stop this sentence*, not
   *quit the app that drew the ring*. `AppDelegate.cancelDictationInFlight` returns whether there was
   anything to cancel; the ✕ falls through to `endSession` when there was not. → journal: *The ✕ cancels the dictation (2026-09-12)*
-- **A Wispr Flow dictation is cancelled with `HotkeyTap.postWisprCancel()` — Escape on the wire.**
+- **⬅️ cancels a Wispr dictation too** (2026-09-12): `hotkeys.onLocalCancel` — the forward button
+  held and the mouse flicked left (`VK_F11` under ⌃⌥⌘), and the wheel held with Logi gestures off —
+  goes through `cancelDictationInFlight` like the ✕ and the menu row. The gesture that abandons a
+  sentence must not depend on which app is hearing it; local behaviour is untouched because
+  `localRecording` is tried first. → journal: *The ✕ cancels the dictation (2026-09-12)*
+- **A Wispr Flow dictation is cancelled with `HotkeyTap.postWisprCancel()` — ⌃Escape on the wire.**
+  **Not a bare Escape.** Wispr's own config files `53+59` as `dismiss` — Escape plus Control — in
+  the same `prefs.user.shortcuts` map as the hands-free chord. A bare Escape is whatever the app
+  under the caret does with Escape.
   Built out of `postWisprHandsFree` and sharing everything that makes it correct: the Options+
   settle, the wait for Victor's own modifiers to come off (a held ⌘ would make this ⌘Escape), the
   `hidSystemState` source and `backButtonStamp` so this app's own tap lets the keystroke through.
-  **Bare, with no flags.** Nothing of Wispr's is read — the database rule is untouched. → journal: *The ✕ cancels the dictation (2026-09-12)*
+  Nothing of Wispr's is read — the database rule is untouched. → journal: *The ✕ cancels the dictation (2026-09-12)*
 - **The ring comes down on Wispr's own closing edge, not on the cancel.** Nothing guesses at the
   state, so a cancel Wispr ignores leaves the beacon truthfully lit. → journal: *The ✕ cancels the dictation (2026-09-12)*
 - **The menu bar's *Cancel Dictation* row reads `isDictationCancellable`, not `isRecording`.**
@@ -298,6 +357,11 @@ when the first level sample arrives, not when the first word is transcribed.
   strokes off a 4× downscaled sheet; they were 8 px. → journal: *Spokes: the halo stylised with lines (2026-09-10, in progress)*
 - **`/test/dictation/start` opens no microphone**, so `level` and `quietSeconds` stay at zero and
   the halo sits at rest for ever there — it reads exactly like a broken swell and is not one. → journal: *What ships: `codex3`, and the envelope became a plateau (2026-09-10)*
+- **`POST /test/wispr {"hotkey": true}` fakes Wispr's *start gesture*, one step earlier than its
+  microphone.** The real path is `HotkeyTap`'s event tap, which needs an Accessibility grant a
+  `.build/debug` binary does not have — so without this the speculative ring is unreachable at a
+  desk. The sequence that exercises the whole life of the ring: `{"hotkey": true}` →
+  `{"on": true}` → `{"on": false}` → write something to the pasteboard. → journal: *The ring is up on Wispr's keystroke (2026-09-12)*
 - **`POST /test/wispr {"on": true|false}` fakes Wispr Flow's microphone.** `WisprWatch` reads a
   CoreAudio boolean about *another app's* process, so before this the ⚡ ring, the chevrons and the
   ✕'s cancel could only be exercised by actually dictating into Wispr Flow — which is how a crash in
