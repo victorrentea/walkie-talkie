@@ -437,6 +437,30 @@ final class CaretHalo {
         on ? show() : hide()
     }
 
+    /// **Build the panel at launch, so the first dictation of the day does not
+    /// pay for it.**
+    ///
+    /// `makePanel` is not cheap and never was: it decodes a 236×236 ×25 sprite
+    /// sheet, then integrates the alpha of every cell of it twice — once for the
+    /// centroid and mean radius, once for the flux the panel's opacity is
+    /// matched against (`artworkGain`). Measured on this Mac it is the whole of
+    /// the gap between `◯ caret halo on` and `◯ caret halo film` in the log, and
+    /// it was being spent on the main thread inside `show()` — i.e. between
+    /// Wispr Flow opening the microphone and the ring for it appearing, which is
+    /// the one place in the day it must not be spent (Victor, 2026-09-12: the
+    /// ring is up *when Wispr starts recording*).
+    ///
+    /// It is the same trade `applicationDidFinishLaunching` already makes for
+    /// the Whisper weights, for the same reason: the relay is a login item that
+    /// is up before he is, and login is the one moment nobody is waiting.
+    func prewarm() {
+        guard panel == nil else { return }
+        let t0 = CFAbsoluteTimeGetCurrent()
+        _ = makePanel()
+        Log.info(String(format: "◯ caret halo warmed at launch in %.0f ms — the first dictation pays nothing",
+                        (CFAbsoluteTimeGetCurrent() - t0) * 1000))
+    }
+
     private func show() {
         let panel = self.panel ?? makePanel()
         // **A collapse still in the air is taken back whole**, before anything

@@ -88,6 +88,13 @@ final class WisprWatch {
     /// The last verdict, for anyone who needs to ask rather than be told.
     private(set) var isDictating = false
 
+    /// **When the edge was read off CoreAudio**, stamped on the watcher's own
+    /// queue immediately before the hop to main. The ring's job is to be up the
+    /// instant the microphone opens, and "instant" is only a claim until
+    /// something measures it — `AppDelegate` subtracts this from the moment the
+    /// panel is on screen and writes the milliseconds into the log.
+    private(set) var edgeAt: CFAbsoluteTime = 0
+
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-watch")
     /// The process objects we hold an `IsRunningInput` listener on, and the block
     /// each was registered with — `AudioObjectRemovePropertyListenerBlock` matches
@@ -156,7 +163,9 @@ final class WisprWatch {
     /// an edge.
     private func publish() {
         let now = watched.keys.contains { Self.isRunningInput($0) }
+        let at = CFAbsoluteTimeGetCurrent()
         DispatchQueue.main.async { [weak self] in
+            self?.edgeAt = at
             guard let self, now != self.isDictating else { return }
             self.isDictating = now
             Log.info("wispr flow \(now ? "opened the microphone" : "closed the microphone")")

@@ -99,8 +99,23 @@ final class MicRecorder {
     /// is `dt / levelFallSeconds`, so a device delivering 4096-frame buffers and
     /// one delivering 512 fade at the same speed. The old coefficient was per
     /// *buffer* and therefore silently faster or slower on a different device.
+    /// **Never waits for the lock.** `start(to:)` holds it across a synchronous
+    /// device open — `AVAudioEngine.inputNode`, `InputDevice.select`,
+    /// `installTap`, `engine.start()` — which is tens to hundreds of
+    /// milliseconds on a good day and, measured 2026-09-12 on a build with no
+    /// microphone grant, **forever**. This getter is called from the halo's
+    /// 20 Hz timer on the main thread, so blocking on it freezes the whole app,
+    /// ring included, for as long as the open takes: the beacon that exists to
+    /// say *I am hearing you* would stop moving precisely because a microphone
+    /// was being opened.
+    ///
+    /// A readout sampled at 20 Hz has nothing to gain from being exactly current
+    /// and everything to lose from being late, so a contended read returns the
+    /// last value it saw instead. `quietSeconds` is the same bargain for the
+    /// same reason.
     var level: Float {
-        lock.lock(); defer { lock.unlock() }
+        guard lock.try() else { return live }
+        defer { lock.unlock() }
         return live
     }
     private var live: Float = 0
@@ -119,7 +134,8 @@ final class MicRecorder {
     /// Counted in audio, not in wall clock, so it cannot run on while the
     /// microphone is closed or while buffers are late.
     var quietSeconds: TimeInterval {
-        lock.lock(); defer { lock.unlock() }
+        guard lock.try() else { return quiet }
+        defer { lock.unlock() }
         return quiet
     }
     private var quiet: TimeInterval = 0

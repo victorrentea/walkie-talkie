@@ -55,6 +55,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the row that ends it is on screen.
     var isRecording: (() -> Bool)?
 
+    /// **Is there a dictation to cancel** — which is not the same question as
+    /// `isRecording`. Since 2026-09-12 the row kills a Wispr Flow dictation too,
+    /// and that one is nothing this app is *recording*: every other row that
+    /// reads `isRecording` (Start Dictation, New Session, Recover) is asking
+    /// about the relay's own microphone and must go on asking only about that.
+    /// Absent, it falls back to `isRecording`, which is what it used to be.
+    var isDictationCancellable: (() -> Bool)?
+
     /// ⌘⌃P from the menu, and whether there is anything to paste. Asked when the
     /// menu opens, like the two above: it becomes true with the first dictation
     /// of the session and never goes back, but the moment it has to be right is
@@ -873,7 +881,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let recording = isRecording?() ?? false
         startDictation.isEnabled = !recording
         stopRecording.isEnabled = recording
-        cancelDictation.isEnabled = recording
+        cancelDictation.isEnabled = isDictationCancellable?() ?? recording
         // Not while one is running: two transcripts arriving at one panel is an
         // ordering problem there is no reason to create from a menu.
         recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)

@@ -194,6 +194,22 @@ final class ElementPicker {
     /// forward-button path is untestable.
     var onTestReplaceWispr: ((Bool) -> Void)?
 
+    /// `POST /test/wispr` `{"on": true}` — pretend Wispr Flow just opened (or
+    /// closed) the microphone.
+    ///
+    /// `WisprWatch` reads one CoreAudio boolean about *another app's* process,
+    /// and there is no way to make that boolean true from a desk without
+    /// actually dictating into Wispr Flow. Everything hanging off it — the ⚡
+    /// ring, the inactivity chevrons, the ✕ that now cancels — was therefore
+    /// only ever exercised by talking, which is how a crash in the chevrons
+    /// survived a day of testing. This enters at exactly the point the watcher's
+    /// edge does, so a pass here is a pass for a real Wispr dictation.
+    var onTestWispr: ((Bool) -> Void)?
+
+    /// `POST /test/cancel` — the ✕'s new meaning: kill the dictation in flight,
+    /// whichever app is holding the microphone.
+    var onTestCancelDictation: (() -> Void)?
+
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
     /// is otherwise reachable only by clicking a row.
     var onTestRecover: (() -> Void)?
@@ -428,6 +444,18 @@ final class ElementPicker {
         case ("POST", "/test/dictation/start"):
             onTestDictationStart?()
             respond(conn, 200, ["ok": true, "listening": true])
+
+        // Wispr Flow's microphone, faked — see `onTestWispr`.
+        case ("POST", "/test/wispr"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let on = body?["on"] as? Bool ?? true
+            onTestWispr?(on)
+            respond(conn, 200, ["ok": true, "wispr": on])
+
+        // The ✕'s cancel, from a desk — see `onTestCancelDictation`.
+        case ("POST", "/test/cancel"):
+            onTestCancelDictation?()
+            respond(conn, 200, ["ok": true])
 
         // **The menu's undo for a cancel, from a desk.** The row is the only way
         // in, and a menu row is the one input nothing here can produce — the

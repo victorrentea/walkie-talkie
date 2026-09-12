@@ -51,6 +51,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Wispr Flow has the microphone open — see `WisprWatch`.
     private let wisprWatch = WisprWatch()
 
+    /// **Where Wispr's meter is opened and closed, off the main thread.**
+    ///
+    /// `MicRecorder.start(to:)` is a synchronous device open — `AVAudioEngine`'s
+    /// `inputNode`, `InputDevice.select`, `installTap`, `engine.start()` — and it
+    /// was being run on main, on the edge, in front of the ring. Measured
+    /// 2026-09-12 with a build that had no microphone grant: `-[AVAudioEngine
+    /// inputNode]` **never returned**, and with the old ordering that is a Wispr
+    /// dictation with no ⚡ ring at all rather than one with a ring that does not
+    /// breathe. Even granted it is tens to hundreds of milliseconds of main
+    /// thread, spent exactly where Victor asked for none.
+    ///
+    /// Serial, and both edges go through it, so a `stop` can never overtake the
+    /// `start` it is meant to undo.
+    private let wisprMeterQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-meter")
+
     /// The last thing `wisprWatch` said, on the main thread where the halo is.
     private var wisprDictating = false
 
@@ -452,7 +467,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Outbox.prepare()
         overlay = RelayWindow()
 
-        overlay.onEndSession = { [weak self] in self?.endSession(reason: "✕ button") }
+        // **The ✕ cancels the dictation before it ends anything.** It ended the
+        // session outright until 2026-09-12, which is the wrong verb at the one
+        // moment the ✕ is actually reachable: it is hidden until the pointer is
+        // over the overlay, and the overlay is a panel he can reach *during a
+        // dictation*. Victor, dictating into Wispr Flow with the ring up: the ✕
+        // beside it has to mean **stop this sentence and throw it away**, not
+        // quit the app that drew the ring. With nothing being dictated it still
+        // means what it always did.
+        overlay.onEndSession = { [weak self] in
+            guard let self else { return }
+            if self.cancelDictationInFlight(reason: "✕ button") { return }
+            self.endSession(reason: "✕ button")
+        }
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
@@ -557,8 +584,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a recording ended from the menu is still a dictation, and it is
         // transcribed and sent exactly as if the button had ended it.
         status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
-        status.onCancelDictation = { [weak self] in self?.cancelLocalRecording() }
+        // **Cancel Dictation means whichever microphone is open**, not only the
+        // relay's — same reason the ✕ does, and the same one call.
+        status.onCancelDictation = { [weak self] in
+            _ = self?.cancelDictationInFlight(reason: "menu bar Cancel Dictation")
+        }
+        status.isDictationCancellable = { [weak self] in
+            guard let self else { return false }
+            return self.localRecording || self.wisprDictating
+        }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
+        // Wispr Flow's microphone, faked — the only way the ⚡ ring, the
+        // chevrons and the ✕'s cancel are reachable without talking into
+        // another app. Straight onto main: everything it reaches is AppKit's.
+        picker.onTestWispr = { [weak self] on in
+            DispatchQueue.main.async {
+                guard let self, self.wisprDictating != on else { return }
+                Log.info("wispr flow \(on ? "opened" : "closed") the microphone (simulated)")
+                self.wisprDictationChanged(on, measured: false)
+            }
+        }
+        picker.onTestCancelDictation = { [weak self] in
+            DispatchQueue.main.async {
+                _ = self?.cancelDictationInFlight(reason: "POST /test/cancel")
+            }
+        }
         picker.onTestRecover = { [weak self] in
             // The listener's thread; everything this touches is the main queue's.
             DispatchQueue.main.async { self?.recoverCancelledDictation() }
@@ -926,24 +976,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // only knows *open* or *closed*. Nothing is written; see
         // `MicRecorder.startMetering`.
         wisprWatch.onChange = { [weak self] on in
-            guard let self else { return }
-            self.wisprDictating = on
-            if on {
-                // Not while the relay is recording for itself: that session is
-                // already metering the same voice, `voiceMeter` prefers it, and
-                // a second engine on the device would buy nothing.
-                if !self.mic.isRecording, let why = self.wisprMeter.startMetering() {
-                    // The ring still comes up — at rest, not breathing. Said out
-                    // loud because a ring that does not move looks exactly like
-                    // a broken swell and is not one.
-                    Log.error("wispr halo: no level — \(why)")
-                }
-            } else {
-                self.wisprMeter.stopMetering()
-            }
-            self.syncBorrowedGestures()
+            self?.wisprDictationChanged(on, measured: true)
         }
         wisprWatch.start()
+
+        // The ring's panel is built here rather than on the first dictation —
+        // see `CaretHalo.prewarm`.
+        caretHalo.prewarm()
 
         // Nothing is bound yet, and a marker left by a relay that was killed
         // rather than quit would claim otherwise until the first bind.
@@ -996,6 +1035,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 CaptureEffectDemo.runOne(only, reps: reps, speed: speed)
             }
+        }
+    }
+
+    /// Wispr Flow's microphone opened or closed — from `WisprWatch`, or from
+    /// `POST /test/wispr`, which is the same edge with no CoreAudio behind it
+    /// (`measured: false` keeps the latency line honest).
+    private func wisprDictationChanged(_ on: Bool, measured: Bool) {
+        wisprDictating = on
+        if on {
+            // **The ring goes up first, and the microphone second.** This
+            // used to run the other way round, and the other way round costs
+            // an `AVAudioEngine.start()` — a synchronous device open,
+            // measured at 60–260 ms on this Mac — spent between Wispr Flow
+            // opening the microphone and the beacon for it appearing.
+            // Victor's ask, 2026-09-12: the ⚡ ring is up *when Wispr starts
+            // recording*, not when the first level sample arrives. The ring
+            // needs no level to be drawn: `show()` puts it at `rest` and the
+            // 20 Hz timer picks the swell up on its very next tick, which is
+            // 50 ms later at worst and needs no ordering with this.
+            syncBorrowedGestures()
+            // Only for an edge that actually came off CoreAudio — the test
+            // route enters below the watcher and would otherwise print the
+            // age of the last real dictation.
+            if measured, wisprWatch.edgeAt > 0 {
+                Log.info(String(format: "⚡ ring up %.0f ms after Wispr Flow opened the microphone",
+                                (CFAbsoluteTimeGetCurrent() - wisprWatch.edgeAt) * 1000))
+            }
+            // Not while the relay is recording for itself: that session is
+            // already metering the same voice, `voiceMeter` prefers it, and
+            // a second engine on the device would buy nothing.
+            guard !mic.isRecording else { return }
+            wisprMeterQueue.async { [weak self] in
+                guard let self else { return }
+                if let why = self.wisprMeter.startMetering() {
+                    // The ring is already up — at rest, not breathing. Said out
+                    // loud because a ring that does not move looks exactly like
+                    // a broken swell and is not one.
+                    Log.error("wispr halo: no level — \(why)")
+                }
+            }
+        } else {
+            wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
+            syncBorrowedGestures()
         }
     }
 
@@ -1369,6 +1451,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Everything the dictation had gathered goes with it. Shots and picks are
     /// stamped against `dictationStartedAt`, so leaving them behind would attach
     /// them to the *next* sentence, timed from a clock that no longer exists.
+    /// **Throw away whatever is being dictated right now, whoever is hearing
+    /// it** — the ✕ on the overlay, the menu bar's *Cancel Dictation*, and
+    /// `POST /test/cancel` all come here.
+    ///
+    /// There are two microphones this app can be looking at and only one of them
+    /// is its own, so there are two cancels:
+    ///
+    /// - **The relay's own dictation** is cancelled where it always was
+    ///   (`cancelLocalRecording`): the audio is kept for five minutes, nothing
+    ///   is transcribed, nothing is sent.
+    /// - **A Wispr Flow dictation** is not this app's to end from the inside —
+    ///   no word, file or transcript of Wispr's is ever read here, and that rule
+    ///   is not being reopened for a cancel. What *is* available is the way this
+    ///   app already talks to Wispr Flow: a chord on the wire.
+    ///   `HotkeyTap.postWisprCancel` posts Escape exactly the way
+    ///   `postWisprHandsFree` posts fn ⌃ Space — same `CGEventSource`, same
+    ///   stamp, same wait for Victor's own modifiers to clear — and Escape while
+    ///   Wispr is recording is Wispr's own *discard this, paste nothing*.
+    ///
+    /// The ring goes down when Wispr closes the microphone and `WisprWatch` says
+    /// so, which is the same edge every other Wispr dictation ends on: nothing
+    /// here guesses at the state, so a cancel Wispr ignores leaves the beacon
+    /// truthfully lit rather than lying about a dictation that is still running.
+    ///
+    /// - Returns: whether there was anything to cancel — the ✕ falls through to
+    ///   ending the session when there was not.
+    @discardableResult
+    private func cancelDictationInFlight(reason: String) -> Bool {
+        if localRecording {
+            Log.info("🗑️ dictation cancelled via \(reason)")
+            cancelLocalRecording()
+            return true
+        }
+        if wisprDictating {
+            Log.info("🗑️ Wispr Flow dictation cancelled via \(reason) — posting Escape")
+            HotkeyTap.postWisprCancel()
+            overlay.flash("✕ cancelled", duration: 2.0)
+            return true
+        }
+        return false
+    }
+
     private func cancelLocalRecording() {
         guard localRecording else { return }
         localRecording = false

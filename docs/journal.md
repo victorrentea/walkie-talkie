@@ -7422,3 +7422,100 @@ fabricated syllables followed by six of silence, so it crosses `patience` at
 t = 8 and raises the heads for real. Measured both ways on 2026-09-12:
 `WT_HALO_DEMO=11` exits **133** with the bug and **0** with it fixed. Anything
 animated in here gets eleven seconds of demo before it gets installed.
+
+## The ring is up before anything is opened (2026-09-12)
+
+The morning's ask was the crash (*Six heads closing in…*, below/above depending on where you
+start reading). The afternoon's was what the crash had been hiding: *"cercul de fulgere trebuie
+să apară imediat ce Wispr Flow începe să înregistreze"* — immediately, not when the first level
+sample arrives.
+
+The edge itself was never slow. `WisprWatch` is two CoreAudio listener blocks, so the boolean
+arrives on the watcher's queue the moment Wispr's helper opens the input; the log had `wispr flow
+opened the microphone` and `◯ caret halo on` in the same second all along. What was slow was
+everything the handler did *before* asking for the ring:
+
+1. **`wisprMeter.startMetering()` ran first, on the main thread.** It is a synchronous device
+   open — `AVAudioEngine.inputNode`, `InputDevice.select`, `installTap`, `engine.start()`. Tens to
+   hundreds of milliseconds on a good day. Measured 2026-09-12 in a `.build/debug` binary, which
+   has no microphone grant of its own: `-[AVAudioEngine inputNode]` **never returned at all**. With
+   the old ordering that is not a ring that fails to breathe, it is a Wispr dictation with no ring
+   whatsoever, and an app frozen with it.
+2. **`CaretHalo.makePanel()` ran inside the first `show()`** — decoding the 236×236 ×25 sprite
+   sheet and integrating its alpha twice, once for the centroid and mean radius and once for the
+   flux `artworkGain` is matched against. Measured **419–438 ms**, paid by the first dictation of
+   the day, in the one place in the day it must not be paid.
+
+So: the ring goes up first (`syncBorrowedGestures()` moved above the meter), the meter opens on a
+serial `wisprMeterQueue` where it can take as long as it likes, and the panel is built at launch by
+`CaretHalo.prewarm()` — the same trade `applicationDidFinishLaunching` already makes for the
+Whisper weights, for the same reason: the relay is a login item that is up before he is.
+
+A third wait was found by the same hang and is the more dangerous of the three, because it does not
+need a missing grant to bite. **`MicRecorder.level` and `.quietSeconds` took the same `NSLock` that
+`start(to:)` holds across the device open**, and they are read from the halo's 20 Hz timer *on the
+main thread*. A slow microphone open therefore froze the whole app — ring included — for its whole
+duration: the beacon that exists to say *I am hearing you* stopped moving precisely because a
+microphone was being opened. Both getters are `lock.try()` now and return the last value they saw
+when contended. A readout sampled at 20 Hz has nothing to gain from being exactly current and
+everything to lose from being late.
+
+`⚡ ring up <n> ms after Wispr Flow opened the microphone` is written on every real edge, measured
+from `WisprWatch.edgeAt` (stamped on the watcher's own queue immediately before the hop to main),
+and suppressed for the test route, which enters below the watcher and would otherwise print the age
+of the last real dictation.
+
+### The chevrons unbound were never gated — they were crashing
+
+Victor also asked for the inactivity chevrons during a Wispr dictation *"și când nu e bindat"*.
+Nothing gated them: `atCaret` is `pasteMode || (wisprDictating && !listening)` and the halo's half
+of `syncBorrowedGestures` reads no `hasDestination` at all, so an unbound Wispr dictation arms
+`DropArrow` exactly like a bound one. What made them look absent was the `.map(NSNumber.init)`
+crash: the heads are *built* at `CaretHalo.patience`, so every Wispr dictation with a two-second
+pause took the app down at the instant they were due — bound or not. Verified after the fix with
+`POST /unbind` then `POST /test/wispr {"on": true}`: the ring came up, the app was still alive
+seven seconds later, and a screen recording of `WT_HALO_DEMO` shows the three amber heads above the
+pointer inside the dimmed ring.
+
+### `POST /test/wispr` — because the signal belongs to another app
+
+`WisprWatch` reads a CoreAudio boolean about a process this app does not own, so before this route
+the ⚡ ring, the chevrons and (now) the ✕'s cancel could only be exercised by actually dictating
+into Wispr Flow. That is how a crash in the chevrons survived a day of testing: the one path
+nobody can run at a desk is the one Victor runs fifty times a day. It enters at
+`wisprDictationChanged(_:measured:)`, the watcher's own edge, and opens the relay's meter like the
+real thing.
+
+## The ✕ cancels the dictation (2026-09-12)
+
+*"Butonul ✕ de pe chip trebuie să anuleze dictarea, nu doar să închidă chip-ul."*
+
+The ✕ is hidden until the pointer is over the overlay, and the overlay is a panel he can reach
+**during a dictation** (`setHovering` — *"It comes back with the panel — during a dictation, and on
+the prompt"*). So at the one moment it is actually reachable it was doing the one thing it must
+not: `endSession`, which announces the session's end to the watching agent and quits the app that
+is drawing the ring.
+
+It cancels first now, and only ends the session when there was nothing to cancel
+(`cancelDictationInFlight` returns whether there was). Two microphones, two cancels:
+
+- **The relay's own dictation** goes through `cancelLocalRecording` exactly as it always did — audio
+  kept for five minutes, nothing transcribed, nothing sent.
+- **A Wispr Flow dictation** is not this app's to end from the inside, and the 2026-08-29 rule
+  against reading Wispr's database is not being reopened for a cancel. What is available is the way
+  this app already talks to Wispr Flow: a chord on the wire. `HotkeyTap.postWisprCancel()` posts
+  **Escape** — Wispr's own *discard this, paste nothing* — built out of `postWisprHandsFree` and
+  sharing everything that makes that correct: the Options+ settle, the wait for Victor's own
+  modifiers to come off the wire (a held ⌘ would make this ⌘Escape, which is something else
+  entirely in half the apps he dictates into), the `hidSystemState` source, and `backButtonStamp` so
+  this app's own tap knows the keystroke is its own. Bare, with no flags: posting it under whatever
+  `flagsState` happens to say is a different chord on a bad day.
+
+The ring comes down on Wispr's **own** closing edge, not on the cancel. Nothing here guesses at the
+state, so a cancel Wispr ignores leaves the beacon truthfully lit rather than lying about a
+dictation that is still running.
+
+The menu bar's *Cancel Dictation* row now reads `isDictationCancellable` (`localRecording ||
+wisprDictating`) instead of `isRecording`. `isRecording` still gates *Start Dictation*, *New
+Session* and *Recover Cancelled Dictation*, all of which are about the relay's own microphone and
+must go on being.

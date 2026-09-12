@@ -1620,6 +1620,47 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// documents at length: this runs in the tap callback for F7, the one
     /// instant ⌃⌥⌘ are on the wire, and the window server merges them into
     /// anything posted then — ⌃⌥⌘ fn Space is not the chord Wispr listens for.
+    /// **Escape, to make Wispr Flow throw the sentence away.**
+    ///
+    /// The other half of `postWisprHandsFree`, and deliberately built out of it
+    /// rather than beside it: the ✕ on the overlay now means *cancel this
+    /// dictation*, and when the microphone belongs to Wispr Flow the only honest
+    /// way to say that is the key Wispr itself listens for. Escape while it is
+    /// recording discards the audio and pastes nothing — the one gesture that
+    /// ends a Wispr dictation without leaving words behind.
+    ///
+    /// Everything that makes `postWisprHandsFree` correct is needed here for the
+    /// same reasons and so is shared: the Options+ settle, the wait for Victor's
+    /// own modifiers to come off the wire (a ⌘ or ⌥ still held would make this
+    /// ⌘Escape, which is something else entirely in half the apps he dictates
+    /// into), the `hidSystemState` source and the `backButtonStamp` so this
+    /// app's own tap knows the keystroke is its own and lets it through.
+    ///
+    /// **Bare, with no flags at all.** Wispr's cancel is the key on its own;
+    /// posting it under whatever `flagsState` happens to say would be a
+    /// different chord on a bad day.
+    static func postWisprCancel() {
+        DispatchQueue.global().async {
+            usleep(settleForOptionsPlus)
+            let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            var waited = 0
+            while !CGEventSource.flagsState(.combinedSessionState).intersection(watched).isEmpty,
+                  waited < 40 {
+                usleep(5_000)
+                waited += 1
+            }
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = backButtonStamp
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_ESC, keyDown: false)
+            else { return }
+            down.flags = []
+            up.flags = []
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
     static func postWisprHandsFree() {
         DispatchQueue.global().async {
             usleep(settleForOptionsPlus)
@@ -1711,6 +1752,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
     /// The three keys of Wispr Flow's hands-free chord, written in the same
     /// numbers Wispr's own config stores them in: `"49+59+63"`.
+    /// Escape, for `postWisprCancel` — Wispr Flow's *discard this*. Static
+    /// beside the chord's keys rather than reusing the instance `VK_ESCAPE` the
+    /// tap reads, because a static method cannot see that one.
+    private static let VK_ESC:     CGKeyCode = 53
     private static let VK_SPACE:   CGKeyCode = 49
     private static let VK_CONTROL: CGKeyCode = 59
     private static let VK_FN:      CGKeyCode = 63
