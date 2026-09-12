@@ -1759,8 +1759,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// System Settings → General → Login Items, which is where he would look.
     /// Already-registered is not an error, and a failure is logged rather than
     /// shown: an app that cannot register is still an app that runs.
+    ///
+    /// **Only the installed bundle registers** (2026-09-12). The debug binary in
+    /// `.build/` — every `RELAY_SHOOT` and `WT_SHOOT_*` run — went through here
+    /// too, and with an ad-hoc signature whose cdhash changes on every build,
+    /// `SMAppService` saw a *new* app each time: `sfltool dumpbtm` listed dozens
+    /// of `WalkieTalkie` items pointing at the same `.build/…/debug/WalkieTalkie`,
+    /// and macOS posted *"Login Item Added — WalkieTalkie"* on every rebuild.
+    /// Victor: *"apare întruna acest mesaj login item added, la fiecare
+    /// reinstall — e chiar necesar să-l văd?"*. It is not: a binary that is not
+    /// `/Applications/Walkie Talkie.app` has no business starting at login.
     private static func startAtLogin() {
         guard #available(macOS 13, *) else { return }
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            Log.info("not an installed bundle — not registering as a login item")
+            return
+        }
         let service = SMAppService.mainApp
         guard service.status != .enabled else {
             Log.info("already a login item")
@@ -1896,6 +1910,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // lands after the work is a flash that no longer means "now": it was
         // firing long after the frame it confirms had already been taken.
         if !alreadyOpen { CaptureFlash.announce(cursor: cursor, cycleMarker: true) }
+        // …and the ring comes out of the point the bubble has just marked. A
+        // hop of its own, like the flash's: `captureContext` is reached from the
+        // loopback's listener thread too, and the halo is layers and timers.
+        DispatchQueue.main.async { [weak self] in self?.caretHalo.grow() }
 
         armOrphanFlush()
 
@@ -2068,11 +2086,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `wisprSpeculative` is *the key that opens one has just been pressed*
         // (dropped again after `wisprSpeculativeGrace` if no microphone follows);
         // `settling` is *it closed, and the words have not landed yet*.
+        // **A bound sentence's ring grows out of the pointer** (2026-09-12) —
+        // the caret's comes up whole, because nothing marks the pointer first
+        // there: no picture is taken and no bubble announces one.
+        let atCaret = pasteMode
+            || (speculative && !listening)
+            || (listening && !isBound && !spawnPending)
+            || (settling && settlingAtCaret)
         caretHalo.setActive(listening || speculative || settling,
-                            atCaret: pasteMode
-                                     || (speculative && !listening)
-                                     || (listening && !isBound && !spawnPending)
-                                     || (settling && settlingAtCaret))
+                            atCaret: atCaret,
+                            fromPointer: listening && !atCaret)
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the ring does rather than a flag of its own.
         publishBinding(terminal.target)

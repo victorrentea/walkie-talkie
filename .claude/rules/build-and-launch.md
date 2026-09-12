@@ -66,6 +66,19 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   mistaken for. `RELAY_SHOOT` and `docs/shoot-overlay-states.sh` run exactly as before.
   → journal: *Never launch the installed app by its executable path*
 
+## Only the installed bundle registers as a login item (2026-09-12)
+
+- **`startAtLogin()` returns unless `Bundle.main.bundleURL` ends in `.app`.** The debug binary
+  (`RELAY_SHOOT`, `WT_SHOOT_*`, any `.build/debug/WalkieTalkie` run) is ad-hoc signed with a new
+  cdhash per build, so `SMAppService` saw a new app each time and registered it — 32 stray
+  `WalkieTalkie` login items in `sfltool dumpbtm`, and a *"Login Item Added — WalkieTalkie"*
+  banner on every rebuild. The banner names the executable (no space), which is how to tell a
+  debug registration from the installed app's. → journal: *Only the installed bundle is a login
+  item (2026-09-12)*
+- **Stray rows are removed by hand** (System Settings → General → Login Items & Extensions, the
+  `WalkieTalkie` rows). `SMAppService` can only unregister the running app; `sfltool resetbtm`
+  resets every login item on the Mac.
+
 ## The app icon and the build stamp
 
 - **The icon is generated at build time from `assets/walkie-bound.png` (the device in its orange

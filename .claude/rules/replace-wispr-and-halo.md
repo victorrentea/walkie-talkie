@@ -97,6 +97,7 @@ no outbox line, no terminal, no prompt panel, no countdown.
   `loud` 0.225 × `artworkGain` 1.98 → **0.148 / 0.445** window alpha; the swell is a scale of 0.2
   off the same sample (*"chiar 20%"*) — from the voice, never a timer. Measured: 94.5 pt at rest vs
   113.5 pt at full voice, ratio 1.201. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
+- **A bound sentence's ring grows out of the pointer** (2026-09-12): `setActive(fromPointer:)` holds the stage at `collapseEnd` and `grow()` — called beside `CaptureFlash.announce`, so the bubble comes first — blooms it to full size over `expand` (0.5 s, the collapse reversed). `growGrace` (1.5 s) grows it anyway if no bubble comes; `growOnShow` remembers a `grow()` that landed before the ring was up, because `dictationBegan` takes the picture a line before it raises the ring. A caret ring comes up whole — nothing marks the pointer there — and `grow()` on a ring not held small is a no-op, so there is never a second bloom. Victor: *"să apară din cursor și să se mărească inelul dictării"*. → journal: *The ring grows out of the pointer (2026-09-12)*
 - **The panel `side` grew by the same 20 %.** It was measured to hold exactly the falloff at rest,
   so at full voice the outer glow was cut off square by its own window — found on the contact sheet,
   not on screen. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*

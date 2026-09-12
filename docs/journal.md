@@ -201,6 +201,8 @@ The journal contradicts itself over time, because it was written as things chang
   - [The ring goes down when he dismisses in Wispr (2026-09-12)](#the-ring-goes-down-when-he-dismisses-in-wispr-2026-09-12)
   - [The session row says the terminal's title (2026-09-12)](#the-session-row-says-the-terminals-title-2026-09-12)
   - [The envelope names no recogniser (2026-09-12)](#the-envelope-names-no-recogniser-2026-09-12)
+  - [The ring grows out of the pointer (2026-09-12)](#the-ring-grows-out-of-the-pointer-2026-09-12)
+  - [Only the installed bundle is a login item (2026-09-12)](#only-the-installed-bundle-is-a-login-item-2026-09-12)
 
 ---
 
@@ -7870,3 +7872,42 @@ same envelope wraps its sentences too — *"elimină bucata aceea din text pentr
 să fie și Wispr Flow"* — so it says *transcribed automatically*. The clause's job is that the
 words were spoken and heard by a machine; which machine is a claim the reader would have had
 to disbelieve half the time.
+
+### The ring grows out of the pointer (2026-09-12)
+
+*"Haloul de fulgere să înceapă mărindu-se din cursor, unde apare mic. Se mărește la începutul
+dictării, după ce apare bula galbenă, dacă este dictare legată. Să facă poză, apare bula aceea
+care arată că s-a luat poziția mouse-ului și apoi face zoom out."*
+
+The collapse already said *the sentence went into the pointer* (half a second, smoothstep,
+into a 2 % dot). The opening is that motion reversed, and only for the dictation that has a
+reason to start at a point: a bound (or spawn) sentence takes a picture, and `CaptureFlash`
+marks where the pointer was when it was taken. So `CaretHalo.setActive(fromPointer:)` holds
+the stage at `collapseEnd`, `grow()` is called beside `CaptureFlash.announce` and blooms it
+over `expand` (0.5 s), and the two arrive in the order he described: bubble, then the ring
+out of it. The order in `dictationBegan` is the other way round — the picture is taken a
+line before the ring is raised — so `growOnShow` keeps the call until `show` runs; and a
+bubble that never comes (no destination, a refused screen) is covered by `growGrace`, 1.5 s,
+after which the ring grows on its own rather than standing as a four-point dot for a whole
+sentence. A caret dictation comes up whole, as before — nothing marks the pointer there —
+and `grow()` on a ring not held small is a no-op, which is what keeps a second bloom from
+ever happening over a full-size ring.
+
+### Only the installed bundle is a login item (2026-09-12)
+
+*"Apare întruna acest mesaj «Login Item Added», la fiecare reinstall. E chiar necesar să-l
+văd?"* — the banner said **WalkieTalkie**, no space, which is the debug executable's name and
+not the app's. `sfltool dumpbtm` had **32** login items called `WalkieTalkie`, every one
+pointing at `.build/arm64-apple-macosx/debug/WalkieTalkie`, beside the one real `Walkie
+Talkie` at `/Applications`. Every `RELAY_SHOOT` run (the states page) and every `WT_SHOOT_*`
+run went through `startAtLogin()`, and the debug binary is ad-hoc signed with a cdhash that
+changes on every build, so `SMAppService.mainApp.status` answered `.notRegistered` each time
+and the app dutifully registered a new item — which is what the banner reports. The installed
+app, signed with the stable local identity, has said `already a login item` at every launch
+since 2026-08-29 and never triggered it.
+
+`startAtLogin()` now returns unless `Bundle.main.bundleURL` ends in `.app`. The 32 stray rows
+cannot be removed from here — `SMAppService` unregisters only the running app, and `sfltool
+resetbtm` resets *every* login item on the Mac and makes each re-ask for approval — so they go
+by hand: System Settings → General → Login Items & Extensions, the `WalkieTalkie` rows (not
+`Walkie Talkie`).
