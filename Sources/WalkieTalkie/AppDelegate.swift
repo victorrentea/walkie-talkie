@@ -29,99 +29,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// nothing about what the agent receives — see `VoiceCorpus`.
     private let corpus = VoiceCorpus()
 
-    /// The recogniser. Idle and costing nothing until a dictation is coming —
-    /// the weights are 1.5 GB resident, and the ordinary case is a relay sitting
-    /// in the menu bar all day with nothing bound.
-    private let whisper = LocalWhisper()
+    /// **The local recogniser, retired from every gesture on 2026-09-12** and
+    /// kept as a fallback — see `LocalWhisperSource`. The weights are no longer
+    /// loaded at launch; nothing below names it except the menu row that selects
+    /// it and the five-minute recovery that re-reads a cancelled WAV.
+    private let whisperSource = LocalWhisperSource()
 
-    /// The microphone. The relay records for itself: it opens the input, hands
-    /// the WAV to the model, and nothing outside this app hears the sentence.
-    private let mic = MicRecorder()
+    /// **Wispr Flow, driven and read as if it were this app's own microphone** —
+    /// see `WisprFlowSource`. `lazy`, because it takes the event tap: the wrap
+    /// rests on seeing the ⌘V Wispr posts before the front app does.
+    private lazy var wisprSource = WisprFlowSource(hotkeys: hotkeys)
 
-    /// **A second microphone, open only while Wispr Flow is** — and open for a
-    /// number, never for a recording. See `MicRecorder.startMetering`.
+    /// **Where the words come from, and the only thing below this line that
+    /// knows there is more than one answer.**
     ///
-    /// Its own `MicRecorder` rather than a mode on `mic`: the two sessions are
-    /// started by different things, can overlap (a wheel dictation opened during
-    /// a Wispr one), and one `AVAudioEngine` has one input tap. Keeping them
-    /// apart means the relay's own recording can never be interrupted, shortened
-    /// or re-pointed by something another app did.
-    private let wisprMeter = MicRecorder()
-
-    /// Wispr Flow has the microphone open — see `WisprWatch`.
-    private let wisprWatch = WisprWatch()
-
-    /// **Where Wispr's meter is opened and closed, off the main thread.**
+    /// Victor, 2026-09-12: *Wispr Flow is the dictation source for everything*,
+    /// the bound relay included. Everything downstream — the chip, the halo, the
+    /// settle, the corpus, the held prompt, the caret paste — reads
+    /// `DictationSource` and cannot tell which recogniser it is serving, which
+    /// is the whole point: the Wispr path spent a month with no transcript in it
+    /// precisely because it was a second branch nobody exercised.
     ///
-    /// `MicRecorder.start(to:)` is a synchronous device open — `AVAudioEngine`'s
-    /// `inputNode`, `InputDevice.select`, `installTap`, `engine.start()` — and it
-    /// was being run on main, on the edge, in front of the ring. Measured
-    /// 2026-09-12 with a build that had no microphone grant: `-[AVAudioEngine
-    /// inputNode]` **never returned**, and with the old ordering that is a Wispr
-    /// dictation with no ⚡ ring at all rather than one with a ring that does not
-    /// breathe. Even granted it is tens to hundreds of milliseconds of main
-    /// thread, spent exactly where Victor asked for none.
-    ///
-    /// Serial, and both edges go through it, so a `stop` can never overtake the
-    /// `start` it is meant to undo.
-    private let wisprMeterQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-meter")
-
-    /// **The ring is up on Wispr's keystroke, before its microphone.**
-    ///
-    /// `WisprWatch`'s CoreAudio edge is the truth and still confirms this, but it
-    /// is not the first observable moment: Electron has to wake, put its overlay
-    /// up and open a device before `IsRunningInput` flips. Victor sees that gap
-    /// (2026-09-12: *the ring still comes up late*). `HotkeyTap` already has every
-    /// key event, so the gesture Wispr itself is configured to listen for is
-    /// where the ring goes up, and the microphone edge is where it is believed.
-    private var wisprSpeculative = false
-    /// When that keystroke was seen, so the confirming edge can say how long the
-    /// guess had to wait — and so the log carries both numbers Victor asked for.
-    private var wisprSpeculativeAt: CFAbsoluteTime = 0
-    private var wisprSpeculativeDrop: DispatchWorkItem?
-    /// **How long a guess is allowed to stand unconfirmed.** Long enough for
-    /// Electron to wake up cold, short enough that a ring raised by a chord Wispr
-    /// ignored is gone before it can be believed. A ring that lies is worse than
-    /// a ring that is late, which is why this exists at all.
-    private static let wisprSpeculativeGrace: TimeInterval = 1.5
+    /// `WT_SOURCE=whisper` (or the menu's *Dictation source* row) picks the
+    /// local model instead.
+    private lazy var source: DictationSource = {
+        let wanted = ProcessInfo.processInfo.environment["WT_SOURCE"]?.lowercased()
+            ?? UserDefaults.standard.string(forKey: "dictationSource")
+        return wanted == "whisper" || wanted == "local" ? whisperSource : wisprSource
+    }()
 
     /// **The dictation is over but the words have not landed yet.**
     ///
     /// Victor, 2026-09-12: the ring and the chevrons go away when the text is
     /// *inserted*, not when the microphone closes. Between those two is the whole
-    /// of the transcription — Wispr's or this app's — and it is exactly the
-    /// stretch in which he is waiting and has nothing to look at.
+    /// of the transcription — another app's round trip for Wispr Flow, the
+    /// model's for the local one — and it is exactly the stretch in which he is
+    /// waiting and has nothing to look at.
+    ///
+    /// **The source ends it**, and there is no pasteboard poll here any more:
+    /// waiting for a transcript is the recogniser's business, and the settle is
+    /// over when `didTranscribe` or `didEnd` says so. `settleTimeout` is the
+    /// backstop for a source that answers neither.
     private var settling = false
     /// What the ring was saying about the destination when the microphone closed,
     /// so the chevrons do not disarm underneath the settle.
     private var settlingAtCaret = false
     private var settlingFrom: CFAbsoluteTime = 0
     private var settleGiveUp: DispatchWorkItem?
-    /// Polls the pasteboard while settling a **Wispr** dictation: the insertion is
-    /// another app's ⌘V and there is nothing else of it to observe from here.
-    private var settleWatch: Timer?
-    private var settleClipboardAt = 0
-    /// **The longest the ring waits for words that may never come.** Wispr's
-    /// round trip is ordinarily well under this; past it the honest thing is to
-    /// say the ring was ended by a clock and not by a paste, which the log does.
-    private static let settleTimeout: TimeInterval = 6
+    /// **The longest the ring waits for words that may never come — 20 s.**
+    ///
+    /// It was 6, which is the *average* of Wispr's round trip (2.6 s) with room
+    /// over it, and on 2026-09-12 Victor watched the ring go dark while the
+    /// words were still coming: measured that evening, 5.9 s on one sentence and
+    /// past six on another, against a fleet maximum of 22.8 s. The ring's whole
+    /// job in this stretch is *they are on their way*, so ending it early is the
+    /// one thing it must not do.
+    ///
+    /// Shorter than `WisprFlowSource.captureTimeout` on purpose: the capture
+    /// costs a flag and can afford to wait 30 s, the ring is on screen and a
+    /// beacon standing for half a minute over nothing would stop meaning
+    /// anything.
+    private static let settleTimeout: TimeInterval = 20
 
-    /// The last thing `wisprWatch` said, on the main thread where the halo is.
-    private var wisprDictating = false
+    /// **The gesture that opens a microphone has been seen and the microphone
+    /// has not.** Only a source whose recorder lives in another process has a
+    /// gap here worth drawing — see `DictationSource.didMaybeBegin`.
+    private var speculative = false
 
-    /// **Whichever meter is actually hearing him.** The halo asks for a level
-    /// and a silence and does not care which app opened the input; when the
-    /// relay's own dictation is running it is the authority, because that is the
-    /// session with a transcript riding on it.
-    private var voiceMeter: MicRecorder { mic.isRecording ? mic : wisprMeter }
-
-    /// A recording is open. Main thread only — it is written and read from the
-    /// wheel toggle and the menu, both of which hop to main.
-    private var localRecording = false
-
-    /// What was in front when the recording started, for the message's `app`
-    /// field. Read at the press, not at the end: by the time the model answers he
-    /// has usually switched away.
+    /// What was in front when the dictation started, for the message's `app`
+    /// field. Read at the press, not at the end: by the time the words come back
+    /// he has usually switched away.
     private var localRecordingApp: String?
 
     /// The terminal dictations are typed into, when Victor has pointed the relay
@@ -441,6 +418,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// back off the overlay because it is half of what decides whether mouse 4 and
     /// ⌘-click belong to the relay or to the software they were borrowed from
     /// (`syncBorrowedGestures`).
+    ///
+    /// **It is not `source.isRecording`** (2026-09-12). That one answers *is a
+    /// microphone open*, which for a source living in another process becomes
+    /// true a beat after the gesture and stays true through a close this app has
+    /// not processed yet. This is *the relay has a sentence in flight*, which is
+    /// what every gate below means — and it is what `localRecording` was called
+    /// while the relay's own microphone was the only one that could be open.
     private var listening = false
 
     /// A message that is built, shown, and *not yet written*. It lives here for
@@ -551,6 +535,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // rather than through `setReplaceWispr`: that call flashes the overlay,
         // and a mode restored from the last launch is not an event to announce.
         // The tick is already drawn, so nothing has to be pushed back to the row.
+        // **The wrap, restored from the last launch** — see
+        // `StatusItem.isWrapWispr`. `WT_WRAP_WISPR=0` overrides it for one run,
+        // which is what the harness uses to watch Wispr paste for itself.
+        let wrapOverride = ProcessInfo.processInfo.environment["WT_WRAP_WISPR"]
+        wisprSource.wrapWispr = wrapOverride.map { $0 != "0" } ?? status.isWrapWispr
+        status.onToggleWrapWispr = { [weak self] on in self?.wisprSource.wrapWispr = on }
+        // The ⏳ in the menu bar belongs to whichever source is slow to come up,
+        // and only one of them ever is.
+        whisperSource.onLoadingChanged = { [weak self] loading in
+            self?.status.setEngineLoading(loading)
+        }
         replaceWispr = status.isReplaceWispr
         hotkeys.replaceWispr = replaceWispr
         // Seeded the same way, and for the same reason: the row is the one
@@ -609,21 +604,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
             }
         }
-        status.whisperFootprint = { [weak self] in self?.whisper.footprintBytes }
+        status.whisperFootprint = { [weak self] in self?.whisperSource.footprintBytes }
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment
         // its answer has to be right.
-        status.whisperModel = { [weak self] in self?.whisper.modelName }
+        status.whisperModel = { [weak self] in self?.whisperSource.modelName }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
-        status.isRecording = { [weak self] in self?.localRecording ?? false }
+        status.isRecording = { [weak self] in self?.listening ?? false }
         status.hasLastDictation = { [weak self] in self?.lastDictation?.isEmpty == false }
         status.onPasteLast = { [weak self] in self?.pasteLastDictation(fromMenu: true) }
         // Deliberately the *same* call mouse 5 makes rather than a quieter variant:
         // a recording ended from the menu is still a dictation, and it is
         // transcribed and sent exactly as if the button had ended it.
-        status.onStopRecording = { [weak self] in self?.stopLocalRecording() }
+        status.onStopRecording = { [weak self] in self?.endDictation() }
         // **Cancel Dictation means whichever microphone is open**, not only the
         // relay's — same reason the ✕ does, and the same one call.
         status.onCancelDictation = { [weak self] in
@@ -631,21 +626,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.isDictationCancellable = { [weak self] in
             guard let self else { return false }
-            return self.localRecording || self.wisprDictating
+            return self.listening || self.source.isRecording || self.speculative
         }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
         // Wispr Flow's microphone, faked — the only way the ⚡ ring, the
         // chevrons and the ✕'s cancel are reachable without talking into
         // another app. Straight onto main: everything it reaches is AppKit's.
         picker.onTestWispr = { [weak self] on in
-            DispatchQueue.main.async {
-                guard let self, self.wisprDictating != on else { return }
-                Log.info("wispr flow \(on ? "opened" : "closed") the microphone (simulated)")
-                self.wisprDictationChanged(on, measured: false)
-            }
+            DispatchQueue.main.async { self?.wisprSource.simulateEdge(on) }
         }
         picker.onTestWisprHotkey = { [weak self] in
-            DispatchQueue.main.async { self?.wisprMaybeStarting("POST /test/wispr {hotkey}") }
+            DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
+        }
+        // The real chord on the wire, for the end-to-end harness — see
+        // `tools/wispr-test.sh`. Only useful from the installed build: a
+        // `.build/debug` binary has no Accessibility grant, so `CGEventPost`
+        // does nothing and does it silently.
+        picker.onTestInputDevice = { name in
+            let was = InputDevice.systemDefaultName() ?? ""
+            guard !name.isEmpty else { return ["input": was, "inputs": InputDevice.inputNames()] }
+            guard let now = InputDevice.setSystemDefault(matching: name) else {
+                return ["input": was, "changed": false, "inputs": InputDevice.inputNames()]
+            }
+            return ["input": now, "was": was, "changed": true]
+        }
+        picker.onTestWisprHandsFree = { [weak self] in
+            DispatchQueue.main.async {
+                Log.info("POST /test/wispr-handsfree — posting fn ⌃ Space")
+                self?.wisprSource.postStartChord()
+            }
         }
         picker.onTestCancelDictation = { [weak self] in
             DispatchQueue.main.async {
@@ -660,7 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let kept = self?.cancelledAudio else { return false }
             return FileManager.default.fileExists(atPath: kept.url.path)
         }
-        status.onStartDictation = { [weak self] in self?.startLocalRecording() }
+        status.onStartDictation = { [weak self] in self?.startDictation() }
         // **On main, like the toggle two lines down.** It was not, and the
         // asymmetry is the whole bug: the tap dispatches globally, so cancelling
         // reached `RelayWindow.layoutContent` → `NSWindow.setFrame` on
@@ -678,7 +687,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = self?.cancelDictationInFlight(reason: "⬅️ forward button flicked left")
             }
         }
-        hotkeys.onWisprMaybeStarting = { [weak self] why in self?.wisprMaybeStarting(why) }
+        // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
+        // source that decides what a gesture on the wire means, and it takes the
+        // callback in its own initialiser.
         // ⬆️ held, mouse moved down. **No toggle**, exactly as the left-plus-wheel
         // chord it replaces: the gesture is made while pointing at the terminal he
         // means, and making it twice means "again", never "let go".
@@ -691,7 +702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The menu's copy of the spawn chord. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
-            DispatchQueue.main.async { self?.startLocalRecording(spawn: true) }
+            DispatchQueue.main.async { self?.startDictation(spawn: true) }
         }
         // The menu's shutter row. **After a beat**, because the menu is dismissed
         // by AppKit and the screen redrawn a frame or two later — a capture fired
@@ -722,7 +733,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // between the wheel and the microphone. Held memory is a number in
         // Activity Monitor; ten seconds mid-gesture is the app being broken in
         // front of a room. The memory loses.
-        Log.info("the model is loaded at launch")
         syncLocalCapture()
         overlay.onPromptResolved = { [weak self] send, edited in
             self?.releaseHeld(send: send, edited: edited)
@@ -739,7 +749,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
         hotkeys.onLocalToggle = { [weak self] in
-            DispatchQueue.main.async { self?.toggleLocalRecording() }
+            DispatchQueue.main.async { self?.toggleDictation() }
         }
         // ⬆️ held, mouse moved up — **dictate at a session that does not exist
         // yet.** A gesture of its own, where from 2026-09-05 it was the wheel
@@ -756,8 +766,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onGestureSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard !self.localRecording, !self.recordWhenModelReady else { return }
-                self.startLocalRecording(spawn: true)
+                guard !self.listening, !self.recordWhenSourceReady else { return }
+                self.startDictation(spawn: true)
             }
         }
         // ── Only reachable with *Use Logi Gestures* off ─────────────────────
@@ -766,7 +776,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictation into a spawn, so the context shot waits for the release
         // (`onWheelRelease`) and pictures the screen his finger left.
         hotkeys.onWheelDictate = { [weak self] in
-            DispatchQueue.main.async { self?.startLocalRecording(deferContext: true) }
+            DispatchQueue.main.async { self?.startDictation(deferContext: true) }
         }
         // **The wheel clicked a second time: convert the dictation to a spawn.**
         // Same recording, same words — only the destination changes: the terminal
@@ -783,8 +793,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard !self.localRecording, !self.recordWhenModelReady else { return }
-                self.startLocalRecording(spawn: true, deferContext: true)
+                guard !self.listening, !self.recordWhenSourceReady else { return }
+                self.startDictation(spawn: true, deferContext: true)
             }
         }
         hotkeys.onWheelDoubleSpawn = { [weak self] in
@@ -796,7 +806,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // second click lands half a second later, long before that. The
                 // resumed start reads `spawnPending`, so setting it here is
                 // exactly how the conversion survives the wait.
-                guard self.localRecording || self.recordWhenModelReady else { return }
+                guard self.listening || self.recordWhenSourceReady else { return }
                 guard !self.spawnPending, !self.pasteMode else { return }
                 self.spawnPending = true
                 self.spawnFolder = nil
@@ -810,7 +820,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self, self.contextAtWheelRelease else { return }
                 self.contextAtWheelRelease = false
                 // Ended under the finger (menu, ⌘⌃D) — no sentence, no picture.
-                guard self.localRecording else { return }
+                guard self.listening else { return }
                 self.captureContext()
             }
         }
@@ -821,7 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if self.localRecording { self.stopLocalRecording() }
+                if self.listening { self.endDictation() }
                 // **A bind he has just made outranks the caret.** The forward
                 // button means *wherever the caret is*, which is the vaguest
                 // destination this app has, and seconds ago he named a precise
@@ -829,9 +839,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // See `boundAt` for the afternoon that measured it.
                 else if self.takeBindGrace() {
                     Log.info("🎙️ forward button just after a bind — dictating at the terminal, not the caret")
-                    self.startLocalRecording()
+                    self.startDictation()
                 }
-                else { self.startLocalRecording(paste: true) }
+                else { self.startDictation(paste: true) }
             }
         }
         picker.onPick = { [weak self] pick in self?.record(pick) }
@@ -862,7 +872,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the local engine is up. Close it: a double click is by definition
             // faster than `MicRecorder.minimumDuration`, so the recording is
             // dropped by the guard there rather than transcribed and sent.
-            if self.localRecording { self.stopLocalRecording() }
+            if self.listening { self.endDictation() }
             _ = self.bindFrontmostTerminal()
         }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
@@ -986,7 +996,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
         picker.describeEngine = { [weak self] in
-            ["engine": "whisper", "ready": self?.whisper.ready ?? false]
+            guard let self else { return [:] }
+            var out: [String: Any] = ["source": self.source.name,
+                                      "ready": self.source.isReady,
+                                      "wrapWispr": self.wisprSource.wrapWispr]
+            out["whisper"] = self.whisperSource.describe()
+            return out
         }
 
         let trusted = AXIsProcessTrusted()
@@ -1003,18 +1018,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // see `RelayWindow.listenWarmth`. This is the whole of the wiring: the
         // overlay pulls the number when it wants it and never learns what a
         // recorder is.
-        overlay.voicedSeconds = { [weak self] in self?.mic.voicedSeconds ?? 0 }
+        overlay.voicedSeconds = { [weak self] in self?.source.meter.voicedSeconds ?? 0 }
 
         picker.start()
         music.start()
         // The same seam the chip's warmth ramp is fed through one line up, and
         // the same reason: the ring lights on his voice, and which recorder is
         // holding the microphone is this delegate's business, not its own.
-        caretHalo.level = { [weak self] in self?.voiceMeter.level ?? 0 }
+        caretHalo.level = { [weak self] in self?.source.meter.level ?? 0 }
         // And it asks a second question of the same recorder, because the drop
         // arrow is triggered by silence rather than by volume — see
         // `MicRecorder.quietSeconds` for why that is not read off `level`.
-        caretHalo.quietSeconds = { [weak self] in self?.voiceMeter.quietSeconds ?? 0 }
+        caretHalo.quietSeconds = { [weak self] in self?.source.meter.quietSeconds ?? 0 }
 
         // **The ring covers Wispr Flow's dictations too, since 2026-09-11.**
         // Replace Wispr is off most days, and with it off Wispr Flow is what he
@@ -1024,13 +1039,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the tick, not on a binding.
         //
         // The relay opens its own microphone alongside Wispr's for the length of
-        // it (`wisprMeter`), because the ring breathes on `level` and `WisprWatch`
-        // only knows *open* or *closed*. Nothing is written; see
-        // `MicRecorder.startMetering`.
-        wisprWatch.onChange = { [weak self] on in
-            self?.wisprDictationChanged(on, measured: true)
-        }
-        wisprWatch.start()
+        // it, because the ring breathes on `level` and a CoreAudio boolean only
+        // knows *open* or *closed* — and since 2026-09-12 that session writes the
+        // WAV the corpus is built from. See `WisprFlowSource`.
+        wireDictationSource()
 
         // The ring's panel is built here rather than on the first dictation —
         // see `CaretHalo.prewarm`.
@@ -1059,7 +1071,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // Not while shooting the state pages: `RELAY_SHOOT` draws every view and
         // quits, and 1.5 GB of weights is a long detour to take for a picture.
-        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil { startWhisper() }
+        // **The weights are no longer loaded at launch** (2026-09-12). They were,
+        // so the first dictation of the day cost nothing — and there is no first
+        // local dictation of the day any more: Wispr Flow is the source, and 1.5
+        // GB resident for a fallback nobody reaches is 1.5 GB of a laptop that is
+        // not this app's to spend. `startDictation` brings it up on demand when
+        // the local source is selected.
 
         // **And the spawn menu's bottom half, if nobody has measured it today.**
         // Same shape as the load above and for the same reason: it is a login
@@ -1090,74 +1107,236 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Wispr Flow's microphone opened or closed — from `WisprWatch`, or from
-    /// `POST /test/wispr`, which is the same edge with no CoreAudio behind it
-    /// (`measured: false` keeps the latency line honest).
-    /// **Wispr's start gesture was seen** — put the ring up now and believe it
-    /// later. See `wisprSpeculative`.
-    private func wisprMaybeStarting(_ why: String) {
+    // MARK: - The dictation source
+
+    /// **Wire whichever recogniser is live into the one lifecycle below.**
+    ///
+    /// Five events and no branches: the source says *a gesture was seen*, *the
+    /// microphone is open*, *it closed*, *here are the words*, *it is over*, and
+    /// everything this app does about a dictation hangs off those. Which source
+    /// produced them is not asked anywhere past this method — see
+    /// `DictationSource` for why that is the whole point.
+    private func wireDictationSource() {
+        source.didMaybeBegin = { [weak self] why in self?.dictationMaybeBeginning(why) }
+        source.didBegin = { [weak self] in self?.dictationBegan() }
+        source.didStopListening = { [weak self] in self?.dictationStoppedListening() }
+        source.didTranscribe = { [weak self] result in self?.deliver(result) }
+        source.didEnd = { [weak self] end in self?.dictationEnded(end) }
+        source.prepare()
+        Log.info("dictation source: \(source.name)")
+    }
+
+    /// **The ring is up on the keystroke, before the microphone.**
+    ///
+    /// The CoreAudio edge is the truth about the microphone and it is not the
+    /// first observable thing about the dictation: between Victor's finger and a
+    /// recorder in another process sit Electron waking, an overlay window and a
+    /// device open. Victor sees that gap (2026-09-12: *the ring still comes up
+    /// late*), so the ring goes up on the gesture and the source takes it back
+    /// if no microphone follows.
+    private func dictationMaybeBeginning(_ why: String) {
         let t0 = CFAbsoluteTimeGetCurrent()
-        guard !listening, !wisprDictating, !wisprSpeculative else { return }
-        wisprSpeculative = true
-        wisprSpeculativeAt = t0
+        guard !listening, !speculative else { return }
+        speculative = true
         endSettling(reason: "a new dictation started", quiet: true)
         syncBorrowedGestures()
         Log.info(String(format: "⚡ ring up %.1f ms after %@ (speculative — waiting for the microphone)",
                         (CFAbsoluteTimeGetCurrent() - t0) * 1000, why))
-        // **A guess that is never taken back is a lie.** A chord Wispr ignored —
-        // it was not running, the shortcut had been changed, the key went to
-        // something else — must not leave a beacon claiming a microphone is open.
-        let drop = DispatchWorkItem { [weak self] in
-            guard let self, self.wisprSpeculative, !self.wisprDictating else { return }
-            self.wisprSpeculative = false
-            self.wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
-            Log.info(String(format: "⚡ ring down: no microphone within %.0f ms of the hotkey",
-                            Self.wisprSpeculativeGrace * 1000))
-            self.syncBorrowedGestures()
-        }
-        wisprSpeculativeDrop?.cancel()
-        wisprSpeculativeDrop = drop
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.wisprSpeculativeGrace, execute: drop)
-        // The meter comes up with the guess, so the ring breathes from the first
-        // syllable rather than from whenever CoreAudio gets round to the edge.
-        // `start(to:)` is a no-op on a session already open, so the confirming
-        // edge below costs nothing when it arrives.
-        guard !mic.isRecording else { return }
-        wisprMeterQueue.async { [weak self] in _ = self?.wisprMeter.startMetering() }
     }
+
+    /// **The microphone is open — open the sentence.**
+    ///
+    /// Everything `startLocalRecording` used to do *after* `mic.start` returned
+    /// lives here, because the two sources reach this moment differently: the
+    /// local one arrives inside its own `start()`, Wispr Flow's arrives when
+    /// CoreAudio says its input is running, which may be a second later and may
+    /// be a dictation Victor started with his own keyboard chord and this app
+    /// never asked for. A sentence the relay did not start is still a sentence
+    /// it must dress, book and route — that is what *Wispr Flow everywhere*
+    /// means.
+    private func dictationBegan() {
+        guard !listening else { return }
+        speculative = false
+        endSettling(reason: "a new dictation started", quiet: true)
+
+        // **The chip says where these words are going.** A spawn names its
+        // folder (armed at the gesture), a caret sentence says so and outranks
+        // the bound terminal for its own length, and a sentence with nothing
+        // bound names the gesture that would give it somewhere to go.
+        if pasteMode { overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph) }
+        else if !spawnPending, !isBound {
+            overlay.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
+        }
+        else if !spawnPending { overlay.setSpawnDestination(nil) }
+
+        localRecordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
+
+        // **A new sentence never inherits the last one's subject.** The
+        // microphone just opened, so anything still pending belongs to something
+        // that is over.
+        abandonDictation("a new dictation started")
+
+        // **A picture is taken for somebody who will read it.** A sentence bound
+        // for an agent gets the screen and the ⌘C probe; one bound for the caret
+        // gets neither — there is no agent, and the probe would post a keystroke
+        // into the very field he is dictating into, which is the whole subject
+        // of a caret dictation. The sentence is booked either way, or a shot
+        // taken mid-dictation would be named by wall-clock and dropped for want
+        // of a destination.
+        if isBound || spawnPending {
+            if contextAtWheelRelease { bookDictation() } else { captureContext() }
+        } else {
+            bookDictation()
+        }
+
+        listening = true
+        syncBorrowedGestures()
+        overlay.setListening(true)
+        publishShotCount()
+        publishPicks()
+    }
+
+    /// Open the sentence without taking a picture of it: `dictationInFlight` is
+    /// what makes a shutter press attach a frame rather than send it off on its
+    /// own, and `dictationStartedAt` is the zero every shot is named from.
+    private func bookDictation() {
+        stateLock.lock()
+        dictationInFlight = true
+        if dictationStartedAt == nil { dictationStartedAt = Date() }
+        pendingShotOffsets = []
+        stateLock.unlock()
+        armOrphanFlush()
+    }
+
+    /// **The microphone closed and the words are in flight.**
+    ///
+    /// This is where the destination is latched — *"the recipient is whoever the
+    /// relay is pointed at when the microphone closes"* — and it matters far
+    /// more here than it did when the relay owned the recogniser: with a round
+    /// trip in another process the close and the transcript are seconds apart,
+    /// and a bind made in those seconds is a bind he made *about this sentence*.
+    private func dictationStoppedListening() {
+        guard listening else { return }
+        listening = false
+        // **One last look at what is highlighted**, before `syncBorrowedGestures`
+        // takes the watcher down — a highlight made in the last seconds of a
+        // sentence never gets its three settling reads, and that is exactly when
+        // he selects the thing he has just described.
+        finalSelectionRead()
+        latchedAtCaret = pasteMode || (!isBound && !spawnPending)
+        // **The ring waits for the words** (2026-09-12), on every source: the
+        // microphone closing is not the end of the dictation, the words landing
+        // is. A **bound** sentence is settled too now that the relay inserts it
+        // itself — the settle ends at `⚡ ring down: routed to …`, which is the
+        // one line that says the wrap worked.
+        beginSettling(atCaret: latchedAtCaret)
+        syncBorrowedGestures()
+        overlay.setListening(false)
+    }
+
+    /// Where this sentence is going, decided at the close and read when the words
+    /// arrive seconds later.
+    private var latchedAtCaret = false
+
+    /// **The words — put them where the close said they were going.**
+    ///
+    /// The one router, for both sources. Nothing here asks which recogniser
+    /// produced the text: a transcript is a transcript, and the only question
+    /// left is the one the chip has been answering all along.
+    private func deliver(_ result: DictationResult) {
+        // **The corpus first, and before anything can fail.** Filing a recording
+        // is not *acting* on a dictation, so nothing that stops a delivery stops
+        // this — and with the local model retired this is the only path by which
+        // `~/.walkie-talkie/voice-corpus/` goes on growing. The bytes are read on
+        // this thread so the staged WAV can go immediately after.
+        if let wav = result.audio {
+            corpus.captureLocal(wav: wav, text: result.text, language: result.language,
+                                duration: result.duration, app: localRecordingApp,
+                                engine: result.engine)
+            try? FileManager.default.removeItem(at: wav)
+        }
+        lastDictation = result.text
+        pendingPromptWarning = result.warning
+
+        // Somebody else already put the words on screen — Wispr Flow with the
+        // wrap off, and nothing else today. Filed above, delivered by nobody.
+        guard case .route = result.delivery else {
+            endSettling(reason: "\(source.name) inserted it")
+            clearSpawn()
+            abandonDictation("the source delivered it itself")
+            return
+        }
+
+        let app = localRecordingApp
+        localRecordingApp = nil
+        let atCaret = latchedAtCaret
+        pasteMode = false
+
+        // **The ring goes down when the words land**, and for a bound sentence
+        // that is here: the relay has just taken Wispr's paste and is putting
+        // the words through the prompt panel instead. `⚡ ring down: routed to
+        // …` is the one line in the file that says the wrap worked.
+        endSettling(reason: atCaret ? "pasting at the caret"
+                                    : "routed to \(terminal.target?.label ?? "the bound session")")
+        guard !atCaret else {
+            // **The caret's envelope**: the words, plus whatever he attached
+            // while speaking. No outbox line, no terminal, no prompt panel and no
+            // countdown — the words are wanted in the field he is looking at, and
+            // a panel between the sentence and the caret is exactly the ceremony
+            // this path exists to remove.
+            let line = caretLine(words: result.text)
+            overlay.setSpawnDestination(nil)
+            overlay.clearSelection()
+            pasteText(line)
+            return
+        }
+        send(kind: "dictation", text: result.text, app: app)
+    }
+
+    /// The session is over, whichever way it ended.
+    private func dictationEnded(_ end: DictationEnd) {
+        // **A guess that was never confirmed ends here too.** The source drops a
+        // speculative ring 1.5 s after a chord no microphone followed, and the
+        // flag it raised lives on this side of the protocol.
+        speculative = false
+        switch end {
+        case .delivered:
+            break
+        case .silent(let why):
+            endSettling(reason: why.isEmpty ? "nothing was recorded" : why)
+            if !why.isEmpty { overlay.flash(why, duration: 8) }
+            overlay.setTranscribing(false)
+            clearSpawn()
+            abandonDictation("the source returned nothing")
+        case .cancelled(let audio, let duration):
+            endSettling(reason: "cancelled", quiet: true)
+            if let audio { keepCancelled(wav: audio, duration: duration) }
+            else { Log.info("🗑️ dictation cancelled — nothing had been recorded yet") }
+            clearCancelledDictationState()
+        }
+        if listening {
+            listening = false
+            overlay.setListening(false)
+        }
+        syncBorrowedGestures()
+    }
+
+    // MARK: - The settle
 
     /// **The ring goes down when the words land, not when the microphone shuts.**
     ///
-    /// Between the two is the transcription, and for a Wispr dictation that is
-    /// another app's round trip — a second or two in which Victor is waiting and
-    /// the beacon used to be already dark. The insertion is the event; this is
-    /// what waits for it.
+    /// Between the two is the transcription — another app's round trip for Wispr
+    /// Flow, the model's for the local one — and it is exactly the stretch in
+    /// which Victor is waiting and the beacon used to be already dark.
     ///
-    /// - Parameter atCaret: what the ring was saying about the destination, kept
-    ///   so the chevrons do not disarm underneath the settle.
-    /// - Parameter watchClipboard: for a **Wispr** dictation the paste is another
-    ///   app's ⌘V and there is nothing of it to observe from here except the
-    ///   pasteboard changing under it — Wispr writes the transcript there and
-    ///   presses ⌘V, exactly as `pasteText` does. The relay's own dictations do
-    ///   not need it: they call `endSettling` from the paste itself.
-    private func beginSettling(atCaret: Bool, watchClipboard: Bool) {
+    /// - Parameter atCaret: what the ring was saying about the destination when
+    ///   the microphone closed, kept so the chevrons do not disarm underneath the
+    ///   settle.
+    private func beginSettling(atCaret: Bool) {
         settling = true
         settlingAtCaret = atCaret
         settlingFrom = CFAbsoluteTimeGetCurrent()
-        settleClipboardAt = NSPasteboard.general.changeCount
         syncBorrowedGestures()
-
-        settleWatch?.invalidate()
-        settleWatch = nil
-        if watchClipboard {
-            let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-                guard let self, self.settling else { return }
-                guard NSPasteboard.general.changeCount != self.settleClipboardAt else { return }
-                self.endSettling(reason: "Wispr pasted at the caret")
-            }
-            settleWatch = t
-            RunLoop.main.add(t, forMode: .common)
-        }
 
         settleGiveUp?.cancel()
         let giveUp = DispatchWorkItem { [weak self] in
@@ -1174,8 +1353,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard settling else { return }
         settling = false
         settlingAtCaret = false
-        settleWatch?.invalidate()
-        settleWatch = nil
         settleGiveUp?.cancel()
         settleGiveUp = nil
         if !quiet {
@@ -1185,170 +1362,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncBorrowedGestures()
     }
 
-    private func wisprDictationChanged(_ on: Bool, measured: Bool) {
-        wisprDictating = on
-        if on {
-            // **The ring goes up first, and the microphone second.** This
-            // used to run the other way round, and the other way round costs
-            // an `AVAudioEngine.start()` — a synchronous device open,
-            // measured at 60–260 ms on this Mac — spent between Wispr Flow
-            // opening the microphone and the beacon for it appearing.
-            // Victor's ask, 2026-09-12: the ⚡ ring is up *when Wispr starts
-            // recording*, not when the first level sample arrives. The ring
-            // needs no level to be drawn: `show()` puts it at `rest` and the
-            // 20 Hz timer picks the swell up on its very next tick, which is
-            // 50 ms later at worst and needs no ordering with this.
-            // **The guess was right** — keep the ring, stop the clock that would
-            // have taken it away, and say how far ahead of the microphone the
-            // keystroke actually was. That number is the whole point of the
-            // speculative path and is the one Victor asked to see.
-            if wisprSpeculative {
-                wisprSpeculativeDrop?.cancel()
-                wisprSpeculativeDrop = nil
-                wisprSpeculative = false
-                Log.info(String(format: "⚡ mic edge confirms the ring %.0f ms after the hotkey",
-                                (CFAbsoluteTimeGetCurrent() - wisprSpeculativeAt) * 1000))
-            }
-            endSettling(reason: "a new dictation started", quiet: true)
-            syncBorrowedGestures()
-            // Only for an edge that actually came off CoreAudio — the test
-            // route enters below the watcher and would otherwise print the
-            // age of the last real dictation.
-            if measured, wisprWatch.edgeAt > 0 {
-                Log.info(String(format: "⚡ ring up %.0f ms after Wispr Flow opened the microphone",
-                                (CFAbsoluteTimeGetCurrent() - wisprWatch.edgeAt) * 1000))
-            }
-            // Not while the relay is recording for itself: that session is
-            // already metering the same voice, `voiceMeter` prefers it, and
-            // a second engine on the device would buy nothing.
-            guard !mic.isRecording else { return }
-            wisprMeterQueue.async { [weak self] in
-                guard let self else { return }
-                if let why = self.wisprMeter.startMetering() {
-                    // The ring is already up — at rest, not breathing. Said out
-                    // loud because a ring that does not move looks exactly like
-                    // a broken swell and is not one.
-                    Log.error("wispr halo: no level — \(why)")
-                }
-            }
-        } else {
-            wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
-            // **The microphone closing is not the end of the dictation** — the
-            // words are still in flight. The ring stays up until Wispr pastes
-            // them, or until `settleTimeout` says nothing is coming. A cancel
-            // has already cleared `wisprCancelling` past this point and takes
-            // the ring down at once, which is right: there are no words.
-            if wisprCancelling {
-                wisprCancelling = false
-                endSettling(reason: "cancelled", quiet: true)
-            } else {
-                beginSettling(atCaret: true, watchClipboard: true)
-            }
-            syncBorrowedGestures()
-        }
-    }
 
-    /// Set by `cancelDictationInFlight` so the closing edge that Wispr's Escape
-    /// produces a moment later knows there is nothing to wait for.
-    private var wisprCancelling = false
-
-    /// **A wheel hold is waiting on the model**, and the microphone opens the
-    /// instant it is up. See where it is set, in `startLocalRecording`.
+    /// **A gesture is waiting on a recogniser that is not up yet.**
     ///
-    /// It used to be the *bind* that set this, on the reading that ⌘⌃B means "I
-    /// am about to talk to this agent". It does not: binding is how Victor points
-    /// the relay at a terminal on his way into a session, often several minutes
-    /// before he says anything, and a bind that opened the microphone by itself
-    /// was recording a room that had not been asked. Only the gesture that means
-    /// "record" may arm this — the bind's remaining job is to bring the model up
-    /// so the hold does not have to wait for it.
-    private var recordWhenModelReady = false
+    /// Wispr Flow is either running or it is not and there is nothing to wait
+    /// for; the local model takes ten seconds to load 1.5 GB of weights, and a
+    /// gesture made against a cold one used to cost Victor the sentence *and*
+    /// the gesture. It is banked here and honoured when the source reports ready.
+    private var recordWhenSourceReady = false
 
     /// A note the next panel should carry under its transcript — set by the
-    /// confidence gate, consumed by the `showSentPrompt` that follows it.
+    /// source's confidence gate, consumed by the `showSentPrompt` that follows it.
     private var pendingPromptWarning: String?
-
-    /// Bring the model up, if it is not already.
-    ///
-    /// It takes ten seconds to load 1.5 GB of weights and can fail outright —
-    /// for a missing `mlx_whisper`, most likely — so nothing may assume it is
-    /// there, and a failure has to say so out loud: this is the only recogniser
-    /// the relay has, and a dictation started against a model that never loaded
-    /// is a sentence with nowhere to go.
-    ///
-    /// **Called at launch**, so in the ordinary run it has finished long before
-    /// any gesture arrives. The gesture call sites stay: they are what retries a
-    /// launch load that failed, and `engineLoading` makes a second call a no-op
-    /// while the first is still running.
-    private func startWhisper() {
-        guard !whisper.ready, !engineLoading else { return }
-
-        setEngineLoading(true)
-        // **Nothing is said beside the cursor.** There was a flash here once,
-        // and then a `Preparing…` row, and for a while both at the same time —
-        // *"2 mesaje de preparing, unul mare unul mai mic"*. Both are gone, and
-        // the reason is no longer layout: the load runs at launch now, so there
-        // is nobody to tell. The menu bar's ⏳ is the whole of it.
-        whisper.start { [weak self] error in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.setEngineLoading(false)
-                if let error = error {
-                    self.recordWhenModelReady = false
-                    self.overlay.flash("⚠️ Whisper unavailable — \(error)", duration: 12)
-                    Log.error("whisper failed to start: \(error)")
-                    self.syncLocalCapture()
-                    return
-                }
-                self.syncLocalCapture()
-                // Asked here rather than at the first press: the grant dialog is
-                // modal and a refusal takes a trip through System Settings, and
-                // the moment to find that out is while the model is loading —
-                // not mid-sentence with an agent waiting.
-                MicRecorder.requestAccess { ok in
-                    guard !ok else { return }
-                    self.overlay.flash("⚠️ grant Microphone to Walkie Talkie — the relay cannot record", duration: 15)
-                    Log.error("microphone access denied — local recording will not work")
-                }
-                // **A wheel pressed against a cold model records the moment it
-                // is up.** On a cold model that press was costing him ten seconds
-                // of waiting followed by a second press he had to remember to
-                // make, with nothing on screen counting the seconds down — and
-                // the ready-flash then said "go ahead" to a relay that was not
-                // listening. Only the *dictate* press arms this: a load started
-                // by a bind is Victor pointing the relay at a terminal, which is
-                // a different sentence and must not open the microphone.
-                if self.recordWhenModelReady {
-                    self.recordWhenModelReady = false
-                    // The ⏳ was a promise about this moment; it is being kept, so
-                    // it comes down rather than sitting over a live dictation for
-                    // whatever its timer had left.
-                    self.overlay.clearFlash()
-                    Log.info("model up after a press that had to wait — opening the microphone")
-                    // **The gesture is kept whole, ⇧ included.** A spawn that had
-                    // to wait ten seconds for the weights is still a spawn; going
-                    // back through the bare path would have started a dictation
-                    // with nowhere to go and then dropped it at `send`.
-                    // `resumed`, so the folder menu — offered at the press, its
-                    // clock his reading time — is not re-offered, and a folder
-                    // already clicked is not wiped.
-                    self.startLocalRecording(spawn: self.spawnPending, paste: self.pasteMode,
-                                             resumed: true)
-                    return
-                }
-                // **Nothing is said.** This used to flash "local Whisper ready —
-                // go ahead", which was the right answer while a bind opened the
-                // microphone by itself and he was waiting for permission to talk.
-                // He is not waiting any more: a hold made during the load is
-                // remembered and fires above, and a load nobody held the wheel
-                // into is just the model coming up in the background. So the ⏳ is
-                // taken down — it promised this moment — and the chip, which goes
-                // back to reading `🖱️ dictate`, is the whole message.
-                self.overlay.clearFlash()
-                Log.info("whisper ready")
-            }
-        }
-    }
 
     // MARK: - The relay's own microphone
 
@@ -1379,201 +1404,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.bound = isBound
     }
 
-    /// Start recording, or finish the one that is open.
+    /// Start a dictation, or finish the one that is open.
     ///
     /// A **toggle**, not a push-to-talk: the dictations that go to an agent run
     /// to a minute or more, and a mouse button held for a minute is a hand that
-    /// cannot do anything else — including take the screenshots (mouse 4)
-    /// that the same minute is for.
-    private func toggleLocalRecording() {
-        if localRecording { stopLocalRecording() } else { startLocalRecording() }
+    /// cannot do anything else — including take the screenshots (mouse 4) that
+    /// the same minute is for.
+    private func toggleDictation() {
+        if listening || source.isRecording { endDictation() } else { startDictation() }
     }
 
-    /// `spawn` is ⇧ + the wheel: this dictation carries its own destination, so
-    /// it is allowed through the one gate a bare one is not — having a binding.
+    /// **Ask the source for a microphone**, and dress the gesture while it opens.
     ///
-    /// `resumed` is the model-ready continuation, and it exists because a cold
-    /// model makes this method run **twice** for one gesture: once at the press
-    /// (which offers the folder menu and returns to wait for the weights) and
-    /// once when the model comes up. The second run must not redo the opening
-    /// ceremony: measured on Victor's desk 2026-09-04, it re-offered the menu
-    /// ten seconds in — flickering it under the hovering hand, restarting its
-    /// clock, and, if he had already clicked, **wiping the folder he chose**
-    /// with the `spawnFolder = nil` below and popping the menu back up.
+    /// This is `startLocalRecording` with the recorder taken out of it: what is
+    /// left is the destination the gesture is arming (a spawn, the caret) and the
+    /// question of whether the source can serve it at all. Everything that used
+    /// to follow `mic.start` — the context shot, the chip, the bookkeeping — has
+    /// moved into `dictationBegan`, because with Wispr Flow the microphone opens
+    /// a beat later and may open without ever being asked.
     ///
-    /// `deferContext` is the bare wheel at rest, and reachable only with *Use
-    /// Logi Gestures* off: its context shot is taken at the **release**, not the
-    /// press, so the picture is of the screen his finger left — and a second
-    /// click, which turns this dictation into a spawn, has not landed yet
-    /// (Victor, 2026-09-04/05). Every Logi gesture leaves it false.
-    private func startLocalRecording(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
-                                     deferContext: Bool = false) {
+    /// `spawn` is ⬆️: this dictation carries its own destination, so it is
+    /// allowed through the one gate a bare one is not — having a binding.
+    ///
+    /// `resumed` is the source-ready continuation, and it exists because a cold
+    /// local model makes this run **twice** for one gesture. The second run must
+    /// not redo the opening ceremony: measured 2026-09-04, it re-offered the
+    /// folder menu ten seconds in — flickering it under the hovering hand,
+    /// restarting its clock, and wiping a folder he had already chosen.
+    ///
+    /// `deferContext` is the bare wheel at rest, reachable only with *Use Logi
+    /// Gestures* off: its context shot is taken at the **release**, not the
+    /// press, so the picture is of the screen his finger left.
+    private func startDictation(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
+                                deferContext: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
-        // used to reach `mic.start` twice. `MicRecorder` refuses the second, so
-        // the damage is not the recording; it is everything around it, which
-        // would run again against a dictation already in flight.
-        guard !localRecording else { return }
+        // used to reach the recorder twice.
+        guard !listening, !source.isRecording, !speculative else { return }
         // Set before the gate below and before anything reads `hasDestination`:
-        // it *is* the answer for a spawn, and `captureContext` a few lines down
-        // asks the same question about the screenshot it is deciding to take.
+        // it *is* the answer for a spawn.
         spawnPending = spawn
-        // A folder chosen for a previous sentence must never ride this one: the
-        // menu is offered again below, and not answering it means `~/workspace`.
-        // A resumed start keeps the choice — its menu was offered at the press
-        // and may already have been clicked.
+        // A folder chosen for a previous sentence must never ride this one. A
+        // resumed start keeps the choice — its menu was offered at the press and
+        // may already have been clicked.
         if !resumed { spawnFolder = nil }
         pasteMode = paste
+        contextAtWheelRelease = deferContext
         // **Always true since `holdsForBind`**, and kept rather than deleted: it
-        // is the gate this path is written under, and the one line to look at if
-        // the hold is ever put back to a refusal. `recordWhenBound` — the bank
-        // for a press made while a bind was still resolving — is unreachable
-        // through it now and stays for `bindFrontmostTerminal`'s own use.
+        // is the gate this path is written under.
         guard hasDestination else { return }
         if spawn {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
-            // **As early as the press allows** — Victor's ask, 2026-09-04, and it
-            // moved up here from the end of this method for a reason that only
-            // shows on a cold model: everything below can `return` and wait
-            // seconds for the weights, and the menu was waiting with it. Its
-            // clock is his reading time, which starts now, and the seconds a
-            // model load costs are seconds he could have been choosing in.
-            //
-            // It no longer waits for the opening picture either. The capture
-            // marker blooms out of the pointer for half a second and the menu
-            // sits *below-right* of it (2026-09-06) — drawn above it, too, at a
-            // window level past every effect panel's, so the ripple washes over
-            // the screen and not over the choice being read.
-            //
-            // **Once per gesture, though** — a resumed start (the model had to
-            // load) skips this: the menu has been up since the press, its clock
-            // is his reading time, and a second offer is a flicker, a reset
-            // clock, and a popup over a choice already made.
+            // **As early as the press allows** — Victor's ask, 2026-09-04. Its
+            // clock is his reading time, which starts now. Once per gesture,
+            // though: a resumed start skips it.
             if !resumed { offerSpawnFolders() }
         }
-        // **The chip says the caret, and it outranks the bound terminal** — the
-        // same slot, and the same argument, a spawn uses: for the length of this
-        // sentence the words are not going where the chip has been saying they
-        // go, and this line's whole job is to get that right.
-        // **The pin, not a keyboard.** ⌨️ named the *input* — which is the
-        // one thing a dictation never uses — where the row's whole job is to
-        // say **where** the words land. A map pin is the mark this chip
-        // already uses for a destination it is aimed at (`RelayWindow.pinGlyph`,
-        // the drawn one: `Glyphs.mapPin`, an oval drawn down to a point with a
-        // hole through it, and not 📍, which Apple draws as a thumbtack). It
-        // rides the icon column like every other destination's icon, which is
-        // what takes it out of the words.
-        //
-        // **And it stays up through the wait.** It is cleared where the words
-        // actually land, not where the microphone closes — see
-        // `stopLocalRecording`. A start that is neither a spawn nor a paste
-        // takes the row down, since a caret left over from a decode that never
-        // came back would name a destination this sentence is not going to.
-        if paste { overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph) }
-        // **And the sentence with no terminal yet says so**, in the row every
-        // other destination takes. It is the one dictation whose destination is
-        // a thing Victor still has to do, so the row names the gesture rather
-        // than a place — and it is taken back the instant the bind lands, by the
-        // same `setSpawnDestination(nil)` the caret's row goes out through.
-        //
-        // **The icon form, like `at caret`, and deliberately not the ✨'s mark
-        // form**: a `mark` with no icon is `spawnCollapsed`, which drops the row
-        // and rides the glyph in front of `Listening...` — so the words would
-        // never have been drawn at all. The pin is the destination row's own
-        // glyph and this is the destination row; what it is standing in for is
-        // said in the words beside it.
-        if !paste, !spawn, !isBound {
-            overlay.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
-        }
-        else if !spawn { overlay.setSpawnDestination(nil) }
-        guard whisper.ready else {
-            // **Rare, now that the load runs at launch**: this is either the
-            // first seconds after login or a launch load that failed and is
-            // being retried. Not an error either way — the gesture is banked
-            // below and honoured the moment the weights land.
-            Log.info("wheel clicked with the model down — bringing it up now")
-            startWhisper()
-            // **The gesture is kept.** Telling him to say it again was making him
-            // watch for a banner and then remember to repeat a gesture he had
-            // already made — the ten seconds cost him the sentence *and* the
-            // gesture. The intention is unambiguous, so it is held and honoured
-            // when the weights land.
-            recordWhenModelReady = true
-            // Nothing to show: the `Preparing…` row is gone with the lazy load
-            // that justified it, and what is left of this wait lives in the
-            // seconds after login rather than in the middle of a session. The
-            // menu bar's ⏳ is there for anyone who looks, and the click turns
-            // itself into a recording when the weights arrive.
+
+        guard source.isReady else {
+            // **The gesture is kept.** Telling him to say it again made him watch
+            // for a banner and then remember to repeat a gesture he had already
+            // made. The intention is unambiguous, so it is banked and honoured
+            // when the source comes up.
+            Log.info("dictate gesture with \(source.name) not ready — bringing it up")
+            recordWhenSourceReady = true
+            bringUpSource()
             return
         }
 
-        let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
-        if let why = mic.start(to: wav) {
+        if let why = source.start() {
             overlay.flash("⚠️ \(why)", duration: 6)
-            Log.error("local recording did not start: \(why)")
+            Log.error("\(source.name) did not start: \(why)")
             return
         }
+        // **And now nothing happens until the microphone is open.** For the local
+        // model that is this same turn; for Wispr Flow it is Electron waking up.
+        // `dictationBegan` is where the sentence is actually opened.
+    }
 
-        localRecording = true
-        localRecordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
-        Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
+    /// End the dictation that is open — the words follow when the source has
+    /// them.
+    private func endDictation() {
+        guard listening || source.isRecording else { return }
+        source.stop()
+    }
 
-        // The context shot is booked synchronously first, because
-        // `setListening(true)` zeroes the count the shot has to appear in.
-        //
-        // **Except in Replace Wispr**, which takes no picture at all. A frame of
-        // the screen exists to be *read by an agent* alongside the words; here
-        // there is no agent and no message — there is a string and a caret. The
-        // saving is not the point, though it is real (a subprocess and a
-        // clipboard probe on every press): the ⌘C probe posts a keystroke into
-        // whatever field he is about to dictate into, and this is the one mode
-        // where that field is the whole subject.
-        // **A new sentence never inherits the last one's subject.** The three
-        // routes above cover every way a dictation is known to end without
-        // becoming a message, but this is the boundary that cannot be argued
-        // with: the microphone just opened, so anything still pending belongs to
-        // something that is over. Replace Wispr included — it takes no selection
-        // of its own, and one left lying around must not outlive it either.
-        abandonDictation("a new dictation started")
-        if paste {
-            // **No picture, but the dictation is open.** The automatic frame
-            // stays gone — Victor was explicit that this mode takes none — and
-            // with it the ⌘C probe that comes with `captureContext`, which is the
-            // half that actually matters: it posts a keystroke into the very
-            // field he is dictating into.
-            //
-            // What `captureContext` *also* does is book the sentence, and that
-            // has to happen anyway now that the shutter works here:
-            // `dictationInFlight` is what makes `plusOneShot` attach a frame
-            // rather than send it off on its own, and `dictationStartedAt` is the
-            // zero every shot is named from. Without them a shot taken at the
-            // caret would be named by wall-clock and then dropped for want of a
-            // destination.
-            stateLock.lock()
-            dictationInFlight = true
-            dictationStartedAt = Date()
-            pendingShotOffsets = []
-            stateLock.unlock()
-            armOrphanFlush()
-        } else {
-            if deferContext {
-                // The audio's zero stays the press — shot offsets count from
-                // where the listening started — but the picture itself waits
-                // for the wheel's release: see `onWheelDictate`.
-                stateLock.lock()
-                dictationStartedAt = Date()
-                stateLock.unlock()
-                contextAtWheelRelease = true
-            } else {
-                captureContext()
-            }
+    /// Bring a source that is not ready up, and honour a gesture that was banked
+    /// against it. Only the local model has anything to do here; Wispr Flow is
+    /// running or it is not, and the relay cannot launch it on his behalf.
+    private func bringUpSource() {
+        guard let local = source as? LocalWhisperSource else {
+            recordWhenSourceReady = false
+            overlay.flash("⚠️ Wispr Flow is not running", duration: 8)
+            return
         }
-        listening = true
-        syncBorrowedGestures()
-        overlay.setListening(true)
-        publishShotCount()
-        publishPicks()
+        local.bringUpModel()
+        // Polled rather than pushed: the model's readiness is the source's own
+        // business and a callback for one banked gesture is a second contract
+        // between two objects that already have one.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.recordWhenSourceReady else { return }
+            guard self.source.isReady else { return self.bringUpSource() }
+            self.recordWhenSourceReady = false
+            self.overlay.clearFlash()
+            Log.info("\(self.source.name) up after a gesture that had to wait — opening the microphone")
+            // **The gesture is kept whole, ⇧ included.** `resumed`, so the folder
+            // menu is not re-offered and a folder already clicked is not wiped.
+            self.startDictation(spawn: self.spawnPending, paste: self.pasteMode, resumed: true)
+        }
     }
 
     /// **Ask which folder, without making it a question he has to answer.**
@@ -1623,82 +1562,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// stamped against `dictationStartedAt`, so leaving them behind would attach
     /// them to the *next* sentence, timed from a clock that no longer exists.
     /// **Throw away whatever is being dictated right now, whoever is hearing
-    /// it** — the ✕ on the overlay, the menu bar's *Cancel Dictation*, and
-    /// `POST /test/cancel` all come here.
+    /// it** — the ✕ on the overlay, the menu bar's *Cancel Dictation*, the ⬅️
+    /// flick and `POST /test/cancel` all come here.
     ///
-    /// There are two microphones this app can be looking at and only one of them
-    /// is its own, so there are two cancels:
+    /// **One cancel, because there is one source.** It used to be two — the
+    /// relay's own recorder, thrown away from the inside, and Wispr Flow's, which
+    /// is not this app's to end from the inside and so is ended with a chord on
+    /// the wire (`postWisprCancel`, Wispr's own ⌃Escape *discard this, paste
+    /// nothing*). Both are `source.cancel()` now, and which of the two it is has
+    /// stopped being a question anything outside the source asks.
     ///
-    /// - **The relay's own dictation** is cancelled where it always was
-    ///   (`cancelLocalRecording`): the audio is kept for five minutes, nothing
-    ///   is transcribed, nothing is sent.
-    /// - **A Wispr Flow dictation** is not this app's to end from the inside —
-    ///   no word, file or transcript of Wispr's is ever read here, and that rule
-    ///   is not being reopened for a cancel. What *is* available is the way this
-    ///   app already talks to Wispr Flow: a chord on the wire.
-    ///   `HotkeyTap.postWisprCancel` posts Escape exactly the way
-    ///   `postWisprHandsFree` posts fn ⌃ Space — same `CGEventSource`, same
-    ///   stamp, same wait for Victor's own modifiers to clear — and Escape while
-    ///   Wispr is recording is Wispr's own *discard this, paste nothing*.
-    ///
-    /// The ring goes down when Wispr closes the microphone and `WisprWatch` says
-    /// so, which is the same edge every other Wispr dictation ends on: nothing
-    /// here guesses at the state, so a cancel Wispr ignores leaves the beacon
+    /// Everything the dictation had gathered goes with it: shots and picks are
+    /// stamped against `dictationStartedAt`, so leaving them behind would attach
+    /// them to the *next* sentence, timed from a clock that no longer exists.
+    /// That clearing happens in `dictationEnded`, on the `.cancelled` the source
+    /// sends back — a cancel Wispr ignores therefore leaves the beacon
     /// truthfully lit rather than lying about a dictation that is still running.
     ///
     /// - Returns: whether there was anything to cancel — the ✕ falls through to
     ///   ending the session when there was not.
     @discardableResult
     private func cancelDictationInFlight(reason: String) -> Bool {
-        if localRecording {
-            Log.info("🗑️ dictation cancelled via \(reason)")
-            cancelLocalRecording()
-            return true
-        }
-        if wisprDictating || wisprSpeculative {
-            Log.info("🗑️ Wispr Flow dictation cancelled via \(reason) — posting ⌃Escape")
-            wisprCancelling = true
-            HotkeyTap.postWisprCancel()
-            overlay.flash("✕ cancelled", duration: 2.0)
-            // **A cancelled sentence has no words to wait for**, so the ring goes
-            // now rather than settling. The speculative half is dropped with it:
-            // a cancel made before Wispr's microphone ever opened must not leave
-            // a guess standing.
-            endSettling(reason: "cancelled", quiet: true)
-            if wisprSpeculative {
-                wisprSpeculativeDrop?.cancel()
-                wisprSpeculative = false
-                wisprMeterQueue.async { [weak self] in self?.wisprMeter.stopMetering() }
-                Log.info("⚡ ring down: cancelled before the microphone opened")
-            }
-            syncBorrowedGestures()
-            return true
-        }
-        return false
+        guard listening || source.isRecording || speculative || settling else { return false }
+        Log.info("🗑️ dictation cancelled via \(reason)")
+        source.cancel()
+        overlay.flash("🗑️ Cancelled", duration: 1.5)
+        return true
     }
 
-    private func cancelLocalRecording() {
-        guard localRecording else { return }
-        endSettling(reason: "cancelled", quiet: true)
-        localRecording = false
+    /// **A bind is a dictation coming**, so whatever the source needs time for
+    /// is started now: the ten seconds a cold local model costs overlap him
+    /// settling into the session. Wispr Flow needs nothing — it is running or it
+    /// is not, and this app does not launch it on his behalf.
+    ///
+    /// **The load only.** Arming the microphone here was wrong: a bind is Victor
+    /// pointing the relay at a terminal, not Victor starting to talk, and the two
+    /// can be minutes apart.
+    private func prepareSourceForBind() {
+        (source as? LocalWhisperSource)?.bringUpModel()
+    }
+
+    /// Everything a cancelled sentence had gathered, put down.
+    ///
+    /// Shots and picks are stamped against `dictationStartedAt`, so leaving them
+    /// behind would attach them to the *next* sentence, timed from a clock that
+    /// no longer exists.
+    private func clearCancelledDictationState() {
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
-
-        // Ahead of `mic.stop()` for the reason `stopLocalRecording` gives: the
-        // engine teardown must not sit between Victor stopping and the music
-        // coming back.
-        listening = false
-        syncBorrowedGestures()
-        overlay.setListening(false)
-
-        let recording = mic.stop()
-
-        if let (wav, duration) = recording {
-            keepCancelled(wav: wav, duration: duration)
-        } else {
-            Log.info("🗑️ dictation cancelled — nothing had been recorded yet")
-        }
 
         stateLock.lock()
         pendingPicks = []
@@ -1718,42 +1630,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         publishPicks()
         // **And the highlight comes off the chip with it.** `pendingSelection` is
         // cleared above, but the row showing it is the overlay's own copy and
-        // nothing else here puts it down: `setListening(false)` does not touch it,
-        // and the flash below draws *over* the chip rather than resetting it. Every
-        // other way a dictation ends already calls this — `commit` before the panel
-        // opens, `flushOrphaned` for the ones that died — and cancel was the one
-        // route that did not, so the last thing he had highlighted went on sitting
-        // beside the cursor with no dictation behind it, until the next sentence
-        // happened to overwrite it. Reported 2026-09-04: *"once I have a selected
-        // text it sometimes remains into the tooltip even if there is no current
-        // dictation"*.
+        // nothing else here puts it down. Reported 2026-09-04: *"once I have a
+        // selected text it sometimes remains into the tooltip even if there is no
+        // current dictation"*.
         overlay.clearSelection()
-        // **Bare, and short.** It replaces `Listening…` in the row it was just
-        // occupying, beside the pointer, and then dissolves back to the chip at
-        // rest. Three seconds inside a blurred panel made cancelling look like
-        // something *opening*; a second and a half of plain text reads as the one
-        // thing that actually happened, which is a word changing.
-        //
-        // **And no glyph, since 2026-09-02.** It led with 🗑️, drawn at 30pt in
-        // the icon column — Apple's wastebasket has its lid flying off above the
-        // bin, and at that size, in grey, beside the pointer, Victor read it as a
-        // *microphone*: the one object this row must not appear to be talking
-        // about, on the one message that means the microphone just threw
-        // everything away. A glyph that has to be decoded is worse than none on a
-        // row that is up for a second and a half.
-        // **🗑️ back in front of it**, on Victor's ask (2026-09-02). It led with
-        // one until the flash row was still being drawn under a lone 🎙️ title —
-        // Apple draws the wastebasket with its lid flying off above the bin, so
-        // beside the microphone it read as a second glyph on a two-glyph line.
-        // That title row is gone from flashes now (*A flash replaces the
-        // collapsed chip*), so the bin is the row's only picture and says what
-        // every other flash's leading emoji says: which kind of thing this is.
-        // **`Cancelled`, since 2026-09-10** (Victor's ask). `Dictation aborted`
-        // named the thing it happened to, which the chip has just spent the whole
-        // sentence saying; what a row beside the pointer has to carry is the one
-        // word that changed. *Aborted* was also the harsher reading of a verdict
-        // he now has five minutes to take back.
-        overlay.flash("🗑️ Cancelled", duration: 1.5)
     }
 
     /// Move the cancelled audio somewhere it will survive the next few minutes,
@@ -1815,7 +1695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("⚠️ nothing to recover")
             return
         }
-        guard !localRecording else {
+        guard !listening else {
             // A sentence is in the air; two transcripts arriving at one panel is
             // the ordering problem `send` already has to solve, and there is no
             // reason to create it from a menu.
@@ -1825,7 +1705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info(String(format: "↩️ recovering %.1fs of cancelled audio", kept.duration))
         overlay.setTranscribing(true, audio: kept.duration)
         let decodeStartedAt = Date()
-        whisper.transcribe(wav: kept.url.path) { [weak self] result in
+        whisperSource.transcribe(wav: kept.url.path) { [weak self] result in
             guard let self = self else { return }
             DispatchQueue.main.async { self.overlay.setTranscribing(false) }
             guard let r = result, !r.text.isEmpty else {
@@ -1853,183 +1733,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-    }
-
-    private func stopLocalRecording() {
-        localRecording = false
-        // **One last look at what is highlighted**, before `syncBorrowedGestures`
-        // below takes the watcher down — a highlight made in the last seconds of
-        // a sentence never gets its three settling reads, and that is exactly
-        // when he selects the thing he has just described. Cancelling does not
-        // do this: everything that dictation gathered is being thrown away.
-        finalSelectionRead()
-        // **Read and consumed here**, so the async transcript that lands a second
-        // later goes where the *press* said it would, whatever the menu has been
-        // clicked into since. Same rule `Message.spawn` follows.
-        let paste = pasteMode
-        pasteMode = false
-        // **The caret row is *not* taken down here** — Victor, 2026-09-08:
-        // *"când fac transcribing … dar sunt în modul de insert la caret, îmi
-        // trebuie să rămână tot jos același lucru scris, insert at caret"*.
-        // Clearing it at the microphone's close put the **bound terminal** back
-        // on the chip for the whole decode — which is the one destination these
-        // words are certainly not going to, said in the seconds he is watching
-        // the row to find out where they went. It comes down where they land
-        // (the paste below) and on every path that gives up on them
-        // (`clearSpawn`).
-        let app = localRecordingApp
-        localRecordingApp = nil
-
-        // **Before `mic.stop()`, deliberately.** Closing the input tears down an
-        // `AVAudioEngine` on this thread and that is not instant; with the
-        // resume edge behind it, the music came back a beat after Victor had
-        // stopped talking. Nothing here needs the microphone to be shut — the
-        // button is already up and the recording already disowned — so the edge
-        // that the extension, the ring and the overlay are all waiting on goes
-        // out first, and the teardown happens after it.
-        listening = false
-        // **A caret dictation's ring waits for the paste** (2026-09-12), the same
-        // rule Wispr's now follows: the microphone closing is not the end, the
-        // words landing is. `watchClipboard: false` because this one *is* the
-        // paste — `pasteText` ends the settle itself and needs no guessing from
-        // the outside.
-        //
-        // A **bound** dictation is deliberately not settled: its words go through
-        // the held prompt, which is up to seven seconds of countdown with a panel
-        // on screen already saying so. A ring hanging over that is a second
-        // indicator for a state that has one, and it would outlive
-        // `settleTimeout` besides.
-        if pasteMode { beginSettling(atCaret: true, watchClipboard: false) }
-        syncBorrowedGestures()
-        overlay.setListening(false)
-
-        let recording = mic.stop()
-
-        guard let (wav, duration) = recording else {
-            Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
-            endSettling(reason: "nothing was recorded")
-            clearSpawn()
-            // The wheel double-click that binds a terminal lands here every time:
-            // it opens the microphone and closes it inside the minimum duration,
-            // after `captureContext` has already read whatever was highlighted.
-            abandonDictation("recording under the minimum duration")
-            return
-        }
-        Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
-        // The duration travels so the row can say how much longer, not only that
-        // it is working — see `RelayWindow.setTranscribing`.
-        overlay.setTranscribing(true, audio: duration)
-
-        // What this decode actually costs, against the audio it was handed —
-        // the pair `DecodeRate` learns the countdown's factor from. Started
-        // here rather than inside `LocalWhisper`, because what the row promised
-        // covers the whole round trip: the JSON out, the helper's answer, and
-        // the queue hop back.
-        let decodeStartedAt = Date()
-        whisper.transcribe(wav: wav.path) { [weak self] result in
-            guard let self = self else { return }
-            guard let r = result, !r.text.isEmpty else {
-                DispatchQueue.main.async {
-                    self.overlay.setTranscribing(false)
-                    self.clearSpawn()
-                    // **`No words detected`, and nothing else** — Victor's
-                    // ask, 2026-09-08. It read `⚠️ the model returned nothing
-                    // — that dictation is lost`, which is three sentences
-                    // where one is a fact: what the recogniser did with the
-                    // audio is the app's business, and *that dictation is
-                    // lost* names a loss he can do nothing about. The one
-                    // thing he acts on is that nothing was heard, which also
-                    // says the only thing to do about it — say it again.
-                    self.overlay.flash("No words detected", duration: 8)
-                }
-                Log.error("local recording produced no transcript")
-                try? FileManager.default.removeItem(at: wav)
-                self.abandonDictation("the model returned nothing")
-                return
-            }
-            Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
-                            r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count))
-            // Filed on the success path only: a decode that returned nothing
-            // says nothing about how long a decode takes, and a failure that
-            // came back instantly would pull the estimate down for the next
-            // twenty dictations.
-            DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt))
-            // **Sent even below the confidence floor.** There is one reading of
-            // this audio and no second opinion to fall back on, so the
-            // alternative to a shaky transcript is silence — and silence is the
-            // one outcome Victor cannot notice and correct. The banner says so,
-            // and the panel holds it long enough for him to fix it.
-            // **The ⏳ comes down here, on both paths.** `transcribing…` is a
-            // promise about this exact moment, and it is flashed with a 30s
-            // duration precisely because it is meant to be taken down by whatever
-            // arrives rather than to expire. It used to be *replaced* by the
-            // low-confidence flash; now that the warning goes to the panel
-            // instead, nothing was left to take it down, and it sat at the foot
-            // of the pre-send panel — a stale "transcribing…" under the finished
-            // transcript.
-            DispatchQueue.main.async { self.overlay.setTranscribing(false) }
-            // Handed to the panel rather than flashed: a flash lands in the hint
-            // row, which is the last row of the panel, and this is a note about
-            // the transcript — it belongs under the words it qualifies.
-            //
-            // **Two gates, and the second one is not a second threshold on the
-            // first.** A hallucination is the model unsure and fluent, which is
-            // what `avg_logprob` sees; a loop is the model certain and stuck,
-            // which it cannot see and `compression_ratio` can. Neither is
-            // allowed to swallow the dictation — see above — so both are
-            // rendered the same way: a note under the words, with the number, in
-            // front of a Cancel button that still works.
-            if r.compressionRatio > LocalWhisper.loopCeiling {
-                self.pendingPromptWarning = String(
-                    format: "⚠️ the model looped (%.1f) — check what was sent", r.compressionRatio)
-            } else if r.avgLogprob < LocalWhisper.confidenceFloor {
-                self.pendingPromptWarning = String(
-                    format: "⚠️ low confidence %.2f — check what was sent", r.avgLogprob)
-            } else {
-                self.pendingPromptWarning = nil
-            }
-            // Reads the bytes on this thread and files the sample on its own, so
-            // the staged copy can go immediately after — the corpus keeps its own.
-            self.corpus.captureLocal(wav: wav, text: r.text, language: r.language,
-                                     duration: duration, app: app)
-            try? FileManager.default.removeItem(at: wav)
-            // **Replace Wispr stops here.** No outbox line, no terminal, no
-            // prompt panel to read and no countdown to wait out: the words are
-            // wanted *in the field he is looking at*, and a panel between the
-            // sentence and the caret is exactly the ceremony this mode exists to
-            // remove. The transcript is on the clipboard either way, which is the
-            // safety net if the caret has moved on.
-            guard !paste else {
-                let line = self.caretLine(words: r.text)
-                DispatchQueue.main.async {
-                    // The words have landed; the row that named where they were
-                    // going has nothing left to say.
-                    self.overlay.setSpawnDestination(nil)
-                    self.overlay.clearSelection()
-                    self.pasteText(line)
-                }
-                return
-            }
-            self.send(kind: "dictation", text: r.text, app: app)
-        }
-    }
-
-    /// Whether the helper is on its way up right now — asked by `startWhisper`
-    /// itself, so the launch preload and the two gestures that also call it can
-    /// never stack two loads on top of one another.
-    private var engineLoading = false
-
-    /// **The menu bar, and only the menu bar.** The chip carried a `Preparing…`
-    /// row for the same seconds, and it was worth its pixels while a gesture was
-    /// what started the load: he had just asked for something and was waiting on
-    /// it. The load now runs at launch, before he has asked for anything, so a
-    /// row beside the cursor would be the app narrating work nobody is waiting
-    /// on. The menu bar glyph keeps the ⏳ — it costs no space, it survives him
-    /// typing (macOS hides the pointer, and the chip goes with it), and it is
-    /// the one place the load is still visible if he goes looking.
-    private func setEngineLoading(_ loading: Bool) {
-        engineLoading = loading
-        status.setEngineLoading(loading)
     }
 
     /// Register the app as a login item, once, quietly.
@@ -2358,9 +2061,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `wisprSpeculative` is *the key that opens one has just been pressed*
         // (dropped again after `wisprSpeculativeGrace` if no microphone follows);
         // `settling` is *it closed, and the words have not landed yet*.
-        caretHalo.setActive(listening || wisprDictating || wisprSpeculative || settling,
+        caretHalo.setActive(listening || speculative || settling,
                             atCaret: pasteMode
-                                     || ((wisprDictating || wisprSpeculative) && !listening)
+                                     || (speculative && !listening)
+                                     || (listening && !isBound && !spawnPending)
                                      || (settling && settlingAtCaret))
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the ring does rather than a flag of its own.
@@ -2566,7 +2270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // thing that opens it — and if he holds it while this load is still
             // running, `startLocalRecording` remembers the gesture and it fires
             // the moment the weights land.
-            self.startWhisper()
+            self.prepareSourceForBind()
             // **The chip is set first, and the rectangle flies into it.** It used
             // to be the other way round — the label appeared when the rectangle
             // landed — which meant the flight ended on empty screen and the
@@ -2586,7 +2290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if self.recordWhenBound {
                 self.recordWhenBound = false
                 Log.info("🎙️ bind landed — opening the microphone the press was waiting for")
-                DispatchQueue.main.async { self.startLocalRecording() }
+                DispatchQueue.main.async { self.startDictation() }
             }
             guard let frame = bound.sourceFrame else {
                 if let unguarded = unguarded { self.overlay.flash(unguarded, duration: 3) }
@@ -2719,7 +2423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // A poll is not Victor answering anything. The rule is about the gesture,
         // so it is gated on the gesture.
-        if spawnPending, localRecording, deliberate {
+        if spawnPending, listening, deliberate {
             Log.info("✨ spawn dropped — bound mid-sentence, the words go to \(target.label)")
             clearSpawn()
         }
@@ -2750,7 +2454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pin and `at the caret` down, and the line the bind writes a moment
         // later — the destination app's icon and `petclinic@main` — is then the
         // top row again, which is the honest answer to where the words go.
-        if pasteMode, localRecording, deliberate {
+        if pasteMode, listening, deliberate {
             Log.info("⌨️ caret dictation redirected — bound mid-sentence, the words go to \(target.label)")
             pasteMode = false
             overlay.setSpawnDestination(nil)
@@ -2761,7 +2465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // for a poll to steal — and it must not be left standing on a dictation
         // that now has somewhere to go. The row only ever exists while a
         // dictation is running, so a bind at rest passes through this untouched.
-        if localRecording, !pasteMode, !spawnPending {
+        if listening, !pasteMode, !spawnPending {
             overlay.setSpawnDestination(nil)
         }
         let line = target.folder ?? target.appName
@@ -4360,7 +4064,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // EOF on stdin when the relay's pipes close and exits on its own, measured
         // at nine seconds even after a SIGKILL — but nine seconds of a model
         // nobody is using is nine seconds of a laptop that is not his to spend.
-        whisper.stop()
+        whisperSource.shutDown()
         Log.info("session ended via \(reason)")
         Outbox.send(kind: "session_end", text: "user closed the relay")
     }

@@ -55,7 +55,17 @@ final class VoiceCorpus {
     ///
     /// The bytes are read on the caller's thread on purpose: the staged WAV is
     /// deleted as soon as this returns, and a copy queued for later would race it.
-    func captureLocal(wav: URL, text: String, language: String?, duration: TimeInterval, app: String?) {
+    /// - Parameter engine: which recogniser read this sample — `whisper-local`
+    ///   or `wispr-flow` since 2026-09-12, when Wispr Flow became the source for
+    ///   every dictation and with it the only labeller the corpus still has.
+    ///   **A `wispr-flow` label has been through Wispr's formatting pass** —
+    ///   punctuation, capitalisation, its custom dictionary — where a
+    ///   `whisper-local` one is raw recogniser output. That is a difference a
+    ///   later evaluation has to know about, and the engine name is where it is
+    ///   said: an absent field is a question a reader asks, a wrong one is an
+    ///   answer they believe.
+    func captureLocal(wav: URL, text: String, language: String?, duration: TimeInterval,
+                      app: String?, engine: String = "whisper-local") {
         guard let audio = try? Data(contentsOf: wav), audio.count > 44 else {
             Log.error("corpus: local recording vanished before it could be filed")
             return
@@ -63,17 +73,22 @@ final class VoiceCorpus {
         let when = Date()
         queue.async { [weak self] in
             self?.writeLocal(audio: audio, text: text, language: language,
-                             duration: duration, app: app, when: when)
+                             duration: duration, app: app, engine: engine, when: when)
         }
     }
 
     private func writeLocal(audio: Data, text: String, language: String?,
-                            duration: TimeInterval, app: String?, when: Date) {
+                            duration: TimeInterval, app: String?, engine: String, when: Date) {
         let dir = Self.root.appendingPathComponent(Self.dayFormatter.string(from: when))
         // The clock is the key. Two relays recording the same second is not a
         // thing — there is one microphone and one hand on the button — but the
         // millisecond keeps a retry from overwriting a sample.
-        let stem = "\(Self.timeFormatter.string(from: when))-local\(Int(when.timeIntervalSince1970 * 1000) % 1000)"
+        // The tag in the stem says which recogniser labelled it, so a folder
+        // listing answers the same question the manifest does. `local` for the
+        // local model, unchanged, so every sample filed before 2026-09-12 keeps
+        // the name it has.
+        let tag = engine == "whisper-local" ? "local" : "wispr"
+        let stem = "\(Self.timeFormatter.string(from: when))-\(tag)\(Int(when.timeIntervalSince1970 * 1000) % 1000)"
         let wav = dir.appendingPathComponent(stem + ".wav")
         let txt = dir.appendingPathComponent(stem + ".txt")
 
@@ -93,7 +108,7 @@ final class VoiceCorpus {
             "txt": Self.relative(txt),
             "bytes": audio.count,
             "text": text,
-            "engine": "whisper-local",
+            "engine": engine,
             "duration": duration,
             "session": SessionLabel.value,
         ]
@@ -112,7 +127,7 @@ final class VoiceCorpus {
         defer { try? handle.close() }
         _ = try? handle.seekToEnd()
         try? handle.write(contentsOf: data)
-        Log.info(String(format: "corpus: %@ — %d KB, %.1fs (local)", stem, audio.count / 1024, duration))
+        Log.info(String(format: "corpus: %@ — %d KB, %.1fs (%@)", stem, audio.count / 1024, duration, engine))
     }
 
     private static func relative(_ url: URL) -> String {
