@@ -135,6 +135,12 @@ enum DictationDelivery {
     case route
     /// Somebody else already put it on screen. File it, do not deliver it.
     case alreadyInserted
+    /// Somebody else put it **where the focus was**, and this is the text they
+    /// put there (2026-09-12: Wispr Flow's Accessibility insertion, read back
+    /// from its `History` row). At the caret that *is* the delivery; at a
+    /// terminal the words still have to travel, and the copy at the caret is
+    /// a stray that cannot be taken back.
+    case insertedElsewhere
 }
 
 /// How a dictation finished.

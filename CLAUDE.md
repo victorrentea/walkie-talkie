@@ -191,8 +191,10 @@ sits at rest there.
   CoreAudio edge **confirms** and never re-opens. `speculativeGrace` is **12 s** (worst measured
   × 2). Push-to-talk (two held modifiers) is the one ambiguous gesture and raises the beacon only.
 - **The recipient is latched when the microphone closes**, and it is the caret when nothing is
-  bound. `settleTimeout` 20 s, `WisprFlowSource.captureTimeout` 30 s — Wispr's round trip
-  measured avg 2.6 s, max 22.8 s, and a six-second window lost an 81-second sentence.
+  bound. **Wispr's own `History` row says when it is done** (`WisprHistory`, read-only, 2026-09-12
+  late): the settle ends on `formatted` / `dismissed` / `empty`, and `pastedText` is delivered as
+  `.insertedElsewhere` when Wispr inserted by a route the tap cannot see. `settleTimeout` 8 s
+  (Wispr's p99) and `WisprFlowSource.captureTimeout` 30 s are the net behind it.
 - **The corpus goes on growing.** The meter the halo breathes on writes its WAV now, and
   `VoiceCorpus.captureLocal(engine:)` files it beside Wispr's transcript as `wispr-flow`. Those
   labels have been through Wispr's formatting pass; `whisper-local` ones are raw.
@@ -204,10 +206,13 @@ sits at rest there.
 
 - **Pause** (gone 2026-09-01) — Disconnect is the "hand the mouse back" gesture; `holdsForBind`
   must never become a menu tick.
-- **Wispr Flow's database** as a recogniser or fallback (gone 2026-08-29, restated 2026-09-12 when
+- **Wispr Flow's database as a recogniser or fallback** (gone 2026-08-29, restated 2026-09-12 when
   Wispr became the source). A fallback is a second *local* model. The wrap reads the **pasteboard**,
   which is where Wispr itself puts the sentence a millisecond before it presses ⌘V — public, and
-  the same place `pasteText` puts its own. No file of Wispr's is opened anywhere in `Sources/`.
+  the same place `pasteText` puts its own. **The one file of Wispr's opened in `Sources/` is
+  `flow.sqlite`, read-only, by `WisprHistory`** (2026-09-12, late, Victor's decision after the
+  experiments): the row's `status` is the *is it done* signal, and `pastedText` is read only for a
+  sentence Wispr has already inserted invisibly. Nothing else of Wispr's, and never as a recogniser.
 - **`copy_last_text` (⌘⌃C) as a routine transcript path** — off by default since the hour it was
   written. It hands back *the last text Wispr produced*, which after a failed sentence is the
   **previous** one, and delivering a five-minute-old paragraph as though he had just said it is

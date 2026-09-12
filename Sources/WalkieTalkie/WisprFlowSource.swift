@@ -180,6 +180,21 @@ final class WisprFlowSource: DictationSource {
 
     private var cancelling = false
 
+    /// **Wispr's own row for this dictation** (`WisprHistory`, 2026-09-12) —
+    /// the completion signal for a delivery the tap cannot see. Taken at the
+    /// microphone's close as the newest row whose `startedAt` is this
+    /// dictation's; polled every `historyTick` while capturing.
+    private var historyRow: Int64?
+    private var historyPoll: Timer?
+    /// When the row said `formatted`, so the ⌘V that normally follows gets
+    /// `pasteGrace` to arrive before the text is taken from the row instead.
+    private var historyFormattedAt: CFAbsoluteTime = 0
+    private static let historyTick: TimeInterval = 0.15
+    private static let pasteGrace: TimeInterval = 1.0
+    /// Wall clock of whichever came first, the gesture or the microphone — the
+    /// row's `startedAt` has to be at or after this to be this dictation's.
+    private var openedAt: TimeInterval = 0
+
     private static let bundlePrefix = "com.electron.wispr-flow"
 
     // MARK: - Life
@@ -302,6 +317,7 @@ final class WisprFlowSource: DictationSource {
         guard !isRecording, !speculative else { return }
         speculative = true
         gestureAt = CFAbsoluteTimeGetCurrent()
+        openedAt = Date().timeIntervalSince1970
         // **A capture still standing belongs to a sentence that is over.** Left
         // armed it would take the *next* sentence's ⌘V as this one's answer.
         endCapture(quiet: true)
@@ -387,6 +403,7 @@ final class WisprFlowSource: DictationSource {
             }
             guard !isRecording else { return }
             isRecording = true
+            openedAt = Date().timeIntervalSince1970
             startMeter()
             didBegin?()
             if measured, watch.edgeAt > 0 {
@@ -482,6 +499,63 @@ final class WisprFlowSource: DictationSource {
         let giveUp = DispatchWorkItem { [weak self] in self?.captureExpired() }
         captureDeadline = giveUp
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.captureTimeout, execute: giveUp)
+
+        // **And Wispr's own row**, the third half of the answer and the only one
+        // for an Accessibility insertion. The newest row is this dictation's
+        // only if it was created at or after this one opened — a chord Wispr
+        // ignored leaves the previous dictation's finished row on top, and
+        // reading *that* as "done" would end every settle on the first tick.
+        historyRow = nil
+        historyFormattedAt = 0
+        if let e = WisprHistory.newest(), e.startedAt >= openedAt - 5 {
+            historyRow = e.rowid
+        } else {
+            Log.info("wispr history: no row for this dictation — the ⌘V and the pasteboard are the only signals")
+        }
+        historyPoll?.invalidate()
+        if historyRow != nil {
+            let h = Timer(timeInterval: Self.historyTick, repeats: true) { [weak self] _ in self?.pollHistory() }
+            historyPoll = h
+            RunLoop.main.add(h, forMode: .common)
+        }
+    }
+
+    /// **What Wispr says about this dictation.** `status` stays empty while it
+    /// works; the first non-empty value is the end of the round trip, whatever
+    /// the tap saw. `formatted` waits `pasteGrace` for the ⌘V that usually
+    /// follows — the ordinary paths deliver and close the capture underneath
+    /// this timer — and only then takes the words from the row: Wispr put them
+    /// where the focus was, by a route no tap sees, and `insertedElsewhere`
+    /// lets the router decide whether that was the destination.
+    private func pollHistory() {
+        guard capturing, let row = historyRow, let e = WisprHistory.newest(), e.rowid == row else { return }
+        let took = (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000
+        switch e.status {
+        case "", "processing", "raw_transcript":
+            return
+        case "formatted", "extension_paste", "extension_other":
+            if historyFormattedAt == 0 {
+                historyFormattedAt = CFAbsoluteTimeGetCurrent()
+                Log.info(String(format: "wispr history: %@ %.0f ms after the microphone closed (Wispr's own e2e %.0f ms) — giving the ⌘V %.1f s",
+                                e.status, took, e.e2eLatency, Self.pasteGrace))
+                return
+            }
+            guard CFAbsoluteTimeGetCurrent() - historyFormattedAt >= Self.pasteGrace else { return }
+            Log.info("wispr history: no ⌘V and no pasteboard after \(e.status) — Wispr inserted it into \(e.app) by a route the tap cannot see")
+            deliver(reason: "Wispr's History row", delivery: .insertedElsewhere, text: e.pastedText)
+        case "dismissed":
+            Log.info(String(format: "wispr history: dismissed — %.0f ms after the microphone closed", took))
+            endCapture(quiet: true)
+            didEnd?(.cancelled(audio: nil, duration: 0))
+        case "empty", "no_audio":
+            Log.info(String(format: "wispr history: %@ — %.0f ms after the microphone closed", e.status, took))
+            endCapture(quiet: true)
+            didEnd?(.silent("No words detected"))
+        default:
+            Log.error(String(format: "wispr history: %@ — %.0f ms after the microphone closed", e.status, took))
+            endCapture(quiet: true)
+            didEnd?(.silent("Wispr Flow reported \(e.status)"))
+        }
     }
 
     /// Wispr pressed ⌘V. Under the wrap the tap has already eaten it, so the
@@ -519,9 +593,11 @@ final class WisprFlowSource: DictationSource {
         didEnd?(.silent("No words came back"))
     }
 
-    private func deliver(reason: String, delivery: DictationDelivery) {
+    /// - Parameter text: the words, when they did not come through the
+    ///   pasteboard — Wispr's own row. The pasteboard otherwise.
+    private func deliver(reason: String, delivery: DictationDelivery, text given: String? = nil) {
         guard capturing else { return }
-        let text = (NSPasteboard.general.string(forType: .string) ?? "")
+        let text = (given ?? NSPasteboard.general.string(forType: .string) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let took = CFAbsoluteTimeGetCurrent() - captureFrom
         endCapture(quiet: true)
@@ -561,6 +637,9 @@ final class WisprFlowSource: DictationSource {
         hotkeys.disarmInjectionCapture()
         clipboardWatch?.invalidate()
         clipboardWatch = nil
+        historyPoll?.invalidate()
+        historyPoll = nil
+        historyRow = nil
         captureDeadline?.cancel()
         captureDeadline = nil
     }

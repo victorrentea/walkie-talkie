@@ -46,15 +46,33 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   was swallowed hands the app underneath an orphan; the modifier goes out and comes back balanced.
 - **`captureTimeout` is 30 s and is not the ring's timeout.** Wispr's round trip: avg 2.6 s, max
   22.8 s. Six seconds lost an 81-second dictation on the evening the wrap shipped. The capture costs
-  one flag and can afford to wait; the ring is on screen and stops at `settleTimeout` (20 s).
+  one flag and can afford to wait; the ring is on screen and stops at `settleTimeout` (8 s, Wispr's
+  p99) — and both are only the net, since 2026-09-12 (late): the settle normally ends on Wispr's own
+  `History` row.
+- **Wispr's `History` row is the completion signal** (`WisprHistory`, read-only, 2026-09-12): one row
+  per dictation, created at the gesture with `status = ''`, filled at the end — `formatted` (+
+  `pastedText`, the exact text inserted), `dismissed`, `empty`, `no_audio`, `error`; `e2eLatency` p50
+  2.2 s / p90 3.5 s / p99 7.1 s / max 13.7 s over 30 days. `beginCapture` takes the newest row **only
+  if its `startedAt` is this dictation's** (a chord Wispr ignored leaves the previous finished row on
+  top) and polls it every 150 ms. `formatted` gives the ⌘V `pasteGrace` (1 s) — the ordinary paths
+  deliver and close the capture underneath — then delivers `pastedText` as `.insertedElsewhere`: at
+  the caret that was the destination; at a terminal the words go on to it and the copy at the focus
+  is a stray the log names. Why: two dictations on 2026-09-12 were inserted with **no ⌘V and no
+  pasteboard change** (an Accessibility insertion), and every other signal is dead — Wispr's unified
+  log is silent, its pill's frame and AX tree never change, `config.json` has no insertion-method
+  setting. → journal: *Wispr's own row says when it is done (2026-09-12)*
 - **A new dictation closes a capture still standing**, or it takes the next sentence's ⌘V as this
   one's answer.
 
 ## Do not
 
-- **Do not read Wispr Flow's database.** The 2026-08-29 rule stands and Victor restated it when he
-  asked for the wrap. The pasteboard is where Wispr itself puts the sentence a millisecond before
-  it presses ⌘V, and `pasteText` puts its own there too.
+- **Do not read Wispr Flow's database as a recogniser or a transcript fallback.** The 2026-08-29
+  rule stands for what it was about: the words come from the pasteboard the ⌘V announces. What
+  `WisprHistory` reads (2026-09-12, Victor: *"ok. build"*) is the **row's status** — is Wispr done —
+  and `pastedText` only for a sentence Wispr has already inserted by a route no tap sees, where the
+  alternative is waiting a timeout for a key that is never coming. Read-only, `mode=ro`, one query;
+  nothing here transcribes, and nothing here may ever start a dictation or replace the pasteboard
+  path while the ⌘V is still possible (`pasteGrace`).
 - **Do not turn `copy_last_text` (⌘⌃C) back on by default.** It hands back *the last text Wispr
   produced* — after a failed sentence, the previous one — and delivering a five-minute-old
   paragraph as though he had just said it is worse than losing the sentence. Measured once: the

@@ -76,20 +76,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settlingAtCaret = false
     private var settlingFrom: CFAbsoluteTime = 0
     private var settleGiveUp: DispatchWorkItem?
-    /// **The longest the ring waits for words that may never come — 20 s.**
+    /// **The longest the ring waits for words that may never come — 8 s, the
+    /// safety net behind Wispr's own answer** (2026-09-12, evening).
     ///
     /// It was 6, which is the *average* of Wispr's round trip (2.6 s) with room
     /// over it, and on 2026-09-12 Victor watched the ring go dark while the
     /// words were still coming: measured that evening, 5.9 s on one sentence and
-    /// past six on another, against a fleet maximum of 22.8 s. The ring's whole
-    /// job in this stretch is *they are on their way*, so ending it early is the
-    /// one thing it must not do.
+    /// past six on another, against a fleet maximum of 22.8 s. So it became 20 —
+    /// and then he watched the lightning stand for twenty seconds over a
+    /// sentence Wispr had inserted 0.7 s after the microphone closed, by a route
+    /// the tap could not see. Since that evening the settle normally ends on
+    /// **Wispr's own row** (`WisprHistory`: `formatted`, `dismissed`, `empty`),
+    /// and this number is only what happens when that row never answers. 8 s is
+    /// Wispr's p99 over 589 dictations (2.2 / 3.5 / 7.1 s at p50 / p90 / p99).
     ///
     /// Shorter than `WisprFlowSource.captureTimeout` on purpose: the capture
     /// costs a flag and can afford to wait 30 s, the ring is on screen and a
     /// beacon standing for half a minute over nothing would stop meaning
     /// anything.
-    private static let settleTimeout: TimeInterval = 20
+    private static let settleTimeout: TimeInterval = 8
 
     /// **The gesture that opens a microphone has been seen and the microphone
     /// has not.** Only a source whose recorder lives in another process has a
@@ -1267,11 +1272,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Somebody else already put the words on screen — Wispr Flow with the
         // wrap off, and nothing else today. Filed above, delivered by nobody.
-        guard case .route = result.delivery else {
+        if case .alreadyInserted = result.delivery {
             endSettling(reason: "\(source.name) inserted it")
             clearSpawn()
             abandonDictation("the source delivered it itself")
             return
+        }
+        // **Inserted where the focus was, by a route the tap never saw**
+        // (2026-09-12). At the caret that was the destination and the words are
+        // there; at a terminal they still have to travel, and the copy at the
+        // focus is a stray this app cannot take back — said in the log, and
+        // the sentence goes on to where he pointed it.
+        if case .insertedElsewhere = result.delivery {
+            if latchedAtCaret {
+                endSettling(reason: "\(source.name) inserted it at the caret, with no ⌘V")
+                clearSpawn()
+                abandonDictation("the source delivered it itself")
+                return
+            }
+            Log.info("⚠️ \(source.name) inserted the words at the focus on its own — routing them to the terminal as well; the copy at the focus stays")
         }
 
         let app = localRecordingApp

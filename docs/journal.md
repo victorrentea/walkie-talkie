@@ -203,6 +203,7 @@ The journal contradicts itself over time, because it was written as things chang
   - [The envelope names no recogniser (2026-09-12)](#the-envelope-names-no-recogniser-2026-09-12)
   - [The ring grows out of the pointer (2026-09-12)](#the-ring-grows-out-of-the-pointer-2026-09-12)
   - [Only the installed bundle is a login item (2026-09-12)](#only-the-installed-bundle-is-a-login-item-2026-09-12)
+- [Wispr's own row says when it is done (2026-09-12)](#wisprs-own-row-says-when-it-is-done-2026-09-12)
 
 ---
 
@@ -7911,3 +7912,47 @@ cannot be removed from here — `SMAppService` unregisters only the running app,
 resetbtm` resets *every* login item on the Mac and makes each re-ask for approval — so they go
 by hand: System Settings → General → Login Items & Extensions, the `WalkieTalkie` rows (not
 `Walkie Talkie`).
+
+## Wispr's own row says when it is done (2026-09-12)
+
+*"But how do you know in that case when Wispr Flow finished dictating?"* — I did not. The relay
+had three signals about Wispr, all indirect: the microphone's closing edge, a synthetic ⌘V from
+Wispr's pid, and the pasteboard's `changeCount`. Twice that evening (22:07, 22:32) a sentence was
+inserted into Terminal with **none of the last two** — no synthetic keystroke from any process
+(the probe logs every one during the capture) and no pasteboard change — and the relay waited its
+full `settleTimeout` with the lightning on screen, then declared *the source returned nothing*.
+An Accessibility insertion, as far as anything outside Wispr can tell; the same Terminal took a
+⌘V two minutes earlier.
+
+Victor: *"Let's run a bunch of experiments for you to figure out how you can detect when Wispr
+Flow finishes the transcription, including looking into its own files on disk (or perhaps where
+else stuff gets saved in the database)."* Four observers ran side by side through his dictations:
+
+- **`CGWindowList`** — the pill lives in a fixed 512×586 `Status` window at layer 1000 whose
+  frame never moves. Dead.
+- **The Accessibility tree** of that window — readable (`AXWebArea`), and it does not change
+  through a dictation. Dead.
+- **The unified log** (`log stream --process "Wispr Flow"`) — silent. **`nettop`** — nothing
+  usable. `config.json` has no insertion-method setting to pin Wispr to ⌘V. Dead.
+- **`flow.sqlite`, table `History`** — one row per dictation, created at the gesture with
+  `status = ''`, filled at the end: `formatted` (+ `pastedText`, the exact text inserted, `app`,
+  `e2eLatency`), `dismissed`, `empty`, `no_audio`, `error`. The 22:32 row was `formatted` **711 ms**
+  after the microphone closed, 168 chars into Terminal — while the relay sat for 20 s. Over 589
+  dictations in 30 days: e2e p50 2.2 s, p90 3.5 s, p99 7.1 s, max 13.7 s. The query costs 6 ms
+  on the 3.5 GB file, WAL mode, a reader never blocks the writer.
+
+**What was built** (Victor: *"ok. build"*): `WisprHistory` — a read-only handle, one query,
+`mode=ro`. `beginCapture` takes the newest row only if its `startedAt` is this dictation's (a
+chord Wispr ignored leaves the previous *finished* row on top, and reading that as "done" would
+end every settle on the first tick), then polls it every 150 ms. `formatted` gives the ⌘V one
+second (`pasteGrace`) — the ordinary paths deliver and close the capture underneath the timer —
+and only then delivers `pastedText` as a new `DictationDelivery.insertedElsewhere`: at the caret
+that was the destination and the sentence is already there; at a terminal the router sends it on
+and logs that the copy at the focus is a stray it cannot take back. `dismissed` ends as a
+cancel, `empty` / `no_audio` as *No words detected*. `settleTimeout` drops from 20 s to 8 s (the
+p99), now only the net behind the row.
+
+**The rule.** *Never Wispr's database as a recogniser or fallback* stands for what it was about —
+nothing here transcribes, and the pasteboard path is untouched while a ⌘V is still possible.
+What changed, by Victor's decision, is that one file of Wispr's is opened read-only for the one
+question nothing else on the machine can answer.
