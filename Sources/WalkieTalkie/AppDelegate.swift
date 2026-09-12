@@ -512,6 +512,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onRebindMessage = { [weak self] text in
             DispatchQueue.main.async { self?.overlay.flash(text, duration: 3) }
         }
+        // **A session found in the transcripts whose window has been closed.**
+        // The spawn is the one ⇧ + wheel makes, minus the prompt: same tiling,
+        // same flight, same bind at the end — `adoptSpawnedWindow` does not care
+        // that the session inside the window is an old one.
+        //
+        // The flash is not decoration here. `do script` plus a Claude Code
+        // starting up is a couple of seconds in which the panel has closed, the
+        // window is not on a screen he is looking at, and the only alternative is
+        // a gesture that appears to have done nothing.
+        status.onResumeSession = { [weak self] session, cwd in
+            self?.resumeSession(session, in: cwd)
+        }
         // **The same route the restart takes** (`picker.onBindTTY`), and for the
         // same reason: this is a binding being *restored*, not a gesture pointing
         // at the window in front. So no toggle — finding it already bound must not
@@ -859,6 +871,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // at the pointer: nothing at a desk moves the mouse, and a panel drawn
         // under a cursor parked in a corner is one shoved back onto the screen
         // by its own edge clamp.
+        picker.onTestResumeSession = { [weak self] session, directory in
+            self?.resumeSession(session, in: directory)
+        }
         picker.onTestRebindPanel = { [weak self] query in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -2531,6 +2546,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.error("✨ spawn failed: \(why)")
                     self.overlay.flash("⚠️ \(why)", duration: 8)
                 }
+            }
+        }
+    }
+
+    /// **A session found in the transcripts whose window has been closed**, put
+    /// back on screen — `RebindPanel`'s ⏎ on a row that has no tty to point at.
+    ///
+    /// The spawn is the one ⇧ + wheel makes, minus the prompt: same tiling, same
+    /// flight, same bind at the end, since `adoptSpawnedWindow` does not care
+    /// that the session inside the window is an old one. A resumed session is a
+    /// destination that did not exist a second ago, which is the same sentence a
+    /// spawn says.
+    ///
+    /// **The flash is not decoration.** `do script` plus a Claude Code starting
+    /// up is a couple of seconds during which the panel has closed, the window is
+    /// being tiled onto a screen he is not looking at, and the alternative is a
+    /// gesture that appears to have done nothing.
+    private func resumeSession(_ session: String, in directory: String) {
+        let folder = (directory as NSString).lastPathComponent
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.flash("✨ reopening \(folder)…", duration: 4)
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            switch SpawnTerminal.resumeClaude(session: session, directory: directory) {
+            case .opened(let tty):
+                DispatchQueue.main.async { self.adoptSpawnedWindow(tty: tty) }
+            case .failed(let why):
+                Log.error("✨ resume failed: \(why)")
+                DispatchQueue.main.async { self.overlay.flash("⚠️ \(why)", duration: 8) }
             }
         }
     }

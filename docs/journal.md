@@ -58,6 +58,7 @@ The journal contradicts itself over time, because it was written as things chang
       - [`bind(tty:)` normalises the tty, and that fixed a silent bug](#bindtty-normalises-the-tty-and-that-fixed-a-silent-bug)
     - [The list takes typing, and searches the session journals (2026-09-12)](#the-list-takes-typing-and-searches-the-session-journals-2026-09-12)
       - [Which tab a session from Tuesday is in — the join nobody had to write](#which-tab-a-session-from-tuesday-is-in--the-join-nobody-had-to-write)
+      - [A closed window is not a dead end: ⏎ reopens the session](#a-closed-window-is-not-a-dead-end--reopens-the-session)
       - [The panel's own corrections, in the order they were found](#the-panels-own-corrections-in-the-order-they-were-found)
     - [A terminal that was closed lets go of the binding by itself (2026-09-07)](#a-terminal-that-was-closed-lets-go-of-the-binding-by-itself-2026-09-07)
     - [The loopback control surface](#the-loopback-control-surface)
@@ -945,10 +946,48 @@ was running *Lightning circle around mouse* while its tab still read
 hook refreshes a title on that session's own turns. Title-matching alone marked
 every live session *window closed*.
 
-A session whose tab is gone stays in the list, dimmed, saying `window closed` —
-the menu's rule that a row the app cannot act on is greyed and not hidden. It is
-also the obvious next move: that row knows the session id and the folder, and
-`claude --resume` is one spawn away.
+#### A closed window is not a dead end: ⏎ reopens the session
+
+Victor, on being told that row could only say *window closed*: *"cu un visual
+hint, să ofere și asta, da"*. So it does — the row knows the session id and the
+folder it belongs to, and that is exactly what `claude --resume <id>` needs.
+
+- **The spawn is the one ⇧ + wheel makes, minus the prompt.** `SpawnTerminal`
+  grew a second entry point (`resumeClaude`) and everything after the launcher is
+  now shared with `launchClaude`: the same `do script`, the same tiling onto a
+  lateral display, the same restoring of the front, the same
+  `adoptSpawnedWindow` — flight, then bind. A resumed session is a destination
+  that did not exist a second ago, which is the sentence a spawn already says.
+- **The `cd` is load-bearing.** A session id is scoped to the project folder
+  Claude Code filed it under; resumed from anywhere else it is simply not found.
+  So a row only offers to reopen when that folder still exists, and otherwise
+  stays what it was: dimmed, `window closed`.
+- **The hint is on the selected row and nowhere else.** `⏎ resume it` in the
+  accent colour, right-aligned, with the title given the width that is left; the
+  footer says `⏎ reopen it with claude --resume` for the same row. Twenty-five
+  rows each repeating it is noise, and an action nothing on screen mentions is an
+  action nobody uses. The title says `closed` rather than `window closed` once
+  reopening is on offer — the window is gone, the session is not.
+- **A flash covers the wait.** `do script` plus a Claude Code starting up is a
+  couple of seconds in which the panel has closed and the window is being tiled
+  onto a screen he is not looking at; `✨ reopening <folder>…` is the only thing
+  saying the ⏎ landed.
+
+Verified end to end on 2026-09-12 through `POST /test/resume-session` (the ⏎ of
+that row, since a window that has taken the keyboard cannot be clicked from a
+script): `✨ resumed session 91f62dd6 in …/walkie-talkie on ttys009`, `ps -t
+ttys009` showing `claude --resume 91f62dd6…`, the tab titling itself
+`✳ Walkie-talkie dictation UI animations`, and the relay bound to it three
+seconds later.
+
+**And it took the folder fallback out of the liveness test.** Matching a tab on
+the repo name alone called every session of a repo live as long as *any* tab was
+open in it: it pointed a bind at a stranger's window, and — worse — it swallowed
+the row, because a hit that claims a tty already listed above is dropped as a
+duplicate. The session Victor searched for vanished from the list instead of
+offering to reopen itself (seen with two sessions of this repo, one of them in a
+tab that had moved on hours before). The title is now the only corroboration, and
+with reopening on offer there is nothing left to buy with a guess.
 
 #### The panel's own corrections, in the order they were found
 

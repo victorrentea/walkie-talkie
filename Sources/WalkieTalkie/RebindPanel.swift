@@ -45,6 +45,17 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let haystack: String
         /// The words to highlight inside `subtitle`, i.e. the query that found it.
         var terms: [String] = []
+        /// **The session to reopen, for a row whose terminal is gone** — id and
+        /// the folder it belongs to. Set only when there is no tty to bind to and
+        /// the folder still exists; ⏎ then spawns `claude --resume` instead of
+        /// rebinding. See `hint`.
+        var resume: (session: String, cwd: String)?
+        /// **What ⏎ would do to this row, in three words**, drawn on the selected
+        /// row only. Victor's ask when the resume was offered: *"cu un visual
+        /// hint, să ofere și asta"* — an action nothing on screen mentions is an
+        /// action nobody uses, and a hint repeated down twenty-five rows is
+        /// noise. The selected row is the one ⏎ is about.
+        var hint: String? { resume != nil ? "⏎ resume it" : (enabled ? "⏎ bind" : nil) }
     }
 
     // MARK: - The pause before the disk is touched
@@ -71,9 +82,12 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var liveTitles: (() -> [String: String])?
     /// Picked a row: point the relay at that tty.
     var onRebind: ((String) -> Void)?
-    /// Something to say on the overlay — the one case being ⏎ on a session whose
-    /// terminal is gone.
+    /// Something to say on the overlay, for the moment between ⏎ and a window
+    /// appearing.
     var onMessage: ((String) -> Void)?
+    /// **⏎ on a session whose terminal is gone**: open it again with
+    /// `claude --resume <id>` in the folder it belongs to.
+    var onResume: ((_ session: String, _ cwd: String) -> Void)?
 
     // MARK: - State
 
@@ -328,12 +342,14 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let i = index ?? selected
         guard shown.indices.contains(i) else { return }
         let row = shown[i]
-        guard let tty = row.tty, row.enabled else {
-            // The one dead end worth a word: he found the session, and the
-            // window it ran in is not there any more.
-            if row.kind == .session { onMessage?("⚠️ that session's window is gone") }
+        // **Reopening comes first**, because a row only carries a resume when
+        // there was no tty to prefer: the two are never both true.
+        if let resume = row.resume {
+            close()
+            onResume?(resume.session, resume.cwd)
             return
         }
+        guard let tty = row.tty, row.enabled else { return }
         close()
         onRebind?(tty)
     }
@@ -387,16 +403,26 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         // the relay last spoke to it.
         if let tty, destinations.contains(where: { $0.tty == tty }) { return nil }
 
+        // **A closed window is no longer a dead end.** The row knows the session
+        // id and the folder, and `claude --resume` is one spawn away — so the
+        // question is only whether the folder is still there to resume *in*: a
+        // session id is scoped to it, and from anywhere else the id is not found.
+        let resumable = tty == nil && !hit.cwd.isEmpty
+            && FileManager.default.fileExists(atPath: hit.cwd)
+
         let who = hit.role == "me" ? "you" : "claude"
         let name = hit.title.isEmpty ? hit.label : hit.title
         var title = name
         if !hit.title.isEmpty { title += "  —  \(hit.label)" }
         title += "  ·  \(RebindHistory.elapsed(since: hit.when))"
-        if tty == nil { title += "  ·  window closed" }
+        if tty == nil { title += resumable ? "  ·  closed" : "  ·  window closed" }
         let subtitle = "\(who): \(hit.snippet)"
-        return Row(kind: .session, tty: tty, icon: Self.folderIcon(hit.cwd),
-                   title: title, subtitle: subtitle, enabled: tty != nil,
-                   haystack: (title + " " + subtitle).lowercased(), terms: terms)
+        var row = Row(kind: .session, tty: tty, icon: Self.folderIcon(hit.cwd),
+                      title: title, subtitle: subtitle,
+                      enabled: tty != nil || resumable,
+                      haystack: (title + " " + subtitle).lowercased(), terms: terms)
+        if resumable { row.resume = (session: hit.session, cwd: hit.cwd) }
+        return row
     }
 
     /// **Is this session still in the tab it last reported?**
@@ -436,9 +462,16 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     /// *Lightning circle around mouse* and reading `✳ victor-vibe-board — Tablet
     /// star icon`, three sessions out of date. That is why `ttyOwner` decides and
     /// this only confirms.
+    ///
+    /// **The folder is not evidence, and briefly was.** Matching a tab on the
+    /// repo name alone calls every session of a repo live as long as *any* tab is
+    /// open in it — which pointed a bind at a stranger's window and, worse,
+    /// silently swallowed the row: a hit that claims a tty already on the list
+    /// above is dropped as a duplicate, so the session he searched for vanished
+    /// instead of offering to reopen itself. A closed window is no longer a dead
+    /// end, so there is nothing left to buy with a guess.
     private func matches(_ shownTitle: String, _ hit: SessionSearch.Hit) -> Bool {
-        if !hit.title.isEmpty && shownTitle.contains(hit.title) { return true }
-        return !hit.folder.isEmpty && shownTitle.contains(hit.folder)
+        !hit.title.isEmpty && shownTitle.contains(hit.title)
     }
 
     // MARK: - The list
@@ -487,9 +520,15 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             listView.addSubview(empty)
         }
 
+        // The footer says what ⏎ does **to the row he is on**, which is not one
+        // sentence any more: most rows are a terminal to point at, and a session
+        // whose window is gone is a terminal to open.
+        let action = shown.indices.contains(selected) && shown[selected].resume != nil
+            ? "⏎ reopen it with claude --resume"
+            : "⏎ bind"
         hintLabel.stringValue = query.isEmpty
-            ? "Type to search every message you and Claude exchanged   ·   ↑↓ choose   ·   ⏎ bind   ·   esc close"
-            : "↑↓ choose   ·   ⏎ bind   ·   esc close"
+            ? "Type to search every message you and Claude exchanged   ·   ↑↓ choose   ·   \(action)   ·   esc close"
+            : "↑↓ choose   ·   \(action)   ·   esc close"
     }
 
     private func reveal(_ index: Int) {
@@ -594,6 +633,21 @@ private final class RowView: NSView {
         let clip = NSMutableParagraphStyle()
         clip.lineBreakMode = .byTruncatingTail
 
+        // **The hint, on this row only.** Drawn before the title so the title can
+        // be given the width that is left: a hint the title runs under is worse
+        // than no hint, and `…` in the right place is what says a row was cut.
+        var reserved: CGFloat = 0
+        if isSelected, let hint = row.hint {
+            let text = NSAttributedString(string: hint, attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                .foregroundColor: NSColor.controlAccentColor,
+            ])
+            let size = text.size()
+            reserved = size.width + 16
+            text.draw(at: NSPoint(x: bounds.width - 16 - size.width,
+                                  y: (bounds.height - size.height) / 2))
+        }
+
         let title = NSMutableAttributedString(string: row.title, attributes: [
             .font: NSFont.systemFont(ofSize: 12.5, weight: .medium),
             .foregroundColor: strong,
@@ -603,7 +657,7 @@ private final class RowView: NSView {
         // the destinations have no second line, and half of a two-line row with
         // the bottom half empty reads as a row that failed to load.
         title.draw(in: NSRect(x: 44, y: row.subtitle.isEmpty ? 14 : 5,
-                              width: bounds.width - 60, height: 17))
+                              width: bounds.width - 60 - reserved, height: 17))
 
         guard !row.subtitle.isEmpty else { return }
         let sub = NSMutableAttributedString(string: row.subtitle, attributes: [
@@ -627,7 +681,7 @@ private final class RowView: NSView {
                 from = range.location + max(1, range.length)
             }
         }
-        sub.draw(in: NSRect(x: 44, y: 24, width: bounds.width - 60, height: 16))
+        sub.draw(in: NSRect(x: 44, y: 24, width: bounds.width - 60 - reserved, height: 16))
     }
 }
 

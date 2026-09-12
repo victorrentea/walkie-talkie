@@ -116,9 +116,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// opening, like the rows above it and for the same AppleScript reason.
     var liveTitles: (() -> [String: String])?
 
-    /// A word for the overlay, from the panel — a session whose window is gone
-    /// has nothing to bind to, and the click has to say something.
+    /// A word for the overlay, from the panel — the beat between ⏎ and a window
+    /// appearing is the one moment it has nothing else to show.
     var onRebindMessage: ((String) -> Void)?
+
+    /// **Picked a session whose terminal is closed** — open it again with
+    /// `claude --resume <id>` in the folder it belongs to, and bind to it.
+    var onResumeSession: ((_ session: String, _ cwd: String) -> Void)?
 
     /// Picked from **Start dictation to new claude** — open the microphone with
     /// the spawn destination armed, exactly as the wheel clicked twice does.
@@ -1057,6 +1061,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         rebindPanel.liveTitles = liveTitles
         rebindPanel.onRebind = { [weak self] tty in self?.onRebind?(tty) }
         rebindPanel.onMessage = { [weak self] text in self?.onRebindMessage?(text) }
+        rebindPanel.onResume = { [weak self] session, cwd in self?.onResumeSession?(session, cwd) }
         rebindPanel.show(at: point, query: query)
     }
     @objc private func newSessionClicked() { onNewSession?() }

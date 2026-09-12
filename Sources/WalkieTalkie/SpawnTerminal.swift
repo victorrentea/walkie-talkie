@@ -49,15 +49,57 @@ enum SpawnTerminal {
     ///
     /// Runs subprocesses — call it off the main thread.
     static func launchClaude(prompt: String, directory: String) -> Outcome {
-        let stamp = "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0..<0xFFFF))"
+        let stamp = Self.stamp()
         let promptFile = dir.appendingPathComponent("prompt-\(stamp).txt")
-        let launcher = dir.appendingPathComponent("start-\(stamp).sh")
-
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try prompt.write(to: promptFile, atomically: true, encoding: .utf8)
-            try script(prompt: promptFile.path, directory: directory)
-                .write(to: launcher, atomically: true, encoding: .utf8)
+        } catch {
+            return .failed("could not stage the new session — \(error.localizedDescription)")
+        }
+        return open(script(prompt: promptFile.path, directory: directory),
+                    stamp: stamp, directory: directory, what: "new Claude Code")
+    }
+
+    /// **A session that already exists, opened again in a window of its own** —
+    /// what ⏎ does on a row of `RebindPanel` whose terminal has been closed.
+    ///
+    /// The search finds the session by something said in it, which is just as
+    /// likely to be a session from Tuesday as one still on screen; for the ones
+    /// still on screen there is a tty to point at, and for the rest there was
+    /// nothing to offer until now. `claude --resume <id>` is the whole of it, and
+    /// the window it opens is spawned, tiled, flown to and bound exactly like the
+    /// one ⇧ + wheel opens — a resumed session is a destination that did not
+    /// exist a second ago, which is the same sentence.
+    ///
+    /// **The directory matters and is not decoration.** A session id is scoped to
+    /// the project folder Claude Code filed it under, so the launcher `cd`s there
+    /// first; resumed from anywhere else the id is simply not found.
+    ///
+    /// Runs subprocesses — call it off the main thread.
+    static func resumeClaude(session: String, directory: String) -> Outcome {
+        open(resumeScript(session: session, directory: directory),
+             stamp: Self.stamp(), directory: directory,
+             what: "resumed session \(session.prefix(8))")
+    }
+
+    private static func stamp() -> String {
+        "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0..<0xFFFF))"
+    }
+
+    /// **Everything both of them do once the launcher exists**: open the window,
+    /// find out which tty it landed on, tile it, and give the front back.
+    ///
+    /// The two callers differ only in the script they stage — one starts a
+    /// session with a prompt in its `argv`, the other reopens one by id — and the
+    /// whole of the rest, which is where every trap in this file lives, is shared
+    /// rather than copied.
+    private static func open(_ body: String, stamp: String,
+                             directory: String, what: String) -> Outcome {
+        let launcher = dir.appendingPathComponent("start-\(stamp).sh")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try body.write(to: launcher, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: launcher.path)
         } catch {
             return .failed("could not stage the new session — \(error.localizedDescription)")
@@ -162,7 +204,7 @@ enum SpawnTerminal {
                 previous.activate(options: [])
             }
         }
-        Log.info("✨ new Claude Code spawned in \(directory) on \((tty as NSString).lastPathComponent) — \(placed)")
+        Log.info("✨ \(what) in \(directory) on \((tty as NSString).lastPathComponent) — \(placed)")
         return .opened(tty: tty)
     }
 
@@ -324,6 +366,24 @@ enum SpawnTerminal {
           exec /bin/zsh -l
         fi
         exec claude "$prompt"
+        """
+    }
+
+    /// The same shell, minus the prompt: `claude --resume <id>` in the folder the
+    /// session belongs to. No file is staged for it — a session id is a uuid, so
+    /// there is nothing here that needs keeping out of a command line, which is
+    /// the whole reason the prompt gets a file of its own.
+    private static func resumeScript(session: String, directory: String) -> String {
+        """
+        #!/bin/zsh
+        # Written by Walkie Talkie — a session picked out of the Rebind to… search.
+        PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+        cd \(quote(directory)) 2>/dev/null || cd "$HOME"
+        if ! command -v claude >/dev/null; then
+          echo "walkie: claude is not on the PATH — could not resume \(session)"
+          exec /bin/zsh -l
+        fi
+        exec claude --resume \(quote(session))
         """
     }
 

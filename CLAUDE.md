@@ -132,6 +132,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
+| `POST /test/resume-session` `{"session": …, "directory": …}` | ⏎ on a closed session's row — `claude --resume` in a spawned window |
 | `GET /ping` · `POST /pick` | the Chrome extension's mailbox; 503 outside a dictation |
 
 `/bind`, `/unbind` and `/target` are not gated on `dictating`. `/test/dictation` enters below the

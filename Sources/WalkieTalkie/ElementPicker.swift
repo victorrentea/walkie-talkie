@@ -198,6 +198,13 @@ final class ElementPicker {
     /// is otherwise reachable only by clicking a row.
     var onTestRecover: (() -> Void)?
 
+    /// `POST /test/resume-session` `{"session": "<uuid>", "directory": "…"}` —
+    /// what ⏎ does on a panel row whose terminal is closed.
+    ///
+    /// The panel's own ⏎ needs a window that has taken the keyboard, so the one
+    /// gesture that opens a session again is otherwise only reachable by hand.
+    var onTestResumeSession: ((_ session: String, _ directory: String) -> Void)?
+
     /// `POST /test/rebind-panel` `{"query": "…"}` — put the *Rebind to…* panel up
     /// in the middle of the screen, optionally with the field already filled in.
     ///
@@ -428,6 +435,18 @@ final class ElementPicker {
         case ("POST", "/test/recover"):
             onTestRecover?()
             respond(conn, 200, ["ok": true])
+
+        // ⏎ on a closed session's row — see `onTestResumeSession`.
+        case ("POST", "/test/resume-session"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let session = (body?["session"] as? String) ?? ""
+            let directory = (body?["directory"] as? String) ?? ""
+            guard !session.isEmpty, !directory.isEmpty else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "expected {\"session\": \"…\", \"directory\": \"…\"}"])
+            }
+            onTestResumeSession?(session, directory)
+            respond(conn, 200, ["ok": true, "session": session, "directory": directory])
 
         // The search panel behind `Rebind to…` — see `onTestRebindPanel`.
         case ("POST", "/test/rebind-panel"):

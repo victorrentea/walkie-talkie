@@ -16,6 +16,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 ## The gesture and what travels
 
+- **There are two entry points now** (2026-09-12): `launchClaude(prompt:directory:)` for the
+  gesture, and `resumeClaude(session:directory:)` for a session `RebindPanel`'s search found whose
+  terminal has been closed (`claude --resume <id>`, in the folder the id is scoped to). Everything
+  past the staged launcher is one shared `open(_:stamp:directory:what:)` — the `do script`, the
+  tiling, the front being handed back — because every trap in this file lives there and none of it
+  is about which of the two started it.
+  → journal: *A closed window is not a dead end: ⏎ reopens the session*
 - **The prompt travels in `argv` — `claude "<prompt>"` — never through the keyboard.** The
   session starts with the prompt already submitted, so there is no window to wait for, no caret to
   land in, no shell prompt to be executed at, no race between "the process is up" and "the process
