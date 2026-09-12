@@ -78,6 +78,51 @@ enum InputDevice {
     /// Every device that can actually record. Outputs and the input-less halves
     /// of duplex devices are dropped here rather than at the match, so "first
     /// one that looks like a DJI" cannot land on a speaker.
+    // MARK: - The system's default input, for the harness
+
+    /// **The name of the system's chosen input**, so a test can put it back.
+    static func systemDefaultName() -> String? { systemDefault()?.name }
+
+    /// **Point the whole system's input at a device, by name.**
+    ///
+    /// This exists for `tools/wispr-test.sh` and nothing else. Wispr Flow's
+    /// microphone is chosen in Wispr's own UI and stored as a Chromium
+    /// `MediaDeviceInfo.deviceId` — a per-origin salted hash that cannot be
+    /// computed from a device name and is rewritten by Wispr's own process, so
+    /// it is not scriptable. What *is* scriptable is the system default, and
+    /// Wispr follows it when its microphone is set to **Auto-detect**. That one
+    /// setting is what turns "flip a preference by hand before and after every
+    /// run" into a scripted end-to-end test.
+    ///
+    /// Substring, case-insensitive: CoreAudio names carry emoji and trailing
+    /// model numbers, and asking a caller to type one exactly is asking for a
+    /// typo that looks like *Wispr heard nothing*.
+    ///
+    /// - Returns: the name it actually selected, or nil if nothing matched.
+    @discardableResult
+    static func setSystemDefault(matching needle: String) -> String? {
+        let wanted = needle.lowercased()
+        guard let device = inputs().first(where: { $0.name.lowercased().contains(wanted) })
+        else { return nil }
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var id = device.id
+        let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                                &address, 0, nil,
+                                                UInt32(MemoryLayout<AudioDeviceID>.size), &id)
+        guard status == noErr else {
+            Log.error("input: could not make \(device.name) the default (OSStatus \(status))")
+            return nil
+        }
+        Log.info("🎚️ system default input → \(device.name)")
+        return device.name
+    }
+
+    /// Every input this Mac can see, for a harness that has to say what it
+    /// looked at when nothing matched.
+    static func inputNames() -> [String] { inputs().map(\.name) }
+
     private static func inputs() -> [Device] {
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
                                                  mScope: kAudioObjectPropertyScopeGlobal,

@@ -107,11 +107,63 @@ final class HotkeyTap {
     /// **Watched, never taken**: both go straight back out. This is a guess and
     /// is labelled one — `AppDelegate` drops the ring again if no microphone
     /// opens within `wisprSpeculativeGrace`.
-    var onWisprMaybeStarting: ((String) -> Void)?
+    /// - Parameter confident: whether this gesture is unambiguous. `fn ⌃ Space`
+    ///   is — nothing else on this Mac claims it, and this app posts exactly it.
+    ///   The push-to-talk pair is not: it is two modifiers held and nothing else,
+    ///   so it also fires on a ⌘⌥ Victor pressed for something entirely
+    ///   different. The source spends a whole dictation's opening on the first
+    ///   and only a beacon on the second.
+    var onWisprMaybeStarting: ((String, Bool) -> Void)?
 
     /// Whether Wispr's push-to-talk pair is currently held, so the ring is asked
     /// for on the edge rather than on every `flagsChanged` while it is down.
     private var wisprPTTDown = false
+
+    // ── Another app's delivery, watched and (when wrapped) taken ─────────────
+
+    /// **Wispr Flow pressed ⌘V** — its whole output interface, seen here before
+    /// the front app sees it. The string is the posting process's name, for the
+    /// log. Fired on the tap's own thread; the source hops to main.
+    ///
+    /// This is the deleted `blockInjection` coming back with a different job.
+    /// The old one swallowed a paste so the relay could substitute a transcript
+    /// it had read out of Wispr's **database**; that rule (2026-08-29) stands and
+    /// nothing here reads a file of Wispr's. What is read is the **pasteboard**,
+    /// which is where Wispr itself puts the sentence a millisecond before it
+    /// presses this key — public, and the same place `pasteText` puts its own.
+    var onInjectedPaste: ((String) -> Void)?
+
+    /// Arm the window in which another app's paste is expected.
+    ///
+    /// - Parameter swallow: take the ⌘V (the wrap) or merely report it. Armed in
+    ///   both modes, because the *probe* half — which process posted what key,
+    ///   how long after the microphone shut — is the only record of how Wispr
+    ///   delivers, and it is worth the same two log lines either way.
+    func armInjectionCapture(swallow: Bool) {
+        stateLock.lock()
+        injectionArmed = true
+        injectionSwallows = swallow
+        injectionProbeLeft = Self.injectionProbeLines
+        stateLock.unlock()
+    }
+
+    func disarmInjectionCapture() {
+        stateLock.lock()
+        injectionArmed = false
+        injectionSwallows = false
+        stateLock.unlock()
+    }
+
+    private var injectionArmed = false
+    private var injectionSwallows = false
+    /// **How many synthetic key events one window may narrate.** Enough to tell a
+    /// ⌘V from a key-by-key type (which would be one line per character) without
+    /// a recogniser that types turning `relay.log` into a transcript of itself.
+    private static let injectionProbeLines = 6
+    private var injectionProbeLeft = 0
+    /// Answers cached per pid, exactly as `remapperPids` are: this runs on the
+    /// event tap and a pid does not change identity.
+    private var wisprPids: [pid_t: Bool] = [:]
 
     /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
@@ -1296,7 +1348,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 wisprPTTDown = ptt
                 if ptt {
                     DispatchQueue.main.async { [weak self] in
-                        self?.onWisprMaybeStarting?("right ⌘⌥ — Wispr push-to-talk")
+                        self?.onWisprMaybeStarting?("right ⌘⌥ — Wispr push-to-talk", false)
                     }
                 }
             }
@@ -1306,7 +1358,36 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
            event.flags.contains(.maskSecondaryFn), event.flags.contains(.maskControl),
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
             DispatchQueue.main.async { [weak self] in
-                self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free")
+                self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free", true)
+            }
+        }
+
+        // ── Another app's delivery, inside the window it is expected in ─────
+        //
+        // Above the `keyDown` gate because a paste is three events and the
+        // release has to go with the press: passing a `keyUp` whose `keyDown`
+        // was swallowed hands the app underneath an orphan. The ⌘ itself is left
+        // alone — it goes out and comes back balanced, and a bare ⌘ press does
+        // nothing anywhere.
+        if (type == .keyDown || type == .keyUp), injectionArmedNow() {
+            let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
+            let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            // **pid 0 is a key Victor pressed.** Real hardware carries no
+            // process, so his own ⌘V can never match this branch — which is the
+            // whole reason a swallow here is safe at all. The stamp is this
+            // app's own keystrokes, which must never be eaten either.
+            if pid != 0, event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+                if type == .keyDown { probeInjected(pid: pid, code: code, flags: event.flags) }
+                if code == Self.VK_V, event.flags.contains(.maskCommand), isWispr(pid) {
+                    if type == .keyDown {
+                        let who = processName(pid)
+                        DispatchQueue.global().async { [weak self] in self?.onInjectedPaste?(who) }
+                    }
+                    stateLock.lock()
+                    let swallow = injectionSwallows
+                    stateLock.unlock()
+                    if swallow { return nil }
+                }
             }
         }
 
@@ -1734,6 +1815,56 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
+    /// **⌘⌃C — Wispr Flow's `copy_last_text`**, the fallback for a delivery this
+    /// tap never saw.
+    ///
+    /// `prefs.user.shortcuts` files `55+59+8` as `copy_last_text`: ⌘ (55), ⌃
+    /// (59), C (8). It puts the last transcript on the pasteboard without a
+    /// microphone, which is the one way left to read a sentence Wispr inserted
+    /// through something other than a ⌘V — an Accessibility write, a paste into
+    /// an app on its `focusModeBlockedApps` list, a keystroke that went to a
+    /// window that had since moved.
+    ///
+    /// **It does not un-paste anything.** Wispr will already have put the words
+    /// wherever the focus was; this only lets the relay know what they were.
+    /// Everything that makes `postWisprHandsFree` correct is needed here for the
+    /// same reasons and is shared.
+    static func postWisprCopyLast() {
+        DispatchQueue.global().async {
+            usleep(settleForOptionsPlus)
+            let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            var waited = 0
+            while !CGEventSource.flagsState(.combinedSessionState).intersection(watched).isEmpty,
+                  waited < 40 {
+                usleep(5_000)
+                waited += 1
+            }
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = backButtonStamp
+            let held: CGEventFlags = [.maskCommand, .maskControl]
+
+            func modifier(_ key: CGKeyCode, leaving state: CGEventFlags) {
+                guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+                else { return }
+                e.type = .flagsChanged
+                e.flags = state
+                e.post(tap: .cghidEventTap)
+            }
+
+            modifier(Self.VK_COMMAND, leaving: .maskCommand)
+            modifier(Self.VK_CONTROL, leaving: held)
+            if let down = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_C, keyDown: true),
+               let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_C, keyDown: false) {
+                down.flags = held
+                up.flags = held
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
+            modifier(Self.VK_CONTROL, leaving: .maskCommand)
+            modifier(Self.VK_COMMAND, leaving: [])
+        }
+    }
+
     static func postWisprHandsFree() {
         DispatchQueue.global().async {
             usleep(settleForOptionsPlus)
@@ -1772,6 +1903,46 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
+
+    private func injectionArmedNow() -> Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return injectionArmed
+    }
+
+    /// **The probe, and it is the only record of how Wispr Flow delivers.**
+    ///
+    /// Nobody knew on 2026-09-12: the old `blockInjection` predated two Wispr
+    /// versions, and the three candidate answers — a synthetic ⌘V, a key-by-key
+    /// type, an Accessibility insertion — need three different mechanisms to
+    /// catch. So every synthetic key inside the capture window says who posted
+    /// it and what it was, capped so a recogniser that *types* cannot fill the
+    /// log with the sentence it is typing. An insertion through Accessibility
+    /// shows up here as **nothing at all**, which is itself the answer.
+    private func probeInjected(pid: pid_t, code: CGKeyCode, flags: CGEventFlags) {
+        stateLock.lock()
+        guard injectionProbeLeft > 0 else { stateLock.unlock(); return }
+        injectionProbeLeft -= 1
+        stateLock.unlock()
+        Log.info("probe: synthetic key \(code) flags 0x\(String(flags.rawValue, radix: 16)) "
+                 + "from pid \(pid) (\(processName(pid)))")
+    }
+
+    private func isWispr(_ pid: pid_t) -> Bool {
+        stateLock.lock()
+        if let known = wisprPids[pid] { stateLock.unlock(); return known }
+        stateLock.unlock()
+        let match = processName(pid).lowercased().contains("wispr")
+        stateLock.lock()
+        wisprPids[pid] = match
+        stateLock.unlock()
+        return match
+    }
+
+    private func processName(_ pid: pid_t) -> String {
+        var buf = [CChar](repeating: 0, count: 256)
+        guard proc_name(pid, &buf, UInt32(buf.count)) > 0 else { return "pid \(pid)" }
+        return String(cString: buf)
+    }
 
     /// Is this pid the mouse remapper — i.e. is that Return a button press in
     /// disguise?
@@ -1835,6 +2006,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private static let deviceRightCommand: UInt64 = 0x000010
     private static let deviceRightOption: UInt64 = 0x000040
 
+    /// **V**, for the paste another app posts — see `onInjectedPaste`.
+    private static let VK_V:       CGKeyCode = 9
+    /// **C**, for Wispr's `copy_last_text` (`55+59+8` = ⌘⌃C). 8 is C.
+    private static let VK_C:       CGKeyCode = 8
+    private static let VK_COMMAND: CGKeyCode = 55
     private static let VK_ESC:     CGKeyCode = 53
     private static let VK_SPACE:   CGKeyCode = 49
     private static let VK_CONTROL: CGKeyCode = 59
