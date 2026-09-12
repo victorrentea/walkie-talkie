@@ -198,6 +198,16 @@ final class ElementPicker {
     /// is otherwise reachable only by clicking a row.
     var onTestRecover: (() -> Void)?
 
+    /// `POST /test/rebind-panel` `{"query": "…"}` — put the *Rebind to…* panel up
+    /// in the middle of the screen, optionally with the field already filled in.
+    ///
+    /// Same reason as the two above, plus one of its own: the panel spends a
+    /// second reading transcripts and then draws what it found, and neither the
+    /// search nor the rows it produces can be reached without clicking a menu
+    /// row and typing into a window that takes the keyboard away from whatever
+    /// is asking.
+    var onTestRebindPanel: ((String) -> Void)?
+
     /// Ask every connected Chrome extension to reload itself; the answer is how
     /// many were listening. Wired to `MusicBridge.reloadExtensions`.
     var onReloadExtension: (() -> Int)?
@@ -418,6 +428,13 @@ final class ElementPicker {
         case ("POST", "/test/recover"):
             onTestRecover?()
             respond(conn, 200, ["ok": true])
+
+        // The search panel behind `Rebind to…` — see `onTestRebindPanel`.
+        case ("POST", "/test/rebind-panel"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let query = body?["query"] as? String ?? ""
+            onTestRebindPanel?(query)
+            respond(conn, 200, ["ok": true, "query": query])
 
         // The mode behind the forward button — see `onTestReplaceWispr`.
         case ("POST", "/test/replace-wispr"):

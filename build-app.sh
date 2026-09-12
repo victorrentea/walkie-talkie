@@ -38,6 +38,9 @@ cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
 # background at most once a day. `RecentProjects.helperPath` looks here first and
 # falls back to <repo>/helpers, exactly as the whisper helper does.
 cp "$DIR/helpers/recent_projects.py" "$CONTENTS/Resources/recent_projects.py"
+# The search field on `Rebind to…` runs this one, on a pause in his typing, over
+# Claude Code's session journals. Same two-place lookup as the two above.
+cp "$DIR/helpers/session_search.py" "$CONTENTS/Resources/session_search.py"
 
 # The menu bar item's two faces: the device alone at rest, the full icon with its
 # ring once the relay is pointed at a terminal. Copied rather than declared as SPM

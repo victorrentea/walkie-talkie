@@ -503,6 +503,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return RebindHistory.shared.rows(live: TerminalBinding.liveTitles(),
                                              boundAddress: self.terminal.target?.address)
         }
+        // The same round trip a second time, for the panel's other half: a
+        // session found in a transcript is bindable only if the tab it ran in is
+        // still showing it. Two calls at one opening rather than a cached map
+        // passed between them — 30 ms against a list that would otherwise be
+        // deciding liveness from a snapshot it did not take.
+        status.liveTitles = { TerminalBinding.liveTitles() }
+        status.onRebindMessage = { [weak self] text in
+            DispatchQueue.main.async { self?.overlay.flash(text, duration: 3) }
+        }
         // **The same route the restart takes** (`picker.onBindTTY`), and for the
         // same reason: this is a binding being *restored*, not a gesture pointing
         // at the window in front. So no toggle — finding it already bound must not
@@ -845,6 +854,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestReplaceWispr = { [weak self] on in
             DispatchQueue.main.async { self?.setReplaceWispr(on, fromMenu: false) }
+        }
+        // In the middle of the screen the pointer happens to be on, rather than
+        // at the pointer: nothing at a desk moves the mouse, and a panel drawn
+        // under a cursor parked in a corner is one shoved back onto the screen
+        // by its own edge clamp.
+        picker.onTestRebindPanel = { [weak self] query in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let area = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
+                self.status.showRebindPanel(at: NSPoint(x: area.midX, y: area.midY + 200),
+                                            query: query)
+            }
         }
         picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
         picker.describeEngine = { [weak self] in

@@ -4,6 +4,9 @@ paths:
   - "Sources/WalkieTalkie/IDEBridge.swift"
   - "Sources/WalkieTalkie/BindFlight.swift"
   - "Sources/WalkieTalkie/RebindHistory.swift"
+  - "Sources/WalkieTalkie/RebindPanel.swift"
+  - "Sources/WalkieTalkie/SessionSearch.swift"
+  - "helpers/session_search.py"
   - "Sources/WalkieTalkie/UnbindPop.swift"
   - "relay-restart.sh"
 ---
@@ -83,14 +86,26 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 - **Swallow autorepeat on both keys** (`HotkeyTap`): a held key would bind and immediately end the session it started. The left-plus-wheel chord is exempt from the toggle (`bindFrontmostTerminal(toggle:)`, since 2026-09-01); ⌘⌃B and `POST /bind` keep it. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
 - **This app is the only owner of ⌘⌃B/⌘⌃D**; nothing about the bind key remains in Victor Addons. ⌘⌃⌥D is Addons' dark-mode toggle, told apart by ⌥. → journal: *⌘⌃D is this app's own key (since 2026-08-26)*
 
-## Rebind to… (`RebindHistory.swift`, `UnbindPop.swift`)
+## Rebind to… (`RebindHistory.swift`, `RebindPanel.swift`, `SessionSearch.swift`, `UnbindPop.swift`)
 
 - **`RebindHistory` is a log of bindings, keyed by `address` (`ttys016`, `%3`, `IntelliJ IDEA`), capped at twelve, persisted to `~/.walkie-talkie/rebind-history.json`.** No LLM, no transcript search (*"strict ceva recent, fără niciun LLM"*): `claude -p` costs 13 s for sonnet and 17 s for haiku on this Mac. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **Every bind goes through the single private `adopt`, which stamps the outgoing binding.** A binding ends in `unbind()`, in a `targetGone` delivery, or — the common one — by a displacing bind that passes through neither; stamping only in `unbind()` would have every row claim it was let go hours later. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **✨ means this app opened the window; passed at `adoptSpawnedWindow` → `bind(tty:spawned: true)` and sticky.** `★` is `SpawnFolderMenu`'s. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **One AppleScript for all titles: `TerminalBinding.liveTitles()`**, ~30 ms for the machine, about one `title(forTTY:)`. It doubles as liveness: a remembered tty missing from the map is greyed, not deleted. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **A dispatched pop-up at the pointer, not a submenu.** AppKit reserves the disclosure-arrow gutter on every row once one item has a submenu, which shoved `layOutGestures`' column (*"a fugit toată coloana de meniuri din cauza >"*). Dispatch it: a menu put up inside the closing click lands underneath and takes no clicks. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
-- **Plain titles, so disabled rows dim** (the bound one, closed windows, IDE panels with no tab). → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
+- **Plain titles, so disabled rows dim** (the bound one, closed windows, IDE panels with no tab). Since 2026-09-12 the list is a panel that draws its own rows, so this is a colour rung rather than AppKit's dimming — but the rule it encodes is the same. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
+
+## The search field on Rebind to… (2026-09-12)
+
+- **The list is an `NSPanel`, not an `NSMenu`: a menu cannot be typed into.** `.nonactivatingPanel` + `canBecomeKey`, `RelayPanel`'s trick, so it takes the keyboard without activating the app. Still dispatched out of the click, still built at the instant it is asked for. → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **Two halves, and the fast one never waits.** Destinations filter by substring on the keystroke; the transcript scan waits **370 ms** (Victor's number) and every keystroke past it `terminate()`s the process the last one started. → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **"No transcript search" was about an LLM, and still is.** The 2026-09-10 rule killed a design that spent 13–17 s in `claude -p`; `session_search.py` is `rg -l` (0.24 s over 1013 files / 1.3 GB) plus a line-by-line read of what it returns, 0.2–2.9 s. Never put a model, an index or a cache in this path. → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **Only visible messages count** — human prompts and assistant `text` blocks. `thinking`, `tool_use`, `tool_result`, sidechains, hook output and slash-command expansions are skipped: raw, `bluetooth` matches 516 of 1013 transcripts. → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **Rows stream.** The helper prints one JSON object per session as it finds it, newest first, and the panel appends; `--limit` stops the scan early. Nothing is held: one snippet and a counter per session, whatever the file's size. → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **A session is live where it is the *newest* claimant of an open tty**, from `/tmp/claude-terminal-title-<id>.tty` (the title hook's own cache; its mtime is the session's start). The tab's title corroborates, never decides — a tab's title lags its session by whole sessions (measured: `ttys016` reading `victor-vibe-board` while running *Lightning circle around mouse*), and title-matching alone marked every live session *window closed*. → journal: *Which tab a session from Tuesday is in — the join nobody had to write*
+- **A destination row keeps its tty even when disabled.** `enabled` is what ⏎ tests; the tty is also how a search hit knows it is already on the list, and dropping it listed the bound session twice. → journal: *The panel's own corrections, in the order they were found*
+- **`.menu` material, `labelColor` at 10 % for the selected row, dim one rung only.** `.hudWindow` is dark in both appearances while the label colours follow the system one; accent blue under a `secondaryLabelColor` sentence is a watermark; `quaternaryLabelColor` is a separator's colour. → journal: *The panel's own corrections, in the order they were found*
+- **`POST /test/rebind-panel` `{"query": …}` is the only way to reach it at a desk** — it is a window that takes the keyboard, opened from a menu row. → journal: *The panel's own corrections, in the order they were found*
 
 ## Liveness (`checkAlive()`)
 

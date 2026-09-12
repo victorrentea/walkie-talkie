@@ -28,6 +28,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *The shell guard is the load-bearing part* — “`.keystroke` targets cannot be guarded” — IDE targets are guarded since 2026-09-10 through the extension's shell pid; only the `.keystroke` fallback is not
 - *Replace Wispr* — “the back button is handed back” — the back button is the shutter in that mode since 2026-09-08 (*What a caret dictation carries*)
 - *The agent gets an 800px copy* — earlier 1000 px — 800 since 2026-08-22
+- *Rebind to: the destinations already spoken to, most recent first* — *"fără nicio căutare prin transcripturi"* was about a **model** picking a session (13–17 s in `claude -p`); since 2026-09-12 the same list has a search field over the transcripts that is `rg` and nothing else (*The list takes typing, and searches the session journals*)
 - *The wait says how long* — `Transcribing... 4s` — digits gone 2026-09-08 (*The wait fills too*)
 - *The menu says what the model costs* — “starting the helper only when a dictation is coming” — the model loads at launch since 2026-09-06
 - *The mouse is drawn* — the three-row bound idle chip with gesture rows — `showsGestureHints` is off since 2026-08-30 (*The chip teaches nothing; the menu does*)
@@ -55,6 +56,9 @@ The journal contradicts itself over time, because it was written as things chang
     - [⌘⌃B again on the same target lets go of it — the chord does not](#b-again-on-the-same-target-lets-go-of-it--the-chord-does-not)
     - [Rebind to: the destinations already spoken to, most recent first (2026-09-10)](#rebind-to-the-destinations-already-spoken-to-most-recent-first-2026-09-10)
       - [`bind(tty:)` normalises the tty, and that fixed a silent bug](#bindtty-normalises-the-tty-and-that-fixed-a-silent-bug)
+    - [The list takes typing, and searches the session journals (2026-09-12)](#the-list-takes-typing-and-searches-the-session-journals-2026-09-12)
+      - [Which tab a session from Tuesday is in — the join nobody had to write](#which-tab-a-session-from-tuesday-is-in--the-join-nobody-had-to-write)
+      - [The panel's own corrections, in the order they were found](#the-panels-own-corrections-in-the-order-they-were-found)
     - [A terminal that was closed lets go of the binding by itself (2026-09-07)](#a-terminal-that-was-closed-lets-go-of-the-binding-by-itself-2026-09-07)
     - [The loopback control surface](#the-loopback-control-surface)
     - [Restarting keeps the binding, and never interrupts a sentence (2026-09-09)](#restarting-keeps-the-binding-and-never-interrupts-a-sentence-2026-09-09)
@@ -866,6 +870,103 @@ been that way since the restart route was written (2026-09-09). One
 `devicePath()` at the single door a caller-supplied tty comes through; proven by
 the first rebind after the fix logging `window at 765,561 945×516` where it had
 previously logged `frame unknown`.
+
+### The list takes typing, and searches the session journals (2026-09-12)
+
+Victor, at the panel that replaced the pop-up: *"când apare ecranul de sesiuni
+recente … trebuie să pot să încep să tastez direct. Tastarea aceea trebuie să fie
+un search peste mesajele scrise de mine sau de agent … nu thinking, nu tool
+calls, ci doar mesajele vizibile în terminal … fără să mai ții lucruri în
+memorie, ci direct pe jurnalele de sesiuni, pentru a putea găsi sesiunea care
+îmi trebuie … live filtering la taste, cu [debounce] … 370 … sau 500"*.
+
+**This is the transcript search the 2026-09-10 entry above ruled out, and the
+reason it is back is that the thing ruled out was a model.** *"strict ceva
+recent, fără niciun LLM, fără nicio căutare prin transcripturi"* was written
+against a design that spent 13–17 s in `claude -p` to have Haiku pick a session.
+Nothing here asks anything: it is `rg` and a line-by-line read of the same files.
+Two stages, measured on this Mac over a 21-day window (1013 files, 1.3 GB):
+
+| stage | cost |
+|---|---|
+| `rg -l -i -F <term>` over the window | **0.24 s** |
+| parse of the files that matched, until 25 sessions are found | 0.2 s–2.9 s |
+
+The second number is the whole range: a rare word finishes in a fifth of a
+second because ripgrep hands back five files, and `hotspot telefon` takes 2.9 s
+because *telefon* is in three hundred of them. That is why the rows **stream** —
+`session_search.py` prints one JSON object per session as it finds it and the
+panel appends them — rather than appearing all at once at the end.
+
+- **Only what was on screen counts.** A hit is a human prompt or a text block the
+  assistant printed; `thinking`, `tool_use`, `tool_result`, sidechains, hook
+  output and the expansions of slash commands are all skipped. Not a nicety —
+  raw, `bluetooth` matches **516 of 1013** transcripts, and about six of them are
+  about Bluetooth.
+- **Nothing is indexed and nothing is held.** The helper keeps one snippet and a
+  counter per session whatever the file's size (the biggest here is 13 MB), and
+  the app never sees a transcript at all, only the rows. An index would be a
+  second thing to keep true; the file on disk is already true.
+- **The fast half never waits for the slow half.** The destinations from
+  `RebindHistory` filter by substring on the keystroke itself. The scan waits
+  **370 ms** — his number, and the low end of the two he said, because what the
+  pause is for is not calming the list but keeping four keystrokes from starting
+  four scans. Every keystroke past it cancels the process the last one started.
+- **An `NSMenu` cannot be typed into**, so the list is an `NSPanel` now
+  (`RebindPanel`) — `.nonactivatingPanel` plus `canBecomeKey`, the trick
+  `RelayPanel` already uses while the transcript is being edited, so it takes the
+  keyboard without activating the app and the terminal behind it gets it back on
+  close. Everything the pop-up did is kept: built at the instant it is asked for,
+  the destination app's own icon per row, a row that cannot be clicked dimmed
+  rather than hidden, and the whole thing dispatched out of the click that is
+  still closing the menu it came from.
+
+#### Which tab a session from Tuesday is in — the join nobody had to write
+
+A search result is only useful if it can be bound to, and a transcript says
+nothing about a terminal. It turns out the link is already on disk, twice, and
+both halves come from Victor's own `terminal-title.sh` hook:
+
+1. `/tmp/claude-terminal-title-<session>.tty` — the hook caches the tty it walked
+   the process tree to find, so it need not do it twice. The file's mtime is when
+   that session first fired a hook, i.e. when it started.
+2. The tab's **title**, which the same hook writes as `✳ <folder> — <title>`,
+   taken from the `ai-title` / `custom-title` records — the same two records the
+   search reads for a row's name.
+
+**The mtime is what makes the first one usable.** `ttys016` has belonged to a
+dozen sessions this fortnight and every one of them left a claim file; the newest
+claimant is the tenant and the rest are former ones. So: the tab must be open
+(`TerminalBinding.liveTitles()` is the only thing that can say so) **and** the
+session must be the newest claimant of it — with the title as corroboration when
+it agrees, never as the only witness. Measured the day this was built: `ttys016`
+was running *Lightning circle around mouse* while its tab still read
+`✳ victor-vibe-board — Tablet star icon`, three sessions out of date, because the
+hook refreshes a title on that session's own turns. Title-matching alone marked
+every live session *window closed*.
+
+A session whose tab is gone stays in the list, dimmed, saying `window closed` —
+the menu's rule that a row the app cannot act on is greyed and not hidden. It is
+also the obvious next move: that row knows the session id and the folder, and
+`claude --resume` is one spawn away.
+
+#### The panel's own corrections, in the order they were found
+
+- **`.menu` material, not `.hudWindow`.** A HUD is a dark slab in both
+  appearances while `labelColor` follows the *system* one — in light mode the
+  rows came out dark grey on dark grey.
+- **A grey plate and an accent bar for the selected row, not a blue fill.** The
+  second line of a row is a sentence in `secondaryLabelColor`; over accent blue it
+  reads as a watermark. The plate is `labelColor` at 10 %, so the text on it keeps
+  the contrast it has everywhere else.
+- **`quaternaryLabelColor` is a separator's colour.** A dimmed row set in it is
+  not dimmed, it is gone; the dim rung is one step, `secondary`/`tertiary`.
+- **A destination keeps its tty even when it cannot be clicked.** The bound row is
+  disabled, and with its tty dropped the session search found the same session
+  again and listed it twice.
+- **`POST /test/rebind-panel` `{"query": …}`** puts the panel up in the middle of
+  the screen with the field filled in, because nothing else at a desk can click a
+  menu row and then type into a window that takes the keyboard away.
 
 ### A terminal that was closed lets go of the binding by itself (2026-09-07)
 

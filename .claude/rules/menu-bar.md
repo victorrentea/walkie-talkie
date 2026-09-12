@@ -133,7 +133,9 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 ## Rebind to…, Recover, Quit and readouts
 
-- **`Rebind to…` is a dispatched pop-up, not a submenu** (2026-09-10). AppKit reserves the
+- **`Rebind to…` puts up `RebindPanel`, a window with a search field** (2026-09-12) — the rows and the search over the session journals are in `.claude/rules/terminal-binding.md`. What stayed from the pop-up: dispatched out of the click, built when asked for, the app's own icon per row, a row that cannot be acted on greyed rather than hidden.
+  → journal: *The list takes typing, and searches the session journals (2026-09-12)*
+- **It was a dispatched pop-up before that, and never a submenu** (2026-09-10). AppKit reserves the
   disclosure-arrow gutter on every row as soon as one item has a submenu, and one arrow moved the
   whole gesture column (*"a fugit toată coloana de meniuri din cauza >"*). The row builds an
   `NSMenu` on click and `popUp`s it at the pointer; **dispatched**, not inline — the click is still
@@ -219,7 +221,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 ## Do not
 
 - Do not hide a row the app cannot act on right now — grey it.
-- Do not put `Rebind to…` back as a submenu, and do not `popUp` it inline from the click.
+- Do not put `Rebind to…` back as a submenu, and do not put its panel up inline from the click.
 - Do not set `NSMenuItem.state` on any row, and do not read a label back off an item that has an
   `attributedTitle`.
 - Do not give `Quit` a ⌘Q key equivalent in the status menu.

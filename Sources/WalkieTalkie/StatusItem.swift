@@ -110,6 +110,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Picked from a row of *Rebind to* — point the relay back at that tty.
     var onRebind: ((String) -> Void)?
 
+    /// **`ttysNNN` → the title that tab is showing now**, for the panel's second
+    /// half: a session found in a transcript is only bindable if the tab it ran
+    /// in is still that session's, and the title is what says so. Asked at the
+    /// opening, like the rows above it and for the same AppleScript reason.
+    var liveTitles: (() -> [String: String])?
+
+    /// A word for the overlay, from the panel — a session whose window is gone
+    /// has nothing to bind to, and the click has to say something.
+    var onRebindMessage: ((String) -> Void)?
+
     /// Picked from **Start dictation to new claude** — open the microphone with
     /// the spawn destination armed, exactly as the wheel clicked twice does.
     var onNewSession: (() -> Void)?
@@ -168,6 +178,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// at the instant it is asked for, never when the menu bar is clicked — and
     /// the `…` is what the row says instead of the arrow.
     private let rebind = NSMenuItem(title: "Rebind to…", action: nil, keyEquivalent: "")
+
+    /// **The list itself** (2026-09-12): a panel with a search field, because a
+    /// menu could not be typed into and *"trebuie să pot să încep să tastez
+    /// direct"*. Kept as one object rather than made per click — it holds the
+    /// scan it started, and that has to be cancellable from the next keystroke.
+    private let rebindPanel = RebindPanel()
 
     /// Let go of the terminal without ending the session — the menu's answer to
     /// ⌘⌃B pressed on the bound target, minus the quitting.
@@ -1015,66 +1031,33 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }
 
-    /// **The list, built and shown where the pointer already is.**
+    /// **The list, shown where the pointer already is.**
     ///
-    /// Dispatched rather than run inline: the click that gets here is still
-    /// closing the menu it came from, and a second menu put up inside that
-    /// closing lands under it and takes no clicks.
+    /// Dispatched rather than run inline, which is the pop-up menu's old reason
+    /// kept for its replacement: the click that gets here is still closing the
+    /// menu it came from, and anything put up inside that closing lands under it
+    /// and takes no clicks.
+    ///
+    /// **It is a panel and no longer an `NSMenu`** (2026-09-12) — the list has a
+    /// search field on it now, and a menu cannot be typed into. See
+    /// `RebindPanel`; everything that used to be in `buildRebindMenu` — the app
+    /// icon per row, the plain dimmed title for a row that cannot be clicked, the
+    /// list built at the instant it is asked for — moved there whole.
     @objc private func rebindListClicked() {
         let at = NSEvent.mouseLocation
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            // `in: nil` — the point is in screen coordinates, which is what the
-            // pointer's own location already is.
-            self.buildRebindMenu().popUp(positioning: nil, at: at, in: nil)
-        }
+        DispatchQueue.main.async { [weak self] in self?.showRebindPanel(at: at) }
     }
 
-    /// **Built from scratch every time it is asked for**, never patched: the
-    /// elapsed times have all moved, the titles are whatever the agents are
-    /// calling themselves this second, and a dozen rows are cheaper to make than
-    /// to reconcile.
-    private func buildRebindMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let rows = rebindRows?() ?? []
-        guard !rows.isEmpty else {
-            // A submenu that comes up empty reads as a bug. Say what is true
-            // instead: nothing has been bound yet, so there is nothing to go back
-            // to.
-            let empty = NSMenuItem(title: "Nothing bound yet", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-            return menu
-        }
-        for row in rows {
-            let entry = NSMenuItem(title: row.title, action: #selector(rebindClicked(_:)), keyEquivalent: "")
-            entry.target = self
-            entry.isEnabled = row.enabled
-            // **The destination app's own icon**, the same half of the chip
-            // Victor reads without reading — a Terminal tab, a VS Code panel and
-            // an IntelliJ panel are three different things to be pointed at, and
-            // the folder name in the row is often identical across all three.
-            entry.image = Self.appIcon(bundleID: row.bundleID)
-            // The tty rides on the item, so the click needs no index into a list
-            // that will have been rebuilt by the time it fires.
-            entry.representedObject = row.tty
-            menu.addItem(entry)
-        }
-        return menu
-    }
-
-    @objc private func rebindClicked(_ sender: NSMenuItem) {
-        guard let tty = sender.representedObject as? String else { return }
-        onRebind?(tty)
-    }
-
-    /// The 16pt icon of an installed app, for a menu row.
-    private static func appIcon(bundleID: String) -> NSImage? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 16, height: 16)
-        return icon
+    /// **The one door into the panel**, for the row above and for
+    /// `POST /test/rebind-panel`. The closures are handed over at the opening
+    /// rather than at construction, for `rebindRows`' reason: what they answer is
+    /// only right at the instant the list goes up.
+    func showRebindPanel(at point: NSPoint, query: String = "") {
+        rebindPanel.rows = rebindRows
+        rebindPanel.liveTitles = liveTitles
+        rebindPanel.onRebind = { [weak self] tty in self?.onRebind?(tty) }
+        rebindPanel.onMessage = { [weak self] text in self?.onRebindMessage?(text) }
+        rebindPanel.show(at: point, query: query)
     }
     @objc private func newSessionClicked() { onNewSession?() }
     @objc private func shotClicked() { onShot?() }

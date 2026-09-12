@@ -14,7 +14,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 
   | rule file | loads for |
   |---|---|
-  | `terminal-binding.md` | `TerminalBinding`, `IDEBridge`, `BindFlight`, `RebindHistory`, `UnbindPop`, `relay-restart.sh` |
+  | `terminal-binding.md` | `TerminalBinding`, `IDEBridge`, `BindFlight`, `RebindHistory`, `RebindPanel`, `SessionSearch`, `helpers/session_search.py`, `UnbindPop`, `relay-restart.sh` |
   | `destinations-and-outbox.md` | `AppDelegate`, `Outbox`, `SessionLabel` |
   | `overlay-chip.md` | `RelayWindow`, `OverlayStates`, `Glyphs`, `docs/states/`, the shoot script |
   | `chip-wipe.md` | `ChipWipe` |
@@ -131,6 +131,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/recover` | recover the cancelled dictation |
+| `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
 | `GET /ping` · `POST /pick` | the Chrome extension's mailbox; 503 outside a dictation |
 
 `/bind`, `/unbind` and `/target` are not gated on `dictating`. `/test/dictation` enters below the
