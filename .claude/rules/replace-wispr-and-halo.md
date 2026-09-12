@@ -193,20 +193,34 @@ no outbox line, no terminal, no prompt panel, no countdown.
   arrow belongs there too (*"Da, ca la at-caret"*); the relay's own live dictation outranks it on
   that half only, because the chip is naming a destination. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
 
-## `DropArrow` (2026-09-11)
+## `DropArrow` — six heads closing in (2026-09-12)
 
 - **Armed on `pasteMode`, re-read on every `setActive`**, so a ⌘⌃B mid-sentence gives the words a
-  terminal and the arrow stops asking; the ring stays up. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
+  terminal and the heads stop asking; the ring stays up. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
 - **`CaretHalo.patience` 2 s of quiet, then `swell` 2 s up to 0.75.** Two seconds because gaps
-  inside a sentence are ordinary. Measured 0.164 → 0.333 → 0.483 → 0.633 → 0.750, gone the frame
-  speech resumes. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
-- **Three dashes drawn as five** under a gradient mask, sliding one period a second, **linear** — a
-  dash that eased is a dash hesitating. Amber with a shadow outline, so it is neither part of the
-  blue-and-magenta ring nor lost on a white page. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
+  inside a sentence are ordinary. Measured 0.164 → 0.333 → 0.483 → 0.633 → 0.750. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
+- **Three heads above pointing down, three below pointing up, symmetric about the hot spot** —
+  `gap` 18, `step` 13, so 18…44 pt out, inside the halo's hole and the faint inner ramp. The old
+  single dotted arrow is gone: an arrow hanging above the pointer is a thing to *read*, it costs a
+  fixation, and it is off-centre by construction. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
+- **The flash runs outside → inside**, phased with **`timeOffset`, never `beginTime`**: the panel is
+  built once and shown again on every silence for the rest of the day, so an absolute timeline point
+  would phase them against whenever it happened to be built. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
+- **Both heads of a ring share one layer**, so the pair cannot drift a frame apart and read as two
+  hints. **Open Vs, never filled triangles** — a stroke is a direction, a fill is an object in the
+  way. **Linear**, the dashes' old rule: a hint that eases is a hint being admired. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
+- **`dim` 0.40, measured off the white half of the sheet** — at 0.28 the unlit heads vanished on
+  paper (0.28 × `ceiling` = 0.21 of amber on white). Amber with a shadow outline, so it is neither
+  part of the blue-and-magenta ring nor lost on a page. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
+- **Leaving is a 0.18 s fade (`recall`), not a cut** (*"ele fac fade-out repede"*), and it needs the
+  `fading` flag: every 20 Hz tick would otherwise start another, and an overruled fade's completion
+  handler would order out a panel that is visible again. `hide()` stays a hard cut. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
 - **Its own window, never a layer in the halo's panel.** The halo's window alpha *is* the voice and
-  the arrow appears when the voice has stopped: as a layer it was drawn through the ring's floor,
+  these appear when the voice has stopped: as layers they were drawn through the ring's floor,
   0.75 × 0.148, a stain no layer opacity recovers. `CaretHalo.follow` places both off one
   `origin()` in one call, so they cannot be a frame apart. → journal: *`DropArrow`: three dashes and a head, pointing down at the cursor (2026-09-11)*
+- **`DropArrow.picture()` is posed, not animated** (`ChipWipe.shoot`'s rule) — the middle ring lit,
+  the only frame that shows what the sweep is doing. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
 
 ## Tooling
 

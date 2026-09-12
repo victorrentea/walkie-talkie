@@ -20,6 +20,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
+- *`DropArrow`: three dashes and a head, pointing down at the cursor* (2026-09-11) — superseded 2026-09-12 by *Six heads closing in, instead of one arrow hanging above*; the shaft, the dashes and the march are gone
 - *The wheel is the relay's*, *Double-clicking the wheel turns the dictation into a spawn*, *The right chord…*, *⌘ + the wheel* — live only with *Use Logi Gestures* unticked; the default since 2026-09-09 is *The side buttons speak in function keys*; the ~18 ms side-button measurement in *Double-clicking the wheel* is corrected there
 - *Mouse 4 is the shutter* (LinearMouse / Victor Addons Return) — LinearMouse uninstalled 2026-09-07; in Logi mode the app posts the Return itself (*Use Logi Gestures*)
 - *⌘⌃D is this app's own key* (since 2026-08-26) — the bind key is ⌘⌃B since 2026-09-01 (*⌘⌃B binds, ⌘⌃D dictates*)
@@ -190,6 +191,7 @@ The journal contradicts itself over time, because it was written as things chang
   - [The Dock tile is the escape hatch](#the-dock-tile-is-the-escape-hatch)
   - [The mic's own lock is not recursive, and `start` already holds it](#the-mics-own-lock-is-not-recursive-and-start-already-holds-it)
   - [The ring covers Wispr Flow's dictations too (2026-09-11)](#the-ring-covers-wispr-flows-dictations-too-2026-09-11)
+  - [Six heads closing in, instead of one arrow hanging above (2026-09-12)](#six-heads-closing-in-instead-of-one-arrow-hanging-above-2026-09-12)
 
 ---
 
@@ -7154,3 +7156,83 @@ happens to be, which is the exact failure `DropArrow` was drawn for, so
 dictation is live the destination is the relay's to name and the chip is naming
 it. The ring itself is `listening || wisprDictating`, with nothing outranking
 anything: the microphone is open either way.
+
+## Six heads closing in, instead of one arrow hanging above (2026-09-12)
+
+`DropArrow` shipped the literal reading of the first ask — three dashes marching
+down a shaft into an arrowhead, the whole thing above the pointer — and lived
+that way for an afternoon. Victor came back with a different shape and the
+reason inside it: *"trebuie ca, atunci când mă opresc din dictare, să apară trei
+capete de săgeți de sus și trei capete de săgeți de jos care clipesc cumva spre
+interior, spre cursor, ca să-mi atragă atenția să depun dictarea undeva … dacă
+vorbesc, ele fac fade-out repede, dar cum nu se mai aude voce, fac … ca și cum
+m-ar atrage privirea spre locul în care e cursorul, ca să pun textul unde
+trebuie"*.
+
+### What was wrong with the arrow is what the replacement is built out of
+
+An arrow hanging above the pointer is a thing to **read**, and reading costs a
+fixation. It says *down there* while sitting somewhere else, so the eye lands on
+the arrow first and on the cursor second — and the cursor is the entire message.
+It is also **off-centre by construction**: the only asymmetric shape on screen is
+the one thing guaranteed to catch the eye, and it was catching it in the wrong
+place.
+
+Six heads closing in from both sides say it without being looked at:
+
+- **Symmetric about the hot spot.** There is nothing off to one side to fixate
+  on, and the only thing the arrangement can point at is its own centre, which is
+  the pointer. The shape cannot be misread because it is not read.
+- **The flash runs outside → inside.** What moves is a *convergence* rather than
+  an object, and peripheral vision is built to follow convergence — that is the
+  property being borrowed, and it is exactly what he described wanting
+  (*"ca și cum m-ar atrage privirea spre locul în care e cursorul"*).
+- **Open Vs, never filled triangles.** A stroke reads as a direction and a fill
+  reads as an object; six objects around the pointer would be six things in the
+  way of what they are pointing at.
+
+The dashes' rule survives the redesign, moved from the march into the flash:
+**linear, no easing.** A hint that hesitates is a hint being admired.
+
+### Geometry and the wave
+
+Three a side — two do not read as a sequence, four crowd the ring's inner rim.
+`gap` 18 pt from the hot spot to the innermost pair, `step` 13, so the heads span
+18…44 pt: inside the halo's hole (~36 pt) and the inner ramp of its band, where
+the film is at its faintest. 18 rather than the 14 the old arrow used above the
+pointer, because the macOS cursor's body hangs *below* the hot spot and this
+arrangement has a head down there now.
+
+Both heads of a ring share one layer and therefore one flash — they are the two
+halves of a single event closing in, and a pair that could drift a frame apart
+would read as two hints rather than one.
+
+The wave is a keyframed `opacity`, `dim` → 1 → `dim` over the first fifth of a
+1.4 s cycle and dark for the rest: a beat between sweeps is what makes it a pulse
+rather than a shimmer. The phase is **`timeOffset`, never `beginTime`** —
+`beginTime` is an absolute point on the layer's timeline, and this panel is built
+once and shown again on every silence for the rest of the day, so the phases
+would be set relative to whenever it happened to be built. The outermost ring
+gets the largest offset, so it is furthest along its cycle and lights first.
+
+**`dim` is 0.40, and the number came off the white half of the contact sheet.**
+At 0.28 the unlit heads read perfectly well over a terminal and all but vanished
+on paper — 0.28 × `ceiling` is 0.21 of amber on white, held up by the shadow
+outline alone. The lit head is still 2.5× its neighbours, which is all the wave
+needs.
+
+### Going away is a fade now
+
+*"ele fac fade-out repede"*. `quiet` snaps to zero on the first voiced buffer, so
+the panel used to be ordered out between two frames — a disappearance sharp
+enough to be its own event, at the exact moment his attention should be going
+back to the sentence. `recall` is 0.18 s: gone before he has finished the next
+word, and nothing snaps.
+
+The fade needs a `fading` flag rather than just a completion handler. Every 20 Hz
+tick through a silence-that-ended would otherwise start another one, and a fade
+that has since been overruled would order out a panel that is visible again —
+which is why `refresh` puts the alpha back through `animator()` while one is in
+flight, and drops `fading` so the old completion handler stands down. `hide()`
+(a bind mid-sentence, the dictation ending) stays a hard cut: nothing is being
+asked for any more, so there is nothing to fade out of.
