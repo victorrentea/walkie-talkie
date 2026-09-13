@@ -224,7 +224,17 @@ def wispr_microphone() -> tuple[str, str]:
     names = {d.get("deviceId"): d.get("name") for d in (user.get("rankedAudioDevices") or [])}
     if device == "default":
         return ("auto", names.get("default", "Auto-detect"))
-    return ("fixed", str(names.get(device, device)))
+    name = names.get(device)
+    # **A hash with no name is not a failure.** `rankedAudioDevices` is Wispr's
+    # cache of the devices it has *enumerated*, and it lags: the moment after a
+    # new device is picked in Wispr's UI, `overrideAudioDeviceId` is a hash that
+    # is in no entry (seen 2026-09-13 the minute `🎓 TO Wispr` was pinned). The
+    # id is a per-origin salted hash and cannot be computed from a name, so this
+    # is genuinely unanswerable from the file — which is the whole reason the
+    # run checks Wispr's `micDevice` column afterwards.
+    if name is None or name == device:
+        return ("unnamed", str(device)[:12] + "…")
+    return ("fixed", str(name))
 
 
 def _loopback_name(device_name: str | None) -> str:
@@ -316,6 +326,10 @@ def checks(device_name: str | None = None, speaker: bool = False,
         rows.append(Row(None, "Wispr microphone is %s — playing out loud instead" % mic_name, key="mic"))
     elif wanted and _same_device(mic_name, wanted):
         rows.append(Row(True, "Wispr microphone: %s — the device this plays into" % mic_name, key="mic"))
+    elif mic == "unnamed":
+        rows.append(Row(None, "Wispr microphone is a device id Wispr has not named yet (%s) — most "
+                        "likely the one just pinned. Going ahead; the run reports which microphone "
+                        "Wispr actually used." % mic_name, key="mic"))
     elif mic == "auto":
         # **Auto-detect is a hard failure, and it is measured.** It resolves to
         # the built-in microphone, not to the system default input: six runs,
