@@ -250,6 +250,11 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   (`armInjectionCapture(swallow: startedMode != .scratchpad)`, probe still armed): taking that key
   is this app reaching into another app's conversation with itself, and it showed — one run's
   sentence was appended to the previous run's note as ` commit and push the fix `, doubled.
+- **The delivery still waits for the window to be gone**, because a `pasteText` fired while the
+  Scratchpad holds the key focus lands in the note. Measured: **488 ms** after the microphone
+  closed when the close takes first time, **3337 ms** when it needs a retry. The way to decouple
+  them is to post the relay's own paste with `postToPid` to the victim rather than to whatever has
+  the focus — not built, and the reason the number is not yet the 0.5 s the row alone would allow.
 - **The delivery is the ROW, not the note** (2026-09-13, after the first working run). Measured:
   the row said `formatted` **531 ms** after the microphone closed; the note was not readable until
   **2627 ms**, because Wispr writes it when it opens its window; closing that window cost another
@@ -283,10 +288,21 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   **system-wide focused element's owner** (`AXUIElementCreateSystemWide` +
   `kAXFocusedUIElementAttribute` + `AXUIElementGetPid`), with the window's own `AXFocused` as the
   second reading.
-- **The window is shut on sight.** A 50 ms poll armed at the **release**, with the 250 ms press
-  posted the moment the window is seen — its life goes from the two seconds it used to spend open
-  to the 0.1–0.4 s the close itself takes. `lastOpenMs` in `/test/state.scratchpad` is that
-  measurement, every time.
+- **The window opens at the START of the hold and lives for the whole sentence** — not at the end,
+  which is what the first build assumed. So the 25 ms watcher is armed at the **chord**, the window
+  is **parked on first sight** (measured: on screen for **19–33 ms**, which is the poll's own
+  latency), and the close is asked at the release. `lastOpenMs` is the whole life, `closeMs` the
+  part after the close was asked — **440 ms** when the first tap takes, up to ~3.3 s when it needs
+  a second.
+- **One tap is not reliably enough, so it is asked up to three times.** Measured both ways inside a
+  minute: a tap toggled a *parked* window closed, and another tap a minute later did nothing. The
+  cost of a failure is not this dictation but the **next** one, which is transcribed and written
+  nowhere — so `closeWindow` retries and the log says which attempt worked.
+- **Measured, once, and worth keeping:** the Scratchpad is `AXStandardWindow` at **window layer 3**
+  — it genuinely floats over everything, which is Victor's objection in a number — and its minimum
+  size is **300×300**. Parked at the bottom-right of the only display it ends up at `1720,1089` on
+  a `1728×1079` screen, clamped from the `1720,1109` asked for. **Wispr does not remember the
+  frame**: it reopens at `1428,817` every time, so parking is done on every open, not once.
 - **And for exactly that stretch, his keys are re-posted to the app he was looking at.**
   `HotkeyTap.armKeyRedirect(to:)` takes every **real** key (pid 0, unstamped) and hands it on with
   `postToPid` to the application that was frontmost at the **stop gesture** — the last moment that

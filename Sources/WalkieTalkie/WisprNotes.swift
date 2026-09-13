@@ -218,6 +218,31 @@ enum WisprScratchpad {
     /// among Wispr's several, and its number changes every time it opens.
     static let windowName = "Scratchpad"
 
+    /// **What kind of window it is** — read from the window server, because the
+    /// thing Victor objected to is not in Accessibility at all.
+    ///
+    /// He tried it by hand and said what it does: *the Scratchpad sits on top of
+    /// every other window* for the two or three seconds it exists. That is a
+    /// **window level**, and AX has no attribute for one — `kCGWindowLayer` does.
+    /// Layer 0 is an ordinary window; anything above it is a panel that floats
+    /// over the work. Measured and logged once per session so the claim is a
+    /// number rather than an impression.
+    private(set) static var windowLayer: Int?
+    private(set) static var windowSubrole: String?
+
+    private static func windowInfo() -> [String: Any]? {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return nil }
+        for w in windows {
+            let owner = (w[kCGWindowOwnerName as String] as? String) ?? ""
+            guard owner.localizedCaseInsensitiveContains("Wispr"),
+                  (w[kCGWindowName as String] as? String) == windowName else { continue }
+            return w
+        }
+        return nil
+    }
+
     /// **Is it up right now?** — the window server, not Accessibility.
     ///
     /// `CGWindowListCopyWindowInfo` at `.optionOnScreenOnly`, filtered to Wispr's
@@ -252,14 +277,35 @@ enum WisprScratchpad {
     /// the time of the mistake looks wrong.
     ///
     /// - Parameter done: on the main queue, with whether the window went.
+    /// **Ask, and ask again.** One tap toggles the window reliably when Wispr is
+    /// listening for it and does nothing at all when it is not — measured both
+    /// ways within a minute of each other on 2026-09-13. A single attempt
+    /// therefore fails occasionally, and the cost of a failure is not this
+    /// dictation but the **next** one, which is transcribed and written nowhere.
+    /// So it is asked up to `closeAttempts` times before anyone concludes
+    /// anything, and the log says which attempt worked.
     static func closeWindow(_ done: @escaping (Bool) -> Void) {
         guard windowIsOpen() else { return DispatchQueue.main.async { done(true) } }
-        HotkeyTap.tapWisprScratchpad()
-        poll(deadline: Date().addingTimeInterval(closeCeiling), done)
+        attempt(1, done)
     }
 
-    /// 2.5 s — measured at "within 1.5 s", with room over it for a busy Electron.
+    private static func attempt(_ n: Int, _ done: @escaping (Bool) -> Void) {
+        HotkeyTap.tapWisprScratchpad()
+        poll(deadline: Date().addingTimeInterval(closeCeiling)) { gone in
+            if gone {
+                if n > 1 { Log.info("🗒️ the Scratchpad closed on attempt \(n)") }
+                return done(true)
+            }
+            guard n < closeAttempts else { return done(false) }
+            Log.info("🗒️ the Scratchpad did not close on attempt \(n) — asking again")
+            attempt(n + 1, done)
+        }
+    }
+
+    /// 2.5 s per attempt — measured at "within 1.5 s", with room over it for a
+    /// busy Electron.
     private static let closeCeiling: TimeInterval = 2.5
+    private static let closeAttempts = 3
 
     // MARK: - Parking it out of the way
 
@@ -294,11 +340,34 @@ enum WisprScratchpad {
     private static let sliver: CGFloat = 8
 
     /// Wispr's application element, or nil when it is not running.
+    /// Wispr's pid, cached — the event tap asks for it on every keystroke while
+    /// the wrap is armed and a process-list scan per key is not a thing to do.
+    private(set) static var wisprPid: pid_t = 0
+
+    /// **Where would a keystroke go right now?** — the system-wide focused
+    /// element's owner, which is the only reading that survives the 2026-09-13
+    /// finding that the Scratchpad becomes key without becoming frontmost.
+    ///
+    /// Called from the event tap, once per key, while the window is up. One AX
+    /// round trip, measured at about a millisecond; the pid it compares against
+    /// is cached above.
+    static func focusOwnerIsWispr() -> Bool {
+        guard wisprPid != 0 else { return false }
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(),
+                                            kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
+        var owner: pid_t = 0
+        guard AXUIElementGetPid(element as! AXUIElement, &owner) == .success else { return false }
+        return owner == wisprPid
+    }
+
     private static func appElement() -> (AXUIElement, pid_t)? {
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.electron.wispr-flow").first
                 ?? NSWorkspace.shared.runningApplications.first(where: {
                     $0.bundleIdentifier == "com.electron.wispr-flow" })
         else { return nil }
+        wisprPid = app.processIdentifier
         return (AXUIElementCreateApplication(app.processIdentifier), app.processIdentifier)
     }
 
@@ -375,14 +444,35 @@ enum WisprScratchpad {
         }
         let before = frame(of: window)
 
-        // **Ask for 1×1 and read back what Wispr allows.** There is no
+        // **What it is, once per session.** `AXSubrole` says what Wispr calls
+        // it; `kCGWindowLayer` says whether it floats — which is the property
+        // Victor objected to and the one AX cannot answer.
+        if windowSubrole == nil {
+            var sub: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &sub) == .success {
+                windowSubrole = sub as? String
+            }
+            windowLayer = windowInfo()?[kCGWindowLayer as String] as? Int
+            Log.info("🗒️ the Scratchpad is subrole \(windowSubrole ?? "?") at window layer \(windowLayer.map(String.init) ?? "?")"
+                     + ((windowLayer ?? 0) > 0 ? " — it floats over everything, which is why it is parked and not merely closed" : ""))
+        }
+
+        // **Ask for 1×1 and read back what Wispr allows**, once. There is no
         // `AXMinimumSize`; the window simply refuses to go below its own layout
-        // minimum, and the number it settles on is the measurement.
-        set(window, size: CGSize(width: 1, height: 1))
-        let shrunk = frame(of: window)?.size ?? .zero
-        if minimumSize == nil, shrunk != .zero {
-            minimumSize = shrunk
-            Log.info(String(format: "🗒️ the Scratchpad's smallest size is %.0f×%.0f", shrunk.width, shrunk.height))
+        // minimum, and the number it settles on is the measurement. After that
+        // the known size is set directly — every AX round trip here is time the
+        // window spends on screen.
+        let shrunk: CGSize
+        if let known = minimumSize {
+            set(window, size: known)
+            shrunk = known
+        } else {
+            set(window, size: CGSize(width: 1, height: 1))
+            shrunk = frame(of: window)?.size ?? .zero
+            if shrunk != .zero {
+                minimumSize = shrunk
+                Log.info(String(format: "🗒️ the Scratchpad's smallest size is %.0f×%.0f", shrunk.width, shrunk.height))
+            }
         }
 
         guard let screen = parkingRectAX() else { return ["parked": false, "why": "no screen"] }
@@ -425,37 +515,63 @@ enum WisprScratchpad {
     private static var closeASAP = false
     private static var closeRequested = false
     private static var appearedAt: Date?
+    private static var parkedAt: Date?
+    /// When the close was asked for — the number that actually says how quickly
+    /// the window goes, now that it exists for the whole sentence.
+    private static var closeAskedAt: Date?
+    private(set) static var closeMs: Double?
     private static var armedAt: Date?
+    /// **How long it was on screen where he could see it** — first sight to
+    /// parked. Victor's target is zero, which needs Wispr to reopen it already
+    /// parked; until it does, this is the poll's own latency plus the AX calls.
+    private(set) static var visibleMs: Double?
     /// Called the moment the window is confirmed gone, with how long it was up,
     /// or nil when it never appeared inside the ceiling.
     static var onWindowGone: ((Double?) -> Void)?
-    /// Called the moment the window is first seen, so the keyboard can be taken
-    /// for exactly the stretch it is up and not a millisecond longer.
-    static var onWindowSeen: (() -> Void)?
     /// The longest the watcher waits for a window that may never come.
     private static let appearCeiling: TimeInterval = 8
     /// What a whole open→closed cycle has cost, most recent first.
     private(set) static var lastOpenMs: Double?
 
-    /// **Watch, and shut it on sight** — from the release until it is confirmed
-    /// closed. The 50 ms tick is the danger window's own resolution: the runner
-    /// measured the window shut again within 0.1–0.4 s once it is asked, and a
-    /// slower poll would spend more of that window unarmed than armed.
-    static func armCloseOnSight() {
-        closeASAP = true
+    /// **The watch starts at the chord, not at the release** (2026-09-13,
+    /// corrected by Victor and by the runner's first `scratchpad-hold`).
+    ///
+    /// The window appears at the **start of the hold**, the way a tap would, and
+    /// stays for the whole sentence — so the thing he objected to, a panel
+    /// floating on top of his work, is happening while he is still talking. It
+    /// is parked on first sight, and closed later.
+    static func beginDictation() {
+        closeASAP = false
         closeRequested = false
         appearedAt = nil
+        parkedAt = nil
         armedAt = Date()
-        beginWatch()
+        _ = appElement()          // cache Wispr's pid for the tap
+        beginWatch(interval: 0.025)
+    }
+
+    /// The sentence is over — now it may go.
+    static func armCloseOnSight() {
+        closeASAP = true
+        armedAt = Date()
+        closeAskedAt = Date()
+        beginWatch(interval: 0.025)
+        // Already up and already parked: ask now rather than waiting a tick.
+        if sawWindow, !closeRequested {
+            closeRequested = true
+            Log.info("🗒️ the Scratchpad window is up — closing it")
+            HotkeyTap.tapWisprScratchpad()
+        }
     }
 
     /// **On for the length of a Scratchpad dictation, and off the rest of the
     /// day.** What it is watching for is the one thing Victor is actually
     /// worried about: the note taking the keyboard while he is typing.
-    static func beginWatch() {
-        guard watch == nil else { return }
+    static func beginWatch(interval: TimeInterval = 0.05) {
+        if let watch, abs(watch.timeInterval - interval) < 0.001 { return }
+        watch?.invalidate()
         sawWindow = false
-        let t = Timer(timeInterval: 0.05, repeats: true) { _ in tick() }
+        let t = Timer(timeInterval: interval, repeats: true) { _ in tick() }
         watch = t
         RunLoop.main.add(t, forMode: .common)
     }
@@ -470,8 +586,9 @@ enum WisprScratchpad {
             if sawWindow, closeRequested {
                 let ms = appearedAt.map { Date().timeIntervalSince($0) * 1000 }
                 lastOpenMs = ms
-                Log.info(String(format: "🗒️ the Scratchpad window is gone — it was up for %.0f ms",
-                                ms ?? 0))
+                closeMs = closeAskedAt.map { Date().timeIntervalSince($0) * 1000 }
+                Log.info(String(format: "🗒️ the Scratchpad window is gone — it existed for %.0f ms (%.0f ms of that after the close was asked for), visible on the main display for %.0f ms",
+                                ms ?? 0, closeMs ?? 0, visibleMs ?? 0))
                 finishCloseOnSight(ms)
             } else if closeASAP, let armed = armedAt, Date().timeIntervalSince(armed) > appearCeiling {
                 Log.info("🗒️ no Scratchpad window appeared within \(Int(appearCeiling)) s — nothing to close")
@@ -483,16 +600,30 @@ enum WisprScratchpad {
         let f = frame(of: window)
         if !sawWindow {
             sawWindow = true
+            appearedAt = Date()
             reopenCount += 1
             let moved = parkedFrame.map { p in
                 abs((f?.minX ?? 0) - p.minX) > 2 || abs((f?.minY ?? 0) - p.minY) > 2
             } ?? true
             if moved, parkedFrame != nil { reopenedElsewhere += 1 }
-            Log.info("🗒️ scratchpad reopened at \(describe(f))"
-                     + (parkedFrame == nil ? "" : moved ? " — NOT where it was parked, so it is parked again"
-                                                        : " — where it was parked; Wispr remembers"))
-            if parkedFrame == nil || moved { park() }
-            appearedAt = Date()
+            // **Parked before anything else, and before the close.** Victor's
+            // objection is not that the window exists, it is that it *floats
+            // over his work* while it does — so the first thing done to it is to
+            // put it where it cannot, and only then is it asked to go.
+            if parkedFrame == nil || moved {
+                let wasFirst = parkedFrame == nil
+                park()
+                parkedAt = Date()
+                visibleMs = parkedAt!.timeIntervalSince(appearedAt!) * 1000
+                Log.info(String(format: "🗒️ scratchpad appeared at %@ — %@; visible on the main display for %.0f ms",
+                                describe(f),
+                                wasFirst ? "first time seen" : "NOT where it was parked",
+                                visibleMs ?? 0))
+            } else {
+                parkedAt = appearedAt
+                visibleMs = 0
+                Log.info("🗒️ scratchpad appeared at \(describe(f)) — where it was parked; **Wispr remembers the frame**; visible on the main display for 0 ms")
+            }
         }
         // **Ask for it to go the instant it is seen.** The press is 250 ms of
         // held key and the window takes another beat to go, so the sooner this
@@ -500,7 +631,6 @@ enum WisprScratchpad {
         // in Wispr's note.
         if closeASAP, !closeRequested {
             closeRequested = true
-            onWindowSeen?()
             Log.info("🗒️ the Scratchpad window appeared — closing it on sight")
             HotkeyTap.tapWisprScratchpad()
         }
@@ -551,7 +681,6 @@ enum WisprScratchpad {
         armedAt = nil
         let done = onWindowGone
         onWindowGone = nil
-        onWindowSeen = nil
         endWatch()
         done?(openMs)
     }
@@ -567,8 +696,12 @@ enum WisprScratchpad {
             "lastKeyAt": lastKeyAt.map { Outbox.iso($0) } ?? NSNull(),
             "opens": reopenCount,
             "lastOpenMs": lastOpenMs.map { Int($0.rounded()) } ?? NSNull(),
+            "visibleMs": visibleMs.map { Int($0.rounded()) } ?? NSNull(),
+            "closeMs": closeMs.map { Int($0.rounded()) } ?? NSNull(),
             "reopenedElsewhere": reopenedElsewhere,
             "screens": NSScreen.screens.count,
+            "layer": windowLayer.map { NSNumber(value: $0) } ?? NSNull(),
+            "subrole": windowSubrole ?? NSNull(),
         ]
     }
 

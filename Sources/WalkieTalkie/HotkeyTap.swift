@@ -186,21 +186,34 @@ final class HotkeyTap {
         guard Self.redirectEnabled, pid > 0 else { return }
         stateLock.lock()
         redirectPid = pid
-        redirectUntil = CFAbsoluteTimeGetCurrent() + Self.redirectCeiling
+        // **No countdown while he is still talking.** A dictation runs to a
+        // minute or more; the ten seconds is measured from the release, where
+        // it means *the window should have gone by now*.
+        redirectUntil = CFAbsoluteTimeGetCurrent() + Self.redirectDictationCeiling
         redirectCount = 0
+        redirectPassed = 0
         stateLock.unlock()
-        Log.info("⌨️ keys are going to pid \(pid) while Wispr's Scratchpad has the focus")
+        Log.info("⌨️ his keys are watched, and go to pid \(pid) whenever Wispr's Scratchpad holds the focus")
+    }
+
+    /// The sentence is over: from here the arming has ten seconds to be taken
+    /// down by the window actually closing.
+    func startKeyRedirectCountdown() {
+        stateLock.lock()
+        if redirectPid != 0 { redirectUntil = CFAbsoluteTimeGetCurrent() + Self.redirectCeiling }
+        stateLock.unlock()
     }
 
     func disarmKeyRedirect() {
         stateLock.lock()
         let n = redirectCount
+        let passed = redirectPassed
         let was = redirectPid
         redirectPid = 0
         redirectUntil = 0
         stateLock.unlock()
         guard was != 0 else { return }
-        Log.info("⌨️ keys are his own again — \(n) redirected to pid \(was)")
+        Log.info("⌨️ keys are unwatched again — \(n) redirected to pid \(was), \(passed) passed through")
     }
 
     /// For `GET /test/state`.
@@ -212,10 +225,15 @@ final class HotkeyTap {
     private var redirectPid: pid_t = 0
     private var redirectUntil: CFAbsoluteTime = 0
     private var redirectCount = 0
-    /// Ten seconds. The window is up for a few hundred milliseconds; this is the
-    /// number that makes a forgotten disarm a nuisance rather than a Mac whose
-    /// keyboard has stopped working.
+    private var redirectPassed = 0
+    /// Ten seconds **from the release**. By then the window has either gone or
+    /// something is wrong, and this is the number that makes a forgotten disarm
+    /// a nuisance rather than a Mac whose keyboard has stopped working.
     private static let redirectCeiling: TimeInterval = 10
+    /// While he is still talking there is no countdown worth running — a
+    /// dictation aimed at an agent goes to a minute or more. Five minutes is the
+    /// backstop for a `stop()` that never arrived at all.
+    private static let redirectDictationCeiling: TimeInterval = 300
     private static let redirectEnabled =
         ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0"
 
@@ -231,6 +249,10 @@ final class HotkeyTap {
         stateLock.lock(); defer { stateLock.unlock() }
         redirectCount += 1
         return redirectCount
+    }
+
+    private func countPassed() {
+        stateLock.lock(); redirectPassed += 1; stateLock.unlock()
     }
 
     func disarmInjectionCapture() {
@@ -1478,18 +1500,42 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // the keys the relay itself is listening for.
         if type == .keyDown || type == .keyUp {
             let target = redirectTargetNow()
+            // **Anyone's key but ours and Wispr's.** It was `pid == 0` — real
+            // hardware only — and that is the right *description* of Victor's
+            // keystrokes and the wrong *rule*: it also makes the behaviour
+            // untestable, because every probe the loop can post carries a pid.
+            // The two exclusions are the ones that matter: this app's own posts
+            // carry `backButtonStamp`, and Wispr's own carry its pid, so neither
+            // can be bounced back at the app underneath.
             if target != 0,
-               event.getIntegerValueField(.eventSourceUnixProcessID) == 0,
+               pid_t(event.getIntegerValueField(.eventSourceUnixProcessID)) != WisprScratchpad.wisprPid,
                event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                event.postToPid(target)
-                if type == .keyDown {
-                    // **The keycode and nothing else.** This is every character
-                    // he types for the length of the window, and a log that
-                    // records what he wrote is a log that must not exist.
-                    Log.info("⌨️ key \(code) → pid \(target) (#\(countRedirect())) — Wispr's Scratchpad had the focus")
+                // **Never a chord.** ⌘Tab, ⌘Space and ⌃-anything are the system's
+                // and the window manager's, and a key redirected into an app that
+                // was not asking for it is worse than a shortcut that reaches the
+                // wrong window. An app shortcut landing on Wispr's panel is the
+                // lesser evil, and it is the rarer one.
+                if event.flags.contains(.maskCommand) || event.flags.contains(.maskControl) {
+                    if type == .keyDown {
+                        countPassed()
+                        Log.info("⌨️ key \(code) passed (modifier) — chords are never redirected")
+                    }
+                } else if WisprScratchpad.focusOwnerIsWispr() {
+                    // **Decided per key, at the key.** The window is up for
+                    // seconds and he may have clicked away in the middle of them;
+                    // redirecting a key whose focus is somewhere else entirely
+                    // would be this app taking a keyboard nobody stole.
+                    event.postToPid(target)
+                    if type == .keyDown {
+                        // **The keycode and nothing else.** A log that records
+                        // what he typed is a log that must not exist.
+                        Log.info("⌨️ key \(code) → pid \(target) (#\(countRedirect())) — Wispr's Scratchpad had the focus")
+                    }
+                    return nil
+                } else if type == .keyDown {
+                    countPassed()
                 }
-                return nil
             }
         }
 

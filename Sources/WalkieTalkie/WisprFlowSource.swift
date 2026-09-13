@@ -480,9 +480,14 @@ final class WisprFlowSource: DictationSource {
     /// The common path costs nothing — the window is already closed, `windowIsOpen`
     /// is one window-server call, and the chord goes down in the same turn.
     private func holdScratchpad() {
-        // Watch it for the whole sentence — the frame it comes back at, and
-        // whether it ever takes the keyboard.
-        WisprScratchpad.beginWatch()
+        // **The window appears at the start of the hold, not at the end**
+        // (2026-09-13, corrected by Victor and by the loop's first
+        // `scratchpad-hold`). It is a floating panel and it sits on top of his
+        // work for the whole sentence, which is the thing he objected to — so it
+        // is watched from the chord, parked the moment it is seen, and closed
+        // later. His keys are guarded for the same stretch and by the same flag.
+        WisprScratchpad.beginDictation()
+        guardTheKeyboard()
         guard WisprScratchpad.windowIsOpen() else {
             HotkeyTap.postWisprScratchpad(down: true)
             return
@@ -523,19 +528,21 @@ final class WisprFlowSource: DictationSource {
     /// is taken by the tap and re-posted to the app he was looking at when he
     /// stopped talking.
     private func guardTheKeyboard() {
+        // **Whose keyboard it is** — read at the chord, which is the last moment
+        // nothing has interfered with it. It is not read again afterwards: the
+        // window that steals the focus never becomes frontmost, so there is
+        // nothing later that would say so.
         let victim = NSWorkspace.shared.frontmostApplication
         let pid = victim?.processIdentifier ?? 0
+        guard pid != 0, victim?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         WisprScratchpad.onWindowGone = { [weak self] openMs in
             self?.hotkeys.disarmKeyRedirect()
             if let openMs {
-                Log.info(String(format: "🗒️ the Scratchpad was up for %.0f ms and his keys went to %@ throughout",
+                Log.info(String(format: "🗒️ the Scratchpad existed for %.0f ms; his keys were watched throughout and went to %@",
                                 openMs, victim?.localizedName ?? "the front app"))
             }
         }
-        WisprScratchpad.onWindowSeen = { [weak self] in
-            self?.hotkeys.armKeyRedirect(to: pid)
-        }
-        WisprScratchpad.armCloseOnSight()
+        hotkeys.armKeyRedirect(to: pid)
     }
 
     /// **Close it again when the sentence is over, and check that it went.**
@@ -835,12 +842,12 @@ final class WisprFlowSource: DictationSource {
         captureFrom = CFAbsoluteTimeGetCurrent()
         Log.info(String(format: "🎙️ the microphone is closed — %@ (%.0f ms of speech)",
                         why, (captureFrom - gestureAt) * 1000))
-        // **From here until Wispr's window is confirmed gone, his keys are
-        // his.** The app he is looking at is remembered *now*, at the stop
-        // gesture, because that is the last moment it is unambiguous — and the
-        // window that will steal the focus becomes key without ever becoming
-        // frontmost, so there is nothing to read afterwards that would say so.
-        if startedMode == .scratchpad, !cancelling { guardTheKeyboard() }
+        // The sentence is over, so the window may go — and the ten seconds the
+        // keyboard guard is allowed to outlive it start counting here.
+        if startedMode == .scratchpad {
+            WisprScratchpad.armCloseOnSight()
+            hotkeys.startKeyRedirectCountdown()
+        }
         didStopListening?()
         if cancelling {
             cancelling = false
@@ -879,6 +886,10 @@ final class WisprFlowSource: DictationSource {
         if on {
             confirmSpeculative(by: "the 100 ms poll")
         } else if isRecording {
+            // The same credential the notification needs, for the same reason:
+            // a poll that never saw this dictation's microphone open is
+            // reporting the end of somebody else's.
+            guard state.pollMs != nil else { return }
             // Victor ended the dictation from Wispr's own window, or Wispr ended
             // it itself. At most one tick late, against a notification measured
             // at up to six seconds.
@@ -944,6 +955,17 @@ final class WisprFlowSource: DictationSource {
                                 (CFAbsoluteTimeGetCurrent() - watch.edgeAt) * 1000))
             }
         } else {
+            // **A witness that never saw the microphone open cannot report it
+            // closing** (2026-09-13, 23:56). The notification is 0–6 s late, and
+            // a close belonging to the *previous* sentence arrived six seconds
+            // afterwards, 600 ms into the next one, and ended it — the dictation
+            // was over before a word of it was spoken. `notifyMs` is nil unless
+            // this notification saw *this* dictation start, which is exactly the
+            // credential the report needs.
+            if isRecording, state.notifyMs == nil {
+                Log.info("⚡ a mic edge closed with no matching open — it belongs to the previous dictation, ignored")
+                return
+            }
             guard isRecording else {
                 // The ordinary case since the relay closes on its own gesture:
                 // the edge arrives seconds later with nothing left to say. Said
@@ -1013,19 +1035,23 @@ final class WisprFlowSource: DictationSource {
         // — which process posted what key, how long after the microphone shut —
         // is the only record of how Wispr delivers, and it is worth the same two
         // log lines in either mode. Only `swallow` differs.
-        // **In Scratchpad mode the ⌘V is watched and never taken** (2026-09-13,
-        // 23:26). Wispr *does* post one — the earlier reading of "no ⌘V at all"
-        // was taken with no tap armed — and it is aimed at **its own Scratchpad
-        // window**, not at Victor's app: the row's `pastedText` is the text that
-        // ends up in the note. Swallowing it is this app reaching into another
-        // app's conversation with itself, and it showed: one run's sentence was
-        // appended to the previous run's note as ` commit and push the fix `
-        // with `source = typed`, doubled.
+        // **The ⌘V is taken in every mode, and Scratchpad mode is not the
+        // exception it looked like** (2026-09-13, settled at 23:54).
         //
-        // The probe half stays armed in both modes, because *which process
-        // posted what key* is the only record of how Wispr delivers and the day
-        // it changes the log has to say so.
-        if takes { hotkeys.armInjectionCapture(swallow: startedMode != .scratchpad) }
+        // It was let through for one build, on the reasoning that Wispr's paste
+        // belongs to Wispr's own note and swallowing it is this app reaching
+        // into another app's conversation with itself. True while the note was
+        // the delivery; false the moment the row took over and the window
+        // started being closed on sight. Measured: with the window shut at the
+        // release, Wispr's paste arrives ~450 ms later with nowhere of its own
+        // to go, and it lands in **Victor's document** — every sentence appeared
+        // twice, once lowercased from Wispr and once properly from the relay.
+        //
+        // With the row as the delivery there is nothing the paste is needed for,
+        // so the invariant the whole wrap exists to keep — *Wispr never inserts
+        // anywhere* — is simply restored. The note becomes a thinner cross-check
+        // and says so when it is empty.
+        if takes { hotkeys.armInjectionCapture(swallow: true) }
 
         // The pasteboard is the other half of the answer, and the only half in
         // the cases where the ⌘V never arrives: an Accessibility insertion, a
@@ -1141,10 +1167,17 @@ final class WisprFlowSource: DictationSource {
     /// lets the router decide whether that was the destination.
     private func pollHistory() {
         guard capturing else { return }
-        // **The Scratchpad note is the delivery in that mode, and the row is
-        // only the clock.** Read first, because a note that has landed ends the
-        // capture and there is nothing for the row below to say about it.
-        if startedMode == .scratchpad, intercepting, !isRecording, pollNote() { return }
+        // **The note is read only when it is the delivery**, which since the row
+        // took over is only under `WT_SCRATCHPAD_DELIVER=note`.
+        //
+        // It was read unconditionally for one build, and that build delivered a
+        // stray `z` (2026-09-13, 23:52): the window is open for the whole
+        // sentence, a keystroke that lands in the note changes it, and the note
+        // poll fired **13 ms after the microphone closed** — before the row was
+        // even `formatted` — and shipped the one character it found. The note
+        // has to be a cross-check or it is a second delivery racing the first.
+        if startedMode == .scratchpad, Self.deliverFromNote, intercepting, !isRecording,
+           pollNote() { return }
         guard let e = WisprHistory.newest() else { return }
 
         // **Adopting the row.** Anything that is not the row that was on top when
@@ -1281,7 +1314,13 @@ final class WisprFlowSource: DictationSource {
     /// the note), so the ordinary path pastes straight away; if it *is* open —
     /// left over, or Wispr being quick — it is closed first and the words follow.
     private func deliverFromRow(_ e: WisprHistory.Entry, took: Double) {
-        let words = e.text
+        // **`formattedText` first in this mode**, where every other path prefers
+        // `pastedText`. What Wispr *pasted* here is what it appended to its own
+        // note, and an append arrives lowercased and run on — `commit and push
+        // the fix.` where the recogniser's own reading is `Commit and push the
+        // fix.`. The row's formatted text is the sentence; the pasted text is a
+        // record of what happened to a text view.
+        let words = e.formattedText.isEmpty ? e.text : e.formattedText
         guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             Log.error(String(format: "wispr history: %@ with no text — waiting for the Scratchpad note instead", e.status))
             return
@@ -1349,7 +1388,9 @@ final class WisprFlowSource: DictationSource {
         if a == b {
             Log.info("🗒️ cross-check: the note and the row agree (\(added.trimmingCharacters(in: .whitespacesAndNewlines).count) chars in the note)")
         } else if a.isEmpty {
-            Log.info("🗒️ cross-check: the note added nothing for this dictation — the row was the only record")
+            // The ordinary case since the ⌘V is swallowed: Wispr's paste never
+            // reached its own note, so there is nothing to compare against.
+            Log.info("🗒️ cross-check: the note added nothing — the paste that would have filled it was taken, and the row is the record")
         } else {
             Log.error("🗒️ cross-check: the note and the row DISAGREE — note \(added.debugDescription) vs row \(delivered.debugDescription)")
         }
@@ -1439,10 +1480,11 @@ final class WisprFlowSource: DictationSource {
     /// words are nowhere yet and this is the whole delivery.
     private func injected(from process: String) {
         guard capturing, intercepting else { return }
-        // Wispr pasting into its own note. Logged, because the probe is the
-        // record, and then left entirely alone — the delivery is the note.
+        // **Taken and dropped.** In Scratchpad mode the words are already the
+        // row's; this key exists only so that it cannot land anywhere, and the
+        // line is the probe's record of Wispr still delivering the way it did.
         guard startedMode != .scratchpad else {
-            Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed (Wispr pasting into its own Scratchpad; left alone)",
+            Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed (taken and dropped; the row is the delivery)",
                             process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
             return
         }

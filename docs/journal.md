@@ -216,6 +216,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The row is the delivery; the note is the second opinion (2026-09-13, midnight)](#the-row-is-the-delivery-the-note-is-the-second-opinion-2026-09-13-midnight)
 - [Parking the Scratchpad, and measuring whether it ever takes a key (2026-09-13, midnight)](#parking-the-scratchpad-and-measuring-whether-it-ever-takes-a-key-2026-09-13-midnight)
 - [The Scratchpad takes the keyboard without taking the front (2026-09-13, after midnight)](#the-scratchpad-takes-the-keyboard-without-taking-the-front-2026-09-13-after-midnight)
+- [The wrap, measured on the installed build (2026-09-14, 00:18)](#the-wrap-measured-on-the-installed-build-2026-09-14-0018)
 
 ---
 
@@ -9036,3 +9037,56 @@ The fourth consequence needed no fix, because it was already on its way: the `z`
 stray keystroke in the note cannot be folded into a transcript — the row carries what Wispr heard
 and nothing else, and the note has been demoted to a cross-check that logs a disagreement rather
 than shipping one.
+
+## The wrap, measured on the installed build (2026-09-14, 00:18)
+
+Two caret dictations through the product path, with one `z` posted during the first.
+
+| | run 1 | run 2 |
+|---|---|---|
+| delivery | `wispr-history` → caret | `wispr-history` → caret |
+| words landed, after the microphone closed | **488 ms** | 3337 ms (the close needed a retry) |
+| Scratchpad visible on the main display | **19 ms** | **19 ms** |
+| Scratchpad existed | 5706 ms | 7293 ms |
+| …of that, after the close was asked | 440 ms | 3289 ms |
+| `everBecameKey` | **true** | **true** |
+| keys redirected / passed | **1** / 1 | 0 / 1 |
+| frontmost, whole run | TextEdit | TextEdit |
+| Wispr windows afterwards | `['Status']` | `['Status']` |
+
+TextEdit ended with `zcommit and push the fix.Commit and push the fix.` — the `z` in the document
+he was looking at, each sentence once, nothing in the note.
+
+**The window is `AXStandardWindow` at window layer 3.** Victor's *it sits on top of everything* is
+a number now: layer 0 is an ordinary window and this is three above it. Its minimum size is
+**300×300** — Wispr refuses smaller — and parked at the bottom-right of the one display it settles
+at `1720,1089` on a `1728×1079` screen, clamped from the `1720,1109` asked for, which leaves the
+8 pt sliver. **Wispr does not remember the frame**: it reopens at `1428,817` every time, so the
+park happens on every open rather than once.
+
+`everBecameKey` is **true**, every run, with the line that proves it: *the system-wide focused
+element belongs to Wispr Flow, frontmost is TextEdit*. The watcher written an hour earlier, which
+asked whether Wispr was frontmost, would have answered false for ever.
+
+Three bugs the two runs found, all fixed in this build:
+
+**The note was still racing the row.** `pollNote` was called before the row was read, so the note
+path could win — and it did, 13 ms after the microphone closed, shipping the single `z` a
+keystroke had put in the note. One character delivered as a dictation. The note is read only under
+`WT_SCRATCHPAD_DELIVER=note` now; otherwise it is a cross-check and nothing else.
+
+**Every sentence arrived twice.** Wispr's ⌘V had been let through, on the reasoning that it
+belongs to Wispr's own note — true while the note was the delivery, false once the window is being
+closed at the release: the paste arrives ~450 ms later with nowhere of its own to go and lands in
+**his document**, lowercased, beside the relay's proper copy. The swallow is back on in every mode.
+
+**A stale close edge ended the next dictation.** Run 2 was over 600 ms after it began, because the
+CoreAudio notification for run *1* arrived six seconds late and `edge(false)` took it. A witness
+that never saw the microphone open cannot report it closing: both the notification and the poll
+now need `notifyMs` / `pollMs` for *this* dictation before their close is honoured.
+
+And one number that is not where it should be. The delivery still waits for the window to be gone,
+because a paste made while the Scratchpad holds the key focus lands in the note — 488 ms when the
+close takes first time, 3337 ms when it does not. The row is ready at ~400 ms and the honest way
+to decouple the two is to post the relay's own paste with `postToPid` to the app it is meant for,
+rather than to whatever happens to hold the focus. Not built.
