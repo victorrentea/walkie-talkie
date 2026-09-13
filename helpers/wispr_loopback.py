@@ -281,6 +281,54 @@ class PushToTalk:
         return False
 
 
+# Wispr's *dismiss* chord, read out of the same `prefs.user.shortcuts` map as the
+# push-to-talk one: `"53+59": "dismiss"` — macOS keycodes 53 (Escape) and 59
+# (Left Control), i.e. ⌃Escape. `WISPR_DISMISS_KEYS` overrides.
+DISMISS_KEYS = [
+    int(k) for k in os.environ.get("WISPR_DISMISS_KEYS", "59,53").split(",") if k.strip()
+]
+
+
+def post_wispr_dismiss(keys=None):
+    """Post Wispr's own **⌃Escape** — *discard this sentence*.
+
+    **Why this is synthesised here and not asked of the relay.** The relay does
+    have `postWisprCancel`, and `POST /test/cancel` looks like the way to reach
+    it — but it is not, at the one instant this matters. Read
+    `WisprFlowSource.cancel()`: with the microphone already closed and a capture
+    standing (`!isRecording, !speculative, capturing` — exactly the state at
+    `formatted`) it takes the first branch, abandons the relay's *own* capture
+    and returns **without posting anything**. Only `isRecording || speculative`
+    reaches the chord. So there is no route that dismisses Wispr after it has
+    finished, and the experiment this exists for happens entirely inside that
+    window.
+
+    This is the same mechanism `PushToTalk` above already uses and that
+    `teacher_label.py` runs a whole batch on: `CGEventPost`, needing Accessibility
+    for *this interpreter*, which is why `accessibility_ok()` is checked first
+    and the caller is told rather than left with a chord that silently went
+    nowhere.
+
+    Modifier down, key down, key up, modifier up — in that order, so the release
+    of a press that was made is never left orphaned.
+    """
+    keys = list(keys or DISMISS_KEYS)
+    if not keys:
+        return False
+    modifiers, key = keys[:-1], keys[-1]
+    for code in modifiers:
+        _post(code, True)
+        time.sleep(0.01)
+    _post(key, True)
+    time.sleep(0.02)
+    _post(key, False)
+    time.sleep(0.01)
+    for code in reversed(modifiers):
+        _post(code, False)
+        time.sleep(0.01)
+    return True
+
+
 def accessibility_ok() -> bool:
     """Can this interpreter synthesise keystrokes at all?
 

@@ -321,6 +321,7 @@ a failed assertion, not papered over.
 | **`spawn-click-in-settle`** | `forward-up` · play · `forward-click` · *(settling)* · `forward-click` | **nothing** in the sink; an outbox line whose `delivery.to` starts `spawn:` and whose text matches |
 | **`bound`** | bind a scratch tty · `forward-right` · play · `forward-right` | the words are typed into `bound-sink.txt`, nothing in the sink |
 | **`cancel`** | `forward-click` · play · `forward-left` | no words anywhere, no outbox line, ring down ≤ 1000 ms after the gesture, reason says *cancel* |
+| **`dismiss-before-paste`** | raw chord · play · stop · *wait for `formatted`* · `--dismiss-delay` ms · ⌃Escape | **answered, negatively** — see below |
 | **`sink-key-at-start`** | sink key · `forward-click` · play · `forward-click` | the control for the pair below: the words are in the sink, the victim document is empty |
 | **`sink-key-at-stop`** | `forward-click` · play · `forward-click` · **sink key** | the same, with the keyboard taken ~100 ms *after* the stop chord — see below |
 
@@ -358,6 +359,50 @@ session simply vanished.
 A real spawn **opens a Terminal window with `claude` in it**. That is a side
 effect on Victor's desktop; the runner reports the spawned destination in its
 notes so the window can be closed.
+
+### `dismiss-before-paste` — measured, and the answer is no (2026-09-13)
+
+A wrap that needed no permission change and no app change: Wispr writes
+`formattedText` into its row at `status = formatted`, so the sentence is
+*readable* before anyone has been handed it. Let it finish, read the row, then
+post Wispr's own ⌃Escape (`53+59`, from its own shortcuts) — *discard this* —
+and the relay has the words while nothing was inserted anywhere.
+
+**It does not work.** Five runs against a real TextEdit document, front and key
+throughout, short fixture:
+
+| dismiss delay | formatted → ⌘V | inserted into victim | text still in row |
+|---|---|---|---|
+| control (none) | **57 ms** | yes | yes |
+| 0 ms | — | **yes** | yes |
+| 300 ms | — | **yes** | yes |
+| 600 ms | — | **yes** | yes |
+| 900 ms | — | **yes** | yes |
+
+Two findings, and the second is the fatal one.
+
+**The window is ~57 ms, not the second it looked like.** The ≥1 s gaps seen
+earlier were the *relay's* own `pasteGrace`, not Wispr's behaviour. Left alone,
+Wispr pastes about 57 ms after writing the row (upper bound; the poll is 50 ms).
+
+**And the dismiss does not stop it anyway.** The chord is delivered — the tap
+logs `probe: synthetic key 53 … (Python)` and
+`🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand while the words were in
+flight` — and Wispr inserts regardless, at every delay from 0 upward. By
+`formatted` it has committed; ⌃Escape only discards a sentence that is still in
+flight. So the delay column never mattered: even at 0 ms the answer is yes.
+
+What *does* hold is the readable half: `formattedText` survived the dismiss in
+every run. The row is a reliable place to read the sentence from; it is not a
+place to stop it from being delivered.
+
+**Note on `POST /test/cancel`:** it cannot be used for this.
+`WisprFlowSource.cancel()` with the microphone closed and a capture standing —
+exactly the state at `formatted` — takes the branch that abandons the relay's own
+capture and returns **without posting anything**. Only `isRecording ||
+speculative` reaches `postWisprCancel`. The harness posts the chord itself with
+`CGEventPost` (`wispr_loopback.post_wispr_dismiss`), which needs Accessibility for
+the interpreter and is checked before the run rather than failing silently.
 
 ### The pair that answers a question rather than guarding a behaviour
 

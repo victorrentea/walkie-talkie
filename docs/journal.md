@@ -7796,6 +7796,36 @@ It rhymes with *Never launch the installed app by its executable path*: both are
 name to something other than the bundle you meant, and both cost hours because the symptom is
 silence rather than an error.
 
+### Dismissing Wispr after `formatted` does not stop it pasting (2026-09-13)
+
+The last wrap that needed neither a permission change nor an app change, and it is dead. Wispr
+writes `formattedText` into its row at `status = formatted`, so the sentence is readable before
+anyone has been handed it: read the row, post Wispr's own ⌃Escape (`53+59`), keep the words, let
+nothing be inserted. Measured with `dismiss-before-paste`, five runs, a real TextEdit document front
+and key throughout:
+
+| dismiss delay | formatted → ⌘V | inserted into the victim | text still in the row |
+|---|---|---|---|
+| control | **57 ms** | yes | yes |
+| 0 ms | — | **yes** | yes |
+| 300 / 600 / 900 ms | — | **yes** | yes |
+
+**The window is 57 ms, not a second.** The ≥1 s gaps that suggested this idea were the relay's own
+`pasteGrace`, not Wispr's behaviour.
+
+**And the chord does not stop it.** It is delivered — the tap logs `probe: synthetic key 53 … (Python)`
+and `🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand while the words were in flight` — and Wispr
+inserts anyway, from 0 ms upward. By `formatted` it has committed; ⌃Escape discards a sentence still
+in flight, not one already written. The delay column never mattered.
+
+The readable half stands: `formattedText` survived every dismiss. **The row is where to read the
+sentence; it is not where to stop it.**
+
+`POST /test/cancel` cannot do this, which is worth writing down: `WisprFlowSource.cancel()` with the
+microphone closed and a capture standing — the exact state at `formatted` — abandons the relay's own
+capture and returns *without posting anything*; only `isRecording || speculative` reaches
+`postWisprCancel`. The harness posts the chord itself, with Accessibility checked first.
+
 ### Auto-detect is not the system default input (2026-09-13)
 
 The harness was built on one sentence from *The harness, and the one setting Victor has to change*:

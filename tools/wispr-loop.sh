@@ -74,6 +74,8 @@ while [ $# -gt 0 ]; do
     --transcript)  PASSTHROUGH+=(--transcript "$2"); shift 2 ;;
     --json|--verbose|--all|--list) PASSTHROUGH+=("$1"); shift ;;
     --repeat)      PASSTHROUGH+=(--repeat "$2"); shift 2 ;;
+    --dismiss-delay) PASSTHROUGH+=(--dismiss-delay "$2"); shift 2 ;;
+    --no-dismiss)  PASSTHROUGH+=(--no-dismiss); shift ;;
     --dry-run)     DRY_RUN=1; PASSTHROUGH+=(--dry-run); shift ;;
     --switch-input) FORCE_SWITCH=1; shift ;;
     # For the hour between "the routes are being written" and "the routes are

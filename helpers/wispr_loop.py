@@ -1438,6 +1438,8 @@ class Context:
     fixture: dict
     device: str | None
     scratch: str
+    #: Per-scenario knobs from the command line (`--dismiss-delay`, `--no-dismiss`).
+    options: dict = field(default_factory=dict)
     #: Wall clock at the start of the run. Wispr's `History` row is created at
     #: the gesture, so a row that started before this is somebody else's
     #: sentence — a chord Wispr ignored leaves the previous finished row on top,
@@ -1576,6 +1578,151 @@ def scenario_sink_key_at_stop(ctx) -> Result:
     return _sink_question(ctx, key_at_start=False)
 
 
+def scenario_dismiss_before_paste(ctx) -> Result:
+    """**Can the relay take the sentence out of Wispr's mouth before it speaks?**
+
+    A candidate wrap that needs no permission change and no app change, which is
+    the constraint: Wispr must go on working standalone.
+
+    The opening it aims at is one today's runs measured by accident. Wispr writes
+    `formattedText` into its row at `status = formatted`, and **inserts only
+    later** — every insertion today came a second or more after. That gap is also
+    why the sink "mismatched" on the long clip: the ⌘V arrived after the relay
+    had closed its capture at formatted + 1 s. So the text exists, in a place we
+    can read, before anybody has been given it.
+
+    The experiment: let Wispr finish, read the row the instant it says
+    `formatted`, wait `--dismiss-delay` ms, and post Wispr's own **⌃Escape**
+    (`53+59`, from its own shortcuts) — *discard this*. Then ask two questions
+    with two independent witnesses:
+
+    * **did it insert anyway?** The victim is a real TextEdit document, front and
+      key for the whole run, read afterwards with `osascript` (a read; it
+      activates nothing). The pasteboard's `changeCount` and the tap's `probe:`
+      lines say whether a ⌘V was ever posted.
+    * **is the text still ours?** The row is re-read after the dismiss: if
+      `formattedText` survives, the sentence is readable and Wispr has been told
+      to keep it to itself.
+
+    `--no-dismiss` is the control, and it is the run that matters most: it
+    measures the natural formatted → paste gap, which is the whole budget this
+    idea has to live inside.
+
+    **No sink here, deliberately.** The question is what Wispr does with nothing
+    of ours in front — a window of ours in the way is the thing being replaced.
+    """
+    relay, result, mark = ctx.relay, ctx.result, ctx.mark
+    delay_ms = ctx.options.get("dismiss_delay_ms", 0)
+    dismiss = not ctx.options.get("no_dismiss", False)
+    victim = None
+    clipboard = None
+    try:
+        import wispr_loopback as wl
+
+        if not relay.dry_run and dismiss and not wl.accessibility_ok():
+            result.check(False, "this interpreter may synthesise ⌃Escape",
+                         "Accessibility is NOT granted — CGEventPost would fail silently")
+            return result
+
+        if not relay.dry_run:
+            victim = _open_victim(ctx.scratch)
+            clipboard = pasteboard_snapshot()
+        else:
+            print("   · osascript: open %s/victim.txt in TextEdit" % ctx.scratch)
+            victim = "victim.txt"
+        result.check(bool(victim), "a victim document, front and key for the whole run", victim or "none")
+        if not victim:
+            return result
+        board_before = pasteboard_change_count()
+
+        # Wispr's own chord, not a relay gesture: the relay must only watch.
+        relay.post("/test/wispr-handsfree")
+        opened, waited = await_microphone(relay, mark)
+        result.check(opened or relay.dry_run, "Wispr's microphone opened before the clip played",
+                     "after %.0f ms" % (waited * 1000) if opened else "never opened")
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.post("/test/wispr-handsfree")
+        stopped_at = time.monotonic()
+
+        # ── the row, polled at 50 ms, and the instant it says `formatted` ──
+        formatted_at = None
+        row = None
+        deadline = time.monotonic() + (seconds + 45)
+        while time.monotonic() < deadline and not relay.dry_run:
+            row = wispr_history_for(ctx.started)
+            if row and row.status in DONE_STATUSES:
+                formatted_at = time.monotonic()
+                break
+            if row and row.status in DEAD_STATUSES:
+                break
+            time.sleep(0.05)
+        result.check(bool(formatted_at) or relay.dry_run, "Wispr reached `formatted`",
+                     "%.0f ms after the stop chord" % ((formatted_at - stopped_at) * 1000)
+                     if formatted_at else "status %r" % (row.status if row else "no row"))
+        text_at_formatted = (row.formatted_text or row.pasted_text or "") if row else ""
+        result.note("row at `formatted`: %d chars — %r" % (len(text_at_formatted), text_at_formatted[:60]))
+
+        # ── the dismiss, `--dismiss-delay` ms later ────────────────────────
+        dismissed_at = None
+        if dismiss and (formatted_at or relay.dry_run):
+            if delay_ms and not relay.dry_run:
+                time.sleep(delay_ms / 1000.0)
+            if relay.dry_run:
+                print("   · CGEventPost ⌃Escape (Wispr's dismiss) %d ms after formatted" % delay_ms)
+            else:
+                wl.post_wispr_dismiss()
+            dismissed_at = time.monotonic()
+            result.note("⌃Escape posted %d ms after `formatted`" % delay_ms)
+        elif not dismiss:
+            result.note("control run — no dismiss; measuring the natural formatted → paste gap")
+
+        # ── did a ⌘V ever come? watch the tap's own probe lines ───────────
+        paste_at = None
+        watch_until = time.monotonic() + 6.0
+        while time.monotonic() < watch_until and not relay.dry_run:
+            fresh = mark.fresh()
+            if "from pid" in fresh and "Wispr Flow)" in fresh and "probe: synthetic key 9 " in fresh:
+                paste_at = time.monotonic()
+                break
+            time.sleep(0.05)
+
+        # ── three seconds later, ask the victim ───────────────────────────
+        if not relay.dry_run:
+            time.sleep(max(0.0, 3.0 - (time.monotonic() - (dismissed_at or formatted_at or stopped_at))))
+        victim_text = "" if relay.dry_run else _victim_text(victim)
+        board_after = pasteboard_change_count()
+        final = wispr_history_for(ctx.started) if not relay.dry_run else None
+
+        inserted = bool(victim_text.strip())
+        kept = bool(final and (final.formatted_text or final.pasted_text))
+        result.check(not inserted, "nothing was inserted into the victim",
+                     "%d chars — %r" % (len(victim_text), victim_text[:60]))
+        result.check(kept or not dismiss, "the sentence is still in Wispr's row after the dismiss",
+                     "%d chars, status %r"
+                     % (len((final.formatted_text or final.pasted_text) if final else ""),
+                        final.status if final else "no row"))
+
+        result.timings = read_timings(mark.lines())
+        result.note("formatted → dismiss: %s" % (
+            "%d ms" % ((dismissed_at - formatted_at) * 1000) if dismissed_at and formatted_at else "—"))
+        result.note("formatted → ⌘V: %s" % (
+            "%d ms" % ((paste_at - formatted_at) * 1000) if paste_at and formatted_at
+            else "no ⌘V seen in 6 s"))
+        result.note("pasteboard changeCount: %s → %s (%s)" % (
+            board_before, board_after,
+            "written" if board_before != board_after else "unchanged"))
+        result.note("row's final status: %r" % (final.status if final else "—"))
+        result.answer = ("inserted into victim: %s; text still in row: %s"
+                         % ("YES" if inserted else "no", "YES" if kept else "no"))
+    finally:
+        if clipboard is not None and pasteboard_change_count() != board_before:
+            pasteboard_restore(clipboard)
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
 SCENARIOS = {
     # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
     # for the microphone before playing, so it measures the caret path without
@@ -1603,6 +1750,9 @@ SCENARIOS = {
     # an anecdote.
     "sink-key-at-start": (scenario_sink_key_at_start,
                           "the sink is key BEFORE the chord — the control for the two below", False),
+    "dismiss-before-paste": (scenario_dismiss_before_paste,
+                             "let Wispr finish, read its row, then post its own ⌃Escape before it "
+                             "inserts — the wrap that needs no permission and no app change", False),
     "sink-key-at-stop": (scenario_sink_key_at_stop,
                          "the sink is made key just AFTER the stop chord — does Wispr choose its "
                          "target at the start or at the end?", False),
@@ -1611,7 +1761,7 @@ SCENARIOS = {
 
 def run_scenario(name: str, port: int, device: str | None, wav: str | None,
                  transcript: str | None, scratch: str, dry_run: bool,
-                 verbose: bool, run_index: int = 1) -> Result:
+                 verbose: bool, run_index: int = 1, options: dict | None = None) -> Result:
     if name not in SCENARIOS:
         raise SystemExit("unknown scenario %r — one of: %s" % (name, ", ".join(SCENARIOS)))
     func, _blurb, expected_red = SCENARIOS[name]
@@ -1621,7 +1771,8 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
     mark, outbox = LogMark(), OutboxMark()
     started = time.time()
     ctx = Context(relay=relay, result=result, mark=mark, outbox=outbox,
-                  fixture=fixture, device=device, scratch=scratch, started=started)
+                  fixture=fixture, device=device, scratch=scratch, started=started,
+                  options=options or {})
     result.note("clip: %s (%.1fs) — %r"
                 % (os.path.basename(fixture["wav"]), float(fixture.get("seconds") or 0),
                    (fixture.get("transcript") or "")[:60]))
@@ -1874,6 +2025,11 @@ def main(argv):
     ap.add_argument("--scratch", default="/tmp", help="where the bound scenario's sink file goes")
     ap.add_argument("--json", action="store_true", help="the same result, machine-readable")
     ap.add_argument("--verbose", action="store_true", help="every relay.log line the run produced")
+    ap.add_argument("--dismiss-delay", type=int, default=0, metavar="MS",
+                    help="dismiss-before-paste: how long after `formatted` to post Wispr's ⌃Escape")
+    ap.add_argument("--no-dismiss", action="store_true",
+                    help="dismiss-before-paste: the control run — post nothing, and measure the "
+                         "natural formatted → paste gap this idea has to live inside")
     ap.add_argument("--repeat", type=int, default=1, metavar="N",
                     help="run each scenario N times. Wispr's round trip is 0.7-13 s, so one "
                          "sample of anything that is a race (sink-key-at-stop) is an anecdote")
@@ -1900,8 +2056,10 @@ def main(argv):
     results = []
     for index in range(1, max(1, args.repeat) + 1):
         for name in names:
-            results.append(run_scenario(name, port, args.device, args.wav, args.transcript,
-                                        args.scratch, args.dry_run, args.verbose, run_index=index))
+            results.append(run_scenario(
+                name, port, args.device, args.wav, args.transcript, args.scratch,
+                args.dry_run, args.verbose, run_index=index,
+                options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss}))
 
     if args.json:
         print(json.dumps({"pass": all(r.passed for r in results),
