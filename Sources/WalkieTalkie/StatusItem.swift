@@ -446,12 +446,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let messageLog = NSMenuItem(title: "Prompt Log", action: nil, keyEquivalent: "")
     /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
     private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
-    /// **The app, named and dated, one row above Quit.** It carries the build
-    /// stamp Quit used to, and clicking it opens a small page with the repository
-    /// the code came from — the one fact about this app that is nowhere on the
-    /// machine it runs on.
-    private let about = NSMenuItem(title: "Victor's Walkie Talkie (\(StatusItem.buildStamp))",
-                                   action: nil, keyEquivalent: "")
+    /// **The build stamp, on a disabled row of its own, one row above Quit**
+    /// (2026-09-13). It was the clickable About row (`Victor's Walkie Talkie
+    /// (<build>)`, opening `AboutPage`) until Victor asked for the same plain
+    /// `Version: <build>` readout in all three menu bar apps, for cleanliness.
+    /// The About page is still one click away from the Dock tile's main menu.
+    private let version = NSMenuItem(title: "Version: \(StatusItem.buildStamp)",
+                                     action: nil, keyEquivalent: "")
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
     /// distinguish. Set from the same `setDestination` the header uses, so the
@@ -684,18 +685,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // **The build stamp moved onto About**, which is the row it was always
-        // describing: it is read once a session, when the question is "am I
-        // looking at what I just built?", and that is a question about the app
-        // rather than about quitting. Quit is left saying the one thing it does.
-        about.image = Self.emojiIcon("ℹ️")
-        about.action = #selector(aboutClicked)
-        about.target = self
-        menu.addItem(about)
+        // **The build stamp is a disabled readout, not a row that does anything**:
+        // it is read once a session, when the question is "am I looking at what
+        // I just built?", and that is a question about the app rather than about
+        // quitting. Quit is left saying the one thing it does.
+        version.image = Self.emojiIcon("ℹ️")
+        version.isEnabled = false
+        menu.addItem(version)
 
-        // No ⌘Q key equivalent: the app never becomes key, so the hint would
-        // advertise a shortcut that does nothing outside the open menu.
-        let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "")
+        // ⌘Q as a key equivalent (2026-09-13), for the same reason it sits on the
+        // other two apps' Quit rows: Victor asked for the three menus to end the
+        // same way. It fires only while the menu is open — a status-item app
+        // never becomes key — and the main menu `main.swift` installs already
+        // carries the real ⌘Q for the Dock-tile case.
+        let exit = NSMenuItem(title: "Quit", action: #selector(exitClicked), keyEquivalent: "q")
         exit.image = Self.symbolIcon("power")
         exit.target = self
         menu.addItem(exit)
@@ -952,7 +955,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// template image is drawn as a silhouette in a single colour. macOS dims
     /// them on an inactive display either way, which is the behaviour that was
     /// asked for.
-    /// When this binary was put in place, for the Quit row.
+    /// When this binary was put in place, for the Version row.
     ///
     /// **Taken from the executable's own mtime, not from a constant stamped into
     /// the source.** Victor Addons seds a `BUILD_TIME` literal into its Swift file
@@ -1113,8 +1116,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func shotClicked() { onShot?() }
     @objc private func pasteLastClicked() { onPasteLast?() }
     @objc private func messageLogClicked() { MessageLog.openInBrowser() }
-
-    @objc private func aboutClicked() { AboutPage.openInBrowser() }
 
     private var destination: String?
 

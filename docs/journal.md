@@ -28,6 +28,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *The shell guard is the load-bearing part* — “`.keystroke` targets cannot be guarded” — IDE targets are guarded since 2026-09-10 through the extension's shell pid; only the `.keystroke` fallback is not
 - *Replace Wispr* — “the back button is handed back” — the back button is the shutter in that mode since 2026-09-08 (*What a caret dictation carries*)
 - *The agent gets an 800px copy* — earlier 1000 px — 800 since 2026-08-22
+- *Autosend* — “no ⌘Q key equivalent in the status menu” — Quit carries ⌘Q since 2026-09-13; the About row is a disabled `Version:` readout (*Version row and ⌘Q (2026-09-13)*)
 - *Rebind to: the destinations already spoken to, most recent first* — *"fără nicio căutare prin transcripturi"* was about a **model** picking a session (13–17 s in `claude -p`); since 2026-09-12 the same list has a search field over the transcripts that is `rg` and nothing else (*The list takes typing, and searches the session journals*)
 - *The wait says how long* — `Transcribing... 4s` — digits gone 2026-09-08 (*The wait fills too*)
 - *The menu says what the model costs* — “starting the helper only when a dictation is coming” — the model loads at launch since 2026-09-06
@@ -207,6 +208,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The shots clause becomes a list, and the folder becomes $WALKIE_SHOTS (2026-09-13)](#the-shots-clause-becomes-a-list-and-the-folder-becomes-walkie_shots-2026-09-13)
 - [The loopback closes: gestures, state, a sink and a delivery field (2026-09-13)](#the-loopback-closes-gestures-state-a-sink-and-a-delivery-field-2026-09-13)
 - [Every selection and every pick says when, and a pick says what it said (2026-09-13)](#every-selection-and-every-pick-says-when-and-a-pick-says-what-it-said-2026-09-13)
+- [Version row and ⌘Q (2026-09-13)](#version-row-and-q-2026-09-13)
 
 ---
 
@@ -8382,3 +8384,16 @@ The Chrome extension has to be **reloaded by hand** in `chrome://extensions` bef
 pick half is live — `inspect.js` changed, and an unpacked extension serves the JS it was loaded
 with until it is told otherwise. Until then a pick still arrives; it arrives with 160 characters
 of text and no `textChars`, which the envelope renders as a quotation that stops.
+
+## Version row and ⌘Q (2026-09-13)
+
+Victor: *"in victor-effects, macos addon and walkie talkie, separate a disabled row Version:
+sep 7, hh:mm above the Quit menu entry, mapped to cmd-q, for cleanliness"*.
+
+The three menu bar apps now end the same way: a separator, a disabled `Version: <build>` row,
+then `Quit ⌘Q`. Here that replaced the clickable About row (`Victor's Walkie Talkie (<build>)`,
+which opened `AboutPage` in the browser) — the page is still on the Dock tile's main menu, where
+the app is actually frontmost. The stamp is still the executable's mtime (see *The menu bar
+item*). The ⌘Q hint reverses the *no key equivalent* note under *Autosend*: it still only fires
+while the menu is open, but the hint is what makes the row read as Quit, and consistency across
+the three menus won over the pedantry.

@@ -162,13 +162,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   unified memory and the two disagree. It doubles as liveness: a dead helper has no footprint and
   the row goes back to its bare name.
   → journal: *The menu says what the model costs*
-- **The build stamp on the About row (`Victor's Walkie Talkie (<build>)`, formerly `Quit — built
-  Aug 28, 17:48`) is the executable's own mtime**, never a sed'ed constant.
-  → journal: *The menu bar item*
-- **No ⌘Q key equivalent in the status menu.** ⌘Q is in the main menu `main.swift` installs; a key
-  equivalent here would advertise a shortcut that does nothing outside the open menu. Quit goes
-  through the same `endSession(reason:)` as the ✕, so the outbox gets its `session_end`.
-  → journal: *Autosend*
+- **The build stamp is a disabled `Version: <build>` row one above Quit (2026-09-13)** — formerly
+  the clickable About row `Victor's Walkie Talkie (<build>)`, before that `Quit — built Aug 28,
+  17:48`. Same plain readout in Victor Addons and Victor Effects; `AboutPage` stays reachable
+  from the Dock tile's main menu only. The stamp **is the executable's own mtime**, never a
+  sed'ed constant.
+  → journal: *The menu bar item*, *Version row and ⌘Q (2026-09-13)*
+- **Quit carries ⌘Q as a key equivalent (2026-09-13)**, matching the other two apps; it fires only
+  while the menu is open (the app never becomes key), the real ⌘Q is in the main menu `main.swift`
+  installs. Quit goes through the same `endSession(reason:)` as the ✕, so the outbox gets its
+  `session_end`.
+  → journal: *Autosend*, *Version row and ⌘Q (2026-09-13)*
 
 ## Prompt Log (`MessageLog`)
 
