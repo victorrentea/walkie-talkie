@@ -1330,6 +1330,16 @@ def _await_settled(relay: Relay, mark: LogMark, timeout: float) -> tuple[bool, f
         return seen_idle[0] >= idle_needed
 
     got, waited = wait_for(done, timeout, poll=0.2, dry=relay.dry_run)
+    if got and not relay.dry_run and "✍️ the words landed" not in mark.fresh():
+        # **Left by the state door, so wait for the line.** The idle fallback can
+        # win the race against the log: measured 2026-09-14, a `wrap-caret` that
+        # delivered perfectly — `via=wispr-history to=caret`, the sentence in the
+        # caret exactly once — reported `settle end 'never'` and no timing at
+        # all, because the settle's own line had not been written yet when the
+        # timings were read. The delivery was right; only the stopwatch was
+        # missing, which is the kind of red that sends somebody after a bug that
+        # is not there.
+        wait_for(lambda: "✍️ the words landed" in mark.fresh(), timeout=4, poll=0.2)
     if got and not relay.dry_run:
         # The delivery line is written a beat after the ring comes down; give the
         # tail of the run a moment to land in the log rather than racing it.
@@ -2926,7 +2936,13 @@ def _wrap_run(ctx, destination: str) -> Result:
                              spawned[-1].get("text") or spawned[-1].get("line") or "", want)
                 result.note("spawned destination: %s — close that Terminal when you are done"
                             % ((spawned[-1].get("delivery") or {}).get("to")))
-            result.check(not victim_text.strip(), "the victim was left alone",
+            # **The sentence, not the document.** With the probe sweep on the
+            # victim is *supposed* to hold the probe letters — that is the
+            # measurement — so "left alone" became the wrong question the moment
+            # the keyboard started being protected. What must never be there is
+            # the dictated sentence, which belongs to the spawned session.
+            result.check(_count_occurrences(victim_text, want) == 0 or relay.dry_run,
+                         "the sentence did not leak into the victim",
                          "%d chars — %r" % (len(victim_text), victim_text[:60]))
 
         # Relaxed to 4 s while the product path settles: measured ~2.8 s after
