@@ -144,16 +144,33 @@
     try { return window.top.location.href; } catch { return location.href; }
   }
 
+  /// How much of an element's text rides to the agent (2026-09-13).
+  ///
+  /// It was 160 characters — enough to *recognise* a button by, which is all the
+  /// message ever did with it: `button.buy-button (Cumpără acum)`. Victor asked
+  /// for what the thing actually **said**, because the element he picks is as
+  /// often a paragraph, a table row or an error box as it is a button, and 160
+  /// characters of one of those is a sentence cut off before it says anything.
+  /// 2000 is where it stops: a `<body>` picked by accident is the whole page,
+  /// and a whole page in the prompt is the one failure mode a cap exists for.
+  /// The untruncated length travels beside it (`textChars`) so the envelope can
+  /// say *how much* was left behind rather than trailing off silently.
+  const TEXT_MAX = 2000;
+
   /// The words in the element. `innerText` is empty for form controls — their
   /// text is the `value` the user typed or chose — and empty is exactly the case
   /// where a pick arrives as a bare selector with nothing to recognise it by.
+  ///
+  /// **Uncapped here, capped in `describe`**: the length that goes in the payload
+  /// has to be measured before anything is cut off, or `textChars` would only
+  /// ever report the cap back.
   function elementText(el) {
     const rendered = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
-    if (rendered) return rendered.slice(0, 160);
+    if (rendered) return rendered;
     if (el.localName === 'select') {
-      return (el.selectedOptions?.[0]?.text || '').trim().slice(0, 160);
+      return (el.selectedOptions?.[0]?.text || '').trim().replace(/\s+/g, ' ');
     }
-    return (typeof el.value === 'string' ? el.value : '').trim().replace(/\s+/g, ' ').slice(0, 160);
+    return (typeof el.value === 'string' ? el.value : '').trim().replace(/\s+/g, ' ');
   }
 
   /// Where the element's top-left corner sits **in the document**, rounded.
@@ -167,10 +184,15 @@
 
   /// What he would have called this thing out loud.
   function describe(el) {
+    const text = elementText(el);
     return {
       path: cssPath(el),
       tag: el.localName,
-      text: elementText(el),
+      text: text.slice(0, TEXT_MAX),
+      /// Only when something was cut off — the envelope prints it as
+      /// `(truncated, N chars)`, and a key that is always there saying "nothing
+      /// was truncated" is a key in every pick saying nothing.
+      ...(text.length > TEXT_MAX ? { textChars: text.length } : {}),
       label: el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') ||
              el.getAttribute('placeholder') || el.getAttribute('name') || '',
       href: el.getAttribute('href') || el.getAttribute('src') || '',

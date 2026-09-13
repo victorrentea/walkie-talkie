@@ -54,6 +54,20 @@ button (and ⌘⇧-click) are still for. This is what makes the shutter optional
 screenshot costs a megabyte on disk and several hundred tokens to read, a
 highlight costs the characters in it.
 
+Every highlight reaches the agent stamped with when in the sentence you made it
+and the window you made it in, as one list:
+
+```
+text selected during dictation:
+- 00:00 in 'IntelliJ IDEA — OrderService.java': "public Order placeOrder(Cart cart) {"
+- 00:19 in 'Google Chrome — Stripe docs': "amount is in the smallest currency unit"
+```
+
+`00:00` is the thing you were already holding when you started talking — the
+subject. The rest are what you reached for while you were speaking, in the order
+you reached for them, so *"the one I mentioned after the tax bit"* resolves to a
+string instead of to a guess.
+
 `Listening...` is itself a gauge: it fills a character at a time as *speech*
 arrives — not as the clock runs — and is full at three voiced seconds, which is
 where a short clip stops being the kind the recogniser mangles. When it fills, a
@@ -114,10 +128,14 @@ What reaches the agent names every element you clicked, when in the sentence you
 clicked it, and the page it came from:
 
 ```
-[elements I picked in Chrome, on https://shop.example/cart, oldest first, each
- stamped with when in the sentence I clicked it: 0:12 div#cart > span.price
- (1.299,00 lei) · 0:21 button.buy-button (Cumpără acum)]
+elements picked in Chrome during dictation, on 'https://shop.example/cart' (Cart — Shop), oldest first:
+- 00:12 div#cart > span.price: "1.299,00 lei"
+- 00:21 button.buy-button: "Cumpără acum"
 ```
+
+Each line quotes what the element actually **said** — up to 2000 characters of its
+text, with `… (truncated, N chars)` when there was more — so *"the error it showed
+me"* resolves to words and not just to a selector.
 
 A negative stamp is normal — you usually find the thing before you say what to do
 with it. The URL is factored out when every pick came from the same page and

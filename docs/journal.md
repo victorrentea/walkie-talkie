@@ -206,6 +206,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Wispr's own row says when it is done (2026-09-12)](#wisprs-own-row-says-when-it-is-done-2026-09-12)
 - [The shots clause becomes a list, and the folder becomes $WALKIE_SHOTS (2026-09-13)](#the-shots-clause-becomes-a-list-and-the-folder-becomes-walkie_shots-2026-09-13)
 - [The loopback closes: gestures, state, a sink and a delivery field (2026-09-13)](#the-loopback-closes-gestures-state-a-sink-and-a-delivery-field-2026-09-13)
+- [Every selection and every pick says when, and a pick says what it said (2026-09-13)](#every-selection-and-every-pick-says-when-and-a-pick-says-what-it-said-2026-09-13)
 
 ---
 
@@ -8185,3 +8186,114 @@ put `tiny sink check` in the view and
 the keyboard back (`key` false) and `{"key": true}` took it again, naming `Terminal` as the app it
 had come from. That is the 2026-09-13 caret failure, reproduced unattended and asserted on —
 which is the whole point.
+
+
+## Every selection and every pick says when, and a pick says what it said (2026-09-13)
+
+The frames have said *when* since the day they were named: `shot-00:05(mouse-at-1681x591px)`
+is five seconds into the sentence, and the clause under them is a `- ` list, one frame a line.
+Nothing else in the envelope did. A highlight arrived as `[selected: …]` with no offset at all,
+or as `[selected 0:31: …]` in a bracket of its own; a picked element arrived in a `·`-joined
+sentence that quoted sixty characters of what the thing said. Victor asked for the same reading
+on all three, in one sentence: the agent should know **when** in the dictation each selection and
+each pick happened, relative to what he was saying — and, for a pick, **what the element said**.
+
+So there are now three lists in the envelope and they are the same list:
+
+```
+text selected during dictation:
+- 00:00 in 'IntelliJ IDEA — OrderService.java': "public Order placeOrder(Cart cart) {"
+- 00:19 in 'Google Chrome — Stripe docs': "amount is in the smallest currency unit"
+screenshots during dictation are in: $WALKIE_SHOTS/2026-09-13-19-13-09/ oldest first:
+- shot-00:12(mouse-at-1681x591px)-small.jpg in 'Google Chrome — Stripe docs'
+Each is ≤800px wide; drop the -small for the full-resolution original.
+elements picked in Chrome during dictation, on 'https://shop.example/cart' (Cart — Shop), oldest first:
+- 00:12 div#cart > span.price: "1.299,00 lei"
+- 00:21 button.buy-button, moved from 120,340 to 500,205 (top-left, page coordinates): "Cumpără acum"
+```
+
+**The frozen selection is line one of its list, not a clause above it.** It is still the
+subject and still first; what used to separate it from the extras — that it was there before he
+started — is now said by its own `00:00` instead of by living in a different bracket. And the
+one case the old shape could not express is exactly the case worth having: a dictation that
+opens with nothing highlighted takes the first mid-sentence highlight into the frozen slot
+(`fillsTheBlank`), and *that* one did not happen at zero. It happened eleven seconds in, while
+he was already saying something, which is the whole reason an offset is worth printing.
+
+**`in '…'` is the shots clause's own punctuation, doing the same job.** He highlights in one
+window and talks about another all day; which window it was is the half a quoted string cannot
+carry. The reading is `WindowContext.describe()`, the same one every frame gets — and it is
+taken **when the highlight is filed**, never at delivery. The envelope is built seconds later,
+behind the held panel, and a title read there names the window he ended up in front of. That is
+the same rule the cursor position, the shot offset and the frame's own title already follow, and
+it has been wrong in this app once for each of them.
+
+One thing it cost, and it is the kind that does not show up until it does: `WindowContext` hops
+to the main queue and *waits* there, and everything that publishes to the chip takes `stateLock`
+**from** the main queue. Read under the lock — which is where it naturally wants to go, since the
+decision *is this highlight novel* is made under the lock — the two are a deadlock with a
+selection on one side of it. It is read before the lock is taken, and the cost is one
+Accessibility call for a highlight that turns out to be a repeat.
+
+**Two clocks became one calculation with two paddings.** `mm:ss` in the envelope, because the
+envelope already has a clock in it — every frame it hands over is named `shot-00:05` — and a
+highlight reading `0:05` beside a frame reading `00:05` is two readings an agent has to satisfy
+itself are the same reading. `m:ss` on the chip, because the chip is a few characters wide beside
+his cursor and a leading zero there is a column spent on nothing. The arithmetic is
+`clock(_:pad:)`; `stamp` and `envelopeStamp` are the two paddings over it. The rule that the
+panel's `pickLines` and the message's stamps cannot drift is unchanged — it just now means *the
+numbers cannot drift*, which is what it was ever about.
+
+**A pick quotes 2000 characters instead of 60, and says what it left behind.** `text` has been in
+the payload since picks existed and was capped at 160 in the page and printed at 60 in the line —
+enough to *recognise* a button by, which is all the clause ever did with it: `button.buy-button
+(Cumpără acum)`. But what he ⌘⇧-clicks is as often an error box, a table row or a paragraph as it
+is a button, and 160 characters of one of those is a sentence cut off before it says anything.
+*"this button"* resolves to a selector; *"the error it showed me"* resolves to nothing unless the
+words travel. So the cap is 2000, said in two places that must not drift (`TEXT_MAX` in
+`inspect.js` slices, `ElementPick.textLimit` guards — the page is hostile input and the extension
+is not the only thing that can POST to `/pick`), and the untruncated length rides beside it as
+`textChars`, measured **before** the slice, so the line can end `… (truncated, 3600 chars)`
+rather than simply stopping. A quotation that stops reads as the whole of what the element said,
+and acting on the half of an error message that fitted is worse than knowing there is more to
+fetch.
+
+The move went *before* the quotation for the same reason: it is an instruction to carry out in
+the source, and an instruction at the far end of a paragraph of page copy is one nobody reads.
+The page's **title** joined its URL, and is factored into the heading only when the URL and the
+title are *both* unanimous — two picks on one address with two titles is a page that changed
+under him, and one of the two names would be wrong.
+
+**Nothing renamed, nothing re-meant.** `selection` still carries the first highlight as a bare
+string, `selections[].at` is still `m:ss`, `elements[].text` is still what the element said. What
+arrived beside them is `selectionAt` / `selectionIn`, `selections[].seconds` / `.in`, and
+`elements[].at` / `.textChars`. The offsets in the JSON are **numbers** and the ones in the line
+are `m:ss`: the string is for reading, and anything comparing two picks would otherwise be
+parsing a clock back. The `relay` skill documents these fields by name, and the standing rule in
+that chain is that adding a key is free and renaming one is not.
+
+**The selection was the one attachment no test could reach**, and that is why it had never been
+asserted. A shot, a pick and the words themselves all have loopback routes; a highlight is read
+off the screen with Accessibility or a ⌘C, so checking how the envelope renders one meant
+genuinely selecting text in another app, by hand, mid-dictation, and then reading the outbox. So
+`POST /test/selection {"text": …}` fakes the **reading** and nothing else: it enters at
+`fileSelection`, the door the watcher and the shutter both come through, and the offset, the
+window reading, the frozen-slot rule and the *already carried* skip all run as they do for his
+hand.
+
+`evals/test_envelope.py` is what it exists for — one fabricated dictation carrying two highlights
+and two picks, driven through the loopback against the installed relay, asserting the shapes
+above and the outbox keys under them. It asks the **microphone** (`isRecording`, `settling`,
+`speculative`) whether Victor is talking rather than asking `listening`, because
+`/test/dictation/start` sets `listening` and nothing on the fabricated path ever produces the
+microphone edge that clears it — guarding on `listening` would mean one run of the file locking
+out the next. It delivers to a tty nothing is listening on: the outbox line is written at
+delivery, and delivery to a tty with no tab comes back `targetGone` without a keystroke reaching
+any window, which is the only way to get a real envelope out of a relay that must not type into
+anything. It puts his binding back, and it re-binds until the line appears, because with nothing
+bound the sentence is *held* rather than dropped and no line is written at all.
+
+The Chrome extension has to be **reloaded by hand** in `chrome://extensions` before any of the
+pick half is live — `inspect.js` changed, and an unpacked extension serves the JS it was loaded
+with until it is told otherwise. Until then a pick still arrives; it arrives with 160 characters
+of text and no `textChars`, which the envelope renders as a quotation that stops.

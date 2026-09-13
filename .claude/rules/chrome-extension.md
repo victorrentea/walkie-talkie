@@ -45,20 +45,28 @@ Covers `chrome-extension/` (`inspect.js`, `relay.js`), its HTTP mailbox `Element
 
 ## What a pick carries
 
-- **Each `elements` entry is `{path, tag, text, label, href, url, title, frame}`, plus `move`** — built in `describe()` (`inspect.js`), clamped by `ElementPick(json:)`, emitted by `ElementPick.json`. **Nothing in that chain may rename or drop a key**: the `relay` skill documents them by name. Adding one is free. → journal: *What a pick carries: the page, and what the thing said*
+- **Each `elements` entry is `{path, tag, text, textChars, label, href, url, title, frame}`, plus `move` and `at`** — built in `describe()` (`inspect.js`), clamped by `ElementPick(json:)`, emitted by `ElementPick.json` / `json(since:)`. **Nothing in that chain may rename or drop a key**: the `relay` skill documents them by name. Adding one is free — `textChars` and `at` were added on 2026-09-13. → journal: *What a pick carries: the page, and what the thing said*
+- **`text` is 2000 characters since 2026-09-13, and the length before the cut travels as `textChars`.** It was 160, which is a label and not a reading: what he ⌘⇧-clicks is as often an error box, a table row or a paragraph as it is a button. `TEXT_MAX` in `inspect.js` and `ElementPick.textLimit` say the same number and must not drift — the extension slices, the Swift side is the guard, because the page is hostile input and the extension is not the only thing that can POST to `/pick`. `textChars` is measured **before** the slice (uncapped `elementText`, capped in `describe`) and is sent only when something was actually cut off. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+- **`at` is the offset in **seconds**, not the `m:ss` the line renders**, and only when a dictation zero exists (`ElementPick.json(since:)`). Negative is ordinary. A string would have to be parsed back by anything comparing two picks. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
 - **`move` (`{from: {x, y}, to: {x, y}}`) is parsed all or nothing** (`ElementPick.move(_:)`) — a half-parsed corner would put `0,0` into the message as if he had dropped it there. → journal: *What a pick carries: the page, and what the thing said*
 - **`url` is `window.top.location.href`**, falling back to `location.href` when the top is cross-origin; `location.href` alone inside an iframe put the page he was on nowhere (`frame` already carried the iframe). **`text` falls back to `value`** (`elementText()`): `innerText` is empty for `<input>`, `<textarea>`, `<select>` — the selected option's label for a `<select>`. → journal: *What a pick carries: the page, and what the thing said*
 
-## The clause (2026-09-09)
+## The clause (2026-09-09, a list since 2026-09-13)
 
 ```
-[elements I picked in Chrome, on https://shop.example/cart, oldest first, each
- stamped with when in the sentence I clicked it: 0:12 div#cart > span.price
- (1.299,00 lei) · 0:21 button.buy-button (Cumpără acum), moved from 120,340 to
- 500,205 (top-left, page coordinates)]
+elements picked in Chrome during dictation, on 'https://shop.example/cart' (Cart — Shop), oldest first:
+- 00:12 div#cart > span.price: "1.299,00 lei"
+- 00:21 button.buy-button, moved from 120,340 to 500,205 (top-left, page coordinates): "Cumpără acum"
+A − offset is something I picked just before I started talking.
 ```
 
-- **`picked … in Chrome`, stamped, with the page URL** — `AppDelegate.picksClause`, shared by `terminalLine` and `caretLine`. Stamps and the panel's `pickLines` both come out of one `stamp(_:since:)` so they cannot drift; `Message.startedAt` carries the zero because `dictationStartedAt` is cleared as the message is built and the panel holds the prompt afterwards. → journal: *The clause: when, what, and on which page (2026-09-09)*
+- **A `- ` list, the shots clause's shape** (2026-09-13). A `·`-joined sentence was already hard to read back with two picks in it; with up to 2000 characters of page copy quoted per pick it is unreadable. `mm:ss`, the frames' clock, through the shared `clock(_:pad:)`. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+- **The quotation is the point.** *"this button"* resolves to a selector; *"the error it showed me"* resolves to nothing unless the words travel. Truncation is said out loud — `… (truncated, N chars)` — because a quotation that merely stops reads as the whole of what the element said. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+- **The move goes before the quotation, not after it.** It is an instruction to carry out, and an instruction at the far end of a paragraph of page copy is one nobody reads. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+- **The page's *title* joins its URL**, and is factored into the heading only when the URL and the title are *both* unanimous: two picks on one address with two titles is a page that changed under him, and one of the two names would be wrong. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+- **The `− offset` note is printed only when one of them is negative.** Said every time, it would be a line of explanation in every envelope about something that did not happen in most of them. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
+
+- **`picked … in Chrome`, stamped, with the page URL** — `AppDelegate.picksClause`, shared by `terminalLine` and `caretLine`. The envelope's stamps and the panel's `pickLines` are **one calculation with two paddings** (`clock(_:pad:)` under `envelopeStamp` and `stamp`), so the two surfaces can differ in how wide a stamp is and never in what it says; `Message.startedAt` carries the zero because `dictationStartedAt` is cleared as the message is built and the panel holds the prompt afterwards. → journal: *The clause: when, what, and on which page (2026-09-09)*
 - **Factor the URL out only when every entry came from one page.** Mixed pages put it on each entry; an entry with no URL blocks the factoring outright, or it would silently inherit another entry's page. → journal: *The clause: when, what, and on which page (2026-09-09)*
 - **Singular and plural are both written** — `elements I picked … oldest first: 0:12 button` for one pick reads as a list with something missing. → journal: *The clause: when, what, and on which page (2026-09-09)*
 
@@ -75,5 +83,7 @@ Covers `chrome-extension/` (`inspect.js`, `relay.js`), its HTTP mailbox `Element
 ## Do not
 
 - Nothing in the `describe()` → `ElementPick(json:)` → `ElementPick.json` chain may rename or drop a key.
+- Do not let `TEXT_MAX` (`inspect.js`) and `ElementPick.textLimit` drift apart, and do not measure `textChars` after the slice.
+- Do not go back to a `·`-joined clause, and do not fork the stamp arithmetic between the chip and the envelope.
 - Do not ship Chrome's icon in the repo; look it up.
 - Do not reconnect the 8920 socket without a probe that answered.

@@ -153,6 +153,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// highlighted, so the selection is the subject of the sentence.
     private var pendingSelection: String?
 
+    /// **Where in the dictation the frozen selection was read, and in which
+    /// window** (2026-09-13).
+    ///
+    /// The extras have carried an offset since they existed; the subject never
+    /// did, because for most of a year it was read at the gesture and `0:00` was
+    /// the only answer it could have. It is not the only answer any more — a
+    /// dictation that opens with nothing highlighted takes the first
+    /// mid-sentence highlight into this slot, and *that* one happened somewhere
+    /// in particular, relative to words he was already saying. Victor's ask is
+    /// one sentence for all of it: the agent should know **when** in the
+    /// dictation each selection happened, relative to what he was saying.
+    ///
+    /// The window is the same reading `WindowContext` gives every frame, sampled
+    /// when the highlight is filed rather than when the message is built: a
+    /// title read at delivery names whatever he ended up in front of.
+    private var pendingSelectionAt: TimeInterval?
+    private var pendingSelectionIn: String?
+
     /// Text he highlighted **later in the same dictation**, each stamped with
     /// where in the sentence he was when he took the shot that carried it.
     ///
@@ -168,7 +186,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// honest: a selection lands here because he deliberately took a picture
     /// while it was highlighted, not because the caret happened to be somewhere
     /// when a timer fired.
-    private var pendingExtraSelections: [(at: TimeInterval, text: String)] = []
+    private var pendingExtraSelections: [SelectionRecord] = []
+
+    /// One highlight, as it travels: when in the sentence, what it said, and
+    /// where it was read. `source` is nil when nothing could be asked — a frozen
+    /// app, an AX read that came back empty-handed — and prints nothing rather
+    /// than guessing a window.
+    typealias SelectionRecord = (at: TimeInterval, text: String, source: String?)
 
     /// The screen Victor was looking at when he started talking, captured
     /// automatically. Offered as context ("look if you need to"), unlike the
@@ -493,10 +517,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// that is catchable before it reaches an agent.
         var text: String?
         let selection: String?
+        /// Where in the dictation that one was read, and in which window — see
+        /// `pendingSelectionAt`. Both nil for a message with no selection, and
+        /// the offset is 0 for the ordinary case where he was already holding
+        /// the highlight when he started talking.
+        var selectionAt: TimeInterval?
+        var selectionSource: String?
         /// Highlighted later in the same dictation, each with its offset. Empty
         /// in the ordinary case, which is why `selection` above stays exactly
         /// what it was rather than becoming element zero of a list.
-        var extraSelections: [(at: TimeInterval, text: String)] = []
+        var extraSelections: [SelectionRecord] = []
         let paths: [String]
         let screen: String?
         /// Path → what was in front when that frame was taken. Covers both
@@ -970,6 +1000,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.publishShotCount()
                 self.publishPicks()
             }
+        }
+        // A highlight, filed against the dictation in flight without one being
+        // made on screen. `fileSelection` is the shared door — this route only
+        // supplies the words a `SelectionCapture` read would have returned, so
+        // everything downstream of the read is the real thing: the offset from
+        // the dictation's zero, the window `WindowContext` names, the frozen
+        // slot taking the first one and the extras taking the rest.
+        picker.onTestSelection = { [weak self] text in
+            guard let self = self else { return nil }
+            self.stateLock.lock()
+            let opened = self.dictationStartedAt
+            self.stateLock.unlock()
+            guard let opened = opened else { return nil }
+            let offset = Date().timeIntervalSince(opened)
+            self.selectionQueue.async {
+                self.fileSelection(text, at: offset, opened: opened, announceOnRepeat: false)
+            }
+            return ["ok": true, "at": Self.envelopeStamp(offset), "chars": text.count]
         }
         picker.onTestDictation = { [weak self] text in
             guard let self = self else { return }
@@ -1760,6 +1808,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingShots = []
         pendingShotOffsets = []
         pendingSelection = nil
+        pendingSelectionAt = nil
+        pendingSelectionIn = nil
         pendingExtraSelections = []
         shotSources = [:]
         dictationStartedAt = nil
@@ -2023,6 +2073,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cannot ride along with the next thing he says.
         if !alreadyOpen {
             pendingSelection = nil
+            pendingSelectionAt = nil
+            pendingSelectionIn = nil
             pendingExtraSelections = []
             contextShotPending = true
             // The zero of every offset in this dictation, set the moment the
@@ -2109,6 +2161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictationStartedAt = nil
         pendingScreen = nil
         pendingSelection = nil
+        pendingSelectionAt = nil
+        pendingSelectionIn = nil
         pendingExtraSelections = []
         shotSources = [:]
         dictationInFlight = false
@@ -3292,8 +3346,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other field on this envelope is: what is not consumed by the sentence
         // that gathered it rides the next one.
         let selection = pendingSelection
+        let selectionAt = pendingSelectionAt
+        let selectionIn = pendingSelectionIn
         let extraSelections = pendingExtraSelections
         pendingSelection = nil
+        pendingSelectionAt = nil
+        pendingSelectionIn = nil
         pendingExtraSelections = []
         // Read before it is cleared, and for the reason `Message.startedAt`
         // exists: it is the zero every pick's stamp is measured from, and one
@@ -3315,12 +3373,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // stamp on the extras: he pastes this into another agent as often as into
         // a commit message, and two envelopes that carry the same fact in two
         // shapes are two things to learn instead of one.
-        if let selection = selection, !selection.isEmpty {
-            parts.append("[selected: \(Self.clampForTerminal(selection))]")
-        }
-        for extra in extraSelections {
-            parts.append("[selected \(Self.stamp(extra.at)): \(Self.clampForTerminal(extra.text))]")
-        }
+        parts.append(contentsOf: Self.selectionsClause(selection, at: selectionAt,
+                                                       source: selectionIn,
+                                                       extras: extraSelections))
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
         if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
         guard parts.count > 1 else { return words }
@@ -3336,18 +3391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
             parts.append(dictatedHint)
         }
-        if let selection = m.selection, !selection.isEmpty {
-            parts.append("[selected: \(clampForTerminal(selection))]")
-        }
-        // **Stamped, because that is the only thing that distinguishes them.**
-        // A bare second `[selected: …]` beside the first is two highlights with
-        // no way to tell which came from where in the sentence — and the reason
-        // to record them at all is that he said something different while each
-        // one was on screen. `0:31` is what lets "the one I mentioned after the
-        // tax bit" resolve to a string.
-        for extra in m.extraSelections {
-            parts.append("[selected \(stamp(extra.at)): \(clampForTerminal(extra.text))]")
-        }
+        parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
+                                                  source: m.selectionSource,
+                                                  extras: m.extraSelections))
         // **What was in front of him is not a caption for a picture.**
         // It used to ride inside the context frame's clause, as
         // `shot-00:00(…).jpg = Terminal — ✳ walkie-talkie`, which made a fact
@@ -3533,6 +3579,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return clauses
     }
 
+    /// **Everything he highlighted, as a list, each line saying when** (2026-09-13).
+    ///
+    /// ```
+    /// text selected during dictation:
+    /// - 00:00 in 'Terminal — ✳ walkie-talkie': "the line he was already holding"
+    /// - 00:08 in 'Google Chrome — Gmail': "the one he reached for mid-sentence"
+    /// ```
+    ///
+    /// It was two different shapes before: `[selected: …]` for the subject, with
+    /// no offset at all, and `[selected 0:31: …]` per extra, each in its own
+    /// bracket. Victor asked for one shape, the shots clause's — *the agent
+    /// should know when in the dictation each selection happened, relative to
+    /// what he was saying*.
+    ///
+    /// - **The frozen selection is line one, not a separate clause.** It is
+    ///   still the subject and still first, but the thing that separates it from
+    ///   the extras — that it was there before he started — is now said by its
+    ///   own `00:00` rather than by living in a different bracket. The one case
+    ///   where it is not `00:00` (a dictation that opened with nothing
+    ///   highlighted, the subject arriving late) is exactly the case the old
+    ///   shape could not express.
+    /// - **`mm:ss`, the shot names' clock**, not the `m:ss` the chip uses. Three
+    ///   lists in one envelope now say when: the frames by their names, these,
+    ///   and the picks. A frame reading `shot-00:05` beside a highlight reading
+    ///   `0:05` is two clocks to check against each other.
+    /// - **`in '…'`**, the same reading and the same quotes `shotsClause` puts
+    ///   round a window title, for the same reason: a title is arbitrary text
+    ///   and the quotes are the one delimiter it cannot forge. He highlights in
+    ///   one window and talks about another; which one it was is the half a
+    ///   quoted string cannot carry.
+    /// - **Quoted, and clamped where it always was** (`clampForTerminal`, 400).
+    ///   A selection can be an entire file, and this line is read by Victor as
+    ///   often as by an agent; the whole text is in the outbox either way.
+    private static func selectionsClause(_ selection: String?, at: TimeInterval?,
+                                         source: String?,
+                                         extras: [SelectionRecord]) -> [String] {
+        var rows: [SelectionRecord] = []
+        if let selection = selection, !selection.isEmpty {
+            rows.append((at: at ?? 0, text: selection, source: source))
+        }
+        rows.append(contentsOf: extras)
+        guard !rows.isEmpty else { return [] }
+        let lines = rows.map { row -> String in
+            var line = "- " + envelopeStamp(row.at)
+            if let source = row.source, !source.isEmpty { line += " in '\(source)'" }
+            return line + ": \"\(clampForTerminal(row.text))\""
+        }
+        return ["text selected during dictation:\n" + lines.joined(separator: "\n")]
+    }
+
     /// The full text is in the outbox either way. What rides into the terminal
     /// is a prompt somebody has to be able to read back, and a selection can be
     /// an entire file.
@@ -3559,6 +3655,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let text = SelectionCapture.read()
         Log.info("selection front=\(SelectionCapture.frontmostAppName() ?? "?") → \(text.map { "\($0.count) chars" } ?? "nothing")")
         guard let text = text, !text.isEmpty else { return }
+        // Read here and not at delivery: the envelope is built seconds later,
+        // after the panel has held the prompt, and by then the title names
+        // whatever he ended up in front of. Same rule the shot's own window
+        // reading follows.
+        let source = WindowContext.describe()
 
         stateLock.lock()
         // **The dictation can end while this probe is still running**, and often
@@ -3570,7 +3671,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (nil) or a different one that has since begun both read as stale.
         let stale = opened == nil || dictationStartedAt != opened
         let lost = pendingSelection != nil      // the other probe got there first
-        if !stale && !lost { pendingSelection = text }
+        if !stale && !lost {
+            pendingSelection = text
+            // **Measured, not assumed to be zero.** This probe runs at the
+            // gesture in the ordinary case and the answer is `00:00`, which is
+            // what it always was — but it also runs from the routes that fill a
+            // blank the first read left, and there the difference between "he
+            // was already holding it" and "he reached for it eleven seconds in"
+            // is the whole point of printing an offset at all.
+            pendingSelectionAt = opened.map { Date().timeIntervalSince($0) } ?? 0
+            pendingSelectionIn = source
+        }
         stateLock.unlock()
         guard !stale else {
             Log.info("selection dropped — the dictation it was read for is over")
@@ -3810,6 +3921,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// about a highlight that has not changed.
     private func fileSelection(_ text: String, at offset: TimeInterval, opened: Date?,
                                announceOnRepeat: Bool) {
+        // **Read before the lock is taken, never under it.** `WindowContext`
+        // hops to the main queue and waits there, and everything that publishes
+        // to the chip takes `stateLock` from the main queue — the two together
+        // are a deadlock with a highlight on one side of it. The cost of asking
+        // for a highlight that turns out to be a repeat is one AX call.
+        let source = WindowContext.describe()
         stateLock.lock()
         // The probe outliving its dictation, exactly as in `stashSelection` and
         // for the same 400ms — a highlight filed against a sentence that is over
@@ -3829,8 +3946,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fillsTheBlank = novel && pendingSelection == nil
         if fillsTheBlank {
             pendingSelection = text
+            pendingSelectionAt = offset
+            pendingSelectionIn = source
         } else if novel {
-            pendingExtraSelections.append((at: offset, text: text))
+            pendingExtraSelections.append((at: offset, text: text, source: source))
         }
         let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
         stateLock.unlock()
@@ -3861,10 +3980,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// `m:ss`, the one clock this app measures anything in.
+    /// **One clock, two renderings** — and the arithmetic is done once, which is
+    /// the half that must never drift.
+    ///
+    /// `m:ss` on the overlay: the chip and the panel are a few characters wide
+    /// beside his cursor and a leading zero there is a column spent on nothing.
+    /// `mm:ss` in the envelope, because the envelope already has a clock in it —
+    /// `shot-00:05(…)` is the name of every frame it hands over — and a
+    /// highlight reading `0:05` beside a frame reading `00:05` is two readings
+    /// an agent has to satisfy itself are the same reading.
+    ///
+    /// The sign is the pick's business: a `−` offset means he pointed at
+    /// something just before he started talking, which is the ordinary order.
+    private static func clock(_ seconds: Int, pad: Bool) -> String {
+        let sign = seconds < 0 ? "−" : ""
+        let abs = Swift.abs(seconds)
+        return String(format: pad ? "%@%02d:%02d" : "%@%d:%02d", sign, abs / 60, abs % 60)
+    }
+
+    /// `m:ss` for the overlay. Negative offsets are clamped here rather than
+    /// signed: nothing on the chip is ever about a moment before the dictation.
     private static func stamp(_ offset: TimeInterval) -> String {
-        let s = max(0, Int(offset.rounded()))
-        return String(format: "%d:%02d", s / 60, s % 60)
+        clock(max(0, Int(offset.rounded())), pad: false)
+    }
+
+    /// `mm:ss` for the envelope, signed.
+    private static func envelopeStamp(_ offset: TimeInterval) -> String {
+        clock(Int(offset.rounded()), pad: true)
     }
 
     /// Mouse 4 while dictating — one more shot for the dictation in
@@ -4097,11 +4239,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// which page** (2026-09-09).
     ///
     /// ```
-    /// [elements I picked in Chrome, on https://shop.example/cart, oldest first,
-    ///  each stamped with when in the sentence I clicked it:
-    ///  0:12 div#cart > span.price (1.299,00 lei) ·
-    ///  0:21 button.buy-button (Cumpără acum), moved from 120,340 to 500,205 …]
+    /// elements picked in Chrome during dictation, on 'https://shop.example/cart' (Cart — Shop), oldest first:
+    /// - 00:12 div#cart > span.price: "1.299,00 lei"
+    /// - 00:21 button.buy-button, moved from 120,340 to 500,205 (top-left, page coordinates): "Cumpără acum"
     /// ```
+    ///
+    /// **It became a `- ` list on 2026-09-13**, the shots clause's shape, and
+    /// grew two things with it: the page's *title* beside its URL, and what the
+    /// element actually **said** — up to `ElementPick.textLimit` characters of
+    /// `innerText` instead of the 60 that used to fit in a parenthesis, with
+    /// `(truncated, N chars)` when there was more. A `·`-joined sentence was
+    /// already hard to read back with two picks in it; with a paragraph of page
+    /// copy quoted per pick it is unreadable, and the quotation is the point —
+    /// *"this button"* resolves to a selector, but *"the error it showed me"*
+    /// resolves to nothing unless the words travel.
     ///
     /// It read `[pointed at: <path> (<text>)]` until then, and Victor named all
     /// three things missing from it in one breath: *"dacă se aleg mai multe
@@ -4110,7 +4261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// trebuie să-i spui că picked element in Chrome … și să-i spui și URL-ul
     /// paginii în care ai făcut pick, nu doar path-ul, că nu e relevant"*.
     ///
-    /// - **The stamps** are the same reading the held panel has always shown and
+    /// - **The stamps** are the same calculation the held panel has always shown and
     ///   the message never did — and they are the half that orders a sentence
     ///   against its own pointing. `−0:08` is normal and not an edge case:
     ///   pointing usually comes *before* the words, since he finds the thing and
@@ -4142,28 +4293,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One page and every pick actually carrying it: an empty URL among them
         // means one entry would silently inherit another's page.
         let shared = urls.count == 1 ? urls.first.flatMap { $0.isEmpty ? nil : $0 } : nil
+        // The title rides with the URL and only when it is as unanimous: two
+        // picks on one address with two titles is a page that changed under him,
+        // and one of the two names would be wrong.
+        let titles = Set(picks.map { $0.title ?? "" })
+        let sharedTitle = shared != nil && titles.count == 1
+            ? titles.first.flatMap({ $0.isEmpty ? nil : $0 }) : nil
 
-        let named = picks.map { pick -> String in
-            var line = ""
-            if let stamp = stamp(pick.at, since: since) { line += stamp + " " }
+        /// `https://shop.example/cart' ('Cart — Shop')` — the address, and what
+        /// the page called itself. The title was in the payload from the first
+        /// day and was never said out loud; a URL is an address and a title is
+        /// what he would recognise the tab by.
+        func page(_ url: String, _ title: String?) -> String {
+            var s = "'\(url)'"
+            if let title = title, !title.isEmpty { s += " (\(clampForTerminal(title, 80)))" }
+            return s
+        }
+
+        let lines = picks.map { pick -> String in
+            var line = "- "
+            if let stamp = envelopeStamp(pick.at, since: since) { line += stamp + " " }
             line += pick.path
-            if let text = pick.text, !text.isEmpty { line += " (\(clampForTerminal(text, 60)))" }
-            if shared == nil, let url = pick.url, !url.isEmpty { line += " on \(url)" }
+            if shared == nil, let url = pick.url, !url.isEmpty {
+                line += " on " + page(url, pick.title)
+            }
+            // **Before the quotation, not after it.** The text can run to two
+            // thousand characters and the move is an instruction to carry out;
+            // an instruction at the far end of a paragraph of page copy is one
+            // nobody reads.
             if let move = pick.move {
                 line += ", moved from \(move.from.x),\(move.from.y)"
                       + " to \(move.to.x),\(move.to.y) (top-left, page coordinates)"
             }
+            if let text = pick.text, !text.isEmpty {
+                line += ": \"\(text)"
+                // **Say how much was left behind.** A quotation that simply stops
+                // reads as the whole of what the element said, and acting on the
+                // half of an error message that fitted is worse than knowing
+                // there is more to fetch.
+                if let chars = pick.textChars {
+                    line += "… (truncated, \(chars) chars)\""
+                } else {
+                    line += "\""
+                }
+            }
             return line
         }
 
-        var head = picks.count == 1 ? "element I picked in Chrome" : "elements I picked in Chrome"
-        if let shared = shared { head += ", on \(shared)" }
+        var head = picks.count == 1 ? "element picked in Chrome during dictation"
+                                    : "elements picked in Chrome during dictation"
+        if let shared = shared { head += ", on " + page(shared, sharedTitle) }
         if picks.count > 1 { head += ", oldest first" }
-        if since != nil {
-            head += picks.count > 1 ? ", each stamped with when in the sentence I clicked it"
-                                    : ", stamped with when in the sentence I clicked it"
+        var clause = head + ":\n" + lines.joined(separator: "\n")
+        // Only when one of them is actually negative. Said every time it would be
+        // a line of explanation in every envelope about something that did not
+        // happen in most of them.
+        if let since = since, picks.contains(where: { $0.at < since }) {
+            clause += "\nA − offset is something I picked just before I started talking."
         }
-        return "[\(head): \(named.joined(separator: " · "))]"
+        return clause
     }
 
     /// Where in the sentence something happened, as `m:ss` — or `−m:ss` when it
@@ -4171,10 +4359,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// order rather than an oddity. Nil with no dictation to measure against.
     private static func stamp(_ at: Date, since: Date?) -> String? {
         guard let since = since else { return nil }
-        let seconds = Int(at.timeIntervalSince(since).rounded())
-        let sign = seconds < 0 ? "−" : ""
-        let abs = Swift.abs(seconds)
-        return String(format: "%@%d:%02d", sign, abs / 60, abs % 60)
+        return clock(Int(at.timeIntervalSince(since).rounded()), pad: false)
+    }
+
+    /// The same reading, padded, for the envelope — the panel's `stamp` and this
+    /// one are one calculation with two paddings, so the two surfaces can differ
+    /// in how wide a stamp is and never in what it says.
+    private static func envelopeStamp(_ at: Date, since: Date?) -> String? {
+        guard let since = since else { return nil }
+        return clock(Int(at.timeIntervalSince(since).rounded()), pad: true)
     }
 
     /// Keep the overlay's `🎯 ×N` honest, and name the newest one — the count says
@@ -4273,7 +4466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?,
-                                      extraSelections: [(at: TimeInterval, text: String)] = [],
+                                      extraSelections: [SelectionRecord] = [],
                                       picks: [ElementPick], since: Date?) -> String? {
         var parts: [String] = []
         if let text = text, !text.isEmpty { parts.append(text) }
@@ -4397,7 +4590,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         stateLock.lock()
         let selection = pendingSelection
+        let selectionAt = pendingSelectionAt
+        let selectionIn = pendingSelectionIn
         pendingSelection = nil
+        pendingSelectionAt = nil
+        pendingSelectionIn = nil
         let extraSelections = pendingExtraSelections
         pendingExtraSelections = []
         let sources = shotSources
@@ -4439,6 +4636,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let message = Message(kind: kind, text: text, selection: selection,
+                              selectionAt: selectionAt, selectionSource: selectionIn,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
@@ -4624,14 +4822,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                   directory: m.directory))
             : nil
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
-                    selections: m.extraSelections.map {
-                        ["at": Self.stamp($0.at), "text": $0.text]
+                    selectionAt: m.selectionAt, selectionIn: m.selectionSource,
+                    selections: m.extraSelections.map { extra in
+                        // `at` keeps the `m:ss` it has always had — the `relay`
+                        // skill documents it by name — and `seconds` is beside
+                        // it for anything that wants to compare two of them
+                        // without parsing a clock back.
+                        var obj: [String: Any] = ["at": Self.stamp(extra.at),
+                                                  "seconds": Int(extra.at.rounded()),
+                                                  "text": extra.text]
+                        if let source = extra.source, !source.isEmpty { obj["in"] = source }
+                        return obj
                     },
                     paths: m.paths, screen: m.screen,
                     sources: m.sources.reduce(into: [String: String]()) { out, pair in
                         out[(pair.key as NSString).lastPathComponent] = pair.value
                     },
-                    app: m.app, elements: m.elements.map { $0.json },
+                    app: m.app, elements: m.elements.map { $0.json(since: m.startedAt) },
                     line: line, delivery: delivery)
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }

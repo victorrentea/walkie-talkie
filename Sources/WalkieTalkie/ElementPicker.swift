@@ -13,8 +13,18 @@ struct ElementPick {
     /// The identifying payload: a selector that resolves to exactly this element.
     let path: String
     let tag: String
-    /// Its visible text, trimmed — what he would have called it out loud.
+    /// Its visible text, trimmed — what he would have called it out loud, and
+    /// since 2026-09-13 what it actually **said**: up to `textLimit` characters
+    /// of `innerText` rather than the 160 that were only ever enough to
+    /// recognise a button by.
     let text: String?
+    /// How long that text was before it was cut off, or nil when nothing was.
+    ///
+    /// Measured in the page, before the slice — the extension is the only place
+    /// that can still see the whole thing. The envelope turns it into
+    /// `(truncated, N chars)`, which is the difference between a quotation that
+    /// ends and one that merely stops.
+    let textChars: Int?
     /// `aria-label` / `alt` / `title`, for the elements that have no text at all
     /// (icon buttons are the whole reason this field is here).
     let label: String?
@@ -57,9 +67,25 @@ struct ElementPick {
         return tail.isEmpty ? tag : tail
     }
 
+    /// The outbox shape. `since` is the moment the dictation opened, and is what
+    /// turns this pick's absolute `at` into `where in the sentence` — negative
+    /// included, which is the ordinary order rather than an oddity: he finds the
+    /// thing first and then says what to do with it.
+    ///
+    /// A number of seconds and not the `m:ss` the line renders: the string is for
+    /// reading, and anything that has to compare two picks would be parsing it
+    /// back. nil `since` (a pick with no dictation behind it) writes no key at
+    /// all rather than a zero that would read as *the instant he started*.
+    func json(since: Date?) -> [String: Any] {
+        var obj = json
+        if let since = since { obj["at"] = Int(at.timeIntervalSince(since).rounded()) }
+        return obj
+    }
+
     var json: [String: Any] {
         var obj: [String: Any] = ["path": path, "tag": tag]
         if let text = text, !text.isEmpty { obj["text"] = text }
+        if let chars = textChars { obj["textChars"] = chars }
         if let label = label, !label.isEmpty { obj["label"] = label }
         if let href = href, !href.isEmpty { obj["href"] = href }
         if let url = url, !url.isEmpty { obj["url"] = url }
@@ -72,13 +98,26 @@ struct ElementPick {
         return obj
     }
 
-    init(at: Date, path: String, tag: String, text: String? = nil, label: String? = nil,
+    init(at: Date, path: String, tag: String, text: String? = nil, textChars: Int? = nil,
+         label: String? = nil,
          href: String? = nil, url: String? = nil, title: String? = nil, frame: String? = nil,
          move: Move? = nil) {
-        self.at = at; self.path = path; self.tag = tag; self.text = text; self.label = label
+        self.at = at; self.path = path; self.tag = tag; self.text = text
+        self.textChars = textChars; self.label = label
         self.href = href; self.url = url; self.title = title; self.frame = frame
         self.move = move
     }
+
+    /// **2000 characters of what the element said** (2026-09-13). It was 160,
+    /// which is a label and not a reading: the thing he ⌘⇧-clicks is as often an
+    /// error box, a table row or a paragraph as it is a button, and those were
+    /// arriving cut off before they said anything. The ceiling is still a
+    /// ceiling, because a `<body>` picked by accident is a whole page, and a
+    /// whole page pasted into a prompt is the failure a cap exists for.
+    /// `chrome-extension/inspect.js` slices at the same number; this is the
+    /// guard, since the page is hostile input and the extension is not the only
+    /// thing that can POST to `/pick`.
+    static let textLimit = 2000
 
     init?(json: [String: Any]) {
         guard let path = (json["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -86,7 +125,13 @@ struct ElementPick {
         self.at = Date()
         self.path = path
         self.tag = (json["tag"] as? String) ?? "?"
-        self.text = ElementPick.clamp(json["text"] as? String, 160)
+        let text = ElementPick.clamp(json["text"] as? String, ElementPick.textLimit)
+        self.text = text
+        // Believed only when it is bigger than what arrived — a page that claims
+        // its 12-character label was truncated from nine would put
+        // `(truncated, 9 chars)` in the prompt.
+        let claimed = (json["textChars"] as? NSNumber)?.intValue ?? 0
+        self.textChars = claimed > (text?.count ?? 0) ? claimed : nil
         self.label = ElementPick.clamp(json["label"] as? String, 120)
         self.href = ElementPick.clamp(json["href"] as? String, 400)
         self.url = ElementPick.clamp(json["url"] as? String, 400)
@@ -178,6 +223,22 @@ final class ElementPicker {
     /// A fabricated transcript, entering where a real one does.
     var onTestDictation: ((String) -> Void)?
     /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
+    /// **A highlight, filed as though he had made it** — `POST /test/selection`
+    /// `{"text": …}` (2026-09-13).
+    ///
+    /// The selection is the one attachment with no desk-reachable route into it.
+    /// Everything else on the envelope has one — a shot, a pick, the words
+    /// themselves — but a highlight is read off the screen with Accessibility or
+    /// a ⌘C, so asserting on how the envelope renders one meant genuinely
+    /// selecting text in another app by hand, in the middle of a dictation, and
+    /// then reading the outbox. Which is to say it was never asserted.
+    ///
+    /// It enters at `fileSelection`, the same door the watcher and the shutter
+    /// both come through, so the offset, the window reading, the frozen-slot
+    /// rule and the *already carried* skip all run as they do for his hand. What
+    /// it fakes is the **reading**, and nothing else.
+    var onTestSelection: ((String) -> [String: Any]?)?
+
     var onTestSpawn: ((String) -> Void)?
     /// `POST /test/spawn-folders` — put the folder menu up on its own.
     ///
@@ -608,6 +669,18 @@ final class ElementPicker {
         case ("POST", "/test/spawn-folders"):
             onTestSpawnFolders?()
             respond(conn, 200, ["ok": true, "shown": true])
+
+        // A highlight without a hand on the mouse — see `onTestSelection`.
+        case ("POST", "/test/selection"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let text = (body?["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let text = text, !text.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"text\": \"…\"}"])
+            }
+            guard let result = onTestSelection?(text) else {
+                return respond(conn, 409, ["ok": false, "error": "no dictation is open"])
+            }
+            respond(conn, 200, result)
 
         case ("POST", "/test/dictation"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]

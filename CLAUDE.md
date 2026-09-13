@@ -130,6 +130,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `GET /target` | the current binding; `guarded` says whether the shell guard applies |
 | `GET /engine` | which **source** is live, whether it is ready, whether the wrap is on, and the local model's state |
 | `POST /test/dictation` `{"text": …}` | a fabricated transcript, entering exactly where a real one does (pastes `caretLine` in Replace Wispr) |
+| `POST /test/selection` `{"text": …}` | file a highlight as though he had made one — it enters at `fileSelection`, so the offset, the window reading and the frozen-slot rule all run; 409 outside a dictation. The one attachment otherwise unreachable from a desk |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero (a caret one in Replace Wispr) |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |

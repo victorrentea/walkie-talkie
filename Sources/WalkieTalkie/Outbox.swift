@@ -250,7 +250,11 @@ enum Outbox {
     /// being assembled: each one is a CSS selector plus what the thing said, so
     /// "this button" in the transcript has something to resolve to.
     /// `selections` are highlights he made **later in the same dictation**, each
-    /// `{at, text}` with `at` as `m:ss` from the moment he started talking.
+    /// `{at, seconds, text, in}` — `at` as `m:ss` from the moment he started
+    /// talking, `seconds` the same offset as a number (added 2026-09-13, because
+    /// `m:ss` is for reading and arithmetic on it is a parser), and `in` the
+    /// window the highlight was read in, the same reading `sources` carries for
+    /// a frame.
     ///
     /// `selection` above is untouched and still carries the first one, so
     /// nothing that reads this queue today has to learn a key to keep working —
@@ -276,7 +280,21 @@ enum Outbox {
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
-                     selections: [[String: String]] = [],
+                     /// **Where in the dictation the frozen selection was read**,
+                     /// in seconds, and the window it was read in — the two facts
+                     /// the envelope started printing on 2026-09-13.
+                     ///
+                     /// Beside `selection` rather than inside it: that field is a
+                     /// bare string, documented by name in the `relay` skill, and
+                     /// a reader that wants the words must not have to learn a
+                     /// shape to keep getting them. `selectionAt` is 0 for the
+                     /// ordinary case — the highlight he already had when he
+                     /// started talking — and only differs when the dictation
+                     /// opened with nothing selected and the subject arrived a
+                     /// few seconds late.
+                     selectionAt: TimeInterval? = nil,
+                     selectionIn: String? = nil,
+                     selections: [[String: Any]] = [],
                      paths: [String] = [],
                      screen: String? = nil,
                      /// File name → what was in front when that frame was taken,
@@ -319,7 +337,11 @@ enum Outbox {
             "session": SessionLabel.value,
         ]
         if let text = text, !text.isEmpty { obj["text"] = text }
-        if let selection = selection, !selection.isEmpty { obj["selection"] = selection }
+        if let selection = selection, !selection.isEmpty {
+            obj["selection"] = selection
+            if let at = selectionAt { obj["selectionAt"] = Int(at.rounded()) }
+            if let source = selectionIn, !source.isEmpty { obj["selectionIn"] = source }
+        }
         if !selections.isEmpty { obj["selections"] = selections }
         if !paths.isEmpty { obj["paths"] = paths }
         if let screen = screen { obj["screen"] = screen }
