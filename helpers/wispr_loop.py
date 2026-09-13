@@ -1368,6 +1368,88 @@ def _assert_text(result: Result, label: str, got: str, want: str) -> float:
     return score
 
 
+def focused_element() -> tuple[str, int | None, str | None, str | None]:
+    """Who owns the keyboard *right now*: `(app, pid, role, window title)`.
+
+    **Asked of the frontmost application, not system-wide.**
+    `AXUIElementCreateSystemWide` + `AXFocusedUIElement` answers
+    `kAXErrorCannotComplete` (-25204) on this Mac whatever is in front, which
+    reads exactly like "nothing is focused" and is not — it is the API declining
+    to walk the tree from the top. The application element answers in
+    microseconds and tells the truth.
+
+    `role` is the thing that matters: an `AXTextArea` means there is a first
+    responder that will take plain characters. A frontmost app with a focused
+    *window* but no focused element has nowhere for a keystroke to go, and macOS
+    drops it — while a ⌘V still lands, because `performKeyEquivalent` runs
+    before first-responder dispatch. That asymmetry is the whole reason the
+    probe types a letter rather than pressing ⌘V.
+    """
+    try:
+        import AppKit
+        from ApplicationServices import (AXUIElementCopyAttributeValue,
+                                         AXUIElementCreateApplication)
+
+        front = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
+        if front is None:
+            return ("?", None, None, None)
+        pid, name = front.processIdentifier(), front.localizedName()
+        app = AXUIElementCreateApplication(pid)
+        _e, element = AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
+        _e2, window = AXUIElementCopyAttributeValue(app, "AXFocusedWindow", None)
+        role = title = None
+        if element is not None:
+            _e3, role = AXUIElementCopyAttributeValue(element, "AXRole", None)
+        if window is not None:
+            _e4, title = AXUIElementCopyAttributeValue(window, "AXTitle", None)
+        return (name or "?", pid, role, title)
+    except Exception as exc:
+        return ("?", None, "error: %s" % exc, None)
+
+
+def make_victim_key(victim: str) -> tuple[bool, str]:
+    """Give the victim a **real key window**, the way a user's click would.
+
+    `activate` alone makes an app frontmost; it does not guarantee a window is
+    key or that anything is first responder. A person always has both, because
+    they got there by clicking into a document — so a rig that only activates is
+    measuring a state no user is ever in, and the plain characters it types are
+    dropped while its ⌘V sails through.
+
+    `AXRaise` on the window and `AXFocused` on its text area is that click
+    without the pointer: nothing is synthesised, nothing moves on screen, and
+    the focused element afterwards is the text area itself.
+    """
+    _osascript('tell application "TextEdit" to activate', timeout=8)
+    try:
+        import AppKit
+        from ApplicationServices import (AXUIElementCopyAttributeValue,
+                                         AXUIElementCreateApplication,
+                                         AXUIElementPerformAction,
+                                         AXUIElementSetAttributeValue)
+
+        apps = {a.localizedName(): a.processIdentifier()
+                for a in AppKit.NSWorkspace.sharedWorkspace().runningApplications()}
+        pid = apps.get("TextEdit")
+        if pid:
+            app = AXUIElementCreateApplication(pid)
+            _e, window = AXUIElementCopyAttributeValue(app, "AXFocusedWindow", None)
+            if window is not None:
+                AXUIElementPerformAction(window, "AXRaise")
+                _e2, kids = AXUIElementCopyAttributeValue(window, "AXChildren", None)
+                for kid in (kids or []):
+                    _e3, role = AXUIElementCopyAttributeValue(kid, "AXRole", None)
+                    if role in ("AXTextArea", "AXScrollArea"):
+                        AXUIElementSetAttributeValue(kid, "AXFocused", True)
+                        break
+    except Exception:
+        pass
+    wait_for(lambda: focused_element()[0] == "TextEdit", timeout=4, poll=0.2)
+    app, _pid, role, title = focused_element()
+    ok = app == "TextEdit" and role is not None
+    return ok, "focused: %s / %s / %r" % (app, role or "NOTHING", title)
+
+
 def _open_witness(ctx) -> str | None:
     """A real TextEdit document, front and key — the leak witness.
 
@@ -1380,9 +1462,13 @@ def _open_witness(ctx) -> str | None:
     what the `wrap-*` scenarios have been doing all along.
     """
     if ctx.relay.dry_run:
-        print("   · osascript: open a TextEdit victim in %s" % ctx.scratch)
+        print("   · osascript: open a TextEdit victim in %s, then AXRaise + AXFocused" % ctx.scratch)
         return "victim.txt"
-    return _open_victim(ctx.scratch)
+    victim = _open_victim(ctx.scratch)
+    if victim:
+        ok, detail = make_victim_key(victim)
+        ctx.result.check(ok, "the victim has a real key window before the gesture", detail)
+    return victim
 
 
 def _witness_text(ctx, victim: str | None) -> str:
@@ -1792,7 +1878,17 @@ def _open_victim(scratch: str) -> str | None:
         '  delay 0.6\n'
         '  return name of front document\n'
         'end tell' % path)
-    return name or None
+    name = name or None
+    # **A real key window, not merely a frontmost app.** `activate` makes an app
+    # front; it does not make a window key or anything first responder, and a
+    # person always has both because they arrived by clicking into a document.
+    # Done here so every caller gets it rather than the two that remembered to
+    # ask — and the run asserts it afterwards, because a precondition nobody
+    # checks is a precondition nobody has.
+    if name:
+        wait_for(lambda: frontmost_app() == "TextEdit", timeout=5, poll=0.2)
+        make_victim_key(name)
+    return name
 
 
 def _victim_text(name: str) -> str:
@@ -2360,6 +2456,7 @@ def _wrap_run(ctx, destination: str) -> Result:
         offsets = ctx.options.get("probe_offsets") or [1.5]
         seconds = _clip_seconds(ctx.fixture["wav"])
         probes: list[tuple[str, float]] = []
+        focus_at_probe: dict[str, tuple] = {}
         probe_deadline = 0.0
         if typed_probe:
             import wispr_loopback as wl
@@ -2372,7 +2469,16 @@ def _wrap_run(ctx, destination: str) -> Result:
                     print("   · CGEventPost `%s` %s (%.1f s into the run)" % (char, when, delay))
                 else:
                     import threading
-                    threading.Timer(delay, wl.tap_key, args=(code,)).start()
+
+                    def tap(ch=char, kc=code):
+                        # **Who owns the keyboard at the instant of the
+                        # keystroke**, not before or after. A window that takes
+                        # focus for the length of a paste and gives it back is
+                        # invisible to any sample taken either side.
+                        focus_at_probe[ch] = focused_element()
+                        wl.tap_key(kc)
+
+                    threading.Timer(delay, tap).start()
             # **The run has to outlive its own last probe.** A letter scheduled
             # 4 s after the stop fires *after* a fast settle has finished, and
             # reading the victim before then reports it LOST when it simply had
@@ -2507,6 +2613,13 @@ def _wrap_run(ctx, destination: str) -> Result:
             result.check(not fouled or relay.dry_run,
                          "no probe letter was folded into the dictated sentence",
                          "found %s in %r" % (", ".join(fouled) or "none", sentence[:50]))
+            # **The scratch Terminal's own screen is not readable this way.**
+            # `contents of t` inside a nested `repeat` comes back as the tab
+            # *reference* — `'tab 1 of window id 113498'` — whose own letters
+            # then match the probe set and fail the check on the `w` in
+            # "window". A witness that reports its own text as evidence is
+            # worse than no witness, so the question is left to the file and to
+            # the victim until there is a way to read that screen honestly.
         elif destination == "spawn":
             spawned = [r for r in rows
                        if str(((r.get("delivery") or {}).get("to")) or "").startswith("spawn:")]
@@ -2561,9 +2674,11 @@ def _wrap_run(ctx, destination: str) -> Result:
                     where["destination"] = gained(char, landed_in, landed_base)
                 if not any(where.values()):
                     lost.append(char)
-                result.note("probe `%s` @ %.1fs → %s"
+                at = focus_at_probe.get(char)
+                result.note("probe `%s` @ %+.1fs → %s   [keyboard: %s]"
                             % (char, offset,
-                               ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing"))
+                               ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing",
+                               ("%s / %s" % (at[0], at[2] or "NO FOCUSED ELEMENT")) if at else "?"))
             # A letter in the note is a letter the Scratchpad took off Victor.
             stolen = [c for c, _ in probes if gained(c, note_tail, note_base)]
             result.check(not stolen, "no probe letter was taken by the Scratchpad",
