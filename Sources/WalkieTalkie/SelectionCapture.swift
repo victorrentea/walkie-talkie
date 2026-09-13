@@ -126,13 +126,55 @@ enum SelectionCapture {
 }
 
 enum KeySimulator {
+
+    /// **A key with a modifier stamped on it, and the modifier put back down
+    /// afterwards** — the second half of which was missing until 2026-09-14 and
+    /// is the whole of this comment.
+    ///
+    /// The ⌘ is **flag-only**: there is no ⌘ `keyDown`/`keyUp` and no
+    /// `flagsChanged` asserting it, so the session never believes a modifier is
+    /// physically held while this runs. That half was always right.
+    ///
+    /// What was wrong is what it left behind. `CGEventSource.flagsState` reports
+    /// **whatever the last event's flags said**, and the `keyUp` here carried
+    /// `.maskCommand` — so after every probe the session believed ⌘ was held,
+    /// indefinitely, until Victor's next real keystroke healed it. That is the
+    /// stale-⌘ bug `area-crop.md` documents for `TerminalBinding.tap(key:command:)`
+    /// and which was fixed there on 2026-09-10; this poster never got the fix,
+    /// and the rule is the same one: **release the modifier with a `flagsChanged`
+    /// carrying the state the keyboard is left in.**
+    ///
+    /// It matters more here than it did there, because of the other half of that
+    /// same rule: **the window server merges live modifier state back into a
+    /// posted key.** A letter arriving while the session believes ⌘ is down is
+    /// delivered as **⌘ + that letter** — and the probe letters the loop types
+    /// are `q z j k w y v`, which against TextEdit are *quit*, *close the
+    /// document*, *undo* and four edits. A sentence's worth of keystrokes
+    /// vanishing, and an empty victim document, are exactly what that would look
+    /// like.
+    ///
+    /// **Stamped**, too: `keyboardEventSource: nil` gave the event pid 0 and no
+    /// `userData`, so this app's own probe reached its own tap looking exactly
+    /// like a key Victor had pressed. Every other poster in this repo carries
+    /// `backButtonStamp` for that reason, and `WT_KEY_TRACE` now reads it.
     static func simulateKeyPress(keyCode: CGKeyCode, flags: CGEventFlags = []) {
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let up   = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.userData = HotkeyTap.backButtonStamp
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let up   = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else { return }
         down.flags = flags
         up.flags = flags
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
+        // **And put the flags back down.** Deliberately only the trailing half:
+        // a leading `flagsChanged` would assert ⌘-down in the session for the
+        // microseconds between the two, which is the window this is closing.
+        guard !flags.isEmpty else { return }
+        if let clear = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) {
+            clear.type = .flagsChanged
+            clear.flags = []
+            clear.post(tap: .cghidEventTap)
+        }
     }
 
     static func cmdC() { simulateKeyPress(keyCode: 0x08, flags: .maskCommand) }

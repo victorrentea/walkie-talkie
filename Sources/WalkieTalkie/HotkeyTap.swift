@@ -2614,7 +2614,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// make the Return; the value is kept rather than reinvented so that a
     /// version of that app still running against the old wiring is recognised
     /// rather than fought.
-    private static let backButtonStamp: Int64 = 0x7774_4241_434B_0000
+    /// Internal rather than private since 2026-09-14: `KeySimulator`'s ⌘C probe
+    /// posts into the same event stream this tap reads, and an unstamped probe
+    /// arrives looking exactly like a key Victor pressed.
+    static let backButtonStamp: Int64 = 0x7774_4241_434B_0000
 
     /// How long `postReturn` lets the ⌃⌥⌘ that Options+ stamped on the chord
     /// wear off before it types. Measured 12–22 ms on this Mac; 45 ms is that
