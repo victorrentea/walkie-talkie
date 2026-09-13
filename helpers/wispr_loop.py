@@ -1407,6 +1407,38 @@ def focused_element() -> tuple[str, int | None, str | None, str | None]:
         return ("?", None, "error: %s" % exc, None)
 
 
+def textedit_documents() -> list[tuple[str, str]]:
+    """Every open TextEdit document, as `(name, path)`."""
+    names = _osascript('tell application "TextEdit" to name of every document', timeout=10)
+    paths = _osascript('tell application "TextEdit" to path of every document', timeout=10)
+    n = [x.strip() for x in names.split(",") if x.strip()]
+    q = [x.strip() for x in paths.split(",") if x.strip()]
+    return list(zip(n, q + [""] * len(n)))
+
+
+def close_other_documents(keep: str) -> list[str]:
+    """Close every TextEdit document but `keep`. Returns what was closed.
+
+    **The victim has to be the only one open.** Six of them had accumulated by
+    2026-09-14 — every run leaves one behind, because closing a document is the
+    step most likely to hit TextEdit's save panel and hang. With several open,
+    "the front document" is not necessarily the one this run just made, and a
+    keystroke landing in a *previous* victim is indistinguishable from a
+    keystroke that was dropped: the harness reads the one it named and finds
+    nothing. That is the whole shape of the `wrap-bound` mystery, and it is the
+    harness's own mess.
+    """
+    closed = []
+    for name, _path in textedit_documents():
+        if name != keep:
+            _osascript('tell application "TextEdit" to set text of document "%s" to ""' % name,
+                       timeout=8)
+            _osascript('tell application "TextEdit" to close document "%s" saving no' % name,
+                       timeout=8)
+            closed.append(name)
+    return closed
+
+
 def make_victim_key(victim: str) -> tuple[bool, str]:
     """Give the victim a **real key window**, the way a user's click would.
 
@@ -1773,6 +1805,19 @@ def _open_scratch_terminal(sink_file: str) -> str | None:
     return tty.split("/")[-1] if tty.startswith("/dev/") else (tty or None)
 
 
+def scratch_terminal_window_id(tty: str) -> str:
+    """The Terminal window id holding that tty — for reading its `history` later."""
+    return _osascript(
+        'tell application "Terminal"\n'
+        '  repeat with w in windows\n'
+        '    repeat with t in tabs of w\n'
+        '      if (tty of t) contains "%s" then return (id of w as string)\n'
+        '    end repeat\n'
+        '  end repeat\n'
+        '  return ""\n'
+        'end tell' % tty, timeout=10)
+
+
 def _close_scratch_terminal(tty: str):
     """Close the window whose tab has that tty, and only that one.
 
@@ -1886,6 +1931,10 @@ def _open_victim(scratch: str) -> str | None:
     # ask — and the run asserts it afterwards, because a precondition nobody
     # checks is a precondition nobody has.
     if name:
+        # **Alone on the desk.** See `close_other_documents` — a stale victim
+        # from an earlier run is a place keystrokes can go that this run will
+        # never look at.
+        close_other_documents(name)
         wait_for(lambda: frontmost_app() == "TextEdit", timeout=5, poll=0.2)
         make_victim_key(name)
     return name
@@ -2418,7 +2467,14 @@ def _wrap_run(ctx, destination: str) -> Result:
                 open(sink_file, "w").close()
                 tty = _open_scratch_terminal(sink_file)
             relay.post("/bind", {"tty": tty})
-            result.check(bool(tty), "a scratch terminal, bound", tty or "none")
+            if tty and not relay.dry_run:
+                ctx.options["terminal_window_id"] = scratch_terminal_window_id(tty)
+                ctx.options["terminal_history_before"] = _osascript(
+                    'tell application "Terminal" to return history of tab 1 of window id %s'
+                    % ctx.options["terminal_window_id"], timeout=10)
+            result.check(bool(tty), "a scratch terminal, bound",
+                         "%s (window id %s)" % (tty or "none",
+                                                ctx.options.get("terminal_window_id") or "?"))
 
         if relay.dry_run:
             print("   · osascript: open %s/victim.txt in TextEdit" % ctx.scratch)
@@ -2613,7 +2669,35 @@ def _wrap_run(ctx, destination: str) -> Result:
             result.check(not fouled or relay.dry_run,
                          "no probe letter was folded into the dictated sentence",
                          "found %s in %r" % (", ".join(fouled) or "none", sentence[:50]))
-            # **The scratch Terminal's own screen is not readable this way.**
+            # **`history`, addressed by the window id captured at creation.**
+            # `contents of t` inside a nested `repeat` comes back as the tab
+            # *reference* (`'tab 1 of window id 113498'`), whose own letters
+            # match the probe set — a witness reporting its own text as
+            # evidence. `history` of a tab addressed by id returns the text.
+            if ctx.options.get("terminal_window_id") and not relay.dry_run:
+                hist = _osascript(
+                    'tell application "Terminal" to return history of tab 1 of window id %s'
+                    % ctx.options["terminal_window_id"], timeout=10)
+                # **Against the baseline taken at creation.** The history
+                # already holds the `cat >> …/wispr-loop/bound-sink.txt` command
+                # line and the prompt, and those carry `z`, `k`, `w`, `y` of
+                # their own — matching them reported five letters "echoed into
+                # the Terminal" in a run where every one of them had reached the
+                # victim. Only an *increase* can be a keystroke.
+                base = ctx.options.get("terminal_history_before") or ""
+                result.note("scratch Terminal history grew by %d chars"
+                            % max(0, len(hist or "") - len(base)))
+                # **Reported, not asserted, and here is why it cannot be.**
+                # The growth *is* the delivered envelope being typed into the
+                # tty — 425 characters of English prose and file paths — and it
+                # carries `j`, `k`, `w`, `y`, `v` of its own. Neither presence
+                # nor a count against the baseline can separate those from a
+                # keystroke, so the check reported five letters "echoed into the
+                # Terminal" in a run where all seven had demonstrably reached
+                # the victim. The victim is the witness that can answer this;
+                # the Terminal is not.
+
+            # **The old approach, kept as a warning.**
             # `contents of t` inside a nested `repeat` comes back as the tab
             # *reference* — `'tab 1 of window id 113498'` — whose own letters
             # then match the probe set and fail the check on the `w` in
@@ -2655,12 +2739,26 @@ def _wrap_run(ctx, destination: str) -> Result:
                 """Did this letter *appear*, rather than already being there?"""
                 return after.lower().count(char) > before.lower().count(char)
 
+            # **Every open document, not only the one we named.** If a letter
+            # went into a different TextEdit window the harness would otherwise
+            # report it lost, having looked in exactly one place.
+            others = {}
+            if not relay.dry_run:
+                for name, _path in textedit_documents():
+                    if name != victim:
+                        others[name] = _victim_text(name)
+            if others:
+                result.note("other TextEdit documents open during the run: %s"
+                            % ", ".join("%s (%d chars)" % (n, len(t)) for n, t in others.items()))
+            elsewhere = "".join(others.values())
+
             lost = []
             for char, offset in probes:
                 where = {
                     "victim": gained(char, victim_text, ""),
                     "note": gained(char, note_tail, note_base),
                     "delivered": gained(char, delivered, ""),
+                    "another document": gained(char, elsewhere, ""),
                 }
                 # **Only where it can be computed honestly.** For `caret` the
                 # victim *is* the destination and its baseline is empty, so the
@@ -2678,7 +2776,8 @@ def _wrap_run(ctx, destination: str) -> Result:
                 result.note("probe `%s` @ %+.1fs → %s   [keyboard: %s]"
                             % (char, offset,
                                ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing",
-                               ("%s / %s" % (at[0], at[2] or "NO FOCUSED ELEMENT")) if at else "?"))
+                               ("%s / %s / %r" % (at[0], at[2] or "NO FOCUSED ELEMENT", at[3]))
+                               if at else "?"))
             # A letter in the note is a letter the Scratchpad took off Victor.
             stolen = [c for c, _ in probes if gained(c, note_tail, note_base)]
             result.check(not stolen, "no probe letter was taken by the Scratchpad",
