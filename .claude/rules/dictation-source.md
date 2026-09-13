@@ -168,6 +168,44 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
   pure loss.
 - **`keyRedirect` counts four things**: `seen`, `redirectedAX`, `redirectedKey`, `passed`, and the
   last three add up to the first.
+
+### The measured truth about his keystrokes, and what is accepted
+
+Wispr's Scratchpad panel takes the keyboard for a stretch of every dictation, and **what he types
+in that stretch is lost**. This is what three nights of measurement actually establish:
+
+- **The window is up for the whole sentence**, from the chord to the close. It is not dangerous for
+  all of it: keys typed *during the recording* are re-posted and land in the app he is in.
+- **The dangerous stretch is the tail** — from Wispr's own paste into its note until the relay's
+  close takes the window down, roughly **0.5–2 s after the stop gesture**. In that window no
+  *key-posting* route reaches him: an application that is frontmost with **no key window has no first
+  responder**, and `postToPid` to a *verified-live* victim drops the character exactly as the
+  session post does. ⌘V survives only because `performKeyEquivalent` needs no first responder,
+  which is why the **delivery** works and the letters do not.
+- **Accessibility is the route that works, and it works off the tap thread.** `AXSelectedText`
+  needs no key window, which is the whole point; the call is a synchronous round trip into another
+  application, so it happens on `HotkeyTap.axQueue` — serial, `.userInteractive`, **200 ms per
+  character** through `AXUIElementSetMessagingTimeout`, and a character that misses the deadline is
+  **said to be lost** rather than queued behind the next. The tap does only what a tap can do
+  quickly: decide, translate the keycode through the layout, swallow, hand it on. Measured
+  2026-09-14 02:10 — `seen=7 redirectedAX=5 redirectedKey=2 passed=0`, **all seven probe letters in
+  the victim document**. Ships on; `WT_SCRATCHPAD_AX_INSERT=0` turns it off.
+- **`TISGetInputSourceProperty` asserts the main thread, and the tap is not it.** Three runs died
+  on this and every one of them looked like something else — a dictation that simply stopped, a
+  relay that was dead when I looked, an AX insertion that seemed to be the culprit. The crash
+  report is unambiguous: `_dispatch_assert_queue_fail` → `TSMGetInputSourceProperty` →
+  `HotkeyTap.translate`, `SIGTRAP`. The layout is read once on the main thread
+  (`refreshKeyboardLayout`, re-read when the input source changes) and the tap touches only a
+  `Data`. **Never call a TIS function from the event tap.**
+- **And no focus reading is true**, in either direction: the Scratchpad reports `AXFocused == false`
+  while it is taking the keystrokes, and the victim reports its own `AXTextArea` as focused while
+  receiving none of them. The gate is the window's **existence**, because that is the only thing
+  that correlates.
+
+**So the accepted cost is a second or two of the keyboard, once per dictation** — the same trade
+Victor made knowingly for the sink, and the reason he rejected the sink as the *primary* path was
+its cost being paid on *his focus*, not on a second of typing he was not doing anyway. A dictation
+is a thing he is speaking, not typing, through.
 - **The theft cannot be undone.** Re-activating the victim does nothing (`activate` says *be
   frontmost* and it already is); `AXMain` / `AXFocused` on the window he was typing in logs
   `the focus owner is still Wispr`.

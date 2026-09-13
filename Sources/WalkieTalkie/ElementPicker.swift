@@ -326,6 +326,11 @@ final class ElementPicker {
     /// runtime because an installed app does not inherit a shell's environment.
     var onTestKeyTrace: ((Bool) -> [String: Any])?
 
+    /// `POST /test/ax-insert` `{"on": true}` — deliver printable keystrokes
+    /// through `AXSelectedText` on its own queue rather than re-posting them.
+    /// See `HotkeyTap.axInsert`.
+    var onTestAXInsert: ((Bool) -> [String: Any])?
+
     enum ScratchpadCommand: String {
         /// Press and keep it pressed — per Wispr's docs, push-to-talk into its
         /// own Scratchpad note.
@@ -785,6 +790,12 @@ final class ElementPicker {
                 return respond(conn, 500, ["ok": false, "error": "no simulator wired"])
             }
             respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // How a redirected printable key is delivered — see `onTestAXInsert`.
+        case ("POST", "/test/ax-insert"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let on = body?["on"] as? Bool ?? true
+            respond(conn, 200, ["ok": true].merging(onTestAXInsert?(on) ?? [:]) { _, new in new })
 
         // Every keyboard event and its verdict — see `onTestKeyTrace`.
         case ("POST", "/test/key-trace"):

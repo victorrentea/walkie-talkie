@@ -285,13 +285,24 @@ final class HotkeyTap {
     /// produced a single trace line and then silence, and the dictation never
     /// finished at all.
     ///
-    /// `postToPid` is what ships, because it measured **7/7 letters into the
-    /// victim** on the build before this one. The AX path stays behind a flag
-    /// rather than being deleted: it is the only route that does not need a key
-    /// window, and the way to make it safe is to move it off the tap thread —
-    /// which is a change worth making deliberately and not at two in the morning.
-    private static let axInsert =
-        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] == "1"
+    /// Moving it off the tap thread is what made it safe, and it **ships on**:
+    /// measured 2026-09-14 02:10, `seen=7 redirectedAX=5 redirectedKey=2
+    /// passed=0` and all seven probe letters in the victim document, with no
+    /// instability. `WT_SCRATCHPAD_AX_INSERT=0` turns it off.
+    ///
+    /// The crash that made this look impossible for three runs was **not** the
+    /// insertion at all — it was `TISGetInputSourceProperty` inside `translate`,
+    /// which asserts the main thread and traps. See `refreshKeyboardLayout`.
+    /// `WT_SCRATCHPAD_AX_INSERT=1` at launch, or `POST /test/ax-insert` at any
+    /// moment — the second because an installed app does not inherit a shell's
+    /// environment, and deciding a default by measurement needs the measurement
+    /// to be takeable without a rebuild.
+    static var axInsert = ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] != "0" {
+        didSet {
+            guard axInsert != oldValue else { return }
+            Log.info("⌨️ printable keys go in through \(axInsert ? "Accessibility, on its own queue" : "postToPid, best effort")")
+        }
+    }
 
     // ── `WT_KEY_TRACE=1` — every keyboard event, and what became of it ───────
 
@@ -411,15 +422,79 @@ final class HotkeyTap {
     /// The focused element is read **fresh at the keystroke** rather than
     /// remembered from the chord: he may have clicked into another field since,
     /// and an insertion into the field he has left is worse than a dropped key.
+    /// **The queue the Accessibility work happens on, and it is the whole fix.**
+    ///
+    /// `AXUIElementCopyAttributeValue` is a synchronous round trip into another
+    /// application. Doing it inside the event tap's callback stalls every
+    /// keystroke on the Mac while it waits, and macOS may disable the tap
+    /// outright — measured 2026-09-14: the run that tried it produced one trace
+    /// line and then silence, the dictation never finished, and the relay was
+    /// dead afterwards.
+    ///
+    /// So the tap does only what a tap can do quickly — decide, translate the
+    /// keycode through the layout (pure, no AX), swallow — and the insertion
+    /// happens here. Serial, so his characters arrive in the order he typed
+    /// them; `.userInteractive`, because this *is* his typing.
+    private static let axQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-keys",
+                                               qos: .userInteractive)
+
+    /// **Two hundred milliseconds per character, and then it is lost.**
+    ///
+    /// `AXUIElementSetMessagingTimeout` bounds the round trip at its source,
+    /// which is the only place it can be bounded — an AX call cannot be
+    /// cancelled once it is waiting. A character that misses the deadline is
+    /// **said to be lost** rather than queued behind the next one: a keyboard
+    /// that delivers his sentence half a second late, in order, is worse than
+    /// one that drops a letter and says so.
+    private static let axDeadline: Float = 0.2
+
+    /// Hand one character to the queue. Returns immediately; the tap is never
+    /// held up by an application that is thinking.
+    private func insert(_ text: String, code: CGKeyCode) {
+        Self.axQueue.async { [weak self] in
+            guard let self, let pid = self.liveTarget() else {
+                Log.error("⌨️ key \(code) lost — no live application to insert it into")
+                return
+            }
+            let started = CFAbsoluteTimeGetCurrent()
+            if self.insertViaAX(text, into: pid) {
+                Log.info(String(format: "⌨️ key %d → pid %d through Accessibility (#%d, %.0f ms)",
+                                Int(code), Int(pid), self.countAX(),
+                                (CFAbsoluteTimeGetCurrent() - started) * 1000))
+            } else {
+                Log.error(String(format: "⌨️ key %d LOST — Accessibility would not insert into pid %d (%.0f ms)",
+                                 Int(code), Int(pid), (CFAbsoluteTimeGetCurrent() - started) * 1000))
+            }
+        }
+    }
+
+    /// Re-post one non-printable on the same queue, so it keeps its place in the
+    /// order his characters arrive in.
+    private func repost(_ event: CGEvent, code: CGKeyCode) {
+        guard let copy = event.copy() else { return }
+        Self.axQueue.async { [weak self] in
+            guard let self, let pid = self.liveTarget() else { return }
+            copy.postToPid(pid)
+            Log.info("⌨️ key \(code) → pid \(pid) as a key, best effort (#\(self.countRedirect())) — not a printable character")
+        }
+    }
+
+    private func liveTarget() -> pid_t? {
+        let pid = redirectTargetNow()
+        return pid != 0 ? pid : nil
+    }
+
     private func insertViaAX(_ text: String, into pid: pid_t) -> Bool {
         let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, Self.axDeadline)
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString,
                                             &focused) == .success,
               let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID()
         else { return false }
-        return AXUIElementSetAttributeValue(element as! AXUIElement,
-                                            kAXSelectedTextAttribute as CFString,
+        let target = element as! AXUIElement
+        AXUIElementSetMessagingTimeout(target, Self.axDeadline)
+        return AXUIElementSetAttributeValue(target, kAXSelectedTextAttribute as CFString,
                                             text as CFString) == .success
     }
 
@@ -458,12 +533,38 @@ final class HotkeyTap {
         return text
     }
 
+    /// **The keyboard layout, cached, because reading it crashes the tap.**
+    ///
+    /// `TISGetInputSourceProperty` asserts that it is on the **main thread** —
+    /// HIToolbox calls `dispatch_assert_queue` and traps. Called from the event
+    /// tap's own thread it is not a slow path or a race, it is an immediate
+    /// `SIGTRAP`: three runs died this way on 2026-09-14 (`_dispatch_assert_queue_fail`
+    /// → `TSMGetInputSourceProperty` → `HotkeyTap.translate`) and each looked
+    /// like something else, because what the log showed was a dictation that
+    /// simply stopped.
+    ///
+    /// So the layout is read once on the main thread and re-read when the input
+    /// source changes. What the tap touches is a `Data` and nothing else.
+    private static let layoutLock = NSLock()
+    private static var layoutData: Data?
+
+    /// Called from `start()`, on the main thread, and again whenever he switches
+    /// keyboard.
+    static func refreshKeyboardLayout() {
+        var data: Data?
+        if let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+           let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
+            data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
+        }
+        layoutLock.lock(); layoutData = data; layoutLock.unlock()
+    }
+
     /// The keycode through the current layout — `UCKeyTranslate`.
     private static func translate(_ code: CGKeyCode, flags: CGEventFlags) -> String? {
-        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
-        else { return nil }
-        let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
+        layoutLock.lock()
+        let cached = layoutData
+        layoutLock.unlock()
+        guard let data = cached else { return nil }
         var modifiers: UInt32 = 0
         if flags.contains(.maskShift) { modifiers |= UInt32(shiftKey >> 8) }
         if flags.contains(.maskAlphaShift) { modifiers |= UInt32(alphaLock >> 8) }
@@ -1053,6 +1154,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
     @discardableResult
     func start() -> Bool {
+        // On the main thread, where HIToolbox insists it be read — see
+        // `refreshKeyboardLayout`.
+        Self.refreshKeyboardLayout()
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main) { _ in Self.refreshKeyboardLayout() }
         // `keyUp` and `flagsChanged` are here only for the injection block: a
         // synthetic ⌘V is a modifier press, a key down and a key up, and letting
         // two thirds of that through would leave the target app holding a ⌘ that
@@ -1774,29 +1881,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 } else if !WisprScratchpad.windowIsUp {
                     if type == .keyDown { countPassed() }
                 } else if Self.axInsert, let text = Self.printable(event) {
-                    // **Printable characters go in through Accessibility.** A
-                    // key event cannot be delivered to an application with no key
-                    // window — it has no first responder — and that is the whole
-                    // of why re-posting failed twice. `AXSelectedText` needs none.
-                    guard type == .keyDown else { return swallow("the keyboard guard (AX, key-up)", type, event) }
-                    if insertViaAX(text, into: target) {
-                        Log.info("⌨️ key \(code) → pid \(target) through Accessibility (#\(countAX()))")
-                        return swallow("the keyboard guard (inserted through Accessibility)", type, event)
-                    }
-                    // The insert failed — better a key that may not land than a
-                    // key that certainly does not.
-                    event.postToPid(target)
-                    Log.error("⌨️ key \(code) → pid \(target): Accessibility refused the insertion, re-posted as a key (#\(countRedirect()))")
-                    return swallow("the keyboard guard (AX refused, re-posted)", type, event)
+                    // **Printable characters go in through Accessibility, on a
+                    // queue.** A key event cannot be delivered to an application
+                    // with no key window — it has no first responder, measured
+                    // three times, `postToPid` to a verified-live victim
+                    // included. `AXSelectedText` needs none. The tap translates
+                    // the keycode (pure, layout only) and hands it on; nothing
+                    // that can block runs here.
+                    if type == .keyDown { insert(text, code: code) }
+                    return swallow("the keyboard guard (queued for Accessibility)", type, event)
                 } else {
                     // Return, Tab, the arrows, Delete: nothing to insert, so the
-                    // key goes by the only other route there is. Best effort, and
-                    // said to be.
-                    event.postToPid(target)
-                    if type == .keyDown {
-                        Log.info("⌨️ key \(code) → pid \(target) as a key, best effort (#\(countRedirect())) — not a printable character")
-                    }
-                    return swallow("the keyboard guard (re-posted, non-printable)", type, event)
+                    // key goes by the only other route there is — on the same
+                    // queue, to keep its place in the order he typed.
+                    if type == .keyDown { repost(event, code: code) }
+                    return swallow("the keyboard guard (queued, non-printable)", type, event)
                 }
             }
         }

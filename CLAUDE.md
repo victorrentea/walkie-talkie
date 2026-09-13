@@ -250,6 +250,7 @@ sits at rest there.
   | `WT_SCRATCHPAD_REDIRECT_KEYS=0` | stop re-posting his keystrokes while Wispr's window is up |
   | `WISPR_SCRATCHPAD_KEYS=79` | override the *Open Scratchpad* chord (the same variable `helpers/wispr_loopback.py` reads) |
   | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
+  | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — on by default, `POST /test/ax-insert` at runtime |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
   | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
 - **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord
@@ -286,7 +287,12 @@ sits at rest there.
   character goes in through `AXSelectedText`, not as a key** (2026-09-14) — an app that is
   frontmost with no key window has no first responder, so a character delivered by any key route is
   dropped, and ⌘V only survives because `performKeyEquivalent` needs none. Return, Tab, the arrows
-  and Delete still go by `postToPid`, best effort. The target pid and the focused element are both
+  and Delete still go by `postToPid`, best effort. The insertion happens on a **serial queue off
+  the tap thread** (200 ms per character; a character that misses it is logged as lost), because an
+  AX round trip inside the tap's callback stalls every keystroke on the Mac — and because
+  `TISGetInputSourceProperty`, which the keycode translation needs, **asserts the main thread and
+  traps**: the layout is cached by `refreshKeyboardLayout` and the tap touches only a `Data`.
+  Measured 7/7 letters into the victim. `WT_SCRATCHPAD_AX_INSERT=0` turns it off. The target pid and the focused element are both
   resolved **at the keystroke** (a remembered pid can be dead), and the swallow is gated strictly
   on the Scratchpad window reporting `AXFocused == true` — anything else passes the key through.
   `keyRedirect` counts `seen` / `redirectedAX` / `redirectedKey` / `passed`.

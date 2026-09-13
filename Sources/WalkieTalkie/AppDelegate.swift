@@ -737,6 +737,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHotkey = { [weak self] in
             DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
         }
+        picker.onTestAXInsert = { on in
+            HotkeyTap.axInsert = on
+            return ["axInsert": on]
+        }
         picker.onTestKeyTrace = { on in
             HotkeyTap.keyTrace = on
             return ["keyTrace": on]
@@ -2990,6 +2994,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // check should read the state rather than infer it from the damage.
             "sessionFlags": HotkeyTap.sessionModifierNames(),
             "keyTrace": HotkeyTap.keyTrace,
+            "axInsert": HotkeyTap.axInsert,
             "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
                             "pid": Int(hotkeys.keyRedirect.pid),
                             "seen": hotkeys.keyRedirect.seen,
