@@ -468,6 +468,11 @@ class Result:
     #: guard a known-good behaviour: the hypothesis this run supports. It is the
     #: payload of such a run — the ✓/✗ rows only say the harness worked.
     answer: str = ""
+    #: Set when a second process was seen typing this run's probe letters.
+    #: **Not a failure — an abort.** A contaminated run has no verdict to give:
+    #: every letter it reports may be somebody else's, so colouring the row red
+    #: would file a measurement that was never made.
+    contaminated: str = ""
 
     def check(self, ok: bool, label: str, measured) -> bool:
         if self.dry:
@@ -2504,15 +2509,22 @@ def scenario_scratchpad_hold(ctx) -> Result:
 LOCK_PATH = os.path.join(HOME, ".walkie-talkie", "wispr-loop.lock")
 
 
-def _lock_holder() -> int | None:
-    """The pid in the lockfile, if that process is still alive."""
+def _lock_holder() -> tuple[int, str] | None:
+    """`(pid, started)` of the live lock holder, or None.
+
+    The start time is in the refusal because "another runner is going" is not
+    actionable and "pid 76300, since 02:18:41" is: it says whether to wait a
+    minute or go and find a process that died without letting go.
+    """
     try:
-        pid = int(open(LOCK_PATH, encoding="utf-8").read().split()[0])
+        parts = open(LOCK_PATH, encoding="utf-8").read().split(None, 1)
+        pid = int(parts[0])
+        started = parts[1].strip() if len(parts) > 1 else "unknown"
     except Exception:
         return None
     try:
         os.kill(pid, 0)
-        return pid
+        return pid, started
     except Exception:
         return None
 
@@ -2533,8 +2545,8 @@ def take_runner_lock() -> tuple[bool, str]:
     is prevented instead.
     """
     holder = _lock_holder()
-    if holder and holder != os.getpid():
-        return False, "pid %d is already running a scenario" % holder
+    if holder and holder[0] != os.getpid():
+        return False, "pid %d has been running a scenario since %s" % holder
     try:
         os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
         with open(LOCK_PATH, "w", encoding="utf-8") as handle:
@@ -2545,7 +2557,8 @@ def take_runner_lock() -> tuple[bool, str]:
 
 
 def release_runner_lock():
-    if _lock_holder() == os.getpid():
+    holder = _lock_holder()
+    if holder and holder[0] == os.getpid():
         try:
             os.remove(LOCK_PATH)
         except Exception:
@@ -2688,6 +2701,7 @@ def _wrap_run(ctx, destination: str) -> Result:
             import wispr_loopback as wl
 
             codes = dict(wl.PROBE_LETTERS)
+            wanted_codes = {codes[c] for c, _o, _d in probe_schedule(offsets, seconds)}
             for char, offset, delay in probe_schedule(offsets, seconds):
                 code = codes[char]
                 probes.append((char, offset))
@@ -2704,6 +2718,16 @@ def _wrap_run(ctx, destination: str) -> Result:
                         # invisible to any sample taken either side.
                         focus_at_probe[ch] = focused_element()
                         wl.tap_key(kc)
+                        # **Checked at every keystroke, not at the end.** A run
+                        # that discovers contamination in its summary has already
+                        # spent four minutes measuring somebody else's typing.
+                        mine = os.getpid()
+                        for keycode, pids in probe_keys_in_trace(mark.lines()).items():
+                            others = pids - {mine}
+                            if keycode in wanted_codes and others:
+                                result.contaminated = (
+                                    "key %d was also posted by pid %s — another runner is on this Mac"
+                                    % (keycode, ", ".join(str(x) for x in sorted(others))))
                         # And what the document held a moment afterwards. A
                         # letter that arrives and is then wiped — by a ⌘A, an
                         # undo, a selection the watcher left behind — looks
@@ -2745,6 +2769,8 @@ def _wrap_run(ctx, destination: str) -> Result:
                      "after %.1f s — windows now %s"
                      % (closed_after, [] if relay.dry_run else wispr_windows()))
 
+        if result.contaminated:
+            return result
         if probe_deadline and not relay.dry_run:
             remaining = probe_deadline - time.monotonic()
             if remaining > 0:
@@ -2753,6 +2779,8 @@ def _wrap_run(ctx, destination: str) -> Result:
 
         seen = [] if relay.dry_run else focus.stop()
         result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
+        if result.contaminated:
+            return result
         if not relay.dry_run:
             appeared = {n for n, _ in textedit_documents()} - docs_before
             result.check(not appeared, "no other TextEdit document appeared during the run",
@@ -3432,7 +3460,9 @@ def render(result: Result, verbose: bool = False) -> str:
     if verbose and result.log:
         out += ["", "  relay.log ─────────────────────────────────"]
         out += ["  " + line for line in result.log]
-    if result.dry:
+    if result.contaminated:
+        verdict = "ABORTED — %s" % result.contaminated
+    elif result.dry:
         verdict = "DRY RUN — nothing was posted and nothing was asserted"
     else:
         verdict = "PASS" if result.passed else "FAIL"
@@ -3721,6 +3751,16 @@ def main(argv):
                 options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss,
                          "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
                                            if x.strip()]}))
+            if results[-1].contaminated:
+                break
+
+    spoiled = [r for r in results if r.contaminated]
+    if spoiled:
+        print("\n" + "═" * 72, file=sys.stderr)
+        print("⚠️  RUN ABORTED — %s" % spoiled[0].contaminated, file=sys.stderr)
+        print("   A contaminated run has no verdict: any letter it reports may be", file=sys.stderr)
+        print("   somebody else's. Nothing below %r was run." % spoiled[0].scenario, file=sys.stderr)
+        print("═" * 72 + "\n", file=sys.stderr)
 
     if victors_binding and args.leave_unbound:
         # Asked for explicitly, and safe in the one direction that matters: it
