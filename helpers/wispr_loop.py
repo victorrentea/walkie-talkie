@@ -1061,7 +1061,8 @@ def notes_diff(before: dict, after: dict) -> list[dict]:
                 changes.append(dict(row, table=table, id=key, change="new"))
             elif row != old[key]:
                 changes.append(dict(row, table=table, id=key, change="modified",
-                                    was=(old[key].get("content") or "")[:80]))
+                                    was=(old[key].get("content") or "")[:80],
+                                    was_full=old[key].get("content") or ""))
     return changes
 
 
@@ -1136,6 +1137,24 @@ def _await_scratchpad_closed(timeout: float = 3.0) -> tuple[bool, float]:
     """
     got, waited = wait_for(lambda: wispr_windows() == ["Status"], timeout, poll=0.1)
     return bool(got), waited
+
+
+def added_portion(changes: list[dict]) -> str:
+    """The text a changed note **gained** — which is exactly what gets delivered.
+
+    `🗒️ wispr scratchpad: note … (typed) — N chars` is the relay saying it took
+    the newly added portion and nothing else, so the delivered string is
+    reconstructible here without guessing: the note's content after, minus its
+    content before. A new note contributes all of itself.
+    """
+    parts = []
+    for change in changes:
+        if change.get("table") != "notes":
+            continue
+        after = change.get("content") or ""
+        before = change.get("was_full") or ""
+        parts.append(after[len(before):] if after.startswith(before) else after)
+    return "".join(parts)
 
 
 def _count_occurrences(haystack: str, needle: str) -> int:
@@ -2146,14 +2165,24 @@ def _wrap_run(ctx, destination: str) -> Result:
         # while Wispr writes the note; if it takes the keyboard, this `x` lands
         # there instead of in the document Victor was typing into — which is the
         # failure he would notice first and forgive last.
-        typed_probe = destination in ("caret", "bound")
-        if typed_probe and not relay.dry_run:
-            import threading
+        # **One distinct letter per offset**, so a single run maps *when* a
+        # keystroke is taken rather than only *whether*. The default is the one
+        # letter the plain scenarios have always typed.
+        typed_probe = destination in ("caret", "bound", "spawn")
+        offsets = ctx.options.get("probe_offsets") or [1.5]
+        probes: list[tuple[str, float]] = []
+        if typed_probe:
             import wispr_loopback as wl
-            threading.Timer(1.5, wl.tap_key).start()
-            result.note("a `z` will be typed 1.5 s after the stop gesture")
-        elif typed_probe:
-            print("   · CGEventPost `z` 1.5 s after the stop gesture")
+
+            for (char, code), offset in zip(wl.PROBE_LETTERS, offsets):
+                probes.append((char, offset))
+                if relay.dry_run:
+                    print("   · CGEventPost `%s` %.1f s after the stop gesture" % (char, offset))
+                else:
+                    import threading
+                    threading.Timer(offset, wl.tap_key, args=(code,)).start()
+            result.note("probe letters: %s"
+                        % ", ".join("`%s` at %.1fs" % (c, o) for c, o in probes))
 
         settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
         result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
@@ -2214,10 +2243,12 @@ def _wrap_run(ctx, destination: str) -> Result:
             # `z` is in neither the sentence nor the note, so one anywhere is
             # this rig's. In the victim: the keyboard stayed where Victor left
             # it. In the note: the Scratchpad took it.
-            in_victim = PROBE_CHAR in victim_text.lower()
-            in_note = any(PROBE_CHAR in (c.get("content") or "").lower()[-40:] for c in changes)
+            chars = [c for c, _ in probes] or [PROBE_CHAR]
+            tail = "".join((c.get("content") or "")[-200:] for c in changes).lower()
+            in_victim = all(ch in victim_text.lower() for ch in chars)
+            in_note = any(ch in tail for ch in chars)
             result.check((in_victim and not in_note) or relay.dry_run,
-                         "the `z` typed mid-settle reached the victim, not the Scratchpad",
+                         "every probe letter reached the victim, none the Scratchpad",
                          "victim=%s note=%s — %r" % (in_victim, in_note, victim_text[:70]))
         elif destination == "bound":
             typed, _ = wait_for(lambda: _read(sink_file).strip(), timeout=10, poll=0.25,
@@ -2231,15 +2262,13 @@ def _wrap_run(ctx, destination: str) -> Result:
                          "%d chars — %r" % (len(typed or ""), (typed or "")[:60]))
             # Here the victim should hold **only** the probe: the sentence went
             # to the tty, so anything else in it is a leak.
-            result.check(victim_text.strip() == PROBE_CHAR or relay.dry_run,
-                         "the victim holds the `z` and nothing else",
-                         "%r" % victim_text[:60])
-            result.check(PROBE_CHAR not in (typed or "").lower() or relay.dry_run,
-                         "the `z` did not go to the bound tty", "%r" % (typed or "")[:60])
-            result.check(not any(PROBE_CHAR in (c.get("content") or "").lower()[-40:]
-                                 for c in changes) or relay.dry_run,
-                         "the `z` did not go into the note",
-                         "; ".join((c.get("content") or "")[-40:] for c in changes) or "—")
+            chars = [c for c, _ in probes] or [PROBE_CHAR]
+            result.check(_count_occurrences(victim_text, want) == 0 or relay.dry_run,
+                         "the sentence did not leak into the victim", "%r" % victim_text[:60])
+            result.check(all(ch in victim_text.lower() for ch in chars) or relay.dry_run,
+                         "every probe letter reached the victim", "%r" % victim_text[:60])
+            result.check(not any(ch in (typed or "").lower() for ch in chars) or relay.dry_run,
+                         "no probe letter went to the bound tty", "%r" % (typed or "")[:60])
         elif destination == "spawn":
             spawned = [r for r in rows
                        if str(((r.get("delivery") or {}).get("to")) or "").startswith("spawn:")]
@@ -2258,6 +2287,36 @@ def _wrap_run(ctx, destination: str) -> Result:
         # `formatted`) and is closed again before the relay delivers. The actual
         # number is printed either way — a bar nobody can see the distance to is
         # not a measurement.
+        # ── where did each probe letter end up? ────────────────────────
+        if probes and not relay.dry_run:
+            delivered = added_portion(changes)
+            note_tail = "".join((c.get("content") or "")[-200:] for c in changes)
+            if destination == "bound":
+                landed_in = _read(sink_file)
+            elif destination == "spawn":
+                landed_in = " ".join(str(r.get("text") or r.get("line") or "") for r in rows)
+            else:
+                landed_in = victim_text
+            lost = []
+            for char, offset in probes:
+                where = {
+                    "victim": char in victim_text.lower(),
+                    "note": char in note_tail.lower(),
+                    "delivered": char in delivered.lower(),
+                    "destination": char in landed_in.lower(),
+                }
+                if not any(where.values()):
+                    lost.append(char)
+                result.note("probe `%s` @ %.1fs → %s"
+                            % (char, offset,
+                               ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing"))
+            # A letter in the note is a letter the Scratchpad took off Victor.
+            stolen = [c for c, _ in probes if c in note_tail.lower()]
+            result.check(not stolen, "no probe letter was taken by the Scratchpad",
+                         "taken: %s" % (", ".join(stolen) or "none"))
+            if lost:
+                result.note("letters that reached nothing at all: %s" % ", ".join(lost))
+
         _assert_ring(result, t, budget_ms=4000)
         result.note("Wispr done → words landed: %s"
                     % ("%d ms" % t.done_to_landed_ms if t.done_to_landed_ms is not None else "—"))
@@ -2617,6 +2676,10 @@ def main(argv):
     ap.add_argument("--scratch", default="/tmp", help="where the bound scenario's sink file goes")
     ap.add_argument("--json", action="store_true", help="the same result, machine-readable")
     ap.add_argument("--verbose", action="store_true", help="every relay.log line the run produced")
+    ap.add_argument("--probe-offsets", default="", metavar="S1,S2,…",
+                    help="wrap-*: type one distinct letter at each of these many seconds after "
+                         "the stop gesture (e.g. 0.3,0.8,1.5,2.5,4) and report where each one "
+                         "ended up. Default: a single letter at 1.5 s")
     ap.add_argument("--dismiss-delay", type=int, default=0, metavar="MS",
                     help="dismiss-before-paste: how long after `formatted` to post Wispr's ⌃Escape")
     ap.add_argument("--no-dismiss", action="store_true",
@@ -2651,7 +2714,9 @@ def main(argv):
             results.append(run_scenario(
                 name, port, args.device, args.wav, args.transcript, args.scratch,
                 args.dry_run, args.verbose, run_index=index,
-                options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss}))
+                options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss,
+                         "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
+                                           if x.strip()]}))
 
     if args.json:
         print(json.dumps({"pass": all(r.passed for r in results),

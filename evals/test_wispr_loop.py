@@ -360,6 +360,42 @@ class WrapMode(unittest.TestCase):
         self.assertEqual(wl._count_occurrences("anything at all", ""), 0)
 
 
+class ProbeLetters(unittest.TestCase):
+    """The multi-letter probe: one letter per offset, so one run maps the window."""
+
+    def test_no_probe_letter_appears_in_the_fixture(self):
+        """A letter the sentence already carries answers the same either way —
+        which is how the first `x` probe produced an unreadable run."""
+        import wispr_loopback
+        said = wl.normalise(wl.fixture_for("caret-short")["transcript"])
+        for char, _code in wispr_loopback.PROBE_LETTERS:
+            self.assertNotIn(char, said, "%r is in the fixture" % char)
+
+    def test_the_letters_are_distinct(self):
+        import wispr_loopback
+        chars = [c for c, _ in wispr_loopback.PROBE_LETTERS]
+        self.assertEqual(len(chars), len(set(chars)))
+
+    def test_there_are_enough_letters_for_the_asked_for_offsets(self):
+        import wispr_loopback
+        self.assertGreaterEqual(len(wispr_loopback.PROBE_LETTERS), 5)
+
+    def test_the_delivered_portion_is_what_the_note_gained(self):
+        """The relay delivers the newly added part, so that is what a letter has
+        to be found in to have been folded into somebody's sentence."""
+        changes = [{"table": "notes", "content": "old text NEW BIT", "was_full": "old text "}]
+        self.assertEqual(wl.added_portion(changes), "NEW BIT")
+
+    def test_a_brand_new_note_contributes_all_of_itself(self):
+        changes = [{"table": "notes", "content": "all of it", "change": "new"}]
+        self.assertEqual(wl.added_portion(changes), "all of it")
+
+    def test_versions_rows_do_not_double_count(self):
+        changes = [{"table": "notes", "content": "ab", "was_full": "a"},
+                   {"table": "versions", "content": "ab", "was_full": "a"}]
+        self.assertEqual(wl.added_portion(changes), "b")
+
+
 class Scratchpad(unittest.TestCase):
     """The parts of `scratchpad-hold` that can be wrong without anyone noticing."""
 

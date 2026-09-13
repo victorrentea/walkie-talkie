@@ -408,6 +408,23 @@ sentence. In `wrap-caret` it looks like the probe "arrived" — it did, but by t
 paste, not from his keyboard; `wrap-bound` removes the ambiguity, because there
 the victim stays empty and the `z` turns up in the bound tty.
 
+**`--probe-offsets 0.3,0.8,1.5,2.5,4` maps the theft window in one run.** One
+**distinct** letter per offset — `q z j k w`, none of which appears in the
+fixture or in anything the formatting pass adds — so a letter found anywhere is
+this rig's and its offset is known without running the scenario five times. Per
+letter the run reports **victim / note / delivered / destination**, or `LOST —
+reached nothing`, and asserts that **no letter was taken by the Scratchpad**.
+
+*Delivered* is reconstructed rather than guessed: the relay's own line says it
+takes the note's newly added portion (`🗒️ wispr scratchpad: note … (typed) — N
+chars`), so `added_portion()` is the note's content after minus its content
+before. A letter in there is a letter that was folded into somebody's sentence.
+
+`wrap-spawn` carries the probe too. Its Terminal only comes forward at delivery,
+so the letters should reach the victim; landing in the **new Terminal** instead
+is acceptable — Victor would see them — but it must not be a surprise, so the run
+says which.
+
 **Use `z`, not `x`.** The fixture is *"Commit and push the fix."* — which already
 contains an `x`, so counting `x` cannot tell "my keystroke reached the document"
 from "the delivered sentence brought its own". The first run of this probe was
