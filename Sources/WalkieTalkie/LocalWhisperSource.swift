@@ -113,7 +113,8 @@ final class LocalWhisperSource: DictationSource {
                 DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt))
                 self.didTranscribe?(DictationResult(
                     text: r.text, language: r.language, audio: wav, duration: duration,
-                    engine: "whisper-local", warning: Self.warning(for: r), delivery: .route))
+                    engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
+                    via: "local-whisper"))
                 self.didEnd?(.delivered)
             }
         }

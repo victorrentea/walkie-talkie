@@ -134,7 +134,11 @@ final class WisprFlowSource: DictationSource {
     private static let speculativeGrace: TimeInterval = 12
 
     /// The microphone closed and the words have not arrived.
-    private var capturing = false
+    ///
+    /// `private(set)` since 2026-09-13 so `GET /test/state` can say whether the
+    /// swallow window is armed — the 2.5 s Word dictation failed precisely
+    /// because it never was, and nothing outside this file could see that.
+    private(set) var capturing = false
     private var captureFrom: CFAbsoluteTime = 0
     private var captureDeadline: DispatchWorkItem?
     private var clipboardWatch: Timer?
@@ -184,7 +188,10 @@ final class WisprFlowSource: DictationSource {
     /// the completion signal for a delivery the tap cannot see. Taken at the
     /// microphone's close as the newest row whose `startedAt` is this
     /// dictation's; polled every `historyTick` while capturing.
-    private var historyRow: Int64?
+    /// `private(set)` for `GET /test/state`: *is Wispr's own row being polled,
+    /// and which one* is the difference between a settle that will end on its
+    /// own and one that will sit out `settleTimeout`.
+    private(set) var historyRow: Int64?
     private var historyPoll: Timer?
     /// When the row said `formatted`, so the ⌘V that normally follows gets
     /// `pasteGrace` to arrive before the text is taken from the row instead.
@@ -336,6 +343,7 @@ final class WisprFlowSource: DictationSource {
             self.speculative = false
             self.isRecording = false
             self.stopMeter(keep: false)
+            RingDown.note("no microphone within \(Int(Self.speculativeGrace)) s of the hotkey — Wispr ignored the chord")
             Log.info(String(format: "⚡ ring down: no microphone within %.0f s of the hotkey — Wispr ignored the chord",
                             Self.speculativeGrace))
             self.didEnd?(.silent(""))
@@ -489,7 +497,7 @@ final class WisprFlowSource: DictationSource {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 guard let self, self.capturing else { return }
                 self.deliver(reason: "the pasteboard moved but no ⌘V was seen",
-                             delivery: .alreadyInserted)
+                             via: "pasteboard", delivery: .alreadyInserted)
             }
         }
         clipboardWatch = t
@@ -542,7 +550,8 @@ final class WisprFlowSource: DictationSource {
             }
             guard CFAbsoluteTimeGetCurrent() - historyFormattedAt >= Self.pasteGrace else { return }
             Log.info("wispr history: no ⌘V and no pasteboard after \(e.status) — Wispr inserted it into \(e.app) by a route the tap cannot see")
-            deliver(reason: "Wispr's History row", delivery: .insertedElsewhere, text: e.pastedText)
+            deliver(reason: "Wispr's History row", via: "wispr-history",
+                    delivery: .insertedElsewhere, text: e.pastedText)
         case "dismissed":
             Log.info(String(format: "wispr history: dismissed — %.0f ms after the microphone closed", took))
             endCapture(quiet: true)
@@ -565,7 +574,8 @@ final class WisprFlowSource: DictationSource {
         Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed%@",
                         process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000,
                         wrapWispr ? " (taken)" : " (let through)"))
-        deliver(reason: "Wispr's ⌘V", delivery: wrapWispr ? .route : .alreadyInserted)
+        deliver(reason: "Wispr's ⌘V", via: "wispr-cmdv",
+                delivery: wrapWispr ? .route : .alreadyInserted)
     }
 
     private func captureExpired() {
@@ -586,16 +596,22 @@ final class WisprFlowSource: DictationSource {
             return
         }
         if NSPasteboard.general.changeCount != clipboardAt {
-            deliver(reason: "copy_last_text", delivery: wrapWispr ? .route : .alreadyInserted)
+            deliver(reason: "copy_last_text", via: "pasteboard",
+                    delivery: wrapWispr ? .route : .alreadyInserted)
             return
         }
         endCapture(quiet: true)
         didEnd?(.silent("No words came back"))
     }
 
+    /// - Parameter via: the route, in the one word `outbox.jsonl` and
+    ///   `GET /test/state` record it under. `reason` above is prose for the log;
+    ///   this is the same fact in a form a test can assert on — see
+    ///   `DictationResult.via`.
     /// - Parameter text: the words, when they did not come through the
     ///   pasteboard — Wispr's own row. The pasteboard otherwise.
-    private func deliver(reason: String, delivery: DictationDelivery, text given: String? = nil) {
+    private func deliver(reason: String, via: String, delivery: DictationDelivery,
+                         text given: String? = nil) {
         guard capturing else { return }
         let text = (given ?? NSPasteboard.general.string(forType: .string) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -625,7 +641,8 @@ final class WisprFlowSource: DictationSource {
                     // to know, and the engine name is where it is said.
                     engine: "wispr-flow",
                     warning: nil,
-                    delivery: delivery))
+                    delivery: delivery,
+                    via: via))
                 self.didEnd?(.delivered)
             }
         }

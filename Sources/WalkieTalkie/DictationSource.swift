@@ -122,6 +122,17 @@ struct DictationResult {
     let warning: String?
     /// Whether the relay still has to put these words somewhere.
     let delivery: DictationDelivery
+    /// **Which of the recogniser's delivery routes produced this text** —
+    /// `wispr-cmdv`, `wispr-history`, `pasteboard`, `local-whisper` (2026-09-13).
+    ///
+    /// It is recorded and never branched on, which is why it is a string and not
+    /// an enum: the router's question is `delivery` above, and this one is only
+    /// ever read back from `outbox.jsonl` and `GET /test/state`. It exists
+    /// because the `🗣️ wispr transcript via …` line in `relay.log` was the only
+    /// place the answer lived, and a log line is not something a test can assert
+    /// against — on 2026-09-13 two failures turned on precisely which route
+    /// delivered, and by then the log was the only witness.
+    let via: String
 }
 
 /// **Who inserts the text.**

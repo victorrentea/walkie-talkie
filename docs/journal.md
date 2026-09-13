@@ -205,6 +205,7 @@ The journal contradicts itself over time, because it was written as things chang
   - [Only the installed bundle is a login item (2026-09-12)](#only-the-installed-bundle-is-a-login-item-2026-09-12)
 - [Wispr's own row says when it is done (2026-09-12)](#wisprs-own-row-says-when-it-is-done-2026-09-12)
 - [The shots clause becomes a list, and the folder becomes $WALKIE_SHOTS (2026-09-13)](#the-shots-clause-becomes-a-list-and-the-folder-becomes-walkie_shots-2026-09-13)
+- [The loopback closes: gestures, state, a sink and a delivery field (2026-09-13)](#the-loopback-closes-gestures-state-a-sink-and-a-delivery-field-2026-09-13)
 
 ---
 
@@ -8004,3 +8005,183 @@ ships a path the agent cannot open — which is the one thing worth knowing befo
 The context frame's own clause keeps its brackets and its wording; only the folder in it is
 abbreviated the same way. `evals/variants.py` still renders the pre-2026-09-13 shape on purpose:
 its fixtures are real files in a temp directory, where `$WALKIE_SHOTS` would resolve to nothing.
+
+## The loopback closes: gestures, state, a sink and a delivery field (2026-09-13)
+
+Two dictations went wrong on 2026-09-13 and neither could be reproduced at a desk, which is
+the fact this section is really about.
+
+The first was 2.5 seconds of talking into Word. `WisprWatch` reads one CoreAudio boolean about
+another process's input and it is 0–6 s late; worse, it publishes an edge only when the value
+it re-reads *differs* from the last one, so a dictation shorter than its own lag produces no
+open edge and no close edge at all. Everything the wrap hangs off `didStopListening` —
+`beginCapture`, the swallow window, the `History` poll, the settle — is armed from that close.
+None of it ran. Wispr pasted straight into Word with its own ⌘V, the relay never saw a thing,
+and the ring stood for twelve seconds until `speculativeGrace` gave up and wrote *Wispr ignored
+the chord* about a sentence that had in fact been delivered.
+
+The second was a 🔼↑ spawn. The first click stopped the microphone; the close edge came three
+seconds late, set `listening = false` and entered the settle; a second 🔼 click landed inside
+that settle, and `onPasteToggle` asks only about `listening`, so it **started a second
+dictation**. `gestureSeen` then called `endCapture(quiet: true)` and disarmed the first
+sentence's swallow window. Wispr's ⌘V arrived a second later and landed in the Terminal that
+happened to be in front. The chip spent twelve seconds on a dictation that did not exist.
+
+The fixes are not here. What is here is the apparatus that makes both of those reproducible
+without a hand on the mouse and assertable without a pair of eyes, because the common half of
+the two failures is that **nothing outside the process could see what had gone wrong**. Four
+pieces.
+
+**`POST /test/gesture {"name": …}`.** Every side-button gesture reaches this app as a keystroke
+and nothing else — Options+ diverts the button inside the mouse and emits ⌃⌥⌘ plus a function
+key (*The side buttons speak in function keys*). So the honest way to fake one is to post that
+chord, and `HotkeyTap.postGesture` does exactly that: `keyDown` + `keyUp` at `.cghidEventTap`,
+flags `control|alternate|command`, stamped with `backButtonStamp`. It enters the tap's
+`useLogiGestures && ctrl && opt && cmd` branch by the same door a real gesture does, and every
+guard on the way runs as it would for his hand.
+
+Three things about it are worth writing down. **The app's own tap sees the post**, which is what
+the whole route rests on: the tap is created at `.cgSessionEventTap` and the post is at
+`.cghidEventTap`, one level below it, so the event climbs through the session tap on its way to
+the front app — the same property `postWisprHandsFree` has relied on since 2026-09-12.
+Measured, not assumed: with a dictation open, `POST /test/gesture {"name":"forward-left"}` put
+`🖱️ POST /test/gesture forward-left — posting ⌃⌥⌘F11` in the log and
+`🗑️ dictation cancelled via ⬅️ forward button flicked left` immediately under it — byte for
+byte the line a real 🔼← writes. **The stamp does not hide it**: the gesture branch never looks
+at `backButtonStamp`; the two branches that do are the injection swallow and the probe, which
+is precisely where this app's own keystrokes must not be counted as another app's delivery, so
+stamping is strictly quieter and changes nothing about what fires. And **it is an instance
+method, not a static one** beside its siblings, on purpose: `VK_F3…VK_F12` are instance
+constants of `HotkeyTap` and a static poster cannot see them. A second table of the same ten
+keycodes is exactly the drift *The numbers are duplicated in two places and must not drift*
+warns about, so the poster reaches for the originals instead — the ten names map onto the same
+`let`s the switch cases read.
+
+One sub-case is not fakeable and says so in the route table: ⌃⌥⌘F7 with the left button
+genuinely held is the **bind** chord, and `leftIsHeld` asks the window server whether a physical
+button is down. Nothing posted can make that true, so `forward-click` from the loopback is
+always the caret dictation.
+
+**`GET /test/state`.** One read, everything an assertion needs, and it changes nothing. The two
+flags that would have named both failures on sight are in it: `capturing`, which was false
+through the whole Word dictation while `listening` was true, and `settling`, which was true when
+the second click arrived. Beside them, `speculative`, `isRecording` (the source's microphone,
+which is not `listening`), `ringUp`, the chip's rows as strings, the latched destination
+(`pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound`), `historyRow`, `source`,
+`wrapWispr`, `sinkOpen`, `lastRingDown` and `lastDelivery`. Timestamps are ISO-8601 **with
+milliseconds** — the outbox line's own `ts` stays at second resolution, because it is documented
+by name in the `relay` skill, and because a second cannot order a settle against the click that
+landed inside it.
+
+Almost none of this is new state. What the route cost is `private(set)` on three flags
+(`WisprFlowSource.capturing`, `WisprFlowSource.historyRow`, `CaretHalo.live`) and one accessor
+on the overlay: `RelayWindow.renderedRows`, filled at the end of `layoutContent` from the rows
+that were just laid out rather than re-derived from the state that produced them — so a test
+asserts what is on screen and not what was meant to be. Glyphs are not in it: a row is an image
+view beside a label and the image is `Glyphs`' own rendering, so what survives is the words,
+which is what an assertion is written against. At rest the chip is a lone 🎙️ and the array is
+empty; open a dictation and it reads `["Listening...", "🤖 /", "×1"]`.
+
+The read hops to the main thread and waits on a semaphore, for `onTestDictationStart`'s reason:
+the chip and the halo are AppKit's and the listener queue is not, and that asymmetry took the
+app down with a `SIGTRAP` the first time it was ignored. Two seconds, then it answers with an
+error rather than hanging the listener.
+
+**The `delivery` field.** `🗣️ wispr transcript via …` was the only place the answer lived, and a
+log line is not something a test can assert on. So `DictationResult` grew a `via` — `wispr-cmdv`,
+`wispr-history`, `pasteboard`, `local-whisper`, `test` — which is recorded and never branched on
+(the router's question is still `delivery`), and `commit` writes
+`{"via", "kind", "to", "at"}` into the outbox line beside the words.
+
+The half that matters is the half that writes **no** outbox line: a caret paste, a sentence
+Wispr had already inserted (`.alreadyInserted`), one it inserted somewhere else
+(`.insertedElsewhere`), and a sentence held for a bind that has not landed. Those are recorded
+too, into `lastDelivery`, and they are the four cases the file could never name — which is
+exactly what happened on 09-13, when the words went into Word and into a Terminal that was
+merely in front. `to` is resolved at the moment of delivery and never remembered, the same rule
+the send flight runs on: `terminal:ttys002`, `caret`, `spawn:<folder>`, `held`. Verified on all
+four paths; the terminal one also appears in `outbox.jsonl`.
+
+**The sink — and it changed shape halfway through being written.** It started as a test
+instrument: a plain 500×200 window titled *Walkie sink* with an instrumented `NSTextView` in it,
+so `GET /test/sink` could answer *did anything leak into the front app, and by which route* with
+a list instead of a guess. Then Victor said what it is actually for, and it stopped being a
+throwaway window.
+
+His design: **only Wispr's transcription engine.** Walkie gives Wispr its inputs and takes its
+outputs synthetically, and Wispr never inserts into the real app at all. Under that the wrap
+stops being *swallow the ⌘V and hope* — which is precisely the mechanism that failed twice today,
+once because the swallow was never armed and once because a phantom sentence disarmed it — and
+becomes *hold the focus, catch the insertion by whatever route it arrives, hand the focus back,
+deliver the words ourselves*. The sink is that focus. So it is `WisprSink`, in its own file, with
+an API rather than a POST handler: `open` / `close`, `becomeKey` / `restoreFocus`, `text`,
+`events`, `clear`, and an `onArrival` callback.
+
+**The scope of that wrap is already fenced, and the fence is the interesting part.** It applies
+only to dictations *this app started* — its own chord, stamped `backButtonStamp` — and only while
+the **Wrap Wispr Flow** tick is on. A dictation Victor starts with his own keyboard shortcut is
+Wispr's and is left alone: taking the focus off him for one of those would be the app interfering
+with a tool he is using directly, which is a different thing from wrapping a dictation it asked
+for itself.
+
+**What is not yet known is the timing, and that is what the loop is for.** Nobody knows whether
+Wispr Flow picks the app it will insert into at the *chord* or at *insertion time*. The two give
+opposite instructions — hold the key window from the moment the dictation opens, or take it only
+at the stop gesture and give it back a moment later — and nothing in Wispr's config, its log or
+its AX tree says which. So `becomeKey()` and `restoreFocus()` are separate calls and
+`POST /test/sink {"key": true}` / `{"restore": true}` drive them separately, so the runner can
+measure both hypotheses against a real dictation. **Nothing on a real path calls the sink today**,
+and nothing may until that measurement exists.
+
+The window shrank with the change of purpose: 40×20, borderless, four points inside the
+bottom-left of the visible frame. Under the wrap it will be taking the keyboard during ordinary
+dictations, and a 500×200 panel appearing over his work every time he talks is not a thing that
+can ship. A borderless window can be any size at all — what it cannot be is *offscreen*, so it
+sits just inside the corner rather than beyond it, and `canBecomeKey` has to be overridden to
+true, which is the property that makes `RelayPanel` safe and the one this window must give up.
+40×20 was tried and takes key focus; 1×1 was not risked for an instrument whose whole job is to
+hold focus reliably. The level is `.normal`, not `.floating`, for the same reason it is not a
+panel: the question it answers is what an ordinary key window would have received.
+
+`becomeKey` remembers the frontmost application and — one `AXUIElementCopyAttributeValue` on the
+system-wide element, no traversal — the focused element, and `restoreFocus` puts both back. Two
+details that only showed up on the wire: it must **never record this app as the previous one**, or
+the restore re-activates the sink it is letting go of and the window still has the keyboard
+afterwards; and with nothing to go back to it calls `NSApp.deactivate` rather than `NSApp.hide`,
+because hiding would take the chip and the halo down with it, and those are the two things that
+must stay on screen through a dictation.
+
+The route attribution survived the rewrite unchanged, because it is the whole point: `paste`
+(⌘V), `ax:…` (an Accessibility write, named after whichever setter fired — `selectedText`,
+`value`, or a legacy attribute), `typed` (an `insertText` that was not a paste), `keyDown` (raw).
+A paste reaches `insertText` as well, so `paste(_:)` sets a flag first; without it every ⌘V would
+be reported twice, once honestly and once as though Wispr had typed it. `onArrival` is debounced
+150 ms after the last insertion, because two of the four routes arrive in pieces — an AX write
+can be a selected-text replace followed by a value set — and a wrap that delivered on the first
+fragment would deliver a third of the sentence.
+
+One thing it needed that nothing else in this app has ever needed: **the app has no Edit menu**,
+so a plain `NSTextView` would never receive ⌘V at all. `main.swift` installs the minimum a
+`.regular` app owes its menu bar — About, Hide, Quit — and nothing in it carries `paste:`. The one
+route the whole sink exists to catch would have arrived and done nothing, silently, which is the
+exact failure shape being tested for. So the view answers `performKeyEquivalent` for ⌘V itself,
+rather than the sink installing an Edit menu while it is up: the menu bar is Victor's, and a route
+that works by changing the app's menus would be testing the menus.
+
+**It is the one deliberate exception to *nothing in it ever calls `NSApp.activate`*.** That rule
+exists because a dictation helper that steals focus takes the caret away from the work it is
+meant to be typing into — and being the caret is precisely what this window has to do. The
+exception is fenced rather than argued away: the sink remembers whose keyboard it took and gives
+it back, nothing but a POST opens it today, and when it is wired in it will be for the app's own
+dictations only. It is not bindable — `bindFrontmostTerminal` asks Terminal, tmux and the two IDE
+bridges what is in front and this window belongs to none of them — and it cannot appear in
+`docs/states/`, because `RelayWindow.snapshot` photographs `root` directly and never enumerates
+the app's windows.
+
+Measured end to end: with the sink as the key window and Replace Wispr on, `POST /test/dictation`
+put `tiny sink check` in the view and
+`{"route":"paste","chars":15,"text":"tiny sink check","at":"…Z"}` in the event list, and
+`lastDelivery` read `{"via":"test","kind":"route","to":"caret"}`. `{"restore": true}` then gave
+the keyboard back (`key` false) and `{"key": true}` took it again, naming `Terminal` as the app it
+had come from. That is the 2026-09-13 caret failure, reproduced unattended and asserted on —
+which is the whole point.

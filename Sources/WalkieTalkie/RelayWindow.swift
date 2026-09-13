@@ -1960,10 +1960,47 @@ private let frontLabel = NSTextField(labelWithString: "")
                                            y: height - closeButton.frame.height - 6)
         refreshChrome()
         root.needsDisplay = true
+        // What the chip is saying, for `GET /test/state` — read off the rows
+        // that were just laid out rather than re-derived from the state that
+        // produced them, so a test asserts what is on screen and not what was
+        // meant to be.
+        renderedRows = rows.compactMap { Self.rowText($0.view) }
         // Last, and here rather than in each setter: every state change already
         // funnels through this method, and the rows it just assembled are the
         // evidence for whether the overlay belongs on screen at all.
         refreshPresence(rowCount: rows.count)
+    }
+
+    /// **The chip's current text rows** — one string per visible row, in the
+    /// order they are drawn. Main thread only; `GET /test/state` is the only
+    /// reader.
+    ///
+    /// Glyphs are not in it: a row is an image view beside a label, and the
+    /// image is `Glyphs`' own rendering rather than a character, so there is
+    /// nothing to put in a string. What survives is the words, which is what an
+    /// assertion is written against — `⏳ bind to send — ⌘⌃B`, `Listening…`,
+    /// `walkie-talkie@main`.
+    private(set) var renderedRows: [String] = []
+
+    /// Every label and button title under one row view, joined — the rows are
+    /// glyph-plus-label containers, not text fields, so the text has to be found
+    /// rather than asked for.
+    private static func rowText(_ view: NSView) -> String? {
+        var parts: [String] = []
+        func walk(_ v: NSView) {
+            if let field = v as? NSTextField {
+                let s = field.attributedStringValue.string.isEmpty
+                    ? field.stringValue : field.attributedStringValue.string
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { parts.append(t) }
+            } else if let button = v as? NSButton, !button.isHidden {
+                let t = button.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { parts.append(t) }
+            }
+            for sub in v.subviews where !sub.isHidden { walk(sub) }
+        }
+        walk(view)
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     // MARK: The recording row

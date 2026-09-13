@@ -405,7 +405,11 @@ final class CaretHalo {
     private var pulse: CALayer?
     private var monitors: [Any] = []
     private var timer: Timer?
-    private var live = false
+    /// **Is the ring on screen** — `private(set)` since 2026-09-13 so
+    /// `GET /test/state` can answer `ringUp` without a screenshot. On 2026-09-13
+    /// the ring stood for twelve seconds over a dictation that had already been
+    /// pasted into Word, and the only witness was Victor watching it.
+    private(set) var live = false
     /// A collapse in flight, and which one. The generation is what a `show`
     /// arriving mid-collapse invalidates: the panel is reused between
     /// dictations, so the delayed `orderOut` at the end of the old collapse

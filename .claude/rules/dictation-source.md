@@ -64,6 +64,30 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
 - **A new dictation closes a capture still standing**, or it takes the next sentence's ⌘V as this
   one's answer.
 
+## Testing
+
+- **The loopback has a closed feedback loop since 2026-09-13**, and the four routes are in CLAUDE.md's
+  *Testing at a desk* table. `POST /test/gesture {"name": …}` posts the ⌃⌥⌘F-key chord Options+ makes
+  for a mouse gesture, so the tap's gesture branch runs as it does for his hand (the F7 *bind* sub-case
+  needs a real held left button and is not fakeable). `GET /test/state` answers `listening`, `settling`,
+  `speculative`, `capturing`, `isRecording`, `ringUp`, the chip's rows and the latched destination in one
+  read. `POST /test/sink` opens `WisprSink` — 40×20, borderless, in a corner — as the key window, and
+  `GET /test/sink` says what landed in it and by which route. `DictationResult.via` names the delivery
+  route and lands in `outbox.jsonl`'s `delivery` field.
+- **`WisprSink` is the wrap's next shape, and is not wired into a real dictation yet.** Victor's design
+  (2026-09-13): only Wispr's transcription engine, Walkie feeding it its inputs and taking its outputs
+  synthetically, Wispr never inserting into the real app — **only for dictations this app started**
+  (`backButtonStamp`) and **only while *Wrap Wispr Flow* is on**. `becomeKey()` / `restoreFocus()` are
+  separate calls (`POST /test/sink {"key"|"restore": true}`) because it is not yet known whether Wispr
+  picks its target app at the chord or at insertion time, and the two answers give opposite
+  instructions. Do not wire it in before the loop has measured that.
+- **The two failures these exist for** (2026-09-13): a 2.5 s caret dictation into Word produced no
+  CoreAudio edge at all — `WisprWatch` is 0–6 s late and only publishes an edge when the value it
+  re-reads has changed — so `beginCapture` never armed and Wispr's ⌘V went straight into Word; and a
+  second 🔼 click landed inside the settle, where `onPasteToggle` asks only about `listening`, and
+  started a phantom dictation whose `gestureSeen` disarmed the first sentence's swallow window. Both are
+  invisible from outside the process, which is what `/test/state` is for.
+
 ## Do not
 
 - **Do not read Wispr Flow's database as a recogniser or a transcript fallback.** The 2026-08-29

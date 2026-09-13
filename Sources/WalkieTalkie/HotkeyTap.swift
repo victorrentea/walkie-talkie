@@ -1914,6 +1914,94 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
+    // MARK: - The mouse gestures, posted from a script
+
+    /// **One name per side-button gesture, and the chord Options+ makes for it.**
+    ///
+    /// The vocabulary is Victor's own (`🔼` forward, `🔽` back, plus a direction)
+    /// written out in words a shell can type. The keycodes are the *instance*
+    /// `VK_F*` above — not a second copy — which is the whole reason
+    /// `postGesture` is an instance method where `postWisprHandsFree` is static:
+    /// a static poster could not see them, and a duplicate table is exactly the
+    /// drift *The numbers are duplicated in two places and must not drift*
+    /// warns about.
+    ///
+    /// The three free rows are listed too. Options+ sends them and nothing here
+    /// claims them, so posting one must visibly do nothing — which is a fact
+    /// worth being able to assert rather than assume.
+    var gestureNames: [String] {
+        gestureVocabulary.map { $0.name }
+    }
+
+    private var gestureVocabulary: [(name: String, key: CGKeyCode, label: String, what: String)] {
+        [("forward-click", VK_F7,  "⌃⌥⌘F7",  "dictate at the caret — or bind, with the left button held"),
+         ("forward-right", VK_F10, "⌃⌥⌘F10", "start the dictation, or end the one open"),
+         ("forward-left",  VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
+         ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
+         ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "free row — assigned in Options+, unclaimed here"),
+         ("back-click",    VK_F6,  "⌃⌥⌘F6",  "a picture while dictating, Return otherwise"),
+         ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
+         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Wispr Flow's raw hands-free chord"),
+         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "free row — assigned in Options+, unclaimed here"),
+         ("back-up",       VK_F4,  "⌃⌥⌘F4",  "free row — assigned in Options+, unclaimed here")]
+    }
+
+    /// **Make a mouse gesture without a mouse** — `POST /test/gesture`.
+    ///
+    /// Every side-button gesture reaches this app as a keystroke and nothing
+    /// else: Options+ diverts the button inside the mouse and emits ⌃⌥⌘ + a
+    /// function key (*The side buttons speak in function keys*). So the honest
+    /// way to fake one is to post that chord, which is what this does — it
+    /// enters `handle`'s `useLogiGestures && ctrl && opt && cmd` branch by the
+    /// same door a real gesture does, and every guard on the way (the autorepeat
+    /// swallow, `reconcileButtons`, `leftIsHeld`) runs as it would for his hand.
+    ///
+    /// **The app's own tap sees it**, which is the property the whole route rests
+    /// on: the tap is created at `.cgSessionEventTap` and this posts at
+    /// `.cghidEventTap`, i.e. one level *below* it, so the event climbs through
+    /// the session tap on its way to the front app. `postWisprHandsFree` has
+    /// relied on exactly this since 2026-09-12 — the `fn ⌃ Space` it posts is
+    /// read back by this tap's own Wispr watcher a moment later.
+    ///
+    /// **Stamped with `backButtonStamp`, and that does not hide it.** The gesture
+    /// branch never looks at the stamp, so the chord is handled; the two branches
+    /// that *do* look at it are the injection swallow and the probe, which is
+    /// precisely where this app's own keystrokes must not be counted as another
+    /// app's delivery. Stamping is therefore strictly quieter and changes
+    /// nothing about what fires.
+    ///
+    /// **One sub-case is not fakeable and says so**: ⌃⌥⌘F7 with the left button
+    /// genuinely held is the *bind* chord, and `leftIsHeld` asks the window
+    /// server whether a physical button is down (`reconcileButtons`). Nothing
+    /// posted can make that true, so `forward-click` from here is always the
+    /// caret dictation.
+    ///
+    /// - Returns: the chord that went out, or nil for a name nobody knows.
+    @discardableResult
+    func postGesture(_ name: String) -> (label: String, what: String)? {
+        guard let g = gestureVocabulary.first(where: { $0.name == name }) else { return nil }
+        DispatchQueue.global().async {
+            // The same settle `postReturn` documents at length. Nothing here is
+            // posted from inside a tap callback, so the window server has no
+            // live ⌃⌥⌘ of its own to merge — but a caller that fires two
+            // gestures back to back is exactly the shape that trips it, and 45 ms
+            // is nothing to a test.
+            usleep(Self.settleForOptionsPlus)
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = Self.backButtonStamp
+            let held: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: g.key, keyDown: true),
+                  let up   = CGEvent(keyboardEventSource: source, virtualKey: g.key, keyDown: false)
+            else { return }
+            down.flags = held
+            up.flags = held
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+        Log.info("🖱️ POST /test/gesture \(name) — posting \(g.label)")
+        return (g.label, g.what)
+    }
+
 
     private func injectionArmedNow() -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }

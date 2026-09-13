@@ -3,6 +3,41 @@ import ServiceManagement
 import ApplicationServices
 import VictorMacKit
 
+/// **The last time the ring came down, and why** — written where the
+/// `⚡ ring down` line is, read by `GET /test/state`.
+///
+/// There are two such lines and they are in different files: the settle's, in
+/// `AppDelegate.endSettling`, and the one `WisprFlowSource` writes when a chord
+/// Wispr ignored has run out its `speculativeGrace`. On 2026-09-13 it was the
+/// second of those that fired twelve seconds after a 2.5 s dictation had already
+/// been pasted into Word — the ring had been standing over nothing the whole
+/// time — and the difference between the two is the whole diagnosis. A test that
+/// has to `grep` the log for it is a test that cannot say *which*.
+///
+/// Written from the main thread and from the source's own callbacks; read on the
+/// listener queue, hence the lock.
+/// A place for a main-thread answer to land, so the listener queue can wait for
+/// it without capturing a `var` across two threads.
+final class StateBox {
+    var value: [String: Any] = [:]
+}
+
+enum RingDown {
+    private static let lock = NSLock()
+    private static var value: (reason: String, at: Date)?
+
+    static func note(_ reason: String) {
+        lock.lock(); defer { lock.unlock() }
+        value = (reason, Date())
+    }
+
+    static var last: [String: Any]? {
+        lock.lock(); defer { lock.unlock() }
+        guard let v = value else { return nil }
+        return ["reason": v.reason, "at": Outbox.iso(v.at)]
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var overlay: RelayWindow!
@@ -488,6 +523,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// off `spawnFolder` at delivery: the menu that sets it is long gone by
         /// then, and a second dictation may have chosen differently since.
         var directory: String = AppDelegate.spawnDirectory
+        /// **Which route the recogniser delivered by** (`DictationResult.via`),
+        /// carried here for the same reason `spawn` is: the outbox line is
+        /// written at `commit`, seconds after the words arrived, and by then the
+        /// next dictation may have started. Recorded, never acted on.
+        var via: String = "test"
+        /// …and what the source said about who had already inserted it.
+        var deliveryKind: DictationDelivery = .route
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -954,6 +996,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.setListening(false)
                     self.overlay.setSpawnDestination(nil)
                     self.overlay.clearSelection()
+                    // Recorded here for the same reason the spoken caret path
+                    // records: no outbox line is written, so without this the
+                    // one route a desk can drive leaves nothing for
+                    // `/test/state` to assert on. `via: "test"` says the words
+                    // came from nowhere.
+                    self.recordDelivery(via: "test", kind: .route, to: "caret")
                     self.pasteText(line)
                 }
                 return
@@ -1000,6 +1048,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.status.showRebindPanel(at: NSPoint(x: area.midX, y: area.midY + 200),
                                             query: query)
             }
+        }
+        // One mouse gesture, posted as the chord Options+ makes for it. The names
+        // come from `HotkeyTap`'s own table, so the refusal cannot list a
+        // vocabulary the tap does not have.
+        picker.onTestGestureNames = hotkeys.gestureNames
+        picker.onTestGesture = { [weak self] name in
+            guard let posted = self?.hotkeys.postGesture(name) else { return nil }
+            return ["posted": posted.label, "gesture": name, "what": posted.what]
+        }
+        // **Everything an assertion needs, read on the main thread.** The chip's
+        // rows and the halo's state are AppKit's, and this closure runs on the
+        // listener queue — the same asymmetry that took the app down with a
+        // `SIGTRAP` the first time `setSpawnDestination` was called from here
+        // (see `onTestDictationStart`). The hop is a wait rather than a callback
+        // because an HTTP reply has to carry the answer; two seconds is far past
+        // anything a main thread doing this app's work could be busy with, and a
+        // timeout answers with what it has rather than hanging the listener.
+        picker.describeState = { [weak self] in
+            guard let self else { return [:] }
+            let box = StateBox()
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async {
+                box.value = self.stateSnapshot()
+                done.signal()
+            }
+            guard done.wait(timeout: .now() + 2) == .success else {
+                return ["ok": false, "error": "the main thread did not answer in 2 s"]
+            }
+            return box.value
+        }
+        // **The sink is not wired into any real dictation** (2026-09-13) and must
+        // not be until the loop has measured which of the two timing hypotheses
+        // holds — see `WisprSink`. These four are the whole of its surface.
+        picker.onTestSink = { command in
+            DispatchQueue.main.async {
+                switch command {
+                case .open:    WisprSink.shared.open()
+                case .close:   WisprSink.shared.close()
+                case .key:     WisprSink.shared.becomeKey()
+                case .restore: WisprSink.shared.restoreFocus()
+                }
+            }
+        }
+        picker.onTestSinkClear = { DispatchQueue.main.async { WisprSink.shared.clear() } }
+        picker.describeSink = {
+            let box = StateBox()
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async {
+                box.value = WisprSink.shared.describe()
+                done.signal()
+            }
+            guard done.wait(timeout: .now() + 2) == .success else {
+                return ["ok": false, "error": "the main thread did not answer in 2 s"]
+            }
+            return box.value
         }
         picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
         picker.describeEngine = { [weak self] in
@@ -1273,6 +1376,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Somebody else already put the words on screen — Wispr Flow with the
         // wrap off, and nothing else today. Filed above, delivered by nobody.
         if case .alreadyInserted = result.delivery {
+            recordDelivery(via: result.via, kind: result.delivery,
+                           to: destinationLabel(atCaret: latchedAtCaret))
             endSettling(reason: "\(source.name) inserted it")
             clearSpawn()
             abandonDictation("the source delivered it itself")
@@ -1285,6 +1390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the sentence goes on to where he pointed it.
         if case .insertedElsewhere = result.delivery {
             if latchedAtCaret {
+                recordDelivery(via: result.via, kind: result.delivery, to: "caret")
                 endSettling(reason: "\(source.name) inserted it at the caret, with no ⌘V")
                 clearSpawn()
                 abandonDictation("the source delivered it itself")
@@ -1297,6 +1403,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         localRecordingApp = nil
         let atCaret = latchedAtCaret
         pasteMode = false
+        // From here the route travels with the sentence — `send` moves it onto
+        // the `Message` and `commit` writes it beside the words.
+        pendingVia = result.via
+        pendingDeliveryKind = result.delivery
 
         // **The ring goes down when the words land**, and for a bound sentence
         // that is here: the relay has just taken Wispr's paste and is putting
@@ -1311,6 +1421,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // a panel between the sentence and the caret is exactly the ceremony
             // this path exists to remove.
             let line = caretLine(words: result.text)
+            // **No outbox line here and there never was one** — a caret sentence
+            // is wanted in the field he is looking at and is not addressed to a
+            // watcher. The record is the only trace it leaves.
+            recordDelivery(via: result.via, kind: result.delivery, to: "caret")
+            pendingVia = nil
+            pendingDeliveryKind = nil
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
             pasteText(line)
@@ -1382,6 +1498,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settleGiveUp?.cancel()
         settleGiveUp = nil
         if !quiet {
+            RingDown.note(reason)
             Log.info(String(format: "⚡ ring down: %@ — %.0f ms after the recording ended",
                             reason, (CFAbsoluteTimeGetCurrent() - settlingFrom) * 1000))
         }
@@ -2563,6 +2680,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.draw(in: NSRect(origin: .zero, size: size))
         scaled.unlockFocus()
         return scaled
+    }
+
+    /// **The whole of the dictation's state, in one object** — `GET /test/state`.
+    ///
+    /// Main thread only, and it *reads*: nothing here may set anything, arm
+    /// anything or take anything back. Every field is state the app was already
+    /// keeping; the only code written for this route is the plumbing that makes
+    /// it visible (`private(set)` on three flags and `RelayWindow.renderedRows`).
+    ///
+    /// It exists because both failures of 2026-09-13 were invisible from
+    /// outside. The 2.5 s dictation into Word never armed a swallow window
+    /// (`capturing` false while `listening` was true); the phantom second
+    /// sentence started because a forward click landed while `settling` was true
+    /// and `onPasteToggle` only ever asked about `listening`. Neither fact is on
+    /// screen, and reconstructing either from `relay.log` means reading prose
+    /// after the event.
+    private func stateSnapshot() -> [String: Any] {
+        var out: [String: Any] = [
+            "at": Outbox.iso(Date()),
+            // The relay's own sentence-in-flight flag — *not* the microphone.
+            "listening": listening,
+            "settling": settling,
+            "speculative": speculative,
+            // The swallow window: armed from `didStopListening`, and the flag
+            // whose absence let Wispr paste straight into Word.
+            "capturing": wisprSource.capturing,
+            // The source's: is a microphone actually open.
+            "isRecording": source.isRecording,
+            "ringUp": caretHalo.live,
+            "chip": overlay.renderedRows,
+            // The destination, in the three flags that decide it plus the one
+            // latched at the microphone's close.
+            "pasteMode": pasteMode,
+            "atCaret": latchedAtCaret,
+            "spawnPending": spawnPending,
+            "awaitingBind": awaitingBind != nil,
+            "source": source.name,
+            "wrapWispr": wisprSource.wrapWispr,
+            "sinkOpen": WisprSink.shared.isOpen,
+            "sinkKey": WisprSink.shared.isKey,
+        ]
+        if let target = terminal.target {
+            var bound: [String: Any] = Self.describe(target)
+            bound["tty"] = target.handle.tty ?? ""
+            out["bound"] = bound
+        } else {
+            out["bound"] = NSNull()
+        }
+        out["historyRow"] = wisprSource.historyRow.map { NSNumber(value: $0) } ?? NSNull()
+        out["lastRingDown"] = RingDown.last ?? NSNull()
+        deliveryLock.lock()
+        out["lastDelivery"] = lastDeliveryRecord ?? NSNull()
+        deliveryLock.unlock()
+        return out
     }
 
     private static func describe(_ target: TerminalBinding.Target) -> [String: Any] {
@@ -4206,7 +4377,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // here the folder travels on the `Message`. Nil is the default it has
         // always had, so a dictation that never saw the menu is unchanged.
         let directory = spawnFolder ?? Self.spawnDirectory
-        if kind == "dictation" { spawnPending = false; spawnFolder = nil }
+        // Taken and cleared with the flags beside them, and for their reason: the
+        // route the words arrived by belongs to *this* sentence, and the panel
+        // holds it for seconds.
+        let via = pendingVia ?? "test"
+        let deliveryKind = pendingDeliveryKind ?? .route
+        if kind == "dictation" { spawnPending = false; spawnFolder = nil
+                                 pendingVia = nil; pendingDeliveryKind = nil }
         // **A dictation is never dropped for want of a binding any more**
         // (`holdsForBind`): it is built, shown and read exactly as a bound one
         // is, and `commit` parks it for the terminal Victor is about to point
@@ -4265,7 +4442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
-                              directory: directory)
+                              directory: directory, via: via, deliveryKind: deliveryKind)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -4365,6 +4542,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// words are the ones that were sent.
     private var lastDictation: String?
 
+    /// **How the last sentence was delivered, and where it went** — the object
+    /// `GET /test/state` answers under `lastDelivery`, and the same one written
+    /// into the outbox line's `delivery` field.
+    ///
+    /// It is kept for the deliveries that write no outbox line at all, which is
+    /// the half the log was worst at: a caret paste, a sentence Wispr had
+    /// already inserted (`.alreadyInserted`), one it inserted somewhere else
+    /// (`.insertedElsewhere`), and a sentence held for a bind that has not
+    /// landed. On 2026-09-13 the words went into Word and into a Terminal that
+    /// was merely in front, and neither left a line anywhere.
+    ///
+    /// Written on the main thread, read on the listener queue, hence the lock.
+    private let deliveryLock = NSLock()
+    private var lastDeliveryRecord: [String: Any]?
+
+    @discardableResult
+    private func recordDelivery(via: String, kind: DictationDelivery, to: String) -> [String: Any] {
+        let obj: [String: Any] = ["via": via, "kind": Self.deliveryName(kind),
+                                  "to": to, "at": Outbox.iso(Date())]
+        deliveryLock.lock()
+        lastDeliveryRecord = obj
+        deliveryLock.unlock()
+        Log.info("📦 delivery: \(via) → \(to) (\(Self.deliveryName(kind)))")
+        return obj
+    }
+
+    private static func deliveryName(_ d: DictationDelivery) -> String {
+        switch d {
+        case .route:             return "route"
+        case .alreadyInserted:   return "alreadyInserted"
+        case .insertedElsewhere: return "insertedElsewhere"
+        }
+    }
+
+    /// **Where a sentence is going, in the one spelling the `delivery` field
+    /// uses.** Asked at the moment of delivery, never remembered — the same rule
+    /// the send flight runs on.
+    private func destinationLabel(atCaret: Bool, spawn: Bool = false,
+                                  directory: String? = nil) -> String {
+        if atCaret { return "caret" }
+        if spawn || spawnPending { return "spawn:\(directory ?? spawnFolder ?? Self.spawnDirectory)" }
+        if let t = terminal.target { return "terminal:\(t.handle.tty ?? t.address)" }
+        return "held"
+    }
+
+    /// The route and the case the sentence being assembled arrived by, taken off
+    /// the `DictationResult` in `deliver` and moved onto the `Message` in `send`.
+    private var pendingVia: String?
+    private var pendingDeliveryKind: DictationDelivery?
+
     private func commit(_ m: Message) {
         // The assembled line, and assembled from `m` — the same call
         // `deliverToTerminal` and `spawnClaude` make, so what he pastes (and
@@ -4383,7 +4610,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // decision — see `holdsForBind`: the words wait, the log does not fill
         // up with them. ⌘⌃P still has them, because `lastDictation` is set
         // above: he said it, so he can paste it, bound or not.
-        if m.kind == "dictation", !m.spawn, !isBound { return holdForBind(m) }
+        if m.kind == "dictation", !m.spawn, !isBound {
+            // **Recorded even though nothing is written** — that is the point of
+            // the record. A held sentence lives in memory and nowhere else
+            // (*When the outbox is written*), so `held` is the one destination
+            // the file could never name.
+            recordDelivery(via: m.via, kind: m.deliveryKind, to: "held")
+            return holdForBind(m)
+        }
+        let delivery = m.kind == "dictation"
+            ? recordDelivery(via: m.via, kind: m.deliveryKind,
+                             to: destinationLabel(atCaret: false, spawn: m.spawn,
+                                                  directory: m.directory))
+            : nil
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selections: m.extraSelections.map {
                         ["at": Self.stamp($0.at), "text": $0.text]
@@ -4393,7 +4632,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         out[(pair.key as NSString).lastPathComponent] = pair.value
                     },
                     app: m.app, elements: m.elements.map { $0.json },
-                    line: line)
+                    line: line, delivery: delivery)
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)

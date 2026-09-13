@@ -139,6 +139,10 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/input` `{"name": "…"}` | point the **system's** default input at a device (substring match) and say what it was; with no name it only reports. For `tools/wispr-test.sh` |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
+| `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
+| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `lastRingDown` · `lastDelivery`. ISO-8601 with ms |
+| `POST /test/sink` `{"on": true}` · `GET /test/sink` · `POST /test/sink/clear` | **the relay's own window, as the key window** — `WisprSink`: 40×20, borderless, bottom-left corner, an instrumented `NSTextView` inside. The GET answers *did anything land in it, and by which route*: `paste` (⌘V), `ax:…` (an Accessibility write, with the setter's name), `typed`, `keyDown`, plus `key` and `previousApp` |
+| `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. Two calls because **nobody yet knows whether Wispr picks its target app at the chord or at insertion time** — the loop measures it |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
 | `POST /test/resume-session` `{"session": …, "directory": …}` | ⏎ on a closed session's row — `claude --resume` in a spawned window |
 | `GET /ping` · `POST /pick` | the Chrome extension's mailbox; 503 outside a dictation |
@@ -147,6 +151,25 @@ three; `MusicBridge` is a WebSocket on 8920).
 recogniser and says nothing about it; `/test/dictation/start` opens no microphone, so the halo
 sits at rest there.
 
+- **`WisprSink` is the one deliberate exception to *nothing in it ever calls `NSApp.activate`*** (2026-09-13).
+  It has to *be* the key window — the question it answers is what an ordinary key window would have
+  received — so opening it activates the app and takes the keyboard, remembering the frontmost app and
+  the focused element so `restoreFocus()` can put both back. It is not bindable (it is not a terminal)
+  and never appears in `docs/states/` (`snapshot` photographs `root`, it does not enumerate the app's
+  windows).
+- **The sink is going to become the wrap itself** (Victor's design, 2026-09-13): only Wispr's
+  transcription engine, with Walkie giving Wispr its inputs and taking its outputs synthetically, and
+  Wispr never inserting into the real app at all. That wrap will apply **only to dictations this app
+  started** (its own chord, stamped `backButtonStamp`) and **only while *Wrap Wispr Flow* is ticked** —
+  a dictation Victor starts with his own shortcut stays Wispr's and is left alone. **It is not wired
+  into any real dictation yet**: nothing outside `POST /test/sink` opens it, and it must stay that way
+  until the loop has measured whether Wispr picks its target app at the chord or at insertion time.
+- **A dictation's `delivery` is written down now** (2026-09-13), in the outbox line and in
+  `/test/state.lastDelivery`: `{"via": "wispr-cmdv" | "wispr-history" | "pasteboard" | "local-whisper" |
+  "test", "kind": "route" | "alreadyInserted" | "insertedElsewhere", "to": "terminal:ttysNNN" | "caret" |
+  "spawn:<folder>" | "held", "at": ISO}`. It records and never decides — the caret, the held sentence and
+  the two *somebody else inserted it* cases write no outbox line at all, and this is the only trace they
+  leave.
 - **`tools/wispr-loop.sh <scenario>` closes the loop on these routes** — one real Wispr
   dictation from a WAV through the virtual microphone, asserted end to end, with the
   scenarios, the preconditions and the timing table in `docs/loopback.md`.

@@ -262,6 +262,56 @@ final class ElementPicker {
     /// many were listening. Wired to `MusicBridge.reloadExtensions`.
     var onReloadExtension: (() -> Int)?
 
+    /// `POST /test/gesture` `{"name": "forward-left"}` — post the ⌃⌥⌘F-key chord
+    /// Logi Options+ makes for one mouse gesture, so the gesture branch of
+    /// `HotkeyTap` runs exactly as it does for Victor's hand.
+    ///
+    /// It is the missing half of the harness: `/test/wispr-handsfree` posts the
+    /// chord that starts a *dictation*, and every other route enters below the
+    /// tap, so the ten gestures the side buttons carry — the cancel, the spawn,
+    /// the unbind, the caret click — were reachable only by putting a hand on
+    /// the mouse. Both failures of 2026-09-13 were gesture-shaped (a second
+    /// forward click landing inside a settle), and neither could be reproduced
+    /// without one.
+    ///
+    /// Answers the chord that went out, or nil for a name nobody knows — the
+    /// route turns that into a 400 carrying the whole vocabulary.
+    var onTestGesture: ((String) -> [String: Any]?)?
+
+    /// `GET /test/state` — everything an assertion needs about the dictation in
+    /// flight, in one object and from the state the app is already keeping.
+    ///
+    /// Every route above changes something; this is the only one that reads. The
+    /// two failures of 2026-09-13 were both *the app believed something the
+    /// screen did not show* — a swallow window that was never armed, a settle a
+    /// second click walked into — and answering that from `relay.log` means
+    /// parsing prose after the fact.
+    var describeState: (() -> [String: Any])?
+
+    /// `POST /test/sink` `{"on": true}` / `GET /test/sink` / `POST
+    /// /test/sink/clear` — the relay's own window for catching text that leaked
+    /// into the front app, and by which route. See `WisprSink`.
+    ///
+    /// `{"key": true}` and `{"restore": true}` drive the two halves of the focus
+    /// separately, and they are separate because **nobody yet knows whether
+    /// Wispr Flow picks the app it will insert into at the chord or at insertion
+    /// time.** Hold the keyboard from the start of the dictation, or take it
+    /// only at the stop gesture and give it back a moment later — the two give
+    /// opposite instructions and only a measurement can choose.
+    var onTestSink: ((SinkCommand) -> Void)?
+    var describeSink: (() -> [String: Any])?
+    var onTestSinkClear: (() -> Void)?
+
+    /// What `POST /test/sink` was asked to do.
+    enum SinkCommand {
+        case open
+        case close
+        /// Take the keyboard, remembering whose it was.
+        case key
+        /// Give it back, leaving the window open.
+        case restore
+    }
+
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
     var describeEngine: (() -> [String: Any])?
@@ -312,6 +362,11 @@ final class ElementPicker {
     private var boundFlag = false
 
     private let stateLock = NSLock()
+
+    /// The gesture names `POST /test/gesture` accepts, for the refusal to list.
+    /// Filled by `AppDelegate` from `HotkeyTap`'s own table, so the two cannot
+    /// disagree about what exists.
+    var onTestGestureNames: [String] = []
 
     /// Tried in order. Several relays can be up at once (one per agent session),
     /// each takes the first free port, and the extension posts to all of them —
@@ -562,6 +617,46 @@ final class ElementPicker {
             }
             onTestDictation?(text)
             respond(conn, 200, ["ok": true, "text": text])
+
+        // One mouse gesture, posted as the chord Options+ makes for it — see
+        // `onTestGesture`.
+        case ("POST", "/test/gesture"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let name = ((body?["name"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let posted = onTestGesture?(name) else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "unknown gesture \(name.isEmpty ? "(none given)" : name)",
+                                           "gestures": onTestGestureNames])
+            }
+            respond(conn, 200, ["ok": true].merging(posted) { _, new in new })
+
+        // Everything an assertion needs, in one read — see `describeState`.
+        case ("GET", "/test/state"):
+            respond(conn, 200, ["ok": true].merging(describeState?() ?? [:]) { _, new in new })
+
+        // The sink window — see `TestSink`.
+        case ("POST", "/test/sink"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            // Checked before `on`, so `{"key": true}` on a sink already open is
+            // not read as a second request to open it.
+            if body?["key"] as? Bool == true {
+                onTestSink?(.key)
+                return respond(conn, 200, ["ok": true, "did": "key"])
+            }
+            if body?["restore"] as? Bool == true {
+                onTestSink?(.restore)
+                return respond(conn, 200, ["ok": true, "did": "restore"])
+            }
+            let on = body?["on"] as? Bool ?? true
+            onTestSink?(on ? .open : .close)
+            respond(conn, 200, ["ok": true, "open": on])
+
+        case ("GET", "/test/sink"):
+            respond(conn, 200, ["ok": true].merging(describeSink?() ?? [:]) { _, new in new })
+
+        case ("POST", "/test/sink/clear"):
+            onTestSinkClear?()
+            respond(conn, 200, ["ok": true, "cleared": true])
 
         case ("GET", "/engine"):
             respond(conn, 200, ["ok": true].merging(describeEngine?() ?? [:]) { _, new in new })

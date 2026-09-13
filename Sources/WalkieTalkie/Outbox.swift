@@ -257,6 +257,22 @@ enum Outbox {
     /// which matters, because the `relay` skill documents these fields by name.
     /// A reader that wants the whole sequence takes `selections`; one that wants
     /// the subject takes `selection`, exactly as before.
+    /// **ISO-8601 with milliseconds**, for every stamp the test surface answers
+    /// in (`/test/state`, `/test/sink`, the `delivery` field).
+    ///
+    /// Deliberately *not* the formatter behind the outbox line's own `ts`, which
+    /// has been second-resolution since the first line was written and is
+    /// documented by name in the `relay` skill. The two failures these routes
+    /// exist for are hundreds of milliseconds apart — a second-resolution stamp
+    /// cannot order a settle against the click that landed inside it.
+    static func iso(_ date: Date) -> String { isoFormatter.string(from: date) }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     static func send(kind: String,
                      text: String? = nil,
                      selection: String? = nil,
@@ -277,7 +293,20 @@ enum Outbox {
                      /// 2026-09-04 so the Message Log's Copy button can put *the
                      /// same string* ⌘⌃P would paste on the clipboard, byte for
                      /// byte, rather than re-assembling it from the parts.
-                     line: String? = nil) {
+                     line: String? = nil,
+                     /// **How these words got here and where they went** —
+                     /// `{"via", "kind", "to", "at"}`, since 2026-09-13.
+                     ///
+                     /// It records, it never decides: `via` is which of the four
+                     /// deliveries produced the text (Wispr's ⌘V, Wispr's own
+                     /// `History` row, the pasteboard, the local model — or
+                     /// `test` for a fabricated one), `kind` is the
+                     /// `DictationDelivery` case, and `to` is the destination as
+                     /// it was resolved at `commit`. Two failures on 2026-09-13
+                     /// were both *the words landed somewhere else*, and nothing
+                     /// written down could tell one route from another
+                     /// afterwards.
+                     delivery: [String: Any]? = nil) {
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
@@ -298,6 +327,7 @@ enum Outbox {
         if let app = app, !app.isEmpty { obj["app"] = app }
         if !elements.isEmpty { obj["elements"] = elements }
         if let line = line, !line.isEmpty { obj["line"] = line }
+        if let delivery = delivery, !delivery.isEmpty { obj["delivery"] = delivery }
 
         queue.async {
             // JSONSerialization (never string interpolation): dictated text and
