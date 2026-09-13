@@ -1568,9 +1568,20 @@ def _read(path: str) -> str:
 
 
 def _osascript(script: str, timeout: float = 20) -> str:
-    out = subprocess.run(["/usr/bin/osascript", "-e", script],
-                         capture_output=True, text=True, timeout=timeout)
-    return (out.stdout or "").strip()
+    """Run one AppleScript. **A timeout is an empty answer, never an exception.**
+
+    These calls are teardown as often as they are measurement, and a teardown
+    that raises leaves the victim open, the binding in place and the locks on
+    screen. TextEdit in particular can stop answering for a while — measured
+    2026-09-14, a close sent while it was busy blocked for 20 s and took the
+    whole scenario's `finally` down with it.
+    """
+    try:
+        out = subprocess.run(["/usr/bin/osascript", "-e", script],
+                             capture_output=True, text=True, timeout=timeout)
+        return (out.stdout or "").strip()
+    except Exception:
+        return ""
 
 
 def _open_scratch_terminal(sink_file: str) -> str | None:
@@ -1593,7 +1604,30 @@ def _open_scratch_terminal(sink_file: str) -> str | None:
 
 
 def _close_scratch_terminal(tty: str):
-    """Close the window whose tab has that tty, and only that one."""
+    """Close the window whose tab has that tty, and only that one.
+
+    **Kill the `cat` first, and kill it by tty.** Terminal will not close a tab
+    with a live process without putting a confirmation dialog on screen, and
+    `close … saving no` does not suppress it — so every run of `wrap-bound` left
+    its scratch window behind, nine of them before anyone counted (2026-09-14).
+
+    **Not `pkill -f bound-sink.txt`.** The redirection is the shell's, so it
+    never appears in `cat`'s own command line: that pattern matches no `cat` at
+    all, and does match any *harness shell* whose command line happens to
+    mention the file — which on 2026-09-14 was the very shell running the
+    cleanup. Matching `tty` plus a `comm` of exactly `cat` can only ever hit the
+    one process this function opened.
+    """
+    try:
+        out = subprocess.run(["/bin/ps", "-Ao", "pid=,tty=,comm="],
+                             capture_output=True, text=True, timeout=10).stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[1] == tty and parts[2].rsplit("/", 1)[-1] == "cat":
+                subprocess.run(["/bin/kill", parts[0]], capture_output=True, timeout=5)
+        time.sleep(0.4)
+    except Exception:
+        pass
     _osascript(
         'tell application "Terminal"\n'
         '  repeat with w in windows\n'
@@ -1618,8 +1652,16 @@ def _close_scratch_terminal(tty: str):
 
 
 def _open_victim(scratch: str) -> str | None:
-    """Open the scratch document and return the name TextEdit gave it."""
-    path = os.path.join(scratch, "victim.txt")
+    """Open a **fresh** scratch document and return the name TextEdit gave it.
+
+    A new file name every run, and that is not fastidiousness: TextEdit keys a
+    document by path, so re-opening `victim.txt` after truncating it hands back
+    the *same in-memory document*, still holding the previous run's text.
+    Measured 2026-09-14 — `wrap-bound` reported `'Qzjkwyvqzjkwyv'` and looked
+    exactly like every keystroke being delivered twice, which is a far more
+    alarming bug than the one that was actually there.
+    """
+    path = os.path.join(scratch, "victim-%d.txt" % int(time.time() * 1000))
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("")
     name = _osascript(
@@ -1637,8 +1679,26 @@ def _victim_text(name: str) -> str:
     return _osascript('tell application "TextEdit" to get text of document "%s"' % name)
 
 
+def _textedit_running() -> bool:
+    """Is TextEdit up? **Ask before telling.**
+
+    `tell application "TextEdit" to …` *launches* it when it is not running, and
+    a close sent to an app that has already quit therefore hangs waiting for a
+    launch nobody wanted. Measured 2026-09-14: the last victim document was
+    closed, macOS auto-quit the documentless app, and the teardown's own close
+    then blocked for 20 s and left two `osascript` processes hanging about.
+    """
+    try:
+        return subprocess.run(["/usr/bin/pgrep", "-x", "TextEdit"],
+                              capture_output=True, timeout=5).returncode == 0
+    except Exception:
+        return False
+
+
 def _close_victim(name: str):
-    _osascript('tell application "TextEdit" to close document "%s" saving no' % name)
+    if not _textedit_running():
+        return
+    _osascript('tell application "TextEdit" to close document "%s" saving no' % name, timeout=10)
 
 
 def _sh_quote(value: str) -> str:
@@ -2154,6 +2214,12 @@ def _wrap_run(ctx, destination: str) -> Result:
 
         notes_before = wispr_notes()
         windows_before = [] if relay.dry_run else wispr_windows()
+        # **Baselines for the probe letters.** A bare `"j" in text` matches the
+        # `.jpg` in an envelope's screenshot line and the `k` in `walkie_shot`,
+        # and on 2026-09-14 that reported five letters as *arrived* in a run
+        # where all seven were lost. A letter counts only if its count went
+        # **up**, which prose it was already sitting in cannot do.
+        sink_before = _read(sink_file) if destination == "bound" else ""
         if not relay.dry_run:
             focus.start()
 
@@ -2173,6 +2239,7 @@ def _wrap_run(ctx, destination: str) -> Result:
         offsets = ctx.options.get("probe_offsets") or [1.5]
         seconds = _clip_seconds(ctx.fixture["wav"])
         probes: list[tuple[str, float]] = []
+        probe_deadline = 0.0
         if typed_probe:
             import wispr_loopback as wl
 
@@ -2185,6 +2252,11 @@ def _wrap_run(ctx, destination: str) -> Result:
                 else:
                     import threading
                     threading.Timer(delay, wl.tap_key, args=(code,)).start()
+            # **The run has to outlive its own last probe.** A letter scheduled
+            # 4 s after the stop fires *after* a fast settle has finished, and
+            # reading the victim before then reports it LOST when it simply had
+            # not been typed yet. Measured: the whole settle took 0.7 s.
+            probe_deadline = time.monotonic() + max(0.05, seconds + max(offsets)) + 0.6
             result.note("probe letters: %s"
                         % ", ".join("`%s` %s" % (c, "%+.1fs" % o) for c, o in probes))
 
@@ -2211,6 +2283,12 @@ def _wrap_run(ctx, destination: str) -> Result:
                      "after %.1f s — windows now %s"
                      % (closed_after, [] if relay.dry_run else wispr_windows()))
 
+        if probe_deadline and not relay.dry_run:
+            remaining = probe_deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(remaining)
+                result.note("waited %.1f s more for the last probe letter" % remaining)
+
         seen = [] if relay.dry_run else focus.stop()
         result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
         strays = [a for a in seen if a not in ("TextEdit", "")]
@@ -2230,6 +2308,9 @@ def _wrap_run(ctx, destination: str) -> Result:
         changes = notes_diff(notes_before, wispr_notes())
         victim_text = "" if relay.dry_run else _victim_text(victim)
         rows = outbox.fresh()
+        # Wispr's own row for this run — the dictated sentence, without the
+        # envelope the relay wraps round it on the way to a bound session.
+        row = None if relay.dry_run else ctx.history()
 
         if destination == "cancel":
             result.check(not changes or relay.dry_run, "no note was delivered",
@@ -2240,11 +2321,13 @@ def _wrap_run(ctx, destination: str) -> Result:
             result.answer = "cancelled cleanly: no note, no delivery, victim untouched"
             return result
 
-        # **New *or* appended.** The delivery is the newly added portion, and the
-        # Scratchpad is one note that grows — asserting "a new row" would go red
-        # the first time Wispr reuses it.
-        result.check(len(changes) >= 1 or relay.dry_run, "Wispr's notes changed (new or appended)",
-                     "%d note change(s)" % len(changes))
+        # **Not an assertion any more.** Under row-first delivery the sentence
+        # comes from Wispr's row as soon as it is terminal, so whether a note is
+        # also written is Wispr's business and no longer on the path — and on
+        # build b0028d6 it often is not written at all, because the Scratchpad is
+        # closed before Wispr gets round to it. Reported, because a note that
+        # *does* appear is where a stolen keystroke would show up.
+        result.note("notes changed: %d" % len(changes))
         # **`wispr-history`, not `wispr-notes`** (row-first delivery): the words
         # come from Wispr's own row as soon as it is terminal, rather than from
         # the note after the Scratchpad has written it. The note is still
@@ -2292,8 +2375,17 @@ def _wrap_run(ctx, destination: str) -> Result:
                          "the sentence did not leak into the victim", "%r" % victim_text[:60])
             result.check(all(ch in victim_text.lower() for ch in chars) or relay.dry_run,
                          "every probe letter reached the victim", "%r" % victim_text[:60])
-            result.check(not any(ch in (typed or "").lower() for ch in chars) or relay.dry_run,
-                         "no probe letter went to the bound tty", "%r" % (typed or "")[:60])
+            # **Against the sentence, not the payload.** What reaches a bound
+            # session is the transcript *inside* an English envelope — the
+            # dictated-automatically clause, the focused-window line — and that
+            # prose contains `w`, `y`, `v`… So the claim that means anything is
+            # that no probe letter was folded into the **dictated sentence**,
+            # which is the row's own text.
+            sentence = (row.formatted_text or row.pasted_text or "") if row else ""
+            fouled = [ch for ch in chars if ch in sentence.lower()]
+            result.check(not fouled or relay.dry_run,
+                         "no probe letter was folded into the dictated sentence",
+                         "found %s in %r" % (", ".join(fouled) or "none", sentence[:50]))
         elif destination == "spawn":
             spawned = [r for r in rows
                        if str(((r.get("delivery") or {}).get("to")) or "").startswith("spawn:")]
@@ -2317,39 +2409,56 @@ def _wrap_run(ctx, destination: str) -> Result:
             delivered = added_portion(changes)
             note_tail = "".join((c.get("content") or "")[-200:] for c in changes)
             if destination == "bound":
-                landed_in = _read(sink_file)
+                landed_in, landed_base = _read(sink_file), sink_before
             elif destination == "spawn":
                 landed_in = " ".join(str(r.get("text") or r.get("line") or "") for r in rows)
+                landed_base = ""
             else:
-                landed_in = victim_text
+                landed_in, landed_base = victim_text, ""
+            note_base = "".join((c.get("was_full") or "")[-200:] for c in changes)
+
+            def gained(char: str, after: str, before: str) -> bool:
+                """Did this letter *appear*, rather than already being there?"""
+                return after.lower().count(char) > before.lower().count(char)
+
             lost = []
             for char, offset in probes:
                 where = {
-                    "victim": char in victim_text.lower(),
-                    "note": char in note_tail.lower(),
-                    "delivered": char in delivered.lower(),
-                    "destination": char in landed_in.lower(),
+                    "victim": gained(char, victim_text, ""),
+                    "note": gained(char, note_tail, note_base),
+                    "delivered": gained(char, delivered, ""),
                 }
+                # **Only where it can be computed honestly.** For `caret` the
+                # victim *is* the destination and its baseline is empty, so the
+                # count means something. For `bound` and `spawn` the destination
+                # receives the sentence inside an English envelope — which
+                # brings its own `j` (`.jpg`), `k` (`walkie_shot`), `w`, `y`,
+                # `v` — and no baseline separates that prose from a typed
+                # letter, because both are new text. Reporting it anyway said
+                # five letters *arrived* in a run where all seven were lost.
+                if destination == "caret":
+                    where["destination"] = gained(char, landed_in, landed_base)
                 if not any(where.values()):
                     lost.append(char)
                 result.note("probe `%s` @ %.1fs → %s"
                             % (char, offset,
                                ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing"))
             # A letter in the note is a letter the Scratchpad took off Victor.
-            stolen = [c for c, _ in probes if c in note_tail.lower()]
+            stolen = [c for c, _ in probes if gained(c, note_tail, note_base)]
             result.check(not stolen, "no probe letter was taken by the Scratchpad",
                          "taken: %s" % (", ".join(stolen) or "none"))
             # And none of them may be in what was *delivered* — that is the
             # difference between a keystroke that was merely overheard and one
             # that was posted to Victor's agent inside his own sentence.
-            in_delivered = [c for c, _ in probes if c in delivered.lower()]
+            in_delivered = [c for c, _ in probes if gained(c, delivered, "")]
             result.check(not in_delivered, "the note's added portion contains no probe letter",
                          "found: %s — added %r" % (", ".join(in_delivered) or "none", delivered[:60]))
             # The ones typed **during the recording** are the sharpest case: the
             # Scratchpad is already open by then, so a letter that goes astray
             # here was stolen while Victor was still speaking.
             during = [c for c, o in probes if o < 0]
-            astray = [c for c in during if c in note_tail.lower() or c not in victim_text.lower()]
+            astray = [c for c in during
+                      if gained(c, note_tail, note_base) or not gained(c, victim_text, "")]
             if during:
                 result.check(not astray, "letters typed during the recording reached the victim",
                              "astray: %s of %s" % (", ".join(astray) or "none", ", ".join(during)))
@@ -2364,19 +2473,31 @@ def _wrap_run(ctx, destination: str) -> Result:
         # still "open", and one that never became key never took anything.
         pad = (state.get("scratchpad") or {}) if isinstance(state, dict) else {}
         if pad:
-            result.note("scratchpad: existed %s ms, visible on the main display %s ms, "
-                        "everBecameKey=%s, parked at %s, reopenedElsewhere=%s"
-                        % (pad.get("existedMs", "—"), pad.get("visibleMs", "—"),
-                           pad.get("everBecameKey"), pad.get("parkedFrame") or "—",
-                           pad.get("reopenedElsewhere")))
-            result.check(not pad.get("everBecameKey") or relay.dry_run,
-                         "the Scratchpad never became the key window",
-                         "everBecameKey=%s, visible %s ms"
-                         % (pad.get("everBecameKey"), pad.get("visibleMs", "—")))
+            # The raw object, once, verbatim — the field names have moved twice
+            # and a note that prints "—" for a key that was renamed is worse than
+            # no note, because it reads as "the app reported nothing".
+            result.note("scratchpad (raw): %s" % json.dumps(pad, sort_keys=True))
+            result.note("scratchpad: open %s ms, visible on the main display %s ms, closed in %s ms, "
+                        "%s open(s), parked at %s, reopenedElsewhere=%s, screens=%s"
+                        % (pad.get("lastOpenMs", "—"), pad.get("visibleMs", "—"),
+                           pad.get("closeMs", "—"), pad.get("opens", "—"),
+                           pad.get("parkedFrame") or "—", pad.get("reopenedElsewhere"),
+                           pad.get("screens")))
+            # **`everBecameKey` is true by design on this build** — the window
+            # does take key focus and the *redirect* is what protects the keys.
+            # So it is reported and not asserted: the assertions that matter are
+            # where the probe letters ended up, and how long the window was
+            # actually visible on the display Victor is looking at.
+            result.note("everBecameKey=%s (true by design — the redirect is the protection), "
+                        "lastKeyAt=%s" % (pad.get("everBecameKey"), pad.get("lastKeyAt") or "—"))
+            visible = pad.get("visibleMs")
+            result.check((visible is not None and visible <= 50) or relay.dry_run,
+                         "the Scratchpad was visible on the main display ≤ 50 ms",
+                         "%s ms" % (visible if visible is not None else "not reported"))
         redirect = (state.get("keyRedirect") or {}) if isinstance(state, dict) else {}
         if redirect:
-            result.note("key redirect: %s" % (redirect.get("keycodes")
-                                              or redirect.get("keys") or redirect))
+            result.note("key redirect: pid=%s, %s key(s) re-posted"
+                        % (redirect.get("pid"), redirect.get("keys")))
         result.note("windows before %s, after %s"
                     % (windows_before, [] if relay.dry_run else wispr_windows()))
         for change in changes:

@@ -79,7 +79,11 @@ while [ $# -gt 0 ]; do
     # **One token with `=`**, not two: the offsets may start with a minus (a
     # letter typed *during* the recording) and argparse reads a bare `-3,-1,…`
     # as a flag it has never heard of.
-    --probe-offsets) PASSTHROUGH+=("--probe-offsets=$2"); shift 2 ;;
+    # Both spellings. The value may start with a minus (a letter typed *during*
+    # the recording), so it always reaches Python as one `=` token — argparse
+    # reads a bare `-3,-1,…` as a flag it has never heard of.
+    --probe-offsets)   PASSTHROUGH+=("--probe-offsets=$2"); shift 2 ;;
+    --probe-offsets=*) PASSTHROUGH+=("$1"); shift ;;
     --dry-run)     DRY_RUN=1; PASSTHROUGH+=(--dry-run); shift ;;
     --switch-input) FORCE_SWITCH=1; shift ;;
     # For the hour between "the routes are being written" and "the routes are
