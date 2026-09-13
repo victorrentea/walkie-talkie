@@ -247,10 +247,11 @@ sits at rest there.
   | `WT_WRAP_WISPR=0` | the *Wrap Wispr Flow* tick off for one run |
   | `WT_WRAP_MODE=scratchpad｜sink｜off` | force the mode for one run (`POST /test/wrap-mode` at runtime, `auto` to hand it back) |
   | `WT_SCRATCHPAD_DELIVER=note` | wait for the Scratchpad note instead of delivering from the row — 2.8 s slower, kept for the day the two disagree |
-  | `WT_SCRATCHPAD_REDIRECT_KEYS=0` | stop re-posting his keystrokes while Wispr's window is up |
+  | `WT_SCRATCHPAD_REDIRECT_KEYS=1` | re-post his keystrokes while Wispr's window is up — **off by default** since it cost both bound and spawn dictations their delivery |
+  | `WT_SCRATCHPAD_NOTE_MAY_DELIVER=1` | let the Scratchpad note be delivered as text — off, because a note that has had his typing in it is not a transcript |
   | `WISPR_SCRATCHPAD_KEYS=79` | override the *Open Scratchpad* chord (the same variable `helpers/wispr_loopback.py` reads) |
   | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
-  | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — on by default, `POST /test/ax-insert` at runtime |
+  | `WT_SCRATCHPAD_AX_INSERT=1` | deliver redirected printable keys through `AXSelectedText` — **off**: measured 7/7 in `wrap-spawn` and **0/7** in `wrap-bound`, where AX reported success eight times and inserted nothing |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
   | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
 - **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord

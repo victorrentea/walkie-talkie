@@ -269,8 +269,21 @@ final class HotkeyTap {
     /// dictation aimed at an agent goes to a minute or more. Five minutes is the
     /// backstop for a `stop()` that never arrived at all.
     private static let redirectDictationCeiling: TimeInterval = 300
+    /// **Off by default since 2026-09-14, and the default is the measurement.**
+    ///
+    /// With the guard armed, `wrap-bound` and `wrap-spawn` put **every** probe
+    /// letter into Wispr's note, two of them ended up inside the delivered
+    /// sentence, and both runs timed out with no delivery at all — keystrokes
+    /// arriving in that note appear to stop Wispr finalising it. A guard that
+    /// costs the whole dictation to save a keystroke is a bad trade, and the
+    /// keystrokes were not being saved either.
+    ///
+    /// So nothing is swallowed and nothing is re-posted: his keys pass through
+    /// untouched, and the cost is written down rather than worked around — see
+    /// *The measured truth about his keystrokes* in `dictation-source.md`.
+    /// `WT_SCRATCHPAD_REDIRECT_KEYS=1` turns it back on.
     private static let redirectEnabled =
-        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0"
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] == "1"
 
     /// **Insert printable characters through Accessibility — off by default, and
     /// the default is the measurement** (2026-09-14).
@@ -285,10 +298,22 @@ final class HotkeyTap {
     /// produced a single trace line and then silence, and the dictation never
     /// finished at all.
     ///
-    /// Moving it off the tap thread is what made it safe, and it **ships on**:
-    /// measured 2026-09-14 02:10, `seen=7 redirectedAX=5 redirectedKey=2
-    /// passed=0` and all seven probe letters in the victim document, with no
-    /// instability. `WT_SCRATCHPAD_AX_INSERT=0` turns it off.
+    /// Moving it off the tap thread made it *work sometimes*, and sometimes is
+    /// the finding. Measured 2026-09-14 02:20, both scenarios, guard on:
+    ///
+    /// | | `wrap-spawn` | `wrap-bound` |
+    /// |---|---|---|
+    /// | letters in the victim | **7/7** | **0/7** |
+    /// | `redirectedAX` | 5 | 8 |
+    /// | AX reported | success, 1–5 ms | **success, 1–5 ms** |
+    ///
+    /// **`AXUIElementSetAttributeValue` returned `.success` eight times and
+    /// inserted nothing.** Two of those probes were sampled with the victim
+    /// showing `NO FOCUSED ELEMENT` — so the element the insert went to was one
+    /// the application had already let go of, and AX said yes to writing into it.
+    /// A delivery route that cannot tell a success from a silent loss is not one
+    /// to leave armed over Victor's typing, whatever it manages in the easy case.
+    /// `WT_SCRATCHPAD_AX_INSERT=1`, or `POST /test/ax-insert`.
     ///
     /// The crash that made this look impossible for three runs was **not** the
     /// insertion at all — it was `TISGetInputSourceProperty` inside `translate`,
@@ -297,7 +322,7 @@ final class HotkeyTap {
     /// moment — the second because an installed app does not inherit a shell's
     /// environment, and deciding a default by measurement needs the measurement
     /// to be takeable without a rebuild.
-    static var axInsert = ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] != "0" {
+    static var axInsert = ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] == "1" {
         didSet {
             guard axInsert != oldValue else { return }
             Log.info("⌨️ printable keys go in through \(axInsert ? "Accessibility, on its own queue" : "postToPid, best effort")")
@@ -399,6 +424,30 @@ final class HotkeyTap {
         redirectTarget = replacement
         return replacement
     }
+
+    /// **Why a swallowed key still appears to land**, answered rather than
+    /// guessed (2026-09-14).
+    ///
+    /// The question was whether the tap is leaking — returning the event instead
+    /// of nil on the guard's branch — or whether the key that arrives is a
+    /// *second* event. The trace already answers it and this makes the answer
+    /// impossible to miss: each probe letter arrives **twice, from two different
+    /// posting processes**, each with its own `SWALLOWED` line. Nothing is being
+    /// let through; the harness posts every letter twice, and a guard that
+    /// faithfully forwards both delivers two.
+    private func noteDuplicate(_ code: CGKeyCode, pid: pid_t) {
+        let now = CFAbsoluteTimeGetCurrent()
+        stateLock.lock()
+        let previous = lastKey
+        lastKey = (code, pid, now)
+        stateLock.unlock()
+        guard let previous, previous.code == code, previous.pid != pid,
+              now - previous.at < 0.5 else { return }
+        Log.info(String(format: "⌨️ key %d arrived again from pid %d (was pid %d, %.0f ms earlier) — "
+                        + "it is posted twice at the source; the swallow is not leaking",
+                        Int(code), Int(pid), Int(previous.pid), (now - previous.at) * 1000))
+    }
+    private var lastKey: (code: CGKeyCode, pid: pid_t, at: CFAbsoluteTime)?
 
     private func countSeen() {
         stateLock.lock(); redirectSeen += 1; stateLock.unlock()
@@ -1852,7 +1901,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                pid_t(event.getIntegerValueField(.eventSourceUnixProcessID)) != WisprScratchpad.wisprPid,
                event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                if type == .keyDown { countSeen() }
+                if type == .keyDown {
+                    countSeen()
+                    noteDuplicate(code, pid: pid_t(event.getIntegerValueField(.eventSourceUnixProcessID)))
+                }
 
                 // **Never a chord.** ⌘Tab, ⌘Space and ⌃-anything are the
                 // system's and the window manager's, and a key redirected into

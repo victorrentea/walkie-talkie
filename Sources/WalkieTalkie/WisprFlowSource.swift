@@ -1297,8 +1297,14 @@ final class WisprFlowSource: DictationSource {
     /// lets the router decide whether that was the destination.
     private func pollHistory() {
         guard capturing else { return }
-        // **The note is read only when it is the delivery**, which since the row
-        // took over is only under `WT_SCRATCHPAD_DELIVER=note`.
+        // **The note is never the delivered text in Scratchpad mode, and that is
+        // now a rule rather than a default** (2026-09-14). Two runs delivered
+        // `added 'qz'` — a pair of probe *keystrokes* that had landed in the note
+        // — as though they were the sentence. A note that has had his typing in
+        // it is not a transcript, and the row is the only thing that ever was.
+        // `WT_SCRATCHPAD_DELIVER=note` is kept for the non-Scratchpad modes and
+        // for looking at the other record by hand; it no longer decides anything
+        // in the mode that ships.
         //
         // It was read unconditionally for one build, and that build delivered a
         // stray `z` (2026-09-13, 23:52): the window is open for the whole
@@ -1306,8 +1312,8 @@ final class WisprFlowSource: DictationSource {
         // poll fired **13 ms after the microphone closed** — before the row was
         // even `formatted` — and shipped the one character it found. The note
         // has to be a cross-check or it is a second delivery racing the first.
-        if startedMode == .scratchpad, Self.deliverFromNote, intercepting, !isRecording,
-           pollNote() { return }
+        if startedMode == .scratchpad, Self.deliverFromNote, Self.noteMayDeliver,
+           intercepting, !isRecording, pollNote() { return }
         guard let e = WisprHistory.newest() else { return }
 
         // **Adopting the row.** Anything that is not the row that was on top when
@@ -1429,6 +1435,14 @@ final class WisprFlowSource: DictationSource {
     /// Long enough for Wispr to have written the note and for the window to have
     /// been shut again — measured at 2.1 s and 0.1–0.4 s respectively.
     private static let crossCheckDelay: TimeInterval = 3.5
+
+    /// **The note may never be delivered as text in Scratchpad mode.** A
+    /// second flag rather than a deleted branch, because the note path is still
+    /// the way to read Wispr's other record by hand — and because a rule that is
+    /// one `guard` is a rule somebody removes by accident.
+    /// `WT_SCRATCHPAD_NOTE_MAY_DELIVER=1` for a deliberate experiment.
+    private static let noteMayDeliver =
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_NOTE_MAY_DELIVER"] == "1"
 
     private static let deliverFromNote =
         ProcessInfo.processInfo.environment["WT_SCRATCHPAD_DELIVER"]?.lowercased() == "note"

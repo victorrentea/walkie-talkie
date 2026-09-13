@@ -169,6 +169,55 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
 - **`keyRedirect` counts four things**: `seen`, `redirectedAX`, `redirectedKey`, `passed`, and the
   last three add up to the first.
 
+### The keyboard guard is OFF, and the loss is the accepted cost (2026-09-14)
+
+**`WT_SCRATCHPAD_REDIRECT_KEYS` and `WT_SCRATCHPAD_AX_INSERT` both default off**,
+and the default was decided by measurement rather than by argument. Nothing is
+swallowed and nothing is re-posted; his keys pass through untouched.
+
+Two runs, 2026-09-14 02:20, with the guard **and** the Accessibility insertion on:
+
+| | `wrap-spawn` | `wrap-bound` |
+|---|---|---|
+| letters in the victim | **7/7** | **0/7** |
+| letters in the note's added portion | none | none |
+| `seen` / `redirectedAX` / `redirectedKey` / `passed` | 5 / 5 / 0 / 0 | 8 / 8 / 0 / 0 |
+| what AX reported | success, 1–5 ms | **success, 1–5 ms** |
+
+**`AXUIElementSetAttributeValue` returned `.success` eight times and inserted
+nothing.** Two of those probes were sampled with the victim showing
+`NO FOCUSED ELEMENT`, so the element being written to was one the application had
+already let go of — and Accessibility said yes. A delivery route that cannot tell
+a success from a silent loss is not one to leave armed over his typing, whatever
+it manages in the easy case; `wrap-spawn`'s 7/7 is the easy case and `wrap-bound`
+is what shipping it would cost.
+
+An earlier build, with the guard re-posting keys instead, was worse still: both
+scenarios put **every** probe letter into Wispr's note, two ended up *inside the
+delivered sentence*, and both timed out with no delivery at all — keystrokes
+landing in that note appear to stop Wispr finalising it. A guard that costs the
+whole dictation to save a keystroke is a bad trade, and it was not saving the
+keystrokes either.
+
+- **The Accessibility insertion is opt-in** (`WT_SCRATCHPAD_AX_INSERT=1`, or
+  `POST /test/ax-insert`), and it is kept rather than deleted because it is the
+  only route that does not need a key window and because its failure mode is now
+  written down. The machinery around it is sound and worth keeping: a serial
+  queue off the tap thread, 200 ms per character through
+  `AXUIElementSetMessagingTimeout`, a character that misses the deadline said to
+  be lost rather than queued behind the next.
+- **The note is never the delivered text in Scratchpad mode**, and that is a rule
+  now rather than a default (`noteMayDeliver`, off, on top of
+  `WT_SCRATCHPAD_DELIVER`). Two runs delivered `added 'qz'` — a pair of probe
+  *keystrokes* that had landed in the note — as though they were the sentence. A
+  note that has had his typing in it is not a transcript. On a timeout with no
+  row the answer is **"No words came back"**, never the note.
+- **Why a swallowed key still appeared to land, answered:** the tap is *not*
+  leaking. Each probe letter arrives **twice, from two different posting
+  processes**, each with its own `SWALLOWED` line — the harness posts every letter
+  twice, and a guard that faithfully forwards both delivers two. `noteDuplicate`
+  says so in the log now, so nobody has to infer it again.
+
 ### The measured truth about his keystrokes, and what is accepted
 
 Wispr's Scratchpad panel takes the keyboard for a stretch of every dictation, and **what he types
