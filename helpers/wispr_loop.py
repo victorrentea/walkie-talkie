@@ -1076,6 +1076,79 @@ def frontmost_app() -> str:
                       "process whose frontmost is true")
 
 
+# ══ the product path: Scratchpad mode ═══════════════════════════════════════
+class FocusWatch:
+    """Samples the frontmost app in the background for the length of a run.
+
+    *Focus never moves* is a claim about the **whole** dictation, not about the
+    two instants either side of it, and the failure it guards against — a window
+    that flashes to the front and back while Victor is mid-sentence on a
+    projector — is invisible to a before/after pair. So it is sampled, and what
+    is reported is the set of everything seen.
+    """
+
+    def __init__(self, every: float = 0.4):
+        self.every = every
+        self.seen: list[str] = []
+        self._stop = None
+        self._thread = None
+
+    def start(self):
+        import threading
+
+        self._stop = threading.Event()
+
+        def loop():
+            while not self._stop.is_set():
+                app = frontmost_app()
+                if app and (not self.seen or self.seen[-1] != app):
+                    self.seen.append(app)
+                self._stop.wait(self.every)
+
+        self._thread = threading.Thread(target=loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> list[str]:
+        if self._stop is not None:
+            self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+        return self.seen
+
+
+def wrap_mode(relay: Relay) -> str:
+    return (relay.state() or {}).get("wrapMode") or ""
+
+
+def set_wrap_mode(relay: Relay, mode: str) -> dict:
+    """`scratchpad` · `sink` · `off` — the tick's three settings, from a desk."""
+    return relay.post("/test/wrap-mode", {"mode": mode})
+
+
+def _await_scratchpad_closed(timeout: float = 3.0) -> tuple[bool, float]:
+    """Wispr's window list back to just the pill.
+
+    The product path closes the Scratchpad with a 250 ms press after delivering,
+    and *within three seconds of delivery* is the difference between a window
+    that blinked and a window Victor now has to close.
+    """
+    got, waited = wait_for(lambda: wispr_windows() == ["Status"], timeout, poll=0.1)
+    return bool(got), waited
+
+
+def _count_occurrences(haystack: str, needle: str) -> int:
+    """How many times the sentence appears, normalised.
+
+    `wrap-caret` is the one scenario where the victim **is** the destination, so
+    "did it arrive" is not the question — *exactly once* is. A wrap that swallows
+    Wispr's own insertion and then adds its own delivers twice, and a test that
+    only asks whether the text is there calls that a pass.
+    """
+    hay, pin = normalise(haystack), normalise(needle)
+    return hay.count(pin) if pin else 0
+
+
 # ══ scenarios ════════════════════════════════════════════════════════════════
 def _open_sink(relay: Relay):
     """Make the relay's own window key, and empty it.
@@ -1998,6 +2071,188 @@ def scenario_scratchpad_hold(ctx) -> Result:
     return result
 
 
+def _wrap_run(ctx, destination: str) -> Result:
+    """The product path, once, at one destination.
+
+    **Scratchpad mode**, with *Wrap Wispr Flow* on: the relay holds the
+    scratchpad chord itself, so Wispr dictates into its own note instead of into
+    whatever has focus; the relay then delivers the newest note
+    (`delivery.via = "wispr-notes"`) and closes the Scratchpad with a 250 ms
+    press. The whole point is that the words arrive **where the gesture said**
+    and nowhere else, so every one of these runs keeps a real TextEdit document
+    front and key and asks what happened to it.
+
+    `destination` is `caret` · `bound` · `spawn` · `cancel`. Everything except
+    the destination assertion is shared, because everything except the
+    destination assertion *is* the same claim four times: one note made, one
+    delivery by `wispr-notes`, the Scratchpad shut again within three seconds,
+    the ring down at the release, the words landed inside two seconds of Wispr
+    finishing, and Victor's focus never taken.
+    """
+    relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
+    victim = None
+    tty = None
+    was_mode = None
+    focus = FocusWatch()
+    sink_file = os.path.join(ctx.scratch, "bound-sink.txt")
+    try:
+        was_mode = wrap_mode(relay)
+        answer = set_wrap_mode(relay, "scratchpad")
+        result.check(relay.dry_run or (wrap_mode(relay) == "scratchpad"),
+                     "the relay is in Scratchpad wrap mode",
+                     "was %r, now %r" % (was_mode or "—", (answer or {}).get("mode")
+                                         or wrap_mode(relay) or "—"))
+
+        if destination == "bound":
+            if relay.dry_run:
+                print("   · osascript: a Terminal running `cat >> %s`" % sink_file)
+                tty = "ttysNNN"
+            else:
+                open(sink_file, "w").close()
+                tty = _open_scratch_terminal(sink_file)
+            relay.post("/bind", {"tty": tty})
+            result.check(bool(tty), "a scratch terminal, bound", tty or "none")
+
+        if relay.dry_run:
+            print("   · osascript: open %s/victim.txt in TextEdit" % ctx.scratch)
+            victim = "victim.txt"
+        else:
+            victim = _open_victim(ctx.scratch)
+        result.check(bool(victim), "a victim document, front and key", victim or "none")
+        if not victim:
+            return result
+
+        notes_before = wispr_notes()
+        windows_before = [] if relay.dry_run else wispr_windows()
+        if not relay.dry_run:
+            focus.start()
+
+        gesture = {"caret": "forward-click", "bound": "forward-right",
+                   "spawn": "forward-up", "cancel": "forward-click"}[destination]
+        relay.gesture(gesture)
+        _await_listening(relay, result)
+        _await_microphone(ctx)
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+
+        if destination == "cancel":
+            relay.gesture("forward-left")
+        elif destination == "spawn":
+            relay.gesture("forward-click")     # the spawn is not a toggle
+        else:
+            relay.gesture(gesture)             # click and right-move both toggle
+
+        settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
+        result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
+
+        closed, closed_after = (True, 0.0) if relay.dry_run else _await_scratchpad_closed()
+        result.check(closed, "the Scratchpad closed again within 3 s of delivery",
+                     "after %.1f s — windows now %s"
+                     % (closed_after, [] if relay.dry_run else wispr_windows()))
+
+        seen = [] if relay.dry_run else focus.stop()
+        result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
+        strays = [a for a in seen if a not in ("TextEdit", "")]
+        if destination == "spawn":
+            # A spawn opens a Terminal and that window is *meant* to come
+            # forward — it is the session Victor is about to talk to. Anything
+            # else in the list is a wrap stealing focus.
+            result.check(all(a in ("TextEdit", "Terminal") for a in seen),
+                         "focus only ever moved to the spawned Terminal", seen or "—")
+        else:
+            result.check(not strays, "focus never moved off the victim", seen or "—")
+
+        t = read_timings(mark.lines())
+        result.timings = t
+        state = relay.state() or {}
+        delivery = state.get("lastDelivery") or {}
+        changes = notes_diff(notes_before, wispr_notes())
+        victim_text = "" if relay.dry_run else _victim_text(victim)
+        rows = outbox.fresh()
+
+        if destination == "cancel":
+            result.check(not changes or relay.dry_run, "no note was delivered",
+                         "%d note change(s)" % len(changes))
+            result.check(not victim_text.strip(), "nothing in the victim",
+                         "%d chars — %r" % (len(victim_text), victim_text[:60]))
+            result.check(not rows, "no delivery was written to the outbox", "%d line(s)" % len(rows))
+            result.answer = "cancelled cleanly: no note, no delivery, victim untouched"
+            return result
+
+        result.check(len(changes) >= 1 or relay.dry_run, "Wispr wrote exactly one new note",
+                     "%d note change(s)" % len(changes))
+        result.check(delivery.get("via") == "wispr-notes" or relay.dry_run,
+                     "the delivery came by `wispr-notes`",
+                     "via=%s kind=%s to=%s" % (delivery.get("via") or "—",
+                                               delivery.get("kind") or "—",
+                                               delivery.get("to") or "—"))
+
+        want = ctx.fixture.get("transcript", "")
+        if destination == "caret":
+            # The victim *is* the caret here, so the question is not whether the
+            # words arrived but whether they arrived **once**. A wrap that
+            # swallows Wispr's insertion and adds its own delivers twice.
+            times = _count_occurrences(victim_text, want)
+            result.check(times == 1 or relay.dry_run, "the words landed in the caret exactly once",
+                         "%d occurrence(s) — %r" % (times, victim_text[:70]))
+        elif destination == "bound":
+            typed, _ = wait_for(lambda: _read(sink_file).strip(), timeout=10, poll=0.25,
+                                dry=relay.dry_run)
+            _assert_text(result, "the words were typed into the bound tty", typed or "", want)
+            result.check(not victim_text.strip(), "the victim was left alone",
+                         "%d chars — %r" % (len(victim_text), victim_text[:60]))
+        elif destination == "spawn":
+            spawned = [r for r in rows
+                       if str(((r.get("delivery") or {}).get("to")) or "").startswith("spawn:")]
+            result.check(bool(spawned) or relay.dry_run, "the outbox has a `spawn:` delivery",
+                         "%d line(s), %d spawn" % (len(rows), len(spawned)))
+            if spawned:
+                _assert_text(result, "the spawned session got the words",
+                             spawned[-1].get("text") or spawned[-1].get("line") or "", want)
+                result.note("spawned destination: %s — close that Terminal when you are done"
+                            % ((spawned[-1].get("delivery") or {}).get("to")))
+            result.check(not victim_text.strip(), "the victim was left alone",
+                         "%d chars — %r" % (len(victim_text), victim_text[:60]))
+
+        _assert_ring(result, t)
+        result.note("windows before %s, after %s"
+                    % (windows_before, [] if relay.dry_run else wispr_windows()))
+        for change in changes:
+            result.note("%s %s %s — %r" % (change["change"], change["table"], change["id"][:8],
+                                           (change.get("content") or "")[-70:]))
+        result.answer = ("delivered to %s via %s; victim %s; Scratchpad closed: %s"
+                         % (destination, delivery.get("via") or "—",
+                            "untouched" if not victim_text.strip() else "%d chars" % len(victim_text),
+                            "yes" if closed else "NO"))
+    finally:
+        focus.stop()
+        if destination == "bound":
+            relay.post("/unbind")
+            if tty and not relay.dry_run:
+                _close_scratch_terminal(tty)
+        stand_down(relay)
+        if was_mode and was_mode != "scratchpad":
+            set_wrap_mode(relay, was_mode)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
+def scenario_wrap_caret(ctx) -> Result:
+    return _wrap_run(ctx, "caret")
+
+
+def scenario_wrap_bound(ctx) -> Result:
+    return _wrap_run(ctx, "bound")
+
+
+def scenario_wrap_spawn(ctx) -> Result:
+    return _wrap_run(ctx, "spawn")
+
+
+def scenario_wrap_cancel(ctx) -> Result:
+    return _wrap_run(ctx, "cancel")
+
+
 SCENARIOS = {
     # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
     # for the microphone before playing, so it measures the caret path without
@@ -2013,11 +2268,12 @@ SCENARIOS = {
     # chord, like Victor's own hand does.
     "caret-short-cold": (lambda ctx: scenario_caret(ctx, wait_for_mic=False),
                          "the 2–3 s clip played on the chord, without waiting for Wispr's "
-                         "microphone — incident 1's actual condition (expected red today)", True),
+                         "microphone — incident 1's condition; green since the ring/settle split", False),
     "caret-long": (scenario_caret,
                    "a 15–25 s dictation at the caret — the control", False),
     "spawn-click-in-settle": (scenario_spawn_click_in_settle,
-                              "a spawn, stopped, then clicked again mid-settle — incident 2 (expected red today)", True),
+                              "a spawn, stopped, then clicked again mid-settle — incident 2; "
+                              "green since the swallow moved to the start chord", False),
     "bound": (scenario_bound, "a dictation typed into a bound scratch terminal", False),
     "cancel": (scenario_cancel, "🔼 ← throws the sentence away", False),
     # The two that answer a question rather than guard a behaviour. Run them
@@ -2025,6 +2281,15 @@ SCENARIOS = {
     # an anecdote.
     "sink-key-at-start": (scenario_sink_key_at_start,
                           "the sink is key BEFORE the chord — the control for the two below", False),
+    # The product path: *Wrap Wispr Flow* on, Scratchpad mode, one per destination.
+    "wrap-caret": (scenario_wrap_caret,
+                   "Scratchpad mode, 🔼 click — the words land in the caret exactly once", False),
+    "wrap-bound": (scenario_wrap_bound,
+                   "Scratchpad mode, 🔼 → — the words are typed into the bound tty", False),
+    "wrap-spawn": (scenario_wrap_spawn,
+                   "Scratchpad mode, 🔼 ↑ — the words go to a session that did not exist", False),
+    "wrap-cancel": (scenario_wrap_cancel,
+                    "Scratchpad mode, 🔼 ← mid-dictation — no note, no delivery, nothing anywhere", False),
     "scratchpad-hold": (scenario_scratchpad_hold,
                         "hold Wispr's Open Scratchpad key and dictate into the Scratchpad — "
                         "a destination that is not 'whatever has focus'", False),

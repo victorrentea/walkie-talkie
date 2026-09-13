@@ -321,6 +321,10 @@ a failed assertion, not papered over.
 | **`spawn-click-in-settle`** | `forward-up` · play · `forward-click` · *(settling)* · `forward-click` | **nothing** in the sink; an outbox line whose `delivery.to` starts `spawn:` and whose text matches |
 | **`bound`** | bind a scratch tty · `forward-right` · play · `forward-right` | the words are typed into `bound-sink.txt`, nothing in the sink |
 | **`cancel`** | `forward-click` · play · `forward-left` | no words anywhere, no outbox line, ring down ≤ 1000 ms after the gesture, reason says *cancel* |
+| **`wrap-caret`** | `/test/wrap-mode scratchpad` · `forward-click` · play · `forward-click` | the words land in the caret **exactly once**, `delivery.via = wispr-notes` |
+| **`wrap-bound`** | the same with `forward-right`, a bound `cat` terminal | the words in `bound-sink.txt`, victim untouched |
+| **`wrap-spawn`** | the same with `forward-up`, stopped with a click | an outbox `spawn:` delivery, victim untouched |
+| **`wrap-cancel`** | `forward-click` · play · `forward-left` | no note, no delivery, nothing anywhere |
 | **`scratchpad-hold`** | hold the *Open Scratchpad* key (F18) · play · release | the sentence reaches a Wispr **note**, the victim is untouched, no window opens, focus never moves |
 | **`dismiss-before-paste`** | raw chord · play · stop · *wait for `formatted`* · `--dismiss-delay` ms · ⌃Escape | **answered, negatively** — see below |
 | **`sink-key-at-start`** | sink key · `forward-click` · play · `forward-click` | the control for the pair below: the words are in the sink, the victim document is empty |
@@ -360,6 +364,39 @@ session simply vanished.
 A real spawn **opens a Terminal window with `claude` in it**. That is a side
 effect on Victor's desktop; the runner reports the spawned destination in its
 notes so the window can be closed.
+
+### The product path: `wrap-*`, Scratchpad mode
+
+With *Wrap Wispr Flow* on, every relay-started dictation runs in **Scratchpad
+mode**: the relay holds the scratchpad chord itself, so Wispr dictates into its
+own note rather than into whatever has focus; the relay then delivers the newest
+note (`delivery.via = "wispr-notes"`) and closes the Scratchpad with a 250 ms
+press. `POST /test/wrap-mode {"mode": "scratchpad"|"sink"|"off"}` is the control
+and `/test/state.wrapMode` reads it back; the scenarios set it and **put the
+previous value back** on the way out.
+
+All four keep a **real TextEdit document front and key** and ask what happened to
+it, because "the words went where the gesture said" is only half a claim without
+"and nowhere else". Everything except the destination is shared, because
+everything except the destination is the same claim four times: one new note, one
+delivery by `wispr-notes`, the Scratchpad shut again **within 3 s**, the ring
+down at the release, the words landed **≤ 2 s** after Wispr's row is terminal,
+and Victor's focus never taken.
+
+Two details that are easy to get wrong and were:
+
+**`wrap-caret` counts, it does not merely look.** There the victim *is* the
+caret, so "the words are there" is true both of a working wrap and of one that
+swallows Wispr's insertion and then adds its own on top. Only `_count_occurrences`
+tells them apart, and a doubled sentence is the bug a reader would least expect a
+green test to have missed.
+
+**Focus is sampled, not compared.** *Never moves* is a claim about the whole
+dictation, and a window that flashes to the front and back mid-sentence — on a
+projector, in front of a room — is invisible to a before/after pair. `FocusWatch`
+records every change at 0.4 s and the run reports the sequence. `wrap-spawn` is
+the one exception: its Terminal is *meant* to come forward, so there the
+assertion is that nothing **else** did.
 
 ### `scratchpad-hold` — dictating somewhere that is not "whatever has focus"
 

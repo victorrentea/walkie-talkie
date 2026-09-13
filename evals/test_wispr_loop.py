@@ -331,6 +331,35 @@ class Playback(unittest.TestCase):
         self.assertEqual(self.wl.DEVICE_PREFERENCE[0], "🎓 TO Wispr")
 
 
+class WrapMode(unittest.TestCase):
+    """`wrap-caret` asks *exactly once*, not *at all*.
+
+    The victim **is** the caret in that scenario, so "the words are there" is
+    true for both a working wrap and a wrap that swallows Wispr's insertion and
+    then adds its own on top. Only the count tells them apart, and a doubled
+    sentence is the bug a reader would least expect a green test to have missed.
+    """
+
+    def test_once_is_once(self):
+        self.assertEqual(wl._count_occurrences("Commit and push the fix.", "Commit and push the fix."), 1)
+
+    def test_a_doubled_delivery_is_caught(self):
+        doubled = "Commit and push the fix. Commit and push the fix."
+        self.assertEqual(wl._count_occurrences(doubled, "Commit and push the fix."), 2)
+
+    def test_punctuation_and_case_do_not_hide_a_second_copy(self):
+        doubled = "commit and push the fix COMMIT AND PUSH THE FIX!"
+        self.assertEqual(wl._count_occurrences(doubled, "Commit and push the fix."), 2)
+
+    def test_an_empty_victim_is_zero_not_a_crash(self):
+        self.assertEqual(wl._count_occurrences("", "Commit and push the fix."), 0)
+
+    def test_an_empty_needle_never_claims_a_match(self):
+        """`str.count("")` is len+1 — a fixture with no transcript must not read
+        as 'delivered a thousand times'."""
+        self.assertEqual(wl._count_occurrences("anything at all", ""), 0)
+
+
 class Scratchpad(unittest.TestCase):
     """The parts of `scratchpad-hold` that can be wrong without anyone noticing."""
 
