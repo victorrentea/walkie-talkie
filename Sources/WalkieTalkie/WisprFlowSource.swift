@@ -316,7 +316,30 @@ final class WisprFlowSource: DictationSource {
     /// and it is worth keeping for the day Wispr changes the order again: a
     /// pasteboard whose contents are **what they were before he started talking**
     /// cannot be this sentence, whatever the change count says.
-    private var clipboardBaseline: String?
+    /// **The one place this app reads the pasteboard's text**, and it is
+    /// guarded because the delivery path runs exactly when Wispr — and, in a
+    /// test, the harness — are rewriting it.
+    ///
+    /// Three cheap defences, none of which can catch a fault but all of which
+    /// shrink the window it needs:
+    ///
+    /// - **Ask `types` first.** It is the question that says whether there is a
+    ///   string at all, and `stringForType:` on a pasteboard without one still
+    ///   walks the type cache — which is where the crash was.
+    /// - **Sandwich it in `changeCount`.** A pasteboard that moved while it was
+    ///   being read may hand back a mixture of two owners' contents; the caller
+    ///   is better off with nothing than with half a sentence.
+    /// - **Read once.** Every caller on the delivery path comes here, so a
+    ///   delivery costs one read rather than one per branch that wondered.
+    static func pasteboardString() -> String? {
+        let board = NSPasteboard.general
+        guard board.types?.contains(.string) == true else { return nil }
+        let before = board.changeCount
+        let text = board.string(forType: .string)
+        guard board.changeCount == before else { return nil }
+        return text
+    }
+
     /// The string as it stood the instant the change was first seen — read then
     /// rather than 250 ms later, because the restore lands inside that gap.
     private var clipboardMoved: String?
@@ -1158,8 +1181,21 @@ final class WisprFlowSource: DictationSource {
         armedAt = CFAbsoluteTimeGetCurrent()
         captureFrom = armedAt
         askedForCopy = false
+        // **The change count, and deliberately not the string** (2026-09-14).
+        //
+        // This line used to read the pasteboard's *text* as well, to keep a
+        // baseline to compare a later read against. It crashed the app on the
+        // main thread, at the start of a dictation:
+        //
+        //     EXC_BAD_ACCESS — objc_msgSend → -[NSPasteboard _updateTypeCacheIfNeeded]
+        //       → stringForType: → beginCapture → gestureSeen → start()
+        //
+        // Reading a pasteboard that another process is rewriting is not safe,
+        // and this one runs on **every** dictation. The baseline was only ever
+        // the belt behind the 2026-09-13 clipboard-restore bug — arming at the
+        // start chord is what actually fixed that — so it goes, and the change
+        // count, which is an integer and cannot fault, stays.
         clipboardAt = NSPasteboard.general.changeCount
-        clipboardBaseline = NSPasteboard.general.string(forType: .string)
         clipboardMoved = nil
         // **Armed whether or not the relay is going to take it.** The probe half
         // — which process posted what key, how long after the microphone shut —
@@ -1205,7 +1241,7 @@ final class WisprFlowSource: DictationSource {
             // transcript, presses ⌘V and puts the previous clipboard back, and
             // the restore lands inside exactly that gap — three sentences on
             // 2026-09-13 were delivered as the clipboard Wispr had just restored.
-            self.clipboardMoved = NSPasteboard.general.string(forType: .string)
+            self.clipboardMoved = Self.pasteboardString()
             // Give the ⌘V a beat to arrive behind the write: Wispr sets the
             // pasteboard *then* presses the key, so a poll that fires in between
             // must not conclude the key is never coming.
@@ -1701,18 +1737,9 @@ final class WisprFlowSource: DictationSource {
         guard intercepting else { return }
         // The string as it stood when the pasteboard first moved, when that is
         // what this delivery is about — see `clipboardMoved`.
-        let fromBoard = clipboardMoved ?? NSPasteboard.general.string(forType: .string)
+        let fromBoard = clipboardMoved ?? Self.pasteboardString()
         let text = (given ?? fromBoard ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        // **A pasteboard holding what it held before he started talking is not a
-        // transcript** — it is Wispr putting the clipboard back after its own
-        // ⌘V. The capture is *kept*, because the row can still answer and
-        // usually does a beat later; only this route is refused.
-        if given == nil, !text.isEmpty,
-           text == clipboardBaseline?.trimmingCharacters(in: .whitespacesAndNewlines) {
-            Log.error("wispr: \(reason) — the pasteboard holds exactly what it held before the dictation (\(text.count) chars). Wispr restored it; this is not the sentence. Waiting for the row.")
-            return
-        }
         let took = CFAbsoluteTimeGetCurrent() - captureFrom
         // Before `endCapture` resets it, or the machine goes `transcribing` →
         // `idle` and the transition log never says this one finished.
@@ -1758,7 +1785,6 @@ final class WisprFlowSource: DictationSource {
         hotkeys.disarmInjectionCapture()
         clipboardWatch?.invalidate()
         clipboardWatch = nil
-        clipboardBaseline = nil
         clipboardMoved = nil
         historyPoll?.invalidate()
         historyPoll = nil

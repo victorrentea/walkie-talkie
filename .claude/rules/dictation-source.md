@@ -201,15 +201,25 @@ landing in that note appear to stop Wispr finalising it. A guard that costs the
 whole dictation to save a keystroke is a bad trade, and it was not saving the
 keystrokes either.
 
-- **`NSPasteboard.string(forType:)` in `beginCapture` can crash the app, and it
-  is on the product path.** Measured 2026-09-14 02:24 — `EXC_BAD_ACCESS` on the
-  **main thread**, `objc_msgSend` → `-[NSPasteboard _updateTypeCacheIfNeeded]` →
+- **`beginCapture` takes the pasteboard's change count and never its text**
+  (2026-09-14). It used to read the string as well, to keep a baseline, and that
+  crashed the app on the **main thread** at the start of a dictation:
+  `EXC_BAD_ACCESS`, `objc_msgSend` → `-[NSPasteboard _updateTypeCacheIfNeeded]` →
   `stringForType:` → `beginCapture` → `gestureSeen` → `start()` →
-  `startDictation`. Reading a pasteboard another process is rewriting is not safe,
-  and this read happens at the start of **every dictation**. It is the belt behind
-  the clipboard-restore fix, not the fix itself (that was arming at the start
-  chord), so it can go: keep `clipboardAt` (the change count) and drop the string.
-  **Not yet changed** — noted here so it is not rediscovered from a crash report.
+  `startDictation`. Reading a pasteboard another process is rewriting is not
+  safe, and that read ran on **every** dictation. The baseline was only the belt
+  behind the 09-13 clipboard-restore bug — arming at the start chord is what
+  fixed it — so it is gone, along with the `text == clipboardBaseline`
+  comparison. The change count is an integer and cannot fault.
+- **Every read of the pasteboard's *text* goes through
+  `WisprFlowSource.pasteboardString()`**, including `WisprSink`'s paste handler.
+  Three defences, none of which can catch a fault but all of which shrink the
+  window it needs: **ask `types` first** (the cheap question, and `stringForType:`
+  on a pasteboard without a string still walks the type cache — which is where
+  the crash was); **sandwich the read in `changeCount`** and discard it if the
+  pasteboard moved, because a torn read hands back a mixture of two owners'
+  contents; and **read once**, so a delivery costs one read rather than one per
+  branch that wondered.
 - **The Accessibility insertion is opt-in** (`WT_SCRATCHPAD_AX_INSERT=1`, or
   `POST /test/ax-insert`), and it is kept rather than deleted because it is the
   only route that does not need a key window and because its failure mode is now

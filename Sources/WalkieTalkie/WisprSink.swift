@@ -370,7 +370,10 @@ private final class SinkTextView: NSTextView {
     }
 
     override func paste(_ sender: Any?) {
-        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        // Guarded, like every other read on a delivery path — this one runs the
+        // instant Wispr pastes, which is the instant it is rewriting the
+        // pasteboard. See `WisprFlowSource.pasteboardString`.
+        let text = WisprFlowSource.pasteboardString() ?? ""
         pasting = true
         defer { pasting = false }
         super.paste(sender)
