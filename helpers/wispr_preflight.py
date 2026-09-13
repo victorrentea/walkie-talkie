@@ -191,6 +191,21 @@ def relay_process() -> tuple[bool, str]:
 def wispr_microphone() -> tuple[str, str]:
     """(`auto` | `fixed` | `unknown`, the device's name).
 
+    **`auto` is not good enough, and that is measured** (2026-09-13). The whole
+    harness was built on the journal's hypothesis that *with Auto-detect picked
+    Wispr follows the system default input, which is scriptable*. It does not.
+    Five runs with the system default pointed at `🎙️TO Zoom` came back with
+    Wispr's own `micDevice` column reading **`Built-in mic (recommended)`** every
+    single time — Wispr resolves *Auto-detect* to the built-in microphone, not to
+    the system default. The WAV was never heard: what Wispr recorded was a quiet
+    room (RMS 37-109 against the clip's 297, 1% of frames over the speech
+    threshold against 11%), which is why row after row sat at `raw_transcript`
+    and `no_audio` with no text.
+
+    So Wispr's microphone has to be **pinned to the Loopback device in Wispr's
+    own UI** — which is what `docs/teacher-loopback.md` said from the start. Only
+    Victor can do it, and nothing here may write that file.
+
     Wispr's microphone lives in `prefs.user.overrideAudioDeviceId` as a Chromium
     `MediaDeviceInfo.deviceId` — a per-origin salted hash that cannot be computed
     from a device name, in a file Wispr's own process rewrites. **Nothing here
@@ -210,6 +225,22 @@ def wispr_microphone() -> tuple[str, str]:
     if device == "default":
         return ("auto", names.get("default", "Auto-detect"))
     return ("fixed", str(names.get(device, device)))
+
+
+def _loopback_name(device_name: str | None) -> str:
+    """The device this run would play into, by name, or "" if none resolves."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import wispr_loopback as wl
+        return wl.resolve_device(device_name)[1]
+    except Exception:
+        return ""
+
+
+def _same_device(a: str, b: str) -> bool:
+    """CoreAudio names carry emoji and spacing Wispr does not always echo back."""
+    strip = lambda x: "".join(c for c in (x or "").lower() if c.isalnum())  # noqa: E731
+    return bool(a and b) and (strip(b) in strip(a) or strip(a) in strip(b))
 
 
 def audio_stack() -> tuple[bool, str]:
@@ -280,16 +311,23 @@ def checks(device_name: str | None = None, speaker: bool = False,
                            "helper of the same name, which quits itself in ~100 ms." % WISPR_LAUNCH))
 
     mic, mic_name = wispr_microphone()
-    if mic == "auto":
-        rows.append(Row(True, "Wispr microphone: Auto-detect — it follows the system default", key="mic"))
-    elif speaker:
-        rows.append(Row(None, "Wispr microphone is pinned (%s) — playing out loud instead" % mic_name, key="mic"))
+    wanted = _loopback_name(device_name)
+    if speaker:
+        rows.append(Row(None, "Wispr microphone is %s — playing out loud instead" % mic_name, key="mic"))
+    elif wanted and _same_device(mic_name, wanted):
+        rows.append(Row(True, "Wispr microphone: %s — the device this plays into" % mic_name, key="mic"))
     else:
-        rows.append(Row(False, "Wispr microphone is pinned to a device (%s)" % mic_name,
+        rows.append(Row(False, "Wispr microphone is %s, not %s"
+                        % ("Auto-detect" if mic == "auto" else repr(mic_name), wanted or "the Loopback device"),
                         fatal=True, key="mic",
-                        remedy="Victor: Wispr → Settings → Microphone → 'Auto-detect (MacBook Pro)'.\n"
-                               "Nothing here may edit Wispr's config.json — the id is a salted hash and\n"
-                               "Wispr's own process rewrites the file. Without it Wispr hears the room."))
+                        remedy="Victor: Wispr → Settings → Microphone → '%s'.\n"
+                               "**Auto-detect is not enough** — measured 2026-09-13: with the system\n"
+                               "default input on the Loopback device, Wispr's own micDevice column said\n"
+                               "'Built-in mic (recommended)' on five runs out of five. It resolves\n"
+                               "Auto-detect to the built-in microphone, not to the system default, so the\n"
+                               "WAV is never heard and the row ends raw_transcript / no_audio.\n"
+                               "Nothing here may edit Wispr's config.json — the id is a salted hash in a\n"
+                               "file Wispr's own process rewrites." % (wanted or "the Loopback device")))
 
     target = get(port, "/target") or {}
     if target.get("bound"):

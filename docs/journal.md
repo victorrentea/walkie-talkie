@@ -7794,6 +7794,53 @@ It rhymes with *Never launch the installed app by its executable path*: both are
 name to something other than the bundle you meant, and both cost hours because the symptom is
 silence rather than an error.
 
+### Auto-detect is not the system default input (2026-09-13)
+
+The harness was built on one sentence from *The harness, and the one setting Victor has to change*:
+`rankedAudioDevices` contains `{"deviceId": "default", "name": "Auto-detect (MacBook Pro)"}`, **so
+with Auto-detect picked Wispr follows the system default input, which is scriptable**. That was a
+reading of a config file, never a measurement. It is false.
+
+Five runs, system default input pointed at `🎙️TO Zoom` by `POST /test/input`, the relay's own meter
+logging `mic: recording through 🎙️TO Zoom — 48000Hz × 2ch` beside them. Wispr's own `micDevice`
+column, every time:
+
+```
+12593  raw_transcript  ro.victorrentea.wispr-relay  Built-in mic (recommended)
+12591  raw_transcript  ro.victorrentea.wispr-relay  Built-in mic (recommended)
+12589  raw_transcript  ro.victorrentea.wispr-relay  Built-in mic (recommended)
+```
+
+Wispr resolves *Auto-detect* to the built-in microphone, not to whatever the system default is. It
+never heard the WAV. What it recorded was the room, and the numbers say so — the `audio` blob in its
+own row against the clip we played:
+
+| | RMS | peak | frames over the speech floor |
+|---|---|---|---|
+| the fixture we play | 297.0 | 2839 | 11% |
+| what Wispr recorded | 37–109 | 1120–3155 | 0–1% |
+
+which is why row after row ended `raw_transcript` or `no_audio` with no text while every other part
+of the chain was working. Two hours went into "Wispr is not completing transcriptions", and Wispr was
+completing them correctly — of silence.
+
+**The fix is the one `docs/teacher-loopback.md` wrote down in the first place**: *Wispr → Settings →
+Microphone → the Loopback device*. The Auto-detect route was invented to avoid asking Victor for that
+click, because the device id is a salted hash; the click is not avoidable. `wispr_preflight.py` now
+requires Wispr's microphone to **be** the device the run plays into and says so in words, and every
+run reports `micDevice` afterwards and fails on a mismatch — a preflight that reads a config file
+cannot be the last word on what another process will do with it.
+
+Two smaller things the same evening, both the harness fooling itself:
+
+- **The chord lands in the sink.** `fn ⌃ Space` with the sink key arrives as `typed+keyDown+typed+
+  keyDown — 4 chars`. A run where Wispr never opened its microphone reported the transcript `"tu"`.
+  The sink is now cleared *after* the microphone edge, and one-character keystroke events never count.
+- **A toggle chord left open records for ever.** A row of **495 seconds** with an empty `app` read at
+  first like Victor dictating for eight minutes; it was this rig's own chord with nobody coming back
+  for it. Every exit path now stands the dictation down, gated on the state so it can never take away
+  one he started.
+
 ### The harness, and the one setting Victor has to change
 
 `tools/wispr-test.sh <file.wav>` plays a WAV into a virtual input device, triggers a **real** Wispr

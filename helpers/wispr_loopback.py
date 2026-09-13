@@ -142,13 +142,48 @@ def read_wav(path):
     return audio, rate, channels
 
 
-def play(audio, rate, device_index, gain=1.0):
-    """Play through to the end, blocking. Real time, by construction."""
+#: Peak the clip is normalised to before it is played. **Not cosmetic.**
+#: Measured 2026-09-13: the corpus clips sit at peak ≈ 0.087 of full scale — a
+#: laptop microphone across a room — and what came back out of Wispr's own
+#: `audio` blob was quieter again: RMS **297 → 109** and the fraction of frames
+#: over the relay's own speech threshold **11% → 1%**. Wispr recorded it, called
+#: its recogniser and got nothing, leaving the row at `raw_transcript` with no
+#: text. A virtual cable has no reason to reproduce the room's distance, so the
+#: clip is normalised to a healthy line level and there is still 6 dB of
+#: headroom above it.
+PLAY_PEAK = float(os.environ.get("WISPR_PLAY_PEAK", "0.5"))
+
+
+def play(audio, rate, device_index, gain=1.0, peak=None):
+    """Play through to the end, blocking. Real time, by construction.
+
+    Two things beyond `sd.play`, both learned the hard way on 2026-09-13:
+
+    * **Normalised to `PLAY_PEAK`.** See above — a clip at the level a room
+      microphone recorded it lands under Wispr's own voice activity threshold.
+    * **Matched to the device's channel count.** `🎙️TO Zoom` is two-channel;
+      handing PortAudio a mono array leaves the signal on one side, and anything
+      downstream that averages the two loses 6 dB — which is most of the gap
+      measured above.
+    """
     import sounddevice as sd
 
+    target = PLAY_PEAK if peak is None else peak
+    signal = np.asarray(audio, dtype=np.float32) * gain
+    if target:
+        loudest = float(np.max(np.abs(signal))) or 1.0
+        signal = signal * (target / loudest)
     lead = np.zeros(int(rate * LEAD_SEC), dtype=np.float32)
     tail = np.zeros(int(rate * TAIL_SEC), dtype=np.float32)
-    signal = np.clip(np.concatenate([lead, audio * gain, tail]), -1.0, 1.0)
+    signal = np.clip(np.concatenate([lead, signal, tail]), -1.0, 1.0)
+
+    channels = 1
+    try:
+        channels = max(1, int(sd.query_devices(device_index)["max_output_channels"]))
+    except Exception:
+        pass
+    if channels > 1:
+        signal = np.repeat(signal[:, None], channels, axis=1)
     sd.play(signal, samplerate=rate, device=device_index, blocking=True)
 
 

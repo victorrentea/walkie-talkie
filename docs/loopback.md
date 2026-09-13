@@ -44,6 +44,18 @@ start a dictation *with a destination* and deliver the sentence to a terminal,
 which is right for a scenario and wrong for a transcription. The run reports
 `relayListening` / `relayRingUp` so a caller can see which of the two it got.
 
+**The clip is normalised before it is played.** The corpus clips sit at peak
+≈ 0.087 of full scale — a laptop microphone across a room — and a virtual cable
+has no reason to reproduce that distance. `wispr_loopback.play()` normalises to
+`PLAY_PEAK` (0.5, `WISPR_PLAY_PEAK` overrides) and duplicates mono across the
+device's channels, because handing PortAudio a mono array leaves the signal on
+one side and anything downstream that averages the two loses 6 dB.
+
+**Every run reports which microphone Wispr actually used** (`wisprMic`, from the
+`micDevice` column) and fails if it was not the Loopback device. That column is
+the only place the answer is written, and the preflight's reading of
+`config.json` turned out not to predict it.
+
 **The clip does not play until Wispr's own microphone is open.** Not the relay's
 `listening`, which goes up on the chord — the CoreAudio edge, `wispr flow opened
 the microphone`. Measured on 2026-09-13: **1042, 3341 and 3694 ms**, against
@@ -151,11 +163,19 @@ when Victor wants it, is small:
 
 Four things make it work, and each of them is load-bearing:
 
-1. **Wispr on Auto-detect.** Its microphone is `prefs.user.overrideAudioDeviceId`
-   — a salted Chromium hash, in a file Wispr's own process rewrites, which
-   **nothing here may ever edit**. On *Auto-detect* it follows the **system
-   default input**, and that is scriptable: `POST /test/input {"name": …}`.
-   That one setting is the whole reason any of this is possible.
+1. **Wispr's microphone pinned to the Loopback device, in Wispr's own UI.**
+   *Auto-detect is not enough, and that is measured* (2026-09-13): with the
+   system default input on `🎙️TO Zoom`, Wispr's own `micDevice` column said
+   **`Built-in mic (recommended)` on five runs out of five**. It resolves
+   *Auto-detect* to the built-in microphone, **not** to the system default. What
+   it recorded was a quiet room — RMS 37–109 against the clip's 297, 1% of frames
+   over the relay's speech threshold against 11% — so row after row ended
+   `raw_transcript` or `no_audio` with no text, and the channel looked broken
+   when nothing was. `prefs.user.overrideAudioDeviceId` is a salted Chromium
+   hash in a file Wispr rewrites, so **only Victor can set this**, in Wispr →
+   Settings → Microphone. The preflight refuses to run until he has.
+   `POST /test/input` still points the system default at the device, because the
+   relay's own meter follows it — it just is not what Wispr obeys.
 2. **A Loopback device whose output side feeds its input side.** `resolve_device`
    prefers `🎓 TO Wispr`, then `TO Wispr`, then the devices that already exist on
    this Mac. As of 2026-09-13 no `TO Wispr` device has been made, so it lands on
@@ -186,7 +206,7 @@ the two cannot drift. Nothing fails silently; a fatal row says what to do.
 | relay answering on 8917–8919 | `ElementPicker` takes the first free port |
 | the **installed** bundle, not `.build/debug` | debug has no Accessibility grant; `CGEventPost` fails silently |
 | Wispr Flow running | the relay drives it, it never launches it. Matched on the **anchored executable path**, because Wispr ships a nested Accessibility helper whose executable is *also* named `Wispr Flow` |
-| **Wispr microphone on Auto-detect** | the one setting only Victor can change; the preflight prints the instruction and exits 2 |
+| **Wispr's microphone is the Loopback device** | the one setting only Victor can change; Auto-detect is *not* enough (Wispr resolves it to the built-in mic — measured, five runs out of five). Exits 2 with the instruction |
 | a Loopback device resolves | otherwise the WAV is played at nobody |
 | `sounddevice` + `numpy` | the playback |
 | `~/bin/hands-off` | the locks are mandatory, not a nicety |

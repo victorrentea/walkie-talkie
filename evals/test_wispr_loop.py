@@ -211,6 +211,15 @@ class Arrival(unittest.TestCase):
         self.assertEqual(text, "")
         self.assertEqual(events, [])
 
+    def test_the_chord_leaks_on_both_keystroke_routes(self):
+        """Verbatim 2026-09-13 19:42: `typed+keyDown+typed+keyDown — 4 chars` from one chord."""
+        sink = {"events": [
+            {"route": "typed", "chars": 1, "text": "t"},
+            {"route": "keyDown", "chars": 1, "text": "u"},
+            {"route": "typed", "chars": 1, "text": "b"},
+            {"route": "keyDown", "chars": 1, "text": "a"}]}
+        self.assertEqual(wl.sink_arrival(sink), ("", []))
+
     def test_a_real_delivery_still_counts(self):
         sink = {"text": "x" + "Commit and push the fix.", "events": [
             {"route": "keyDown", "chars": 1, "text": "x"},

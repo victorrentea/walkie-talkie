@@ -237,6 +237,10 @@ class HistoryRow:
     e2e_latency: float
     app: str
     started_at: float
+    #: **Wispr's own record of which microphone it used.** The one column that
+    #: catches the failure that wasted 2026-09-13: the system default pointed at
+    #: the Loopback device and this still said `Built-in mic (recommended)`.
+    mic_device: str = ""
 
 
 def wispr_history_newest() -> HistoryRow | None:
@@ -255,7 +259,7 @@ def wispr_history_newest() -> HistoryRow | None:
     try:
         row = db.execute(
             "select rowid, coalesce(status,''), coalesce(pastedText,''), coalesce(e2eLatency,0),"
-            "       coalesce(app,''), coalesce(strftime('%s', timestamp), '0')"
+            "       coalesce(app,''), coalesce(strftime('%s', timestamp), '0'), coalesce(micDevice,'')"
             "  from History order by rowid desc limit 1").fetchone()
     except Exception:
         return None
@@ -264,7 +268,8 @@ def wispr_history_newest() -> HistoryRow | None:
     if not row:
         return None
     return HistoryRow(rowid=row[0], status=row[1], pasted_text=row[2],
-                      e2e_latency=float(row[3]), app=row[4], started_at=float(row[5] or 0))
+                      e2e_latency=float(row[3]), app=row[4], started_at=float(row[5] or 0),
+                      mic_device=row[6])
 
 
 # ══ the relay, as this runner talks to it ════════════════════════════════════
@@ -535,6 +540,10 @@ STABLE_MS = 300
 #: be one*. Waiting past them is waiting for a key that is not coming.
 DEAD_STATUSES = ("dismissed", "empty", "no_audio", "error")
 
+#: The routes the sink attributes to *a key being pressed*, as opposed to a
+#: delivery. The chord this harness posts arrives on both of them.
+KEYSTROKE_ROUTES = ("keyDown", "typed")
+
 #: **`raw_transcript` is a status nothing in this repo knew about** until a run
 #: on 2026-09-13 19:23 sat in it: `duration 20.56`, `speechDuration 19.08`,
 #: `calledExternalAsr 1`, `clientNetworkLatency 176` — Wispr heard the whole
@@ -557,12 +566,18 @@ def sink_arrival(sink: dict) -> tuple[str, list[dict]]:
     reading its own keystrokes back and calling them an answer. That is the
     worst failure a test rig has, because it is green.
 
-    So a `keyDown` of one character or less does not count as an arrival.
-    Every other route does, at any length: a one-character *paste* is Wispr
-    delivering something, a one-character keystroke is us.
+    The chord arrives on **both** keystroke routes, not one: measured
+    2026-09-13 19:42, a single `fn ⌃ Space` produced
+    `typed+keyDown+typed+keyDown — 4 chars`, and a filter that dropped only
+    `keyDown` kept the other half and reported it as a transcript. So a
+    one-character event on **any keystroke route** does not count.
+
+    A *paste* still counts at any length — a one-character paste is Wispr
+    delivering something, a one-character keystroke is us. Belt to the braces of
+    `clear_sink_after_microphone()`, which removes the leakage at source.
     """
     events = [e for e in (sink.get("events") or [])
-              if e.get("route") != "keyDown" or (e.get("chars") or 0) > 1]
+              if e.get("route") not in KEYSTROKE_ROUTES or (e.get("chars") or 0) > 1]
     return "".join(e.get("text") or "" for e in events), events
 
 
@@ -588,6 +603,36 @@ class StableText:
         if not text or self.since is None:
             return False
         return (now - self.since) * 1000 >= self.stable_ms
+
+
+def stand_down(relay: Relay) -> bool:
+    """**Never leave a microphone open.** Returns True if it had to close one.
+
+    The chord is a *toggle*, and every path between the two halves of one — a
+    timeout, a Ctrl-C, an exception in the playback, a kill — leaves Wispr
+    recording with nobody coming back for it. Measured 2026-09-13: a row of
+    **495 seconds** with an empty `app`, which read at first like Victor
+    dictating for eight minutes and was this rig's own chord left open.
+
+    `POST /test/cancel` and not a second chord: a chord Wispr *missed* the first
+    time would be *started* by the second one, which is the same bug with a
+    longer fuse. Cancel is idempotent — it is the ✕, and the ✕ on nothing is
+    nothing.
+
+    Gated on the state, so it can never take away a dictation Victor started in
+    the moment the rig was finishing.
+    """
+    if relay.dry_run:
+        return False
+    state = relay.state() or {}
+    if not (state.get("isRecording") or state.get("listening") or state.get("speculative")):
+        return False
+    relay.post("/test/cancel")
+    time.sleep(0.3)
+    after = relay.state() or {}
+    if after.get("isRecording") or after.get("listening"):
+        relay.post("/test/cancel")
+    return True
 
 
 def _sink_key(relay: Relay) -> dict:
@@ -677,6 +722,11 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         opened, waited = await_microphone(relay, mark)
         out["micOpenWaitMs"] = round(waited * 1000)
         out["micOpened"] = opened
+        # **Clear the sink once the microphone is open, not before.** The chord
+        # is delivered into it as four one-character events, and clearing before
+        # posting the chord leaves them in front of whatever Wispr sends later.
+        # After the edge, anything in the sink can only be about this audio.
+        relay.sink_clear()
         if not opened:
             out["reason"] = ("Wispr's microphone never opened — the clip was played at a "
                              "recorder that was not listening")
@@ -709,6 +759,16 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
             "ringDownReason": t.ring_down_reason,
         }
         out["wisprApp"] = row.app if row else ""
+        # **Which microphone Wispr actually used.** Asked after the fact because
+        # it is the only place the answer is written, and because the preflight's
+        # reading of `config.json` turned out not to predict it.
+        out["wisprMic"] = row.mic_device if row else ""
+        if row and row.mic_device and "zoom" not in row.mic_device.lower() \
+                and "wispr" not in row.mic_device.lower():
+            out["reason"] = ("Wispr recorded through %r, not the Loopback device — it never heard "
+                             "the clip. Pin its microphone in Wispr → Settings → Microphone."
+                             % row.mic_device)
+            out["ok"] = False
         if outcome in DEAD_STATUSES:
             out["reason"] = "Wispr finished with status %r — there is no transcript" % outcome
         elif text.strip():
@@ -725,6 +785,11 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
             out["reason"] = "the sink settled empty"
         out["log"] = [line.raw for line in mark.lines()]
     finally:
+        # Before anything else: a microphone this run opened and did not close.
+        if stand_down(relay):
+            out["stoodDown"] = True
+            out["reason"] = (out.get("reason") or "") + \
+                " — a dictation was still open at the end and was cancelled"
         _sink_restore(relay)
         _close_sink(relay)
     return out
@@ -811,8 +876,13 @@ def _await_listening(relay: Relay, result: Result, timeout: float = 8.0) -> bool
 
 
 def _await_microphone(ctx) -> bool:
-    """The scenarios' wrapper: wait for Wispr's microphone, and say so either way."""
+    """The scenarios' wrapper: wait for Wispr's microphone, and say so either way.
+
+    It also empties the sink at that instant, so the chord's own four characters
+    are never in front of what Wispr sends afterwards.
+    """
     opened, waited = await_microphone(ctx.relay, ctx.mark)
+    ctx.relay.sink_clear()
     ctx.result.check(opened or ctx.relay.dry_run, "Wispr's microphone opened before the clip played",
                      "after %.0f ms" % (waited * 1000) if opened else
                      "never opened (%.1f s) — the clip was played at a recorder that was not listening"
@@ -1356,6 +1426,8 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
     try:
         func(ctx)
     finally:
+        if stand_down(relay):
+            result.note("a dictation was still open at the end of the scenario and was cancelled")
         if not dry_run:
             row = ctx.history()
             if row:
@@ -1449,6 +1521,9 @@ def _transcribe_cli(args, port: int) -> int:
               file=sys.stderr)
         if out.get("wisprApp"):
             print("  Wispr says it inserted into  %s" % out["wisprApp"], file=sys.stderr)
+    if out.get("wisprMic"):
+        print("  Wispr recorded through   %s" % out["wisprMic"], file=sys.stderr)
+    if True:
         print("  relay listening / ring   %s / %s"
               % (out.get("relayListening"), out.get("relayRingUp")), file=sys.stderr)
         if args.verbose:
@@ -1465,8 +1540,21 @@ def _ms(value):
     return "%d ms" % value if value is not None else "—"
 
 
+def _die_politely(signum, _frame):
+    """Turn a SIGTERM into an exception, so every `finally` above still runs.
+
+    Without this a `kill` skips the stand-down and the sink restore, and leaves
+    Wispr recording and Victor's keyboard pointed at a 40×20 window in a corner.
+    """
+    raise SystemExit("signal %d" % signum)
+
+
 def main(argv):
     import argparse
+    import signal
+
+    signal.signal(signal.SIGTERM, _die_politely)
+    signal.signal(signal.SIGHUP, _die_politely)
 
     ap = argparse.ArgumentParser(
         prog="wispr-loop",

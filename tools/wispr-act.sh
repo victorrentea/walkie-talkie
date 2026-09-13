@@ -74,7 +74,24 @@ for port in (8917, 8918, 8919):
 EOF
 }
 
+# **Never leave a microphone open.** The chord is a toggle and every path between
+# its two halves — Ctrl-C, a kill, a crash in the playback — leaves Wispr
+# recording. Measured 2026-09-13: a 495-second row with an empty `app`, which is
+# this rig's own chord left open, not anybody dictating. `POST /test/cancel` is
+# the ✕ and is idempotent; a second *chord* would start one Wispr had missed.
+# Gated on the state, and only reached when the Python did not clean up after
+# itself: an ungated cancel in the trap fired **four** ⌃Escapes into Wispr on
+# 2026-09-13 19:47, on top of the one the runner had already posted, and the
+# extra ones land on whatever dictation exists next.
+wispr_act_stand_down() {
+  curl -s -m 3 "http://127.0.0.1:8917/test/state" 2>/dev/null \
+    | /usr/bin/grep -qE '"(isRecording|listening)": *true' || return 0
+  curl -s -m 5 -X POST "http://127.0.0.1:8917/test/cancel" \
+       -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true
+}
+
 wispr_act_restore_input() {
+  wispr_act_stand_down
   [ -n "$WISPR_ACT_RESTORE" ] || return 0
   local name="$WISPR_ACT_RESTORE"; WISPR_ACT_RESTORE=""
   _wispr_act_post_input "$name" >/dev/null 2>&1
