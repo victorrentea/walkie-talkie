@@ -217,6 +217,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Parking the Scratchpad, and measuring whether it ever takes a key (2026-09-13, midnight)](#parking-the-scratchpad-and-measuring-whether-it-ever-takes-a-key-2026-09-13-midnight)
 - [The Scratchpad takes the keyboard without taking the front (2026-09-13, after midnight)](#the-scratchpad-takes-the-keyboard-without-taking-the-front-2026-09-13-after-midnight)
 - [The wrap, measured on the installed build (2026-09-14, 00:18)](#the-wrap-measured-on-the-installed-build-2026-09-14-0018)
+- [The paste is addressed, so the delivery stops waiting (2026-09-14)](#the-paste-is-addressed-so-the-delivery-stops-waiting-2026-09-14)
 
 ---
 
@@ -9090,3 +9091,43 @@ because a paste made while the Scratchpad holds the key focus lands in the note 
 close takes first time, 3337 ms when it does not. The row is ready at ~400 ms and the honest way
 to decouple the two is to post the relay's own paste with `postToPid` to the app it is meant for,
 rather than to whatever happens to hold the focus. Not built.
+
+## The paste is addressed, so the delivery stops waiting (2026-09-14)
+
+The last number that was in the wrong place. The row is ready **400 ms** after the microphone
+closes and the words were landing at 488 ms on a good close and **3337 ms** on one that needed a
+retry, because the delivery was gated on Wispr's window being gone. The gate was there for a real
+reason: a ⌘V posted at the session while the Scratchpad holds the key focus lands in **its** note,
+which is a bug this journal has already paid for once.
+
+The fix is to stop posting at the session. `CGEvent.postToPid` delivers straight into one
+application's event queue — it bypasses the session entirely, so it reaches the app whether or not
+that app is frontmost and whether or not some other window has taken the key focus. Which is
+exactly the shape of the problem: the thief never becomes frontmost, so *frontmost at the chord* is
+both knowable and correct.
+
+So `DictationResult` grew **`focusPid`** — *which process these words were meant for* — and it is
+deliberately a pid and deliberately source-agnostic. The fact being recorded is **the caret was
+here when he asked**, which is a property of any recogniser whose machinery might move the focus
+under a sentence, not a Wispr quirk to branch on. `WisprFlowSource` fills it only in Scratchpad
+mode, from the app it remembered at the chord; every other path leaves it nil and means *whatever
+has the caret*, which is what `/test/dictation`, the five-minute recovery of a cancelled sentence
+and ⌘⌃P all correctly mean. Bound-terminal and spawn deliveries never went through the focus at
+all. One field, one caller, no second branch — which is the rule this file is under.
+
+`TerminalBinding.pressPaste(to:)` is the addressed half, and it is shorter than its sibling rather
+than longer: the stale-⌘ cleanup that `tap(key:command:)` exists for is about
+`CGEventSource.flagsState`, which is *session* state, and an event posted to a pid never enters it.
+The `flagsChanged` pair still goes out — to the same pid — because a Cocoa app builds ⌘V out of a
+modifier it believes is down.
+
+**Who holds the keyboard is a log line now, not a gate.** It still says so when the Scratchpad is
+open at the moment of delivery, and whether it has the focus, because that is worth knowing; it no
+longer decides anything.
+
+One thing deliberately left as a measurement rather than a fix: the close is asked up to three
+times, and each attempt now logs **which one worked and whether the window was parked at the
+time**. The open question is whether a window pushed to the edge of the screen is harder for Wispr
+to toggle — and nothing is un-parked to find out, because un-parking would put it back over his
+work, which is the thing being avoided. The log accumulates the evidence; the decision waits for
+enough of it.

@@ -1003,6 +1003,41 @@ final class TerminalBinding {
     /// key at the frontmost app" is enough.
     static func pressPaste() { tap(key: 0x09, command: true) }
 
+    /// **⌘V addressed to one process**, for the case where what has the keyboard
+    /// is not what he was looking at.
+    ///
+    /// `postToPid` delivers straight into an application's own event queue: it
+    /// bypasses the session, so it reaches the app whether or not that app is
+    /// frontmost and whether or not some other window has taken the key focus.
+    /// That is the whole point — measured 2026-09-13, Wispr's Scratchpad becomes
+    /// key without becoming frontmost, and a paste posted at the session lands in
+    /// its note.
+    ///
+    /// **No modifier cleanup here, unlike `tap`.** The stale-⌘ bug that one is
+    /// written around is about `CGEventSource.flagsState`, which is *session*
+    /// state; events posted to a pid never enter it, so there is nothing left
+    /// behind to clear. The `flagsChanged` pair still goes out to the same pid,
+    /// because a Cocoa app builds ⌘V from a modifier it believes is down.
+    static func pressPaste(to pid: pid_t) {
+        let source = CGEventSource(stateID: .privateState)
+        func modifier(leaving state: CGEventFlags) {
+            guard let e = CGEvent(keyboardEventSource: source, virtualKey: VK_COMMAND, keyDown: true)
+            else { return }
+            e.type = .flagsChanged
+            e.flags = state
+            e.postToPid(pid)
+        }
+        modifier(leaving: .maskCommand)
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+           let up = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
+            down.flags = .maskCommand
+            up.flags = .maskCommand
+            down.postToPid(pid)
+            up.postToPid(pid)
+        }
+        modifier(leaving: [])
+    }
+
     /// **The ⌘ is pressed and released as a key, not only stamped on the V.**
     ///
     /// Stamping was all this did until 2026-09-10, and it left the session's

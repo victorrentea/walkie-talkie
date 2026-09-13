@@ -290,16 +290,36 @@ enum WisprScratchpad {
     }
 
     private static func attempt(_ n: Int, _ done: @escaping (Bool) -> Void) {
+        let parked = isWhereItWasParked()
         HotkeyTap.tapWisprScratchpad()
         poll(deadline: Date().addingTimeInterval(closeCeiling)) { gone in
             if gone {
-                if n > 1 { Log.info("🗒️ the Scratchpad closed on attempt \(n)") }
+                // **Which attempt worked, and whether it was parked at the
+                // time.** The open question is whether a window pushed to the
+                // edge of the screen is harder for Wispr to toggle; nothing is
+                // un-parked to find out, because un-parking would put it back
+                // over his work, which is the thing being avoided. The log is
+                // the measurement and the decision comes after enough of them.
+                Log.info("🗒️ the Scratchpad closed on attempt \(n) (it was \(parked ? "parked" : "where Wispr had put it"))")
                 return done(true)
             }
-            guard n < closeAttempts else { return done(false) }
-            Log.info("🗒️ the Scratchpad did not close on attempt \(n) — asking again")
+            guard n < closeAttempts else {
+                Log.error("🗒️ the Scratchpad did not close in \(closeAttempts) attempts — it is at \(describe(currentFrame())), \(parked ? "parked" : "unparked"); un-parking first was not tried")
+                return done(false)
+            }
+            Log.info("🗒️ the Scratchpad did not close on attempt \(n) — it is at \(describe(currentFrame())), \(parked ? "parked" : "unparked"); asking again")
             attempt(n + 1, done)
         }
+    }
+
+    private static func currentFrame() -> CGRect? {
+        windowElement().flatMap { frame(of: $0) }
+    }
+
+    /// Is the window sitting where it was put, within a couple of points.
+    private static func isWhereItWasParked() -> Bool {
+        guard let parked = parkedFrame, let now = currentFrame() else { return false }
+        return abs(now.minX - parked.minX) <= 2 && abs(now.minY - parked.minY) <= 2
     }
 
     /// 2.5 s per attempt — measured at "within 1.5 s", with room over it for a

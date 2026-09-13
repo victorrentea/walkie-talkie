@@ -1579,6 +1579,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // a panel between the sentence and the caret is exactly the ceremony
             // this path exists to remove.
             let line = caretLine(words: result.text)
+            // **Addressed, when the source says so.** A recogniser that opens
+            // windows of its own can be holding the keyboard at this instant —
+            // see `DictationResult.focusPid` — and the pid it remembered is the
+            // app he was looking at when he asked.
             // **No outbox line here and there never was one** — a caret sentence
             // is wanted in the field he is looking at and is not addressed to a
             // watcher. The record is the only trace it leaves.
@@ -1587,7 +1591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingDeliveryKind = nil
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
-            pasteText(line)
+            pasteText(line, to: result.focusPid)
             return
         }
         send(kind: "dictation", text: result.text, app: app)
@@ -5153,7 +5157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// **Silent on success**, like every delivery that lands: the words appear
     /// where he was looking, which is the whole of the evidence.
-    private func pasteText(_ text: String, after delay: TimeInterval = 0) {
+    /// - Parameter to: the process the words were meant for
+    ///   (`DictationResult.focusPid`), when something else may have taken the key
+    ///   focus in the meantime. Nil is *whatever has the caret*, which is what
+    ///   every caller but one means.
+    private func pasteText(_ text: String, after delay: TimeInterval = 0, to pid: pid_t? = nil) {
         // So ⌘⌃P can say it again — a Replace Wispr dictation is a dictation that
         // went out, and it is exactly the kind he wants twice: the same sentence
         // into a second field.
@@ -5161,16 +5169,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-        Log.info("📋 \(text.count) chars on the clipboard — pasting at the caret")
+        Log.info("📋 \(text.count) chars on the clipboard — pasting at the caret"
+                 + (pid.map { " (addressed to pid \($0))" } ?? ""))
         // The insertion the ring has been waiting for, said at the ⌘V rather than
         // at the transcript: the words are on screen when the key goes out, not
         // when the model handed them over.
+        func press() {
+            if let pid, pid > 0 { TerminalBinding.pressPaste(to: pid) }
+            else { TerminalBinding.pressPaste() }
+        }
         if delay == 0 {
-            TerminalBinding.pressPaste()
+            press()
             endSettling(reason: "pasted at the caret")
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                TerminalBinding.pressPaste()
+                press()
                 self?.endSettling(reason: "pasted at the caret")
             }
         }

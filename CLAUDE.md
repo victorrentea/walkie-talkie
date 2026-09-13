@@ -246,7 +246,13 @@ sits at rest there.
   **531 ms** after the microphone closed and the note was not readable until **2627 ms**, with
   another **663 ms** to close the window. The note is where Wispr *pastes*; the row is where it
   writes what it heard. `WT_SCRATCHPAD_DELIVER=note` goes back to waiting for the note.
-- **The caret paste must not race the window's keyboard grab.** The Scratchpad window **takes the
+- **The caret paste is addressed** (2026-09-14): `DictationResult.focusPid` carries the pid of the
+  app he was looking at at the chord, and `TerminalBinding.pressPaste(to:)` posts the ⌘V with
+  `postToPid` straight into that application's queue — bypassing the session and therefore whoever
+  holds the key focus. So the delivery fires at `formatted` (~400 ms) instead of waiting for Wispr's
+  window to close (488 ms good case, 3337 ms with a retry). Nil for every other delivery, which
+  means *whatever has the caret*; bound-terminal and spawn deliveries never used the focus at all.
+- **Historically — the caret paste had to not race the window's keyboard grab.** The Scratchpad window **takes the
   keyboard when it opens** — measured, a paste fired the moment the note appeared went into the
   note and the document Victor was looking at stayed empty. At `formatted` the window is normally
   not open yet; if it is, it is closed first and the words follow. A window that will not close

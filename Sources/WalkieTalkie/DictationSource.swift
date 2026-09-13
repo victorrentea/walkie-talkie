@@ -151,6 +151,20 @@ struct DictationResult {
     /// against — on 2026-09-13 two failures turned on precisely which route
     /// delivered, and by then the log was the only witness.
     let via: String
+    /// **Which process these words were meant for**, when the recogniser's own
+    /// machinery may have taken the focus since (2026-09-14). Nil — the ordinary
+    /// case — means *whatever has the caret*, which is what every delivery in
+    /// this app meant until a recogniser started opening windows of its own.
+    ///
+    /// It is source-agnostic and deliberately a **pid** rather than anything
+    /// Wispr-shaped: the fact being recorded is *the caret was here when he
+    /// asked*, and the only thing that can act on it is a paste addressed with
+    /// `postToPid`. Measured 2026-09-13: Wispr's Scratchpad window takes the key
+    /// focus without its application becoming frontmost, so a ⌘V posted at the
+    /// session lands in **its** note and not in his document — and the delivery
+    /// had to wait for that window to close before it could fire, which cost
+    /// 0.5–3.3 s of a round trip that was ready at 400 ms.
+    var focusPid: pid_t?
 }
 
 /// **Who inserts the text.**

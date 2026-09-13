@@ -171,6 +171,14 @@ final class WisprFlowSource: DictationSource {
     /// ended by releasing *that* key, whatever the menu says by then.
     private(set) var startedMode: WrapMode = .off
 
+    /// **The app he was looking at when he asked**, remembered at the chord — the
+    /// last moment it is unambiguous, because the window that will take the
+    /// keyboard never becomes frontmost. It travels out on
+    /// `DictationResult.focusPid` so the caret paste can be *addressed* instead
+    /// of aimed at whatever holds the focus, which is what lets the delivery fire
+    /// at `formatted` rather than waiting for Wispr's window to close.
+    private(set) var focusPid: pid_t?
+
     /// For `GET /test/state` — the flag above, which is not `startedMode`.
     var isIntercepting: Bool { intercepting }
 
@@ -535,6 +543,7 @@ final class WisprFlowSource: DictationSource {
         let victim = NSWorkspace.shared.frontmostApplication
         let pid = victim?.processIdentifier ?? 0
         guard pid != 0, victim?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        focusPid = pid
         WisprScratchpad.onWindowGone = { [weak self] openMs in
             self?.hotkeys.disarmKeyRedirect()
             if let openMs {
@@ -724,6 +733,7 @@ final class WisprFlowSource: DictationSource {
         }
         guard !isRecording, !speculative else { return }
         speculative = true
+        focusPid = nil
         relayStarted = relay
         startedMode = relay ? (mode ?? wrapMode) : .off
         intercepting = relay && wrapWispr
@@ -1333,24 +1343,31 @@ final class WisprFlowSource: DictationSource {
         let priorText = priorNoteText
         let since = openedAt
 
-        let finish = { [weak self] in
-            guard let self else { return }
-            Log.info(String(format: "wispr history: %@ %.0f ms after the microphone closed (Wispr's own e2e %.0f ms) — the row is the delivery",
-                            e.status, took, e.e2eLatency))
-            self.deliver(reason: "Wispr's History row (scratchpad)", via: "wispr-history",
-                         delivery: .route, text: words)
-            // **The window is already being shut on sight** — armed at the
-            // release, because it is dangerous from the moment it appears and
-            // not from the moment the words are ready. All that is left here is
-            // the second opinion, once the note has had time to be written.
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossCheckDelay) {
-                Self.crossCheckNote(delivered: words, priorId: priorId, priorText: priorText, since: since)
-            }
+        Log.info(String(format: "wispr history: %@ %.0f ms after the microphone closed (Wispr's own e2e %.0f ms) — the row is the delivery",
+                        e.status, took, e.e2eLatency))
+        // **Who holds the keyboard is a log line now, not a gate** (2026-09-14).
+        //
+        // It used to be both: the delivery waited for Wispr's window to close,
+        // because a ⌘V posted at the session while the Scratchpad has the key
+        // focus lands in its note. That cost 488 ms on a good close and 3337 ms
+        // on one that needed a retry, for a round trip the row had finished at
+        // 400 ms. The paste is **addressed** now — `postToPid` to the app he was
+        // looking at when he asked — so who holds the focus stops being this
+        // delivery's business and becomes something worth saying and nothing
+        // more.
+        if WisprScratchpad.windowIsOpen() {
+            Log.info("🗒️ the Scratchpad window is open at the delivery"
+                     + (WisprScratchpad.focusOwnerIsWispr() ? " and holds the key focus" : "")
+                     + " — the paste is addressed to pid \(focusPid.map(String.init) ?? "the caret"), so it goes to him either way")
         }
-
-        guard WisprScratchpad.windowIsOpen() else { return finish() }
-        Log.info("🗒️ the Scratchpad window is already open — closing it before the words go to the caret")
-        WisprScratchpad.closeWindow { _ in finish() }
+        deliver(reason: "Wispr's History row (scratchpad)", via: "wispr-history",
+                delivery: .route, text: words)
+        // The window is already being shut on sight — armed at the release. All
+        // that is left here is the second opinion, once the note has had time to
+        // be written.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossCheckDelay) {
+            Self.crossCheckNote(delivered: words, priorId: priorId, priorText: priorText, since: since)
+        }
     }
 
     /// **Did Wispr's note say the same thing as Wispr's row?**
@@ -1592,7 +1609,10 @@ final class WisprFlowSource: DictationSource {
                     engine: "wispr-flow",
                     warning: nil,
                     delivery: delivery,
-                    via: via))
+                    via: via,
+                    // Only where the recogniser may have moved the focus under
+                    // the sentence; every other path means *the caret*.
+                    focusPid: self.startedMode == .scratchpad ? self.focusPid : nil))
                 self.didEnd?(.delivered)
             }
         }

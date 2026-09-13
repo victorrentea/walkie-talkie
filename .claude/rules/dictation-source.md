@@ -250,11 +250,21 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   (`armInjectionCapture(swallow: startedMode != .scratchpad)`, probe still armed): taking that key
   is this app reaching into another app's conversation with itself, and it showed — one run's
   sentence was appended to the previous run's note as ` commit and push the fix `, doubled.
-- **The delivery still waits for the window to be gone**, because a `pasteText` fired while the
-  Scratchpad holds the key focus lands in the note. Measured: **488 ms** after the microphone
-  closed when the close takes first time, **3337 ms** when it needs a retry. The way to decouple
-  them is to post the relay's own paste with `postToPid` to the victim rather than to whatever has
-  the focus — not built, and the reason the number is not yet the 0.5 s the row alone would allow.
+- **The caret paste is ADDRESSED, so the delivery no longer waits for the window** (2026-09-14).
+  `DictationResult.focusPid` carries the pid of the app he was looking at *at the chord* — the last
+  unambiguous moment, since the thief never becomes frontmost — and `pasteText(_:to:)` →
+  `TerminalBinding.pressPaste(to:)` posts the ⌘V with **`postToPid`**, straight into that
+  application's event queue, bypassing the session and therefore whoever holds the key focus. Who
+  holds it is a **log line now, not a gate**. It was both, and it cost 488 ms on a good close and
+  3337 ms on one that needed a retry, for a round trip the row had finished at 400 ms.
+- **`focusPid` is nil for every other delivery, and that is the point.** The fabricated
+  `/test/dictation`, the recovered cancelled sentence (minutes later, where *now* is the right
+  target) and ⌘⌃P all mean *whatever has the caret*. Bound-terminal and spawn deliveries never
+  went through the focus at all. One field, one caller, no second branch.
+- **No modifier cleanup on the addressed paste.** The stale-⌘ bug `tap(key:command:)` is written
+  around is about `CGEventSource.flagsState`, which is *session* state; events posted to a pid
+  never enter it. The `flagsChanged` pair still goes to the same pid, because a Cocoa app builds
+  ⌘V out of a modifier it believes is down.
 - **The delivery is the ROW, not the note** (2026-09-13, after the first working run). Measured:
   the row said `formatted` **531 ms** after the microphone closed; the note was not readable until
   **2627 ms**, because Wispr writes it when it opens its window; closing that window cost another
@@ -297,7 +307,10 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
 - **One tap is not reliably enough, so it is asked up to three times.** Measured both ways inside a
   minute: a tap toggled a *parked* window closed, and another tap a minute later did nothing. The
   cost of a failure is not this dictation but the **next** one, which is transcribed and written
-  nowhere — so `closeWindow` retries and the log says which attempt worked.
+  nowhere — so `closeWindow` retries, and every attempt logs **which one worked and whether the
+  window was parked at the time**. Nothing is un-parked to find out whether that helps: un-parking
+  would put the window back over his work, which is the thing being avoided, so the log accumulates
+  the evidence and the decision comes after enough of it.
 - **Measured, once, and worth keeping:** the Scratchpad is `AXStandardWindow` at **window layer 3**
   — it genuinely floats over everything, which is Victor's objection in a number — and its minimum
   size is **300×300**. Parked at the bottom-right of the only display it ends up at `1720,1089` on
