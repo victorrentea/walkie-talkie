@@ -1525,8 +1525,10 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
         if not dry_run:
             row = ctx.history()
             if row:
-                result.note("Wispr History row %d: status=%s, e2e %.1f s, app=%s"
-                            % (row.rowid, row.status or "(empty)", row.e2e_latency, row.app or "—"))
+                # `e2eLatency` is **milliseconds** — 737.0 is 0.7 s, not 12 minutes.
+                result.note("Wispr History row %d: status=%s, e2e %.0f ms, mic=%s, app=%s"
+                            % (row.rowid, row.status or "(empty)", row.e2e_latency,
+                               row.mic_device or "—", row.app or "—"))
             else:
                 newest = wispr_history_newest()
                 result.note("no History row for this run — Wispr never opened one"
