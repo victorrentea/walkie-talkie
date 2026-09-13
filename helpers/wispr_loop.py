@@ -1651,6 +1651,40 @@ def _close_scratch_terminal(tty: str):
 # write and close the one it opened.
 
 
+def _unwedge_textedit() -> bool:
+    """Clear a stuck save panel, which is how TextEdit stops answering at all.
+
+    Returns True if something was killed. The panel service
+    (`com.apple.appkit.xpc.openAndSavePanelService`) is a separate XPC process;
+    when it wedges, TextEdit is alive, on screen, and still will not answer a
+    single AppleScript call — so every diagnosis points at the wrong place. It
+    happened twice on 2026-09-14 and both times looked like "TextEdit will not
+    launch".
+    """
+    try:
+        for line in subprocess.run(["/bin/ps", "-Ao", "pid=,command="],
+                                   capture_output=True, text=True, timeout=10).stdout.splitlines():
+            if "com.apple.appkit.xpc.openAndSavePanelService" in line:
+                subprocess.run(["/bin/kill", "-9", line.split()[0]], capture_output=True, timeout=5)
+        time.sleep(1.0)
+        if _osascript('tell application "TextEdit" to count of documents', timeout=8):
+            return True
+        # **The panel service is the symptom, not the cause.** Killing it and
+        # watching four respawn while TextEdit stayed mute (2026-09-14) is what
+        # settled that. The only thing that actually recovers it is a force
+        # quit, after which the open/close cycle is 1.7 s again.
+        #
+        # This throws away unsaved TextEdit work. By the time it runs, TextEdit
+        # has already stopped answering every AppleScript call, so that work was
+        # unreachable anyway — but it is the reason this is the last resort and
+        # not the first.
+        subprocess.run(["/usr/bin/killall", "-9", "TextEdit"], capture_output=True, timeout=10)
+        time.sleep(2.0)
+        return True
+    except Exception:
+        return False
+
+
 def _open_victim(scratch: str) -> str | None:
     """Open a **fresh** scratch document and return the name TextEdit gave it.
 
@@ -1664,6 +1698,9 @@ def _open_victim(scratch: str) -> str | None:
     path = os.path.join(scratch, "victim-%d.txt" % int(time.time() * 1000))
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("")
+    if _textedit_running() and not _osascript(
+            'tell application "TextEdit" to count of documents', timeout=8):
+        _unwedge_textedit()
     name = _osascript(
         'tell application "TextEdit"\n'
         '  activate\n'
