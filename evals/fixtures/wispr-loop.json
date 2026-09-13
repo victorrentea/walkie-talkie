@@ -33,15 +33,23 @@
     "",
     "'What car do I have?' is a question nobody acts on, and it contains none of",
     "the probe letters (q z j k y g l b) — which matters, because a probe letter",
-    "the sentence already carries cannot be attributed to a keystroke."
+    "the sentence already carries cannot be attributed to a keystroke.",
+    "",
+    "AND AGAIN, 2026-09-14. 'What car do I have?' leaked into Victor's real",
+    "session too, and the agent there ANSWERED it — by writing a memory. A",
+    "question is still actionable; so is anything an agent can read as addressed",
+    "to it. The bar is not 'harmless if obeyed', it is 'nothing to obey'.",
+    "'Test, test, test, test.' is a plain statement with no verb of request, no",
+    "question, and nothing an agent can do about it — and it still shares no",
+    "letter with the probe set (q z j k y g l b)."
   ],
   "default": {
-    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-08-12/11-10-31-45fee527.wav",
-    "transcript": "What car do I have?",
-    "seconds": 1.93,
+    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-08-15/20-03-06-6ab1d5a0.wav",
+    "transcript": "Test, test, test, test.",
+    "seconds": 1.57,
     "engine": "wispr",
-    "why": "1.9 s, English, and INERT — a question no agent acts on. It also shares no letter with the probe set, so every probe letter found anywhere is the rig's.",
-    "verified": "2026-09-14 — one run through 🎓 TO Wispr returned it verbatim (asrText identical), e2e 323 ms",
+    "why": "1.6 s, English, and INERT — a plain statement, no request and no question, so an agent that receives it by accident has nothing to act on. Shares no letter with the probe set.",
+    "verified": "2026-09-14 — one run through 🎓 TO Wispr, unbound, returned it verbatim",
     "language": "en"
   },
   "caret-long": {

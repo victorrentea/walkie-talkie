@@ -2920,9 +2920,12 @@ def _wrap_run(ctx, destination: str) -> Result:
                          "%s ms" % (visible if visible is not None else "not reported"))
         redirect = (state.get("keyRedirect") or {}) if isinstance(state, dict) else {}
         if redirect:
-            result.note("key redirect: armed=%s, pid=%s, %s key(s) seen, %s passed through"
+            result.note("key redirect: armed=%s pid=%s seen=%s redirectedAX=%s "
+                        "redirectedKey=%s passed=%s"
                         % (redirect.get("armed"), redirect.get("pid"),
-                           redirect.get("keys"), redirect.get("passed")))
+                           redirect.get("seen", redirect.get("keys")),
+                           redirect.get("redirectedAX"), redirect.get("redirectedKey"),
+                           redirect.get("passed")))
         for line in mark.lines():
             if "⌨️trace" in line.text or line.text.startswith("👁"):
                 result.note("   %s" % line.raw)
@@ -3568,10 +3571,25 @@ def main(argv):
         ap.error("a scenario, --all, or --transcribe <wav>")
 
     # **The whole suite runs unbound**, and Victor's binding goes back at the end.
-    victors_binding = isolate_binding(port) if not args.dry_run else ""
+    victors_binding = "" if args.dry_run else current_binding(port)
     if victors_binding:
-        print("🔓 unbound from %r for the run — it will be put back at the end" % victors_binding,
+        # **Loud, and not negotiable.** There is deliberately no flag to skip
+        # this. Twice on 2026-09-14 a fixture reached Victor's own Claude
+        # session — once it nearly committed this harness's open files, once the
+        # agent answered it by writing a memory — and both times the relay was
+        # simply still pointed where he had left it. An opt-out would be used on
+        # the one run somebody was in a hurry.
+        print("\n" + "═" * 72, file=sys.stderr)
+        print("⚠️  THE RELAY IS BOUND TO %r, WHICH THIS RUNNER DID NOT OPEN." % victors_binding,
               file=sys.stderr)
+        print("   Unbinding before anything is dictated. It goes back at the end.",
+              file=sys.stderr)
+        print("═" * 72 + "\n", file=sys.stderr)
+        isolate_binding(port)
+        still = current_binding(port)
+        if still:
+            print("✗ could not unbind (still %r) — refusing to run." % still, file=sys.stderr)
+            return 2
 
     results = []
     for index in range(1, max(1, args.repeat) + 1):
