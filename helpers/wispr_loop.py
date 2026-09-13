@@ -1940,9 +1940,30 @@ def _open_victim(scratch: str) -> str | None:
     return name
 
 
-def _victim_text(name: str) -> str:
-    """What is in the victim now. A **read** — it activates nothing and steals no focus."""
-    return _osascript('tell application "TextEdit" to get text of document "%s"' % name)
+def _victim_text(name: str, tries: int = 3) -> str:
+    """What is in the victim now. A **read** — it activates nothing and steals no focus.
+
+    **Retried, because an empty string is two different answers.** `_osascript`
+    turns a timeout into `""` so that a teardown never raises — which means a
+    read that failed is indistinguishable from a document that is genuinely
+    empty. On 2026-09-14 that cost the whole `wrap-spawn` diagnosis: the probe
+    snapshots showed the letters arriving and accumulating (`q`, `qz`, `qzj`,
+    `qzjkw`, `qzjkwy`) and then the final read came back `''` — at the exact
+    second the spawned Terminal appeared and TextEdit got busy — so the run
+    reported all seven letters lost when six of them were sitting in the
+    document.
+
+    A document that is really empty answers instantly; a busy app times out. So
+    an empty answer is asked again rather than believed the first time.
+    """
+    for attempt in range(tries):
+        text = _osascript('tell application "TextEdit" to get text of document "%s"' % name,
+                          timeout=8)
+        if text:
+            return text
+        if attempt + 1 < tries:
+            time.sleep(0.4)
+    return ""
 
 
 def _textedit_running() -> bool:
@@ -2452,6 +2473,8 @@ def _wrap_run(ctx, destination: str) -> Result:
     focus = FocusWatch()
     sink_file = os.path.join(ctx.scratch, "bound-sink.txt")
     try:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
         was_mode = wrap_mode(relay)
         answer = set_wrap_mode(relay, "scratchpad")
         result.check(relay.dry_run or (wrap_mode(relay) == "scratchpad"),
@@ -2513,6 +2536,7 @@ def _wrap_run(ctx, destination: str) -> Result:
         seconds = _clip_seconds(ctx.fixture["wav"])
         probes: list[tuple[str, float]] = []
         focus_at_probe: dict[str, tuple] = {}
+        victim_at_probe: dict[str, str] = {}
         probe_deadline = 0.0
         if typed_probe:
             import wispr_loopback as wl
@@ -2533,6 +2557,14 @@ def _wrap_run(ctx, destination: str) -> Result:
                         # invisible to any sample taken either side.
                         focus_at_probe[ch] = focused_element()
                         wl.tap_key(kc)
+                        # And what the document held a moment afterwards. A
+                        # letter that arrives and is then wiped — by a ⌘A, an
+                        # undo, a selection the watcher left behind — looks
+                        # identical at the end of the run to a letter that never
+                        # arrived. Only a snapshot beside each keystroke tells
+                        # those two apart.
+                        time.sleep(0.15)
+                        victim_at_probe[ch] = _victim_text(victim) if victim else ""
 
                     threading.Timer(delay, tap).start()
             # **The run has to outlive its own last probe.** A letter scheduled
@@ -2778,6 +2810,9 @@ def _wrap_run(ctx, destination: str) -> Result:
                                ", ".join(k for k, v in where.items() if v) or "LOST — reached nothing",
                                ("%s / %s / %r" % (at[0], at[2] or "NO FOCUSED ELEMENT", at[3]))
                                if at else "?"))
+                snap = victim_at_probe.get(char)
+                if snap is not None:
+                    result.note("      victim right after `%s`: %r" % (char, snap[-40:]))
             # A letter in the note is a letter the Scratchpad took off Victor.
             stolen = [c for c, _ in probes if gained(c, note_tail, note_base)]
             result.check(not stolen, "no probe letter was taken by the Scratchpad",
@@ -2834,6 +2869,9 @@ def _wrap_run(ctx, destination: str) -> Result:
             result.note("key redirect: armed=%s, pid=%s, %s key(s) seen, %s passed through"
                         % (redirect.get("armed"), redirect.get("pid"),
                            redirect.get("keys"), redirect.get("passed")))
+        for line in mark.lines():
+            if "⌨️trace" in line.text or line.text.startswith("👁"):
+                result.note("   %s" % line.raw)
         result.note("windows before %s, after %s"
                     % (windows_before, [] if relay.dry_run else wispr_windows()))
         for change in changes:
@@ -2845,6 +2883,8 @@ def _wrap_run(ctx, destination: str) -> Result:
                             "yes" if closed else "NO"))
     finally:
         focus.stop()
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
         if destination == "bound":
             relay.post("/unbind")
             if tty and not relay.dry_run:
