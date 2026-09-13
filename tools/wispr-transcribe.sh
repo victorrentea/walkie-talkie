@@ -6,6 +6,8 @@
 #   tools/wispr-transcribe.sh clip.wav
 #   tools/wispr-transcribe.sh clip.wav --json
 #   tools/wispr-transcribe.sh clip.wav --device '🎙️TO Zoom' --verbose
+#   tools/wispr-transcribe.sh clip.wav --repeat 5      # the reliability table
+#   tools/wispr-transcribe.sh clip.wav --no-sink       # nothing of ours in front
 #   tools/wispr-transcribe.sh clip.wav --dry-run
 #
 # The transcript goes to **stdout** and everything else — the preflight, the
@@ -30,6 +32,15 @@
 # `helpers/wispr_loopback.py`'s older `dictate()`, and the reason the
 # teacher-labelling batch should move onto this (see `docs/loopback.md`).
 #
+# `--no-sink` opens nothing of ours at all. The text still comes from Wispr's
+# History row, and the run additionally reports the pasteboard's `changeCount`
+# before and after plus the relay's `probe:` lines — the two independent
+# witnesses to **where Wispr's output went when nothing of ours was in front**:
+# onto the pasteboard and through a ⌘V, or by a route that touches neither. The
+# pasteboard is snapshotted with every flavour and put back if anything wrote to
+# it. **The relay is bound to Victor's terminal**, so a ⌘V the tap swallows in
+# this mode is routed *there* — use it deliberately, never by default.
+#
 # Exit: 0 a transcript · 1 nothing arrived · 2 a precondition failed · 3 Wispr
 # itself said there would be nothing (`dismissed` / `empty` / `no_audio`).
 
@@ -52,13 +63,13 @@ ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --device)      DEVICE="$2"; ARGS+=(--device "$2"); shift 2 ;;
-    --json|--verbose) ARGS+=("$1"); shift ;;
+    --json|--verbose|--no-sink) ARGS+=("$1"); shift ;;
     --repeat)      ARGS+=(--repeat "$2"); shift 2 ;;
     --transcript)  ARGS+=(--transcript "$2"); shift 2 ;;
     --dry-run)     DRY_RUN=1; ARGS+=(--dry-run); shift ;;
     --switch-input) FORCE_SWITCH=1; shift ;;
     --wait-routes) WAIT_ROUTES="${2:-600}"; shift 2 ;;
-    -h|--help)     sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)            wispr_act_say "unknown flag: $1"; exit 2 ;;
     *)             WAV="$1"; shift ;;
   esac

@@ -281,6 +281,29 @@ class Playback(unittest.TestCase):
         self.assertEqual(self.wl.DEVICE_PREFERENCE[0], "🎓 TO Wispr")
 
 
+class Pasteboard(unittest.TestCase):
+    """`--no-sink`'s witness. **Read-only here** — nothing in this file writes.
+
+    A test that snapshotted and restored the real pasteboard to prove it works
+    would be a test that occasionally eats whatever Victor had copied, and the
+    cost of that is out of all proportion to what it proves.
+    """
+
+    def test_the_change_count_is_a_number_or_honestly_nothing(self):
+        count = wl.pasteboard_change_count()
+        self.assertTrue(count is None or isinstance(count, int))
+
+    def test_restoring_nothing_is_a_no_op_and_says_so(self):
+        self.assertFalse(wl.pasteboard_restore(None))
+
+    def test_a_snapshot_keeps_every_flavour_not_just_text(self):
+        """The general pasteboard held a TIFF *and* a PNG the day this was written;
+        a text-only snapshot would have handed back a string where an image was."""
+        items = wl.pasteboard_snapshot()
+        if items:   # empty clipboard is a legitimate state, not a failure
+            self.assertTrue(all(isinstance(flavours, dict) for flavours in items))
+
+
 class Fixtures(unittest.TestCase):
     def test_every_scenario_resolves_to_a_clip_that_is_on_disk(self):
         for name in wl.SCENARIOS:

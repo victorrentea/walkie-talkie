@@ -755,9 +755,69 @@ def wait_for_history(started: float, timeout: float = HISTORY_TIMEOUT,
     return row, ("timeout" if row else "no-row")
 
 
+# ══ the pasteboard, for the no-sink mode ════════════════════════════════════
+def pasteboard_change_count() -> int | None:
+    """`NSPasteboard.changeCount` — the one number that says *somebody wrote here*.
+
+    It moves on every write by anybody, so it answers the question `--no-sink`
+    exists for: with nothing of ours in front, did Wispr put its sentence on the
+    pasteboard at all, or did it insert by a route that never touches it? The
+    relay's own `probe:` lines answer the other half — whether a ⌘V was posted.
+    """
+    try:
+        from AppKit import NSPasteboard
+        return int(NSPasteboard.generalPasteboard().changeCount())
+    except Exception:
+        return None
+
+
+def pasteboard_snapshot():
+    """Every item and every flavour, so a restore does not eat an image.
+
+    Deliberately **not** `pbpaste`: the general pasteboard on this Mac was
+    holding a TIFF and a PNG when this was written, and a text-only snapshot
+    would have handed Victor back a string where his screenshot used to be.
+    """
+    try:
+        from AppKit import NSPasteboard
+        items = []
+        for item in (NSPasteboard.generalPasteboard().pasteboardItems() or []):
+            flavours = {}
+            for kind in (item.types() or []):
+                data = item.dataForType_(kind)
+                if data is not None:
+                    flavours[str(kind)] = data
+            if flavours:
+                items.append(flavours)
+        return items
+    except Exception:
+        return None
+
+
+def pasteboard_restore(items) -> bool:
+    """Put a snapshot back. Only ever called when the change count moved."""
+    if items is None:
+        return False
+    try:
+        from AppKit import NSPasteboard, NSPasteboardItem
+        board = NSPasteboard.generalPasteboard()
+        board.clearContents()
+        restored = []
+        for flavours in items:
+            entry = NSPasteboardItem.alloc().init()
+            for kind, data in flavours.items():
+                entry.setData_forType_(data, kind)
+            restored.append(entry)
+        if restored:
+            board.writeObjects_(restored)
+        return True
+    except Exception:
+        return False
+
+
 def transcribe(wav: str, device: str | None = None, port: int | None = None,
                timeout: float | None = None, verbose: bool = False,
-               dry_run: bool = False) -> dict:
+               dry_run: bool = False, no_sink: bool = False) -> dict:
     """**Feed Wispr an arbitrary WAV and hand back what it transcribed.**
 
     The one primitive the whole harness is built on, and the one Victor's
@@ -774,6 +834,15 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
     nothing is delivered anywhere. `listening` is reported back so a caller can
     see which of the two it got.
 
+    `no_sink` opens nothing of ours at all: the text still comes from the History
+    row, and the run additionally reports the pasteboard's `changeCount` before
+    and after plus the relay's `probe:` lines, so it can say **where Wispr's
+    output went when there was nothing of ours in front** — onto the pasteboard
+    and through a ⌘V, or by a route that touches neither. The pasteboard is
+    snapshotted with every flavour and put back if anything wrote to it.
+    **The relay is bound to Victor's terminal**, so in this mode a ⌘V the tap
+    swallows is routed *there*: use it deliberately, not by default.
+
     Returns a dict; `ok` is False with a `reason` when there is no transcript,
     and `status` carries Wispr's own verdict when it had one.
     """
@@ -787,10 +856,16 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
 
     mark = LogMark()
     started = time.time()
-    out: dict = {"ok": False, "wav": wav, "text": "", "route": "", "status": "", "reason": ""}
+    out: dict = {"ok": False, "wav": wav, "text": "", "route": "", "status": "", "reason": "",
+                 "noSink": bool(no_sink)}
+    clipboard = None
     try:
-        _open_sink(relay)
-        _sink_key(relay)
+        if no_sink:
+            out["pasteboardBefore"] = pasteboard_change_count()
+            clipboard = None if dry_run else pasteboard_snapshot()
+        else:
+            _open_sink(relay)
+            _sink_key(relay)
 
         relay.post("/test/wispr-handsfree")
         # Not a relay gesture: `listening` should stay false and only the ring
@@ -807,7 +882,8 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         # is delivered into it as four one-character events, and clearing before
         # posting the chord leaves them in front of whatever Wispr sends later.
         # After the edge, anything in the sink can only be about this audio.
-        relay.sink_clear()
+        if not no_sink:
+            relay.sink_clear()
         if not opened:
             out["reason"] = ("Wispr's microphone never opened — the clip was played at a "
                              "recorder that was not listening")
@@ -837,7 +913,7 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
             out["wisprDuration"] = row.duration
 
         # ── the sink, now a cross-check and not the source ──────────────
-        sink_text, sink_events = sink_arrival(relay.sink_read() or {})
+        sink_text, sink_events = ("", []) if no_sink else sink_arrival(relay.sink_read() or {})
         out["sinkText"] = sink_text
         out["sinkRoute"] = (sink_events[-1].get("route") if sink_events else "") or ""
         out["sinkMatched"] = bool(text) and similarity(sink_text, text) >= SIMILARITY_FLOOR
@@ -845,6 +921,14 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
 
         t = read_timings(mark.lines())
         out["text"], out["route"] = text, out["sinkRoute"]
+        if no_sink:
+            # Where did it go, with nothing of ours in front? Two independent
+            # witnesses: the pasteboard's counter, and the tap's own record of
+            # every synthetic key it saw.
+            out["pasteboardAfter"] = pasteboard_change_count()
+            before, after = out.get("pasteboardBefore"), out["pasteboardAfter"]
+            out["pasteboardWritten"] = (before is not None and after is not None and after != before)
+            out["probes"] = t.probes
         out["timings"] = {
             "gestureToMicOpenMs": t.gesture_to_mic_open_ms,
             "micOpenWaitMs": out.get("micOpenWaitMs"),
@@ -884,8 +968,14 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
             out["stoodDown"] = True
             out["reason"] = (out.get("reason") or "") + \
                 " — a dictation was still open at the end and was cancelled"
-        _sink_restore(relay)
-        _close_sink(relay)
+        if no_sink:
+            # Only if somebody wrote: an untouched pasteboard is left untouched,
+            # rather than rewritten with a copy of itself.
+            if out.get("pasteboardWritten") and clipboard is not None:
+                out["pasteboardRestored"] = pasteboard_restore(clipboard)
+        else:
+            _sink_restore(relay)
+            _close_sink(relay)
     return out
 
 
@@ -1026,7 +1116,7 @@ def _assert_text(result: Result, label: str, got: str, want: str) -> float:
     return score
 
 
-def scenario_caret(ctx) -> Result:
+def scenario_caret(ctx, wait_for_mic: bool = True) -> Result:
     """1 & 2 — a dictation at the caret, short and long.
 
     **The short one reproduces incident 1** (2026-09-13 18:18:04): a sentence
@@ -1042,7 +1132,12 @@ def scenario_caret(ctx) -> Result:
     _open_sink(relay)
     relay.gesture("forward-click")
     _await_listening(relay, result)
-    _await_microphone(ctx)
+    if wait_for_mic:
+        _await_microphone(ctx)
+    else:
+        # **Deliberately not waiting** — this is the incident, not an oversight.
+        # See `caret-short-cold` below.
+        result.note("played on the chord, without waiting for Wispr's microphone")
     seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
     relay.gesture("forward-click")
 
@@ -1482,8 +1577,21 @@ def scenario_sink_key_at_stop(ctx) -> Result:
 
 
 SCENARIOS = {
+    # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
+    # for the microphone before playing, so it measures the caret path without
+    # ever creating incident 1 — `caret-short-cold` is the one that does.
     "caret-short": (scenario_caret,
-                    "a 2–3 s dictation at the caret — incident 1 (expected red today)", True),
+                    "a 2–3 s dictation at the caret, played once Wispr is listening", False),
+    # **The real incident-1 condition, and the reason `caret-short` stopped
+    # reproducing it.** The incident is a sentence that is *over before Wispr's
+    # microphone opens* — measured 2026-09-13, the chord-to-edge gap was 2913 ms
+    # against a 2.2 s clip, exactly the shape. Every other scenario waits for
+    # that edge before playing, which is right for measuring anything else and
+    # is precisely what stops the bug from happening. This one plays on the
+    # chord, like Victor's own hand does.
+    "caret-short-cold": (lambda ctx: scenario_caret(ctx, wait_for_mic=False),
+                         "the 2–3 s clip played on the chord, without waiting for Wispr's "
+                         "microphone — incident 1's actual condition (expected red today)", True),
     "caret-long": (scenario_caret,
                    "a 15–25 s dictation at the caret — the control", False),
     "spawn-click-in-settle": (scenario_spawn_click_in_settle,
@@ -1651,7 +1759,7 @@ def _transcribe_cli(args, port: int) -> int:
                 time.sleep(5)   # a few seconds apart, never two chords in flight
             print("── run %d of %d ─────────────────────────────" % (i + 1, repeat), file=sys.stderr)
             run = transcribe(args.transcribe, device=args.device, port=port,
-                             verbose=args.verbose, dry_run=args.dry_run)
+                             verbose=args.verbose, dry_run=args.dry_run, no_sink=args.no_sink)
             runs.append(run)
             print("   %s" % (run.get("text") or ("✗ " + (run.get("reason") or "no transcript"))),
                   file=sys.stderr)
@@ -1665,7 +1773,7 @@ def _transcribe_cli(args, port: int) -> int:
         return 0 if all(r.get("ok") for r in runs) else 1
 
     out = transcribe(args.transcribe, device=args.device, port=port,
-                     verbose=args.verbose, dry_run=args.dry_run)
+                     verbose=args.verbose, dry_run=args.dry_run, no_sink=args.no_sink)
     if args.json:
         print(json.dumps(out, ensure_ascii=False, indent=2))
     else:
@@ -1680,10 +1788,24 @@ def _transcribe_cli(args, port: int) -> int:
         print("  speechDuration           %s" % (
             "%.2f s" % out["speechDuration"] if out.get("speechDuration") else "—"), file=sys.stderr)
         print("  raw asrText              %r" % ((out.get("asrText") or "")[:70]), file=sys.stderr)
-        print("  sink cross-check         %s via %s%s" % (
-            "matched" if out.get("sinkMatched") else "did NOT match",
-            out.get("sinkRoute") or "nothing",
-            (" — %r" % out["sinkText"][:50]) if out.get("sinkText") else ""), file=sys.stderr)
+        if out.get("noSink"):
+            before, after = out.get("pasteboardBefore"), out.get("pasteboardAfter")
+            print("  pasteboard changeCount   %s → %s   %s" % (
+                before, after,
+                "WRITTEN — Wispr put the sentence on the pasteboard"
+                if out.get("pasteboardWritten") else
+                "unchanged — Wispr inserted by a route that never touches it"), file=sys.stderr)
+            if out.get("pasteboardWritten"):
+                print("  pasteboard restored      %s" % out.get("pasteboardRestored"), file=sys.stderr)
+            probes = out.get("probes") or []
+            print("  probe: lines             %s" % ("; ".join(probes) if probes else
+                                                     "none — no synthetic key was posted at all"),
+                  file=sys.stderr)
+        else:
+            print("  sink cross-check         %s via %s%s" % (
+                "matched" if out.get("sinkMatched") else "did NOT match",
+                out.get("sinkRoute") or "nothing",
+                (" — %r" % out["sinkText"][:50]) if out.get("sinkText") else ""), file=sys.stderr)
         print("  gesture → mic open       %s%s" % (
             _ms(t.get("gestureToMicOpenMs")),
             "" if out.get("micOpened", True) else "   ← never opened; the clip was played anyway"),
@@ -1737,6 +1859,11 @@ def main(argv):
         prog="wispr-loop",
         description="Drive one real Wispr Flow dictation end to end and assert the outcome.")
     ap.add_argument("scenario", nargs="?", help="one of: " + ", ".join(SCENARIOS))
+    ap.add_argument("--no-sink", action="store_true",
+                    help="open nothing of ours: text from Wispr's History row only, plus the "
+                         "pasteboard's changeCount and the tap's probe: lines, so the run can say "
+                         "where Wispr's output went with nothing of ours in front. The relay is "
+                         "bound, so a ⌘V it swallows is routed to that terminal — deliberate use only")
     ap.add_argument("--transcribe", metavar="WAV",
                     help="the primitive on its own: feed Wispr this WAV and print what it "
                          "transcribed. No scenario, no assertions.")

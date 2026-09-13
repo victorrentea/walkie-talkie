@@ -121,6 +121,31 @@ relay's settle only ends on `formatted`, so such a row costs the full
 "Wispr stalled" and "the channel is broken" send whoever reads it to opposite
 ends of the system.
 
+### `--no-sink`: where do the words go when nothing of ours is in front?
+
+```sh
+tools/wispr-transcribe.sh clip.wav --no-sink
+```
+
+Opens nothing of ours. The text still comes from the History row, and the run
+adds the **two independent witnesses** to where Wispr put it:
+
+- the pasteboard's **`changeCount`**, before and after — *written* means Wispr
+  put the sentence there, *unchanged* means it inserted by a route that never
+  touches it;
+- the relay's **`probe:`** lines from the run's window — every synthetic key the
+  tap saw, so `key 9 flags 0x20100000 from Wispr Flow` is a ⌘V and *none* means
+  no key was posted at all.
+
+Between them they distinguish the three ways Wispr can deliver, which no single
+signal does. The pasteboard is snapshotted **with every flavour** and put back
+only if something wrote to it — deliberately not `pbpaste`, which is text-only:
+the general pasteboard was holding a TIFF and a PNG the day this was written, and
+a text-only restore would have handed Victor a string where his screenshot was.
+
+**Use it deliberately, never by default.** The relay is bound to Victor's
+terminal, so in this mode a ⌘V the tap swallows is routed *there*.
+
 ### As a Python function, and what it means for the teacher batch
 
 ```python
@@ -290,7 +315,8 @@ a failed assertion, not papered over.
 
 | scenario | gestures | what it asserts |
 |---|---|---|
-| **`caret-short`** | `forward-click` · play · `forward-click` | the 2.2 s clip lands at the caret, and the ring is down ≤ 2000 ms after Wispr finished |
+| **`caret-short`** | `forward-click` · *wait for the mic* · play · `forward-click` | the 2.2 s clip lands at the caret, and the ring is down ≤ 2000 ms after Wispr finished. **Green since 2026-09-13** (1053 ms) |
+| **`caret-short-cold`** | `forward-click` · play **on the chord** · `forward-click` | the same, without waiting for Wispr's microphone — incident 1's actual condition |
 | **`caret-long`** | the same, 19.4 s clip | the control — green today |
 | **`spawn-click-in-settle`** | `forward-up` · play · `forward-click` · *(settling)* · `forward-click` | **nothing** in the sink; an outbox line whose `delivery.to` starts `spawn:` and whose text matches |
 | **`bound`** | bind a scratch tty · `forward-right` · play · `forward-right` | the words are typed into `bound-sink.txt`, nothing in the sink |
@@ -309,9 +335,16 @@ is why `spawn-click-in-settle` stops with a click and not with a second ↑.
 
 ### The two that are expected red
 
-**`caret-short` reproduces incident 1** (2026-09-13 18:18:04). A sentence that is
-over before Wispr's microphone ever opens leaves the relay inside
-`speculativeGrace` — 12 s — with the lightning on screen the whole time, and
+**`caret-short-cold` reproduces incident 1** (2026-09-13 18:18:04), and
+`caret-short` no longer does — which is worth knowing, because the reason is the
+harness. Every other scenario waits for Wispr's microphone edge before playing,
+and that is right for measuring anything else and is *exactly* what stops the
+bug from happening: the chord-to-edge gap was measured at 2913 ms against a
+2.2 s clip, so waiting removes the very condition. `caret-short-cold` plays on
+the chord, the way Victor's own hand does.
+
+A sentence that is over before Wispr's microphone ever opens leaves the relay
+inside `speculativeGrace` — 12 s — with the lightning on screen the whole time, and
 `⚡ ring down: no microphone within 12 s of the hotkey — Wispr ignored the chord`
 is the line it ends on. The runner is built to **print that red with the measured
 gap**, not to crash on it: the ring-down line has no `ms after the recording
