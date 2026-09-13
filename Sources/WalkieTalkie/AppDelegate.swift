@@ -741,6 +741,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyTap.axInsert = on
             return ["axInsert": on]
         }
+        picker.onTestKeyGuard = { on in
+            HotkeyTap.redirectEnabled = on
+            return ["redirect": on]
+        }
         picker.onTestKeyTrace = { on in
             HotkeyTap.keyTrace = on
             return ["keyTrace": on]
@@ -2995,6 +2999,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "sessionFlags": HotkeyTap.sessionModifierNames(),
             "keyTrace": HotkeyTap.keyTrace,
             "axInsert": HotkeyTap.axInsert,
+            "keyGuard": HotkeyTap.redirectEnabled,
             "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
                             "pid": Int(hotkeys.keyRedirect.pid),
                             "seen": hotkeys.keyRedirect.seen,

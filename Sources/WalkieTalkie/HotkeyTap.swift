@@ -282,8 +282,17 @@ final class HotkeyTap {
     /// untouched, and the cost is written down rather than worked around — see
     /// *The measured truth about his keystrokes* in `dictation-source.md`.
     /// `WT_SCRATCHPAD_REDIRECT_KEYS=1` turns it back on.
-    private static let redirectEnabled =
-        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] == "1"
+    /// A `var`, and settable at runtime (`POST /test/ax-insert {"redirect": …}`),
+    /// for the same reason `axInsert` is: an installed app does not inherit a
+    /// shell's environment, and a default that is supposed to be decided by
+    /// measurement has to be measurable without a rebuild.
+    static var redirectEnabled =
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] == "1" {
+        didSet {
+            guard redirectEnabled != oldValue else { return }
+            Log.info("⌨️ the keyboard guard is \(redirectEnabled ? "armed — his keys are taken while Wispr's window is up" : "off — his keys pass through untouched")")
+        }
+    }
 
     /// **Insert printable characters through Accessibility — off by default, and
     /// the default is the measurement** (2026-09-14).
