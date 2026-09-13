@@ -412,6 +412,33 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var isWrapWispr: Bool { wrapWisprOn }
     var onToggleWrapWispr: ((Bool) -> Void)?
 
+    /// Put the tick where the behaviour is — `POST /test/wrap-mode` can turn the
+    /// wrap off, and a row that goes on claiming it is on is worse than no row.
+    func setWrapWispr(_ on: Bool) {
+        guard wrapWisprOn != on else { return }
+        wrapWisprOn = on
+        UserDefaults.standard.set(on, forKey: Self.wrapWisprKey)
+        applyWrapWisprIcon()
+    }
+
+    // ── Close Wispr Scratchpad ──────────────────────────────────────────────
+
+    /// **The one thing the Scratchpad wrap leaves on screen.**
+    ///
+    /// In Scratchpad mode Wispr opens its own note window in the background on
+    /// the first dictation of the session and never takes it down. Victor has not
+    /// decided whether the relay should close it for him — it is *his* window in
+    /// *his* tool, and an app that keeps shutting another app's window is one he
+    /// would have to fight — so for now it is a row he clicks.
+    ///
+    /// A row rather than a gesture, and disabled-looking never: the gestures are
+    /// full, and this is housekeeping rather than something done mid-sentence.
+    private let closeScratchpad =
+        NSMenuItem(title: "Close Wispr Scratchpad", action: nil, keyEquivalent: "")
+    var onCloseScratchpad: (() -> Void)?
+
+    @objc private func closeScratchpadClicked() { onCloseScratchpad?() }
+
     @objc private func wrapWisprClicked() {
         wrapWisprOn.toggle()
         UserDefaults.standard.set(wrapWisprOn, forKey: Self.wrapWisprKey)
@@ -653,6 +680,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         wrapWispr.target = self
         applyWrapWisprIcon()
         menu.addItem(wrapWispr)
+
+        closeScratchpad.action = #selector(closeScratchpadClicked)
+        closeScratchpad.target = self
+        closeScratchpad.image = Self.symbolIcon("note.text")
+        menu.addItem(closeScratchpad)
 
         logiGestures.action = #selector(logiGesturesClicked)
         logiGestures.target = self

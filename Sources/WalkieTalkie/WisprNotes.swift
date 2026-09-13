@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import SQLite3
 
@@ -184,5 +185,85 @@ enum WisprNotes {
             "versionId": note.versionId,
             "versionSource": note.versionSource,
         ]]
+    }
+}
+
+/// **Wispr Flow's Scratchpad window, and the one precondition the wrap has.**
+///
+/// Measured by the loop over four runs on 2026-09-13, and it is the whole reason
+/// this type exists:
+///
+/// - With the Scratchpad window **closed** at the start, a held chord dictates
+///   into a note — 3/3: a new `Notes` row with its `NoteVersions` row, the victim
+///   document untouched, the focus unchanged, and the window opening in the
+///   background afterwards.
+/// - With the window **already open**, Wispr transcribes normally (`formatted`
+///   in `History`) and **writes no note at all**. The sentence is lost, and
+///   closing the window afterwards does not commit it.
+///
+/// So *close the window* is not tidying up after the wrap, it is the wrap's
+/// precondition, and the window Wispr opens at the end of every dictation is the
+/// thing that would break the next one. The cycle is: check, close, hold,
+/// dictate, release, read the note, close again, verify.
+///
+/// A ~250 ms press-and-release of the same chord closes it inside 1.5 s and does
+/// not move the focus. A 60 ms one does nothing at all — Wispr is telling a tap
+/// from a hold by duration.
+enum WisprScratchpad {
+
+    /// Wispr's own title for it. Matched by name because the window has no other
+    /// distinguishing property from outside: it is an ordinary Electron window
+    /// among Wispr's several, and its number changes every time it opens.
+    static let windowName = "Scratchpad"
+
+    /// **Is it up right now?** — the window server, not Accessibility.
+    ///
+    /// `CGWindowListCopyWindowInfo` at `.optionOnScreenOnly`, filtered to Wispr's
+    /// processes by owner name. Window *titles* need the Screen Recording grant
+    /// this app already holds for its screenshots; without it the list still
+    /// arrives and the names are simply absent, which reads as *no Scratchpad* —
+    /// so the check says so once rather than silently answering no for ever.
+    static func windowIsOpen() -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return false }
+        var sawAnyName = false
+        for w in windows {
+            let owner = (w[kCGWindowOwnerName as String] as? String) ?? ""
+            guard owner.localizedCaseInsensitiveContains("Wispr") else { continue }
+            guard let name = w[kCGWindowName as String] as? String else { continue }
+            sawAnyName = true
+            if name == windowName { return true }
+        }
+        if !sawAnyName, !warnedAboutNames {
+            warnedAboutNames = true
+            Log.error("wispr scratchpad: no window titles readable — grant Screen Recording, or the wrap cannot tell whether its precondition holds")
+        }
+        return false
+    }
+    private static var warnedAboutNames = false
+
+    /// Post the toggle and **wait until the window is actually gone**.
+    ///
+    /// Verified rather than assumed, because the failure is silent and expensive:
+    /// a window left open costs the *next* sentence, not this one, so nothing at
+    /// the time of the mistake looks wrong.
+    ///
+    /// - Parameter done: on the main queue, with whether the window went.
+    static func closeWindow(_ done: @escaping (Bool) -> Void) {
+        guard windowIsOpen() else { return DispatchQueue.main.async { done(true) } }
+        HotkeyTap.tapWisprScratchpad()
+        poll(deadline: Date().addingTimeInterval(closeCeiling), done)
+    }
+
+    /// 2.5 s — measured at "within 1.5 s", with room over it for a busy Electron.
+    private static let closeCeiling: TimeInterval = 2.5
+
+    private static func poll(deadline: Date, _ done: @escaping (Bool) -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if !windowIsOpen() { return done(true) }
+            if Date() >= deadline { return done(false) }
+            poll(deadline: deadline, done)
+        }
     }
 }

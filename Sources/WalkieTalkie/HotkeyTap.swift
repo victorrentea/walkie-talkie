@@ -1891,9 +1891,31 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
     /// Press and release in one breath — the *tap*, which per Wispr's docs opens
     /// and closes the Scratchpad window rather than dictating into it.
+    ///
+    /// **250 ms, measured** (2026-09-13, 23:01): a 60 ms press/release did not
+    /// toggle the window at all and a 250 ms one did, twice. Wispr is telling a
+    /// tap from a hold by duration and 60 ms is below whatever floor it uses. It
+    /// is still far under any hold a dictation would be.
     static func tapWisprScratchpad() {
         postScratchpad(down: true)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.06) { postScratchpad(down: false) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.scratchpadTapHold) {
+            postScratchpad(down: false)
+        }
+    }
+    private static let scratchpadTapHold: TimeInterval = 0.25
+
+    /// **Whether Wispr actually has a Scratchpad shortcut**, which is the
+    /// question `WrapMode` asks before it decides to hold one.
+    ///
+    /// Deliberately *not* `scratchpadChord()` — that one always answers, because
+    /// a poster with nothing to post is useless. This one distinguishes *Victor
+    /// has bound it* from *we are guessing F18*, and the wrap falls back to the
+    /// sink rather than holding a key nobody asked for.
+    static var scratchpadIsConfigured: Bool {
+        if let raw = ProcessInfo.processInfo.environment["WISPR_SCRATCHPAD_KEYS"], !raw.isEmpty {
+            return true
+        }
+        return wisprShortcut(named: "open_scratchpad") != nil
     }
 
     /// The chord as Wispr has it today, newest read wins.

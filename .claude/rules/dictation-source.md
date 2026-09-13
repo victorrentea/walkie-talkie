@@ -58,6 +58,63 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   far side — one seen while a dictation is open is Victor ending it — so without the
   `backButtonStamp` check `postWisprHandsFree` would hand the source its own start back as a stop.
 
+## The wrap is Wispr's Scratchpad, and the sink is the emergency path (2026-09-13)
+
+- **Three modes, one tick, and `/engine` + `/test/state` say which and why** (`wrapMode`,
+  `wrapWhy`): `scratchpad` (default — hold Wispr's `open_scratchpad` chord for the sentence, read
+  the note, `via: "wispr-notes"`), `sink` (the hands-free chord, the swallow, and the sink taking
+  the key at the **relay's own stop**, `via: "wispr-sink"`), `off` (the tick down — Wispr inserts
+  where the focus is, ring only). `WT_WRAP_MODE` / `POST /test/wrap-mode`, `auto` to hand it back.
+- **The Scratchpad wrap has exactly one precondition: the Scratchpad window must be CLOSED.**
+  Measured over four runs. Closed: a held chord writes a note, 3/3 — new `Notes` + `NoteVersions`
+  row, victim document untouched, focus unchanged, window opens in the background afterwards.
+  Open: Wispr transcribes normally (`History` = `formatted`) and writes **no note at all**; the
+  sentence is lost and closing the window afterwards does not commit it.
+- **So the close is part of the wrap, not tidying after it.** Wispr opens that window at the end
+  of *every* dictation, which means the thing that swallows a sentence is the **previous** one —
+  the failure shows up one sentence after its cause, which is why it is checked twice: before the
+  hold (`holdScratchpad`) and after the capture (`closeScratchpadAfterwards`, from `endCapture`,
+  so it runs on every way out). Both verify by polling the window list; the second is mandatory
+  and logs loudly when it fails.
+- **A window that will not close stands the mode down to `sink`, out loud** (`scratchpadBroken`).
+  It is cleared by a later `start()` that finds the window closed, or by
+  `POST /test/wrap-mode {"mode": "auto"}`. Holding a chord that writes nothing is the one failure
+  this mode must never have quietly.
+- **250 ms, not 60.** A 60 ms press/release does not toggle the Scratchpad window; 250 ms does,
+  inside 1.5 s, without moving the focus. Wispr is telling a tap from a hold by duration.
+- **`startedMode` and `intercepting` are two different questions.** The first says *how the chord
+  was posted*, so it says what `stop()` must undo — a dictation opened by holding a key is ended
+  by releasing that key, whatever the menu says by then. The second says *does the relay deliver
+  these words*. They come apart on `POST /test/wispr-handsfree`, which posts Wispr's own chord
+  (`startedMode == .off`: nothing held, no sink) while the wrap is on and the ⌘V is still the
+  relay's to swallow. Folding them into one flag broke that route the first time it was tried.
+- **A dictation Victor starts himself is Wispr's** (`relayStarted == false`): his own keyboard
+  chord, or 🔽→ which posts Wispr's chord raw. Ring only — no swallow, no Scratchpad, no
+  pasteboard watch, nothing delivered. It ends on Wispr's row with `.silent("")`, which is
+  *nothing worth a banner*. `deliver` carries the same guard, because the cost of one call site
+  ever missing it is a sentence he spoke into another app arriving in an agent's terminal.
+- **Every path out releases the chord.** `closeListening` releases as a belt, and so does the
+  `speculativeGrace` drop — the one exit that does not go through it. Behind both,
+  `HotkeyTap`'s 120 s dead-man's switch.
+- **The `History` row's `app` column is the front app, never the destination.** It said TextEdit
+  for a sentence that went into Wispr's own note. In Scratchpad mode the row is the *clock* —
+  `formatted` says Wispr is done, `dismissed` / `empty` / `no_audio` end the capture — and the
+  **note** is the delivery; delivering from the row would race the note it is announcing.
+
+## The two alternatives that work and were rejected (2026-09-13)
+
+- **The sink as the primary wrap.** Measured 3/3: Wispr picks its insertion target at the *end*,
+  so a window taking the keyboard 1–5 ms after the stop chord receives the text. Victor rejected
+  it because it takes the focus off a man who may be clicking or typing at that instant. It stays
+  as the emergency path and as the test instrument, and **must not become the default again**.
+- **Revoking Wispr's Accessibility grant.** With no grant it can neither write through AX nor post
+  a synthetic ⌘V, so the row is the only delivery left. Rejected: Wispr has to go on being usable
+  on its own, and an app this one has quietly disarmed is not.
+- **Dismissing before the paste.** Not an alternative at all, and the number says why: the window
+  between the row saying `formatted` and the ⌘V is **57 ms**, and a ⌃Escape posted *after*
+  `formatted` does not stop the paste. There is no *cancel the insertion* — only *do not ask for
+  one*, which is exactly what the Scratchpad is.
+
 ## The ring is *microphone open*; the chip carries the wait (2026-09-13)
 
 - **The ring goes down at the microphone's close, not at the words' landing.** Victor's reading:

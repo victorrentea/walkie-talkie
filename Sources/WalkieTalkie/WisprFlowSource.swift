@@ -75,8 +75,117 @@ final class WisprFlowSource: DictationSource {
     /// behaviour of every build before 2026-09-12, kept because it is the one
     /// thing to fall back to if a Wispr update changes how it delivers.
     var wrapWispr = true {
-        didSet { Log.info("wispr wrap \(wrapWispr ? "on — the relay takes the paste" : "off — Wispr pastes where the focus is")") }
+        didSet {
+            guard wrapWispr != oldValue else { return }
+            Log.info("wispr wrap \(wrapWispr ? "on" : "off") — \(wrapMode.rawValue): \(wrapReason)")
+        }
     }
+
+    /// **How the relay takes Wispr's words**, and the three answers are three
+    /// different relationships with another app (Victor's decisions, 2026-09-13).
+    ///
+    /// | mode | Wispr is told | the words come from | what it costs |
+    /// |---|---|---|---|
+    /// | `scratchpad` | *Open Scratchpad*, **held** for the sentence | its own `Notes` row | nothing — no insertion, no focus moved |
+    /// | `sink` | the hands-free chord | the relay's own key window | the keyboard, for a moment, during every dictation |
+    /// | `off` | the hands-free chord | nobody — Wispr inserts where the focus is | the wrap |
+    ///
+    /// The order matters and so does why the other two were rejected. **The sink
+    /// works** — measured 3/3 on 2026-09-13: Wispr picks its insertion target at
+    /// the *end*, so a window taking the keyboard 1–5 ms after the stop chord
+    /// receives the text. Victor rejected it as the primary path anyway, because
+    /// it takes the focus off a man who may be clicking or typing at that
+    /// instant, and a dictation helper whose ordinary behaviour is to interrupt
+    /// him is not one he can leave running. **Revoking Wispr's Accessibility
+    /// grant** also works and was rejected for its own reason: Wispr has to go on
+    /// being usable on its own, and an app this one has quietly disarmed is not.
+    ///
+    /// The Scratchpad costs nothing because it is Wispr's own answer to *dictate
+    /// somewhere that is not the caret*. Measured: F18 held 20 s, the text in
+    /// `Notes`, the victim document untouched, **focus never moved**, no ⌘V
+    /// posted, e2e 432 ms.
+    enum WrapMode: String {
+        case scratchpad
+        case sink
+        case off
+    }
+
+    /// `WT_WRAP_MODE=sink` for one run, and `POST /test/wrap-mode` for the loop.
+    /// Nil means *decide from the tick and from Wispr's own configuration*.
+    private var modeOverride: WrapMode? =
+        ProcessInfo.processInfo.environment["WT_WRAP_MODE"].flatMap { WrapMode(rawValue: $0.lowercased()) }
+
+    /// The mode in force this instant, and a sentence saying how it got there —
+    /// both in `/engine` and `GET /test/state`, because a wrap that silently
+    /// fell back to the emergency path is exactly the thing nobody notices.
+    var wrapMode: WrapMode {
+        guard wrapWispr else { return .off }
+        if let modeOverride { return modeOverride }
+        guard !scratchpadBroken else { return .sink }
+        return HotkeyTap.scratchpadIsConfigured ? .scratchpad : .sink
+    }
+
+    var wrapReason: String {
+        guard wrapWispr else { return "the Wrap Wispr Flow tick is off — Wispr inserts where the focus is and the relay only draws the ring" }
+        if let modeOverride {
+            return "forced to \(modeOverride.rawValue) by WT_WRAP_MODE / POST /test/wrap-mode"
+        }
+        if scratchpadBroken {
+            return "the Scratchpad window would not close, and a held chord writes no note while it is open — the sink until it does"
+        }
+        return HotkeyTap.scratchpadIsConfigured
+            ? "Wispr has an open_scratchpad shortcut — the relay holds it and reads the note"
+            : "Wispr has no open_scratchpad shortcut — falling back to the sink, which takes the keyboard for a moment at every stop"
+    }
+
+    /// `POST /test/wrap-mode {"mode": "scratchpad"|"sink"|"off"|"auto"}`.
+    func setWrapMode(_ raw: String) -> [String: Any] {
+        if raw.lowercased() == "auto" {
+            modeOverride = nil
+            scratchpadBroken = false
+            wrapWispr = true
+        } else if let mode = WrapMode(rawValue: raw.lowercased()) {
+            if mode == .off { wrapWispr = false }
+            else { wrapWispr = true; modeOverride = mode }
+            if mode != .off { modeOverride = mode }
+        } else {
+            return ["ok": false, "error": "unknown mode \(raw)", "modes": ["scratchpad", "sink", "off", "auto"]]
+        }
+        Log.info("wispr wrap mode → \(wrapMode.rawValue): \(wrapReason)")
+        return ["wrapMode": wrapMode.rawValue, "why": wrapReason]
+    }
+
+    /// **Whether this dictation is the relay's to take.**
+    ///
+    /// Victor's line, 2026-09-13: a dictation *he* starts — his own keyboard
+    /// chord, or 🔽→ which posts Wispr's chord raw — is Wispr's. The relay draws
+    /// the ring for it because the ring is *a microphone is open* and that is
+    /// true, and it does nothing else: no swallow, no Scratchpad, no routing.
+    /// Taking over a tool he reached for directly is a different thing from
+    /// wrapping a dictation this app asked for itself.
+    private(set) var relayStarted = false
+
+    /// **The mode this dictation opened in**, latched at the gesture. `wrapMode`
+    /// can change under a sentence — the tick is a menu row and the loop posts
+    /// `/test/wrap-mode` — and a dictation started by holding a key must be
+    /// ended by releasing *that* key, whatever the menu says by then.
+    private(set) var startedMode: WrapMode = .off
+
+    /// For `GET /test/state` — the flag above, which is not `startedMode`.
+    var isIntercepting: Bool { intercepting }
+
+    /// **The wrap's apparatus is armed for this sentence** — latched at the
+    /// gesture, exactly like `startedMode`, and deliberately a *different*
+    /// question from it.
+    ///
+    /// `startedMode` says **how the chord was posted**, so it says what `stop()`
+    /// has to undo: a dictation opened by holding a key is ended by releasing
+    /// that key. This says **whether the relay delivers the words**. They come
+    /// apart on `POST /test/wispr-handsfree`, which posts the hands-free chord —
+    /// so its `startedMode` is `off`, no key is held and no sink is taken — while
+    /// the wrap is on and the ⌘V is still the relay's to swallow. Folding the two
+    /// into one flag broke that route the first time it was tried.
+    private var intercepting = false
 
     // MARK: - Events
 
@@ -246,6 +355,11 @@ final class WisprFlowSource: DictationSource {
     /// Wispr creates the row at the gesture and the relay can be reading a
     /// millisecond after it.
     private var priorRowWasOpen = false
+    /// The Scratchpad note that was newest when this dictation opened, so the
+    /// one Wispr writes at the end can be told from it — by id for a new note,
+    /// by its stamp for one Wispr appended to.
+    private var priorNoteId: String?
+    private var priorNoteStamp: TimeInterval = 0
     private var historyPoll: Timer?
     /// When the row said `formatted`, so the ⌘V that normally follows gets
     /// `pasteGrace` to arrive before the text is taken from the row instead.
@@ -293,7 +407,8 @@ final class WisprFlowSource: DictationSource {
         state.onTransition = { [weak self] _, _, _ in self?.syncInputPoll() }
         watch.onChange = { [weak self] on in self?.edge(on, measured: true) }
         hotkeys.onWisprMaybeStarting = { [weak self] why, confident in
-            DispatchQueue.main.async { self?.gestureSeen(why, confident: confident) }
+            // His keyboard, not the relay's — `relay: false`.
+            DispatchQueue.main.async { self?.gestureSeen(why, confident: confident, relay: false) }
         }
         hotkeys.onWisprMaybeCancelling = { [weak self] in
             DispatchQueue.main.async { self?.dismissSeen() }
@@ -313,13 +428,102 @@ final class WisprFlowSource: DictationSource {
     func start() -> String? {
         guard !isRecording else { return nil }
         guard isReady else { return "Wispr Flow is not running" }
-        HotkeyTap.postWisprHandsFree()
-        // **The relay asked for this one**, so there is nothing to guess about:
-        // the dictation opens now and the microphone edge confirms it. The tap
-        // will *also* see the chord this posts and call `gestureSeen`, which is
-        // a no-op once `speculative` is set.
-        gestureSeen("the relay asked for a dictation", confident: true)
+        // **A stand-down is not a verdict.** If the window that would not close
+        // is closed now — Victor clicked the menu row, Wispr was restarted — the
+        // precondition holds again and there is no reason to go on using the
+        // emergency path.
+        if scratchpadBroken, HotkeyTap.scratchpadIsConfigured, !WisprScratchpad.windowIsOpen() {
+            scratchpadBroken = false
+            Log.info("🗒️ the Scratchpad window is closed again — scratchpad mode is back")
+        }
+        let mode = wrapMode
+        // **The ring first, always.** Whatever the mode has to do to get Wispr
+        // ready, Victor pressed a button and the beacon answers the button.
+        gestureSeen("the relay asked for a dictation (\(mode.rawValue))", confident: true, relay: true)
+        switch mode {
+        case .scratchpad:
+            holdScratchpad()
+        case .sink:
+            HotkeyTap.postWisprHandsFree()
+            // The sink comes up now and takes the keyboard only at the stop —
+            // Wispr picks its target at insertion time (measured 3/3), so there
+            // is nothing to gain by holding his keyboard for the whole sentence
+            // and everything to lose.
+            WisprSink.shared.open()
+            WisprSink.shared.clear()
+        case .off:
+            HotkeyTap.postWisprHandsFree()
+        }
         return nil
+    }
+
+    /// **Close the Scratchpad window if it is up, then hold the chord.**
+    ///
+    /// The order is the measurement (2026-09-13, four runs): with the window
+    /// **closed** a held chord writes a note, 3/3; with it **open** Wispr
+    /// transcribes normally and writes **no note at all**, and closing it
+    /// afterwards does not commit one. The sentence is simply lost, silently, and
+    /// the thing that leaves the window open is the *previous* dictation — Wispr
+    /// opens it in the background at the end of every one. So the precondition is
+    /// checked at the start as well as restored at the end: two chances to
+    /// notice, because the failure shows up one sentence later than its cause.
+    ///
+    /// The common path costs nothing — the window is already closed, `windowIsOpen`
+    /// is one window-server call, and the chord goes down in the same turn.
+    private func holdScratchpad() {
+        guard WisprScratchpad.windowIsOpen() else {
+            HotkeyTap.postWisprScratchpad(down: true)
+            return
+        }
+        Log.info("🗒️ the Scratchpad window is open — a held chord writes no note while it is; closing it first")
+        WisprScratchpad.closeWindow { [weak self] gone in
+            guard let self, self.startedMode == .scratchpad,
+                  self.isRecording || self.speculative else { return }
+            if gone {
+                Log.info("🗒️ the Scratchpad window is closed — holding the chord")
+                HotkeyTap.postWisprScratchpad(down: true)
+                return
+            }
+            // **Salvage the sentence rather than lose it.** Holding the chord
+            // now would record into a window that writes no note; the hands-free
+            // chord with the sink behind it is the emergency path and it works.
+            Log.error("🗒️ the Scratchpad window would not close — this sentence goes through the sink instead, and so will the next one")
+            self.scratchpadBroken = true
+            self.startedMode = .sink
+            HotkeyTap.postWisprHandsFree()
+            WisprSink.shared.open()
+            WisprSink.shared.clear()
+        }
+    }
+
+    /// **Close it again when the sentence is over, and check that it went.**
+    ///
+    /// Mandatory rather than tidy: the window Wispr opens at the end of this
+    /// dictation is the thing that would silently swallow the next one. Called
+    /// from `endCapture`, so it runs on every way out — delivered, dismissed,
+    /// empty, timed out.
+    private func closeScratchpadAfterwards() {
+        WisprScratchpad.closeWindow { [weak self] gone in
+            guard let self else { return }
+            if gone {
+                Log.info("🗒️ the Scratchpad window is closed — the next dictation can write a note")
+                return
+            }
+            Log.error("🗒️ THE SCRATCHPAD WINDOW WOULD NOT CLOSE — the next dictation would be transcribed and written nowhere. Falling back to the sink until it does.")
+            self.scratchpadBroken = true
+        }
+    }
+
+    /// **The Scratchpad mode has failed its own precondition and stands down.**
+    ///
+    /// Not a permanent decision and not a silent one: `POST /test/wrap-mode
+    /// {"mode": "auto"}` clears it, and so does a close that works. What it must
+    /// not do is go on holding a chord that writes nothing.
+    private var scratchpadBroken = false {
+        didSet {
+            guard scratchpadBroken, !oldValue else { return }
+            Log.error("🗒️ scratchpad mode stood down — the wrap is the sink until the window closes again or /test/wrap-mode says otherwise")
+        }
     }
 
     /// **The same chord again** — Wispr's hands-free shortcut is a toggle, and
@@ -342,7 +546,21 @@ final class WisprFlowSource: DictationSource {
     /// The relay knows what it asked for. The edge now confirms and logs.
     func stop() {
         guard isRecording || speculative else { return }
-        HotkeyTap.postWisprHandsFree()
+        switch startedMode {
+        case .scratchpad:
+            HotkeyTap.postWisprScratchpad(down: false)
+        case .sink:
+            HotkeyTap.postWisprHandsFree()
+            // **The keyboard, for the moment that matters and no longer.**
+            // Wispr picks the app it will insert into at the *end*; taking key
+            // 1–5 ms after the stop chord was enough, 3/3.
+            WisprSink.shared.onArrival = { [weak self] text, route in
+                DispatchQueue.main.async { self?.sinkArrived(text: text, route: route) }
+            }
+            WisprSink.shared.becomeKey()
+        case .off:
+            HotkeyTap.postWisprHandsFree()
+        }
         closeListening("the relay's own stop gesture")
     }
 
@@ -359,6 +577,10 @@ final class WisprFlowSource: DictationSource {
         }
         guard isRecording || speculative else { return }
         cancelling = true
+        // **Release first, then dismiss.** In Scratchpad mode the chord is held,
+        // and a ⌃Escape posted with it still down is a dismiss Wispr reads while
+        // it is still being told to record.
+        if startedMode == .scratchpad { HotkeyTap.postWisprScratchpad(down: false) }
         Log.info("🗑️ Wispr Flow dictation cancelled — posting ⌃Escape")
         HotkeyTap.postWisprCancel()
         // **The cancel closes it here too.** Same change as `stop()`, same
@@ -393,13 +615,20 @@ final class WisprFlowSource: DictationSource {
         if isRecording || speculative {
             closeListening("POST /test/wispr-handsfree — the toggle's second press")
         } else {
-            gestureSeen("POST /test/wispr-handsfree", confident: true)
+            // **`mode: .off`, and the wrap still on.** This route posts Wispr's
+            // *hands-free* chord, so there is no held key for `stop()` to release
+            // and no sink to take — but the ⌘V it will produce is the relay's to
+            // swallow exactly as it was yesterday, which is the behaviour the
+            // loop is written against.
+            gestureSeen("POST /test/wispr-handsfree", confident: true, relay: true, mode: .off)
         }
     }
 
     /// `POST /test/wispr {"hotkey": true}` — the speculative ring, one step
     /// earlier than the microphone.
-    func simulateHotkey() { gestureSeen("POST /test/wispr {hotkey}", confident: true) }
+    func simulateHotkey() {
+        gestureSeen("POST /test/wispr {hotkey}", confident: true, relay: true, mode: .off)
+    }
 
     // MARK: - Edges
 
@@ -423,7 +652,14 @@ final class WisprFlowSource: DictationSource {
     ///   into whatever he is working in, which is far too much to spend on a
     ///   guess — so an unconfident gesture raises the beacon and nothing else,
     ///   and its microphone edge does the opening a moment later.
-    private func gestureSeen(_ why: String, confident: Bool) {
+    /// - Parameter relay: whether **this app** asked for the dictation. A
+    ///   dictation Victor starts himself is Wispr's: ring only, never
+    ///   intercepted, never routed.
+    /// - Parameter mode: **how the chord was posted**, which is what `stop()`
+    ///   will have to undo. Nil means *the mode in force* — every gesture except
+    ///   the loopback's hands-free routes, which post Wispr's own chord and so
+    ///   have no key held and no sink to take.
+    private func gestureSeen(_ why: String, confident: Bool, relay: Bool, mode: WrapMode? = nil) {
         // **The chord is a toggle and the second press is the stop** (2026-09-13).
         // Only for a confident gesture: `fn ⌃ Space` is unambiguous and this
         // app's own posts no longer come back through the tap, so a hands-free
@@ -436,9 +672,15 @@ final class WisprFlowSource: DictationSource {
         }
         guard !isRecording, !speculative else { return }
         speculative = true
+        relayStarted = relay
+        startedMode = relay ? (mode ?? wrapMode) : .off
+        intercepting = relay && wrapWispr
         gestureAt = CFAbsoluteTimeGetCurrent()
         openedAt = Date().timeIntervalSince1970
         state.startChord(why)
+        if !relay {
+            Log.info("⚡ \(why) — Victor's own dictation; the ring is all the relay does with it")
+        }
         // **A capture still standing whose row is not terminal is a sentence
         // still in flight**, and this new one does not get to disarm it — that
         // is precisely what happened on 2026-09-13 when a phantom second
@@ -473,6 +715,11 @@ final class WisprFlowSource: DictationSource {
             }
             self.speculative = false
             self.isRecording = false
+            // **Nothing else is going to release it.** This is the one path out
+            // of a dictation that does not go through `closeListening`, and in
+            // Scratchpad mode the chord is still down — twelve seconds of a
+            // held key, then a hundred and twenty until the dead-man's switch.
+            if HotkeyTap.scratchpadIsHeld { HotkeyTap.postWisprScratchpad(down: false) }
             self.stopMeter(keep: false)
             self.state.timedOut("no row and no microphone within \(Int(Self.speculativeGrace)) s")
             let why = "Wispr never created a row within \(Int(Self.speculativeGrace)) s of the chord — it ignored it"
@@ -530,6 +777,11 @@ final class WisprFlowSource: DictationSource {
         // kind of disagreement between two records of the same fact this file
         // exists to remove.
         state.stopChord(why)
+        // **Belt on the hold.** Every ordinary path releases the chord before it
+        // gets here; this is for the ones that do not exist yet and for the one
+        // that already does — Victor's own hands-free chord, read as a stop for
+        // a dictation the relay opened by holding a different key.
+        if HotkeyTap.scratchpadIsHeld { HotkeyTap.postWisprScratchpad(down: false) }
         isRecording = false
         speculativeDrop?.cancel()
         speculativeDrop = nil
@@ -695,6 +947,11 @@ final class WisprFlowSource: DictationSource {
     private func beginCapture() {
         guard !capturing else { return }
         capturing = true
+        // **A dictation Victor started is watched and never taken.** The row
+        // poll still runs — the chip and the ring want to know when Wispr is
+        // done — but nothing is swallowed, nothing is read off the pasteboard
+        // and nothing is delivered.
+        let takes = intercepting
         armedAt = CFAbsoluteTimeGetCurrent()
         captureFrom = armedAt
         askedForCopy = false
@@ -705,7 +962,11 @@ final class WisprFlowSource: DictationSource {
         // — which process posted what key, how long after the microphone shut —
         // is the only record of how Wispr delivers, and it is worth the same two
         // log lines in either mode. Only `swallow` differs.
-        hotkeys.armInjectionCapture(swallow: wrapWispr)
+        // In Scratchpad mode Wispr posts no ⌘V at all (measured: none, 20 s of
+        // speech), so the swallow is pure safety net — armed anyway, because the
+        // day it fires is the day this file's premise stopped being true and the
+        // probe line is how anyone finds out.
+        if takes { hotkeys.armInjectionCapture(swallow: true) }
 
         // The pasteboard is the other half of the answer, and the only half in
         // the cases where the ⌘V never arrives: an Accessibility insertion, a
@@ -714,7 +975,13 @@ final class WisprFlowSource: DictationSource {
         // pasteboard poll is a different and much worse thing than a six-second
         // one.
         clipboardWatch?.invalidate()
+        // **No pasteboard watch in Scratchpad mode.** Wispr writes the clipboard
+        // and puts it straight back there too, and with nothing pasted anywhere
+        // the only thing a watcher could report is the restore — which is the
+        // bug that filed a Word contract as a dictation three times.
+        let watchesBoard = takes && startedMode != .scratchpad
         let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard watchesBoard else { return }
             guard let self, self.capturing else { return }
             guard NSPasteboard.general.changeCount != self.clipboardAt else { return }
             self.clipboardWatch?.invalidate()
@@ -753,6 +1020,15 @@ final class WisprFlowSource: DictationSource {
         priorRowWasOpen = prior.map { !WisprState.isTerminal($0.status) } ?? false
         historyRow = nil
         historyFormattedAt = 0
+        // **The note as it stood before he started talking**, so a Scratchpad
+        // that is appended to rather than added to is still recognisable.
+        if startedMode == .scratchpad, let note = WisprNotes.newest() {
+            priorNoteId = note.id
+            priorNoteStamp = max(note.createdAt, note.modifiedAt)
+        } else {
+            priorNoteId = nil
+            priorNoteStamp = 0
+        }
         historyPoll?.invalidate()
         let h = Timer(timeInterval: Self.historyTick, repeats: true) { [weak self] _ in self?.pollHistory() }
         historyPoll = h
@@ -802,7 +1078,12 @@ final class WisprFlowSource: DictationSource {
     /// where the focus was, by a route no tap sees, and `insertedElsewhere`
     /// lets the router decide whether that was the destination.
     private func pollHistory() {
-        guard capturing, let e = WisprHistory.newest() else { return }
+        guard capturing else { return }
+        // **The Scratchpad note is the delivery in that mode, and the row is
+        // only the clock.** Read first, because a note that has landed ends the
+        // capture and there is nothing for the row below to say about it.
+        if startedMode == .scratchpad, intercepting, !isRecording, pollNote() { return }
+        guard let e = WisprHistory.newest() else { return }
 
         // **Adopting the row.** Anything that is not the row that was on top when
         // this was armed, and was created at or after the gesture, is this
@@ -838,6 +1119,31 @@ final class WisprFlowSource: DictationSource {
             return
 
         case "formatted", "extension_paste", "extension_other":
+            // **A dictation the relay did not start is over here and nothing
+            // else happens.** It was Wispr's from the chord; the row is how the
+            // ring and the chip find out it is finished, and `.silent("")` is
+            // *nothing worth a banner* rather than a failure.
+            guard intercepting else {
+                Log.info(String(format: "wispr history: %@ — Victor's own dictation, delivered by Wispr (%.0f ms)",
+                                e.status, took))
+                endCapture(quiet: true)
+                didEnd?(.silent(""))
+                return
+            }
+            // **In Scratchpad mode the row is not the delivery.** It says *Wispr
+            // is done*, which is worth a log line and is what `WisprState` reads
+            // for its timing; the words are in the note and `pollNote` above is
+            // waiting for them. Measured: the row is `formatted` before the note
+            // is written, so delivering from it here would race the thing it is
+            // announcing.
+            if startedMode == .scratchpad {
+                if historyFormattedAt == 0 {
+                    historyFormattedAt = CFAbsoluteTimeGetCurrent()
+                    Log.info(String(format: "wispr history: %@ %.0f ms after the microphone closed (Wispr's own e2e %.0f ms) — waiting for the Scratchpad note",
+                                    e.status, took, e.e2eLatency))
+                }
+                return
+            }
             // **The row as the delivery, with no ⌘V ever arriving.** Nothing to
             // wait for when Wispr cannot insert: the words are in the row, and
             // the relay is the only one who is going to put them anywhere.
@@ -862,6 +1168,7 @@ final class WisprFlowSource: DictationSource {
             Log.info(String(format: "wispr history: dismissed — %.0f ms after the microphone closed", took))
             endCapture(quiet: true)
             didEnd?(.cancelled(audio: nil, duration: 0))
+            return
         case "empty", "no_audio":
             Log.info(String(format: "wispr history: %@ — %.0f ms after the microphone closed", e.status, took))
             endCapture(quiet: true)
@@ -877,10 +1184,41 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **Wispr's Scratchpad note, which in that mode is the whole delivery.**
+    ///
+    /// - Returns: whether the sentence was delivered, so the caller can stop.
+    private func pollNote() -> Bool {
+        guard let note = WisprNotes.newest(since: openedAt - 2) else { return false }
+        let stamp = max(note.createdAt, note.modifiedAt)
+        // A **new** note, or the one that was there written to again — the
+        // Scratchpad is a notepad and nothing promises Wispr will keep adding
+        // files rather than lines.
+        let isThisOne = note.id != priorNoteId || stamp > priorNoteStamp
+        let text = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isThisOne, !text.isEmpty else { return false }
+        Log.info(String(format: "🗒️ wispr scratchpad: note %@ (%@) — %d chars, %.0f ms after the microphone closed",
+                        String(note.id.prefix(8)),
+                        note.versionSource.isEmpty ? "no version" : note.versionSource,
+                        text.count, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
+        deliver(reason: "Wispr's Scratchpad note", via: "wispr-notes", delivery: .route, text: note.text)
+        return true
+    }
+
+    /// **The sink caught it** — the emergency path, and the only one in which
+    /// this app holds Victor's keyboard for a moment.
+    private func sinkArrived(text: String, route: String) {
+        guard capturing, startedMode == .sink else { return }
+        WisprSink.shared.restoreFocus()
+        WisprSink.shared.onArrival = nil
+        Log.info(String(format: "🧪 wispr sink caught the delivery via %@ — %d chars, %.0f ms after the microphone closed",
+                        route, text.count, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
+        deliver(reason: "the sink (\(route))", via: "wispr-sink", delivery: .route, text: text)
+    }
+
     /// Wispr pressed ⌘V. Under the wrap the tap has already eaten it, so the
     /// words are nowhere yet and this is the whole delivery.
     private func injected(from process: String) {
-        guard capturing else { return }
+        guard capturing, intercepting else { return }
         Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed%@",
                         process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000,
                         wrapWispr ? " (taken)" : " (let through)"))
@@ -895,6 +1233,15 @@ final class WisprFlowSource: DictationSource {
         // without a microphone. Posted once, and only when nothing has been seen
         // at all: a pasteboard that never moved and a ⌘V that never came means
         // the delivery went somewhere this tap cannot see.
+        // Nothing was ever going to come back for a dictation this app did not
+        // start, and a banner about it would be the relay complaining that
+        // another app's tool worked.
+        guard intercepting else {
+            Log.info("wispr: Victor's own dictation is over and the relay took nothing from it")
+            endCapture(quiet: true)
+            didEnd?(.silent(""))
+            return
+        }
         if !askedForCopy, Self.copyFallbackEnabled {
             askedForCopy = true
             Log.info("no delivery seen — asking Wispr for it with ⌘⌃C (copy_last_text)")
@@ -927,6 +1274,11 @@ final class WisprFlowSource: DictationSource {
     private func deliver(reason: String, via: String, delivery: DictationDelivery,
                          text given: String? = nil) {
         guard capturing else { return }
+        // The one gate that says *these words are the relay's to route*. Every
+        // caller is already behind it; it is here because the cost of one of
+        // them ever not being is a sentence Victor spoke into another app
+        // arriving in an agent's terminal.
+        guard intercepting else { return }
         // The string as it stood when the pasteboard first moved, when that is
         // what this delivery is about — see `clipboardMoved`.
         let fromBoard = clipboardMoved ?? NSPasteboard.general.string(forType: .string)
@@ -990,6 +1342,19 @@ final class WisprFlowSource: DictationSource {
         historyRow = nil
         priorRow = nil
         priorRowWasOpen = false
+        priorNoteId = nil
+        priorNoteStamp = 0
+        // **Never leave the sink holding his keyboard.** Every ordinary sink
+        // delivery restores focus on arrival; this is the path where nothing
+        // arrived and the capture timed out.
+        if startedMode == .sink {
+            WisprSink.shared.onArrival = nil
+            if WisprSink.shared.isKey { WisprSink.shared.restoreFocus() }
+            WisprSink.shared.close()
+        }
+        // **And the window Wispr just opened**, which is the next dictation's
+        // precondition and not this one's housekeeping.
+        if startedMode == .scratchpad { closeScratchpadAfterwards() }
         captureDeadline?.cancel()
         captureDeadline = nil
         // The machine goes back to rest with the capture, which is also what

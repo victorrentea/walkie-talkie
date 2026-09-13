@@ -737,6 +737,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHotkey = { [weak self] in
             DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
         }
+        picker.onTestWrapMode = { [weak self] mode in
+            guard let self else { return ["ok": false, "error": "gone"] }
+            var answer: [String: Any] = [:]
+            DispatchQueue.main.sync { answer = self.wisprSource.setWrapMode(mode) }
+            // The tick on the menu follows the mode, or the row and the
+            // behaviour behind it disagree for the rest of the session.
+            DispatchQueue.main.async { self.status.setWrapWispr(self.wisprSource.wrapWispr) }
+            return answer
+        }
         picker.onTestHistoryRoute = { [weak self] on in
             DispatchQueue.main.async { self?.wisprSource.historyIsTheRoute = on }
         }
@@ -807,6 +816,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return FileManager.default.fileExists(atPath: kept.url.path)
         }
         status.onStartDictation = { [weak self] in self?.startDictation() }
+        // **Close Wispr's Scratchpad window** — the one thing the wrap leaves
+        // behind. In Scratchpad mode Wispr opens its own note window in the
+        // background on the first dictation and never closes it; Victor has not
+        // decided whether that should be automatic, so it is a row he clicks.
+        // 250 ms, because a 60 ms tap does not toggle it (measured 2026-09-13).
+        status.onCloseScratchpad = {
+            Log.info("🗒️ Close Wispr Scratchpad — tapping \(HotkeyTap.scratchpadChord().map(String.init).joined(separator: "+"))")
+            HotkeyTap.tapWisprScratchpad()
+        }
         // **On main, like the toggle two lines down.** It was not, and the
         // asymmetry is the whole bug: the tap dispatches globally, so cancelling
         // reached `RelayWindow.layoutContent` → `NSWindow.setFrame` on
@@ -1231,7 +1249,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return [:] }
             var out: [String: Any] = ["source": self.source.name,
                                       "ready": self.source.isReady,
-                                      "wrapWispr": self.wisprSource.wrapWispr]
+                                      "wrapWispr": self.wisprSource.wrapWispr,
+                                      // **And how**, not only whether — a wrap
+                                      // that quietly fell back to the sink is
+                                      // exactly what nobody notices.
+                                      "wrapMode": self.wisprSource.wrapMode.rawValue,
+                                      "wrapWhy": self.wisprSource.wrapReason,
+                                      "scratchpadChord": HotkeyTap.scratchpadChord()
+                                          .map(String.init).joined(separator: "+")]
             out["whisper"] = self.whisperSource.describe()
             return out
         }
@@ -2902,6 +2927,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "awaitingBind": awaitingBind != nil,
             "source": source.name,
             "wrapWispr": wisprSource.wrapWispr,
+            "wrapMode": wisprSource.wrapMode.rawValue,
+            "wrapWhy": wisprSource.wrapReason,
+            // Whether *this* dictation is the relay's to take — a dictation
+            // Victor started with his own chord is Wispr's and is only drawn.
+            "relayStarted": wisprSource.relayStarted,
+            "startedMode": wisprSource.startedMode.rawValue,
+            // *Does the relay deliver these words* — not the same question as
+            // `startedMode`, which says how the chord was posted.
+            "intercepting": wisprSource.isIntercepting,
+            // The Scratchpad wrap's precondition: a held chord writes no note
+            // while this is true (measured 2026-09-13).
+            "scratchpadWindowOpen": WisprScratchpad.windowIsOpen(),
             "sinkOpen": WisprSink.shared.isOpen,
             "sinkKey": WisprSink.shared.isKey,
             // The Scratchpad chord is the one thing this app can leave *held* on

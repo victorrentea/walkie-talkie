@@ -211,6 +211,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Version row and ⌘Q (2026-09-13)](#version-row-and-q-2026-09-13)
 - [Three witnesses instead of one, and the ring stops waiting for CoreAudio (2026-09-13, evening)](#three-witnesses-instead-of-one-and-the-ring-stops-waiting-for-coreaudio-2026-09-13-evening)
 - [The numbers, and the Scratchpad is the one that works (2026-09-13, night)](#the-numbers-and-the-scratchpad-is-the-one-that-works-2026-09-13-night)
+- [The wrap is Wispr's own Scratchpad (2026-09-13, late)](#the-wrap-is-wisprs-own-scratchpad-2026-09-13-late)
 
 ---
 
@@ -8717,3 +8718,97 @@ permission.
 
 Verified against the runner's own dictation: `GET /test/wispr-notes` answers note
 `3e088dcb-…`, 24 characters, `"Commit and push the fix "`, version `initial`.
+
+## The wrap is Wispr's own Scratchpad (2026-09-13, late)
+
+Four candidates were built or measured in one evening and three of them work. The one that
+shipped is the only one that costs Victor nothing, and the argument is worth keeping because
+"it works" turned out to be the least interesting property of the other three.
+
+| candidate | does it work | why not |
+|---|---|---|
+| swallow the ⌘V | yes, most of the time | it depends on a keystroke another process may or may not post, inside a window this app may or may not have armed — both 09-13 failures |
+| the **sink** (take the key window at the stop) | **yes, 3/3** | it takes the focus off a man who may be clicking or typing |
+| **revoke Wispr's Accessibility grant** | yes | Wispr stops working as a standalone tool |
+| **hold *Open Scratchpad*** | **yes, 3/3** | — |
+
+The sink's measurement is the one that made the decision easy, because it settled a question
+that had been open all day: **Wispr picks the app it will insert into at the end, not at the
+chord.** Taking the keyboard 1–5 ms after the stop chord was enough, three times out of three,
+and the `History` row's `app` column named the relay although TextEdit had been in front for the
+whole dictation. So the sink needs the focus for a moment rather than for a sentence — and
+Victor still said no, and was right to: a dictation helper whose ordinary behaviour is to
+interrupt him is one he cannot leave running all day, and "only for a moment" is not a promise
+that survives a busy Electron app. It stays as the emergency path and as the test instrument.
+
+Revoking the Accessibility grant was rejected for a shape of reason worth naming separately: it
+does not break the relay, it breaks **Wispr**. An app this one has quietly disarmed is not a tool
+he still has.
+
+And one thing that is not a candidate at all, measured the same evening: the window between
+Wispr's row saying `formatted` and its ⌘V is **57 ms**, and a ⌃Escape posted after `formatted`
+does not stop the paste. There is no *cancel the insertion*. There is only *do not ask for one*.
+
+### The Scratchpad, and the precondition that is the whole feature
+
+Wispr's *Open Scratchpad* shortcut carries three gestures on one binding, and the middle one is
+the wrap: **hold it and Wispr dictates into its own note.** Measured — F18 held 20 s: a new
+`Notes` row with its `NoteVersions` row, the victim TextEdit document untouched, **focus never
+moved**, **no ⌘V posted**, the pasteboard written and restored by Wispr, e2e **432 ms**, and the
+Scratchpad window opening in the background afterwards.
+
+That last clause is not a footnote. Four runs established the precondition:
+
+- Window **closed** at the start → a note is written, 3/3.
+- Window **open** at the start → Wispr transcribes perfectly (`History` says `formatted`) and
+  writes **no note at all**. The sentence is lost, and closing the window afterwards does not
+  commit it.
+
+And Wispr opens that window at the end of *every* dictation. So **the thing that breaks a
+sentence is the previous sentence**, the failure arrives one dictation after its cause, and
+nothing at the moment of the mistake looks wrong. That is the shape of bug this journal has spent
+two days on, and it is designed against rather than hoped about: the window is checked **twice**,
+once before the hold (`holdScratchpad`) and once after the capture (`closeScratchpadAfterwards`,
+called from `endCapture` so it runs on every way out — delivered, dismissed, empty, timed out).
+Both close by posting a ~250 ms press and then **polling the window list until it is gone**; a
+60 ms press does nothing at all, because Wispr is telling a tap from a hold by duration.
+
+A window that will not close stands the mode down to `sink`, loudly, and the next `start()` that
+finds it closed puts it back. The one failure this mode must never have quietly is holding a
+chord that writes nothing.
+
+### The three modes, and the two flags that are not the same flag
+
+`WrapMode` is `scratchpad` (default) · `sink` (emergency) · `off` (the tick down), resolved from
+the tick, `WT_WRAP_MODE`, `POST /test/wrap-mode`, whether Wispr actually has an `open_scratchpad`
+shortcut, and whether the window last refused to close. `/engine` and `GET /test/state` answer
+`wrapMode` **and `wrapWhy`**, because a wrap that silently fell back to the emergency path is
+precisely what nobody notices.
+
+Two flags are latched at the gesture and they answer different questions. `startedMode` says
+**how the chord was posted**, so it says what `stop()` has to undo: a dictation opened by holding
+a key is ended by releasing *that* key, whatever the menu says by then. `intercepting` says
+**whether the relay delivers these words**. They come apart on `POST /test/wispr-handsfree`,
+which posts Wispr's own chord — nothing held, no sink to take — while the wrap is on and the ⌘V
+is still the relay's to swallow, which is the behaviour the loop is written against. Folding them
+into one flag broke that route the first time it was tried.
+
+### A dictation he starts is his
+
+Victor's line, and it is the fence round the whole wrap: a dictation *he* opens — his own
+keyboard chord, or 🔽→ which posts Wispr's chord raw — is **Wispr's**. The relay draws the ring
+for it, because the ring means *a microphone is open* and that is true, and does nothing else: no
+swallow, no pasteboard watch, no Scratchpad, nothing routed. It ends on Wispr's own row with
+`.silent("")`, which is *nothing worth a banner*. `relayStarted` is that distinction and `deliver`
+carries the guard as well as the callers, because the cost of one call site ever missing it is a
+sentence he spoke into another app arriving in an agent's terminal.
+
+Every path out of a Scratchpad dictation releases the chord: `closeListening` as a belt, the
+`speculativeGrace` drop separately because it is the one exit that does not go through it, and
+`HotkeyTap`'s 120 s dead-man's switch behind both. A stuck right ⌘ is a Mac that has stopped
+working, and the reason F18 is the binding is that a chord held for a whole sentence must not be
+one that hijacks every key he presses while he talks.
+
+The window Wispr leaves open is his window in his tool, so the menu gained one row — **Close
+Wispr Scratchpad** — rather than the relay deciding to keep shutting it. Whether that should be
+automatic beyond the wrap's own cycle is Victor's to say.

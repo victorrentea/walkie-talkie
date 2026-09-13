@@ -304,6 +304,16 @@ final class ElementPicker {
     /// other half is still `POST /test/wispr-scratchpad`.
     var onTestWisprNotes: ((TimeInterval?) -> [String: Any])?
 
+    /// `POST /test/wrap-mode` `{"mode": "scratchpad"|"sink"|"off"|"auto"}` — pick
+    /// how the relay takes Wispr's words, for one run. `auto` hands the decision
+    /// back to the tick and to Wispr's own configuration.
+    ///
+    /// It exists because the three modes are three different *relationships with
+    /// another app* — hold a key it offers, take the keyboard for a moment, or
+    /// stand back — and the loop has to be able to drive all three against a real
+    /// Wispr without a menu click and without a rebuild.
+    var onTestWrapMode: ((String) -> [String: Any])?
+
     enum ScratchpadCommand: String {
         /// Press and keep it pressed — per Wispr's docs, push-to-talk into its
         /// own Scratchpad note.
@@ -759,6 +769,17 @@ final class ElementPicker {
                 return respond(conn, 500, ["ok": false, "error": "no simulator wired"])
             }
             respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // How the relay takes Wispr's words — see `onTestWrapMode`.
+        case ("POST", "/test/wrap-mode"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let mode = ((body?["mode"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !mode.isEmpty, let answered = onTestWrapMode?(mode) else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "expected {\"mode\": \"scratchpad\"|\"sink\"|\"off\"|\"auto\"}"])
+            }
+            let ok = answered["ok"] as? Bool ?? true
+            respond(conn, ok ? 200 : 400, ["ok": ok].merging(answered) { _, new in new })
 
         // Wispr's Scratchpad note, read — see `onTestWisprNotes`.
         case ("GET", "/test/wispr-notes"):
