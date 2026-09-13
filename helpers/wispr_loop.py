@@ -2405,6 +2405,11 @@ def scenario_scratchpad_hold(ctx) -> Result:
         board_before = pasteboard_change_count()
         notes_before = wispr_notes()
         windows_before = [] if relay.dry_run else wispr_windows()
+        # **Who else is on this desk.** A `victim-*` document that appears mid-run
+        # is another runner sharing the Mac — on 2026-09-14 two probes reported a
+        # *different* victim title from the other five, which is a run measuring
+        # somebody else's document without knowing it.
+        docs_before = set() if relay.dry_run else {n for n, _ in textedit_documents()}
         result.note("Wispr windows before: %s" % (windows_before or "—"))
 
         # ── hold the key ────────────────────────────────────────────────
@@ -2502,6 +2507,25 @@ def scenario_scratchpad_hold(ctx) -> Result:
     return result
 
 
+def probe_schedule(offsets: list[float], clip_seconds: float) -> list[tuple[str, float, float]]:
+    """`(letter, offset, delay)` per probe — **exactly one event per offset**.
+
+    Pulled out of the scenario so it can be asserted without posting anything.
+    A sweep that scheduled a letter twice would type it twice, and two
+    characters where one was expected reads as the *app* duplicating
+    keystrokes — which is precisely the accusation that came back on
+    2026-09-14 (`Qqzzjjkkwwyyvv`, 14 characters for 7 probes). It was not this,
+    measured: one `tap_key` produces one trace line and one character. This
+    test exists so that stays true.
+    """
+    import wispr_loopback as wl
+
+    out = []
+    for (char, _code), offset in zip(wl.PROBE_LETTERS, offsets):
+        out.append((char, offset, max(0.05, clip_seconds + offset)))
+    return out
+
+
 def _wrap_run(ctx, destination: str) -> Result:
     """The product path, once, at one destination.
 
@@ -2595,9 +2619,10 @@ def _wrap_run(ctx, destination: str) -> Result:
         if typed_probe:
             import wispr_loopback as wl
 
-            for (char, code), offset in zip(wl.PROBE_LETTERS, offsets):
+            codes = dict(wl.PROBE_LETTERS)
+            for char, offset, delay in probe_schedule(offsets, seconds):
+                code = codes[char]
                 probes.append((char, offset))
-                delay = max(0.05, seconds + offset)
                 when = "%.1f s %s the stop" % (abs(offset), "before" if offset < 0 else "after")
                 if relay.dry_run:
                     print("   · CGEventPost `%s` %s (%.1f s into the run)" % (char, when, delay))
@@ -2660,6 +2685,11 @@ def _wrap_run(ctx, destination: str) -> Result:
 
         seen = [] if relay.dry_run else focus.stop()
         result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
+        if not relay.dry_run:
+            appeared = {n for n, _ in textedit_documents()} - docs_before
+            result.check(not appeared, "no other TextEdit document appeared during the run",
+                         "appeared: %s — another runner is sharing this Mac"
+                         % ", ".join(sorted(appeared)) if appeared else "none")
         strays = [a for a in seen if a not in ("TextEdit", "")]
         if destination == "spawn":
             # A spawn opens a Terminal and that window is *meant* to come

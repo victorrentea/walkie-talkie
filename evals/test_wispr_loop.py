@@ -399,6 +399,28 @@ class ProbeLetters(unittest.TestCase):
         self.assertAlmostEqual(played - bare,
                                wispr_loopback.LEAD_SEC + wispr_loopback.TAIL_SEC, places=1)
 
+    def test_a_sweep_schedules_exactly_one_event_per_offset(self):
+        """**One letter, one keystroke.** A sweep that scheduled a letter twice
+        would type it twice, and two characters where one was expected reads as
+        the *app* duplicating keystrokes — which is the accusation that came back
+        on 2026-09-14 (`Qqzzjjkkwwyyvv`: 14 characters for 7 probes). Measured, it
+        was not this; this test is what keeps that true."""
+        offsets = [-3.0, -1.0, 0.3, 0.8, 1.5, 2.5, 4.0]
+        sched = wl.probe_schedule(offsets, 3.37)
+        self.assertEqual(len(sched), len(offsets))
+        self.assertEqual(len({c for c, _o, _d in sched}), len(offsets))   # distinct letters
+        self.assertEqual([o for _c, o, _d in sched], offsets)             # one per offset, in order
+
+    def test_the_schedule_never_asks_for_a_negative_delay(self):
+        """An offset earlier than the clip is long would otherwise fire in the past."""
+        for _c, _o, delay in wl.probe_schedule([-30.0, -3.0], 1.57):
+            self.assertGreaterEqual(delay, 0.05)
+
+    def test_the_schedule_is_stable_across_calls(self):
+        a = wl.probe_schedule([0.3, 1.5], 2.0)
+        b = wl.probe_schedule([0.3, 1.5], 2.0)
+        self.assertEqual(a, b)
+
     def test_the_delivered_portion_is_what_the_note_gained(self):
         """The relay delivers the newly added part, so that is what a letter has
         to be found in to have been folded into somebody's sentence."""
