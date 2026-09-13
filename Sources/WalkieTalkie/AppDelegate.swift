@@ -737,6 +737,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHotkey = { [weak self] in
             DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
         }
+        picker.onTestScratchpadPark = {
+            var answer: [String: Any] = [:]
+            DispatchQueue.main.sync { answer = WisprScratchpad.park() }
+            return answer
+        }
         picker.onTestWrapMode = { [weak self] mode in
             guard let self else { return ["ok": false, "error": "gone"] }
             var answer: [String: Any] = [:]
@@ -2938,6 +2943,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "intercepting": wisprSource.isIntercepting,
             // The Scratchpad wrap's precondition: a held chord writes no note
             // while this is true (measured 2026-09-13).
+            // Where the parked window is, whether Wispr kept it there, and —
+            // the one Victor actually asked about — whether it has ever had the
+            // keyboard while he was typing.
+            "scratchpad": WisprScratchpad.describe(),
+            // Kept beside the object above because it is what every assertion
+            // written before tonight asks for.
             "scratchpadWindowOpen": WisprScratchpad.windowIsOpen(),
             "sinkOpen": WisprSink.shared.isOpen,
             "sinkKey": WisprSink.shared.isKey,

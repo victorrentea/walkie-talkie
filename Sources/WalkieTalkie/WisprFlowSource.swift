@@ -480,6 +480,9 @@ final class WisprFlowSource: DictationSource {
     /// The common path costs nothing — the window is already closed, `windowIsOpen`
     /// is one window-server call, and the chord goes down in the same turn.
     private func holdScratchpad() {
+        // Watch it for the whole sentence — the frame it comes back at, and
+        // whether it ever takes the keyboard.
+        WisprScratchpad.beginWatch()
         guard WisprScratchpad.windowIsOpen() else {
             HotkeyTap.postWisprScratchpad(down: true)
             return
@@ -497,6 +500,7 @@ final class WisprFlowSource: DictationSource {
             // now would record into a window that writes no note; the hands-free
             // chord with the sink behind it is the emergency path and it works.
             Log.error("🗒️ the Scratchpad window would not close — this sentence goes through the sink instead, and so will the next one")
+            WisprScratchpad.endWatch()
             self.scratchpadBroken = true
             self.startedMode = .sink
             HotkeyTap.postWisprHandsFree()
@@ -514,6 +518,7 @@ final class WisprFlowSource: DictationSource {
     private func closeScratchpadAfterwards() {
         WisprScratchpad.closeWhenItAppears { [weak self] appeared, gone in
             guard let self else { return }
+            WisprScratchpad.endWatch()
             if gone {
                 Log.info(appeared
                     ? "🗒️ the Scratchpad window opened and has been closed — the next dictation can write a note"
@@ -1152,12 +1157,25 @@ final class WisprFlowSource: DictationSource {
                 didEnd?(.silent(""))
                 return
             }
-            // **In Scratchpad mode the row is not the delivery.** It says *Wispr
-            // is done*, which is worth a log line and is what `WisprState` reads
-            // for its timing; the words are in the note and `pollNote` above is
-            // waiting for them. Measured: the row is `formatted` before the note
-            // is written, so delivering from it here would race the thing it is
-            // announcing.
+            // **In Scratchpad mode the row is the delivery and the note is the
+            // cross-check** (2026-09-13, after the first working run).
+            //
+            // Measured on that run: the row said `formatted` **531 ms** after
+            // the microphone closed, and the note was not readable until
+            // **2627 ms** — Wispr writes the note when it opens its window, two
+            // seconds later, and closing that window cost another 663 ms on top.
+            // Waiting for the note therefore made the mode 2.8 s slower than the
+            // ⌘V it replaced, for a copy of the same sentence.
+            //
+            // The note is where Wispr *pastes*; the row is where Wispr *writes
+            // what it heard*. So the words come from the row the instant it is
+            // terminal, the window is dealt with afterwards on its own time, and
+            // the note is read at the end only to say whether the two agree.
+            // `WT_SCRATCHPAD_DELIVER=note` goes back to waiting for the note.
+            if startedMode == .scratchpad, !Self.deliverFromNote {
+                deliverFromRow(e, took: took)
+                return
+            }
             if startedMode == .scratchpad {
                 if historyFormattedAt == 0 {
                     historyFormattedAt = CFAbsoluteTimeGetCurrent()
@@ -1206,7 +1224,108 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
-    /// **Wispr's Scratchpad note, which in that mode is the whole delivery.**
+    /// **`WT_SCRATCHPAD_DELIVER=note`** — wait for the note rather than taking
+    /// the row, which is 2.8 s slower and the behaviour of the first working
+    /// build. Kept because the row and the note are two different records and
+    /// the day they disagree this is how to look at the other one.
+    private static let deliverFromNote =
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_DELIVER"]?.lowercased() == "note"
+
+    /// **The row, delivered at `formatted`, with the window dealt with after.**
+    ///
+    /// The one thing that must not race is the caret paste against the
+    /// Scratchpad window's keyboard grab: that window takes the key when it
+    /// opens, and a paste made while it has it goes **into the note** — measured
+    /// on 2026-09-13, 70 characters of the relay's own delivery appended to
+    /// Wispr's notepad while the document Victor was looking at stayed empty. At
+    /// `formatted` the window is normally not open yet (it opens ~2 s later with
+    /// the note), so the ordinary path pastes straight away; if it *is* open —
+    /// left over, or Wispr being quick — it is closed first and the words follow.
+    private func deliverFromRow(_ e: WisprHistory.Entry, took: Double) {
+        let words = e.text
+        guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            Log.error(String(format: "wispr history: %@ with no text — waiting for the Scratchpad note instead", e.status))
+            return
+        }
+        historyPoll?.invalidate()
+        historyPoll = nil
+        scratchpadWindowHandled = true
+        // Everything the cross-check needs, before `endCapture` clears it.
+        let priorId = priorNoteId
+        let priorText = priorNoteText
+        let since = openedAt
+
+        let finish = { [weak self] in
+            guard let self else { return }
+            Log.info(String(format: "wispr history: %@ %.0f ms after the microphone closed (Wispr's own e2e %.0f ms) — the row is the delivery",
+                            e.status, took, e.e2eLatency))
+            self.deliver(reason: "Wispr's History row (scratchpad)", via: "wispr-history",
+                         delivery: .route, text: words)
+            // **Afterwards, and on its own time**: the window Wispr is about to
+            // open is the *next* dictation's precondition, and the note it is
+            // about to write is this one's second opinion.
+            WisprScratchpad.closeWhenItAppears { appeared, closed in
+                if closed {
+                    Log.info(appeared
+                        ? "🗒️ the Scratchpad window opened and has been closed — the next dictation can write a note"
+                        : "🗒️ no Scratchpad window appeared — nothing to close")
+                } else {
+                    Log.error("🗒️ THE SCRATCHPAD WINDOW WOULD NOT CLOSE — the next dictation would be transcribed and written nowhere. Falling back to the sink until it does.")
+                    self.scratchpadBroken = true
+                }
+                WisprScratchpad.endWatch()
+                Self.crossCheckNote(delivered: words, priorId: priorId, priorText: priorText, since: since)
+            }
+        }
+
+        guard WisprScratchpad.windowIsOpen() else { return finish() }
+        Log.info("🗒️ the Scratchpad window is already open — closing it before the words go to the caret")
+        WisprScratchpad.closeWindow { _ in finish() }
+    }
+
+    /// **Did Wispr's note say the same thing as Wispr's row?**
+    ///
+    /// They are two records of one sentence and they are not the same record:
+    /// the row is what the recogniser produced, the note is what its paste put
+    /// on screen — and the paste has been seen to arrive lowercased and without
+    /// the final stop (` commit and push the fix ` against
+    /// `Commit and push the fix.`). Punctuation and case are therefore normalised
+    /// away before comparing, and only a **material** difference is worth a line:
+    /// a disagreement about the words is the wrap delivering something other
+    /// than what Wispr heard, which is the failure this whole mode exists to
+    /// avoid.
+    private static func crossCheckNote(delivered: String, priorId: String?, priorText: String?,
+                                       since: TimeInterval) {
+        guard let note = WisprNotes.newest(since: since - 2) else {
+            Log.info("🗒️ cross-check: Wispr wrote no note for this dictation")
+            return
+        }
+        var added = note.content
+        if note.id == priorId, let prior = priorText, !prior.isEmpty {
+            var cut = added.startIndex
+            var p = prior.startIndex
+            while cut < added.endIndex, p < prior.endIndex, added[cut] == prior[p] {
+                cut = added.index(after: cut)
+                p = prior.index(after: p)
+            }
+            added = String(added[cut...])
+        }
+        func plain(_ s: String) -> String {
+            s.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
+        let a = plain(added)
+        let b = plain(delivered)
+        if a == b {
+            Log.info("🗒️ cross-check: the note and the row agree (\(added.trimmingCharacters(in: .whitespacesAndNewlines).count) chars in the note)")
+        } else if a.isEmpty {
+            Log.info("🗒️ cross-check: the note added nothing for this dictation — the row was the only record")
+        } else {
+            Log.error("🗒️ cross-check: the note and the row DISAGREE — note \(added.debugDescription) vs row \(delivered.debugDescription)")
+        }
+    }
+
+    /// **Wispr's Scratchpad note, which under `WT_SCRATCHPAD_DELIVER=note` is
+    /// the whole delivery.**
     ///
     /// - Returns: whether the sentence was delivered, so the caller can stop.
     private func pollNote() -> Bool {
@@ -1233,7 +1352,8 @@ final class WisprFlowSource: DictationSource {
         historyPoll = nil
         scratchpadWindowHandled = true
         WisprScratchpad.closeWhenItAppears { [weak self] appeared, closed in
-            guard let self, self.capturing else { return }
+            guard let self, self.capturing else { return WisprScratchpad.endWatch() }
+            WisprScratchpad.endWatch()
             if closed {
                 Log.info(appeared
                     ? "🗒️ the Scratchpad window is closed — delivering the words to the caret"

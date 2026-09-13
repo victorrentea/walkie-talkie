@@ -213,6 +213,8 @@ The journal contradicts itself over time, because it was written as things chang
 - [The numbers, and the Scratchpad is the one that works (2026-09-13, night)](#the-numbers-and-the-scratchpad-is-the-one-that-works-2026-09-13-night)
 - [The wrap is Wispr's own Scratchpad (2026-09-13, late)](#the-wrap-is-wisprs-own-scratchpad-2026-09-13-late)
 - [Five runs to make the Scratchpad wrap real (2026-09-13, 23:20–23:31)](#five-runs-to-make-the-scratchpad-wrap-real-2026-09-13-23202331)
+- [The row is the delivery; the note is the second opinion (2026-09-13, midnight)](#the-row-is-the-delivery-the-note-is-the-second-opinion-2026-09-13-midnight)
+- [Parking the Scratchpad, and measuring whether it ever takes a key (2026-09-13, midnight)](#parking-the-scratchpad-and-measuring-whether-it-ever-takes-a-key-2026-09-13-midnight)
 
 ---
 
@@ -8909,3 +8911,73 @@ worth saying out loud rather than discovering later.
 gesture, `lastDelivery` untouched, and the silent dictation ending at the capture's own timeout
 with `wispr: Victor's own dictation is over and the relay took nothing from it` — quiet, with no
 banner, because a relay complaining that another app's tool worked is not a message.
+
+## The row is the delivery; the note is the second opinion (2026-09-13, midnight)
+
+The Scratchpad wrap shipped waiting for the note, and the note is the wrong thing to wait for.
+Measured on the first working run: the `History` row said `formatted` **531 ms** after the
+microphone closed, and the note was not readable until **2627 ms** — Wispr writes it when it opens
+its window — with another **663 ms** to close that window before the words could safely be pasted.
+So the mode was 2.8 s slower than the ⌘V it replaces, and every millisecond of that was spent
+waiting for **a copy of the same sentence**.
+
+The distinction that was missing: **the note is where Wispr pastes; the row is where Wispr writes
+what it heard.** The note was never the source of truth — it is the sink the wrap chose precisely
+*because* it is not Victor's document. The row has been the completion signal since 2026-09-12 and
+has carried `formattedText` since this morning, and in Scratchpad mode it carries it while the
+note is still being written.
+
+So: deliver from the row the instant it is terminal, and let everything about the window happen
+afterwards on its own time — wait for it to appear, close it, verify, and then read the note as a
+**cross-check** rather than as a delivery. `WT_SCRATCHPAD_DELIVER=note` goes back to waiting,
+because the day the two disagree is the day someone will want to look at the other one.
+
+The cross-check normalises case and punctuation away first, and that is not laziness: Wispr's
+paste arrives as ` commit and push the fix ` where its row says `Commit and push the fix.` — the
+same sentence, dressed differently, because one went through its formatting pass on the way to a
+text view and the other did not. Only a disagreement about the **words** is worth a line, and what
+it would mean is the wrap delivering something other than what Wispr heard, which is the failure
+this whole mode exists to avoid.
+
+**The one thing that must not race.** Delivering at 531 ms means pasting at the caret while the
+Scratchpad window is about two seconds from opening — and that window *takes the keyboard when it
+opens*, which is how 70 characters of the relay's own delivery ended up appended to Wispr's
+notepad with the document Victor was looking at left empty. At `formatted` the window is normally
+not open yet, so the ordinary path pastes straight away; if it *is* open — left over, or Wispr
+being quick — it is closed first and the words follow. The check is a window-server call
+immediately before the delivery, which is the last honest moment there is.
+
+## Parking the Scratchpad, and measuring whether it ever takes a key (2026-09-13, midnight)
+
+Victor's ask, and the reason for it is the whole of his objection to the sink: the Scratchpad is a
+side effect of the wrap, not something he asked to look at, and a window that can take his
+keyboard is a window that can eat a keystroke meant for his work.
+
+**Parked**, through Accessibility and without activating anything: as small as Wispr allows, at
+the bottom-right of the **second** display when one is attached — a training Mac spends its day
+extended onto a projector and the corner of *that* is the one place a stray window costs nothing —
+all but an **8 pt sliver** past the edge. Visible enough to notice, small enough to ignore, far too
+small to click into by accident.
+
+Three details that are the whole of the implementation:
+
+- **There is no `AXMinimumSize`.** The window simply refuses to go below its own layout minimum,
+  so the measurement is *ask for 1×1 and read back what it settled on*, once, and log it.
+- **AX coordinates are not AppKit's.** Accessibility measures from the top left of the main screen
+  with y going **down**; AppKit measures from the bottom left with y going up. Getting that
+  backwards puts the window off the *top* of the world instead of off the bottom, which looks
+  exactly like the call having failed.
+- **Read the frame back.** macOS clamps a window it thinks is escaping, and where it ended up is
+  the only thing worth logging.
+
+**Whether Wispr remembers it** is a question the log answers rather than a thing assumed: every
+time the window appears it says `scratchpad reopened at <frame>` and whether that is where it was
+parked. If it is, parking is a one-off; if it is not, it is parked again, every time, and the
+count of times it came back elsewhere is in `/test/state`.
+
+**And the keyboard.** For the whole of every Scratchpad dictation the window is polled at **50 ms**
+with one question: has it ever become key. Wispr frontmost **and** this window its main one is the
+honest test — a background window cannot take a key, and either half alone is a false positive.
+The answer is `everBecameKey` in `/test/state.scratchpad`, with the moment it happened beside it,
+and if it is ever true the log says so in capitals, because the sentence it would be describing is
+*a keystroke of his landed in Wispr's note*.

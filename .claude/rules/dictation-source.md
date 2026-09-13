@@ -250,11 +250,34 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   (`armInjectionCapture(swallow: startedMode != .scratchpad)`, probe still armed): taking that key
   is this app reaching into another app's conversation with itself, and it showed — one run's
   sentence was appended to the previous run's note as ` commit and push the fix `, doubled.
-- **The Scratchpad window takes the keyboard when it opens, so the close comes BEFORE the
-  delivery.** Wispr opens it when it *writes the note*, ~2 s after the words are readable, and a
-  `pasteText` fired the moment the note appears goes **into the note**: measured, the relay's own
-  70 characters were appended to the Scratchpad and the TextEdit document Victor was looking at
-  stayed empty. `pollNote` therefore closes and verifies first, then delivers.
+- **The delivery is the ROW, not the note** (2026-09-13, after the first working run). Measured:
+  the row said `formatted` **531 ms** after the microphone closed; the note was not readable until
+  **2627 ms**, because Wispr writes it when it opens its window; closing that window cost another
+  **663 ms**. Waiting for the note made the mode 2.8 s slower than the ⌘V it replaces, for a copy
+  of the same sentence. The note is where Wispr *pastes*; the row is where it writes what it
+  heard. `WT_SCRATCHPAD_DELIVER=note` goes back to the note.
+- **The note is the cross-check, and case and punctuation are normalised away before comparing.**
+  Wispr's paste arrives lowercased and without the final stop (` commit and push the fix ` against
+  `Commit and push the fix.`), so only a **material** disagreement is worth a line — a
+  disagreement about the *words* is the wrap delivering something other than what Wispr heard,
+  which is the failure this mode exists to avoid.
+- **The Scratchpad window takes the keyboard when it opens, so the caret paste must not race it.**
+  Measured: the relay's own 70 characters were appended to the Scratchpad and the TextEdit
+  document Victor was looking at stayed empty. At `formatted` the window is normally not open yet,
+  so the ordinary path pastes straight away; if it *is* open it is closed first and the words
+  follow. Everything else about the window — the close, the verify, the cross-check — happens
+  **after** the delivery, on its own time.
+- **The window is parked** (`WisprScratchpad.park`): smallest size Wispr allows (measured by
+  asking for 1×1 through AX and reading back what it settled on), bottom-right of the **second**
+  display when one is attached, all but an 8 pt sliver past the edge. AX coordinates run from the
+  top left of the main screen with y **down**, where AppKit runs from the bottom left with y up;
+  getting that backwards puts the window off the top of the world rather than off the bottom.
+  Parked on the first open and on any open that comes back elsewhere; the log says whether Wispr
+  remembered. `POST /test/scratchpad/park` does it on demand.
+- **The window is polled at 50 ms for the whole of a Scratchpad dictation**, and the one thing it
+  is watching for is `everBecameKey` — Victor's real worry is a keystroke of his landing in
+  Wispr's note. Wispr frontmost **and** the window its main one is the honest test; a background
+  window cannot take a key.
 - **Wispr does not reliably start a new note** — it appended to a note from four minutes earlier
   with `source = typed`, and a `typed` version carries the **accumulated notepad**, not the
   increment. So the delivery is the new portion only: the note's content with the text captured at

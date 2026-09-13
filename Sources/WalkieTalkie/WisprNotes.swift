@@ -1,3 +1,5 @@
+import AppKit
+import ApplicationServices
 import CoreGraphics
 import Foundation
 import SQLite3
@@ -258,6 +260,228 @@ enum WisprScratchpad {
 
     /// 2.5 s — measured at "within 1.5 s", with room over it for a busy Electron.
     private static let closeCeiling: TimeInterval = 2.5
+
+    // MARK: - Parking it out of the way
+
+    /// **Where the parked window went, and whether Wispr kept it there.**
+    ///
+    /// Victor's ask: the Scratchpad is a side effect of the wrap, not something
+    /// he asked to look at, so it goes to the bottom-right corner of the second
+    /// display (the main one's corner when there is only one), as small as Wispr
+    /// will allow and mostly off the edge — a sliver, so that it is visible
+    /// enough to notice and small enough to ignore.
+    private(set) static var parkedFrame: CGRect?
+    /// What Wispr's own layout allows, measured by asking for 1×1 and reading
+    /// back what it settled on. Nil until a window has been parked once.
+    private(set) static var minimumSize: CGSize?
+    /// The frame the window had the last time it was seen, whatever that was.
+    private(set) static var lastSeenFrame: CGRect?
+    /// **Has it ever had the keyboard?** Victor's real worry about this wrap is
+    /// one of his own keystrokes landing in Wispr's note, so the answer is
+    /// measured rather than asserted — polled at 50 ms for the whole of every
+    /// Scratchpad dictation.
+    private(set) static var everBecameKey = false
+    /// When it did, for the log.
+    private(set) static var lastKeyAt: Date?
+    /// Whether the window came back somewhere other than where it was parked —
+    /// the answer to *does Wispr remember the frame*, which decides whether
+    /// parking is a one-off or a thing to do on every open.
+    private(set) static var reopenedElsewhere = 0
+    private(set) static var reopenCount = 0
+
+    /// How much of it is left on screen. Eight points: enough to see, not enough
+    /// to read, and far too little to click in by accident.
+    private static let sliver: CGFloat = 8
+
+    /// Wispr's application element, or nil when it is not running.
+    private static func appElement() -> (AXUIElement, pid_t)? {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.electron.wispr-flow").first
+                ?? NSWorkspace.shared.runningApplications.first(where: {
+                    $0.bundleIdentifier == "com.electron.wispr-flow" })
+        else { return nil }
+        return (AXUIElementCreateApplication(app.processIdentifier), app.processIdentifier)
+    }
+
+    /// The Scratchpad's own window element, by title.
+    private static func windowElement() -> AXUIElement? {
+        guard let (app, _) = appElement() else { return nil }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+              let windows = value as? [AXUIElement] else { return nil }
+        for w in windows {
+            var t: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(w, kAXTitleAttribute as CFString, &t) == .success,
+                  (t as? String) == windowName else { continue }
+            return w
+        }
+        return nil
+    }
+
+    private static func frame(of window: AXUIElement) -> CGRect? {
+        var p: CFTypeRef?
+        var s: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &p) == .success,
+              AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &s) == .success
+        else { return nil }
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        AXValueGetValue(p as! AXValue, .cgPoint, &origin)
+        AXValueGetValue(s as! AXValue, .cgSize, &size)
+        return CGRect(origin: origin, size: size)
+    }
+
+    @discardableResult
+    private static func set(_ window: AXUIElement, position: CGPoint) -> Bool {
+        var p = position
+        guard let value = AXValueCreate(.cgPoint, &p) else { return false }
+        return AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value) == .success
+    }
+
+    @discardableResult
+    private static func set(_ window: AXUIElement, size: CGSize) -> Bool {
+        var s = size
+        guard let value = AXValueCreate(.cgSize, &s) else { return false }
+        return AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, value) == .success
+    }
+
+    /// **The screen to park on, in Accessibility's coordinates.**
+    ///
+    /// The second display when one is attached — a training Mac spends its day
+    /// mirrored or extended onto a projector, and the corner of *that* is the
+    /// one place a stray window costs nothing. AppKit measures from the bottom
+    /// left of the main screen with y up; Accessibility measures from its top
+    /// left with y down, and getting that backwards puts the window off the top
+    /// of the world rather than off the bottom.
+    private static func parkingRectAX() -> CGRect? {
+        let screens = NSScreen.screens
+        guard let main = screens.first(where: { $0.frame.origin == .zero }) ?? screens.first
+        else { return nil }
+        let target = screens.first(where: { $0 !== main }) ?? main
+        let f = target.visibleFrame
+        return CGRect(x: f.minX, y: main.frame.maxY - f.maxY, width: f.width, height: f.height)
+    }
+
+    /// **Park it**: smallest Wispr allows, bottom-right of the chosen screen, all
+    /// but a sliver off the edge. Answers what it did, for `/test/state` and for
+    /// `POST /test/scratchpad/park`.
+    @discardableResult
+    static func park() -> [String: Any] {
+        guard AXIsProcessTrusted() else {
+            Log.error("🗒️ cannot park the Scratchpad — no Accessibility grant")
+            return ["parked": false, "why": "no Accessibility grant"]
+        }
+        guard let window = windowElement() else {
+            return ["parked": false, "why": "no Scratchpad window"]
+        }
+        let before = frame(of: window)
+
+        // **Ask for 1×1 and read back what Wispr allows.** There is no
+        // `AXMinimumSize`; the window simply refuses to go below its own layout
+        // minimum, and the number it settles on is the measurement.
+        set(window, size: CGSize(width: 1, height: 1))
+        let shrunk = frame(of: window)?.size ?? .zero
+        if minimumSize == nil, shrunk != .zero {
+            minimumSize = shrunk
+            Log.info(String(format: "🗒️ the Scratchpad's smallest size is %.0f×%.0f", shrunk.width, shrunk.height))
+        }
+
+        guard let screen = parkingRectAX() else { return ["parked": false, "why": "no screen"] }
+        let size = shrunk == .zero ? CGSize(width: 200, height: 120) : shrunk
+        // Bottom-right, all but `sliver` past the edge. Read back rather than
+        // assumed: macOS clamps a window it thinks is escaping, and what matters
+        // is where it ended up.
+        let wanted = CGPoint(x: screen.maxX - sliver, y: screen.maxY - sliver)
+        set(window, position: wanted)
+        let after = frame(of: window)
+        parkedFrame = after
+        lastSeenFrame = after
+        Log.info(String(format: "🗒️ Scratchpad parked: %@ → %@ (asked for %.0f,%.0f on a %.0f×%.0f screen)",
+                        describe(before), describe(after), wanted.x, wanted.y, screen.width, screen.height))
+        return ["parked": true,
+                "frame": rect(after),
+                "was": rect(before),
+                "minimumSize": ["w": Int(size.width), "h": Int(size.height)],
+                "screens": NSScreen.screens.count]
+    }
+
+    private static func describe(_ r: CGRect?) -> String {
+        guard let r else { return "nowhere" }
+        return String(format: "%.0f,%.0f %.0f×%.0f", r.minX, r.minY, r.width, r.height)
+    }
+
+    private static func rect(_ r: CGRect?) -> Any {
+        guard let r else { return NSNull() }
+        return ["x": Int(r.minX), "y": Int(r.minY), "w": Int(r.width), "h": Int(r.height)]
+    }
+
+    // MARK: - Watching it, at 50 ms
+
+    private static var watch: Timer?
+    private static var sawWindow = false
+
+    /// **On for the length of a Scratchpad dictation, and off the rest of the
+    /// day.** What it is watching for is the one thing Victor is actually
+    /// worried about: the note taking the keyboard while he is typing.
+    static func beginWatch() {
+        guard watch == nil else { return }
+        sawWindow = false
+        let t = Timer(timeInterval: 0.05, repeats: true) { _ in tick() }
+        watch = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    static func endWatch() {
+        watch?.invalidate()
+        watch = nil
+    }
+
+    private static func tick() {
+        guard let window = windowElement() else {
+            sawWindow = false
+            return
+        }
+        let f = frame(of: window)
+        if !sawWindow {
+            sawWindow = true
+            reopenCount += 1
+            let moved = parkedFrame.map { p in
+                abs((f?.minX ?? 0) - p.minX) > 2 || abs((f?.minY ?? 0) - p.minY) > 2
+            } ?? true
+            if moved, parkedFrame != nil { reopenedElsewhere += 1 }
+            Log.info("🗒️ scratchpad reopened at \(describe(f))"
+                     + (parkedFrame == nil ? "" : moved ? " — NOT where it was parked, so it is parked again"
+                                                        : " — where it was parked; Wispr remembers"))
+            if parkedFrame == nil || moved { park() }
+        }
+        lastSeenFrame = f
+        // **Does it have the keyboard?** Wispr frontmost *and* this window its
+        // main one is the honest test — a background window cannot take a key.
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        guard front.hasPrefix("com.electron.wispr-flow") else { return }
+        var main: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXMainAttribute as CFString, &main) == .success,
+              (main as? Bool) == true else { return }
+        if !everBecameKey {
+            everBecameKey = true
+            lastKeyAt = Date()
+            Log.error("🗒️ THE SCRATCHPAD WINDOW HAS THE KEYBOARD — a keystroke now lands in Wispr's note, not in his work")
+        }
+    }
+
+    /// `GET /test/state` → `scratchpad`.
+    static func describe() -> [String: Any] {
+        [
+            "windowOpen": windowIsOpen(),
+            "frame": rect(lastSeenFrame),
+            "parkedFrame": rect(parkedFrame),
+            "minimumSize": minimumSize.map { ["w": Int($0.width), "h": Int($0.height)] } ?? NSNull(),
+            "everBecameKey": everBecameKey,
+            "lastKeyAt": lastKeyAt.map { Outbox.iso($0) } ?? NSNull(),
+            "opens": reopenCount,
+            "reopenedElsewhere": reopenedElsewhere,
+            "screens": NSScreen.screens.count,
+        ]
+    }
 
     /// **Wait for the window to appear, then close it** — and the waiting is the
     /// whole point (2026-09-13, 23:26).

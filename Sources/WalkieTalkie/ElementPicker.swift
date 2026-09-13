@@ -314,6 +314,12 @@ final class ElementPicker {
     /// Wispr without a menu click and without a rebuild.
     var onTestWrapMode: ((String) -> [String: Any])?
 
+    /// `POST /test/scratchpad/park` — move Wispr's Scratchpad window to the
+    /// corner it is supposed to live in, and say where it ended up. See
+    /// `WisprScratchpad.park`; the wrap does it by itself on every open that is
+    /// not already there, and this is the way to make it happen on demand.
+    var onTestScratchpadPark: (() -> [String: Any])?
+
     enum ScratchpadCommand: String {
         /// Press and keep it pressed — per Wispr's docs, push-to-talk into its
         /// own Scratchpad note.
@@ -769,6 +775,10 @@ final class ElementPicker {
                 return respond(conn, 500, ["ok": false, "error": "no simulator wired"])
             }
             respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // Park Wispr's Scratchpad window — see `onTestScratchpadPark`.
+        case ("POST", "/test/scratchpad/park"):
+            respond(conn, 200, ["ok": true].merging(onTestScratchpadPark?() ?? [:]) { _, new in new })
 
         // How the relay takes Wispr's words — see `onTestWrapMode`.
         case ("POST", "/test/wrap-mode"):
