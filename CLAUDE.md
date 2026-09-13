@@ -148,7 +148,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
-| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `wrapMode` / `wrapWhy` · `relayStarted` / `startedMode` / `intercepting` · `scratchpadWindowOpen` · `scratchpad` (`{windowOpen, frame, parkedFrame, minimumSize, everBecameKey, lastKeyAt, opens, reopenedElsewhere, screens}`) · `historyRoute` · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `sessionFlags` (the modifiers the window server believes are held) · `keyTrace` · `keyRedirect` (`{armed, pid, keys, passed}`, per dictation) · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery`. ISO-8601 with ms |
+| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `wrapMode` / `wrapWhy` · `relayStarted` / `startedMode` / `intercepting` · `scratchpadWindowOpen` · `scratchpad` (`{windowOpen, frame, parkedFrame, minimumSize, everBecameKey, lastKeyAt, opens, reopenedElsewhere, screens}`) · `historyRoute` · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `sessionFlags` (the modifiers the window server believes are held) · `keyTrace` · `keyRedirect` (`{armed, pid, seen, redirectedAX, redirectedKey, passed}`, per dictation) · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery`. ISO-8601 with ms |
 | `POST /test/sink` `{"on": true}` · `GET /test/sink` · `POST /test/sink/clear` | **the relay's own window, as the key window** — `WisprSink`: 40×20, borderless, bottom-left corner, an instrumented `NSTextView` inside. The GET answers *did anything land in it, and by which route*: `paste` (⌘V), `ax:…` (an Accessibility write, with the setter's name), `typed`, `keyDown`, plus `key` and `previousApp` |
 | `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. The two calls answered the question they were built for (2026-09-13, 3/3): **Wispr picks its insertion target at the END** — taking key 1–5 ms after the stop chord is enough, and the row's `app` column named the relay although TextEdit was in front the whole dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
@@ -282,10 +282,14 @@ sits at rest there.
   `frontmostApplication`** — use the system-wide focused element's owner. For as long as the window
   is up, every **real** keystroke is re-posted to the app he was looking at
   (`HotkeyTap.armKeyRedirect`, `postToPid`, per-key focus check, ⌘/⌃ always pass, logged by keycode
-  only, 10 s ceiling from the release, `WT_SCRATCHPAD_REDIRECT_KEYS=0` to disable). **Its limit:
-  it cannot manufacture a key window** — an app that is frontmost with no key window has no first
-  responder and a character posted to it is dropped, which is why the same redirect lands 7/7 where
-  the victim keeps its key window and 0/7 where another window holds it.
+  only, 10 s ceiling from the release, `WT_SCRATCHPAD_REDIRECT_KEYS=0` to disable). **A printable
+  character goes in through `AXSelectedText`, not as a key** (2026-09-14) — an app that is
+  frontmost with no key window has no first responder, so a character delivered by any key route is
+  dropped, and ⌘V only survives because `performKeyEquivalent` needs none. Return, Tab, the arrows
+  and Delete still go by `postToPid`, best effort. The target pid and the focused element are both
+  resolved **at the keystroke** (a remembered pid can be dead), and the swallow is gated strictly
+  on the Scratchpad window reporting `AXFocused == true` — anything else passes the key through.
+  `keyRedirect` counts `seen` / `redirectedAX` / `redirectedKey` / `passed`.
 - **`WisprState` joins four witnesses**, measured on one real dictation: Wispr's `History` row
   appearing at **357 ms**, the 100 ms CoreAudio poll at **607 ms**, `WisprWatch`'s notification at
   **5590 ms** — and the chord itself as the clock. The notification is 0–6 s late and produced **no

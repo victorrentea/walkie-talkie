@@ -436,6 +436,24 @@ enum WisprScratchpad {
     /// Called from the event tap, once per key, while the window is up. One AX
     /// round trip, measured at about a millisecond; the pid it compares against
     /// is cached above.
+    /// **Does the Scratchpad window itself say it is focused** — the strict gate
+    /// the keyboard guard swallows on, and nothing else.
+    ///
+    /// `focusOwnerIsWispr` below asks a broader question and answers it partly
+    /// from an element that does not work on this Mac. This one asks the window
+    /// the single thing that decides whether swallowing a key can possibly be
+    /// right, because the loop sampled TextEdit's `AXTextArea` as focused at
+    /// every probe of a run in which the guard swallowed all seven letters. A
+    /// swallow while the victim holds the focus is pure loss, so anything short
+    /// of a **yes** from this window lets the key through.
+    static func scratchpadHasFocus() -> Bool {
+        guard let window = windowElement() else { return false }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXFocusedAttribute as CFString, &value) == .success
+        else { return false }
+        return (value as? Bool) == true
+    }
+
     static func focusOwnerIsWispr() -> Bool {
         guard wisprPid != 0 else { return false }
         // **The system-wide element does not answer on this Mac.** Measured

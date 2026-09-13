@@ -2992,7 +2992,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "keyTrace": HotkeyTap.keyTrace,
             "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
                             "pid": Int(hotkeys.keyRedirect.pid),
-                            "keys": hotkeys.keyRedirect.keys,
+                            "seen": hotkeys.keyRedirect.seen,
+                            "redirectedAX": hotkeys.keyRedirect.ax,
+                            "redirectedKey": hotkeys.keyRedirect.key,
                             "passed": hotkeys.keyRedirect.passed],
             // Kept beside the object above because it is what every assertion
             // written before tonight asks for.

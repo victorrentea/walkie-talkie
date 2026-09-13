@@ -193,6 +193,8 @@ final class HotkeyTap {
         redirectUntil = 0
         redirectCount = 0
         redirectPassed = 0
+        redirectSeen = 0
+        redirectAX = 0
         stateLock.unlock()
     }
 
@@ -211,6 +213,8 @@ final class HotkeyTap {
         redirectUntil = CFAbsoluteTimeGetCurrent() + Self.redirectDictationCeiling
         redirectCount = 0
         redirectPassed = 0
+        redirectSeen = 0
+        redirectAX = 0
         stateLock.unlock()
         Log.info("⌨️ his keys are watched, and go to pid \(pid) whenever Wispr's Scratchpad holds the focus")
     }
@@ -235,16 +239,16 @@ final class HotkeyTap {
         Log.info("⌨️ keys are unwatched again — \(n) redirected to pid \(was), \(passed) passed through")
     }
 
-    /// For `GET /test/state`, and it answers three separate questions because
-    /// one field answering all of them was unreadable after the fact: the loop
-    /// read `pid = 0, keys = 5` on a run where seven letters had been redirected
-    /// correctly — `pid` went to zero the moment the guard disarmed, and `keys`
-    /// was a total across every dictation of the session. **The pid it was aimed
-    /// at survives the disarm, and the counts are this dictation's.**
-    var keyRedirect: (armed: Bool, pid: pid_t, keys: Int, passed: Int) {
+    /// For `GET /test/state`, and it answers five separate questions because one
+    /// field answering all of them was unreadable after the fact. **The pid it
+    /// was aimed at survives the disarm, and the counts are this dictation's.**
+    ///
+    /// `seen` is every real key the guard looked at; the three below it are what
+    /// became of them and must add up to it.
+    var keyRedirect: (armed: Bool, pid: pid_t, seen: Int, ax: Int, key: Int, passed: Int) {
         stateLock.lock(); defer { stateLock.unlock() }
         return (redirectPid != 0 && CFAbsoluteTimeGetCurrent() < redirectUntil,
-                redirectTarget, redirectCount, redirectPassed)
+                redirectTarget, redirectSeen, redirectAX, redirectCount, redirectPassed)
     }
 
     private var redirectPid: pid_t = 0
@@ -254,6 +258,8 @@ final class HotkeyTap {
     private var redirectUntil: CFAbsoluteTime = 0
     private var redirectCount = 0
     private var redirectPassed = 0
+    private var redirectSeen = 0
+    private var redirectAX = 0
     /// Ten seconds **from the release**. By then the window has either gone or
     /// something is wrong, and this is the number that makes a forgotten disarm
     /// a nuisance rather than a Mac whose keyboard has stopped working.
@@ -326,12 +332,78 @@ final class HotkeyTap {
         return nil
     }
 
-    /// The pid to redirect to, or 0. Cheap enough for the tap thread: a lock and
-    /// two comparisons, no window server and no Accessibility.
+    /// **Whoever is frontmost now**, pushed in by `WisprFlowSource`'s workspace
+    /// observer so the tap never has to ask AppKit on its own thread. It is the
+    /// fallback for a remembered pid that has since died — the loop force-quits
+    /// its victim between scenarios, and the guard spent a whole run posting into
+    /// a corpse (`re-posted to pid 62948`, dead; the live TextEdit was 87941).
+    func noteFrontmost(_ pid: pid_t) {
+        stateLock.lock(); currentFrontPid = pid; stateLock.unlock()
+    }
+    private var currentFrontPid: pid_t = 0
+
+    /// **The pid to redirect to, resolved at the keystroke and not at the
+    /// chord.** Cheap enough for the tap thread: a lock, two comparisons and a
+    /// `kill(pid, 0)` — a signal-zero liveness probe that touches neither the
+    /// window server nor Accessibility.
     private func redirectTargetNow() -> pid_t {
         stateLock.lock(); defer { stateLock.unlock() }
         guard redirectPid != 0, CFAbsoluteTimeGetCurrent() < redirectUntil else { return 0 }
-        return redirectPid
+        if kill(redirectPid, 0) == 0 { return redirectPid }
+        let replacement = currentFrontPid
+        guard replacement != 0, replacement != redirectPid, kill(replacement, 0) == 0 else { return 0 }
+        Log.error("⌨️ pid \(redirectPid) is gone — his keys go to pid \(replacement) instead")
+        redirectPid = replacement
+        redirectTarget = replacement
+        return replacement
+    }
+
+    private func countSeen() {
+        stateLock.lock(); redirectSeen += 1; stateLock.unlock()
+    }
+
+    private func countAX() -> Int {
+        stateLock.lock(); defer { stateLock.unlock() }
+        redirectAX += 1
+        return redirectAX
+    }
+
+    /// **Insert text where the caret is, without needing a key window.**
+    ///
+    /// This is the whole point of the change. An application that is frontmost
+    /// with no key window has **no first responder**, so a character delivered to
+    /// it by any key route is dropped — measured twice, once with a dead target
+    /// and once with a live one, and the letters vanished both times.
+    /// `AXSelectedText` needs no key window at all: it replaces the focused
+    /// element's selection, which at a caret is empty, so setting it *is* typing.
+    ///
+    /// The focused element is read **fresh at the keystroke** rather than
+    /// remembered from the chord: he may have clicked into another field since,
+    /// and an insertion into the field he has left is worse than a dropped key.
+    private func insertViaAX(_ text: String, into pid: pid_t) -> Bool {
+        let app = AXUIElementCreateApplication(pid)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString,
+                                            &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID()
+        else { return false }
+        return AXUIElementSetAttributeValue(element as! AXUIElement,
+                                            kAXSelectedTextAttribute as CFString,
+                                            text as CFString) == .success
+    }
+
+    /// What this key would type, and whether that is a character at all. Return,
+    /// Tab, the arrows and Delete have no text to insert and go by key.
+    private static func printable(_ event: CGEvent) -> String? {
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 8)
+        event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length,
+                                       unicodeString: &chars)
+        guard length > 0 else { return nil }
+        let text = String(utf16CodeUnits: chars, count: length)
+        guard text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7F })
+        else { return nil }
+        return text
     }
 
     private func countRedirect() -> Int {
@@ -1593,41 +1665,52 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // hardware only — and that is the right *description* of Victor's
             // keystrokes and the wrong *rule*: it also makes the behaviour
             // untestable, because every probe the loop can post carries a pid.
-            // The two exclusions are the ones that matter: this app's own posts
-            // carry `backButtonStamp`, and Wispr's own carry its pid, so neither
-            // can be bounced back at the app underneath.
             if target != 0,
                pid_t(event.getIntegerValueField(.eventSourceUnixProcessID)) != WisprScratchpad.wisprPid,
                event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                // **Never a chord.** ⌘Tab, ⌘Space and ⌃-anything are the system's
-                // and the window manager's, and a key redirected into an app that
-                // was not asking for it is worse than a shortcut that reaches the
-                // wrong window. An app shortcut landing on Wispr's panel is the
-                // lesser evil, and it is the rarer one.
+                if type == .keyDown { countSeen() }
+
+                // **Never a chord.** ⌘Tab, ⌘Space and ⌃-anything are the
+                // system's and the window manager's, and a key redirected into
+                // an app that was not asking for it is worse than a shortcut
+                // reaching the wrong window.
                 if event.flags.contains(.maskCommand) || event.flags.contains(.maskControl) {
                     if type == .keyDown {
                         countPassed()
                         Log.info("⌨️ key \(code) passed (modifier) — chords are never redirected")
                     }
-                } else if !WisprScratchpad.focusOwnerIsWispr() {
-                    // **Passed, untouched, and counted as such.** The guard is
-                    // armed for the whole sentence but acts only while Wispr
-                    // actually holds the focus; the rest of the time his keys are
-                    // nobody's business but his.
+                // **The strict gate.** Only while the Scratchpad *itself* says it
+                // is focused. The loop sampled TextEdit's `AXTextArea` as focused
+                // at every probe of a run where the guard swallowed all seven
+                // letters — a swallow there is pure loss, so anything short of a
+                // *yes* passes the key through untouched.
+                } else if !WisprScratchpad.scratchpadHasFocus() {
                     if type == .keyDown { countPassed() }
+                } else if let text = Self.printable(event) {
+                    // **Printable characters go in through Accessibility.** A
+                    // key event cannot be delivered to an application with no key
+                    // window — it has no first responder — and that is the whole
+                    // of why re-posting failed twice. `AXSelectedText` needs none.
+                    guard type == .keyDown else { return swallow("the keyboard guard (AX, key-up)", type, event) }
+                    if insertViaAX(text, into: target) {
+                        Log.info("⌨️ key \(code) → pid \(target) through Accessibility (#\(countAX()))")
+                        return swallow("the keyboard guard (inserted through Accessibility)", type, event)
+                    }
+                    // The insert failed — better a key that may not land than a
+                    // key that certainly does not.
+                    event.postToPid(target)
+                    Log.error("⌨️ key \(code) → pid \(target): Accessibility refused the insertion, re-posted as a key (#\(countRedirect()))")
+                    return swallow("the keyboard guard (AX refused, re-posted)", type, event)
                 } else {
-                    // **Decided per key, at the key.** The window is up for
-                    // seconds and he may have clicked away in the middle of them;
-                    // redirecting a key whose focus is somewhere else entirely
-                    // would be this app taking a keyboard nobody stole.
+                    // Return, Tab, the arrows, Delete: nothing to insert, so the
+                    // key goes by the only other route there is. Best effort, and
+                    // said to be.
                     event.postToPid(target)
                     if type == .keyDown {
-                        // **The keycode and nothing else.** A log that records
-                        // what he typed is a log that must not exist.
-                        Log.info("⌨️ key \(code) → pid \(target) (#\(countRedirect())) — Wispr's Scratchpad had the focus")
+                        Log.info("⌨️ key \(code) → pid \(target) as a key, best effort (#\(countRedirect())) — not a printable character")
                     }
-                    return swallow("the keyboard guard (re-posted to pid \(target))", type, event)
+                    return swallow("the keyboard guard (re-posted, non-printable)", type, event)
                 }
             }
         }

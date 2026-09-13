@@ -145,12 +145,29 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
   posting pid only, never a character**. An event that reached the end of `handle` untouched says
   `passed` explicitly, so a missing verdict means a branch that has not been instrumented rather
   than a key that vanished.
-- **Its limit, and it is a hard one: it cannot manufacture a key window.** An application that is
-  frontmost with **no key window has no first responder**, and a character posted to it is dropped.
-  `wrap-caret` lands 7/7 because TextEdit keeps its key window; `wrap-bound` lands 0/7 with the
-  same pid, because a bound Terminal holds it instead. ⌘V survives the same trip either way
-  (`performKeyEquivalent` needs no first responder), which is why the delivery works and the
-  letters do not.
+- **A printable character goes in through Accessibility, not as a key** (2026-09-14). An
+  application that is frontmost with **no key window has no first responder**, so a character
+  delivered to it by any key route is dropped — measured twice, once with a dead target and once
+  with a live one, and the letters vanished both times. ⌘V survives the same trip only because
+  `performKeyEquivalent` needs no first responder. So the guard sets **`AXSelectedText`** on the
+  victim's focused element, which needs no key window at all: at a caret the selection is empty, so
+  setting it *is* typing. **Return, Tab, the arrows and Delete** have no text to insert and go by
+  `postToPid`, logged as best effort.
+- **The focused element is read fresh at the keystroke**, not remembered from the chord: he may
+  have clicked into another field since, and inserting into the field he has left is worse than
+  dropping the key.
+- **The target pid is resolved at the keystroke too.** The remembered one can be **dead** — the
+  loop force-quits its victim between scenarios, and the guard spent a whole run posting into a
+  corpse — so `kill(pid, 0)` checks it and a dead target falls back to whoever is frontmost now,
+  said out loud once. The tap never asks AppKit on its own thread; `HotkeyTap.noteFrontmost` is
+  pushed in by the workspace observer.
+- **The swallow gate is strict: `WisprScratchpad.scratchpadHasFocus()`, and nothing else.** Only
+  while the window itself reports `AXFocused == true`. Anything short of a yes passes the key
+  through, because the loop sampled TextEdit's `AXTextArea` as focused at every probe of a run in
+  which the guard swallowed all seven letters — and a swallow while the victim holds the focus is
+  pure loss.
+- **`keyRedirect` counts four things**: `seen`, `redirectedAX`, `redirectedKey`, `passed`, and the
+  last three add up to the first.
 - **The theft cannot be undone.** Re-activating the victim does nothing (`activate` says *be
   frontmost* and it already is); `AXMain` / `AXFocused` on the window he was typing in logs
   `the focus owner is still Wispr`.

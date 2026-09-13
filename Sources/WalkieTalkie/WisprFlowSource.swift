@@ -461,6 +461,9 @@ final class WisprFlowSource: DictationSource {
                       app.bundleIdentifier != Bundle.main.bundleIdentifier,
                       app.processIdentifier > 0 else { return }
                 self?.lastFrontPid = app.processIdentifier
+                // The tap needs this too, and must not ask AppKit on its own
+                // thread — see `HotkeyTap.noteFrontmost`.
+                self?.hotkeys.noteFrontmost(app.processIdentifier)
             }
     }
 
