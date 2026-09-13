@@ -247,10 +247,23 @@ Four things make it work, and each of them is load-bearing:
    this harness holds none and needs none. `POST /test/gesture` is the only way
    in, and a `.build/debug` relay is refused by the preflight because
    `CGEventPost` fails *silently* there.
-4. **The sink.** `POST /test/sink {"on": true}` makes a relay-owned window key,
-   so "whatever app is in front" is a window this harness can read and attribute
-   to a route (`paste` · `ax` · `typed` · `keyDown`) instead of being Victor's
-   editor.
+4. **A real TextEdit document as the witness.** Every relay-started scenario
+   keeps one front and key and asks what happened to it — *the words went where
+   the gesture said* is only half a claim without *and nowhere else*.
+
+   It used to be the **sink**, a relay-owned window made key to answer the same
+   question. That is over (2026-09-14): in Scratchpad mode the key window is
+   exactly what Wispr aims at, so the app now refuses
+   `POST /test/sink {"key": true}` with a **409** mid-dictation — taking the
+   keyboard would lose the sentence. A 409 from that route is a **hard failure**
+   in this harness with the body printed, because a caller that reads a refusal
+   as a quiet nothing goes on measuring a run whose premise has been withdrawn.
+
+   The sink survives in `transcribe()`, where the chord is Wispr's own rather
+   than a relay gesture, and in the two `sink-key-at-*` scenarios, which are
+   **superseded**: they answered *does Wispr choose its target at the start or
+   the end* (the end), the wrap moved to the Scratchpad on the strength of it,
+   and they will now go red on that 409 until somebody wants them again.
 
 Everything the run measures comes out of numbers the **relay already prints**.
 `relay.log` timestamps have second resolution; the milliseconds live inside the

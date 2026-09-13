@@ -697,9 +697,28 @@ def stand_down(relay: Relay) -> bool:
     return True
 
 
-def _sink_key(relay: Relay) -> dict:
-    """Make the relay's sink the key window, remembering what was in front."""
-    return relay.post("/test/sink", {"key": True})
+def _sink_key(relay: Relay, result: Result | None = None) -> dict:
+    """Make the relay's sink the key window, remembering what was in front.
+
+    **A 409 here is a hard failure, not a shrug.** The app refuses this route
+    while a Scratchpad-mode dictation is in flight — Wispr targets the key
+    window, so taking it would lose the sentence — and a caller that treats the
+    refusal as "it did not work, never mind" goes on to measure a run whose
+    premise has already been withdrawn. The body is printed because it is the
+    app explaining itself, and paraphrasing it would be inventing a reason.
+    """
+    if relay.dry_run:
+        relay.post("/test/sink", {"key": True})
+        return {}
+    code, body = pf.post_detailed(relay.port, "/test/sink", {"key": True})
+    relay.steps.append("POST /test/sink {\"key\": true} -> %s" % code)
+    if code == 409 and result is not None:
+        result.check(False, "the sink could be made key",
+                     "409 from POST /test/sink {\"key\":true} — %s" % body.strip()[:120])
+    try:
+        return json.loads(body or "{}")
+    except ValueError:
+        return {}
 
 
 def _sink_restore(relay: Relay) -> dict:
@@ -904,6 +923,9 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
             out["pasteboardBefore"] = pasteboard_change_count()
             clipboard = None if dry_run else pasteboard_snapshot()
         else:
+            # **The chord here is Wispr's own, not a relay gesture**, so this is
+            # not a Scratchpad-mode dictation and the 409 rule does not apply.
+            # The step log records the status either way.
             _open_sink(relay)
             _sink_key(relay)
 
@@ -1262,11 +1284,11 @@ def _await_listening(relay: Relay, result: Result, timeout: float = 8.0) -> bool
 def _await_microphone(ctx) -> bool:
     """The scenarios' wrapper: wait for Wispr's microphone, and say so either way.
 
-    It also empties the sink at that instant, so the chord's own four characters
-    are never in front of what Wispr sends afterwards.
+    It no longer clears the sink: no relay-started scenario opens one since the
+    witness became a real TextEdit document, and `transcribe()` — the one caller
+    that still uses the sink — does its own clear at this exact moment.
     """
     opened, waited = await_microphone(ctx.relay, ctx.mark)
-    ctx.relay.sink_clear()
     ctx.result.check(opened or ctx.relay.dry_run, "Wispr's microphone opened before the clip played",
                      "after %.0f ms" % (waited * 1000) if opened else
                      "never opened (%.1f s) — the clip was played at a recorder that was not listening"
@@ -1346,6 +1368,27 @@ def _assert_text(result: Result, label: str, got: str, want: str) -> float:
     return score
 
 
+def _open_witness(ctx) -> str | None:
+    """A real TextEdit document, front and key — the leak witness.
+
+    **Replaces the sink in every relay-started scenario** (2026-09-14). The sink
+    took the keyboard to answer *what would an ordinary front window have
+    received*, and in Scratchpad mode that is exactly the window Wispr is
+    aiming at: the app now refuses `POST /test/sink {"key": true}` with a 409
+    mid-dictation because taking it would lose the sentence. A real document
+    answers the same question without competing for the same focus, which is
+    what the `wrap-*` scenarios have been doing all along.
+    """
+    if ctx.relay.dry_run:
+        print("   · osascript: open a TextEdit victim in %s" % ctx.scratch)
+        return "victim.txt"
+    return _open_victim(ctx.scratch)
+
+
+def _witness_text(ctx, victim: str | None) -> str:
+    return "" if (ctx.relay.dry_run or not victim) else _victim_text(victim)
+
+
 def scenario_caret(ctx, wait_for_mic: bool = True) -> Result:
     """1 & 2 — a dictation at the caret, short and long.
 
@@ -1359,7 +1402,8 @@ def scenario_caret(ctx, wait_for_mic: bool = True) -> Result:
     runner can read instead of in whatever Victor left in front.
     """
     relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
-    _open_sink(relay)
+    victim = _open_witness(ctx)
+    result.check(bool(victim), "a victim document, front and key", victim or "none")
     relay.gesture("forward-click")
     _await_listening(relay, result)
     if wait_for_mic:
@@ -1377,16 +1421,17 @@ def scenario_caret(ctx, wait_for_mic: bool = True) -> Result:
     t = read_timings(mark.lines())
     result.timings = t
 
-    text, events = _settled_sink(ctx)
+    text, events = _witness_text(ctx, victim), []
     state = relay.state()
     delivery = (state.get("lastDelivery") or {})
     kind = delivery.get("kind") or ""
     paste_events = [e for e in events if e.get("route") == "paste"]
 
     if text:
-        _assert_text(result, "the words reached the sink at the caret", text, ctx.fixture.get("transcript", ""))
-        result.check(bool(paste_events) or not events,
-                     "it arrived by a route the tap can name", ", ".join(sorted({e.get("route", "?") for e in events})) or "(no events)")
+        _assert_text(result, "the words reached the caret", text, ctx.fixture.get("transcript", ""))
+        result.check(_count_occurrences(text, ctx.fixture.get("transcript", "")) == 1,
+                     "they arrived exactly once", "%d occurrence(s)"
+                     % _count_occurrences(text, ctx.fixture.get("transcript", "")))
     else:
         # No ⌘V is not a failure by itself — Wispr inserts invisibly often enough
         # that `WisprHistory` exists for it. The delivery has to say so, though.
@@ -1402,7 +1447,8 @@ def scenario_caret(ctx, wait_for_mic: bool = True) -> Result:
 
     _assert_ring(result, t)
     result.note("outbox lines this run: %d" % len(outbox.fresh()))
-    _close_sink(relay)
+    if victim and not relay.dry_run:
+        _close_victim(victim)
     return result
 
 
@@ -1420,7 +1466,8 @@ def scenario_spawn_click_in_settle(ctx) -> Result:
     reports the tty so it can be closed.
     """
     relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
-    _open_sink(relay)
+    victim = _open_witness(ctx)
+    result.check(bool(victim), "a victim document, front and key", victim or "none")
     relay.gesture("forward-up")
     _await_listening(relay, result)
     _await_microphone(ctx)
@@ -1443,9 +1490,9 @@ def scenario_spawn_click_in_settle(ctx) -> Result:
     t = read_timings(mark.lines())
     result.timings = t
 
-    text, events = _sink_text(relay)
-    result.check(not events, "nothing leaked into the window in front",
-                 "sink events: %d%s" % (len(events), (" — %r" % text[:60]) if text else ""))
+    text = _witness_text(ctx, victim)
+    result.check(not text.strip(), "nothing leaked into the window in front",
+                 "%d chars — %r" % (len(text), text[:60]))
 
     rows = outbox.fresh()
     spawned = [r for r in rows if str(((r.get("delivery") or {}).get("to")) or r.get("session") or "").startswith("spawn:")]
@@ -1463,7 +1510,8 @@ def scenario_spawn_click_in_settle(ctx) -> Result:
             result.note("a Terminal window was spawned (%s) — close it when you are done" % bound)
 
     _assert_ring(result, t)
-    _close_sink(relay)
+    if victim and not relay.dry_run:
+        _close_victim(victim)
     return result
 
 
@@ -1482,6 +1530,7 @@ def scenario_bound(ctx) -> Result:
     relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
     sink_file = os.path.join(ctx.scratch, "bound-sink.txt")
     tty = None
+    victim = None
     try:
         if not relay.dry_run:
             open(sink_file, "w").close()
@@ -1503,7 +1552,8 @@ def scenario_bound(ctx) -> Result:
             result.note("the shell guard applies to this tty — the relay may refuse to type "
                         "into a session that is not an agent; `GET /target.guarded` said true")
 
-        _open_sink(relay)
+        victim = _open_witness(ctx)
+        result.check(bool(victim), "a victim document, front and key", victim or "none")
         relay.gesture("forward-right")
         _await_listening(relay, result)
         _await_microphone(ctx)
@@ -1525,13 +1575,14 @@ def scenario_bound(ctx) -> Result:
                      or relay.dry_run, "the words reached the bound tty",
                      "%d chars — %r" % (len(typed or ""), (typed or "")[:60]))
 
-        text, events = _sink_text(relay)
-        result.check(not events, "nothing leaked into the window in front",
-                     "sink events: %d%s" % (len(events), (" — %r" % text[:60]) if text else ""))
+        text = _witness_text(ctx, victim)
+        result.check(not text.strip(), "nothing leaked into the window in front",
+                     "%d chars — %r" % (len(text), text[:60]))
         _assert_ring(result, t)
         result.note("outbox lines this run: %d" % len(outbox.fresh()))
     finally:
-        _close_sink(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
         relay.post("/unbind")
         if tty and not relay.dry_run:
             _close_scratch_terminal(tty)
@@ -1547,7 +1598,8 @@ def scenario_cancel(ctx) -> Result:
     nobody is waiting for.
     """
     relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
-    _open_sink(relay)
+    victim = _open_witness(ctx)
+    result.check(bool(victim), "a victim document, front and key", victim or "none")
     relay.gesture("forward-click")
     _await_listening(relay, result)
     _await_microphone(ctx)
@@ -1582,12 +1634,13 @@ def scenario_cancel(ctx) -> Result:
                  "the sentence never reached a settle",
                  settled_why or "no settle line — the cancel took it")
 
-    text, events = _sink_text(relay)
-    result.check(not events and not text, "no words anywhere in the sink",
-                 "sink events: %d%s" % (len(events), (" — %r" % text[:60]) if text else ""))
+    text = _witness_text(ctx, victim)
+    result.check(not text.strip(), "no words anywhere in the victim",
+                 "%d chars — %r" % (len(text), text[:60]))
     rows = outbox.fresh()
     result.check(not rows, "no delivery was written to the outbox", "outbox lines: %d" % len(rows))
-    _close_sink(relay)
+    if victim and not relay.dry_run:
+        _close_victim(victim)
     return result
 
 
@@ -1840,7 +1893,7 @@ def _sink_question(ctx, key_at_start: bool) -> Result:
             return result
 
         if key_at_start:
-            answer = _sink_key(relay)
+            answer = _sink_key(relay, result)
             result.check(relay.dry_run or answer.get("ok") is not False,
                          "the sink was made key before the chord", json.dumps(answer, ensure_ascii=False)[:60])
 
@@ -1855,7 +1908,7 @@ def _sink_question(ctx, key_at_start: bool) -> Result:
             # reported: an answer that took 400 ms to grab the keyboard says
             # something different from one that took 40.
             started = time.monotonic()
-            answer = _sink_key(relay)
+            answer = _sink_key(relay, result)
             grabbed_ms = (time.monotonic() - started) * 1000
             result.check(relay.dry_run or answer.get("ok") is not False,
                          "the sink was made key right after the stop chord",
@@ -2564,8 +2617,9 @@ def _wrap_run(ctx, destination: str) -> Result:
                          "%s ms" % (visible if visible is not None else "not reported"))
         redirect = (state.get("keyRedirect") or {}) if isinstance(state, dict) else {}
         if redirect:
-            result.note("key redirect: pid=%s, %s key(s) re-posted"
-                        % (redirect.get("pid"), redirect.get("keys")))
+            result.note("key redirect: armed=%s, pid=%s, %s key(s) seen, %s passed through"
+                        % (redirect.get("armed"), redirect.get("pid"),
+                           redirect.get("keys"), redirect.get("passed")))
         result.note("windows before %s, after %s"
                     % (windows_before, [] if relay.dry_run else wispr_windows()))
         for change in changes:
@@ -2832,8 +2886,14 @@ SCENARIOS = {
     # The two that answer a question rather than guard a behaviour. Run them
     # `--repeat 3`: Wispr's round trip is 0.7–13 s and one sample of a race is
     # an anecdote.
+    # **Answered and superseded (2026-09-13/14).** These two settled that Wispr
+    # picks its target at the *end*, which is what the sink wrap was built on —
+    # and the wrap then moved to the Scratchpad, so the app now refuses
+    # `POST /test/sink {"key":true}` mid-dictation with a 409. They are kept
+    # because the answer is worth reproducing, and they will go red on that 409
+    # until somebody wants them again: that is the honest state, not a bug.
     "sink-key-at-start": (scenario_sink_key_at_start,
-                          "the sink is key BEFORE the chord — the control for the two below", False),
+                          "SUPERSEDED — the sink is key BEFORE the chord; 409s in Scratchpad mode", False),
     # The product path: *Wrap Wispr Flow* on, Scratchpad mode, one per destination.
     "wrap-caret": (scenario_wrap_caret,
                    "Scratchpad mode, 🔼 click — the words land in the caret exactly once", False),
@@ -2856,8 +2916,8 @@ SCENARIOS = {
                              "let Wispr finish, read its row, then post its own ⌃Escape before it "
                              "inserts — the wrap that needs no permission and no app change", False),
     "sink-key-at-stop": (scenario_sink_key_at_stop,
-                         "the sink is made key just AFTER the stop chord — does Wispr choose its "
-                         "target at the start or at the end?", False),
+                         "SUPERSEDED — the sink is made key just AFTER the stop chord; it answered "
+                         "'at the end' and 409s in Scratchpad mode now", False),
 }
 
 

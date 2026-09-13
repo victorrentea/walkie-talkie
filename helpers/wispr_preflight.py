@@ -62,6 +62,30 @@ def get(port: int, path: str, timeout: float = 5.0):
         return None
 
 
+def post_detailed(port: int, path: str, body=None, timeout: float = 10.0):
+    """POST and hand back `(status, body_text)`, refusals included.
+
+    `post()` swallows an HTTP error into `None`, which is right for a route that
+    may simply not exist on an older build — and wrong for a route that
+    **refuses on purpose**. `POST /test/sink {"key": true}` answers **409** while
+    a Scratchpad-mode dictation is in flight, because Wispr targets the key
+    window and taking it would lose the sentence. That refusal is information; a
+    caller that cannot see it reads "the sink did not become key" as a quiet
+    nothing and carries on measuring a run that is already void.
+    """
+    data = json.dumps(body if body is not None else {}).encode("utf-8")
+    req = urllib.request.Request(
+        "http://127.0.0.1:%d%s" % (port, path), data=data,
+        headers={"content-type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:
+        return 0, str(e)
+
+
 def post(port: int, path: str, body=None, timeout: float = 10.0):
     """POST JSON to a route. Same contract as `get` — `None` means it is not there."""
     data = json.dumps(body if body is not None else {}).encode("utf-8")
