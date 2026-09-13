@@ -147,6 +147,10 @@ three; `MusicBridge` is a WebSocket on 8920).
 recogniser and says nothing about it; `/test/dictation/start` opens no microphone, so the halo
 sits at rest there.
 
+- **`tools/wispr-loop.sh <scenario>` closes the loop on these routes** — one real Wispr
+  dictation from a WAV through the virtual microphone, asserted end to end, with the
+  scenarios, the preconditions and the timing table in `docs/loopback.md`.
+
 ## Gestures, current
 
 - **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds), ⌘⌃D starts /

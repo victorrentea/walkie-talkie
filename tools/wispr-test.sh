@@ -28,7 +28,6 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3
 LOG="$HOME/.walkie-talkie/relay.log"
-WISPR_CONFIG="$HOME/Library/Application Support/Wispr Flow/config.json"
 
 DEVICE=""
 WAV=""
@@ -56,88 +55,34 @@ done
 say() { printf '%s\n' "$*"; }
 fail() { printf '✗ %s\n' "$*" >&2; exit 1; }
 
-# ── The port the relay is listening on ──────────────────────────────────────
-PORT=""
-for p in 8917 8918 8919; do
-  if curl -s -m 2 "http://127.0.0.1:$p/target" >/dev/null 2>&1; then PORT=$p; break; fi
-done
-[ -n "$PORT" ] || fail "the relay is not listening on 8917–8919 — is Walkie Talkie running?"
+# ── Preflight: say exactly what is missing, never fail silently ─────────────
+#
+# The list itself lives in `helpers/wispr_preflight.py`, because
+# `tools/wispr-loop.sh` needs the same six answers and a second copy of them is
+# a copy that drifts — the `✗ Wispr microphone is pinned` row is the one thing
+# standing between a real result and a WAV played into a device nobody records,
+# and it has to say the same sentence from both scripts.
+#
+# `--no-idle-check`: this script is a single dictation Victor asked for by hand,
+# so it is allowed to run beside whatever else is going on.
+say "── preflight ──────────────────────────────────────────────"
+PRE=(--no-idle-check)
+[ -n "$DEVICE" ] && PRE+=(--device "$DEVICE")
+[ "$SPEAKER" = 1 ] && PRE+=(--speaker)
+"$PY" "$REPO/helpers/wispr_preflight.py" "${PRE[@]}" \
+  || fail "preflight failed — fix the ✗ rows above and run again"
+
+PORT=$("$PY" "$REPO/helpers/wispr_preflight.py" --print port) \
+  || fail "the relay is not listening on 8917–8919 — is Walkie Talkie running?"
 
 post() { curl -s -m 10 -X POST "http://127.0.0.1:$PORT$1" -H 'content-type: application/json' -d "${2:-{}}"; }
 
-# ── Preflight: say exactly what is missing, never fail silently ─────────────
-say "── preflight ──────────────────────────────────────────────"
-MISSING=0
-
-pgrep -f "Wispr Flow.app" >/dev/null || { say "✗ Wispr Flow is not running"; MISSING=1; }
-say "✓ relay on port $PORT"
-
-TARGET=$(curl -s -m 5 "http://127.0.0.1:$PORT/target")
-if printf '%s' "$TARGET" | /usr/bin/grep -q '"bound":true'; then
-  BOUND=$(printf '%s' "$TARGET" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
-  say "✓ bound to $BOUND — the transcript should reach that session"
-else
-  say "• unbound — the transcript should land at the caret"
-fi
-
-# Wispr's microphone. `overrideAudioDeviceId == "default"` is *Auto-detect*, the
-# one setting that makes the system default input scriptable. Anything else is a
-# named device and this script cannot point Wispr at the WAV.
-if [ -f "$WISPR_CONFIG" ]; then
-  MIC=$("$PY" - "$WISPR_CONFIG" <<'EOF' 2>/dev/null
-import json, sys
-u = json.load(open(sys.argv[1])).get("prefs", {}).get("user", {})
-dev = u.get("overrideAudioDeviceId")
-names = {d.get("deviceId"): d.get("name") for d in (u.get("rankedAudioDevices") or [])}
-print(("default" if dev == "default" else "fixed") + "\t" + str(names.get(dev, dev)))
-EOF
-)
-  case "$MIC" in
-    default*)
-      say "✓ Wispr microphone: Auto-detect — it follows the system default" ;;
-    *)
-      if [ "$SPEAKER" = 1 ]; then
-        say "• Wispr microphone is pinned (${MIC#*	}) — playing out loud instead"
-      else
-        say "✗ Wispr microphone is pinned to a device (${MIC#*	})."
-        say "  Victor: Wispr → Settings → Microphone → 'Auto-detect (MacBook Pro)'."
-        say "  Without it Wispr will hear the built-in mic and not the WAV."
-        MISSING=1
-      fi ;;
-  esac
-else
-  say "• Wispr config not found — cannot check which microphone it is on"
-fi
-
-"$PY" -c "import sounddevice, numpy" 2>/dev/null \
-  || { say "✗ $PY has no sounddevice/numpy — pip install sounddevice numpy"; MISSING=1; }
-
-# The virtual device the WAV is played into. Its *output* side is what we play
-# to; its input side is what Wispr records.
-DEV_NAME=$("$PY" - "$REPO" "$DEVICE" <<'EOF' 2>&1
-import sys
-sys.path.insert(0, sys.argv[1] + "/helpers")
-try:
-    import wispr_loopback as wl
-    idx, name = wl.resolve_device(sys.argv[2] or None)
-    print(name)
-except SystemExit as e:
-    print("MISSING\t%s" % str(e).replace("\n", " "))
-except Exception as e:
-    print("MISSING\t%s" % e)
-EOF
-)
 if [ "$SPEAKER" = 1 ]; then
   DEV_NAME="(speakers)"
-  say "✓ playing out loud — Wispr hears it through whatever microphone it is on"
 else
-  case "$DEV_NAME" in
-    MISSING*) say "✗ no virtual output device: ${DEV_NAME#*	}"; MISSING=1 ;;
-    *) say "✓ playing into: $DEV_NAME" ;;
-  esac
+  DEV_NAME=$("$PY" "$REPO/helpers/wispr_preflight.py" --print device ${DEVICE:+--device "$DEVICE"}) \
+    || fail "no usable virtual output device"
 fi
-
-[ "$MISSING" = 0 ] || fail "preflight failed — fix the ✗ rows above and run again"
 
 # ── The system default input, switched and always put back ──────────────────
 RESTORE=""

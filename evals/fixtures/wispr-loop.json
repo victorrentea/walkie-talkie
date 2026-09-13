@@ -1,0 +1,33 @@
+{
+  "_": [
+    "Clips for tools/wispr-loop.sh. The WAVs are Victor's own voice and stay OUT of",
+    "this repo — these are absolute paths into ~/.walkie-talkie/voice-corpus/, which",
+    "nothing prunes. --wav / --transcript override any of it.",
+    "",
+    "`transcript` is Wispr Flow's own reading of that clip, taken from corpus.jsonl.",
+    "That is the right reference on purpose: the run compares Wispr to Wispr over the",
+    "same audio, so any difference is the loopback and not the recogniser. It is not",
+    "ground truth and is not claimed to be — see .claude/rules/whisper-and-corpus.md,",
+    "'The line beside a recording is not ground truth'.",
+    "",
+    "Both clips are English. Wispr's language pick is its own and unpinned, and an",
+    "English clip gives the fuzzy match the least to argue about; the corpus is mostly",
+    "Romanian, so these were picked for being clean rather than for being typical."
+  ],
+  "default": {
+    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-09-04/13-25-48-fab7e654.wav",
+    "transcript": "Commit and push the fix.",
+    "seconds": 2.17,
+    "language": "en",
+    "engine": "wispr",
+    "why": "2.2 s, four words, no proper nouns — the shortest clean English clip in the corpus. The short caret scenario needs a sentence that is over before Wispr's microphone is warm, which is the whole of incident 1."
+  },
+  "caret-long": {
+    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-09-12/22-31-12-wispr243.wav",
+    "transcript": "Let's run a bunch of experiments for you to figure out how you can detect when Wispr Flow finishes the transcription, including looking into its own files on disk (or perhaps where else stuff gets saved in the database). I don't know.",
+    "seconds": 19.4,
+    "language": "en",
+    "engine": "wispr-flow",
+    "why": "19.4 s, English, and labelled wispr-flow — i.e. this transcript came back through Wispr's own formatting pass on this very audio, which is the closest thing to a known answer the corpus has."
+  }
+}
