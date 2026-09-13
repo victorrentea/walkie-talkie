@@ -51,6 +51,39 @@ The middle button held and dragged during a dictation selects a rectangle of the
 - **The handover copy is unchanged**: 800 px on the long edge, so a smaller crop travels at its own size; the note says *at most* 800px wide. A crop counts in `📸 ×N` like any other picture — the chip is untouched. The one new string is the failure flash `⚠️ area capture failed` (the `listening-flash` state with different words). → journal: *`area-00:38(1200x800px).jpg`, and one sentence in the clause*
 - **The menu carries a legend row `Select Screen Area — 🛞 drag`**, permanently disabled like `Take Screenshot` and `Pick Element in Chrome` — the one row that puts `🛞` back in the Logi column, because a drag is not a click. → journal: *`area-00:38(1200x800px).jpg`, and one sentence in the clause*
 
+## The stale-⌘ bug, and the test that guards it
+
+**The rule, once:** *a function that posts a key event with a modifier flag on it must also post a
+`flagsChanged` carrying the state the keyboard is left in — or address its events to a process with
+`postToPid`, which never touches session state at all.* `CGEventSource.flagsState` reports whatever
+the **last event's flags said**, so a key-up that carries ⌘ leaves the whole session believing ⌘ is
+held until Victor's next real keystroke heals it.
+
+**Four occurrences, and each time the symptom was something else failing:**
+
+| when | poster | what it broke |
+|---|---|---|
+| 2026-09-10 | `TerminalBinding.tap(key:command:)` | every Replace Wispr dictation, ⌘⌃P and blind paste left `0x00100000` behind; found because a wheel drag silently refused to select an area after a caret paste |
+| 2026-09-13 | `HotkeyTap.postGesture` | `POST /test/gesture` posted ⌃⌥⌘F-key down and up and nothing else, so every *wait for a bare wire* loop ran to its 200 ms ceiling — and Wispr's Scratchpad chord went out as `⌃⌥⌘F18`, which it does not have bound |
+| 2026-09-13 | `HotkeyTap.postScratchpad` | posted immediately rather than onto a bare wire — the same bug from the other end |
+| 2026-09-14 | `KeySimulator.simulateKeyPress` (the ⌘C selection probe) | the session believed ⌘ was held after every probe; **the window server merges live modifier state back into a posted key**, so letters arriving afterwards were delivered as ⌘ + letter — against TextEdit, `q z j k w y v` are *quit*, *close the document*, *undo* and four edits |
+
+It self-heals on the next real key, which is why it has never been reported and why it has had to
+be rediscovered four times. So it is a test now:
+
+- **`evals/test_stale_modifier.py`** parses `Sources/` and fails any function that posts a key with
+  non-empty flags and neither posts a `flagsChanged` nor uses `postToPid`. `--list` prints every
+  poster it found (12 at the time of writing); `--self-test` reads `SelectionCapture.swift` as it
+  stood before `fc74df6` and asserts the scan **rejects** it, because a guard nobody has watched
+  fail is a guard nobody knows the shape of. Exit 2 when it finds no posters at all — a parser that
+  has stopped matching must not read as a clean tree.
+- **It detects the assignment, not the literal.** The fourth occurrence took its flags as a
+  *parameter* (`simulateKeyPress(keyCode:flags:)`) and named no modifier, so a scanner looking for
+  `.maskCommand` would have missed the very bug it was written for.
+- **`GET /test/state.sessionFlags`** answers what the window server believes is held right now, by
+  name, so a standing *flags are clear* check reads the state instead of inferring it from the
+  damage.
+
 ## The stale-⌘ bug in `tap(key:command:)`
 
 - **Release the modifier with a `flagsChanged` carrying the state the keyboard is left in.** `TerminalBinding.tap(key:command:)` — under `pressPaste`, so every Replace Wispr dictation, every ⌘⌃P and every blind-paste delivery — stamped ⌘ onto the V's key events and never released it; `CGEventSource` reports whatever the last event's flags said, so a ⌘V ending in a key-up *with ⌘ on it* left the session believing ⌘ was held: `0x00100000` after a single paste, and it stayed. It self-heals on the next real key, which is why it was never reported. Two readers were wrong until then: `postWisprHandsFree` spun its full 200 ms allowance after every paste, and **every gesture gated on `bare` refused** — a wheel drag silently declining to select straight after a caret dictation had pasted is how it was found; the same stale ⌘ would refuse the mouse-4 shutter. Verified: `0x20100000` before, `0x20000000` after, and a crop straight after a paste now arms. → journal: *It cost a real bug in the paste path, found by this gesture refusing to fire*

@@ -2984,6 +2984,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // handed on — the answer to *did one of his keystrokes reach the
             // note*, which is the one question this mode has to keep answering
             // no to.
+            // **What the window server believes is held right now.** The stale-⌘
+            // bug has surfaced four times in this repo and each time the symptom
+            // was something else refusing to work; a standing *flags are clear*
+            // check should read the state rather than infer it from the damage.
+            "sessionFlags": HotkeyTap.sessionModifierNames(),
             "keyTrace": HotkeyTap.keyTrace,
             "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
                             "pid": Int(hotkeys.keyRedirect.pid),

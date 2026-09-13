@@ -290,6 +290,25 @@ final class HotkeyTap {
         }
     }
 
+    /// **The modifiers the session believes are held**, by name — `GET
+    /// /test/state.sessionFlags`.
+    ///
+    /// `CGEventSource.flagsState(.combinedSessionState)` reports whatever the
+    /// last event's flags said, which is why a poster that stamps a modifier on
+    /// a key-up and posts nothing after leaves the whole session believing that
+    /// modifier is down. It self-heals on the next real key, which is why it has
+    /// never been reported and has had to be found four times.
+    static func sessionModifierNames() -> [String] {
+        let flags = CGEventSource.flagsState(.combinedSessionState)
+        var out: [String] = []
+        if flags.contains(.maskCommand) { out.append("command") }
+        if flags.contains(.maskAlternate) { out.append("option") }
+        if flags.contains(.maskControl) { out.append("control") }
+        if flags.contains(.maskShift) { out.append("shift") }
+        if flags.contains(.maskSecondaryFn) { out.append("fn") }
+        return out
+    }
+
     private func trace(_ verdict: String, _ type: CGEventType, _ event: CGEvent) {
         guard Self.keyTrace else { return }
         let code = event.getIntegerValueField(.keyboardEventKeycode)
