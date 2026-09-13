@@ -65,7 +65,7 @@ no outbox line, no terminal, no prompt panel, no countdown.
 | clause | terminal | caret |
 |---|---|---|
 | the words | ✓ | ✓ |
-| `[the shots I took: …]`, `[elements I picked in Chrome: …]` | ✓ | ✓ — identical wording |
+| `screenshots during dictation are in: …` (was `[the shots I took: …]` until 2026-09-13), `[elements I picked in Chrome: …]` | ✓ | ✓ — identical wording |
 | `[selected: …]` | ✓ | ✓ — identical wording, since 2026-09-09 |
 | the context frame, `[Focused window: …]` | ✓ | — none is taken |
 | `[this text was dictated in RO or EN…]` | ✓ | — |

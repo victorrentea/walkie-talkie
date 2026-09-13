@@ -204,6 +204,7 @@ The journal contradicts itself over time, because it was written as things chang
   - [The ring grows out of the pointer (2026-09-12)](#the-ring-grows-out-of-the-pointer-2026-09-12)
   - [Only the installed bundle is a login item (2026-09-12)](#only-the-installed-bundle-is-a-login-item-2026-09-12)
 - [Wispr's own row says when it is done (2026-09-12)](#wisprs-own-row-says-when-it-is-done-2026-09-12)
+- [The shots clause becomes a list, and the folder becomes $WALKIE_SHOTS (2026-09-13)](#the-shots-clause-becomes-a-list-and-the-folder-becomes-walkie_shots-2026-09-13)
 
 ---
 
@@ -7956,3 +7957,50 @@ p99), now only the net behind the row.
 nothing here transcribes, and the pasteboard path is untouched while a ⌘V is still possible.
 What changed, by Victor's decision, is that one file of Wispr's is opened read-only for the one
 question nothing else on the machine can answer.
+
+
+## The shots clause becomes a list, and the folder becomes $WALKIE_SHOTS (2026-09-13)
+
+What shipped until today was one sentence:
+
+```
+[the shots I took, in /Users/victorrentea/Library/Caches/ro.victorrentea.wispr-relay/shots/2026-09-12-22-43-03/, oldest first, each named by what was in front of me: shot-00:05(mouse-at-1681x591px)-small.jpg = Terminal — ✳ victor-effects — Victor Effect menu shortcuts layout. Each is at most 800px wide; drop the -small for the full-resolution original.]
+```
+
+Victor rewrote it by hand and asked for exactly this shape:
+
+```
+screenshots during dictation are in: $WALKIE_SHOTS/2026-09-12-22-43-03/ oldest first:
+- shot-00:05(mouse-at-1681x591px)-small.jpg in 'Terminal — ✳ victor-effects — Victor Effect menu shortcuts layout'
+Each is ≤800px wide; drop the -small for the full-resolution original.
+```
+
+Four changes, each with its own reason:
+
+- **A `- ` list instead of `; `-joined prose.** Five frames joined with semicolons is a
+  paragraph an agent has to parse back into a list, through window titles that carry their own
+  punctuation. A line per frame says where one name ends and the next begins at a glance — and
+  Victor reads these himself, in a field in front of him.
+- **`in '…'` instead of `= …`.** An equals sign claims the two sides are the same thing; the
+  left is a file and the right is the window it was taken in front of. The quotes also take
+  over the delimiting job the brackets used to do: a title is arbitrary text, and something has
+  to say where it ends.
+- **`$WALKIE_SHOTS` instead of the Caches path.** The 53 characters before the session stamp
+  are identical in every envelope this app has ever sent, and the stamp — the only part that
+  differs per run — was being read at the end of them. This is **not** a token argument
+  (*Three things that sound like improvements and are not* settled that: the addressing is a
+  rounding error beside the pixels); it is a legibility one. `AppDelegate.shotsRootAbbreviated`
+  rewrites the prefix and falls back to the literal path for anything outside `Outbox.cacheRoot`.
+- **`≤800px` instead of `at most 800px`.** Same fact, four words shorter, and still interpolated
+  from `ScreenCapture.handoverWidth` — the one-place rule stands.
+
+**The variable has to be real, and it lives outside this repo.** `~/.zshrc` exports
+`WALKIE_SHOTS="$HOME/Library/Caches/ro.victorrentea.wispr-relay/shots"`. Nothing in the app can
+set it: the envelope is pasted into a terminal that was already running when the relay bound to
+it, so its environment is the shell's, not the app's. A checkout on a machine without that line
+ships a path the agent cannot open — which is the one thing worth knowing before anyone
+"simplifies" the variable back to an absolute path.
+
+The context frame's own clause keeps its brackets and its wording; only the folder in it is
+abbreviated the same way. `evals/variants.py` still renders the pre-2026-09-13 shape on purpose:
+its fixtures are real files in a temp directory, where `$WALKIE_SHOTS` would resolve to nothing.

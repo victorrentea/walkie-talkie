@@ -3260,10 +3260,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// having and is **not** where the tokens are: measured, the addressing is a
     /// rounding error beside the pixels, which is why this method is short and
     /// `handoverWidth` has an essay over it.
+    /// `~/Library/Caches/ro.victorrentea.wispr-relay/shots/<stamp>` written as
+    /// `$WALKIE_SHOTS/<stamp>`.
+    ///
+    /// **The variable is real**, exported from `~/.zshrc`, so the shell this
+    /// lands in expands it and `cat $WALKIE_SHOTS/…` works unchanged. What it
+    /// buys is not tokens — `shotsClause` already factors the directory out once
+    /// — but a readable line: 53 characters of Caches boilerplate is the part of
+    /// the path that is identical in every envelope ever sent, and the session
+    /// stamp, the one part that differs per run, was being read at the end of it.
+    ///
+    /// Falls back to the literal path for anything outside the root, which is
+    /// how a shot re-delivered from an older layout still addresses itself.
+    private static func shotsRootAbbreviated(_ dir: String) -> String {
+        let root = Outbox.cacheRoot.path
+        guard dir == root || dir.hasPrefix(root + "/") else { return dir }
+        return "$WALKIE_SHOTS" + dir.dropFirst(root.count)
+    }
+
     private static func shotsClause(paths: [String], screen: String?,
                                     sources: [String: String] = [:]) -> [String] {
         guard paths.first != nil || screen != nil else { return [] }
         let dir = ((paths.first ?? screen!) as NSString).deletingLastPathComponent
+        let shown = shotsRootAbbreviated(dir)
 
         /// `shot-00:18(…).jpg = IntelliJ IDEA — OwnerController.java`
         ///
@@ -3288,7 +3307,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         func described(_ original: String) -> String {
             guard let source = sources[original] else { return handed(original) }
-            return "\(handed(original)) = \(source)"
+            // **`in '…'` rather than `= …`.** An equals sign says the two sides
+            // are the same thing, and they are not: the left is a file, the
+            // right is the window it was taken in front of. The quotes do the
+            // job the brackets used to — a title is arbitrary text, and this is
+            // the one pair of characters around it that says where it ends.
+            return "\(handed(original)) in '\(source)'"
         }
 
         // **A clause each, rather than one sentence with the context tacked on.**
@@ -3296,8 +3320,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is the screen when I started talking` — and a window title can itself
         // end in a full stop, so the separator between the last shot and the
         // context frame stopped being a separator. Titles are arbitrary text;
-        // the brackets are the only delimiter here that they cannot forge.
-        var note = "Each is at most \(ScreenCapture.handoverWidth)px wide; "
+        // what delimits them is punctuation they cannot forge — the brackets
+        // around the context clause, and the quotes `described` puts around a
+        // title inside the list.
+        var note = "Each is ≤\(ScreenCapture.handoverWidth)px wide; "
             + "drop the -small for the full-resolution original."
         // **The one thing a frame cannot say about itself.** A picture of a
         // region and a picture of a display are both a rectangle of pixels, and
@@ -3316,11 +3342,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !paths.isEmpty else {
             guard let screen = screen else { return [] }
             return ["[the screen when I started talking, open only if the words need it: "
-                    + "\(dir)/\(handed(screen)). \(note)]"]
+                    + "\(shown)/\(handed(screen)). \(note)]"]
         }
 
-        var clauses = ["[the shots I took, in \(dir)/, oldest first, each named by what was in front of me: "
-                       + paths.map(described).joined(separator: "; ") + ". \(note)]"]
+        // **One frame per line, under a heading, instead of one long sentence.**
+        // Five shots joined with `; ` is a paragraph an agent has to parse back
+        // into a list, and Victor reads these himself — a `- ` list is where a
+        // name ends and the next begins, at a glance, with no counting of
+        // semicolons through window titles that contain their own punctuation.
+        // The note is a line of its own for the same reason it was ever a
+        // separate sentence: it is about all of them, not about the last one.
+        var clauses = ["screenshots during dictation are in: \(shown)/ oldest first:\n"
+                       + paths.map { "- " + described($0) }.joined(separator: "\n")
+                       + "\n\(note)"]
         if let screen = screen {
             clauses.append("[and \(handed(screen)) is the screen when I started talking, "
                            + "open it only if the words need it]")
