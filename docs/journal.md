@@ -7768,6 +7768,32 @@ there has to be something to fall back to; it is the only recogniser that works 
 and `evals/` scores the corpus against it, so a model that cannot be run is a baseline that cannot
 be measured.
 
+### Two apps are called Wispr Flow, and `open -a` picks the wrong one (2026-09-13)
+
+An afternoon of "Wispr Flow will not stay running": `open -a "Wispr Flow"` returned 0, a pid
+appeared for about 100 ms, and then nothing — no crash report in `DiagnosticReports`, nothing in
+the unified log, `config.json` still parsing and still on Auto-detect. Nothing was crashing.
+
+Wispr ships a **nested** Accessibility helper at `/Applications/Wispr Flow.app/Contents/Resources/
+swift-helper-app-dist/Wispr Flow.app` — bundle id `com.electron.wispr-flow.accessibility-mac-app`,
+executable also named `Wispr Flow`. LaunchServices resolves the *name* to it, and it quits itself
+when it has no parent. The one-line proof:
+
+```
+osascript -e 'POSIX path of (path to application "Wispr Flow")'
+→ /Applications/Wispr Flow.app/Contents/Resources/swift-helper-app-dist/Wispr Flow.app/
+```
+
+It poisons the *check* as well as the launch: `pgrep -x "Wispr Flow"` and `pgrep -f "Wispr
+Flow.app"` both match the helper, so a preflight can report Wispr running when only the helper is.
+`helpers/wispr_preflight.py` matches the anchored executable path
+(`^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow`), and the remedy line says
+`open "/Applications/Wispr Flow.app"` — never `-a`.
+
+It rhymes with *Never launch the installed app by its executable path*: both are macOS resolving a
+name to something other than the bundle you meant, and both cost hours because the symptom is
+silence rather than an error.
+
 ### The harness, and the one setting Victor has to change
 
 `tools/wispr-test.sh <file.wav>` plays a WAV into a virtual input device, triggers a **real** Wispr

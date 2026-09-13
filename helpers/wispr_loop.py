@@ -535,6 +535,36 @@ STABLE_MS = 300
 #: be one*. Waiting past them is waiting for a key that is not coming.
 DEAD_STATUSES = ("dismissed", "empty", "no_audio", "error")
 
+#: **`raw_transcript` is a status nothing in this repo knew about** until a run
+#: on 2026-09-13 19:23 sat in it: `duration 20.56`, `speechDuration 19.08`,
+#: `calledExternalAsr 1`, `clientNetworkLatency 176` — Wispr heard the whole
+#: clip and called its recogniser — and then never wrote `asrText`,
+#: `pastedText` or `formatted`. The relay's settle only ends on `formatted`, so
+#: it waited its whole `settleTimeout` (`ring down: timed out waiting for the
+#: text — 8006 ms`). Not dead, because the row may still fill in; not done
+#: either. It is named so a run that stalls here says *that*, rather than
+#: reporting a bare timeout and sending whoever reads it to look at the audio.
+STALLED_STATUSES = ("raw_transcript",)
+
+
+def sink_arrival(sink: dict) -> tuple[str, list[dict]]:
+    """What actually *arrived* in the sink, with the chord's own leakage removed.
+
+    `POST /test/wispr-handsfree` posts **fn ⌃ Space**, and with the sink key that
+    Space is delivered into it as a one-character `keyDown`. Measured
+    2026-09-13: two chords, two stray characters, and a run where Wispr never
+    opened its microphone at all reported the transcript `"tu"` — the harness
+    reading its own keystrokes back and calling them an answer. That is the
+    worst failure a test rig has, because it is green.
+
+    So a `keyDown` of one character or less does not count as an arrival.
+    Every other route does, at any length: a one-character *paste* is Wispr
+    delivering something, a one-character keystroke is us.
+    """
+    events = [e for e in (sink.get("events") or [])
+              if e.get("route") != "keyDown" or (e.get("chars") or 0) > 1]
+    return "".join(e.get("text") or "" for e in events), events
+
 
 class StableText:
     """Has the text stopped changing?
@@ -588,16 +618,15 @@ def wait_for_arrival(relay: Relay, timeout: float, started: float,
     stable = StableText(stable_ms)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        sink = relay.sink_read() or {}
-        text, events = (sink.get("text") or ""), (sink.get("events") or [])
+        text, events = sink_arrival(relay.sink_read() or {})
         if events and stable.observe(text, time.monotonic()):
             return (text, events, "")
         row = wispr_history_newest()
         if row and row.started_at >= started - 5 and row.status in DEAD_STATUSES:
             return (text, events, row.status)
         time.sleep(0.1)
-    sink = relay.sink_read() or {}
-    return ((sink.get("text") or ""), (sink.get("events") or []), "timeout")
+    text, events = sink_arrival(relay.sink_read() or {})
+    return (text, events, "timeout")
 
 
 def transcribe(wav: str, device: str | None = None, port: int | None = None,
@@ -645,34 +674,53 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         out["relayListening"] = bool(state.get("listening"))
         out["relayRingUp"] = bool(state.get("ringUp"))
 
+        opened, waited = await_microphone(relay, mark)
+        out["micOpenWaitMs"] = round(waited * 1000)
+        out["micOpened"] = opened
+        if not opened:
+            out["reason"] = ("Wispr's microphone never opened — the clip was played at a "
+                             "recorder that was not listening")
+
         seconds = play_wav(wav, device, dry_run)
         out["seconds"] = round(seconds, 2)
         relay.post("/test/wispr-handsfree")   # the chord is a toggle
 
-        text, events, status = wait_for_arrival(relay, timeout or (seconds + 60), started)
-        out["text"], out["status"] = text, status
+        text, events, outcome = wait_for_arrival(relay, timeout or (seconds + 60), started)
+        # `status` is **Wispr's** word and only ever Wispr's; `outcome` is ours.
+        # Printing our own "timeout" under a heading that says *Wispr's History
+        # status* is how a harness invents a fact about somebody else's app.
+        out["text"], out["outcome"] = text, outcome
         out["route"] = (events[-1].get("route") if events else "") or ""
         out["events"] = events
 
         t = read_timings(mark.lines())
         row = wispr_history_newest()
         row = row if row and row.started_at >= started - 5 else None
+        out["status"] = row.status if row else ""
         out["timings"] = {
             "gestureToMicOpenMs": t.gesture_to_mic_open_ms,
             "micCloseToArrivalMs": t.delivery_ms if t.delivery_ms is not None else t.done_ms,
             "micCloseToWisprDoneMs": t.done_ms,
             "wisprDoneSource": t.done_source,
-            "e2eLatency": row.e2e_latency if row else None,
+            # Wispr's column is in **milliseconds** — 937.0 on a 20 s clip, and
+            # 470 in the relay's own `Wispr's own e2e 470 ms`. Reporting it as
+            # seconds turned a 0.9 s round trip into "937 s".
+            "e2eLatencyMs": row.e2e_latency if row else None,
             "ringDownReason": t.ring_down_reason,
         }
         out["wisprApp"] = row.app if row else ""
-        if status in DEAD_STATUSES:
-            out["reason"] = "Wispr finished with status %r — there is no transcript" % status
-        elif status == "timeout":
-            out["reason"] = ("nothing arrived in the sink within the timeout"
-                             + (" (ring down: %s)" % t.ring_down_reason if t.ring_down_reason else ""))
+        if outcome in DEAD_STATUSES:
+            out["reason"] = "Wispr finished with status %r — there is no transcript" % outcome
         elif text.strip():
             out["ok"] = True
+        elif out["status"] in STALLED_STATUSES:
+            out["reason"] = (
+                "Wispr's row stalled at %r — it heard the audio (%s s of speech) and called its "
+                "recogniser, then never wrote the text. Nothing is wrong with the channel."
+                % (out["status"], out.get("seconds")))
+        elif outcome == "timeout":
+            out["reason"] = ("nothing arrived in the sink within the timeout"
+                             + (" (ring down: %s)" % t.ring_down_reason if t.ring_down_reason else ""))
         else:
             out["reason"] = "the sink settled empty"
         out["log"] = [line.raw for line in mark.lines()]
@@ -702,9 +750,12 @@ def _close_sink(relay: Relay):
 
 
 def _sink_text(relay: Relay) -> tuple[str, list[dict]]:
-    """One read, for the scenarios that assert the sink stayed *empty*."""
-    sink = relay.sink_read() or {}
-    return (sink.get("text") or ""), (sink.get("events") or [])
+    """One read, for the scenarios that assert the sink stayed *empty*.
+
+    Through `sink_arrival`, so the chord this harness posts is never counted as
+    something having leaked into the window.
+    """
+    return sink_arrival(relay.sink_read() or {})
 
 
 def _settled_sink(ctx, grace: float = 4.0) -> tuple[str, list[dict]]:
@@ -716,6 +767,33 @@ def _settled_sink(ctx, grace: float = 4.0) -> tuple[str, list[dict]]:
     """
     text, events, _status = wait_for_arrival(ctx.relay, grace, ctx.started)
     return text, events
+
+
+def await_microphone(relay: Relay, mark: LogMark, timeout: float = 10.0) -> tuple[bool, float]:
+    """Wait for **Wispr's own microphone** to open before a note of the clip plays.
+
+    Not the relay's `listening`, which goes up on the chord: this is the
+    CoreAudio edge, `wispr flow opened the microphone`. Measured on this Mac the
+    same evening: **1042 ms, 3341 ms, 3694 ms** — and 324–674 ms warm, 5–6 s cold
+    per the 2026-09-12 measurements. Playing on the chord therefore throws the
+    first three seconds of a clip at a recorder that is not open yet, and the
+    0.6 s of lead silence `wispr_loopback` adds is nowhere near enough. A short
+    fixture could be over before Wispr starts listening at all, which is
+    incident 1 with the harness as the cause rather than the subject.
+
+    Returns `(opened, seconds_waited)`. It plays anyway on a timeout — a clipped
+    head is still evidence, and the caller reports that it did not see the edge.
+    """
+    if relay.dry_run:
+        return (True, 0.0)
+
+    def open_now():
+        if "wispr flow opened the microphone" in mark.fresh():
+            return True
+        return bool((relay.state() or {}).get("isRecording"))
+
+    got, waited = wait_for(open_now, timeout, poll=0.1)
+    return (bool(got), waited)
 
 
 def _await_listening(relay: Relay, result: Result, timeout: float = 8.0) -> bool:
@@ -730,6 +808,16 @@ def _await_listening(relay: Relay, result: Result, timeout: float = 8.0) -> bool
     result.check(bool(got) or relay.dry_run, "the dictation opened on the gesture",
                  "listening after %.0f ms" % (waited * 1000) if got else "never listening (%.1fs)" % waited)
     return bool(got)
+
+
+def _await_microphone(ctx) -> bool:
+    """The scenarios' wrapper: wait for Wispr's microphone, and say so either way."""
+    opened, waited = await_microphone(ctx.relay, ctx.mark)
+    ctx.result.check(opened or ctx.relay.dry_run, "Wispr's microphone opened before the clip played",
+                     "after %.0f ms" % (waited * 1000) if opened else
+                     "never opened (%.1f s) — the clip was played at a recorder that was not listening"
+                     % waited)
+    return opened
 
 
 def _await_settled(relay: Relay, mark: LogMark, timeout: float) -> tuple[bool, float]:
@@ -790,6 +878,7 @@ def scenario_caret(ctx) -> Result:
     _open_sink(relay)
     relay.gesture("forward-click")
     _await_listening(relay, result)
+    _await_microphone(ctx)
     seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
     relay.gesture("forward-click")
 
@@ -845,6 +934,7 @@ def scenario_spawn_click_in_settle(ctx) -> Result:
     _open_sink(relay)
     relay.gesture("forward-up")
     _await_listening(relay, result)
+    _await_microphone(ctx)
     seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
     relay.gesture("forward-click")
 
@@ -927,6 +1017,7 @@ def scenario_bound(ctx) -> Result:
         _open_sink(relay)
         relay.gesture("forward-right")
         _await_listening(relay, result)
+        _await_microphone(ctx)
         seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
         relay.gesture("forward-right")
 
@@ -966,6 +1057,7 @@ def scenario_cancel(ctx) -> Result:
     _open_sink(relay)
     relay.gesture("forward-click")
     _await_listening(relay, result)
+    _await_microphone(ctx)
     play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
     cancelled_at = time.monotonic()
     relay.gesture("forward-left")
@@ -1149,6 +1241,7 @@ def _sink_question(ctx, key_at_start: bool) -> Result:
 
         relay.gesture("forward-click")
         _await_listening(relay, result)
+        _await_microphone(ctx)
         seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
         relay.gesture("forward-click")
         grabbed_ms = None
@@ -1344,12 +1437,16 @@ def _transcribe_cli(args, port: int) -> int:
             print("✗ %s" % (out.get("reason") or "no transcript"), file=sys.stderr)
         print("", file=sys.stderr)
         print("  route                    %s" % (out.get("route") or "—"), file=sys.stderr)
-        print("  gesture → mic open       %s" % _ms(t.get("gestureToMicOpenMs")), file=sys.stderr)
+        print("  gesture → mic open       %s%s" % (
+            _ms(t.get("gestureToMicOpenMs")),
+            "" if out.get("micOpened", True) else "   ← never opened; the clip was played anyway"),
+            file=sys.stderr)
         print("  mic close → arrival      %s" % _ms(t.get("micCloseToArrivalMs")), file=sys.stderr)
         print("  Wispr's own e2eLatency   %s" % (
-            "%.2f s" % t["e2eLatency"] if t.get("e2eLatency") else "—"), file=sys.stderr)
-        if out.get("status"):
-            print("  Wispr's History status   %s" % out["status"], file=sys.stderr)
+            "%.0f ms" % t["e2eLatencyMs"] if t.get("e2eLatencyMs") else "—"), file=sys.stderr)
+        print("  Wispr's History status   %s" % (out.get("status") or "—"), file=sys.stderr)
+        print("  how this run ended       %s" % (out.get("outcome") or "the sink settled"),
+              file=sys.stderr)
         if out.get("wisprApp"):
             print("  Wispr says it inserted into  %s" % out["wisprApp"], file=sys.stderr)
         print("  relay listening / ring   %s / %s"
@@ -1361,7 +1458,7 @@ def _transcribe_cli(args, port: int) -> int:
         return 0
     if out.get("ok"):
         return 0
-    return 3 if out.get("status") in DEAD_STATUSES else 1
+    return 3 if out.get("outcome") in DEAD_STATUSES else 1
 
 
 def _ms(value):

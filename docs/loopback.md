@@ -44,6 +44,22 @@ start a dictation *with a destination* and deliver the sentence to a terminal,
 which is right for a scenario and wrong for a transcription. The run reports
 `relayListening` / `relayRingUp` so a caller can see which of the two it got.
 
+**The clip does not play until Wispr's own microphone is open.** Not the relay's
+`listening`, which goes up on the chord — the CoreAudio edge, `wispr flow opened
+the microphone`. Measured on 2026-09-13: **1042, 3341 and 3694 ms**, against
+324–674 ms warm and 5–6 s cold on 2026-09-12. Playing on the chord throws the
+first seconds of a clip at a recorder that is not open yet, and a short fixture
+can be over before Wispr starts listening at all — incident 1 with the harness
+as the cause instead of the subject. On a timeout it plays anyway and says the
+edge was never seen, because a clipped head is still evidence.
+
+**The chord's own keystroke is not a transcript.** `fn ⌃ Space` with the sink key
+delivers a one-character `keyDown` into it. A run on 2026-09-13 where Wispr never
+opened its microphone at all reported the transcript `"tu"` — the rig reading its
+own chords back. `sink_arrival()` drops `keyDown` events of one character or less
+and every other route counts at any length; a one-character *paste* is Wispr
+delivering something, a one-character keystroke is us.
+
 **Waiting on a condition, with two exits.** The sink is polled until its text is
 non-empty **and has not changed for 300 ms** (`StableText`, `STABLE_MS`) —
 because Wispr inserts some sentences in more than one event, and reading the
@@ -53,8 +69,19 @@ transcript. The other exit is Wispr's own `History` row reaching `dismissed`,
 the timeout for it is the twenty-second stall the `WisprHistory` work removed
 from the app. The status is printed and the exit code is 3.
 
-The scenarios call the same wait (`_settled_sink`) rather than reading the sink
-once, so none of them can score a sentence Wispr is halfway through inserting.
+The scenarios call the same waits — `_await_microphone` before the clip and
+`_settled_sink` after — so none of them plays into a closed microphone or scores
+a sentence Wispr is halfway through inserting.
+
+**`raw_transcript` is a third outcome, and it is not in the relay's vocabulary.**
+`.claude/rules/dictation-source.md` lists `formatted` / `dismissed` / `empty` /
+`no_audio` / `error`; a row can also sit at `raw_transcript`, where Wispr has
+heard the audio and called its recogniser and not yet written anything. The
+relay's settle only ends on `formatted`, so such a row costs the full
+`settleTimeout` (`ring down: timed out waiting for the text — 8006 ms`, measured
+2026-09-13). The primitive names it rather than reporting a bare timeout, because
+"Wispr stalled" and "the channel is broken" send whoever reads it to opposite
+ends of the system.
 
 ### As a Python function, and what it means for the teacher batch
 
@@ -158,13 +185,21 @@ the two cannot drift. Nothing fails silently; a fatal row says what to do.
 |---|---|
 | relay answering on 8917–8919 | `ElementPicker` takes the first free port |
 | the **installed** bundle, not `.build/debug` | debug has no Accessibility grant; `CGEventPost` fails silently |
-| Wispr Flow running | the relay drives it, it never launches it |
+| Wispr Flow running | the relay drives it, it never launches it. Matched on the **anchored executable path**, because Wispr ships a nested Accessibility helper whose executable is *also* named `Wispr Flow` |
 | **Wispr microphone on Auto-detect** | the one setting only Victor can change; the preflight prints the instruction and exits 2 |
 | a Loopback device resolves | otherwise the WAV is played at nobody |
 | `sounddevice` + `numpy` | the playback |
 | `~/bin/hands-off` | the locks are mandatory, not a nicety |
 | `/test/state`, `/test/sink`, and `/test/gesture` (scenarios) or `/test/wispr-handsfree` (the primitive) | a build older than the harness exits **3**, not 1 |
 | `/up` says nothing is listening | Victor may be dictating; the run refuses |
+
+**Never start it with `open -a "Wispr Flow"`.** LaunchServices resolves that
+name to the nested helper (`…/Contents/Resources/swift-helper-app-dist/Wispr
+Flow.app`, `com.electron.wispr-flow.accessibility-mac-app`), which quits itself
+in ~100 ms — no crash report, nothing in the log, and an afternoon spent reading
+it as "Wispr Flow will not stay running". Use `open "/Applications/Wispr
+Flow.app"` or `open -b com.electron.wispr-flow`; `osascript -e 'POSIX path of
+(path to application "Wispr Flow")'` is the one-line proof of which one you get.
 
 **Route detection has a wrinkle worth knowing.** `ElementPicker` dispatches on
 method *and* path, and answers a GET to a POST-only route with the same

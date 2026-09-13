@@ -145,8 +145,26 @@ def _binary_strings() -> str:
 
 
 # ── the things that are true of the Mac, not of the relay ────────────────────
+#: **The executable, anchored, and never the bare name** (2026-09-13). Wispr
+#: ships a *nested* Accessibility helper at
+#: `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app`, bundle id
+#: `com.electron.wispr-flow.accessibility-mac-app`, whose executable is **also**
+#: called `Wispr Flow`. `pgrep -x "Wispr Flow"` matches it, `pgrep -f "Wispr
+#: Flow.app"` matches it, and — worse — `open -a "Wispr Flow"` *launches* it:
+#: LaunchServices resolves the name to the nested bundle, which then quits
+#: itself in about 100 ms for want of a parent. That cost an afternoon reading
+#: as "Wispr Flow will not stay running", with no crash report and nothing in
+#: the unified log, because nothing was crashing — the wrong app was starting
+#: and correctly leaving. `osascript -e 'POSIX path of (path to application
+#: "Wispr Flow")'` is the one-line proof: it answers the nested path.
+WISPR_EXECUTABLE = "/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"
+#: How to start it, when it is genuinely not running. **Never `open -a`.**
+WISPR_LAUNCH = 'open "/Applications/Wispr Flow.app"   (or: open -b com.electron.wispr-flow)'
+
+
 def wispr_running() -> bool:
-    return _pgrep("Wispr Flow.app")
+    """Is Wispr *proper* running — not its nested Accessibility helper."""
+    return _pgrep("^" + WISPR_EXECUTABLE)
 
 
 def relay_process() -> tuple[bool, str]:
@@ -254,8 +272,12 @@ def checks(device_name: str | None = None, speaker: bool = False,
                     remedy="`.build/debug` has no Accessibility grant — every gesture this harness\n"
                            "posts would fail silently. Run ./build-app.sh and relay-restart.sh."))
 
-    rows.append(Row(wispr_running(), "Wispr Flow is running" if wispr_running() else "Wispr Flow is not running",
-                    fatal=True, key="wispr", remedy="Launch Wispr Flow and let its pill appear."))
+    running = wispr_running()
+    rows.append(Row(running, "Wispr Flow is running" if running else "Wispr Flow is not running",
+                    fatal=True, key="wispr",
+                    remedy="Launch it and let its pill appear:\n  %s\n"
+                           "NOT `open -a \"Wispr Flow\"` — that resolves to the nested Accessibility\n"
+                           "helper of the same name, which quits itself in ~100 ms." % WISPR_LAUNCH))
 
     mic, mic_name = wispr_microphone()
     if mic == "auto":

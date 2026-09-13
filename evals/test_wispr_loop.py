@@ -202,6 +202,32 @@ class Arrival(unittest.TestCase):
         self.assertFalse(wl.StableText(stable_ms=0).observe("hello", 99.0))
         self.assertTrue(wl.StableText(stable_ms=0).observe("hello", 99.0) is False)
 
+    def test_the_chord_s_own_keystroke_is_not_a_transcript(self):
+        """Verbatim from 2026-09-13 19:26: the rig read its own chord back as `"tu"`."""
+        sink = {"text": "tu", "events": [
+            {"route": "keyDown", "chars": 1, "text": "t"},
+            {"route": "keyDown", "chars": 1, "text": "u"}]}
+        text, events = wl.sink_arrival(sink)
+        self.assertEqual(text, "")
+        self.assertEqual(events, [])
+
+    def test_a_real_delivery_still_counts(self):
+        sink = {"text": "x" + "Commit and push the fix.", "events": [
+            {"route": "keyDown", "chars": 1, "text": "x"},
+            {"route": "paste", "chars": 24, "text": "Commit and push the fix."}]}
+        text, events = wl.sink_arrival(sink)
+        self.assertEqual(text, "Commit and push the fix.")
+        self.assertEqual(len(events), 1)
+
+    def test_a_one_character_paste_is_wispr_not_us(self):
+        """Only `keyDown` is ours. A short paste is still a delivery."""
+        text, events = wl.sink_arrival({"events": [{"route": "paste", "chars": 1, "text": "A"}]})
+        self.assertEqual(text, "A")
+
+    def test_typed_delivery_of_real_length_counts(self):
+        text, _ = wl.sink_arrival({"events": [{"route": "typed", "chars": 9, "text": "hello you"}]})
+        self.assertEqual(text, "hello you")
+
     def test_wispr_s_own_dead_ends_are_named(self):
         """A dismissed dictation must end the wait, not burn the timeout."""
         for status in ("dismissed", "empty", "no_audio", "error"):
