@@ -256,8 +256,16 @@ sits at rest there.
   at the bottom-right of the **second** display when one is attached, all but an 8 pt sliver past
   the edge. Parked on the first open and again on any open that comes back somewhere else — the
   log says which (`scratchpad reopened at <frame> — where it was parked; Wispr remembers`). While
-  a Scratchpad dictation is in flight the window is polled at **50 ms** for the one thing that
-  matters: whether it ever takes the keyboard (`everBecameKey` in `/test/state.scratchpad`).
+  a Scratchpad dictation is in flight the window is polled at **50 ms**, it is **closed on sight**
+  (`lastOpenMs` says how long it was up — 0.1–0.4 s), and `everBecameKey` records whether it ever
+  took the keyboard.
+- **The Scratchpad becomes key without its app becoming frontmost** (measured 2026-09-13): a `z`
+  typed 1.5 s after the stop gesture went into Wispr's note and was delivered *inside the
+  sentence*, with `frontmostApplication` reading TextEdit throughout. So for as long as that window
+  is up, **every real keystroke is re-posted to the app he was looking at** when he stopped talking
+  (`HotkeyTap.armKeyRedirect`, `postToPid`, pid 0 only, logged by keycode only, 10 s ceiling,
+  `WT_SCRATCHPAD_REDIRECT_KEYS=0` to disable). And never test key focus with
+  `frontmostApplication` — use the system-wide focused element's owner.
 - **Wispr posts a ⌘V in Scratchpad mode and it belongs to Wispr** — aimed at its own note window.
   The swallow is **off** in this mode (the probe stays on); taking that key doubled a sentence into
   the previous run's note. And Wispr does not reliably start a new note: it appends with

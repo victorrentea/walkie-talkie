@@ -215,6 +215,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Five runs to make the Scratchpad wrap real (2026-09-13, 23:20–23:31)](#five-runs-to-make-the-scratchpad-wrap-real-2026-09-13-23202331)
 - [The row is the delivery; the note is the second opinion (2026-09-13, midnight)](#the-row-is-the-delivery-the-note-is-the-second-opinion-2026-09-13-midnight)
 - [Parking the Scratchpad, and measuring whether it ever takes a key (2026-09-13, midnight)](#parking-the-scratchpad-and-measuring-whether-it-ever-takes-a-key-2026-09-13-midnight)
+- [The Scratchpad takes the keyboard without taking the front (2026-09-13, after midnight)](#the-scratchpad-takes-the-keyboard-without-taking-the-front-2026-09-13-after-midnight)
 
 ---
 
@@ -8981,3 +8982,57 @@ honest test — a background window cannot take a key, and either half alone is 
 The answer is `everBecameKey` in `/test/state.scratchpad`, with the moment it happened beside it,
 and if it is ever true the log says so in capitals, because the sentence it would be describing is
 *a keystroke of his landed in Wispr's note*.
+
+## The Scratchpad takes the keyboard without taking the front (2026-09-13, after midnight)
+
+The loop asked the question Victor actually cares about and got the answer he was afraid of. One
+`z`, posted 1.5 s after the stop gesture, flags cleared:
+
+| | wrap-caret | wrap-bound |
+|---|---|---|
+| frontmost, whole run | TextEdit | TextEdit |
+| `z` in the victim document | yes | **no — empty** |
+| `z` in Wispr's note | **yes** | **yes** |
+| `z` in the delivered text | **yes** | **yes** |
+
+`wrap-bound` is the one that removes the doubt: the document he was looking at stayed empty, and
+the character turned up in the bound agent's terminal *folded into the dictation* —
+`commit and push the fix z`. **Wispr's Scratchpad window becomes key without its application
+becoming frontmost.**
+
+That has three consequences and each got its own fix.
+
+**The test for key focus was wrong, and it was wrong in this file too.** The watcher written an
+hour earlier asked *is Wispr frontmost and is this its main window*, on the reasoning that a
+background window cannot take a key. It can. `NSWorkspace.frontmostApplication` would have said
+TextEdit for the whole of the run that proved it, so the watcher would have reported
+`everBecameKey: false` for ever and told Victor the opposite of the truth. The test is now the
+**system-wide focused element's owner** — `AXUIElementCreateSystemWide` +
+`kAXFocusedUIElementAttribute` + `AXUIElementGetPid` — with the window's own `AXFocused` beside
+it, and frontmost is not consulted at all, because it is the thing that lied.
+
+**The window is shut on sight.** It used to be closed after the delivery, which left it up for the
+two seconds Wispr takes to write the note plus however long the close took. The 50 ms watcher is
+now armed at the **release**, and the 250 ms press goes out the moment the window is seen —
+cutting its life to the 0.1–0.4 s the close itself costs. `lastOpenMs` is that number, measured
+every time rather than assumed once.
+
+**And for exactly that stretch, his keys are given back to him.** The tap takes every key that
+came from **real hardware** — pid 0, unstamped — and re-posts it with `postToPid` to the
+application that was frontmost at the *stop gesture*. That moment is the last one at which the
+answer is unambiguous, precisely because the thief never becomes frontmost and there is nothing to
+read afterwards that would say so. Wispr's own synthetic keys carry its pid and this app's carry
+`backButtonStamp`; neither is touched. The branch sits **below** the app's own chords in `handle`,
+so ⌘⌃B and ⌘⌃D go on working while the keyboard is borrowed.
+
+Swallowing real keystrokes is the most dangerous thing in `HotkeyTap`, so it has two hard limits
+and no judgement: it is armed only while the window is *observed* to be open, and it expires by
+itself after **10 s** whatever anyone forgets. It logs the **keycode and nothing else** — a log
+that records what he typed is a log that must not exist — and `WT_SCRATCHPAD_REDIRECT_KEYS=0`
+turns it off.
+
+The fourth consequence needed no fix, because it was already on its way: the `z` reached the agent
+*inside the sentence* only because the note was the delivery. With the row delivering instead, a
+stray keystroke in the note cannot be folded into a transcript — the row carries what Wispr heard
+and nothing else, and the note has been demoted to a cross-check that logs a disagreement rather
+than shipping one.

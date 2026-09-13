@@ -158,6 +158,81 @@ final class HotkeyTap {
         stateLock.unlock()
     }
 
+    // ── Victor's own keys, while another app's window has stolen the focus ───
+
+    /// **Send real keystrokes to the app he is looking at**, for as long as
+    /// Wispr's Scratchpad window is up.
+    ///
+    /// Measured by the loop on 2026-09-13: **the Scratchpad window becomes key
+    /// without its app becoming frontmost.** `NSWorkspace.frontmostApplication`
+    /// said TextEdit for the whole run; a `z` typed 1.5 s after the stop gesture
+    /// went into Wispr's note, was picked up as part of the newly added portion,
+    /// and was delivered to the bound agent **inside the sentence** — while the
+    /// document Victor was looking at stayed empty. That is his exact worry, and
+    /// it is not a theoretical one.
+    ///
+    /// So for the few hundred milliseconds the window is up, a key that came
+    /// from **real hardware** (pid 0) is taken here and re-posted with
+    /// `postToPid` to the application that was frontmost when he stopped
+    /// talking. Wispr's own synthetic keys carry its pid and are never touched;
+    /// this app's carry `backButtonStamp` and are never touched either.
+    ///
+    /// **Two hard limits, because swallowing real keys is the most dangerous
+    /// thing in this file.** It is armed only while the window is actually
+    /// observed to be open — a few hundred milliseconds, measured — and it
+    /// expires on its own after `redirectCeiling` whatever anyone forgets.
+    /// `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
+    func armKeyRedirect(to pid: pid_t) {
+        guard Self.redirectEnabled, pid > 0 else { return }
+        stateLock.lock()
+        redirectPid = pid
+        redirectUntil = CFAbsoluteTimeGetCurrent() + Self.redirectCeiling
+        redirectCount = 0
+        stateLock.unlock()
+        Log.info("⌨️ keys are going to pid \(pid) while Wispr's Scratchpad has the focus")
+    }
+
+    func disarmKeyRedirect() {
+        stateLock.lock()
+        let n = redirectCount
+        let was = redirectPid
+        redirectPid = 0
+        redirectUntil = 0
+        stateLock.unlock()
+        guard was != 0 else { return }
+        Log.info("⌨️ keys are his own again — \(n) redirected to pid \(was)")
+    }
+
+    /// For `GET /test/state`.
+    var keyRedirect: (pid: pid_t, keys: Int) {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return (redirectUntil > CFAbsoluteTimeGetCurrent() ? redirectPid : 0, redirectCount)
+    }
+
+    private var redirectPid: pid_t = 0
+    private var redirectUntil: CFAbsoluteTime = 0
+    private var redirectCount = 0
+    /// Ten seconds. The window is up for a few hundred milliseconds; this is the
+    /// number that makes a forgotten disarm a nuisance rather than a Mac whose
+    /// keyboard has stopped working.
+    private static let redirectCeiling: TimeInterval = 10
+    private static let redirectEnabled =
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0"
+
+    /// The pid to redirect to, or 0. Cheap enough for the tap thread: a lock and
+    /// two comparisons, no window server and no Accessibility.
+    private func redirectTargetNow() -> pid_t {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard redirectPid != 0, CFAbsoluteTimeGetCurrent() < redirectUntil else { return 0 }
+        return redirectPid
+    }
+
+    private func countRedirect() -> Int {
+        stateLock.lock(); defer { stateLock.unlock() }
+        redirectCount += 1
+        return redirectCount
+    }
+
     func disarmInjectionCapture() {
         stateLock.lock()
         injectionArmed = false
@@ -1395,6 +1470,29 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // was swallowed hands the app underneath an orphan. The ⌘ itself is left
         // alone — it goes out and comes back balanced, and a bare ⌘ press does
         // nothing anywhere.
+        // ── His own keys, while Wispr's Scratchpad has the focus ────────────
+        //
+        // Below the app's own chords on purpose: ⌘⌃B, ⌘⌃D and the gesture keys
+        // are handled above and have already returned by the time this runs, so
+        // borrowing the keyboard for a few hundred milliseconds cannot take away
+        // the keys the relay itself is listening for.
+        if type == .keyDown || type == .keyUp {
+            let target = redirectTargetNow()
+            if target != 0,
+               event.getIntegerValueField(.eventSourceUnixProcessID) == 0,
+               event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+                let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                event.postToPid(target)
+                if type == .keyDown {
+                    // **The keycode and nothing else.** This is every character
+                    // he types for the length of the window, and a log that
+                    // records what he wrote is a log that must not exist.
+                    Log.info("⌨️ key \(code) → pid \(target) (#\(countRedirect())) — Wispr's Scratchpad had the focus")
+                }
+                return nil
+            }
+        }
+
         if (type == .keyDown || type == .keyUp), injectionArmedNow() {
             let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
             let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))

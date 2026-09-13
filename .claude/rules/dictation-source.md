@@ -274,10 +274,31 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   getting that backwards puts the window off the top of the world rather than off the bottom.
   Parked on the first open and on any open that comes back elsewhere; the log says whether Wispr
   remembered. `POST /test/scratchpad/park` does it on demand.
-- **The window is polled at 50 ms for the whole of a Scratchpad dictation**, and the one thing it
-  is watching for is `everBecameKey` — Victor's real worry is a keystroke of his landing in
-  Wispr's note. Wispr frontmost **and** the window its main one is the honest test; a background
-  window cannot take a key.
+- **THE SCRATCHPAD BECOMES KEY WITHOUT ITS APP BECOMING FRONTMOST**, and that is the finding
+  everything below is written against (loop, 2026-09-13, `wrap-bound`). A `z` typed 1.5 s after
+  the stop gesture went into Wispr's note, was picked up as part of the newly added portion, and
+  was delivered to the bound agent **inside the sentence** — while
+  `NSWorkspace.frontmostApplication` read `TextEdit` for the whole run and the victim document
+  stayed empty. So: **do not test for key focus with `frontmostApplication`.** The test is the
+  **system-wide focused element's owner** (`AXUIElementCreateSystemWide` +
+  `kAXFocusedUIElementAttribute` + `AXUIElementGetPid`), with the window's own `AXFocused` as the
+  second reading.
+- **The window is shut on sight.** A 50 ms poll armed at the **release**, with the 250 ms press
+  posted the moment the window is seen — its life goes from the two seconds it used to spend open
+  to the 0.1–0.4 s the close itself takes. `lastOpenMs` in `/test/state.scratchpad` is that
+  measurement, every time.
+- **And for exactly that stretch, his keys are re-posted to the app he was looking at.**
+  `HotkeyTap.armKeyRedirect(to:)` takes every **real** key (pid 0, unstamped) and hands it on with
+  `postToPid` to the application that was frontmost at the **stop gesture** — the last moment that
+  is unambiguous, since the thief never becomes frontmost. Wispr's own synthetic keys carry its
+  pid and this app's carry `backButtonStamp`; neither is touched. Armed when the window is *seen*
+  and disarmed when it is confirmed gone, with a **10 s ceiling** whatever anyone forgets, and
+  below the app's own chords in the tap so ⌘⌃B and ⌘⌃D keep working. Logged **by keycode only** —
+  a log that records what he typed is a log that must not exist.
+  `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
+- **The note is never the delivered text once the row has delivered.** It is read
+  `crossCheckDelay` (3.5 s) later and compared, nothing more — which is also what stops a stray
+  keystroke in the note from being folded into the sentence, the other half of the same finding.
 - **Wispr does not reliably start a new note** — it appended to a note from four minutes earlier
   with `source = typed`, and a `typed` version carries the **accumulated notepad**, not the
   increment. So the delivery is the new portion only: the note's content with the text captured at

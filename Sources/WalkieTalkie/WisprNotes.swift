@@ -418,6 +418,36 @@ enum WisprScratchpad {
 
     private static var watch: Timer?
     private static var sawWindow = false
+    /// **Close it the instant it appears.** Armed at the release, because the
+    /// window is only dangerous while it is up and the measured danger is real:
+    /// a `z` typed 1.5 s into the settle landed in the note and was delivered
+    /// inside the sentence.
+    private static var closeASAP = false
+    private static var closeRequested = false
+    private static var appearedAt: Date?
+    private static var armedAt: Date?
+    /// Called the moment the window is confirmed gone, with how long it was up,
+    /// or nil when it never appeared inside the ceiling.
+    static var onWindowGone: ((Double?) -> Void)?
+    /// Called the moment the window is first seen, so the keyboard can be taken
+    /// for exactly the stretch it is up and not a millisecond longer.
+    static var onWindowSeen: (() -> Void)?
+    /// The longest the watcher waits for a window that may never come.
+    private static let appearCeiling: TimeInterval = 8
+    /// What a whole open→closed cycle has cost, most recent first.
+    private(set) static var lastOpenMs: Double?
+
+    /// **Watch, and shut it on sight** — from the release until it is confirmed
+    /// closed. The 50 ms tick is the danger window's own resolution: the runner
+    /// measured the window shut again within 0.1–0.4 s once it is asked, and a
+    /// slower poll would spend more of that window unarmed than armed.
+    static func armCloseOnSight() {
+        closeASAP = true
+        closeRequested = false
+        appearedAt = nil
+        armedAt = Date()
+        beginWatch()
+    }
 
     /// **On for the length of a Scratchpad dictation, and off the rest of the
     /// day.** What it is watching for is the one thing Victor is actually
@@ -437,6 +467,16 @@ enum WisprScratchpad {
 
     private static func tick() {
         guard let window = windowElement() else {
+            if sawWindow, closeRequested {
+                let ms = appearedAt.map { Date().timeIntervalSince($0) * 1000 }
+                lastOpenMs = ms
+                Log.info(String(format: "🗒️ the Scratchpad window is gone — it was up for %.0f ms",
+                                ms ?? 0))
+                finishCloseOnSight(ms)
+            } else if closeASAP, let armed = armedAt, Date().timeIntervalSince(armed) > appearCeiling {
+                Log.info("🗒️ no Scratchpad window appeared within \(Int(appearCeiling)) s — nothing to close")
+                finishCloseOnSight(nil)
+            }
             sawWindow = false
             return
         }
@@ -452,20 +492,68 @@ enum WisprScratchpad {
                      + (parkedFrame == nil ? "" : moved ? " — NOT where it was parked, so it is parked again"
                                                         : " — where it was parked; Wispr remembers"))
             if parkedFrame == nil || moved { park() }
+            appearedAt = Date()
+        }
+        // **Ask for it to go the instant it is seen.** The press is 250 ms of
+        // held key and the window takes another beat to go, so the sooner this
+        // is asked the shorter the stretch in which a keystroke of his can land
+        // in Wispr's note.
+        if closeASAP, !closeRequested {
+            closeRequested = true
+            onWindowSeen?()
+            Log.info("🗒️ the Scratchpad window appeared — closing it on sight")
+            HotkeyTap.tapWisprScratchpad()
         }
         lastSeenFrame = f
-        // **Does it have the keyboard?** Wispr frontmost *and* this window its
-        // main one is the honest test — a background window cannot take a key.
-        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        guard front.hasPrefix("com.electron.wispr-flow") else { return }
-        var main: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXMainAttribute as CFString, &main) == .success,
-              (main as? Bool) == true else { return }
+        // **Does it have the keyboard?** And the obvious test is the wrong one.
+        //
+        // The first version of this asked *is Wispr frontmost and is this its
+        // main window*, on the reasoning that a background window cannot take a
+        // key. The loop disproved it the same hour (2026-09-13, `wrap-bound`): a
+        // `z` typed 1.5 s into the settle went **into the Scratchpad** while
+        // `NSWorkspace.frontmostApplication` was TextEdit for the whole run —
+        // the victim document stayed empty and the character turned up in the
+        // note. **The Scratchpad takes key focus without becoming frontmost.**
+        //
+        // So the test is the system-wide focused element's owner, which is the
+        // question actually being asked — *where would a keystroke go* — with the
+        // window's own `AXFocused` beside it as the second reading. Frontmost is
+        // not consulted at all any more, because it is the thing that lied.
+        var why: String?
+        var focused: CFTypeRef?
+        if AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(),
+                                         kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+           let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() {
+            var owner: pid_t = 0
+            if AXUIElementGetPid(element as! AXUIElement, &owner) == .success,
+               let (_, wispr) = appElement(), owner == wispr {
+                why = "the system-wide focused element belongs to Wispr Flow"
+            }
+        }
+        if why == nil {
+            var isFocused: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, kAXFocusedAttribute as CFString, &isFocused) == .success,
+               (isFocused as? Bool) == true {
+                why = "the window reports AXFocused"
+            }
+        }
+        guard let why else { return }
         if !everBecameKey {
             everBecameKey = true
             lastKeyAt = Date()
-            Log.error("🗒️ THE SCRATCHPAD WINDOW HAS THE KEYBOARD — a keystroke now lands in Wispr's note, not in his work")
+            Log.error("🗒️ THE SCRATCHPAD WINDOW HAS THE KEYBOARD (\(why), frontmost is \(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?")) — a keystroke now lands in Wispr's note, not in his work")
         }
+    }
+
+    private static func finishCloseOnSight(_ openMs: Double?) {
+        closeASAP = false
+        closeRequested = false
+        armedAt = nil
+        let done = onWindowGone
+        onWindowGone = nil
+        onWindowSeen = nil
+        endWatch()
+        done?(openMs)
     }
 
     /// `GET /test/state` → `scratchpad`.
@@ -478,6 +566,7 @@ enum WisprScratchpad {
             "everBecameKey": everBecameKey,
             "lastKeyAt": lastKeyAt.map { Outbox.iso($0) } ?? NSNull(),
             "opens": reopenCount,
+            "lastOpenMs": lastOpenMs.map { Int($0.rounded()) } ?? NSNull(),
             "reopenedElsewhere": reopenedElsewhere,
             "screens": NSScreen.screens.count,
         ]

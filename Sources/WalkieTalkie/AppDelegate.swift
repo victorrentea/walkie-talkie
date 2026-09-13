@@ -2947,6 +2947,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the one Victor actually asked about — whether it has ever had the
             // keyboard while he was typing.
             "scratchpad": WisprScratchpad.describe(),
+            // Whose keyboard the relay is holding, and how many keys it has
+            // handed on — the answer to *did one of his keystrokes reach the
+            // note*, which is the one question this mode has to keep answering
+            // no to.
+            "keyRedirect": ["pid": Int(hotkeys.keyRedirect.pid), "keys": hotkeys.keyRedirect.keys],
             // Kept beside the object above because it is what every assertion
             // written before tonight asks for.
             "scratchpadWindowOpen": WisprScratchpad.windowIsOpen(),

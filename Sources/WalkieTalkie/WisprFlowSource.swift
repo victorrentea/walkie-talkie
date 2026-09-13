@@ -509,6 +509,35 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **Shut the window on sight, and hold the keyboard for him meanwhile.**
+    ///
+    /// Two halves of one answer to the loop's 2026-09-13 finding: a `z` typed
+    /// 1.5 s after the stop gesture landed in Wispr's note and was delivered
+    /// **inside the sentence**, with `NSWorkspace.frontmostApplication` reading
+    /// TextEdit the whole time. The Scratchpad becomes key without its app
+    /// becoming frontmost.
+    ///
+    /// So the window is closed the instant it is seen (50 ms poll, the press
+    /// posted immediately), which cuts its life to the few hundred milliseconds
+    /// the close itself takes; and for exactly that stretch every real keystroke
+    /// is taken by the tap and re-posted to the app he was looking at when he
+    /// stopped talking.
+    private func guardTheKeyboard() {
+        let victim = NSWorkspace.shared.frontmostApplication
+        let pid = victim?.processIdentifier ?? 0
+        WisprScratchpad.onWindowGone = { [weak self] openMs in
+            self?.hotkeys.disarmKeyRedirect()
+            if let openMs {
+                Log.info(String(format: "🗒️ the Scratchpad was up for %.0f ms and his keys went to %@ throughout",
+                                openMs, victim?.localizedName ?? "the front app"))
+            }
+        }
+        WisprScratchpad.onWindowSeen = { [weak self] in
+            self?.hotkeys.armKeyRedirect(to: pid)
+        }
+        WisprScratchpad.armCloseOnSight()
+    }
+
     /// **Close it again when the sentence is over, and check that it went.**
     ///
     /// Mandatory rather than tidy: the window Wispr opens at the end of this
@@ -806,6 +835,12 @@ final class WisprFlowSource: DictationSource {
         captureFrom = CFAbsoluteTimeGetCurrent()
         Log.info(String(format: "🎙️ the microphone is closed — %@ (%.0f ms of speech)",
                         why, (captureFrom - gestureAt) * 1000))
+        // **From here until Wispr's window is confirmed gone, his keys are
+        // his.** The app he is looking at is remembered *now*, at the stop
+        // gesture, because that is the last moment it is unambiguous — and the
+        // window that will steal the focus becomes key without ever becoming
+        // frontmost, so there is nothing to read afterwards that would say so.
+        if startedMode == .scratchpad, !cancelling { guardTheKeyboard() }
         didStopListening?()
         if cancelling {
             cancelling = false
@@ -1228,6 +1263,10 @@ final class WisprFlowSource: DictationSource {
     /// the row, which is 2.8 s slower and the behaviour of the first working
     /// build. Kept because the row and the note are two different records and
     /// the day they disagree this is how to look at the other one.
+    /// Long enough for Wispr to have written the note and for the window to have
+    /// been shut again — measured at 2.1 s and 0.1–0.4 s respectively.
+    private static let crossCheckDelay: TimeInterval = 3.5
+
     private static let deliverFromNote =
         ProcessInfo.processInfo.environment["WT_SCRATCHPAD_DELIVER"]?.lowercased() == "note"
 
@@ -1261,19 +1300,11 @@ final class WisprFlowSource: DictationSource {
                             e.status, took, e.e2eLatency))
             self.deliver(reason: "Wispr's History row (scratchpad)", via: "wispr-history",
                          delivery: .route, text: words)
-            // **Afterwards, and on its own time**: the window Wispr is about to
-            // open is the *next* dictation's precondition, and the note it is
-            // about to write is this one's second opinion.
-            WisprScratchpad.closeWhenItAppears { appeared, closed in
-                if closed {
-                    Log.info(appeared
-                        ? "🗒️ the Scratchpad window opened and has been closed — the next dictation can write a note"
-                        : "🗒️ no Scratchpad window appeared — nothing to close")
-                } else {
-                    Log.error("🗒️ THE SCRATCHPAD WINDOW WOULD NOT CLOSE — the next dictation would be transcribed and written nowhere. Falling back to the sink until it does.")
-                    self.scratchpadBroken = true
-                }
-                WisprScratchpad.endWatch()
+            // **The window is already being shut on sight** — armed at the
+            // release, because it is dangerous from the moment it appears and
+            // not from the moment the words are ready. All that is left here is
+            // the second opinion, once the note has had time to be written.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossCheckDelay) {
                 Self.crossCheckNote(delivered: words, priorId: priorId, priorText: priorText, since: since)
             }
         }
