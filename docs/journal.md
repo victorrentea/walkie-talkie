@@ -7820,9 +7820,21 @@ own row against the clip we played:
 | the fixture we play | 297.0 | 2839 | 11% |
 | what Wispr recorded | 37–109 | 1120–3155 | 0–1% |
 
-which is why row after row ended `raw_transcript` or `no_audio` with no text while every other part
-of the chain was working. Two hours went into "Wispr is not completing transcriptions", and Wispr was
-completing them correctly — of silence.
+**Confirmed once more with the network up.** A DNS outage ran through the same hour and had Wispr's
+remote recogniser returning nothing, so for a while the two explanations were entangled. The run
+after it cleared settles it — `e2eLatency 1055 ms`, so the recogniser answered — and the numbers are
+not attenuation of the same signal, they are a different signal:
+
+| | RMS | peak | voiced |
+|---|---|---|---|
+| the clip as actually played (normalised) | 1713.7 | 16383 | 54% |
+| what Wispr recorded, same run | **58.9** | **650** | **0%** |
+
+29× down on a digital pass-through is not possible. That is a quiet room through the built-in
+microphone. Six runs, six times `Built-in mic (recommended)`.
+
+Two hours went into "Wispr is not completing transcriptions", and Wispr was completing them
+correctly — of silence.
 
 **The fix is the one `docs/teacher-loopback.md` wrote down in the first place**: *Wispr → Settings →
 Microphone → the Loopback device*. The Auto-detect route was invented to avoid asking Victor for that

@@ -316,6 +316,16 @@ def checks(device_name: str | None = None, speaker: bool = False,
         rows.append(Row(None, "Wispr microphone is %s — playing out loud instead" % mic_name, key="mic"))
     elif wanted and _same_device(mic_name, wanted):
         rows.append(Row(True, "Wispr microphone: %s — the device this plays into" % mic_name, key="mic"))
+    elif mic == "auto":
+        # **A warning and not a refusal.** Auto-detect was measured resolving to
+        # the built-in microphone on 2026-09-13 — but those runs also fell inside
+        # a DNS outage that had Wispr's remote recogniser returning nothing, so
+        # the two explanations are entangled and neither is proven alone. The run
+        # goes ahead and settles it: every run reads Wispr's own `micDevice`
+        # column afterwards and fails on a mismatch. A preflight guesses; the
+        # column knows.
+        rows.append(Row(None, "Wispr microphone is Auto-detect, not %s — going ahead, and the run "
+                        "will report which microphone Wispr actually used" % wanted, key="mic"))
     else:
         rows.append(Row(False, "Wispr microphone is %s, not %s"
                         % ("Auto-detect" if mic == "auto" else repr(mic_name), wanted or "the Loopback device"),

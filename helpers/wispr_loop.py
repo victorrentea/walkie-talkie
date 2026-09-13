@@ -763,13 +763,18 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         # it is the only place the answer is written, and because the preflight's
         # reading of `config.json` turned out not to predict it.
         out["wisprMic"] = row.mic_device if row else ""
-        if row and row.mic_device and "zoom" not in row.mic_device.lower() \
-                and "wispr" not in row.mic_device.lower():
-            out["reason"] = ("Wispr recorded through %r, not the Loopback device — it never heard "
-                             "the clip. Pin its microphone in Wispr → Settings → Microphone."
-                             % row.mic_device)
-            out["ok"] = False
-        if outcome in DEAD_STATUSES:
+        wrong_mic = bool(out["wisprMic"]) and not any(
+            hint in out["wisprMic"].lower() for hint in ("zoom", "wispr", "loopback", "os output"))
+        if wrong_mic:
+            # **The root cause outranks the symptom.** `raw_transcript` and
+            # `no_audio` are what a recogniser says about silence; the reason
+            # there was silence is that Wispr was listening to a different
+            # microphone, and reporting the symptom sends the reader to the
+            # network, the ASR and the channel in that order — all three fine.
+            out["reason"] = (
+                "Wispr recorded through %r, not the Loopback device — it never heard the clip. "
+                "Pin its microphone: Wispr → Settings → Microphone." % out["wisprMic"])
+        elif outcome in DEAD_STATUSES:
             out["reason"] = "Wispr finished with status %r — there is no transcript" % outcome
         elif text.strip():
             out["ok"] = True

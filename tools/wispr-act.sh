@@ -90,12 +90,26 @@ wispr_act_stand_down() {
        -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true
 }
 
+# **And check that it took.** The device the run displaced can be gone by the
+# time the run ends — measured 2026-09-13: it was a Bluetooth headset, `Vic
+# Bose`, which disconnected mid-run; the restore was posted, went nowhere, and
+# left Victor's Mac recording from a Loopback device with nothing on screen to
+# say so. That is the single worst thing this script can leave behind, so it
+# verifies and falls back to the built-in microphone.
+WISPR_ACT_FALLBACK_INPUT="MacBook Pro Microphone"
+
 wispr_act_restore_input() {
   wispr_act_stand_down
   [ -n "$WISPR_ACT_RESTORE" ] || return 0
-  local name="$WISPR_ACT_RESTORE"; WISPR_ACT_RESTORE=""
+  local name="$WISPR_ACT_RESTORE" now; WISPR_ACT_RESTORE=""
   _wispr_act_post_input "$name" >/dev/null 2>&1
-  wispr_act_say "↩︎ system input restored to $name"
+  now=$(_wispr_act_post_input "" 2>/dev/null | sed -n 's/.*"input": *"\([^"]*\)".*/\1/p')
+  if [ -n "$now" ] && [ "$now" != "$name" ]; then
+    wispr_act_say "↩︎ '$name' is gone (now '$now') — falling back to $WISPR_ACT_FALLBACK_INPUT"
+    _wispr_act_post_input "$WISPR_ACT_FALLBACK_INPUT" >/dev/null 2>&1
+    now=$(_wispr_act_post_input "" 2>/dev/null | sed -n 's/.*"input": *"\([^"]*\)".*/\1/p')
+  fi
+  wispr_act_say "↩︎ system input is ${now:-$name}"
 }
 
 # Point the system's default input at the Loopback device and arrange for it to

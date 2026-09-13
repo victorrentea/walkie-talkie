@@ -175,7 +175,13 @@ Four things make it work, and each of them is load-bearing:
    hash in a file Wispr rewrites, so **only Victor can set this**, in Wispr →
    Settings → Microphone. The preflight refuses to run until he has.
    `POST /test/input` still points the system default at the device, because the
-   relay's own meter follows it — it just is not what Wispr obeys.
+   relay's own meter follows it — it just is not what Wispr obeys. Confirmed
+   again with the network up (`e2eLatency 1055 ms`, so the remote recogniser did
+   answer): the clip goes out at RMS 1713 / peak 16383 / 54% voiced and Wispr's
+   own blob comes back at RMS 59 / peak 650 / 0% voiced. A 29× drop is not
+   possible on a digital pass-through; that is a room, through the built-in mic.
+   The preflight **warns** rather than refusing, and the run settles it from the
+   `micDevice` column afterwards — a preflight guesses, the column knows.
 2. **A Loopback device whose output side feeds its input side.** `resolve_device`
    prefers `🎓 TO Wispr`, then `TO Wispr`, then the devices that already exist on
    this Mac. As of 2026-09-13 no `TO Wispr` device has been made, so it lands on
