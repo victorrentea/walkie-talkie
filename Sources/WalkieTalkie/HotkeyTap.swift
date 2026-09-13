@@ -269,25 +269,23 @@ final class HotkeyTap {
     /// dictation aimed at an agent goes to a minute or more. Five minutes is the
     /// backstop for a `stop()` that never arrived at all.
     private static let redirectDictationCeiling: TimeInterval = 300
-    /// **Off by default since 2026-09-14, and the default is the measurement.**
+    /// **On by default since 2026-09-14, and the default is the measurement.**
     ///
-    /// With the guard armed, `wrap-bound` and `wrap-spawn` put **every** probe
-    /// letter into Wispr's note, two of them ended up inside the delivered
-    /// sentence, and both runs timed out with no delivery at all — keystrokes
-    /// arriving in that note appear to stop Wispr finalising it. A guard that
-    /// costs the whole dictation to save a keystroke is a bad trade, and the
-    /// keystrokes were not being saved either.
+    /// The suite, run alone under its own lock: **all three `wrap-*` scenarios
+    /// 7/7 letters into the victim at every offset** — including the two typed
+    /// while the clip was playing — none in Wispr's note, none inside the
+    /// delivered sentence, `redirectedAX=5`, deliveries at 12–18 ms.
     ///
-    /// So nothing is swallowed and nothing is re-posted: his keys pass through
-    /// untouched, and the cost is written down rather than worked around — see
-    /// *The measured truth about his keystrokes* in `dictation-source.md`.
-    /// `WT_SCRATCHPAD_REDIRECT_KEYS=1` turns it back on.
+    /// Every earlier reading that said otherwise was taken while two harness
+    /// instances were typing into the same document at once, which is also what
+    /// produced the doubled letters and the two-pid traces.
+    /// `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
     /// A `var`, and settable at runtime (`POST /test/ax-insert {"redirect": …}`),
     /// for the same reason `axInsert` is: an installed app does not inherit a
     /// shell's environment, and a default that is supposed to be decided by
     /// measurement has to be measurable without a rebuild.
     static var redirectEnabled =
-        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] == "1" {
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0" {
         didSet {
             guard redirectEnabled != oldValue else { return }
             Log.info("⌨️ the keyboard guard is \(redirectEnabled ? "armed — his keys are taken while Wispr's window is up" : "off — his keys pass through untouched")")
@@ -331,7 +329,7 @@ final class HotkeyTap {
     /// moment — the second because an installed app does not inherit a shell's
     /// environment, and deciding a default by measurement needs the measurement
     /// to be takeable without a rebuild.
-    static var axInsert = ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] == "1" {
+    static var axInsert = ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] != "0" {
         didSet {
             guard axInsert != oldValue else { return }
             Log.info("⌨️ printable keys go in through \(axInsert ? "Accessibility, on its own queue" : "postToPid, best effort")")
@@ -2852,7 +2850,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                   let up   = CGEvent(keyboardEventSource: source, virtualKey: g.key, keyDown: false)
             else { return }
             down.flags = held
-            up.flags = held
+            // Bare, for the reason `KeySimulator.simulateKeyPress` gives at
+            // length: the last event's flags are what the session keeps.
+            up.flags = []
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
             // **And put the flags back down**, which Options+ does for itself
@@ -2869,7 +2869,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // an ordinary paste came back instead of a note. It is the stale-⌘
             // bug of `area-crop.md` for a third time: **release the modifier
             // with a `flagsChanged` carrying the state the keyboard is left in.**
-            if let clear = CGEvent(keyboardEventSource: source, virtualKey: g.key, keyDown: true) {
+            // **On the modifiers' own keys.** Announced on `g.key` — an
+            // F-key — this is not a modifier transition and the window server
+            // need not apply it; see the fifth occurrence.
+            for key: CGKeyCode in [Self.VK_COMMAND, Self.VK_CONTROL, 58] {
+                guard let clear = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+                else { continue }
                 clear.type = .flagsChanged
                 clear.flags = []
                 clear.post(tap: .cghidEventTap)

@@ -227,6 +227,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The paste is addressed, so the delivery stops waiting (2026-09-14)](#the-paste-is-addressed-so-the-delivery-stops-waiting-2026-09-14)
 - [Three ways to take the keyboard back, and what each one measured (2026-09-14, 01:00–01:15)](#three-ways-to-take-the-keyboard-back-and-what-each-one-measured-2026-09-14-010001-15)
 - [The night the wrap found its shape (2026-09-13/14)](#the-night-the-wrap-found-its-shape-2026-09-1314)
+- [The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)](#the-fifth-stale--and-the-guard-that-finally-works-2026-09-14-0248)
 
 ---
 
@@ -9328,3 +9329,61 @@ while it is up, release at the stop and ask the close once, deliver from the row
 with an addressed ⌘V, and read the note afterwards only to check the two agree. The sink is the
 emergency mode and may not take the key window while any of this is running. A dictation Victor
 starts himself is Wispr's, and the relay does nothing to it but draw the ring.
+
+## The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)
+
+Two things closed in one night's last hour, and one of them is a rule this repo
+has now paid for five times.
+
+**The keyboard guard ships on.** Run alone under the loop's own lock, all three
+`wrap-*` scenarios put **7/7 probe letters into the victim document at every
+offset** — including the two typed while the clip was still playing — with none
+in Wispr's note, none inside the delivered sentence, `redirectedAX = 5` and
+deliveries at 12–18 ms. Every earlier reading that contradicted this was taken
+while **two harness instances were typing into the same document at once**, which
+the runner proved by finding its own three-letter sweep arriving from another
+process's pid. That contamination is also the whole explanation of the doubled
+letters and the two-pid traces that cost most of the night. There is a lock file
+now, and no measurement of this is worth anything without it.
+
+**And the fifth stale ⌘ was in the fix for the fourth.** After a bound dictation
+the trace showed the relay's own ⌘C leaving the session at ⌘-down:
+
+```
+⌨️trace ↓ key 8 pid <ours> flags 0x20100000 — passed
+⌨️trace ↑ key 8 pid <ours> flags 0x20100000
+```
+
+`KeySimulator.simulateKeyPress` had been given a trailing `flagsChanged` earlier
+that evening, and it had **two** faults that a passing test did not see:
+
+1. **The key-up still carried the modifier.** `CGEventSource.flagsState` reports
+   whatever the *last* event's flags said, so a release stamped with ⌘ **is** the
+   session believing ⌘ is held. Whatever is posted afterwards is a second
+   mechanism papering over the first.
+2. **The clearing event was announced on the wrong key.** It was built with
+   `virtualKey: keyCode` — the **C** of ⌘C. A `flagsChanged` is a *modifier*
+   transition; one carrying a letter's keycode is not one, and the window server
+   need not apply it. The clear silently did nothing.
+
+Both are fixed: the release is bare and the clear is announced on the modifier's
+own key. `HotkeyTap.postGesture` had the same second fault and got the same
+treatment.
+
+The guard grew accordingly, because a test that passed this is a test that was
+not asking the right question. `evals/test_stale_modifier.py` now fails a poster
+whose **key-up carries a modifier** *and* whose `flagsChanged` is announced on
+something that is not a modifier key — the pair, because the five posters that
+were measured leaving the wire clean all carry a modifier on the key-up and are
+rescued by an honest clear. Its `--self-test` reads both historical versions of
+the same function out of git and asserts the scan rejects each:
+
+```
+✓ the scan rejects `simulateKeyPress` at fc74df6~1 — it stamped ⌘ on a key-up and posted nothing after
+✓ the scan rejects `simulateKeyPress` at 2cc4ff1 — it cleared the flags on the typed key, not on a modifier
+✓ and accepts it at HEAD
+```
+
+Two occurrences of one bug in one function, four builds apart, and the second was
+introduced by the fix for the first. That is the argument for the test existing
+rather than the paragraph.

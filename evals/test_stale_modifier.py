@@ -100,16 +100,89 @@ def functions(text: str):
         yield match.group(1), text[brace:i + 1]
 
 
+#: `let up = CGEvent(… keyDown: false)` — the release event, by the name it is
+#: bound to.
+RELEASE = re.compile(r"let[ \t]+(\w+)[ \t]*=[ \t]*CGEvent\([^)]*keyDown:[ \t]*false", re.DOTALL)
+#: What a `flagsChanged` event was created with, so the *virtual key* can be
+#: checked — a `flagsChanged` is a modifier transition and carries a modifier's
+#: keycode; one carrying the letter being typed is not applied at all.
+FLAGS_EVENT = re.compile(r"let[ \t]+(\w+)[ \t]*=[ \t]*CGEvent\([^)]*virtualKey:[ \t]*([A-Za-z0-9_.]+)")
+MODIFIER_KEYS = {"VK_COMMAND", "VK_CONTROL", "VK_FN", "VK_OPTION", "VK_SHIFT",
+                 "55", "54", "56", "57", "58", "59", "60", "61", "62", "63",
+                 "0x37", "0x36", "0x38", "0x3B", "0x3A", "0x3F"}
+
+
+def release_carries_modifier(body: str) -> str | None:
+    """**A key-up that carries a modifier is what leaves the session holding it.**
+
+    `CGEventSource.flagsState` reports whatever the last event's flags said, so a
+    release stamped with ⌘ is a keyboard the window server believes is still
+    holding ⌘ — regardless of anything posted afterwards. This is the check that
+    would have caught the fifth occurrence, where a trailing `flagsChanged` was
+    present and the release was still carrying the modifier.
+    """
+    for match in RELEASE.finditer(body):
+        name = match.group(1)
+        for value in re.findall(rf"\b{re.escape(name)}\?\.flags[ \t]*=[ \t]*([^\n]+)"
+                                rf"|\b{re.escape(name)}\.flags[ \t]*=[ \t]*([^\n]+)", body):
+            text = (value[0] or value[1]).strip().rstrip(";")
+            if text and text != "[]":
+                return f"its key-up carries `{text}`"
+    return None
+
+
+def clearing_event_is_a_modifier(body: str) -> str | None:
+    """**A `flagsChanged` must carry a modifier's keycode**, not the typed key's.
+
+    The fifth occurrence posted its clearing event with `virtualKey: keyCode` —
+    the **C** of ⌘C. A modifier transition announced on a letter key is not one,
+    the window server does not apply it, and the clear silently did nothing.
+    """
+    named = dict((m.group(1), m.group(2)) for m in FLAGS_EVENT.finditer(body))
+    for name, key in named.items():
+        if not re.search(rf"\b{re.escape(name)}\.type[ \t]*=[ \t]*\.flagsChanged", body):
+            continue
+        # **Exactly a modifier constant, or the `key` parameter of the local
+        # `modifier(_:leaving:)` helpers.** Deliberately not a prefix match:
+        # `keyCode` starts with `key` and is the *letter being typed*, which is
+        # how the fifth occurrence slipped past this check on its first draft.
+        if key in MODIFIER_KEYS or key == "key":
+            return None                      # at least one honest clear
+        # A function that announces its transitions through the local
+        # `modifier(_:leaving:)` helper is clean by construction — the helper
+        # takes the modifier's keycode as its argument. Checked here because a
+        # textual scan cannot tell two `let e = …` bindings in one function
+        # apart, and `emitScratchpad` has exactly that shadowing.
+        if re.search(r"\bmodifier\(", body):
+            return None
+        return f"its `flagsChanged` carries `{key}`, which is not a modifier key"
+    return None
+
+
 def scan(name: str, text: str):
     """`(posters, offenders)` for one file's source."""
     posters, offenders = [], []
     for func, body in functions(text):
         if not POSTS.search(body) or not stamps_a_modifier(body):
             continue
-        clean = bool(PUTS_BACK.search(body) or ADDRESSED.search(body))
-        posters.append((f"{name}.{func}", clean))
-        if not clean:
-            offenders.append(f"{name}.{func}")
+        why: str | None = None
+        if not (PUTS_BACK.search(body) or ADDRESSED.search(body)):
+            why = "it never puts the modifier back"
+        else:
+            # **A key-up carrying a modifier is only survivable when a real
+            # modifier transition follows it.** `flagsState` reports the last
+            # event's flags, so releasing with ⌘ stamped sets the session to
+            # ⌘-down; what rescues it is a `flagsChanged` on a *modifier's*
+            # keycode. One announced on the letter being typed is not a modifier
+            # transition at all, the window server does not apply it, and the
+            # clear silently does nothing — which is the fifth occurrence.
+            release = release_carries_modifier(body)
+            clearing = clearing_event_is_a_modifier(body)
+            if release and clearing:
+                why = f"{release}, and {clearing}"
+        posters.append((f"{name}.{func}", why is None))
+        if why:
+            offenders.append(f"{name}.{func} — {why}")
     return posters, offenders
 
 
@@ -153,21 +226,24 @@ def self_test() -> int:
     reads `SelectionCapture.swift` as it stood *before* `fc74df6` and asserts that
     the scan rejects it.
     """
-    before = subprocess.run(
-        ["git", "show", "fc74df6~1:Sources/WalkieTalkie/SelectionCapture.swift"],
-        cwd=SOURCES.parent.parent, capture_output=True, text=True)
-    if before.returncode != 0:
-        print(f"✗ cannot read the pre-fix source: {before.stderr.strip()}", file=sys.stderr)
-        return 2
-
-    _, offenders = scan("SelectionCapture", before.stdout)
-    if "SelectionCapture.simulateKeyPress" not in offenders:
-        print("✗ the scanner does NOT reject the bug it was written for — "
-              "`KeySimulator.simulateKeyPress` before fc74df6 stamped ⌘ on a keyUp "
-              "and posted nothing after, and this scan called it clean",
-              file=sys.stderr)
-        return 1
-    print("✓ the scan rejects `SelectionCapture.simulateKeyPress` as it stood before fc74df6")
+    # Two occurrences of the same bug in the same function, four builds apart:
+    # `fc74df6~1` posted nothing after the ⌘-stamped key-up at all, and `2cc4ff1`
+    # posted a `flagsChanged` announced on the **C** key, which is not a modifier
+    # transition and did nothing. The scan must reject both.
+    for commit, what in (("fc74df6~1", "stamped ⌘ on a key-up and posted nothing after"),
+                         ("2cc4ff1", "cleared the flags on the typed key, not on a modifier")):
+        before = subprocess.run(
+            ["git", "show", f"{commit}:Sources/WalkieTalkie/SelectionCapture.swift"],
+            cwd=SOURCES.parent.parent, capture_output=True, text=True)
+        if before.returncode != 0:
+            print(f"✗ cannot read {commit}: {before.stderr.strip()}", file=sys.stderr)
+            return 2
+        _, offenders = scan("SelectionCapture", before.stdout)
+        if not any(o.startswith("SelectionCapture.simulateKeyPress") for o in offenders):
+            print(f"✗ the scan does NOT reject {commit}, where `simulateKeyPress` {what}",
+                  file=sys.stderr)
+            return 1
+        print(f"✓ the scan rejects `simulateKeyPress` at {commit} — it {what}")
 
     _, still = scan("SelectionCapture",
                     (SOURCES / "SelectionCapture.swift").read_text())

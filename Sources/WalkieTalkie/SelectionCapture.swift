@@ -163,19 +163,32 @@ enum KeySimulator {
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
               let up   = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else { return }
         down.flags = flags
-        up.flags = flags
+        // **The release carries nothing** (2026-09-14, the fifth occurrence).
+        // `CGEventSource.flagsState` reports whatever the **last** event's flags
+        // said, so a key-up stamped with ⌘ *is* the session believing ⌘ is held.
+        // The trailing `flagsChanged` below was supposed to undo that and did
+        // not — it was announced on `keyCode`, the **C** of ⌘C, and a modifier
+        // transition on a letter key is not one. Both halves are fixed: the
+        // release is bare, and the clear is announced on the modifier's own key.
+        up.flags = []
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
-        // **And put the flags back down.** Deliberately only the trailing half:
-        // a leading `flagsChanged` would assert ⌘-down in the session for the
-        // microseconds between the two, which is the window this is closing.
         guard !flags.isEmpty else { return }
-        if let clear = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) {
+        for (mask, key) in Self.modifierKeys where flags.contains(mask) {
+            guard let clear = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+            else { continue }
             clear.type = .flagsChanged
             clear.flags = []
             clear.post(tap: .cghidEventTap)
         }
     }
+
+    /// The modifier a flag is announced on. A `flagsChanged` carries a
+    /// **modifier's** keycode; one carrying the letter being typed is ignored.
+    private static let modifierKeys: [(CGEventFlags, CGKeyCode)] = [
+        (.maskCommand, 55), (.maskControl, 59), (.maskAlternate, 58),
+        (.maskShift, 56), (.maskSecondaryFn, 63),
+    ]
 
     static func cmdC() { simulateKeyPress(keyCode: 0x08, flags: .maskCommand) }
 }
