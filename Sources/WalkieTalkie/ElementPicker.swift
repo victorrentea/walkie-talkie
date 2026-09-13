@@ -273,6 +273,38 @@ final class ElementPicker {
     /// Accessibility grant a `.build/debug` binary does not have.
     var onTestWisprHotkey: (() -> Void)?
 
+    /// `POST /test/wispr {"historyRoute": true}` — make Wispr's `History` row the
+    /// **delivery** rather than the late fallback behind `pasteGrace`. See
+    /// `WisprFlowSource.historyIsTheRoute`; the candidate wrap reads the row and
+    /// never waits for a ⌘V.
+    var onTestHistoryRoute: ((Bool) -> Void)?
+
+    /// `POST /test/wispr-state/simulate` `{"steps": [...]}` — run a scripted
+    /// sequence of inputs through a **fresh** `WisprState` and answer with the
+    /// transitions it made.
+    ///
+    /// This is the unit test, and it is a route because the package has no test
+    /// target and an `executableTarget` is not one an XCTest bundle can import
+    /// without `main.swift`'s top-level code fighting it. What it buys is the
+    /// thing a state machine most needs and this app could least do: assert that
+    /// a poll at 300 ms and a notification at 5 s produce **one** `listening`
+    /// transition with two lags, with no Wispr, no microphone and no waiting.
+    var onTestWisprStateSimulate: (([[String: Any]]) -> [String: Any])?
+
+    /// `POST /test/wispr-scratchpad` `{"down"|"up"|"tap": true}` — Wispr's
+    /// *Open Scratchpad* chord, and the one chord this app has to be able to
+    /// **hold**. See `HotkeyTap.postWisprScratchpad`.
+    var onTestScratchpad: ((ScratchpadCommand) -> [String: Any])?
+
+    enum ScratchpadCommand {
+        /// Press and keep it pressed — per Wispr's docs, push-to-talk into its
+        /// own Scratchpad note.
+        case down
+        case up
+        /// Press and release — opens or closes the Scratchpad window.
+        case tap
+    }
+
     /// `POST /test/cancel` — the ✕'s new meaning: kill the dictation in flight,
     /// whichever app is holding the microphone.
     /// **The real chord on the wire** — `POST /test/wispr-handsfree` posts
@@ -591,6 +623,10 @@ final class ElementPicker {
         // Wispr Flow's microphone, faked — see `onTestWispr`.
         case ("POST", "/test/wispr"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            if let route = body?["historyRoute"] as? Bool {
+                onTestHistoryRoute?(route)
+                return respond(conn, 200, ["ok": true, "historyRoute": route])
+            }
             if body?["hotkey"] as? Bool == true {
                 onTestWisprHotkey?()
                 return respond(conn, 200, ["ok": true, "hotkey": true])
@@ -702,6 +738,33 @@ final class ElementPicker {
                                            "gestures": onTestGestureNames])
             }
             respond(conn, 200, ["ok": true].merging(posted) { _, new in new })
+
+        // The state machine, run on a script — see `onTestWisprStateSimulate`.
+        case ("POST", "/test/wispr-state/simulate"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let steps = (body?["steps"] as? [[String: Any]]) ?? []
+            guard !steps.isEmpty else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "expected {\"steps\": [{\"input\": \"chord|stop|poll|notify|row|timeout\", …}]}"])
+            }
+            guard let result = onTestWisprStateSimulate?(steps) else {
+                return respond(conn, 500, ["ok": false, "error": "no simulator wired"])
+            }
+            respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // Wispr's Scratchpad chord, held — see `onTestScratchpad`.
+        case ("POST", "/test/wispr-scratchpad"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let command: ScratchpadCommand?
+            if body?["down"] as? Bool == true { command = .down }
+            else if body?["up"] as? Bool == true { command = .up }
+            else if body?["tap"] as? Bool == true { command = .tap }
+            else { command = nil }
+            guard let command, let answered = onTestScratchpad?(command) else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "expected {\"down\": true} | {\"up\": true} | {\"tap\": true}"])
+            }
+            respond(conn, 200, ["ok": true].merging(answered) { _, new in new })
 
         // Everything an assertion needs, in one read — see `describeState`.
         case ("GET", "/test/state"):

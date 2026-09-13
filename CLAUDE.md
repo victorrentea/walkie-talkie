@@ -136,14 +136,17 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/wispr` `{"on": true}` | pretend Wispr Flow opened (or closed) the microphone — the ⚡ ring, the chevrons and the ✕'s cancel, without dictating into another app |
 | `POST /test/wispr` `{"hotkey": true}` | pretend Wispr's *start gesture* was pressed — the whole dictation opens here, and the microphone edge only confirms it |
-| `POST /test/wispr-handsfree` | post the **real** chord (fn ⌃ Space) — a real Wispr dictation starts. Installed build only: `.build/debug` has no Accessibility grant and `CGEventPost` fails silently |
+| `POST /test/wispr-handsfree` | post the **real** chord (fn ⌃ Space) — a real Wispr dictation starts, and the relay's own state machine is driven with it (this app's posts are stamped out of its own tap since 2026-09-13, so the chord no longer comes back as Victor's). A second call is the toggle's stop. Installed build only: `.build/debug` has no Accessibility grant and `CGEventPost` fails silently |
+| `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
+| `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
+| `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
 | `POST /test/input` `{"name": "…"}` | point the **system's** default input at a device (substring match) and say what it was; with no name it only reports. For `tools/wispr-test.sh` |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
-| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `lastRingDown` · `lastDelivery`. ISO-8601 with ms |
+| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `historyRoute` · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery`. ISO-8601 with ms |
 | `POST /test/sink` `{"on": true}` · `GET /test/sink` · `POST /test/sink/clear` | **the relay's own window, as the key window** — `WisprSink`: 40×20, borderless, bottom-left corner, an instrumented `NSTextView` inside. The GET answers *did anything land in it, and by which route*: `paste` (⌘V), `ax:…` (an Accessibility write, with the setter's name), `typed`, `keyDown`, plus `key` and `previousApp` |
-| `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. Two calls because **nobody yet knows whether Wispr picks its target app at the chord or at insertion time** — the loop measures it |
+| `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. The two calls answered the question they were built for (2026-09-13, 3/3): **Wispr picks its insertion target at the END** — taking key 1–5 ms after the stop chord is enough, and the row's `app` column named the relay although TextEdit was in front the whole dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |
 | `POST /test/resume-session` `{"session": …, "directory": …}` | ⏎ on a closed session's row — `claude --resume` in a spawned window |
 | `GET /ping` · `POST /pick` | the Chrome extension's mailbox; 503 outside a dictation |
@@ -158,13 +161,17 @@ sits at rest there.
   the focused element so `restoreFocus()` can put both back. It is not bindable (it is not a terminal)
   and never appears in `docs/states/` (`snapshot` photographs `root`, it does not enumerate the app's
   windows).
-- **The sink is going to become the wrap itself** (Victor's design, 2026-09-13): only Wispr's
-  transcription engine, with Walkie giving Wispr its inputs and taking its outputs synthetically, and
-  Wispr never inserting into the real app at all. That wrap will apply **only to dictations this app
-  started** (its own chord, stamped `backButtonStamp`) and **only while *Wrap Wispr Flow* is ticked** —
-  a dictation Victor starts with his own shortcut stays Wispr's and is left alone. **It is not wired
-  into any real dictation yet**: nothing outside `POST /test/sink` opens it, and it must stay that way
-  until the loop has measured whether Wispr picks its target app at the chord or at insertion time.
+- **The sink is NOT the wrap and never will be** (Victor, 2026-09-13 evening). Measured 3/3: Wispr
+  picks its insertion target at the **end**, and a window that takes the keyboard 1–5 ms after the stop
+  chord receives the text — so it works, and he rejected it anyway, because stealing focus during every
+  dictation is not something to do to a man who may be clicking or typing at that instant. Revoking
+  Wispr's Accessibility grant was rejected for its own reason: Wispr has to go on working standalone.
+  The sink stays a **test instrument**, opened by `POST /test/sink` and nothing else. The candidate now
+  is Wispr's own **Scratchpad** (`POST /test/wispr-scratchpad`, held) with the words read out of the
+  `History` row (`historyRoute`).
+- **The sink cross-check only ever sees what leaks.** With the swallow armed at the **start** chord
+  (2026-09-13), a correct run leaves the sink empty; it disagreed with the row 5/5 that evening only
+  because Wispr's ⌘V arrived before the relay knew the microphone had shut and escaped into it.
 - **A dictation's `delivery` is written down now** (2026-09-13), in the outbox line and in
   `/test/state.lastDelivery`: `{"via": "wispr-cmdv" | "wispr-history" | "pasteboard" | "local-whisper" |
   "test", "kind": "route" | "alreadyInserted" | "insertedElsewhere", "to": "terminal:ttysNNN" | "caret" |
@@ -218,6 +225,17 @@ sits at rest there.
   shot and the music pause all fire on `didBegin`, which the hands-free chord raises directly; the
   CoreAudio edge **confirms** and never re-opens. `speculativeGrace` is **12 s** (worst measured
   × 2). Push-to-talk (two held modifiers) is the one ambiguous gesture and raises the beacon only.
+- **Three witnesses, since 2026-09-13** (`WisprState`, `DictationPhase` on the protocol): the chord,
+  a **100 ms poll** of Wispr's `IsRunningInput`, `WisprWatch`'s notification, and the `History` row at
+  150 ms. The notification alone is **0–6 s late and produced no edge at all in five successful
+  Loopback runs**, which is where both failures of that day came from. The relay's own stop closes
+  the listening phase; the edge only confirms. `beginCapture` is armed at the **start** chord, so a
+  missing edge costs nothing, and `speculativeGrace` may only retract a ring for a chord that left
+  **no row**.
+- **The ⚡ ring is *microphone open*, and the chip carries the wait** (2026-09-13): it goes down on
+  the relay's own stop gesture, the chip shows `Transcribing...` for the settle, `endSettling` logs
+  `✍️ the words landed`, and a 🔼 click during the settle is a **stop or nothing**, never a new
+  dictation.
 - **The recipient is latched when the microphone closes**, and it is the caret when nothing is
   bound. **Wispr's own `History` row says when it is done** (`WisprHistory`, read-only, 2026-09-12
   late): the settle ends on `formatted` / `dismissed` / `empty`, and `pastedText` is delivered as

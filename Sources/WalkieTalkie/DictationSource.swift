@@ -44,6 +44,18 @@ protocol DictationSource: AnyObject {
     /// Is a dictation open right now? True from `didBegin` to `didStopListening`.
     var isRecording: Bool { get }
 
+    /// **Where the recogniser is in its own round trip** — see `DictationPhase`.
+    ///
+    /// Added 2026-09-13, and the thing it buys is the difference between *the
+    /// words are late* and *the words are lost*. `isRecording` answers only the
+    /// middle of the five phases, so everything either side of the microphone —
+    /// the warm-up a cold Electron costs, the seconds Wispr spends formatting —
+    /// reached the relay as the same undivided "not recording", and a ring or a
+    /// settle written against that has no way to wait for one and give up on the
+    /// other. Nothing downstream may ask *which recogniser*; this is how it asks
+    /// *how far along*.
+    var phase: DictationPhase { get }
+
     /// Whether `start()` would work this instant. The local model answers *are
     /// the weights loaded*; Wispr answers *is it running*.
     var isReady: Bool { get }

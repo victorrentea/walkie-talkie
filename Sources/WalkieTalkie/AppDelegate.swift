@@ -25,15 +25,33 @@ final class StateBox {
 enum RingDown {
     private static let lock = NSLock()
     private static var value: (reason: String, at: Date)?
+    /// **And the words landing, which stopped being the same event on
+    /// 2026-09-13.** The ring now means *a microphone is open* and comes down at
+    /// the relay's own stop gesture; the settle ends later, when the transcript
+    /// arrives. One box could not hold both without one of them overwriting the
+    /// other, and *why did the ring go* and *why did the wait end* are two
+    /// different questions with two different fixes.
+    private static var settled: (reason: String, at: Date)?
 
     static func note(_ reason: String) {
         lock.lock(); defer { lock.unlock() }
         value = (reason, Date())
     }
 
+    static func noteSettled(_ reason: String) {
+        lock.lock(); defer { lock.unlock() }
+        settled = (reason, Date())
+    }
+
     static var last: [String: Any]? {
         lock.lock(); defer { lock.unlock() }
         guard let v = value else { return nil }
+        return ["reason": v.reason, "at": Outbox.iso(v.at)]
+    }
+
+    static var lastSettled: [String: Any]? {
+        lock.lock(); defer { lock.unlock() }
+        guard let v = settled else { return nil }
         return ["reason": v.reason, "at": Outbox.iso(v.at)]
     }
 }
@@ -130,6 +148,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// beacon standing for half a minute over nothing would stop meaning
     /// anything.
     private static let settleTimeout: TimeInterval = 8
+    /// **How far the settle may be extended by a recogniser that keeps saying it
+    /// is working** — the capture's own window, because past it nothing is
+    /// listening for the words either.
+    private static let settleCeiling: TimeInterval = 30
 
     /// **The gesture that opens a microphone has been seen and the microphone
     /// has not.** Only a source whose recorder lives in another process has a
@@ -715,6 +737,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHotkey = { [weak self] in
             DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
         }
+        picker.onTestHistoryRoute = { [weak self] on in
+            DispatchQueue.main.async { self?.wisprSource.historyIsTheRoute = on }
+        }
+        // **The state machine's unit test, over HTTP** — a fresh `WisprState`
+        // with a clock of its own, driven by the script and asked what it did.
+        // It touches nothing in the running app on purpose: a test that has to
+        // put the relay into a state in order to assert on the state machine is
+        // a test of the relay.
+        picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
+        // Wispr's Scratchpad chord, and the one this app has to hold — see
+        // `HotkeyTap.postWisprScratchpad`.
+        picker.onTestScratchpad = { command in
+            let chord = HotkeyTap.scratchpadChord().map(String.init).joined(separator: "+")
+            switch command {
+            case .down: HotkeyTap.postWisprScratchpad(down: true)
+            case .up: HotkeyTap.postWisprScratchpad(down: false)
+            case .tap: HotkeyTap.tapWisprScratchpad()
+            }
+            return ["chord": chord, "held": HotkeyTap.scratchpadIsHeld]
+        }
         // The real chord on the wire, for the end-to-end harness — see
         // `tools/wispr-test.sh`. Only useful from the installed build: a
         // `.build/debug` binary has no Accessibility grant, so `CGEventPost`
@@ -916,10 +958,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the two destinations, and a click that sometimes means the other one
         // is a click he cannot trust. `takeBindGrace` still serves the
         // left-held chord's own dictation.
+        // **And it asks about the settle, not only about `listening`** —
+        // 2026-09-13's second failure in one line. The first click stopped the
+        // microphone; the closing edge came three seconds late; a second click
+        // landed inside the settle, where this asked only `listening`, and
+        // started a **phantom dictation** whose `gestureSeen` disarmed the first
+        // sentence's swallow window. Wispr's ⌘V arrived a second later and landed
+        // in the Terminal that happened to be in front, and the chip spent twelve
+        // seconds on a dictation that did not exist.
+        //
+        // A click while the words are in flight is him ending a sentence he has
+        // already ended. It is a stop, or it is nothing; it is never a start.
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if self.listening { self.endDictation() }
+                if self.listening || self.source.isRecording { self.endDictation() }
+                else if self.settling || self.source.phase.isWaitingForWords {
+                    Log.info("🔼 forward click while the words are still in flight — nothing to start, nothing to stop")
+                }
                 else { self.startDictation(paste: true) }
             }
         }
@@ -1386,6 +1442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence never gets its three settling reads, and that is exactly when
         // he selects the thing he has just described.
         finalSelectionRead()
+        RingDown.note("the microphone closed — the words are in flight")
+        Log.info("⚡ ring down: the microphone closed — the words are in flight")
         latchedAtCaret = pasteMode || (!isBound && !spawnPending)
         // **The ring waits for the words** (2026-09-12), on every source: the
         // microphone closing is not the end of the dictation, the words landing
@@ -1395,6 +1453,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         beginSettling(atCaret: latchedAtCaret)
         syncBorrowedGestures()
         overlay.setListening(false)
+        // **The chip says the words are coming**, now that the ring no longer
+        // does. `Transcribing...` beside the cursor is the same claim the ring
+        // used to make by standing, minus the lie that a microphone is open.
+        overlay.setTranscribing(true)
     }
 
     /// Where this sentence is going, decided at the close and read when the words
@@ -1528,9 +1590,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settlingFrom = CFAbsoluteTimeGetCurrent()
         syncBorrowedGestures()
 
+        armSettleGiveUp()
+    }
+
+    /// **The backstop, and it steps aside for a recogniser that is still
+    /// answering** (2026-09-13).
+    ///
+    /// Eight seconds is Wispr's p99 and it is the right number for *nothing has
+    /// come back*. It is the wrong number for a row that says `processing`:
+    /// Wispr's own tail runs to 22.8 s, and giving up on a sentence that is
+    /// visibly arriving is how an 81-second dictation was lost once already. So
+    /// the give-up asks the source first and re-arms while the answer is *still
+    /// working*, bounded by the capture's own 30 s, which is the number that
+    /// means *this is not coming*.
+    private func armSettleGiveUp() {
         settleGiveUp?.cancel()
         let giveUp = DispatchWorkItem { [weak self] in
-            self?.endSettling(reason: "timed out waiting for the text")
+            guard let self, self.settling else { return }
+            let waited = CFAbsoluteTimeGetCurrent() - self.settlingFrom
+            if self.source.phase.isWaitingForWords, waited < Self.settleCeiling {
+                Log.info(String(format: "the settle waits: %@ is still %@ — %.0f s in",
+                                self.source.name,
+                                self.source.phase.status.isEmpty ? "working" : self.source.phase.status,
+                                waited))
+                return self.armSettleGiveUp()
+            }
+            self.endSettling(reason: "timed out waiting for the text")
         }
         settleGiveUp = giveUp
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleTimeout, execute: giveUp)
@@ -1545,9 +1630,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settlingAtCaret = false
         settleGiveUp?.cancel()
         settleGiveUp = nil
+        // The promise is kept (or given up on), so the row goes with it —
+        // `setTranscribing` is idempotent and this is the one place the wait
+        // ends, whichever way it ended.
+        overlay.setTranscribing(false)
         if !quiet {
-            RingDown.note(reason)
-            Log.info(String(format: "⚡ ring down: %@ — %.0f ms after the recording ended",
+            RingDown.noteSettled(reason)
+            // **No longer `⚡ ring down`** (2026-09-13): the ring came down at the
+            // microphone's close, and this line is the *words* landing. The two
+            // used to be the same instant and the day they stopped being one is
+            // the day the log started lying about which.
+            Log.info(String(format: "✍️ the words landed: %@ — %.0f ms after the microphone closed",
                             reason, (CFAbsoluteTimeGetCurrent() - settlingFrom) * 1000))
         }
         syncBorrowedGestures()
@@ -1632,7 +1725,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
         // used to reach the recorder twice.
-        guard !listening, !source.isRecording, !speculative else { return }
+        // **`settling` is in the guard since 2026-09-13**, and it is the same
+        // fact `onPasteToggle` above states in its own words: between the
+        // microphone closing and the words landing there is a sentence in flight,
+        // and a second one opened on top of it takes the first one's swallow
+        // window with it. Every caller here is a gesture that means *start*, and
+        // none of them means *start another one over the last*.
+        guard !listening, !source.isRecording, !speculative, !settling else { return }
         // Set before the gate below and before anything reads `hasDestination`:
         // it *is* the answer for a spawn.
         spawnPending = spawn
@@ -2279,11 +2378,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **A bound sentence's ring grows out of the pointer** (2026-09-12) —
         // the caret's comes up whole, because nothing marks the pointer first
         // there: no picture is taken and no bubble announces one.
+        // **The ring is *microphone open*, and nothing else** (Victor,
+        // 2026-09-13). It used to stand through the settle as well, on the
+        // 2026-09-12 argument that the dictation is not over until the words
+        // land. That argument is still true and it is the *chip's* to make: the
+        // settle now shows a `Transcribing...` row beside the cursor, which says
+        // the same thing without claiming a microphone that is shut.
+        //
+        // What it cost was the whole of the 09-13 diagnosis: a ring that stands
+        // for twelve seconds after a sentence has already been pasted into Word
+        // is indistinguishable from a ring that is still hearing him, and he had
+        // no way to tell which he was looking at. The ring goes down on the
+        // relay's own stop gesture — `WisprFlowSource.closeListening` — rather
+        // than on a CoreAudio edge measured at 0–6 s late and sometimes absent.
         let atCaret = pasteMode
             || (speculative && !listening)
             || (listening && !isBound && !spawnPending)
             || (settling && settlingAtCaret)
-        caretHalo.setActive(listening || speculative || settling,
+        caretHalo.setActive(listening || speculative,
                             atCaret: atCaret,
                             fromPointer: listening && !atCaret)
         // The status line goes yellow → red on the same edge, and reads the same
@@ -2774,6 +2886,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "wrapWispr": wisprSource.wrapWispr,
             "sinkOpen": WisprSink.shared.isOpen,
             "sinkKey": WisprSink.shared.isKey,
+            // The Scratchpad chord is the one thing this app can leave *held* on
+            // the wire, so the read that can say whether it is down matters more
+            // than the others here.
+            "scratchpadHeld": HotkeyTap.scratchpadIsHeld,
         ]
         if let target = terminal.target {
             var bound: [String: Any] = Self.describe(target)
@@ -2783,7 +2899,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             out["bound"] = NSNull()
         }
         out["historyRow"] = wisprSource.historyRow.map { NSNumber(value: $0) } ?? NSNull()
+        // **Where the recogniser is in its own round trip** — source-agnostic
+        // (`DictationPhase`), beside the Wispr-specific machine that produced it.
+        out["phase"] = source.phase.name
+        out["phaseStatus"] = source.phase.status
+        out["wispr"] = wisprSource.state.snapshot()
+        out["historyRoute"] = wisprSource.historyIsTheRoute
         out["lastRingDown"] = RingDown.last ?? NSNull()
+        out["lastSettled"] = RingDown.lastSettled ?? NSNull()
         deliveryLock.lock()
         out["lastDelivery"] = lastDeliveryRecord ?? NSNull()
         deliveryLock.unlock()

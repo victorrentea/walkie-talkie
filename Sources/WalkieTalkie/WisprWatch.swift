@@ -100,6 +100,15 @@ final class WisprWatch {
     /// each was registered with — `AudioObjectRemovePropertyListenerBlock` matches
     /// on the block, so it has to be the same one.
     private var watched: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
+    /// **A copy of `watched`'s keys for the 100 ms poll**, under its own lock.
+    ///
+    /// `watched` is the listener queue's and nothing else may touch it; the poll
+    /// runs on the main runloop and would otherwise have to hop, which is a hop
+    /// per tick to read three integers. What it costs instead is one array
+    /// rewritten whenever the audio process list changes — which is when an app
+    /// is launched or quit, not ten times a second.
+    private let sampleLock = NSLock()
+    private var sampleObjects: [AudioObjectID] = []
     private var listListener: AudioObjectPropertyListenerBlock?
     private var started = false
 
@@ -156,7 +165,31 @@ final class WisprWatch {
             let status = AudioObjectAddPropertyListenerBlock(object, &Self.runningAddress, queue, block)
             if status == noErr { watched[object] = block }
         }
+        sampleLock.lock()
+        sampleObjects = Array(watched.keys)
+        sampleLock.unlock()
         publish()
+    }
+
+    /// **The same OR, read on demand** — for `WisprState`'s 100 ms poll.
+    ///
+    /// The notification above is the push and this is the pull, and they exist
+    /// side by side because on 2026-09-13 the push was measured at **0–6 s late
+    /// and sometimes absent altogether**: it publishes only on a value that
+    /// differs from the last one it re-read, so a dictation shorter than its own
+    /// lag has no edges at all, and with Wispr pinned to a Loopback device whose
+    /// physical source keeps the stream warm there was no edge in five runs out
+    /// of five. Nothing here changes that behaviour — it simply stops being the
+    /// only witness.
+    ///
+    /// Cheap on purpose: three CoreAudio reads over a cached list of object ids,
+    /// not a re-enumeration of every audio client with a bundle-id read apiece.
+    /// Safe from any thread.
+    func sampleIsRunningInput() -> Bool {
+        sampleLock.lock()
+        let objects = sampleObjects
+        sampleLock.unlock()
+        return objects.contains { Self.isRunningInput($0) }
     }
 
     /// The OR over every watched process, reported on the main queue and only on

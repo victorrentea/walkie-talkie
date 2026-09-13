@@ -41,6 +41,15 @@ final class LocalWhisperSource: DictationSource {
     private(set) var isRecording = false
     var isReady: Bool { whisper.ready }
 
+    /// **The same five phases, with no status string in them.** The local model
+    /// has a warm-up (the weights) and a round trip (the decode) exactly as Wispr
+    /// does; what it has not got is a *vocabulary* for what it is doing in the
+    /// middle, which is why `DictationPhase`'s payload is a string and not an
+    /// enum of Wispr's statuses. `warming` is the load, which is the source's own
+    /// business and is why nothing here is ever `warming`: `start()` refuses on a
+    /// cold model rather than opening a dictation against one.
+    private(set) var phase: DictationPhase = .idle
+
     /// For the menu bar's ⏳ and the About row — asked, never pushed, because
     /// the one moment the answer has to be right is the moment the row is drawn.
     var modelName: String? { whisper.modelName }
@@ -70,6 +79,7 @@ final class LocalWhisperSource: DictationSource {
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
         if let why = meter.start(to: wav) { return why }
         isRecording = true
+        phase = .listening
         Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
         didBegin?()
         return nil
@@ -78,10 +88,12 @@ final class LocalWhisperSource: DictationSource {
     func stop() {
         guard isRecording else { return }
         isRecording = false
+        phase = .transcribing("")
         didStopListening?()
 
         guard let (wav, duration) = meter.stop() else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
+            phase = .done("empty")
             didEnd?(.silent(""))
             return
         }
@@ -103,6 +115,7 @@ final class LocalWhisperSource: DictationSource {
                     // 2026-09-08): what the recogniser did with the audio is the
                     // app's business, and the one thing he acts on is that
                     // nothing was heard.
+                    self.phase = .done("empty")
                     self.didEnd?(.silent("No words detected"))
                     return
                 }
@@ -115,6 +128,7 @@ final class LocalWhisperSource: DictationSource {
                     text: r.text, language: r.language, audio: wav, duration: duration,
                     engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
                     via: "local-whisper"))
+                self.phase = .done("formatted")
                 self.didEnd?(.delivered)
             }
         }
@@ -123,6 +137,7 @@ final class LocalWhisperSource: DictationSource {
     func cancel() {
         guard isRecording else { return }
         isRecording = false
+        phase = .done("dismissed")
         didStopListening?()
         let taken = meter.stop()
         didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))

@@ -35,9 +35,29 @@ enum WisprHistory {
         let rowid: Int64
         /// `""` while Wispr is still working on it.
         let status: String
+        /// **What Wispr actually inserted** — empty when it inserted nothing.
         let pastedText: String
+        /// **What Wispr made of the audio, whether or not it ever inserted it**
+        /// (2026-09-13). `pastedText` is a record of an *insertion*, so a Wispr
+        /// that cannot insert — one whose Accessibility grant has been taken
+        /// away, which is the shape the wrap is heading for — fills this column
+        /// and leaves that one empty. The words are the same words; the
+        /// difference between the two columns is whether they reached the screen.
+        let formattedText: String
+        /// Whichever of the two carries the sentence, insertion first: a row that
+        /// was pasted says so in `pastedText`, and `formattedText` is what a row
+        /// has when nothing was pasted.
+        var text: String { pastedText.isEmpty ? formattedText : pastedText }
         let e2eLatency: Double
         let app: String
+        /// **Which microphone Wispr recorded through** — the column that ended
+        /// two hours of "Wispr is not completing transcriptions" on 2026-09-13 by
+        /// answering `Built-in mic (recommended)` six times while the rig was
+        /// playing a WAV into a virtual device. Read here so the relay can say it
+        /// without a second SQLite client.
+        let micDevice: String
+        /// Wispr's own reading of the language, for the corpus.
+        let language: String
         /// Unix time of the gesture that opened it — the row is created then.
         let startedAt: TimeInterval
     }
@@ -53,8 +73,9 @@ enum WisprHistory {
         lock.lock(); defer { lock.unlock() }
         guard let db = open() else { return nil }
         let sql = """
-            select rowid, coalesce(status, ''), coalesce(pastedText, ''), coalesce(e2eLatency, 0),
-                   coalesce(app, ''), coalesce(strftime('%s', timestamp), '0')
+            select rowid, coalesce(status, ''), coalesce(pastedText, ''), coalesce(formattedText, ''),
+                   coalesce(e2eLatency, 0), coalesce(app, ''), coalesce(micDevice, ''),
+                   coalesce(language, ''), coalesce(strftime('%s', timestamp), '0')
             from History order by rowid desc limit 1
             """
         var stmt: OpaquePointer?
@@ -69,8 +90,9 @@ enum WisprHistory {
             sqlite3_column_text(stmt, i).map { String(cString: $0) } ?? ""
         }
         return Entry(rowid: sqlite3_column_int64(stmt, 0), status: text(1), pastedText: text(2),
-                     e2eLatency: sqlite3_column_double(stmt, 3), app: text(4),
-                     startedAt: Double(text(5)) ?? 0)
+                     formattedText: text(3), e2eLatency: sqlite3_column_double(stmt, 4),
+                     app: text(5), micDevice: text(6), language: text(7),
+                     startedAt: Double(text(8)) ?? 0)
     }
 
     private static func open() -> OpaquePointer? {

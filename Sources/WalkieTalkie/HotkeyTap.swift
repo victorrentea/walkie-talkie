@@ -1364,9 +1364,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 }
             }
         }
+        // **This app's own posts are stamped out of it** (2026-09-13), exactly as
+        // the ⌃Escape branch below has always been. It was harmless while the
+        // report was guarded by `!isRecording` on the far side; it stopped being
+        // harmless the day the chord became a **toggle** there — a hands-free
+        // chord seen while a dictation is open is now read as Victor ending it,
+        // and `postWisprHandsFree` would otherwise hand the source its own start
+        // back as a stop, a millisecond after it.
         if type == .keyDown,
            CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == Self.VK_SPACE,
            event.flags.contains(.maskSecondaryFn), event.flags.contains(.maskControl),
+           event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
             DispatchQueue.main.async { [weak self] in
                 self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free", true)
@@ -1824,6 +1832,214 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
             modifier(Self.VK_CONTROL, leaving: [])
         }
+    }
+
+    // MARK: - Wispr's Scratchpad, and the one chord this app has to *hold*
+
+    /// **`open_scratchpad`, held** — the candidate wrap that does not touch
+    /// Victor's focus and does not touch Wispr's permissions (2026-09-13).
+    ///
+    /// Two candidates were tried and both were rejected by Victor the same
+    /// evening. The **sink** works (measured 3/3: Wispr picks its insertion
+    /// target at the *end*, and a window that takes the keyboard 1–5 ms after the
+    /// stop chord gets the text) but it steals the focus during every dictation,
+    /// and he may be clicking or typing at that instant. **Revoking Wispr's
+    /// Accessibility grant** works on paper but breaks Wispr as a standalone
+    /// tool, which it has to go on being.
+    ///
+    /// The Scratchpad is the third door and it is Wispr's own. Per Wispr's docs
+    /// the *Open Scratchpad* shortcut carries three gestures: **tap** opens and
+    /// closes the window, **hold** is push-to-talk *into the Scratchpad*, and
+    /// **double-tap** is hands-free into it while it is visible. The hypothesis
+    /// this poster exists to test is the middle one: a held chord dictates into
+    /// Wispr's own note — filed in `flow.sqlite`'s `Notes` / `NoteVersions`, with
+    /// a `History` row whose `app` is `com.electron.wispr-flow` — **without
+    /// inserting anything into the front app and without moving the focus**. If
+    /// that holds, the wrap is *hold the chord for the length of the sentence and
+    /// read the row*, and nothing in Victor's day changes.
+    ///
+    /// ## Why it reads the chord rather than carrying it
+    ///
+    /// `prefs.user.shortcuts` in Wispr's own `config.json` maps keycodes joined
+    /// with `+` to an action name, and the *action* is the stable thing: Victor's
+    /// is `"35+54+61": "open_scratchpad"` (P + right ⌘ + right ⌥) and the day he
+    /// rebinds it, a hard-coded chord posts a keystroke into whatever now owns
+    /// it. Read at call time, with his current value as the fallback — the same
+    /// argument `postWisprHandsFree` makes for `49+59+63`, one file further on.
+    ///
+    /// ## Holding is not tapping twice
+    ///
+    /// Every other poster here is a press and a release in one breath. This one
+    /// leaves the keyboard **down** between two calls, which is a state no event
+    /// tap can clean up after: a crash, a missed `{"up": true}` or a script that
+    /// dies with the chord held leaves a modifier stuck for the session, and a
+    /// stuck right ⌘ is a Mac that has stopped working. So the hold carries its
+    /// own dead-man's switch — 120 s, far past any sentence — and every path
+    /// through `release` is idempotent.
+    static func postWisprScratchpad(down: Bool) {
+        scratchpadLock.lock()
+        let alreadyHeld = scratchpadHeld
+        scratchpadLock.unlock()
+        if down {
+            guard !alreadyHeld else { return Log.info("🗒️ scratchpad chord is already held — nothing posted") }
+            postScratchpad(down: true)
+        } else {
+            guard alreadyHeld else { return }
+            postScratchpad(down: false)
+        }
+    }
+
+    /// Press and release in one breath — the *tap*, which per Wispr's docs opens
+    /// and closes the Scratchpad window rather than dictating into it.
+    static func tapWisprScratchpad() {
+        postScratchpad(down: true)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.06) { postScratchpad(down: false) }
+    }
+
+    /// The chord as Wispr has it today, newest read wins.
+    /// `WISPR_SCRATCHPAD_KEYS=79` (or `35+54+61`) overrides both, and is the same
+    /// variable `helpers/wispr_loopback.py` reads — the rig posts this chord too
+    /// and the two must not disagree about what they are holding.
+    static func scratchpadChord() -> [CGKeyCode] {
+        if let raw = ProcessInfo.processInfo.environment["WISPR_SCRATCHPAD_KEYS"] {
+            let codes = raw.split(whereSeparator: { "+, ".contains($0) })
+                .compactMap { UInt16($0) }.map { CGKeyCode($0) }
+            if !codes.isEmpty { return codes }
+        }
+        return wisprShortcut(named: "open_scratchpad") ?? Self.scratchpadFallback
+    }
+
+    /// **A single `F18`, and the single key is the point.** It shipped as
+    /// `35+54+61` (P + right ⌘ + right ⌥) and moves to keycode **79** for a
+    /// reason that is not tidiness: this chord is *held for the length of a
+    /// sentence*, and a held ⌘⌥ hijacks every key Victor presses for that whole
+    /// minute. F18 is a key nothing on this desk sends by itself, so holding it
+    /// costs him nothing.
+    private static let scratchpadFallback: [CGKeyCode] = [79]
+    private static var scratchpadHeld = false
+    /// Its own lock, because the hold is a **static** — every other flag in this
+    /// file belongs to the one tap instance and shares its `stateLock`.
+    private static let scratchpadLock = NSLock()
+    private static var scratchpadDeadMan: DispatchWorkItem?
+    /// The chord that is actually down, so the release cannot post a *different*
+    /// one after Victor has rebound it mid-sentence.
+    private static var scratchpadDownCodes: [CGKeyCode] = []
+    /// Far past any sentence, and the only thing standing between a missed
+    /// release and a Mac with right ⌘ stuck down.
+    private static let scratchpadHoldCeiling: TimeInterval = 120
+
+    private static func postScratchpad(down: Bool) {
+        let codes = down ? scratchpadChord() : (scratchpadDownCodes.isEmpty ? scratchpadChord() : scratchpadDownCodes)
+        // Modifiers first on the way down, last on the way up — the order a hand
+        // makes the chord in, and the order Wispr's own reader expects.
+        let modifiers = codes.filter { modifierFlag(for: $0) != nil }
+        let keys = codes.filter { modifierFlag(for: $0) == nil }
+
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.userData = backButtonStamp
+
+        func flags(of held: [CGKeyCode]) -> CGEventFlags {
+            var raw: UInt64 = 0
+            for c in held { raw |= modifierFlag(for: c)?.rawValue ?? 0 }
+            return CGEventFlags(rawValue: raw)
+        }
+
+        func modifier(_ key: CGKeyCode, leaving state: CGEventFlags) {
+            guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true) else { return }
+            e.type = .flagsChanged
+            e.flags = state
+            e.post(tap: .cghidEventTap)
+        }
+
+        if down {
+            var held: [CGKeyCode] = []
+            for m in modifiers {
+                held.append(m)
+                modifier(m, leaving: flags(of: held))
+            }
+            let state = flags(of: held)
+            for k in keys {
+                guard let e = CGEvent(keyboardEventSource: source, virtualKey: k, keyDown: true) else { continue }
+                e.flags = state
+                e.post(tap: .cghidEventTap)
+            }
+            scratchpadLock.lock()
+            scratchpadHeld = true
+            scratchpadDownCodes = codes
+            scratchpadLock.unlock()
+            Log.info("🗒️ scratchpad chord DOWN — \(codes.map(String.init).joined(separator: "+")) held")
+            let deadMan = DispatchWorkItem {
+                Log.error("🗒️ scratchpad chord was held for \(Int(scratchpadHoldCeiling)) s — releasing it before it becomes a stuck modifier")
+                postScratchpad(down: false)
+            }
+            scratchpadDeadMan?.cancel()
+            scratchpadDeadMan = deadMan
+            DispatchQueue.global().asyncAfter(deadline: .now() + scratchpadHoldCeiling, execute: deadMan)
+        } else {
+            var held = modifiers
+            let state = flags(of: held)
+            for k in keys.reversed() {
+                guard let e = CGEvent(keyboardEventSource: source, virtualKey: k, keyDown: false) else { continue }
+                e.flags = state
+                e.post(tap: .cghidEventTap)
+            }
+            for m in modifiers.reversed() {
+                held.removeAll { $0 == m }
+                modifier(m, leaving: flags(of: held))
+            }
+            scratchpadDeadMan?.cancel()
+            scratchpadDeadMan = nil
+            scratchpadLock.lock()
+            scratchpadHeld = false
+            scratchpadDownCodes = []
+            scratchpadLock.unlock()
+            Log.info("🗒️ scratchpad chord UP — \(codes.map(String.init).joined(separator: "+")) released")
+        }
+    }
+
+    /// Whether the scratchpad chord is down right now — `GET /test/state`.
+    static var scratchpadIsHeld: Bool {
+        scratchpadLock.lock(); defer { scratchpadLock.unlock() }
+        return scratchpadHeld
+    }
+
+    /// **The flag a modifier keycode leaves on the wire**, device-dependent bit
+    /// included — the right ⌘ and the right ⌥ are specifically the *right* ones
+    /// in Wispr's own push-to-talk reader (`deviceRightCommand` /
+    /// `deviceRightOption` above), so a chord posted with only `.maskCommand`
+    /// would be a different chord as far as it is concerned. Nil for a key that
+    /// is not a modifier.
+    private static func modifierFlag(for code: CGKeyCode) -> CGEventFlags? {
+        switch code {
+        case 55: return CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x000008)   // ⌘ left
+        case 54: return CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | deviceRightCommand)
+        case 56: return CGEventFlags(rawValue: CGEventFlags.maskShift.rawValue | 0x000002)     // ⇧ left
+        case 60: return CGEventFlags(rawValue: CGEventFlags.maskShift.rawValue | 0x000004)     // ⇧ right
+        case 58: return CGEventFlags(rawValue: CGEventFlags.maskAlternate.rawValue | 0x000020) // ⌥ left
+        case 61: return CGEventFlags(rawValue: CGEventFlags.maskAlternate.rawValue | deviceRightOption)
+        case 59: return CGEventFlags(rawValue: CGEventFlags.maskControl.rawValue | 0x000001)   // ⌃ left
+        case 62: return CGEventFlags(rawValue: CGEventFlags.maskControl.rawValue | 0x002000)   // ⌃ right
+        case 63: return .maskSecondaryFn
+        default: return nil
+        }
+    }
+
+    /// **Read Wispr's own shortcut table** — `prefs.user.shortcuts`, keycodes
+    /// joined with `+` mapped to an action name. Read-only and at call time, for
+    /// `postWisprScratchpad`'s reason: the action is stable, the chord is not.
+    private static func wisprShortcut(named action: String) -> [CGKeyCode]? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Wispr Flow/config.json")
+        guard let data = try? Data(contentsOf: url),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let prefs = root["prefs"] as? [String: Any],
+              let user = prefs["user"] as? [String: Any],
+              let shortcuts = user["shortcuts"] as? [String: Any] else { return nil }
+        for (chord, value) in shortcuts where (value as? String) == action {
+            let codes = chord.split(separator: "+").compactMap { UInt16($0) }.map { CGKeyCode($0) }
+            if !codes.isEmpty { return codes }
+        }
+        return nil
     }
 
     /// **⌘⌃C — Wispr Flow's `copy_last_text`**, the fallback for a delivery this

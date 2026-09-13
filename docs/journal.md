@@ -8610,9 +8610,12 @@ The hypothesis to test is that a *held* chord dictates into Wispr's own note (fi
 
 `POST /test/wispr-scratchpad {"down": true}` presses the chord and **leaves it down**;
 `{"up": true}` releases in reverse order; `{"tap": true}` is the press-and-release. The chord
-is read from `prefs.user.shortcuts` at call time by *action name*, falling back to `35+54+61`,
-because the action is the stable thing and a hard-coded chord posts a keystroke into whatever
-owns it after a rebind.
+is read from `prefs.user.shortcuts` at call time by *action name*, because the action is the
+stable thing and a hard-coded chord posts a keystroke into whatever owns it after a rebind —
+and it is about to be rebound: the fallback is **`79`, a single F18**, since a chord held for
+the length of a sentence must not be one that hijacks every key he presses while he talks.
+`WISPR_SCRATCHPAD_KEYS` overrides, and is the same variable `helpers/wispr_loopback.py` reads,
+because the rig posts this chord too.
 
 Two things about the hold are worth writing down. It is the only poster in `HotkeyTap` that
 leaves the keyboard down between two calls, and a stuck right ⌘ is a Mac that has stopped
