@@ -158,6 +158,47 @@ class TimingArithmetic(unittest.TestCase):
         self.assertIn("not measured", wl.timing_table(t))
 
 
+# The shape since 2026-09-13: the ring goes at the microphone's close and the
+# settle ends on its own line, so the two are asserted separately.
+SPLIT_RUN = """\
+09-13 23:02:22 [relay] wispr flow closed the microphone
+09-13 23:02:23 [relay] ⚡ ring down: the microphone closed — the words are in flight
+09-13 23:02:23 [relay] wispr history: formatted 151 ms after the microphone closed (Wispr's own e2e 470 ms) — giving the ⌘V 1.0 s
+09-13 23:02:24 [relay] ✍️ the words landed: pasting at the caret — 792 ms after the microphone closed
+"""
+
+
+class TheSplit(unittest.TestCase):
+    """The ring and the settle stopped being the same event (2026-09-13).
+
+    Before, one line carried both, and a runner that waits for `⚡ ring down`
+    read it as *the sentence has been delivered*. It now fires at the
+    microphone's close, so the same wait returns **before Wispr has said
+    anything** — a green run measured against nothing.
+    """
+
+    def test_the_settle_has_its_own_number_now(self):
+        t = wl.read_timings(wl.parse_log(SPLIT_RUN, year=2026))
+        self.assertEqual(t.done_ms, 151)
+        self.assertEqual(t.landed_ms, 792)
+        self.assertEqual(t.landed_reason, "pasting at the caret")
+        self.assertEqual(t.done_to_landed_ms, 641)
+
+    def test_the_ring_reason_no_longer_carries_the_outcome(self):
+        t = wl.read_timings(wl.parse_log(SPLIT_RUN, year=2026))
+        self.assertIn("the words are in flight", t.ring_down_reason)
+        # The line carries no "ms after the recording ended" any more, so any
+        # number here is the wall-clock fallback and is flagged as such — it is
+        # reported, never asserted on.
+        self.assertTrue(t.ring_down_estimated)
+
+    def test_a_pre_split_log_still_parses(self):
+        """Old logs and the paths that still end at the close keep working."""
+        t = wl.read_timings(wl.parse_log(HISTORY_RUN, year=2026))
+        self.assertEqual(t.ring_down_ms, 1205)
+        self.assertIsNone(t.landed_ms)
+
+
 class Assertions(unittest.TestCase):
     def test_a_ring_that_is_late_goes_red_with_the_gap_on_it(self):
         result = wl.Result(scenario="caret-short")
@@ -165,10 +206,19 @@ class Assertions(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertTrue(any("ignored the chord" in c.measured for c in result.checks))
 
-    def test_a_ring_inside_the_budget_is_green(self):
+    def test_a_settle_inside_the_budget_is_green(self):
         result = wl.Result(scenario="caret-long")
-        wl._assert_ring(result, wl.read_timings(wl.parse_log(HISTORY_RUN, year=2026)))
+        wl._assert_ring(result, wl.read_timings(wl.parse_log(SPLIT_RUN, year=2026)))
         self.assertTrue(result.passed, [c.render() for c in result.checks])
+
+    def test_a_run_with_no_settle_line_is_red_and_says_which_half_is_missing(self):
+        """A ring that came down proves nothing now — the settle is the outcome."""
+        blob = ("09-13 23:02:22 [relay] wispr flow closed the microphone\n"
+                "09-13 23:02:23 [relay] ⚡ ring down: the microphone closed — the words are in flight\n")
+        result = wl.Result(scenario="caret-long")
+        wl._assert_ring(result, wl.read_timings(wl.parse_log(blob, year=2026)))
+        self.assertFalse(result.passed)
+        self.assertTrue(any("landed" in c.label and not c.ok for c in result.checks))
 
     def test_a_result_with_no_checks_has_not_passed(self):
         """An empty run must never read as green — that is how a crash looks."""

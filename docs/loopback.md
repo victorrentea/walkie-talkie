@@ -407,6 +407,17 @@ destination witness. And the pasteboard *was* written (4493 → 4496) with **no
 `probe:` line at all**: Wispr put the sentence on the clipboard and wrote it into
 its own window without ever posting a ⌘V.
 
+**The Scratchpad has to start closed** (measured 2026-09-13, four runs). From the
+**closed** state it works every time: the window opens in the background, a new
+`Notes` row is written with the sentence, the victim stays at 0 chars and focus
+never moves (mic edge at 1488 / 3560 / 2711 ms). With the window **already
+open**, Wispr still produced the sentence — `formatted`, e2e 386 ms — and **no
+note was written at all**, before or after a delay, and the following F18 tap
+that closed the window did not commit one either. The sentence is simply lost.
+So the hold is a *from-closed* gesture, and anything built on it has to close
+the Scratchpad after each use. A plain tap does close it (`['Status',
+'Scratchpad']` → `['Status']`) without moving focus.
+
 **A *modified* note counts as much as a new one.** The Scratchpad is one note
 that gets appended to, not a note per dictation, so a diff that only reports new
 ids would report nothing for ever — unit-tested, because it is invisible.
@@ -459,6 +470,28 @@ capture and returns **without posting anything**. Only `isRecording ||
 speculative` reaches `postWisprCancel`. The harness posts the chord itself with
 `CGEventPost` (`wispr_loopback.post_wispr_dismiss`), which needs Accessibility for
 the interpreter and is checked before the run rather than failing silently.
+
+### After the ring and the settle were split (2026-09-13)
+
+`⚡ ring down` now fires at the **microphone's close** — *the words are in
+flight* — and the settle ends on its own line, `✍️ the words landed: <why> — N
+ms after the microphone closed`. A runner that waits for the ring, as this one
+did, returns **before Wispr has said anything**: a green run measured against
+nothing. So `_await_settled` waits for the settle's line, `_assert_ring` checks
+the two separately (the ring came down at all and not on *ignored the chord*;
+the **words** landed within budget of Wispr finishing), and the timing table
+gained *mic close → words landed* and *Wispr done → words landed*.
+
+The sink cross-check **inverted** with it: the swallow is armed at the start
+chord, so on a correct run nothing reaches the window in front and the sink stays
+**empty** — `sinkClean`, where it used to be `sinkMatched`. A sink with something
+in it is now the failure it used to be the proof of.
+
+**Both incidents are green on this build.** `caret-short-cold` — the ring down at
+the close, words landed **9 ms** after Wispr finished, no 12 s grace burned.
+`spawn-click-in-settle` — sink events **0**, one outbox line with
+`delivery.to = spawn:…`, the spawned session got the words at similarity 1.00,
+words landed **9 ms** after Wispr finished.
 
 ### The pair that answers a question rather than guarding a behaviour
 

@@ -274,8 +274,14 @@ def wispr_settings_open() -> str:
             capture_output=True, text=True, timeout=10).stdout
     except Exception:
         return ""
-    # "Status" is the pill and is always there; anything else is a real window.
-    windows = [w.strip() for w in (out or "").split(",") if w.strip() and w.strip() != "Status"]
+    # `Status` is the pill and is always there. **`Scratchpad` is expected**
+    # (2026-09-13): the `scratchpad-hold` scenario opens it by design and two
+    # runs proved it does not hold the microphone the way the Settings page
+    # does — Wispr reacted to the held key in 1488 ms and 3560 ms with it open.
+    # The guard is about the window that *takes the microphone*, so it must not
+    # also refuse the one this harness is here to study.
+    ignore = {"Status", "Scratchpad"}
+    windows = [w.strip() for w in (out or "").split(",") if w.strip() and w.strip() not in ignore]
     return ", ".join(windows)
 
 
@@ -387,7 +393,8 @@ def checks(device_name: str | None = None, speaker: bool = False,
 
     settings = wispr_settings_open()
     if settings:
-        rows.append(Row(False, "a Wispr Flow window is open (%s)" % settings, fatal=True, key="wispr-ui",
+        rows.append(Row(False, "a Wispr Flow window is open that is neither the pill nor the "
+                        "Scratchpad (%s)" % settings, fatal=True, key="wispr-ui",
                         remedy="Close it. Wispr's Settings → Microphone page holds the microphone\n"
                                "open for its level meter, and a run made while it is up gets no\n"
                                "microphone *transition* for WisprWatch to see: the relay reports\n"

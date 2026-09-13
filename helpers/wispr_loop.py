@@ -132,6 +132,13 @@ _MIC_CLOSE = "wispr flow closed the microphone"
 _FORMATTED = re.compile(r"wispr history: formatted (\d+) ms after the microphone closed")
 _CMD_V = re.compile(r"⌘V from Wispr Flow — (\d+) ms after the microphone closed")
 _TRANSCRIPT = re.compile(r"🗣️ wispr transcript via (.+?) — (\d+) chars, (\d+) ms after the microphone closed")
+# **The ring and the settle parted company on 2026-09-13.** `⚡ ring down` now
+# fires at the *microphone's close* — "the words are in flight" — and the settle
+# ends later with its own line. So the old `⚡ ring down: … — N ms after the
+# recording ended` is the pre-split shape and is still read (old logs, and the
+# paths that end at the close), while `✍️ the words landed` is where the
+# interesting number lives now.
+_LANDED = re.compile(r"✍️ the words landed: (.*) — (\d+) ms after the microphone closed$")
 _RING_DOWN_MS = re.compile(r"⚡ ring down: (.*) — (\d+) ms after the recording ended$")
 _RING_DOWN = re.compile(r"⚡ ring down: (.*)$")
 _PROBE = re.compile(r"probe: synthetic key (\d+) flags (\S+) from pid (\d+) \((.*)\)")
@@ -162,6 +169,10 @@ class Timings:
     ring_down_ms: int | None = None
     ring_down_reason: str = ""
     ring_down_at: datetime | None = None
+    #: The settle's own end, since 2026-09-13: `✍️ the words landed: <why> — N ms
+    #: after the microphone closed`. This is the number that used to be the ring's.
+    landed_ms: int | None = None
+    landed_reason: str = ""
     probes: list[str] = field(default_factory=list)
     #: True when `ring_down_ms` had to come off the wall clock.
     ring_down_estimated: bool = False
@@ -171,6 +182,18 @@ class Timings:
         if self.done_ms is None or self.ring_down_ms is None:
             return None
         return self.ring_down_ms - self.done_ms
+
+    @property
+    def done_to_landed_ms(self) -> int | None:
+        """Wispr finished → the relay had put the words somewhere.
+
+        The number that matters since the split: the ring is already down by
+        then, so this is the relay's own tail and not time Victor spends looking
+        at lightning.
+        """
+        if self.done_ms is None or self.landed_ms is None:
+            return None
+        return self.landed_ms - self.done_ms
 
     @property
     def done_to_delivery_ms(self) -> int | None:
@@ -207,6 +230,10 @@ def read_timings(lines: list[LogLine]) -> Timings:
         m = _PROBE.search(text)
         if m:
             t.probes.append("key %s flags %s from %s" % (m.group(1), m.group(2), m.group(4)))
+        m = _LANDED.search(text)
+        if m:
+            t.landed_reason, t.landed_ms = m.group(1), int(m.group(2))
+            continue
         m = _RING_DOWN_MS.search(text)
         if m:
             t.ring_down_reason, t.ring_down_ms = m.group(1), int(m.group(2))
@@ -491,14 +518,16 @@ def timing_table(t: Timings) -> str:
     rows = [
         ("gesture → mic open", ms(t.gesture_to_mic_open_ms)),
         ("mic close → Wispr done", ms(t.done_ms, t.done_source)),
-        ("Wispr done → ring down", ms(t.done_to_ring_down_ms,
-                                      "(wall clock)" if t.ring_down_estimated else "")),
+        ("mic close → words landed", ms(t.landed_ms, t.landed_reason)),
+        ("Wispr done → words landed", ms(t.done_to_landed_ms)),
         ("Wispr done → delivery", ms(t.done_to_delivery_ms, t.delivery_via)),
     ]
     width = max(len(name) for name, _ in rows)
     out = ["  %-*s   %s" % (width, name, value) for name, value in rows]
     if t.ring_down_reason:
         out.append("  %-*s   %s" % (width, "ring down reason", t.ring_down_reason))
+    if t.landed_reason:
+        out.append("  %-*s   %s" % (width, "settle ended with", t.landed_reason))
     return "\n".join(out)
 
 
@@ -916,6 +945,11 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         sink_text, sink_events = ("", []) if no_sink else sink_arrival(relay.sink_read() or {})
         out["sinkText"] = sink_text
         out["sinkRoute"] = (sink_events[-1].get("route") if sink_events else "") or ""
+        # **Inverted 2026-09-13.** The swallow is armed at the *start* chord now,
+        # so on a correct run Wispr's ⌘V never reaches the window in front and
+        # the sink stays **empty** — the row is the text. A sink with something
+        # in it is the failure it used to be the proof of.
+        out["sinkClean"] = not sink_events
         out["sinkMatched"] = bool(text) and similarity(sink_text, text) >= SIMILARITY_FLOOR
         out["events"] = sink_events
 
@@ -1140,15 +1174,16 @@ def _await_microphone(ctx) -> bool:
 def _await_settled(relay: Relay, mark: LogMark, timeout: float) -> tuple[bool, float]:
     """Wait for the run to be over: the relay's ring is down and it is not listening.
 
-    `⚡ ring down` in the log is the authoritative end — it is written on every
-    path including the ones where nothing was delivered — and `/test/state` is
-    the belt to its braces for a build whose log wording has moved on.
+    **Not `⚡ ring down` any more** (2026-09-13): that fires at the microphone's
+    close now — *the words are in flight* — so waiting on it would return before
+    Wispr had said anything at all. The settle has its own line, `✍️ the words
+    landed`, and `/test/state.settling` is the belt to its braces.
     """
     def done():
-        if "⚡ ring down" in mark.fresh():
+        if "✍️ the words landed" in mark.fresh():
             return True
         state = relay.state()
-        return state and not state.get("listening") and not state.get("ringUp") and not state.get("settling")
+        return state and not state.get("listening") and not state.get("settling")
 
     got, waited = wait_for(done, timeout, poll=0.2, dry=relay.dry_run)
     if got and not relay.dry_run:
@@ -1159,17 +1194,32 @@ def _await_settled(relay: Relay, mark: LogMark, timeout: float) -> tuple[bool, f
 
 
 def _assert_ring(result: Result, t: Timings, budget_ms: int = RING_DOWN_BUDGET_MS):
-    gap = t.done_to_ring_down_ms
-    if gap is None:
-        result.check(False, "ring down within %d ms of Wispr finishing" % budget_ms,
-                     "no measurement — Wispr never reported finishing (reason: %s)"
-                     % (t.ring_down_reason or "none"))
-    else:
-        result.check(gap <= budget_ms, "ring down within %d ms of Wispr finishing" % budget_ms,
-                     "%d ms%s" % (gap, " (wall clock)" if t.ring_down_estimated else ""))
+    """The ring and the settle, asserted separately — because they are separate now.
+
+    Before 2026-09-13 one line carried both: the lightning stayed on screen until
+    the words arrived, so *when did the ring go down* and *when was the sentence
+    delivered* were the same question, and incident 1 was the ring burning 12 s
+    over a sentence nobody was waiting for. The app split them — the ring goes at
+    the **microphone's close** (`the words are in flight`) and the settle ends
+    with `✍️ the words landed`. So this asserts:
+
+    * the ring came down at all, and not on *Wispr ignored the chord*;
+    * the **settle** ended within the budget of Wispr finishing, which is the
+      relay's own tail and the only part still worth a stopwatch.
+    """
+    result.check(bool(t.ring_down_reason), "the ring came down",
+                 t.ring_down_reason or "(no ring down line at all)")
     result.check("ignored the chord" not in (t.ring_down_reason or ""),
                  "the ring did not come down on 'Wispr ignored the chord'",
                  t.ring_down_reason or "(no ring down line)")
+    gap = t.done_to_landed_ms
+    if gap is None:
+        result.check(False, "the words landed within %d ms of Wispr finishing" % budget_ms,
+                     "no measurement — settle end %r, Wispr done %s"
+                     % (t.landed_reason or "never", t.done_ms))
+    else:
+        result.check(gap <= budget_ms, "the words landed within %d ms of Wispr finishing" % budget_ms,
+                     "%d ms — %s" % (gap, t.landed_reason or "?"))
 
 
 def _assert_text(result: Result, label: str, got: str, want: str) -> float:
@@ -2100,7 +2150,7 @@ def _reliability_table(runs: list[dict], expected: str) -> str:
     anecdote.
     """
     head = ("  %-4s %9s %9s %-15s %9s %6s  %s"
-            % ("run", "mic open", "speech", "status", "e2e", "simil", "sink route"))
+            % ("run", "mic open", "speech", "status", "e2e", "simil", "sink"))
     rows = [head, "  " + "-" * (len(head) - 2)]
     good = 0
     for i, r in enumerate(runs, 1):
@@ -2115,7 +2165,8 @@ def _reliability_table(runs: list[dict], expected: str) -> str:
                        (r.get("status") or r.get("outcome") or "—")[:15],
                        "%.0f ms" % t["e2eLatencyMs"] if t.get("e2eLatencyMs") else "—",
                        "%.2f" % score if expected else "—",
-                       (r.get("sinkRoute") or "—") + ("" if r.get("sinkMatched") else " (no match)")))
+                       "clean" if r.get("sinkClean") else
+                       "LEAKED via %s" % (r.get("sinkRoute") or "?")))
     rows.append("")
     rows.append("  %d/%d runs at similarity >= %.2f%s"
                 % (good, len(runs), SIMILARITY_FLOOR,
@@ -2181,9 +2232,10 @@ def _transcribe_cli(args, port: int) -> int:
                                                      "none — no synthetic key was posted at all"),
                   file=sys.stderr)
         else:
-            print("  sink cross-check         %s via %s%s" % (
-                "matched" if out.get("sinkMatched") else "did NOT match",
-                out.get("sinkRoute") or "nothing",
+            print("  sink cross-check         %s%s" % (
+                "clean — the swallow held, nothing reached the window in front"
+                if out.get("sinkClean") else
+                "LEAKED via %s" % (out.get("sinkRoute") or "?"),
                 (" — %r" % out["sinkText"][:50]) if out.get("sinkText") else ""), file=sys.stderr)
         print("  gesture → mic open       %s%s" % (
             _ms(t.get("gestureToMicOpenMs")),
