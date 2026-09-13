@@ -416,6 +416,54 @@ class HeldKey:
         return False
 
 
+#: `z`, the harmless keystroke the wrap scenarios type mid-settle.
+#:
+#: **Not `x`**, and the reason is the whole value of the probe: the fixture says
+#: *"Commit and push the fix."* — which already contains an `x`. Counting `x`
+#: cannot tell "my keystroke reached the document" from "the delivered sentence
+#: brought its own", so the answer it gives is the same whichever happened, and
+#: a probe that cannot distinguish the two outcomes is not a probe. `z` appears
+#: in neither the sentence nor the note, so a `z` anywhere is this rig's and
+#: nobody else's.
+KEY_Z = 6
+PROBE_KEY = KEY_Z
+PROBE_CHAR = "z"
+
+
+def _post_bare(keycode: int, down: bool):
+    """Post a key with **no modifiers**, whatever the hardware thinks is held.
+
+    `CGEventCreateKeyboardEvent` inherits the current HID flag state, and the
+    moment this fires is the moment Wispr is holding ⌘ for its own paste.
+    Measured 2026-09-13: a probe meant to type `x` went out as
+    `key 7 flags 0x20100000` — ⌘X — and TextEdit dutifully *cut* instead of
+    typing, so the character never appeared and the run read as "the Scratchpad
+    stole the keyboard". It had not. `CGEventSetFlags(event, 0)` is the whole
+    fix, and without it this probe answers a question nobody asked.
+    """
+    import Quartz
+
+    event = Quartz.CGEventCreateKeyboardEvent(None, keycode, down)
+    Quartz.CGEventSetFlags(event, 0)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+
+def tap_key(keycode: int = PROBE_KEY):
+    """One key, down and up. **The question Victor cares about most.**
+
+    A wrap that writes into Wispr's Scratchpad has to open that window, and a
+    window that takes the keyboard while he is mid-sentence is worse than no
+    wrap at all — he would be typing into a scratchpad he cannot see and did not
+    ask for. Timings can be tuned later; a stolen keyboard cannot be lived with.
+    So the scenarios type one character into the room and then ask where it
+    went, which is the only way to answer that from outside.
+    """
+    _post_bare(keycode, True)
+    time.sleep(0.02)
+    _post_bare(keycode, False)
+    return True
+
+
 def accessibility_ok() -> bool:
     """Can this interpreter synthesise keystrokes at all?
 

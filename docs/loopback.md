@@ -391,6 +391,35 @@ swallows Wispr's insertion and then adds its own on top. Only `_count_occurrence
 tells them apart, and a doubled sentence is the bug a reader would least expect a
 green test to have missed.
 
+**The keystroke probe is the finding.** 1.5 s into the settle the run types one
+character and asks where it went. Measured 2026-09-13 on build `73f0348`:
+
+| | `wrap-caret` | `wrap-bound` |
+|---|---|---|
+| frontmost, whole run | `TextEdit` | `TextEdit` |
+| the `z` in the victim | yes | **no** (victim empty) |
+| the `z` in the note | **yes** | **yes** |
+| the `z` in the delivered text | **yes** (25 chars) | **yes** (in the tty) |
+
+**The Scratchpad takes key focus without becoming frontmost.** A character Victor
+types while the sentence is settling goes into the Scratchpad, is picked up as
+part of the newly added portion, and is delivered to his agent inside the
+sentence. In `wrap-caret` it looks like the probe "arrived" — it did, but by the
+paste, not from his keyboard; `wrap-bound` removes the ambiguity, because there
+the victim stays empty and the `z` turns up in the bound tty.
+
+**Use `z`, not `x`.** The fixture is *"Commit and push the fix."* — which already
+contains an `x`, so counting `x` cannot tell "my keystroke reached the document"
+from "the delivered sentence brought its own". The first run of this probe was
+unreadable for exactly that reason. `z` is in neither the sentence nor the note.
+
+**And post it with the flags cleared.** `CGEventCreateKeyboardEvent` inherits the
+current HID modifier state, and the instant the probe fires is the instant Wispr
+is holding ⌘ for its own paste: the first attempt went out as
+`key 7 flags 0x20100000` — **⌘X** — and TextEdit *cut* instead of typing, which
+read as "the Scratchpad stole the keyboard" when it had not yet been asked.
+`CGEventSetFlags(event, 0)` is the whole fix.
+
 **Focus is sampled, not compared.** *Never moves* is a claim about the whole
 dictation, and a window that flashes to the front and back mid-sentence — on a
 projector, in front of a room — is invisible to a before/after pair. `FocusWatch`
