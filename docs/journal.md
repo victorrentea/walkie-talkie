@@ -37,6 +37,13 @@ The journal contradicts itself over time, because it was written as things chang
 - *The folder menu* — hardcoded six, below-left — pinned + recent since 2026-09-08; below-right since 2026-09-06
 - *The spawn's flight leaves the dialog* — `reversed:`, outline — the spawn flight carries pixels and runs forwards since 2026-09-09 (*The little terminal grows out of the dialog*)
 - *Autosend* / *Replace Wispr* — “deliberately not persisted” — both persist since 2026-09-07
+- **The night of 2026-09-13/14 supersedes a great deal of the same night.** The wrap changed shape four times in eight hours and the earlier sections are kept because the reasoning is the evidence; *The night the wrap found its shape* is the one that holds. Specifically:
+  - *The loopback closes: gestures, state, a sink and a delivery field* — “the sink is going to become the wrap itself” — **the sink is the emergency mode**, rejected as the primary path the same evening
+  - *The wrap is Wispr's own Scratchpad* — “a new note per dictation”, “no ⌘V posted”, “focus never moved” — all three are wrong: Wispr **appends** with `source = typed`, it **does** post a ⌘V (aimed at its own note), and the window **takes the key focus**
+  - *Parking the Scratchpad…* — “Wispr frontmost **and** the window its main one is the honest test” — it becomes key **without** becoming frontmost; the test is the system-wide focused element's owner
+  - *The wrap is Wispr's own Scratchpad*, *Five runs…* — “the window opens when the note is written, ~2 s after the words” — it opens at the **start of the hold** and lives for the whole sentence
+  - *The row is the delivery; the note is the second opinion* — “the delivery waits for the window to be gone” — the paste is **addressed** (`postToPid`) since 2026-09-14 and waits for nothing
+  - *Five runs…* — “the swallow must be off in Scratchpad mode” — it is **on in every mode**; letting it through put every sentence in his document twice
 - *The folder menu*, *Autosend* — “the app is `.accessory`” — `.regular` with a Dock tile since 2026-09-07 (*The Dock tile is the escape hatch*)
 - *Scope: dictation helper only* — “`canBecomeKey` is false” — the panel becomes key only while the transcript is edited (*⏎ sends it, and clicking the words edits them*)
 
@@ -219,6 +226,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The wrap, measured on the installed build (2026-09-14, 00:18)](#the-wrap-measured-on-the-installed-build-2026-09-14-0018)
 - [The paste is addressed, so the delivery stops waiting (2026-09-14)](#the-paste-is-addressed-so-the-delivery-stops-waiting-2026-09-14)
 - [Three ways to take the keyboard back, and what each one measured (2026-09-14, 01:00–01:15)](#three-ways-to-take-the-keyboard-back-and-what-each-one-measured-2026-09-14-010001-15)
+- [The night the wrap found its shape (2026-09-13/14)](#the-night-the-wrap-found-its-shape-2026-09-1314)
 
 ---
 
@@ -9190,3 +9198,133 @@ victim document* is not automatically that. The measurement that settles it is o
 The redirect is kept, because on the evidence it works wherever the app it is aimed at has a key
 window to receive them, and it cannot manufacture one: A says Wispr's window cannot be taken away
 mid-dictation, C says the focus cannot be taken back from it.
+
+## The night the wrap found its shape (2026-09-13/14)
+
+Eight hours, four shapes, and the one that holds. This section is the consolidated account; the
+sections above it are kept because the reasoning is the evidence, and every claim of theirs that
+did not survive is named in *Superseded on the way* at the top.
+
+### What it started as, and why that could not work
+
+The wrap was *swallow the ⌘V Wispr posts and insert the words ourselves*. Two of Victor's
+dictations failed on 09-13 and both failed the same way: the whole apparatus — the swallow, the
+`History` poll, the settle — was armed from `WisprWatch`'s CoreAudio **closing edge**, and that
+edge is **0–6 s late and sometimes absent altogether**. It publishes only when the value it
+re-reads differs, so a dictation shorter than its own lag has neither edge; with Wispr pinned to
+the Loopback device `🎓 TO Wispr`, whose physical source keeps the stream warm, it produced **no
+edge at all in five successful runs**. A 2.5 s sentence went into Word with the relay blind to it,
+and twelve seconds later `speculativeGrace` announced *Wispr ignored the chord* about a sentence
+that had been delivered.
+
+### Three witnesses, measured
+
+`WisprState` joins four inputs, none authoritative alone. On one real dictation:
+
+| witness | proves | spoke at |
+|---|---|---|
+| the chord this app posts | a dictation was **asked for** | it is the clock |
+| Wispr's `History` row appearing | Wispr **took the chord** | **357 ms** |
+| a 100 ms poll of `kAudioProcessPropertyIsRunningInput` | a microphone **is** open | **607 ms** |
+| `WisprWatch`'s notification | the same fact, pushed | **5590 ms** |
+
+`wispr state: warming → listening — Wispr created a row, poll saw it never after the chord,
+notification never` is the line at 357 ms, and it is the thesis: at the moment the dictation was
+confirmed, **neither microphone signal had spoken**. The notification was 9.2× slower than the
+poll and 15.7× slower than the row.
+
+Two rules came out of it and both are load-bearing. **Arm at the start chord**, so a missing edge
+costs one flag instead of a sentence. And **a witness that never saw the microphone open may not
+report it closing** — a close belonging to the previous sentence arrived six seconds later, 600 ms
+into the next one, and ended it before a word was spoken.
+
+### The ring stopped meaning two things
+
+Victor's reading: the ⚡ ring is *a microphone is open*, and the tooltip is where the words go. So
+the ring comes down at the relay's **own stop gesture**, the chip carries `Transcribing...` for the
+settle, and `endSettling` logs `✍️ the words landed` rather than `⚡ ring down`. `RingDown` grew a
+sibling, because *why did the ring go* and *why did the wait end* are two questions with two
+different fixes. And a 🔼 click while the words are in flight became a stop or nothing — never the
+phantom second dictation that threw away the first sentence's swallow window.
+
+### Four candidates for the wrap, three of which work
+
+| candidate | works | verdict |
+|---|---|---|
+| swallow the ⌘V | mostly | depends on a keystroke another process may or may not post, inside a window this app may or may not have armed |
+| **the sink** (take the key window at the stop) | **3/3** | Victor: it takes the focus off a man who may be clicking or typing. **Emergency mode.** |
+| **revoke Wispr's Accessibility grant** | yes | breaks **Wispr** as a standalone tool |
+| **hold *Open Scratchpad*** | **yes** | **shipped** |
+
+The sink's measurement settled a question that had been open all day: **Wispr picks the app it
+will insert into at the end, not at the chord** — taking the keyboard 1–5 ms after the stop chord
+was enough, 3/3, and the row's `app` column named the relay although TextEdit had been in front
+throughout. And one thing that is not a candidate at all: the window between the row saying
+`formatted` and the ⌘V is **57 ms**, and a ⌃Escape posted after `formatted` does not stop the
+paste. There is no *cancel the insertion*; there is only *do not ask for one*.
+
+### The Scratchpad, and the five runs it took to get right
+
+Wispr's *Open Scratchpad* shortcut **held** dictates into its own note. The first measurement —
+F18 held 20 s, text in `Notes`, victim untouched, focus unmoved, no ⌘V, 432 ms — was taken with no
+event tap armed, and three of its four claims turned out to be wrong. Each cost a run.
+
+1. **23:20 — the chord went out as `⌃⌥⌘F18`.** Posted a millisecond after `/test/gesture`'s own
+   `⌃⌥⌘F7`, with those modifiers still on the wire. `mouse-gestures.md` says it already: *any key
+   this app posts near a gesture has the same trap waiting*.
+2. **23:24 — the wire never went bare**, because `postGesture` posted the chord down and up and
+   **nothing else**, leaving three modifiers held as far as `CGEventSource` was concerned. It is
+   the stale-⌘ bug of `area-crop.md` for the third time in this repo.
+3. **23:26 — the swallow was stealing Wispr's own paste.** Reading the database rather than the log
+   showed that every run so far had written a note; Wispr *does* post a ⌘V and it is aimed at its
+   own window.
+4. **23:28 — the words went into the note instead of the caret.** The window **takes the keyboard
+   when it opens**, so a paste fired the moment the note appeared went into the note. And Wispr
+   does not reliably start a new note: it **appends**, with `source = typed`, whose content is the
+   whole accumulated notepad — 70 characters delivered for a four-word sentence.
+5. **23:31 — green**, end to end, `via: wispr-notes`, the sentence once in TextEdit, the window
+   closed, the frontmost app TextEdit throughout.
+
+Then the model itself was corrected: **the window appears at the start of the hold and lives for
+the whole sentence**, not at the end. So the watcher is armed at the chord, the window is parked on
+sight, and the close is asked at the release — **exactly once**, because the close is a toggle and
+the second ask re-opens what the first shut.
+
+### The row is the delivery
+
+The note is where Wispr *pastes*; the row is where Wispr writes *what it heard*. Waiting for the
+note made the mode 2.8 s slower for a copy of the same sentence — the row is `formatted` at
+~400–530 ms, the note not readable until 2627 ms, plus 417–663 ms to close the window. So the row
+delivers at `formatted`, and the note became a cross-check that normalises case and punctuation
+away and compares only the **new portion**.
+
+The last gate went on 09-14: the paste is **addressed**. `DictationResult.focusPid` carries the pid
+of the app he was looking at at the chord, and `postToPid` puts the ⌘V into that application's own
+queue, bypassing the session and therefore whoever holds the key focus. **Words land at
+~410–490 ms.**
+
+### The keyboard, and the limit of what can be done about it
+
+The finding Victor was afraid of, measured: **the Scratchpad becomes key without its application
+becoming frontmost.** A `z` typed 1.5 s after the stop went into the note and reached the bound
+agent *inside the sentence*, with `frontmostApplication` reading TextEdit the whole time. Three
+consequences. The test for key focus must be the **system-wide focused element's owner**, never
+frontmost. The window is **closed on sight** (its life is now the close's own 417–445 ms). And
+every real keystroke is re-posted to the app he was looking at, decided per key, with ⌘ and ⌃ always
+passing so ⌘Tab and ⌘Space stay the system's.
+
+And the limit, which three experiments established rather than guessed: **the redirect cannot
+manufacture a key window.** An application that is frontmost with no key window has no first
+responder, and a character posted to it is dropped — ⌘V survives the same trip only because
+`performKeyEquivalent` needs none. Minimizing Wispr's window kills the dictation outright; setting
+`AXMain`/`AXFocused` on the victim's window logs *the focus owner is still Wispr*; re-activating the
+application does nothing, because it was already frontmost. So the redirect lands 7/7 where the
+victim keeps its key window and 0/7 where another window holds it.
+
+### The shape that holds
+
+Hold the chord from a closed Scratchpad, park the window the moment it appears, guard his keyboard
+while it is up, release at the stop and ask the close once, deliver from the row at `formatted`
+with an addressed ⌘V, and read the note afterwards only to check the two agree. The sink is the
+emergency mode and may not take the key window while any of this is running. A dictation Victor
+starts himself is Wispr's, and the relay does nothing to it but draw the ring.

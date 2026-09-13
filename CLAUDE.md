@@ -147,6 +147,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
+| `GET`/`POST /test/wispr-notes` `{"since": …}` | Wispr's **Scratchpad note**, read-only (`WisprNotes`: `Notes` + `NoteVersions`) — the baseline before the chord, the cross-check after it |
 | `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `wrapMode` / `wrapWhy` · `relayStarted` / `startedMode` / `intercepting` · `scratchpadWindowOpen` · `scratchpad` (`{windowOpen, frame, parkedFrame, minimumSize, everBecameKey, lastKeyAt, opens, reopenedElsewhere, screens}`) · `historyRoute` · `ringUp` · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery`. ISO-8601 with ms |
 | `POST /test/sink` `{"on": true}` · `GET /test/sink` · `POST /test/sink/clear` | **the relay's own window, as the key window** — `WisprSink`: 40×20, borderless, bottom-left corner, an instrumented `NSTextView` inside. The GET answers *did anything land in it, and by which route*: `paste` (⌘V), `ax:…` (an Accessibility write, with the setter's name), `typed`, `keyDown`, plus `key` and `previousApp` |
 | `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. The two calls answered the question they were built for (2026-09-13, 3/3): **Wispr picks its insertion target at the END** — taking key 1–5 ms after the stop chord is enough, and the row's `app` column named the relay although TextEdit was in front the whole dictation |
@@ -169,14 +170,14 @@ sits at rest there.
   chord receives the text — so it works, and he rejected it anyway, because stealing focus during every
   dictation is not something to do to a man who may be clicking or typing at that instant. Revoking
   Wispr's Accessibility grant was rejected for its own reason: Wispr has to go on working standalone.
-  The sink stays a **test instrument**, opened by `POST /test/sink` and nothing else. The candidate now
-  is Wispr's own **Scratchpad** (`POST /test/wispr-scratchpad`, held) with the words read out of
-  `Notes` / `NoteVersions` (`WisprNotes`, `via: "wispr-notes"`). Measured 2026-09-13, F18 held 20 s:
-  the text landed in `Notes` (a new note per dictation, plus a `NoteVersions` row), the victim
-  TextEdit document was untouched, **focus never moved**, no ⌘V was posted, the pasteboard was
-  written and restored by Wispr, e2e **432 ms**; the Scratchpad window opened in the background.
-  The `History` row is **not** the witness here — its `app` column named the front app, not the
-  destination.
+  The sink stays a **test instrument** and the emergency mode, and **may not take the key window
+  while a Scratchpad dictation is in flight** — `POST /test/sink {"key": true}` is refused with a
+  409, because Wispr appears to choose its target from the key window and the sentence is lost.
+  The wrap that shipped is Wispr's own **Scratchpad** (`POST /test/wispr-scratchpad`, held) — see
+  *The dictation source* for how it runs, and the journal's *The night the wrap found its shape*
+  for the three things the first measurement of it got wrong.
+  The `History` row's `app` column is **not** a witness to the destination — it names the front
+  app, which for every other kind of dictation is accidentally the same thing.
 - **The sink cross-check only ever sees what leaks.** With the swallow armed at the **start** chord
   (2026-09-13), a correct run leaves the sink empty; it disagreed with the row 5/5 that evening only
   because Wispr's ⌘V arrived before the relay knew the microphone had shut and escaped into it.
@@ -231,52 +232,58 @@ sits at rest there.
   | **`scratchpad`** (default) | *Open Scratchpad*, **held** for the sentence | the `History` row at `formatted` (`via: "wispr-history"`); the note is the cross-check | nothing — no insertion, no focus moved |
   | `sink` (emergency) | the hands-free chord | the relay's own key window, taken at the **stop** (`via: "wispr-sink"`) | his keyboard, for a moment, every dictation |
   | `off` (tick off) | the hands-free chord | nobody — Wispr inserts where the focus is | the wrap |
-  `WT_WRAP_MODE=sink` for one run; `POST /test/wrap-mode {"mode": …}` for the loop (`auto` hands
-  it back). Automatic fallback to `sink` when Wispr has no `open_scratchpad` shortcut, and when
-  the Scratchpad window will not close — both said out loud in `wrapWhy`.
-- **The Scratchpad wrap has one precondition and it is checked twice** (measured, four runs,
-  2026-09-13): a held chord writes a note **only while the Scratchpad window is closed**. With it
-  open Wispr transcribes normally (`History` says `formatted`) and writes **no note at all** — the
-  sentence is lost, and closing the window afterwards does not commit it. Wispr opens that window
-  when it **writes the note** — about two seconds after the words are readable — so the thing that
-  breaks a sentence is the *previous* one. The cycle: check → close (a ~250 ms press; a 60 ms tap
-  does nothing) → hold → dictate → release → **deliver from the row at `formatted`** → then wait
-  for the window, close it, verify, and read the note as a cross-check. The row is the delivery
-  because the note costs 2.8 s for a copy of the same sentence: measured, the row was `formatted`
-  **531 ms** after the microphone closed and the note was not readable until **2627 ms**, with
-  another **663 ms** to close the window. The note is where Wispr *pastes*; the row is where it
-  writes what it heard. `WT_SCRATCHPAD_DELIVER=note` goes back to waiting for the note.
+  Automatic fallback to `sink` when Wispr has no `open_scratchpad` shortcut, and when the
+  Scratchpad window will not close — both said out loud in `wrapWhy`.
+- **Every switch the dictation source reads**, in one place:
+  | variable | what it does |
+  |---|---|
+  | `WT_SOURCE=whisper` | the local model instead of Wispr Flow (also the `dictationSource` default) |
+  | `WT_WRAP_WISPR=0` | the *Wrap Wispr Flow* tick off for one run |
+  | `WT_WRAP_MODE=scratchpad｜sink｜off` | force the mode for one run (`POST /test/wrap-mode` at runtime, `auto` to hand it back) |
+  | `WT_SCRATCHPAD_DELIVER=note` | wait for the Scratchpad note instead of delivering from the row — 2.8 s slower, kept for the day the two disagree |
+  | `WT_SCRATCHPAD_REDIRECT_KEYS=0` | stop re-posting his keystrokes while Wispr's window is up |
+  | `WISPR_SCRATCHPAD_KEYS=79` | override the *Open Scratchpad* chord (the same variable `helpers/wispr_loopback.py` reads) |
+  | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
+  | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
+- **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord
+  writes a note only while the window is closed; with it open Wispr transcribes and writes **no
+  note at all**, and the thing that breaks a sentence is therefore the *previous* one → **hold the
+  chord** (`open_scratchpad`, read by action name, fallback `79` = F18, `WISPR_SCRATCHPAD_KEYS`
+  overrides) → **park on sight** (25 ms watcher from the *chord*: the window appears at the start
+  of the hold and lives for the whole sentence) → **release** and ask the close **exactly once** →
+  **deliver from the row at `formatted`** → **cross-check the note** 3.5 s later.
+- **The numbers:** Wispr's own round trip 320–420 ms; row `formatted` ~400–530 ms after the
+  microphone closes; **words landed ~410–490 ms**; the note not readable until 2627 ms (which is
+  why it is not the delivery); the window visible on the main display **17–40 ms**; closed **417–445
+  ms** after the close is asked; window **layer 3**, `AXStandardWindow`, minimum **300×300**; and
+  **Wispr does not remember the parked frame**, so it is parked on every open.
+- **The delivery is the row, the note is the second opinion.** The note is where Wispr *pastes*;
+  the row is where it writes what it heard. `WT_SCRATCHPAD_DELIVER=note` goes back to waiting for
+  the note, which costs 2.8 s for a copy of the same sentence.
 - **The caret paste is addressed** (2026-09-14): `DictationResult.focusPid` carries the pid of the
   app he was looking at at the chord, and `TerminalBinding.pressPaste(to:)` posts the ⌘V with
   `postToPid` straight into that application's queue — bypassing the session and therefore whoever
-  holds the key focus. So the delivery fires at `formatted` (~400 ms) instead of waiting for Wispr's
-  window to close (488 ms good case, 3337 ms with a retry). Nil for every other delivery, which
-  means *whatever has the caret*; bound-terminal and spawn deliveries never used the focus at all.
-- **Historically — the caret paste had to not race the window's keyboard grab.** The Scratchpad window **takes the
-  keyboard when it opens** — measured, a paste fired the moment the note appeared went into the
-  note and the document Victor was looking at stayed empty. At `formatted` the window is normally
-  not open yet; if it is, it is closed first and the words follow. A window that will not close
-  stands the mode down to `sink`, loudly.
+  holds the key focus. Nil for every other delivery, which means *whatever has the caret*;
+  bound-terminal and spawn deliveries never used the focus at all.
 - **The Scratchpad window is parked out of the way** (`WisprScratchpad.park`, `POST
-  /test/scratchpad/park`): as small as Wispr allows (measured by asking for 1×1 and reading back),
-  at the bottom-right of the **second** display when one is attached, all but an 8 pt sliver past
-  the edge. Parked on the first open and again on any open that comes back somewhere else — the
-  log says which (`scratchpad reopened at <frame> — where it was parked; Wispr remembers`). While
-  a Scratchpad dictation is in flight the window is polled at **50 ms**, it is **closed on sight**
-  (`lastOpenMs` says how long it was up — 0.1–0.4 s), and `everBecameKey` records whether it ever
-  took the keyboard.
-- **The Scratchpad becomes key without its app becoming frontmost** (measured 2026-09-13): a `z`
-  typed 1.5 s after the stop gesture went into Wispr's note and was delivered *inside the
-  sentence*, with `frontmostApplication` reading TextEdit throughout. So for as long as that window
-  is up, **every real keystroke is re-posted to the app he was looking at** when he stopped talking
-  (`HotkeyTap.armKeyRedirect`, `postToPid`, pid 0 only, logged by keycode only, 10 s ceiling,
-  `WT_SCRATCHPAD_REDIRECT_KEYS=0` to disable). And never test key focus with
-  `frontmostApplication` — use the system-wide focused element's owner.
-- **Wispr posts a ⌘V in Scratchpad mode and it belongs to Wispr** — aimed at its own note window.
-  The swallow is **off** in this mode (the probe stays on); taking that key doubled a sentence into
-  the previous run's note. And Wispr does not reliably start a new note: it appends with
-  `source = typed`, whose content is the whole accumulated notepad, so the delivery is the **new
-  portion only**, the pre-dictation text stripped off the front.
+  /test/scratchpad/park`): smallest size Wispr allows, bottom-right of the **second** display when
+  one is attached, all but an 8 pt sliver past the edge. AX measures from the top left with y
+  **down** where AppKit measures from the bottom left with y up.
+- **The Scratchpad becomes KEY without its app becoming frontmost** (measured): a `z` typed 1.5 s
+  after the stop went into Wispr's note and was delivered *inside the sentence*, with
+  `frontmostApplication` reading TextEdit throughout. **Never test key focus with
+  `frontmostApplication`** — use the system-wide focused element's owner. For as long as the window
+  is up, every **real** keystroke is re-posted to the app he was looking at
+  (`HotkeyTap.armKeyRedirect`, `postToPid`, per-key focus check, ⌘/⌃ always pass, logged by keycode
+  only, 10 s ceiling from the release, `WT_SCRATCHPAD_REDIRECT_KEYS=0` to disable). **Its limit:
+  it cannot manufacture a key window** — an app that is frontmost with no key window has no first
+  responder and a character posted to it is dropped, which is why the same redirect lands 7/7 where
+  the victim keeps its key window and 0/7 where another window holds it.
+- **`WisprState` joins four witnesses**, measured on one real dictation: Wispr's `History` row
+  appearing at **357 ms**, the 100 ms CoreAudio poll at **607 ms**, `WisprWatch`'s notification at
+  **5590 ms** — and the chord itself as the clock. The notification is 0–6 s late and produced **no
+  edge at all** in five successful runs; a witness that never saw the microphone open may not
+  report it closing.
 - **A dictation Victor starts himself is Wispr's** — his own keyboard chord, or 🔽→ which posts
   Wispr's chord raw. Ring only: never intercepted, never routed, no swallow and no Scratchpad.
   `relayStarted` in `/test/state` is that distinction; it ends on Wispr's row with `.silent("")`.
@@ -335,6 +342,21 @@ sits at rest there.
   between `formatted` and the ⌘V is **57 ms**, and a ⌃Escape posted after `formatted` does not
   stop the paste at all. There is no *cancel the insertion* — only *do not ask for one*, which is
   what the Scratchpad is.
+- **Minimizing or hiding Wispr's Scratchpad mid-dictation** (2026-09-14). `AXMinimized = true` the
+  moment the window appears and the dictation **never comes back** — no `formatted`, no delivery,
+  no ring down. Wispr needs that window live; the precondition is *closed at the start*, not
+  *absent during*. Hiding the application is the same move and is expected to do the same thing.
+- **Asking the Scratchpad close twice.** It is a **toggle**: a second tap behind the first closes
+  the window and opens it straight back up — `wrap-cancel` left `['Status', 'Scratchpad']` behind
+  for exactly that reason. `armCloseOnSight` is idempotent and claims `scratchpadWindowHandled`.
+- **Arming a capture from the CoreAudio edge** (2026-09-13). It is 0–6 s late and sometimes silent
+  altogether, and everything armed from `edge(false)` — the swallow, the row poll, the settle —
+  simply never ran; a 2.5 s dictation went straight into Word with the relay blind to it. Arm at
+  the **start chord**.
+- **`open -a "Wispr Flow"`** — LaunchServices resolves the name to the nested Accessibility helper
+  at `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app`, which quits itself when it has no
+  parent, and `pgrep -x "Wispr Flow"` matches it too. Use `open "/Applications/Wispr Flow.app"` and
+  match the anchored executable path.
 - **A typing affordance on the overlay's own surface.** The panel becomes key only while the
   transcript is being edited (`RelayPanel.wantsKey`).
 - **A leash, smoothing filter or spring** on the chip's cursor-following; **a ✕ beside the
