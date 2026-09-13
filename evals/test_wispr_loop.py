@@ -416,6 +416,36 @@ class ProbeLetters(unittest.TestCase):
         for _c, _o, delay in wl.probe_schedule([-30.0, -3.0], 1.57):
             self.assertGreaterEqual(delay, 0.05)
 
+    def test_one_event_per_offset_in_the_tap_s_own_trace(self):
+        """**The integration form of the same claim**, asserted against the trace
+        rather than the scheduler — because the scheduler was never the suspect.
+
+        Parses `⌨️trace ↓ key N pid P` lines from one run's window and requires
+        each probe keycode to appear exactly once, from exactly one pid. The run
+        that prompted this had `j`, `k` and `y` arriving from a pid the runner
+        had not started: a second instance of this harness on the same Mac,
+        typing into the same document. That is what `take_runner_lock` now
+        prevents; this is what would catch it coming back.
+        """
+        blob = (
+            "09-14 02:20:28 [relay] ⌨️trace ↓ key 12 pid 79610 flags 0x20000000 — passed\n"
+            "09-14 02:20:28 [relay] ⌨️trace ↓ key 6 pid 79610 flags 0x20000000 — passed\n"
+            "09-14 02:20:29 [relay] ⌨️trace ↓ key 38 pid 76300 flags 0x20000000 — passed\n"
+            "09-14 02:20:29 [relay] ⌨️trace ↓ key 38 pid 79610 flags 0x20000000 — passed\n")
+        seen = wl.probe_keys_in_trace(wl.parse_log(blob, year=2026))
+        self.assertEqual(seen[12], {79610})
+        self.assertEqual(seen[6], {79610})
+        # key 38 twice, from two different processes — the failure this catches
+        self.assertEqual(seen[38], {76300, 79610})
+        offenders = {k: pids for k, pids in seen.items() if len(pids) > 1}
+        self.assertEqual(list(offenders), [38])
+
+    def test_a_clean_trace_has_one_pid_per_key(self):
+        blob = ("09-14 02:20:28 [relay] ⌨️trace ↓ key 12 pid 79610 flags 0x0 — passed\n"
+                "09-14 02:20:29 [relay] ⌨️trace ↓ key 6 pid 79610 flags 0x0 — passed\n")
+        seen = wl.probe_keys_in_trace(wl.parse_log(blob, year=2026))
+        self.assertTrue(all(len(pids) == 1 for pids in seen.values()))
+
     def test_the_schedule_is_stable_across_calls(self):
         a = wl.probe_schedule([0.3, 1.5], 2.0)
         b = wl.probe_schedule([0.3, 1.5], 2.0)

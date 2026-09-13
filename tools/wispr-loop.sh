@@ -76,6 +76,7 @@ while [ $# -gt 0 ]; do
     --repeat)      PASSTHROUGH+=(--repeat "$2"); shift 2 ;;
     --dismiss-delay) PASSTHROUGH+=(--dismiss-delay "$2"); shift 2 ;;
     --no-dismiss)  PASSTHROUGH+=(--no-dismiss); shift ;;
+    --leave-unbound) PASSTHROUGH+=(--leave-unbound); shift ;;
     # **One token with `=`**, not two: the offsets may start with a minus (a
     # letter typed *during* the recording) and argparse reads a bare `-3,-1,…`
     # as a flag it has never heard of.

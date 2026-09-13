@@ -2404,12 +2404,6 @@ def scenario_scratchpad_hold(ctx) -> Result:
 
         board_before = pasteboard_change_count()
         notes_before = wispr_notes()
-        windows_before = [] if relay.dry_run else wispr_windows()
-        # **Who else is on this desk.** A `victim-*` document that appears mid-run
-        # is another runner sharing the Mac — on 2026-09-14 two probes reported a
-        # *different* victim title from the other five, which is a run measuring
-        # somebody else's document without knowing it.
-        docs_before = set() if relay.dry_run else {n for n, _ in textedit_documents()}
         result.note("Wispr windows before: %s" % (windows_before or "—"))
 
         # ── hold the key ────────────────────────────────────────────────
@@ -2507,6 +2501,75 @@ def scenario_scratchpad_hold(ctx) -> Result:
     return result
 
 
+LOCK_PATH = os.path.join(HOME, ".walkie-talkie", "wispr-loop.lock")
+
+
+def _lock_holder() -> int | None:
+    """The pid in the lockfile, if that process is still alive."""
+    try:
+        pid = int(open(LOCK_PATH, encoding="utf-8").read().split()[0])
+    except Exception:
+        return None
+    try:
+        os.kill(pid, 0)
+        return pid
+    except Exception:
+        return None
+
+
+def take_runner_lock() -> tuple[bool, str]:
+    """**Only one runner on this Mac at a time.** Returns `(got it, detail)`.
+
+    Two runs of this harness overlapping is not a slow test, it is a *wrong*
+    one, and it took hours to see because the symptom looks like an app bug.
+    Measured 2026-09-14: a three-letter sweep from pid 79610 came back with
+    `'qzqzjjky'` in the victim, and the tap's trace showed `j`, `k`, `y` posted
+    by **pid 76300** — another instance of this same harness, typing the same
+    probe letters into the same TextEdit document. That is where
+    `Qqzzjjkkwwyyvv` came from, and the second victim document, and a run
+    measuring somebody else's keystrokes as its own.
+
+    Nothing about a shared Mac makes this detectable from inside one run, so it
+    is prevented instead.
+    """
+    holder = _lock_holder()
+    if holder and holder != os.getpid():
+        return False, "pid %d is already running a scenario" % holder
+    try:
+        os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
+        with open(LOCK_PATH, "w", encoding="utf-8") as handle:
+            handle.write("%d %s\n" % (os.getpid(), time.strftime("%Y-%m-%d %H:%M:%S")))
+        return True, "held by pid %d" % os.getpid()
+    except Exception as exc:
+        return True, "could not write the lockfile (%s) — going ahead" % exc
+
+
+def release_runner_lock():
+    if _lock_holder() == os.getpid():
+        try:
+            os.remove(LOCK_PATH)
+        except Exception:
+            pass
+
+
+_TRACE_KEY = re.compile(r"⌨️trace ↓ key (\d+) pid (\d+)")
+
+
+def probe_keys_in_trace(lines: list[LogLine]) -> dict[int, set[int]]:
+    """`{keycode: {posting pids}}` from one run's `⌨️trace` lines.
+
+    More than one pid against a keycode means two processes typed the same
+    letter — which is the shape of two runners sharing a Mac, and is invisible
+    from inside either of them.
+    """
+    seen: dict[int, set[int]] = {}
+    for line in lines:
+        m = _TRACE_KEY.search(line.text)
+        if m:
+            seen.setdefault(int(m.group(1)), set()).add(int(m.group(2)))
+    return seen
+
+
 def probe_schedule(offsets: list[float], clip_seconds: float) -> list[tuple[str, float, float]]:
     """`(letter, offset, delay)` per probe — **exactly one event per offset**.
 
@@ -2588,6 +2651,11 @@ def _wrap_run(ctx, destination: str) -> Result:
 
         notes_before = wispr_notes()
         windows_before = [] if relay.dry_run else wispr_windows()
+        # **Who else is on this desk.** A `victim-*` document that appears
+        # mid-run is another runner sharing the Mac — on 2026-09-14 two probes
+        # reported a *different* victim title from the other five, which is a run
+        # measuring somebody else's document without knowing it.
+        docs_before = set() if relay.dry_run else {n for n, _ in textedit_documents()}
         # **Baselines for the probe letters.** A bare `"j" in text` matches the
         # `.jpg` in an envelope's screenshot line and the `k` in `walkie_shot`,
         # and on 2026-09-14 that reported five letters as *arrived* in a run
@@ -2956,6 +3024,15 @@ def _wrap_run(ctx, destination: str) -> Result:
                            redirect.get("seen", redirect.get("keys")),
                            redirect.get("redirectedAX"), redirect.get("redirectedKey"),
                            redirect.get("passed")))
+        if probes and not relay.dry_run:
+            codes = dict(__import__("wispr_loopback").PROBE_LETTERS)
+            wanted = {codes[c] for c, _o in probes}
+            seen_keys = probe_keys_in_trace(mark.lines())
+            doubled = {k: sorted(p) for k, p in seen_keys.items()
+                       if k in wanted and len(p) > 1}
+            result.check(not doubled, "each probe letter was posted by exactly one process",
+                         "two posters for %s — another runner is on this Mac" % doubled
+                         if doubled else "one pid per key")
         for line in mark.lines():
             if "⌨️trace" in line.text or line.text.startswith("👁"):
                 result.note("   %s" % line.raw)
@@ -3568,6 +3645,9 @@ def main(argv):
     ap.add_argument("--scratch", default="/tmp", help="where the bound scenario's sink file goes")
     ap.add_argument("--json", action="store_true", help="the same result, machine-readable")
     ap.add_argument("--verbose", action="store_true", help="every relay.log line the run produced")
+    ap.add_argument("--leave-unbound", action="store_true",
+                    help="do not put the original binding back at the end. There is no flag for "
+                         "the opposite — skipping the *unbind* is never offered")
     ap.add_argument("--probe-offsets", default="", metavar="S1,S2,…",
                     help="wrap-*: type one distinct letter at each of these many seconds after "
                          "the stop gesture (e.g. 0.3,0.8,1.5,2.5,4) and report where each one "
@@ -3601,6 +3681,17 @@ def main(argv):
         ap.error("a scenario, --all, or --transcribe <wav>")
 
     # **The whole suite runs unbound**, and Victor's binding goes back at the end.
+    if not args.dry_run:
+        got, detail = take_runner_lock()
+        if not got:
+            print("\n" + "═" * 72, file=sys.stderr)
+            print("⚠️  ANOTHER RUNNER IS ALREADY DICTATING ON THIS MAC — %s." % detail,
+                  file=sys.stderr)
+            print("   Two runs overlapping type each other's probe letters into each", file=sys.stderr)
+            print("   other's documents. Refusing rather than measuring nonsense.", file=sys.stderr)
+            print("═" * 72 + "\n", file=sys.stderr)
+            return 2
+
     victors_binding = "" if args.dry_run else current_binding(port)
     if victors_binding:
         # **Loud, and not negotiable.** There is deliberately no flag to skip
@@ -3631,7 +3722,13 @@ def main(argv):
                          "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
                                            if x.strip()]}))
 
-    if victors_binding:
+    if victors_binding and args.leave_unbound:
+        # Asked for explicitly, and safe in the one direction that matters: it
+        # leaves the relay *less* pointed at anything, never more. The binding is
+        # named so whoever wants it back knows what it was.
+        print("🔓 leaving the relay unbound as asked — it was %r" % victors_binding,
+              file=sys.stderr)
+    elif victors_binding:
         ok = restore_binding(port, victors_binding)
         print("🔒 binding restored to %r: %s" % (victors_binding, "yes" if ok else "FAILED"),
               file=sys.stderr)
@@ -3644,6 +3741,7 @@ def main(argv):
             print(render(result, verbose=args.verbose))
         if len(results) > 1:
             print(summary(results))
+    release_runner_lock()
     if args.dry_run:
         return 0
     return 0 if all(r.passed for r in results) else 1
