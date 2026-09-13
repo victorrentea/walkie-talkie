@@ -250,7 +250,21 @@ enum WisprScratchpad {
     /// this app already holds for its screenshots; without it the list still
     /// arrives and the names are simply absent, which reads as *no Scratchpad* —
     /// so the check says so once rather than silently answering no for ever.
-    static func windowIsOpen() -> Bool {
+    /// **Does the window exist** — asked of Accessibility, not of the on-screen
+    /// window list.
+    ///
+    /// It was the window list until 2026-09-14, and that stopped being the right
+    /// question the moment the window started being **minimized**: a minimized
+    /// window is not on screen, so `.optionOnScreenOnly` would have reported it
+    /// gone and the close, the retry and the precondition would all have been
+    /// answering about a window that was still there. *On screen* is a separate
+    /// question with its own reader below, and it is only wanted for the
+    /// `visibleMs` measurement.
+    static func windowIsOpen() -> Bool { windowElement() != nil }
+
+    /// Is it drawn where he can see it — the window server's own answer, and the
+    /// one `visibleMs` is measured from.
+    static func windowIsOnScreen() -> Bool {
         guard let windows = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
         else { return false }
@@ -269,6 +283,50 @@ enum WisprScratchpad {
         return false
     }
     private static var warnedAboutNames = false
+
+    /// **Minimize it, which is the only thing that takes the key focus off it.**
+    ///
+    /// Measured 2026-09-14: Wispr's Scratchpad is a non-activating panel that
+    /// becomes **key** without its application becoming frontmost, and the app
+    /// underneath is then frontmost with no key window — so it has no first
+    /// responder and a plain character posted to it is dropped. Re-posting his
+    /// keys could not fix that, because there was nothing for them to arrive at.
+    /// A **minimized** window cannot hold the key focus and cannot be seen, and
+    /// it is still open as far as Wispr is concerned: the precondition the wrap
+    /// rests on is that the window is *closed* at the start of a dictation, not
+    /// that it is on screen during one.
+    /// **Do not minimize it, and this is the note that says why** (variant A,
+    /// tried and rejected 2026-09-14, 01:06).
+    ///
+    /// A minimized window cannot hold the key focus, cannot be seen, and looked
+    /// like the whole answer. It is not: with the Scratchpad minimized the
+    /// moment it appears, the dictation **never comes back at all** — no row
+    /// reaching `formatted`, no delivery, no ring down, nothing in the bound tty.
+    /// Wispr's Scratchpad dictation needs its own window live, exactly as it
+    /// needs the sink not to hold the key window. Kept as a method because the
+    /// close occasionally wants the window back from wherever it is, and deleted
+    /// from the path that made it a precondition.
+    @discardableResult
+    static func minimize() -> Bool {
+        guard let window = windowElement() else { return false }
+        let ok = AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString,
+                                              kCFBooleanTrue) == .success
+        if !ok { Log.error("🗒️ the Scratchpad refused to minimize") }
+        return ok
+    }
+
+    static func unminimize() {
+        guard let window = windowElement() else { return }
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+    }
+
+    static var isMinimized: Bool {
+        guard let window = windowElement() else { return false }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success
+        else { return false }
+        return (value as? Bool) == true
+    }
 
     /// Post the toggle and **wait until the window is actually gone**.
     ///
@@ -291,6 +349,13 @@ enum WisprScratchpad {
 
     private static func attempt(_ n: Int, _ done: @escaping (Bool) -> Void) {
         let parked = isWhereItWasParked()
+        // A minimized window may not answer the toggle; from the second attempt
+        // it is brought back (still parked off the edge, so still unseen) before
+        // asking again.
+        if n > 1, isMinimized {
+            Log.info("🗒️ un-minimizing the Scratchpad before asking again")
+            unminimize()
+        }
         HotkeyTap.tapWisprScratchpad()
         poll(deadline: Date().addingTimeInterval(closeCeiling)) { gone in
             if gone {
@@ -723,6 +788,8 @@ enum WisprScratchpad {
     static func describe() -> [String: Any] {
         [
             "windowOpen": windowIsOpen(),
+            "onScreen": windowIsOnScreen(),
+            "minimized": isMinimized,
             "frame": rect(lastSeenFrame),
             "parkedFrame": rect(parkedFrame),
             "minimumSize": minimumSize.map { ["w": Int($0.width), "h": Int($0.height)] } ?? NSNull(),

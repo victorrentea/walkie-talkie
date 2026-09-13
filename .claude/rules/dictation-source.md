@@ -334,6 +334,20 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   `guardTheKeyboard` behind a guard that returned early on the relay, which is why `wrap-spawn`
   armed no protection at all. The destination of the sentence has nothing to do with whose
   keyboard it is.
+- **Never minimize or hide Wispr while a Scratchpad dictation is running.** Measured 2026-09-14:
+  `AXMinimized = true` on the window the moment it appears and the dictation **never comes back** —
+  no `formatted`, no delivery, no ring down. Wispr needs that window live, the same way it needs
+  the sink not to hold the key window. The precondition is *closed at the start*, not *absent
+  during*.
+- **The focus cannot be taken back from it either.** Re-activating the victim application does
+  nothing (`activate` says *be frontmost*, and it already is); setting `AXMain` / `AXFocused` on
+  the window he was typing in logs `the focus owner is still Wispr`. So the redirect is the only
+  lever there is, and it works exactly where the app it is aimed at **has a key window** to receive
+  the keys — `wrap-caret` 7/7, `wrap-bound` 0/7 with the same pid, the difference being a bound
+  Terminal holding the key window in the second.
+- **`windowIsOpen()` asks Accessibility, not the window server.** *Exists* and *is on screen* are
+  two questions; the close, the retry and the precondition all want the first. `windowIsOnScreen()`
+  is the second and is what `visibleMs` is measured from.
 - **And for exactly that stretch, his keys are re-posted to the app he was looking at.**
   `HotkeyTap.armKeyRedirect(to:)` takes every **real** key (pid 0, unstamped) and hands it on with
   `postToPid` to the application that was frontmost at the **stop gesture** — the last moment that

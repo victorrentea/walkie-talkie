@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Foundation
 
 /// **Wispr Flow, driven and read as if it were this app's own microphone.**
@@ -559,6 +560,16 @@ final class WisprFlowSource: DictationSource {
     /// the close itself takes; and for exactly that stretch every real keystroke
     /// is taken by the tap and re-posted to the app he was looking at when he
     /// stopped talking.
+    /// The window he was typing in, read once at the chord — `AXFocusedWindow`
+    /// of the application that was frontmost then.
+    private static func focusedWindow(of pid: pid_t) -> AXUIElement? {
+        let app = AXUIElementCreateApplication(pid)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let w = value, CFGetTypeID(w) == AXUIElementGetTypeID() else { return nil }
+        return (w as! AXUIElement)
+    }
+
     private func guardTheKeyboard() {
         // `focusPid` was decided at the gesture, in every mode — see its note.
         guard let pid = focusPid, pid != 0 else {
@@ -575,10 +586,33 @@ final class WisprFlowSource: DictationSource {
         // is one call, once per dictation, aimed at the app he is already in,
         // and the Scratchpad it takes the focus from is parked off the edge of
         // the screen by the time this runs.
+        // **Give the victim its key WINDOW back, not just its application.**
+        //
+        // Re-activating the app was not enough and could not be: `activate` says
+        // *be frontmost*, and the app was already frontmost — what it did not
+        // have was a **key window**, because Wispr's non-activating panel had
+        // taken that without taking the front. An application that is frontmost
+        // with no key window has no first responder, so a plain character posted
+        // to it is dropped, which is why five re-posted letters vanished.
+        //
+        // So the window itself is remembered at the chord and told, through
+        // Accessibility, to be main and focused again. Cheap, and aimed at the
+        // window he was actually typing in rather than at whatever the app would
+        // pick for itself.
+        let victimWindow = Self.focusedWindow(of: pid)
+        if victimWindow == nil {
+            Log.error("⌨️ could not read \(name)'s focused window — the keyboard cannot be handed back if Wispr takes it")
+        }
         WisprScratchpad.onKeyStolen = {
             guard let app = NSRunningApplication(processIdentifier: pid) else { return }
-            Log.info("⌨️ Wispr's Scratchpad took the keyboard — giving it back to \(name)")
             app.activate(options: [])
+            if let w = victimWindow {
+                AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
+                AXUIElementSetAttributeValue(w, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            }
+            let back = !WisprScratchpad.focusOwnerIsWispr()
+            Log.info("⌨️ Wispr's Scratchpad took the keyboard — handed it back to \(name); the focus owner "
+                     + (back ? "flipped back" : "is still Wispr"))
         }
         WisprScratchpad.onWindowGone = { [weak self] openMs in
             WisprScratchpad.onKeyStolen = nil

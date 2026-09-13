@@ -218,6 +218,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The Scratchpad takes the keyboard without taking the front (2026-09-13, after midnight)](#the-scratchpad-takes-the-keyboard-without-taking-the-front-2026-09-13-after-midnight)
 - [The wrap, measured on the installed build (2026-09-14, 00:18)](#the-wrap-measured-on-the-installed-build-2026-09-14-0018)
 - [The paste is addressed, so the delivery stops waiting (2026-09-14)](#the-paste-is-addressed-so-the-delivery-stops-waiting-2026-09-14)
+- [Three ways to take the keyboard back, and what each one measured (2026-09-14, 01:00–01:15)](#three-ways-to-take-the-keyboard-back-and-what-each-one-measured-2026-09-14-010001-15)
 
 ---
 
@@ -9131,3 +9132,61 @@ time**. The open question is whether a window pushed to the edge of the screen i
 to toggle — and nothing is un-parked to find out, because un-parking would put it back over his
 work, which is the thing being avoided. The log accumulates the evidence; the decision waits for
 enough of it.
+
+## Three ways to take the keyboard back, and what each one measured (2026-09-14, 01:00–01:15)
+
+The letters die because an application that is **frontmost with no key window has no first
+responder**: Wispr's Scratchpad is a non-activating panel that becomes key without becoming
+frontmost, and a plain character posted to the app underneath is dropped. ⌘V survives the same
+trip because it goes through `performKeyEquivalent`, which needs no first responder — which is why
+the addressed paste works and the addressed letters do not.
+
+Three ways out were tried against
+`./tools/wispr-loop.sh wrap-bound --probe-offsets=-3,-1,0.3,0.8,1.5,2.5,4`.
+
+**A — minimize the Scratchpad on sight. Rejected: it kills the dictation.** A minimized window
+cannot hold key focus and cannot be seen, and it looked like the whole answer. With
+`AXMinimized = true` set the moment the 25 ms watcher sees the window, the dictation **never comes
+back at all**: no row reaching `formatted`, no delivery, no ring down, nothing in the bound tty.
+Wispr's Scratchpad dictation needs its own window live — the same shape as the sink holding the key
+window, which breaks it the same way. The precondition the wrap rests on is that the window is
+*closed* when a dictation **starts**; it is not that the window is dispensable while one runs.
+
+One thing survived from A and is an improvement on its own: `windowIsOpen()` now asks
+**Accessibility** whether the window exists rather than asking the window server whether it is on
+screen. *Exists* and *is visible* are two questions, and the close, the retry and the precondition
+all want the first; `windowIsOnScreen()` keeps the second, which is all `visibleMs` ever needed.
+
+**C — give the victim its key window back through AX. Rejected: it does not flip.** The window he
+was typing in is remembered at the chord (`AXFocusedWindow` of the frontmost application) and told
+to be `AXMain` and `AXFocused` again the instant the theft is detected. The log is the result:
+`Wispr's Scratchpad took the keyboard — handed it back to TextEdit; the focus owner is still
+Wispr`. Re-activating the application had already been tried and could not work for a reason worth
+keeping: `activate` says *be frontmost*, and it already was — what it lacked was a key window, and
+neither call produces one against a panel that has taken it.
+
+**B — hide Wispr's application for the dictation. Not run.** A's result predicts it: hiding an
+application takes its windows off screen exactly as minimizing one does, and the Scratchpad
+dictation did not survive that. Spending a build to confirm it would buy a second copy of the same
+answer.
+
+### And the thing the three experiments were actually chasing
+
+`wrap-caret` passes **7/7 with the same code and the same mechanism** — measured on this build:
+`key redirect: pid=32184, 5 key(s) seen`, every letter in the victim. `wrap-bound` loses all seven
+with `pid=88211`, and `ps` says both pids are TextEdit. Same target, same redirect, opposite
+outcome.
+
+The difference is not in the relay. It is **what else has a window**: `wrap-bound` opens a scratch
+Terminal to bind to, and that Terminal holds the key window — so TextEdit, the app the letters are
+addressed to, has none, and they are dropped exactly as the theory predicts. `wrap-caret` has no
+Terminal in the picture, TextEdit keeps its key window, and the same five redirected letters land.
+
+Which makes the scenario's expectation the thing to look at rather than the redirect. With a bound
+terminal on screen, a keystroke Victor makes belongs to whatever has the key window, and *the
+victim document* is not automatically that. The measurement that settles it is one run of
+`wrap-bound` that also looks in **the bound tty** for the probe letters.
+
+The redirect is kept, because on the evidence it works wherever the app it is aimed at has a key
+window to receive them, and it cannot manufacture one: A says Wispr's window cannot be taken away
+mid-dictation, C says the focus cannot be taken back from it.
