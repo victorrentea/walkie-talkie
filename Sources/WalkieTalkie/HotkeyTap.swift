@@ -1897,10 +1897,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// tap from a hold by duration and 60 ms is below whatever floor it uses. It
     /// is still far under any hold a dictation would be.
     static func tapWisprScratchpad() {
+        // The 250 ms is measured from the press that actually went out, not from
+        // this call — the press waits for a bare wire first, and the gap between
+        // the two is exactly what Wispr is reading.
         postScratchpad(down: true)
-        DispatchQueue.global().asyncAfter(deadline: .now() + Self.scratchpadTapHold) {
-            postScratchpad(down: false)
-        }
+        scratchpadQueue.async { usleep(UInt32(Self.scratchpadTapHold * 1_000_000)) }
+        postScratchpad(down: false)
     }
     private static let scratchpadTapHold: TimeInterval = 0.25
 
@@ -1950,8 +1952,67 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// release and a Mac with right ⌘ stuck down.
     private static let scratchpadHoldCeiling: TimeInterval = 120
 
+    /// **Posted on a serial queue of its own, and only onto a bare wire.**
+    ///
+    /// Both halves of that sentence were paid for on 2026-09-13, 23:20, by the
+    /// first real dictation through the Scratchpad wrap. The chord went down for
+    /// 5.2 s, Wispr recorded, transcribed — and pasted a ⌘V like an ordinary
+    /// dictation, writing no note and never opening its Scratchpad window.
+    ///
+    /// The gesture that had started the dictation was `POST /test/gesture
+    /// forward-click`, which posts **⌃⌥⌘F7**, and the F18 went out a
+    /// millisecond later with those three modifiers still on the wire. Wispr was
+    /// offered `⌃⌥⌘F18`, which is not the chord it has bound. This is the trap
+    /// `mouse-gestures.md` names in as many words — *any key this app posts near
+    /// a gesture has the same trap waiting* — and which `postWisprHandsFree`,
+    /// `postWisprCancel`, `postWisprCopyLast` and `postReturn` have all been
+    /// written under since 2026-09-09. This poster was the one that was not.
+    ///
+    /// So it waits `settleForOptionsPlus` and then for the modifiers to come off
+    /// the wire, exactly as its four siblings do — which means it cannot run on
+    /// the main thread, which means the **bookkeeping** (`scratchpadHeld`, the
+    /// dead-man's switch) is done at the call and only the posting is deferred.
+    /// A serial queue rather than `.global()`, because a press and a release
+    /// that can overtake each other are a key stuck down.
+    private static let scratchpadQueue =
+        DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-scratchpad")
+
     private static func postScratchpad(down: Bool) {
         let codes = down ? scratchpadChord() : (scratchpadDownCodes.isEmpty ? scratchpadChord() : scratchpadDownCodes)
+        // **The flag moves now, the keys move on the queue.** `stop()` reads
+        // `scratchpadIsHeld` a few milliseconds after `start()` returns, and a
+        // release that saw `held == false` because the press was still waiting
+        // for a bare wire is a key held until the dead-man's switch.
+        scratchpadLock.lock()
+        scratchpadHeld = down
+        scratchpadDownCodes = down ? codes : []
+        scratchpadLock.unlock()
+        if down {
+            let deadMan = DispatchWorkItem {
+                Log.error("🗒️ scratchpad chord was held for \(Int(scratchpadHoldCeiling)) s — releasing it before it becomes a stuck modifier")
+                postScratchpad(down: false)
+            }
+            scratchpadDeadMan?.cancel()
+            scratchpadDeadMan = deadMan
+            DispatchQueue.global().asyncAfter(deadline: .now() + scratchpadHoldCeiling, execute: deadMan)
+        } else {
+            scratchpadDeadMan?.cancel()
+            scratchpadDeadMan = nil
+        }
+        scratchpadQueue.async { emitScratchpad(codes, down: down) }
+    }
+
+    /// The keys themselves, on the serial queue, after the wire is clear.
+    private static func emitScratchpad(_ codes: [CGKeyCode], down: Bool) {
+        usleep(settleForOptionsPlus)
+        let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+        var waited = 0
+        while !CGEventSource.flagsState(.combinedSessionState).intersection(watched).isEmpty,
+              waited < 40 {
+            usleep(5_000)
+            waited += 1
+        }
+
         // Modifiers first on the way down, last on the way up — the order a hand
         // makes the chord in, and the order Wispr's own reader expects.
         let modifiers = codes.filter { modifierFlag(for: $0) != nil }
@@ -1973,6 +2034,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             e.post(tap: .cghidEventTap)
         }
 
+        let chord = codes.map(String.init).joined(separator: "+")
         if down {
             var held: [CGKeyCode] = []
             for m in modifiers {
@@ -1985,18 +2047,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 e.flags = state
                 e.post(tap: .cghidEventTap)
             }
-            scratchpadLock.lock()
-            scratchpadHeld = true
-            scratchpadDownCodes = codes
-            scratchpadLock.unlock()
-            Log.info("🗒️ scratchpad chord DOWN — \(codes.map(String.init).joined(separator: "+")) held")
-            let deadMan = DispatchWorkItem {
-                Log.error("🗒️ scratchpad chord was held for \(Int(scratchpadHoldCeiling)) s — releasing it before it becomes a stuck modifier")
-                postScratchpad(down: false)
-            }
-            scratchpadDeadMan?.cancel()
-            scratchpadDeadMan = deadMan
-            DispatchQueue.global().asyncAfter(deadline: .now() + scratchpadHoldCeiling, execute: deadMan)
+            Log.info("🗒️ scratchpad chord DOWN — \(chord) held (wire clear after \(waited * 5) ms)")
         } else {
             var held = modifiers
             let state = flags(of: held)
@@ -2009,13 +2060,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 held.removeAll { $0 == m }
                 modifier(m, leaving: flags(of: held))
             }
-            scratchpadDeadMan?.cancel()
-            scratchpadDeadMan = nil
-            scratchpadLock.lock()
-            scratchpadHeld = false
-            scratchpadDownCodes = []
-            scratchpadLock.unlock()
-            Log.info("🗒️ scratchpad chord UP — \(codes.map(String.init).joined(separator: "+")) released")
+            Log.info("🗒️ scratchpad chord UP — \(chord) released (wire clear after \(waited * 5) ms)")
         }
     }
 
@@ -2235,6 +2280,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             up.flags = held
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
+            // **And put the flags back down**, which Options+ does for itself
+            // and this route did not (2026-09-13, 23:24).
+            //
+            // `CGEventSource` reports whatever the last event's flags said, so a
+            // chord whose key-up carries ⌃⌥⌘ leaves the whole session believing
+            // three modifiers are held until the next real keystroke heals it.
+            // The gap between a real gesture and its trailing flags-cleared
+            // event was measured at 12–22 ms on 2026-09-09; this route posted no
+            // such event at all, so `settleForOptionsPlus` and every
+            // wait-for-a-bare-wire loop behind it simply ran out — the Scratchpad
+            // chord went out as `⌃⌥⌘F18`, which Wispr does not have bound, and
+            // an ordinary paste came back instead of a note. It is the stale-⌘
+            // bug of `area-crop.md` for a third time: **release the modifier
+            // with a `flagsChanged` carrying the state the keyboard is left in.**
+            if let clear = CGEvent(keyboardEventSource: source, virtualKey: g.key, keyDown: true) {
+                clear.type = .flagsChanged
+                clear.flags = []
+                clear.post(tap: .cghidEventTap)
+            }
         }
         Log.info("🖱️ POST /test/gesture \(name) — posting \(g.label)")
         return (g.label, g.what)

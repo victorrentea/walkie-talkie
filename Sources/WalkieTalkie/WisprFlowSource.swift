@@ -360,6 +360,15 @@ final class WisprFlowSource: DictationSource {
     /// by its stamp for one Wispr appended to.
     private var priorNoteId: String?
     private var priorNoteStamp: TimeInterval = 0
+    /// **The note's whole text before this dictation**, because Wispr does not
+    /// reliably start a new note: measured 2026-09-13, it appended to the note
+    /// from a run four minutes earlier with `source = typed`, and a delivery of
+    /// `NoteVersions.content` would then have handed over the accumulated
+    /// notepad — 70 characters for a four-word sentence, growing every time.
+    private var priorNoteText: String?
+    /// Whether the note path has already dealt with the Scratchpad window, so
+    /// `endCapture` does not tap the chord a second time behind it.
+    private var scratchpadWindowHandled = false
     private var historyPoll: Timer?
     /// When the row said `formatted`, so the ⌘V that normally follows gets
     /// `pasteGrace` to arrive before the text is taken from the row instead.
@@ -503,10 +512,12 @@ final class WisprFlowSource: DictationSource {
     /// from `endCapture`, so it runs on every way out — delivered, dismissed,
     /// empty, timed out.
     private func closeScratchpadAfterwards() {
-        WisprScratchpad.closeWindow { [weak self] gone in
+        WisprScratchpad.closeWhenItAppears { [weak self] appeared, gone in
             guard let self else { return }
             if gone {
-                Log.info("🗒️ the Scratchpad window is closed — the next dictation can write a note")
+                Log.info(appeared
+                    ? "🗒️ the Scratchpad window opened and has been closed — the next dictation can write a note"
+                    : "🗒️ no Scratchpad window appeared — nothing to close")
                 return
             }
             Log.error("🗒️ THE SCRATCHPAD WINDOW WOULD NOT CLOSE — the next dictation would be transcribed and written nowhere. Falling back to the sink until it does.")
@@ -962,11 +973,19 @@ final class WisprFlowSource: DictationSource {
         // — which process posted what key, how long after the microphone shut —
         // is the only record of how Wispr delivers, and it is worth the same two
         // log lines in either mode. Only `swallow` differs.
-        // In Scratchpad mode Wispr posts no ⌘V at all (measured: none, 20 s of
-        // speech), so the swallow is pure safety net — armed anyway, because the
-        // day it fires is the day this file's premise stopped being true and the
-        // probe line is how anyone finds out.
-        if takes { hotkeys.armInjectionCapture(swallow: true) }
+        // **In Scratchpad mode the ⌘V is watched and never taken** (2026-09-13,
+        // 23:26). Wispr *does* post one — the earlier reading of "no ⌘V at all"
+        // was taken with no tap armed — and it is aimed at **its own Scratchpad
+        // window**, not at Victor's app: the row's `pastedText` is the text that
+        // ends up in the note. Swallowing it is this app reaching into another
+        // app's conversation with itself, and it showed: one run's sentence was
+        // appended to the previous run's note as ` commit and push the fix `
+        // with `source = typed`, doubled.
+        //
+        // The probe half stays armed in both modes, because *which process
+        // posted what key* is the only record of how Wispr delivers and the day
+        // it changes the log has to say so.
+        if takes { hotkeys.armInjectionCapture(swallow: startedMode != .scratchpad) }
 
         // The pasteboard is the other half of the answer, and the only half in
         // the cases where the ⌘V never arrives: an Accessibility insertion, a
@@ -1022,12 +1041,15 @@ final class WisprFlowSource: DictationSource {
         historyFormattedAt = 0
         // **The note as it stood before he started talking**, so a Scratchpad
         // that is appended to rather than added to is still recognisable.
+        scratchpadWindowHandled = false
         if startedMode == .scratchpad, let note = WisprNotes.newest() {
             priorNoteId = note.id
             priorNoteStamp = max(note.createdAt, note.modifiedAt)
+            priorNoteText = note.content
         } else {
             priorNoteId = nil
             priorNoteStamp = 0
+            priorNoteText = nil
         }
         historyPoll?.invalidate()
         let h = Timer(timeInterval: Self.historyTick, repeats: true) { [weak self] _ in self?.pollHistory() }
@@ -1194,14 +1216,61 @@ final class WisprFlowSource: DictationSource {
         // Scratchpad is a notepad and nothing promises Wispr will keep adding
         // files rather than lines.
         let isThisOne = note.id != priorNoteId || stamp > priorNoteStamp
-        let text = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = newPortion(of: note)
         guard isThisOne, !text.isEmpty else { return false }
         Log.info(String(format: "🗒️ wispr scratchpad: note %@ (%@) — %d chars, %.0f ms after the microphone closed",
                         String(note.id.prefix(8)),
                         note.versionSource.isEmpty ? "no version" : note.versionSource,
                         text.count, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
-        deliver(reason: "Wispr's Scratchpad note", via: "wispr-notes", delivery: .route, text: note.text)
+        // **Close the window before delivering, not after** (2026-09-13, 23:29).
+        // Wispr's Scratchpad window takes the keyboard when it opens, and it
+        // opens when the note is written — so a `pasteText` fired the moment the
+        // note appears goes **into the note**, which is exactly what happened:
+        // the relay's own 70 characters were appended to the Scratchpad and the
+        // TextEdit document Victor was looking at stayed empty. The words are
+        // already read; the window goes first and the caret gets them after.
+        historyPoll?.invalidate()
+        historyPoll = nil
+        scratchpadWindowHandled = true
+        WisprScratchpad.closeWhenItAppears { [weak self] appeared, closed in
+            guard let self, self.capturing else { return }
+            if closed {
+                Log.info(appeared
+                    ? "🗒️ the Scratchpad window is closed — delivering the words to the caret"
+                    : "🗒️ no Scratchpad window to close — delivering the words to the caret")
+            } else {
+                Log.error("🗒️ THE SCRATCHPAD WINDOW WOULD NOT CLOSE — it has the keyboard, so these words would land in the note. Falling back to the sink for the next dictation.")
+                self.scratchpadBroken = true
+            }
+            self.deliver(reason: "Wispr's Scratchpad note", via: "wispr-notes",
+                         delivery: .route, text: text)
+        }
         return true
+    }
+
+    /// **Only what this dictation added.**
+    ///
+    /// A new note is the whole sentence; a note Wispr appended to is the
+    /// notepad, and the sentence is what is on the end of it. Compared against
+    /// the text captured at the gesture rather than against the version row,
+    /// because a `typed` version carries the accumulated note and not the
+    /// increment.
+    private func newPortion(of note: WisprNotes.Note) -> String {
+        let full = note.content
+        if note.id == priorNoteId, let prior = priorNoteText, !prior.isEmpty {
+            // The common prefix rather than `hasPrefix`, so a note Wispr
+            // reformatted at the front still yields its tail instead of the lot.
+            var cut = full.startIndex
+            var p = prior.startIndex
+            while cut < full.endIndex, p < prior.endIndex, full[cut] == prior[p] {
+                cut = full.index(after: cut)
+                p = prior.index(after: p)
+            }
+            let tail = String(full[cut...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tail.isEmpty { return tail }
+        }
+        let version = note.versionContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return version.isEmpty ? full.trimmingCharacters(in: .whitespacesAndNewlines) : version
     }
 
     /// **The sink caught it** — the emergency path, and the only one in which
@@ -1219,6 +1288,13 @@ final class WisprFlowSource: DictationSource {
     /// words are nowhere yet and this is the whole delivery.
     private func injected(from process: String) {
         guard capturing, intercepting else { return }
+        // Wispr pasting into its own note. Logged, because the probe is the
+        // record, and then left entirely alone — the delivery is the note.
+        guard startedMode != .scratchpad else {
+            Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed (Wispr pasting into its own Scratchpad; left alone)",
+                            process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
+            return
+        }
         Log.info(String(format: "⌘V from %@ — %.0f ms after the microphone closed%@",
                         process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000,
                         wrapWispr ? " (taken)" : " (let through)"))
@@ -1344,6 +1420,7 @@ final class WisprFlowSource: DictationSource {
         priorRowWasOpen = false
         priorNoteId = nil
         priorNoteStamp = 0
+        priorNoteText = nil
         // **Never leave the sink holding his keyboard.** Every ordinary sink
         // delivery restores focus on arrival; this is the path where nothing
         // arrived and the capture timed out.
@@ -1354,7 +1431,7 @@ final class WisprFlowSource: DictationSource {
         }
         // **And the window Wispr just opened**, which is the next dictation's
         // precondition and not this one's housekeeping.
-        if startedMode == .scratchpad { closeScratchpadAfterwards() }
+        if startedMode == .scratchpad, !scratchpadWindowHandled { closeScratchpadAfterwards() }
         captureDeadline?.cancel()
         captureDeadline = nil
         // The machine goes back to rest with the capture, which is also what

@@ -259,6 +259,34 @@ enum WisprScratchpad {
     /// 2.5 s — measured at "within 1.5 s", with room over it for a busy Electron.
     private static let closeCeiling: TimeInterval = 2.5
 
+    /// **Wait for the window to appear, then close it** — and the waiting is the
+    /// whole point (2026-09-13, 23:26).
+    ///
+    /// Wispr opens the Scratchpad window when it *writes the note*, which is a
+    /// second or two after the words have already been delivered. A close fired
+    /// at the delivery therefore finds nothing open, does nothing, and reports
+    /// success — and the window appears immediately afterwards and is still
+    /// there at the start of the next dictation, which is exactly the state that
+    /// costs a sentence. Measured: run 2's close ran at 23:24:34 and Wispr opened
+    /// the window at 23:24:36, so run 3 dictated into an open Scratchpad and its
+    /// text was **appended** to run 2's note with `source = typed` rather than
+    /// becoming a note of its own.
+    ///
+    /// - Parameter done: on the main queue, with whether a window appeared at all
+    ///   and whether it is closed now.
+    static func closeWhenItAppears(within: TimeInterval = 4,
+                                   _ done: @escaping (_ appeared: Bool, _ closed: Bool) -> Void) {
+        let deadline = Date().addingTimeInterval(within)
+        func look() {
+            if windowIsOpen() {
+                return closeWindow { closed in done(true, closed) }
+            }
+            if Date() >= deadline { return done(false, true) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { look() }
+        }
+        DispatchQueue.main.async { look() }
+    }
+
     private static func poll(deadline: Date, _ done: @escaping (Bool) -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if !windowIsOpen() { return done(true) }

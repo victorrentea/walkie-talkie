@@ -237,10 +237,18 @@ sits at rest there.
   2026-09-13): a held chord writes a note **only while the Scratchpad window is closed**. With it
   open Wispr transcribes normally (`History` says `formatted`) and writes **no note at all** — the
   sentence is lost, and closing the window afterwards does not commit it. Wispr opens that window
-  in the background at the end of **every** dictation, so the thing that breaks a sentence is the
-  *previous* one. The cycle: check → close (a ~250 ms press; a 60 ms tap does nothing) → hold →
-  dictate → release → read the note → close again → **verify**. Both closes are logged and the
-  second is mandatory; a window that will not close stands the mode down to `sink` loudly.
+  when it **writes the note** — about two seconds after the words are readable — so the thing that
+  breaks a sentence is the *previous* one. The cycle: check → close (a ~250 ms press; a 60 ms tap
+  does nothing) → hold → dictate → release → read the note → **wait for the window, close it,
+  verify** → only then deliver. The close is before the delivery because the Scratchpad window
+  **takes the keyboard when it opens**: measured, a paste fired the moment the note appeared went
+  into the note and the document Victor was looking at stayed empty. A window that will not close
+  stands the mode down to `sink`, loudly.
+- **Wispr posts a ⌘V in Scratchpad mode and it belongs to Wispr** — aimed at its own note window.
+  The swallow is **off** in this mode (the probe stays on); taking that key doubled a sentence into
+  the previous run's note. And Wispr does not reliably start a new note: it appends with
+  `source = typed`, whose content is the whole accumulated notepad, so the delivery is the **new
+  portion only**, the pre-dictation text stripped off the front.
 - **A dictation Victor starts himself is Wispr's** — his own keyboard chord, or 🔽→ which posts
   Wispr's chord raw. Ring only: never intercepted, never routed, no swallow and no Scratchpad.
   `relayStarted` in `/test/state` is that distinction; it ends on Wispr's row with `.silent("")`.

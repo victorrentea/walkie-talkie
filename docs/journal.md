@@ -212,6 +212,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Three witnesses instead of one, and the ring stops waiting for CoreAudio (2026-09-13, evening)](#three-witnesses-instead-of-one-and-the-ring-stops-waiting-for-coreaudio-2026-09-13-evening)
 - [The numbers, and the Scratchpad is the one that works (2026-09-13, night)](#the-numbers-and-the-scratchpad-is-the-one-that-works-2026-09-13-night)
 - [The wrap is Wispr's own Scratchpad (2026-09-13, late)](#the-wrap-is-wisprs-own-scratchpad-2026-09-13-late)
+- [Five runs to make the Scratchpad wrap real (2026-09-13, 23:20–23:31)](#five-runs-to-make-the-scratchpad-wrap-real-2026-09-13-23202331)
 
 ---
 
@@ -8812,3 +8813,99 @@ one that hijacks every key he presses while he talks.
 The window Wispr leaves open is his window in his tool, so the menu gained one row — **Close
 Wispr Scratchpad** — rather than the relay deciding to keep shutting it. Whether that should be
 automatic beyond the wrap's own cycle is Victor's to say.
+
+## Five runs to make the Scratchpad wrap real (2026-09-13, 23:20–23:31)
+
+The wrap was written against a measurement taken with no event tap armed, and every one of the
+four things that reading got wrong cost a run to find. The fifth run is the product path working
+end to end; this is what the four before it were.
+
+**Run 1, 23:20 — the chord went out as `⌃⌥⌘F18`.** The hold was logged, 5.2 s, and Wispr ran an
+ordinary dictation and pasted. `postScratchpad` posted **immediately**, and the gesture that had
+started the dictation was `POST /test/gesture forward-click` — `⌃⌥⌘F7` — a millisecond earlier.
+Wispr was offered a chord it does not have bound. This is `mouse-gestures.md`'s own sentence —
+*any key this app posts near a gesture has the same trap waiting* — and `postWisprHandsFree`,
+`postWisprCancel`, `postWisprCopyLast` and `postReturn` have all been written under it since
+2026-09-09. This poster was the one that was not. It now waits `settleForOptionsPlus` and then for
+the modifiers, on a **serial queue** so a press and a release can never overtake each other, with
+the bookkeeping (`scratchpadHeld`, the dead-man's switch) left at the call site because `stop()`
+reads it milliseconds later.
+
+A one-minute probe settled it before any rebuild: `POST /test/wispr-scratchpad {"down"}`, three
+seconds, `{"up"}`, with nothing else on the wire — and Wispr's window list went from `['Status']`
+to `['Status', 'Scratchpad']`. A bare F18 is read as a Scratchpad dictation; one wearing three
+modifiers is not.
+
+**Run 2, 23:24 — the wire never went bare, because `/test/gesture` never let it.** With the settle
+in, the log said `wire clear after 200 ms` — the ceiling — and the paste came back again.
+`postGesture` posts `⌃⌥⌘F-key` down and up and **nothing else**, so `CGEventSource` goes on
+reporting three held modifiers until the next real keystroke heals it. A real Options+ gesture
+posts its own trailing flags-cleared event 12–22 ms later (measured 2026-09-09) and that is what
+`settleForOptionsPlus` was fitted to; this route posted none, so every *wait for a bare wire* loop
+behind it simply ran out. It is the stale-⌘ bug of `area-crop.md` for the third time in this
+repo, and the rule is the same one: **release the modifier with a `flagsChanged` carrying the
+state the keyboard is left in.** With that, `wire clear after 0 ms`.
+
+**Run 3, 23:26 — the swallow was stealing Wispr's own paste.** The chord was right, the Scratchpad
+window opened, and the delivery still came back `wispr-cmdv`. Reading the database rather than the
+log is what showed it: **every run so far had written a note**. Wispr *does* post a ⌘V in
+Scratchpad mode — the earlier *no ⌘V at all* was measured with no tap armed — and it is aimed at
+**its own note window**. The relay was swallowing it. Run 3's sentence ended up appended to run
+2's note as ` commit and push the fix `, doubled, with `source = typed`. So the swallow is off in
+this mode and the probe stays on: taking that key is this app reaching into another app's
+conversation with itself.
+
+**Run 4, 23:28 — `via: wispr-notes`, and the words went into the note instead of the caret.** Two
+more things wrong, both about the window.
+
+The first: **it takes the keyboard when it opens**, and it opens when Wispr *writes the note*,
+about two seconds after the words are readable. `pasteText` fired the moment the note appeared
+went straight into the Scratchpad — the note grew to 141 characters and the TextEdit document
+Victor was looking at stayed empty. So the close moved **before** the delivery: read the note,
+wait for the window, close it, verify, and only then hand the words to the caret.
+
+The second: **Wispr does not reliably start a new note.** Run 4 appended to a note from four
+minutes earlier, and a `typed` version's `content` is the whole accumulated notepad — 70
+characters delivered for a four-word sentence, and growing. The delivery is now the **new portion
+only**: the note's text with the pre-dictation text stripped off the front by longest common
+prefix, which handles a fresh note and an appended one with the same code.
+
+And the close itself had to learn to wait. A close fired at the delivery finds nothing open,
+reports success, and the window appears a second later — still there at the start of the next
+dictation, which is the state that costs a sentence. `closeWhenItAppears` polls for up to four
+seconds for it to show, then closes and verifies.
+
+### Run 5, 23:31 — the product path
+
+```
+23:31:38  wispr state: idle → warming — the relay asked for a dictation (scratchpad)
+23:31:39  🗒️ scratchpad chord DOWN — 79 held (wire clear after 0 ms)
+23:31:39  wispr history: row 12627 is this dictation's — 604 ms after the chord
+23:31:39  ⚡ Wispr's own row confirms the ring 612 ms after the gesture
+23:31:39  wispr state: warming → listening — Wispr created a row, poll saw it never …, notification never
+23:31:43  🎙️ the microphone is closed — the relay's own stop gesture (5036 ms of speech)
+23:31:43  ⚡ ring down: the microphone closed — the words are in flight
+23:31:44  🗒️ scratchpad chord UP — 79 released (wire clear after 0 ms)
+23:31:44  ⌘V from Wispr Flow — 453 ms after the microphone closed (Wispr pasting into its own Scratchpad; left alone)
+23:31:44  wispr history: formatted 531 ms after the microphone closed (Wispr's own e2e 381 ms) — waiting for the Scratchpad note
+23:31:46  🗒️ wispr scratchpad: note 4c6a7f52 (typed) — 23 chars, 2627 ms after the microphone closed
+23:31:47  🗒️ the Scratchpad window is closed — delivering the words to the caret
+23:31:47  🗣️ wispr transcript via Wispr's Scratchpad note — 23 chars, 3290 ms after the microphone closed
+23:31:47  ✍️ the words landed: pasting at the caret
+```
+
+TextEdit ended with `commit and push the fix`, once. Wispr's window list ended at `['Status']`.
+The frontmost application, sampled every 200 ms through the whole run, was **TextEdit and nothing
+else**. `lastRingDown` is the release and `lastSettled` is the landing, 3.3 s apart.
+
+The cost of the mode, in the same numbers: Wispr's own round trip was **381 ms**, the note was
+readable **2096 ms after the row said `formatted`**, and closing the window took a further
+**663 ms**. So the words land about **2.8 s after Wispr is done**, against a few hundred
+milliseconds for a ⌘V it is allowed to post. That is what not touching his focus costs, and it is
+worth saying out loud rather than discovering later.
+
+**And the wrap off still means off.** `POST /test/wrap-mode {"mode": "off"}` then a
+`/test/wispr-handsfree` pair: `intercepting false`, the ring up and down on the relay's own
+gesture, `lastDelivery` untouched, and the silent dictation ending at the capture's own timeout
+with `wispr: Victor's own dictation is over and the relay took nothing from it` — quiet, with no
+banner, because a relay complaining that another app's tool worked is not a message.

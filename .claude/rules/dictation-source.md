@@ -81,7 +81,20 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   `POST /test/wrap-mode {"mode": "auto"}`. Holding a chord that writes nothing is the one failure
   this mode must never have quietly.
 - **250 ms, not 60.** A 60 ms press/release does not toggle the Scratchpad window; 250 ms does,
-  inside 1.5 s, without moving the focus. Wispr is telling a tap from a hold by duration.
+  inside 1.5 s. Wispr is telling a tap from a hold by duration.
+- **The chord goes out on a serial queue and only onto a bare wire.** `postScratchpad` posted
+  immediately at first, and the first real dictation went out as `⌃⌥⌘F18` a millisecond after
+  `/test/gesture`'s `⌃⌥⌘F7` — Wispr does not have that bound, so it ran an ordinary dictation and
+  pasted. It now waits `settleForOptionsPlus` and then for the modifiers, exactly as
+  `postWisprHandsFree`, `postWisprCancel`, `postWisprCopyLast` and `postReturn` all have since
+  2026-09-09; the **bookkeeping** (`scratchpadHeld`, the dead-man's switch) stays at the call site
+  because `stop()` reads it milliseconds later. A serial queue rather than `.global()`, because a
+  press and a release that can overtake each other are a key stuck down.
+- **`POST /test/gesture` now clears its own flags.** It posted `⌃⌥⌘F-key` down and up and nothing
+  else, so `CGEventSource` went on reporting three held modifiers until the next real keystroke —
+  the stale-⌘ bug of `area-crop.md` for a third time, and the reason every *wait for a bare wire*
+  loop behind it ran out. A real Options+ gesture posts its own trailing flags-cleared event
+  12–22 ms later; this route now posts one too.
 - **`startedMode` and `intercepting` are two different questions.** The first says *how the chord
   was posted*, so it says what `stop()` must undo — a dictation opened by holding a key is ended
   by releasing that key, whatever the menu says by then. The second says *does the relay deliver
@@ -228,12 +241,28 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   row's 23, a match. With the swallow armed at the start chord, a **correct** run leaves the sink
   empty, so a runner assertion of *sink text equals row text* now fails on every good run and has to
   be inverted.
-- **The third candidate is Wispr's own Scratchpad, and it is the one that works** (2026-09-13,
-  measured): F18 held 20 s put the text in `Notes` (a new note per dictation, with a
-  `NoteVersions` row beside it), left the victim TextEdit document untouched, **never moved the
-  focus**, posted **no ⌘V**, wrote and then restored the pasteboard, and came back in **432 ms**.
-  The Scratchpad window opened in the background. `WisprNotes` is the read half
-  (`GET`/`POST /test/wispr-notes`, `via: "wispr-notes"`), wired to no gesture yet.
+- **The third candidate is Wispr's own Scratchpad, and it is the one that shipped** (2026-09-13):
+  the chord held for the sentence puts the text in `Notes`, and `WisprNotes` reads it back
+  (`via: "wispr-notes"`). Verified end to end on the installed build at 23:31 — see the four
+  corrections below, every one of them paid for by a run that looked like it worked.
+- **Wispr DOES post a ⌘V in Scratchpad mode, and it is aimed at its own window.** The earlier
+  reading of *no ⌘V at all* was taken with no tap armed. The swallow must be **off** in this mode
+  (`armInjectionCapture(swallow: startedMode != .scratchpad)`, probe still armed): taking that key
+  is this app reaching into another app's conversation with itself, and it showed — one run's
+  sentence was appended to the previous run's note as ` commit and push the fix `, doubled.
+- **The Scratchpad window takes the keyboard when it opens, so the close comes BEFORE the
+  delivery.** Wispr opens it when it *writes the note*, ~2 s after the words are readable, and a
+  `pasteText` fired the moment the note appears goes **into the note**: measured, the relay's own
+  70 characters were appended to the Scratchpad and the TextEdit document Victor was looking at
+  stayed empty. `pollNote` therefore closes and verifies first, then delivers.
+- **Wispr does not reliably start a new note** — it appended to a note from four minutes earlier
+  with `source = typed`, and a `typed` version carries the **accumulated notepad**, not the
+  increment. So the delivery is the new portion only: the note's content with the text captured at
+  the gesture (`priorNoteText`) stripped off the front by longest common prefix. 70 characters for
+  a four-word sentence is what the other reading costs, growing every time.
+- **The close must wait for the window to appear** (`closeWhenItAppears`). A close fired at the
+  delivery finds nothing open, reports success, and the window appears a second later and is still
+  there at the start of the next dictation — which is the state that costs a sentence.
 - **On a Scratchpad dictation the `History` row is not the witness.** Its `app` column named the
   **front app** (TextEdit) for a sentence that went into Wispr's own note: `app` answers *what was
   in front*, which for every other kind of dictation is accidentally the same thing as *where the
