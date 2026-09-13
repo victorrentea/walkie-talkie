@@ -312,6 +312,43 @@ def dictate(wav_path, device_index, keys=None, timeout=RESULT_TIMEOUT_SEC) -> He
     return wait_for_new(before, timeout=timeout)
 
 
+# ── the same thing again, through the relay instead of our own keystrokes ────
+def transcribe(wav_path, device=None, timeout=None, verbose=False) -> dict:
+    """**Feed Wispr a WAV and get back what it transcribed** — the relay's way.
+
+    The newer half of this module, and the one a batch should move to. Beside
+    `dictate()` and not instead of it, because they are not the same trade:
+
+    | | `dictate()` | `transcribe()` |
+    |---|---|---|
+    | the chord | synthesised here, `CGEventPost` | posted by the **app**, `POST /test/wispr-handsfree` |
+    | Accessibility | **this interpreter needs the grant** | not needed, and not asked for |
+    | where the words land | whatever has focus — hence `paste_sink()` and an allow-list | the relay's own sink window, which it owns |
+    | the answer | read out of `flow.sqlite` | read out of the sink, with the route named |
+    | when it is done | polls for a new `History` row | the sink settling, or Wispr's own `dismissed`/`empty`/`no_audio` |
+
+    So it needs the relay running, and in exchange it stops needing the grant,
+    stops needing a harmless document to be in front, and stops reading Wispr's
+    database for the words — which is the rule this repo keeps
+    (`.claude/rules/dictation-source.md`, *Do not read Wispr Flow's database as
+    a recogniser or a transcript fallback*). The row's **status** is still read,
+    read-only, as the *is it done* signal; the words come from the sink.
+
+    `helpers/teacher_label.py` is the caller this is for. It is **not** rewritten
+    yet — `docs/loopback.md` says what the switch is.
+
+    The implementation lives in `wispr_loop.py`, beside the `Relay`, the log
+    parsing and the timing arithmetic it shares; imported lazily so this module
+    stays importable with no relay and no harness on the path.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import wispr_loop
+
+    return wispr_loop.transcribe(wav_path, device=device, timeout=timeout, verbose=verbose)
+
+
 # ── a tiny CLI, for one file at a time ───────────────────────────────────────
 def main(argv):
     import argparse

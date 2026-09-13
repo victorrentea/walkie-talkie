@@ -175,6 +175,40 @@ class Assertions(unittest.TestCase):
         self.assertFalse(wl.Result(scenario="nothing").passed)
 
 
+class Arrival(unittest.TestCase):
+    """`StableText` — the rule the primitive's wait rests on.
+
+    Wispr inserts some sentences in more than one event (a paste, then a
+    trailing space). Reading the sink the instant the first event lands scores a
+    half-written sentence as a bad transcript, which is exactly the kind of
+    failure that looks like a broken channel and is not.
+    """
+
+    def test_text_must_stop_changing_before_it_counts(self):
+        stable = wl.StableText(stable_ms=300)
+        self.assertFalse(stable.observe("Commit and", 0.0))
+        self.assertFalse(stable.observe("Commit and", 0.2))     # only 200 ms so far
+        self.assertFalse(stable.observe("Commit and push", 0.3))  # changed — clock restarts
+        self.assertFalse(stable.observe("Commit and push", 0.5))
+        self.assertTrue(stable.observe("Commit and push", 0.61))
+
+    def test_an_empty_sink_never_counts_as_settled(self):
+        stable = wl.StableText(stable_ms=300)
+        for t in (0.0, 0.5, 1.0, 5.0):
+            self.assertFalse(stable.observe("", t))
+
+    def test_the_first_observation_is_never_enough(self):
+        """However long the caller waited before asking, one sample is not stability."""
+        self.assertFalse(wl.StableText(stable_ms=0).observe("hello", 99.0))
+        self.assertTrue(wl.StableText(stable_ms=0).observe("hello", 99.0) is False)
+
+    def test_wispr_s_own_dead_ends_are_named(self):
+        """A dismissed dictation must end the wait, not burn the timeout."""
+        for status in ("dismissed", "empty", "no_audio", "error"):
+            self.assertIn(status, wl.DEAD_STATUSES)
+        self.assertNotIn("formatted", wl.DEAD_STATUSES)
+
+
 class Fixtures(unittest.TestCase):
     def test_every_scenario_resolves_to_a_clip_that_is_on_disk(self):
         for name in wl.SCENARIOS:

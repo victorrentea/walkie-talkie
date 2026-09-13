@@ -20,6 +20,82 @@ tools/wispr-loop.sh sink-key-at-stop --repeat 3   # a race — one sample is an 
 Exit codes: **0** every assertion passed · **1** one failed · **2** a
 precondition failed · **3** the running build has not got the loopback routes.
 
+## The primitive everything stands on
+
+```sh
+tools/wispr-transcribe.sh clip.wav           # the sentence, on stdout
+tools/wispr-transcribe.sh clip.wav --json    # + route and timings
+```
+
+**Feed Wispr an arbitrary WAV, print what it transcribed.** No scenario, no
+assertions, nothing about destinations. The transcript goes to **stdout** and
+everything else to stderr, so `$(tools/wispr-transcribe.sh f.wav)` is the
+sentence and nothing else.
+
+Exit: **0** a transcript · **1** nothing arrived · **2** a precondition failed ·
+**3** Wispr itself said there would be nothing (`dismissed` / `empty` /
+`no_audio`).
+
+It differs from the scenarios in exactly one deliberate way: **the chord is
+Wispr's own, not a relay gesture.** `POST /test/wispr-handsfree` makes the app
+post `fn ⌃ Space`, so the relay sees a dictation *Victor* began by hand — it
+draws the ring and watches, and routes the words nowhere. A relay gesture would
+start a dictation *with a destination* and deliver the sentence to a terminal,
+which is right for a scenario and wrong for a transcription. The run reports
+`relayListening` / `relayRingUp` so a caller can see which of the two it got.
+
+**Waiting on a condition, with two exits.** The sink is polled until its text is
+non-empty **and has not changed for 300 ms** (`StableText`, `STABLE_MS`) —
+because Wispr inserts some sentences in more than one event, and reading the
+sink the instant the first one lands scores a half-written sentence as a bad
+transcript. The other exit is Wispr's own `History` row reaching `dismissed`,
+`empty`, `no_audio` or `error`: there is no transcript coming, and waiting out
+the timeout for it is the twenty-second stall the `WisprHistory` work removed
+from the app. The status is printed and the exit code is 3.
+
+The scenarios call the same wait (`_settled_sink`) rather than reading the sink
+once, so none of them can score a sentence Wispr is halfway through inserting.
+
+### As a Python function, and what it means for the teacher batch
+
+```python
+import wispr_loopback as rig
+heard = rig.transcribe("/path/to/clip.wav")     # -> {"ok", "text", "route", "timings", …}
+```
+
+`helpers/wispr_loopback.py` has **two** ways to put a WAV through Wispr now, and
+they are not the same trade:
+
+| | `dictate()` (2026-09-11) | `transcribe()` (2026-09-13) |
+|---|---|---|
+| the chord | synthesised here, `CGEventPost` | posted by the **app**, `POST /test/wispr-handsfree` |
+| Accessibility | **this interpreter needs the grant** | not needed, not asked for |
+| where the words land | whatever has focus — hence `paste_sink()` and an allow-list of harmless sinks | the relay's sink window, which it owns |
+| the answer | read out of `flow.sqlite` | read out of the sink, with the route named |
+| when it is done | polls for a new `History` row | the sink settling, or Wispr's own `dismissed`/`empty`/… |
+| needs | Accessibility + a harmless front app | the relay running |
+
+**`helpers/teacher_label.py` is the caller this was written for and is not
+rewritten yet.** `docs/teacher-loopback.md` describes the batch as it stands:
+play each corpus WAV into Wispr, read back what it heard, and store `asrText` as
+the label. It was blocked on the microphone pin, which is now lifted. The switch,
+when Victor wants it, is small:
+
+- `rig.dictate(wav, idx)` → `rig.transcribe(wav)`; the returned dict's `text` is
+  the label and `timings` replaces the hand-rolled stopwatch.
+- `rig.accessibility_ok()` and the `rig.paste_sink()` allow-list **go away** —
+  neither is a question any more once the app posts the chord and the relay owns
+  the window the words land in. Hazards 1 and 2 of
+  `docs/teacher-loopback.md` are answered by construction rather than by
+  refusing to start.
+- the 🔒 locks stay, and `tools/wispr-act.sh` is where that lives now.
+- **one thing does not survive the switch:** the batch stores Wispr's **`asrText`**,
+  the recogniser's raw reading, and deliberately *not* `formattedText`. The sink
+  receives what Wispr **inserts**, which is the formatted text. So a batch that
+  moves to `transcribe()` is training on a different column, and that is a
+  decision about the corpus, not a refactor — see *What gets written* in
+  `docs/teacher-loopback.md`. Until it is made, `dictate()` stays.
+
 ## How the loop works
 
 ```
@@ -87,7 +163,7 @@ the two cannot drift. Nothing fails silently; a fatal row says what to do.
 | a Loopback device resolves | otherwise the WAV is played at nobody |
 | `sounddevice` + `numpy` | the playback |
 | `~/bin/hands-off` | the locks are mandatory, not a nicety |
-| `/test/state`, `/test/sink`, `/test/gesture` | a build older than the harness exits **3**, not 1 |
+| `/test/state`, `/test/sink`, and `/test/gesture` (scenarios) or `/test/wispr-handsfree` (the primitive) | a build older than the harness exits **3**, not 1 |
 | `/up` says nothing is listening | Victor may be dictating; the run refuses |
 
 **Route detection has a wrinkle worth knowing.** `ElementPicker` dispatches on
@@ -96,6 +172,10 @@ method *and* path, and answers a GET to a POST-only route with the same
 with a POST is out of the question — a POST to it *is* the gesture. So a 404
 falls back to `strings` over the running executable: a hit proves the literal is
 compiled in, a miss proves nothing, and it is only ever the fallback.
+
+All three of these — the preflight, the system input and the locks — live in
+**`tools/wispr-act.sh`**, sourced by both scripts. One implementation of the
+restore trap, not two.
 
 **The locks and the restore.** The act phase runs under
 `hands-off run "wispr-loop <scenario>" -- …`, which releases on exit, on Ctrl-C

@@ -525,6 +525,163 @@ def play_wav(path: str, device_name: str | None, dry_run: bool = False) -> float
     return seconds
 
 
+# ══ the primitive ════════════════════════════════════════════════════════════
+#: How long the sink's text has to stop changing before it counts as arrived.
+#: Wispr inserts a sentence in more than one event on some paths (a paste, then
+#: a trailing space), so the first event is not the end of it.
+STABLE_MS = 300
+
+#: Wispr's own verdicts that mean *there is no transcript and there never will
+#: be one*. Waiting past them is waiting for a key that is not coming.
+DEAD_STATUSES = ("dismissed", "empty", "no_audio", "error")
+
+
+class StableText:
+    """Has the text stopped changing?
+
+    Kept as an object with an injectable clock rather than a sleep loop, because
+    the rule — *non-empty, and unchanged for `stable_ms`* — is the one piece of
+    the wait that can be wrong quietly, and `evals/test_wispr_loop.py` can only
+    test it if it does not own the clock.
+    """
+
+    def __init__(self, stable_ms: int = STABLE_MS):
+        self.stable_ms = stable_ms
+        self.text = ""
+        self.since: float | None = None
+
+    def observe(self, text: str, now: float) -> bool:
+        text = text or ""
+        if text != self.text:
+            self.text, self.since = text, now
+            return False
+        if not text or self.since is None:
+            return False
+        return (now - self.since) * 1000 >= self.stable_ms
+
+
+def _sink_key(relay: Relay) -> dict:
+    """Make the relay's sink the key window, remembering what was in front."""
+    return relay.post("/test/sink", {"key": True})
+
+
+def _sink_restore(relay: Relay) -> dict:
+    """Put the app that was in front back in front."""
+    return relay.post("/test/sink", {"restore": True})
+
+
+def wait_for_arrival(relay: Relay, timeout: float, started: float,
+                     stable_ms: int = STABLE_MS) -> tuple[str, list, str]:
+    """Wait for the sink to settle, or for Wispr to say there will be nothing.
+
+    Returns `(text, events, status)`. `status` is `""` while Wispr is still
+    working, one of `DEAD_STATUSES` when it has given up, `"timeout"` when
+    neither happened.
+
+    Two exits and no fixed sleep between them. The sink one is the answer; the
+    History one is what keeps a dismissed dictation from costing the caller a
+    whole timeout — that was the 20-second wait the `WisprHistory` work removed
+    from the app, and a harness has no business reintroducing it.
+    """
+    if relay.dry_run:
+        return ("(dry run)", [], "")
+    stable = StableText(stable_ms)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        sink = relay.sink_read() or {}
+        text, events = (sink.get("text") or ""), (sink.get("events") or [])
+        if events and stable.observe(text, time.monotonic()):
+            return (text, events, "")
+        row = wispr_history_newest()
+        if row and row.started_at >= started - 5 and row.status in DEAD_STATUSES:
+            return (text, events, row.status)
+        time.sleep(0.1)
+    sink = relay.sink_read() or {}
+    return ((sink.get("text") or ""), (sink.get("events") or []), "timeout")
+
+
+def transcribe(wav: str, device: str | None = None, port: int | None = None,
+               timeout: float | None = None, verbose: bool = False,
+               dry_run: bool = False) -> dict:
+    """**Feed Wispr an arbitrary WAV and hand back what it transcribed.**
+
+    The one primitive the whole harness is built on, and the one Victor's
+    teacher-labelling batch wants: `helpers/teacher_label.py`'s `rig.dictate()`
+    synthesises Wispr's push-to-talk chord itself and then reads `flow.sqlite`.
+    This needs no Accessibility grant of its own and reads no transcript out of
+    Wispr's database — the app posts the chord, and the words come back through
+    the sink, which is a window we own.
+
+    **The chord is `POST /test/wispr-handsfree`, deliberately not a relay
+    gesture.** A gesture would make the relay *start* a dictation and route the
+    words at a destination; this is Wispr's own raw chord, so the relay treats
+    it as a dictation Victor began by hand — it draws the ring and watches, and
+    nothing is delivered anywhere. `listening` is reported back so a caller can
+    see which of the two it got.
+
+    Returns a dict; `ok` is False with a `reason` when there is no transcript,
+    and `status` carries Wispr's own verdict when it had one.
+    """
+    port = port or pf.relay_port()
+    if port is None:
+        return {"ok": False, "reason": "the relay is not listening on 8917-8919"}
+    relay = Relay(port, dry_run=dry_run, verbose=verbose)
+    wav = os.path.expanduser(wav)
+    if not os.path.exists(wav) and not dry_run:
+        return {"ok": False, "reason": "no such WAV: %s" % wav}
+
+    mark = LogMark()
+    started = time.time()
+    out: dict = {"ok": False, "wav": wav, "text": "", "route": "", "status": "", "reason": ""}
+    try:
+        _open_sink(relay)
+        _sink_key(relay)
+
+        relay.post("/test/wispr-handsfree")
+        # Not a relay gesture: `listening` should stay false and only the ring
+        # should come up. Recorded rather than asserted — the relay is allowed
+        # to adopt a hand-started dictation, and which it did is information.
+        state = relay.state() or {}
+        out["relayListening"] = bool(state.get("listening"))
+        out["relayRingUp"] = bool(state.get("ringUp"))
+
+        seconds = play_wav(wav, device, dry_run)
+        out["seconds"] = round(seconds, 2)
+        relay.post("/test/wispr-handsfree")   # the chord is a toggle
+
+        text, events, status = wait_for_arrival(relay, timeout or (seconds + 60), started)
+        out["text"], out["status"] = text, status
+        out["route"] = (events[-1].get("route") if events else "") or ""
+        out["events"] = events
+
+        t = read_timings(mark.lines())
+        row = wispr_history_newest()
+        row = row if row and row.started_at >= started - 5 else None
+        out["timings"] = {
+            "gestureToMicOpenMs": t.gesture_to_mic_open_ms,
+            "micCloseToArrivalMs": t.delivery_ms if t.delivery_ms is not None else t.done_ms,
+            "micCloseToWisprDoneMs": t.done_ms,
+            "wisprDoneSource": t.done_source,
+            "e2eLatency": row.e2e_latency if row else None,
+            "ringDownReason": t.ring_down_reason,
+        }
+        out["wisprApp"] = row.app if row else ""
+        if status in DEAD_STATUSES:
+            out["reason"] = "Wispr finished with status %r — there is no transcript" % status
+        elif status == "timeout":
+            out["reason"] = ("nothing arrived in the sink within the timeout"
+                             + (" (ring down: %s)" % t.ring_down_reason if t.ring_down_reason else ""))
+        elif text.strip():
+            out["ok"] = True
+        else:
+            out["reason"] = "the sink settled empty"
+        out["log"] = [line.raw for line in mark.lines()]
+    finally:
+        _sink_restore(relay)
+        _close_sink(relay)
+    return out
+
+
 # ══ scenarios ════════════════════════════════════════════════════════════════
 def _open_sink(relay: Relay):
     """Make the relay's own window key, and empty it.
@@ -545,8 +702,20 @@ def _close_sink(relay: Relay):
 
 
 def _sink_text(relay: Relay) -> tuple[str, list[dict]]:
+    """One read, for the scenarios that assert the sink stayed *empty*."""
     sink = relay.sink_read() or {}
     return (sink.get("text") or ""), (sink.get("events") or [])
+
+
+def _settled_sink(ctx, grace: float = 4.0) -> tuple[str, list[dict]]:
+    """What the sink ended up holding, through the primitive's own stability rule.
+
+    Shared with `transcribe()` on purpose: reading the sink once, the instant the
+    ring goes down, catches a sentence Wispr is still halfway through inserting
+    and scores it as a bad transcript.
+    """
+    text, events, _status = wait_for_arrival(ctx.relay, grace, ctx.started)
+    return text, events
 
 
 def _await_listening(relay: Relay, result: Result, timeout: float = 8.0) -> bool:
@@ -630,7 +799,7 @@ def scenario_caret(ctx) -> Result:
     t = read_timings(mark.lines())
     result.timings = t
 
-    text, events = _sink_text(relay)
+    text, events = _settled_sink(ctx)
     state = relay.state()
     delivery = (state.get("lastDelivery") or {})
     kind = delivery.get("kind") or ""
@@ -932,16 +1101,6 @@ class Context:
         return row if row and row.started_at >= self.started - 5 else None
 
 
-def _sink_key(relay: Relay) -> dict:
-    """Make the relay's sink the key window, remembering what was in front."""
-    return relay.post("/test/sink", {"key": True})
-
-
-def _sink_restore(relay: Relay) -> dict:
-    """Put the app that was in front back in front."""
-    return relay.post("/test/sink", {"restore": True})
-
-
 def _sink_question(ctx, key_at_start: bool) -> Result:
     """6 & 7 — **does Wispr pick its insertion target at the start or at the end?**
 
@@ -1009,7 +1168,7 @@ def _sink_question(ctx, key_at_start: bool) -> Result:
 
         result.timings = read_timings(mark.lines())
 
-        sink_text, events = _sink_text(relay)
+        sink_text, events = _settled_sink(ctx)
         victim_text = "" if relay.dry_run else _victim_text(victim)
         routes = ", ".join(sorted({e.get("route", "?") for e in events})) or "(none)"
 
@@ -1170,6 +1329,45 @@ def summary(results: list[Result]) -> str:
     return "\n".join(rows)
 
 
+def _transcribe_cli(args, port: int) -> int:
+    """`--transcribe`: the primitive, printed. 0 words, 1 nothing arrived,
+    3 Wispr itself said there would be nothing (`dismissed` / `empty` / …)."""
+    out = transcribe(args.transcribe, device=args.device, port=port,
+                     verbose=args.verbose, dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    else:
+        t = out.get("timings") or {}
+        if out.get("ok"):
+            print(out["text"])
+        else:
+            print("✗ %s" % (out.get("reason") or "no transcript"), file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  route                    %s" % (out.get("route") or "—"), file=sys.stderr)
+        print("  gesture → mic open       %s" % _ms(t.get("gestureToMicOpenMs")), file=sys.stderr)
+        print("  mic close → arrival      %s" % _ms(t.get("micCloseToArrivalMs")), file=sys.stderr)
+        print("  Wispr's own e2eLatency   %s" % (
+            "%.2f s" % t["e2eLatency"] if t.get("e2eLatency") else "—"), file=sys.stderr)
+        if out.get("status"):
+            print("  Wispr's History status   %s" % out["status"], file=sys.stderr)
+        if out.get("wisprApp"):
+            print("  Wispr says it inserted into  %s" % out["wisprApp"], file=sys.stderr)
+        print("  relay listening / ring   %s / %s"
+              % (out.get("relayListening"), out.get("relayRingUp")), file=sys.stderr)
+        if args.verbose:
+            for line in out.get("log") or []:
+                print("  " + line, file=sys.stderr)
+    if args.dry_run:
+        return 0
+    if out.get("ok"):
+        return 0
+    return 3 if out.get("status") in DEAD_STATUSES else 1
+
+
+def _ms(value):
+    return "%d ms" % value if value is not None else "—"
+
+
 def main(argv):
     import argparse
 
@@ -1177,6 +1375,9 @@ def main(argv):
         prog="wispr-loop",
         description="Drive one real Wispr Flow dictation end to end and assert the outcome.")
     ap.add_argument("scenario", nargs="?", help="one of: " + ", ".join(SCENARIOS))
+    ap.add_argument("--transcribe", metavar="WAV",
+                    help="the primitive on its own: feed Wispr this WAV and print what it "
+                         "transcribed. No scenario, no assertions.")
     ap.add_argument("--all", action="store_true", help="every scenario, then a summary table")
     ap.add_argument("--wav", help="override the fixture's clip")
     ap.add_argument("--transcript", help="override the fixture's known transcript")
@@ -1195,14 +1396,17 @@ def main(argv):
         for name, (_f, blurb, red) in SCENARIOS.items():
             print("  %-24s %s%s" % (name, blurb, "" if not red else ""))
         return 0
-    names = list(SCENARIOS) if args.all else ([args.scenario] if args.scenario else [])
-    if not names:
-        ap.error("a scenario, or --all")
-
     port = pf.relay_port()
     if port is None:
         print("✗ the relay is not listening on 8917–8919", file=sys.stderr)
         return 2
+
+    if args.transcribe:
+        return _transcribe_cli(args, port)
+
+    names = list(SCENARIOS) if args.all else ([args.scenario] if args.scenario else [])
+    if not names:
+        ap.error("a scenario, --all, or --transcribe <wav>")
 
     results = []
     for index in range(1, max(1, args.repeat) + 1):
