@@ -209,6 +209,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The loopback closes: gestures, state, a sink and a delivery field (2026-09-13)](#the-loopback-closes-gestures-state-a-sink-and-a-delivery-field-2026-09-13)
 - [Every selection and every pick says when, and a pick says what it said (2026-09-13)](#every-selection-and-every-pick-says-when-and-a-pick-says-what-it-said-2026-09-13)
 - [Version row and ⌘Q (2026-09-13)](#version-row-and-q-2026-09-13)
+- [Three witnesses instead of one, and the ring stops waiting for CoreAudio (2026-09-13, evening)](#three-witnesses-instead-of-one-and-the-ring-stops-waiting-for-coreaudio-2026-09-13-evening)
 
 ---
 
@@ -8443,3 +8444,188 @@ the app is actually frontmost. The stamp is still the executable's mtime (see *T
 item*). The ⌘Q hint reverses the *no key equivalent* note under *Autosend*: it still only fires
 while the menu is open, but the hint is what makes the row read as Quit, and consistency across
 the three menus won over the pedantry.
+
+## Three witnesses instead of one, and the ring stops waiting for CoreAudio (2026-09-13, evening)
+
+Five end-to-end runs through the Loopback device that evening transcribed perfectly, and
+`WisprWatch` saw **no microphone edge in any of them**. That is the sentence this whole
+section is about. The five runs were not failures — Wispr heard the WAV, the row said
+`formatted`, the words came back in 0.6–1.1 s — and the app's one model of *is Wispr
+listening* was blind through every one of them, because Wispr is pinned to `🎓 TO Wispr`
+whose physical source keeps the stream warm, so `kAudioProcessPropertyIsRunningInput`
+never changes and the notification only fires on a change.
+
+Both of Victor's failed dictations earlier that day are the same fact from the other end:
+
+- **18:18:04, into Word.** 2.5 s of talking, no open edge and no close edge — the dictation
+  was shorter than the watcher's own lag. `beginCapture` is armed from the close, so the
+  swallow window, the `History` poll and the settle never existed; Wispr pasted into Word
+  with its own ⌘V and the relay never saw a thing. The ring stood for twelve seconds and
+  then `speculativeGrace` wrote *Wispr ignored the chord* about a sentence that had been
+  delivered.
+- **18:18:36, the spawn.** The close edge came three seconds late, a second 🔼 click landed
+  inside the settle, `onPasteToggle` asked only about `listening` and started a phantom
+  dictation, whose `gestureSeen` called `endCapture(quiet:)` and disarmed the **first**
+  sentence's swallow. Wispr's ⌘V landed in whatever Terminal was in front.
+
+The common half is not the timing. It is that **one signal was the only witness**, and it is
+a signal about another process's audio device — the one thing in this arrangement nobody
+controls.
+
+### `WisprState` — the phase, and what each signal is allowed to prove
+
+`WisprState` is a five-phase machine (`idle` · `warming` · `listening` ·
+`transcribing(status)` · `done(status)`) with four inputs, each with its own latency and none
+of them authoritative alone:
+
+| input | what it proves | measured |
+|---|---|---|
+| the chord this app posts | a dictation was **asked for** | it is the clock |
+| a **100 ms poll** of `kAudioProcessPropertyIsRunningInput` | a microphone **is** open | one tick |
+| `WisprWatch`'s CoreAudio notification | the same fact, pushed | **0–6 s, sometimes never** |
+| the `History` row at 150 ms | Wispr **has the sentence** | the row is created at the gesture |
+
+The poll and the notification are deliberately two inputs and not one. Collapsing them into
+the faster one would throw away the number the next feature needs — Victor's replay buffer
+has to know when Wispr is *ready to be spoken to*, and the gap between the pull and the push
+is the closest thing to that measurement there is. So every `listening` transition logs both:
+`wispr state: warming → listening — poll saw the microphone, poll saw it 412 ms after the
+chord, notification never`.
+
+The machine owns nothing — no timers, no CoreAudio, no SQLite, no AppKit — which is what
+makes `POST /test/wispr-state/simulate` possible: a fresh machine with a fake clock, driven
+by a scripted sequence, answering with its transitions. That is the unit test. It is a route
+rather than an XCTest target because the package is one `executableTarget` with a
+`main.swift`, and splitting the app into a library for one test file is a worse trade than a
+route that runs in under a millisecond and touches nothing in the running relay.
+
+The phase is surfaced **source-agnostically**, as `DictationPhase` on `DictationSource`.
+`isRecording` only ever answered the middle of the five, so the warm-up a cold Electron costs
+and the seconds Wispr spends formatting both reached the relay as the same undivided *not
+recording* — and a settle written against that cannot tell *the words are late* from *the
+words are lost*. `LocalWhisperSource` answers the same five with an empty status.
+
+### The ring is *microphone open*, and the chip carries the wait
+
+Victor's direction, the same evening: **the ⚡ ring is the relay's own knowledge that a
+microphone is open**; the tooltip says where the words go. So:
+
+- The ring goes **down on the relay's own stop** — the 🔼 click, ⌘⌃D, the second 🔼→, the end
+  of a `/test` run — not on a CoreAudio edge. `WisprFlowSource.stop()` closes the listening
+  phase itself and the edge only confirms and logs `⚡ the mic edge closed N ms after the
+  relay had already stopped`, which is the number that made this necessary.
+- The chip shows `Transcribing...` for the whole settle. That is the claim the ring used to
+  make by standing, minus the lie that a microphone is open.
+- `endSettling`'s line is no longer `⚡ ring down`; it is `✍️ the words landed`. The ring and
+  the words were the same instant until today and the day they stopped being one is the day
+  the log started lying about which. `RingDown` grew a sibling (`lastSettled`), because *why
+  did the ring go* and *why did the wait end* are two questions with two different fixes.
+- **`beginCapture` is armed at the start chord.** The swallow, the pasteboard watch and the
+  row poll now cover the whole sentence; only the 30 s deadline starts at the close, because
+  *how long may the words take* is counted from the last word. A missing edge costs nothing —
+  the window is simply open, which is one flag.
+- **`speculativeGrace` may only retract a ring for a chord that left no row.** Wispr creates
+  the `History` row at the gesture, so the row's *absence* is the honest test for *Wispr
+  ignored the chord*; a row that exists confirms the dictation exactly as the microphone used
+  to, and the log says which — `Wispr never created a row within 12 s of the chord` against
+  `Wispr's own row (the relay saw no microphone) confirms the ring`.
+- The row poll now **adopts** the row rather than taking a snapshot at the close: it refuses
+  the row that was on top when the capture was armed (unless that one was still open) and
+  takes the first newer one whose `startedAt` is this dictation's.
+
+### A click during the settle is a stop, or it is nothing
+
+`onPasteToggle` asks about `listening || source.isRecording` first, then about
+`settling || phase.isWaitingForWords` — and in the second case it does nothing at all and
+says so. `startDictation`'s own guard grew `!settling` beside it. Behind both,
+`retireCaptureIfSettled` replaces the unconditional `endCapture` in `gestureSeen`: a capture
+whose row is **not terminal** belongs to a sentence still in flight and a new gesture does
+not get to disarm it.
+
+### `raw_transcript` and `processing` are progress, not silence
+
+Both statuses were on the wire that evening and neither was in the switch, so a settle sat
+out its full eight seconds on a sentence that was arriving. The vocabulary is now in one
+place (`WisprState.intermediateStatuses` / `terminalStatuses`) and the settle's give-up asks
+the source before it fires: while the phase is `transcribing` it re-arms, bounded by the
+capture's own 30 s. Eight seconds is the right number for *nothing has come back*; it is the
+wrong number for a row that says `processing`, and Wispr's tail runs to 22.8 s.
+
+### The sink cross-check, explained — and a bug nobody was looking for
+
+The runner's sink cross-check disagreed with the row in 5/5 runs, and the explanation is two
+separate things.
+
+**The sink was right.** With the capture armed at the *close*, Wispr's ⌘V routinely arrived
+**before** the relay knew the microphone had shut — 22:30:24 against a close edge at 22:30:27
+— so it was never swallowed, and it landed in the sink because the sink was the key window.
+24 characters against the row's 23 (`Commit and push the fix` plus a trailing space). That is
+a match, not a mismatch. What it also means is that **once the swallow is armed at the start
+chord the sink can only ever see what leaks**, and a cross-check written as *sink text must
+equal row text* will now fail on every correct run. The runner's assertion has to invert: an
+armed, working wrap leaves the sink **empty**.
+
+**The relay was wrong, and in a way nothing was watching for.** In three of those five runs
+the transcript the relay delivered was 163 characters of a Word rental contract —
+`Semnături, PROPRIETAR CHIRIAȘ …` — filed in `corpus.jsonl` at 22:19:46, 22:20:19 and
+22:29:55 beside audio of Victor saying *"Commit and push the fix"*. Wispr writes the
+transcript to the pasteboard, presses ⌘V, and **puts the previous clipboard back**. The
+capture's `clipboardAt` baseline was taken at the microphone's close, which is *after*
+Wispr's write, so the only pasteboard move the relay ever saw was the restore — and
+`the pasteboard moved but no ⌘V was seen` delivered it as the sentence. (163 and not 166
+because Swift counts `\r\n` as one `Character`; the corpus text has three of them.)
+
+Two fixes, and the second is kept even though the first makes it redundant today. Arming at
+the start chord puts the baseline before Wispr's write, so the first move seen is the
+transcript. And `deliver` now refuses a pasteboard whose contents are **exactly what they
+were before he started talking** — keeping the capture alive, because the row usually answers
+a beat later — and reads the string at the instant the change is seen rather than 250 ms
+afterwards, because the restore lands inside that gap.
+
+### The row as the delivery, not the fallback
+
+Victor rejected both candidate wraps the same evening. The **sink** works — measured 3/3, Wispr
+picks its insertion target at the *end*, and a window that takes the keyboard 1–5 ms after the
+stop chord receives the text — but it steals focus during every dictation and he may be
+clicking or typing at that instant. **Revoking Wispr's Accessibility grant** works on paper and
+breaks Wispr as a standalone tool, which it has to go on being.
+
+What is built for whichever wrap wins is the path itself: `historyIsTheRoute`
+(`WT_WISPR_HISTORY_ROUTE=1`, `POST /test/wispr {"historyRoute": true}`) makes `formatted`
+deliver **immediately**, with no `pasteGrace` for a ⌘V that is not coming, taking the words
+from `pastedText` **or `formattedText`** — a Wispr that inserted nothing fills the second
+column and leaves the first empty — and always as `.route`, because nobody but the relay is
+going to put that sentence anywhere. The ⌘V swallow stays armed behind it as the safety net.
+`WisprHistory.Entry` grew `formattedText`, `micDevice` and `language` for it.
+
+### The Scratchpad chord, and the one chord this app has to hold
+
+The third candidate is Wispr's own **Scratchpad**, and it touches neither the focus nor the
+permissions. Per Wispr's docs its *Open Scratchpad* shortcut carries three gestures: tap opens
+and closes the window, **hold is push-to-talk into the Scratchpad**, double-tap is hands-free
+into it while visible. Victor's is `"35+54+61": "open_scratchpad"` — P + right ⌘ + right ⌥.
+The hypothesis to test is that a *held* chord dictates into Wispr's own note (filed in
+`flow.sqlite`'s `Notes` / `NoteVersions`, with a `History` row whose `app` is
+`com.electron.wispr-flow`) and inserts nothing anywhere.
+
+`POST /test/wispr-scratchpad {"down": true}` presses the chord and **leaves it down**;
+`{"up": true}` releases in reverse order; `{"tap": true}` is the press-and-release. The chord
+is read from `prefs.user.shortcuts` at call time by *action name*, falling back to `35+54+61`,
+because the action is the stable thing and a hard-coded chord posts a keystroke into whatever
+owns it after a rebind.
+
+Two things about the hold are worth writing down. It is the only poster in `HotkeyTap` that
+leaves the keyboard down between two calls, and a stuck right ⌘ is a Mac that has stopped
+working — so it carries a **120 s dead-man's switch**, every release is idempotent, and the
+chord that is actually down is remembered so a rebind mid-sentence cannot make the release
+post a different one. And the modifiers go out with their **device-dependent bits**
+(`NX_DEVICERCMDKEYMASK` / `NX_DEVICERALTKEYMASK`): Wispr's own push-to-talk reader
+distinguishes the right ⌘ from the left, so a chord posted with a plain `.maskCommand` is a
+different chord as far as it is concerned.
+
+One thing the hold made necessary elsewhere: **this app's own hands-free chord is now stamped
+out of its own tap**. `HotkeyTap`'s `fn ⌃ Space` branch gained the `backButtonStamp` check the
+⌃Escape branch has always had, because the chord became a *toggle* on the far side — a
+hands-free chord seen while a dictation is open is now read as Victor ending it — and without
+the stamp `postWisprHandsFree` would hand the source its own start back as a stop, a
+millisecond later.

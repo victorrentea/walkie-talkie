@@ -281,6 +281,55 @@ class Playback(unittest.TestCase):
         self.assertEqual(self.wl.DEVICE_PREFERENCE[0], "🎓 TO Wispr")
 
 
+class Scratchpad(unittest.TestCase):
+    """The parts of `scratchpad-hold` that can be wrong without anyone noticing."""
+
+    def test_a_modified_note_counts_as_much_as_a_new_one(self):
+        """The Scratchpad is **one** note that gets appended to, not a note per
+        dictation — so a diff that only reports new ids reports nothing, for ever."""
+        before = {"notes": {"n1": {"content": "old", "title": "Scratchpad"}}, "versions": {}}
+        after = {"notes": {"n1": {"content": "old\nCommit and push the fix.", "title": "Scratchpad"}},
+                 "versions": {}}
+        changes = wl.notes_diff(before, after)
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["change"], "modified")
+        self.assertIn("Commit and push", changes[0]["content"])
+        self.assertEqual(changes[0]["was"], "old")
+
+    def test_a_new_note_is_reported_too(self):
+        changes = wl.notes_diff({"notes": {}, "versions": {}},
+                                {"notes": {"n2": {"content": "hello"}}, "versions": {}})
+        self.assertEqual([c["change"] for c in changes], ["new"])
+
+    def test_an_unchanged_database_reports_nothing(self):
+        snap = {"notes": {"n1": {"content": "same"}}, "versions": {"v1": {"content": "same"}}}
+        self.assertEqual(wl.notes_diff(snap, snap), [])
+
+    def test_note_versions_are_watched_as_well_as_notes(self):
+        changes = wl.notes_diff({"notes": {}, "versions": {}},
+                                {"notes": {}, "versions": {"v9": {"content": "x", "noteId": "n1"}}})
+        self.assertEqual([c["table"] for c in changes], ["versions"])
+
+    def test_the_scratchpad_key_falls_back_to_f18(self):
+        import os
+
+        import wispr_loopback
+        os.environ["WISPR_SCRATCHPAD_KEYS"] = "79"
+        try:
+            self.assertEqual(wispr_loopback.scratchpad_keys(), [79])
+        finally:
+            del os.environ["WISPR_SCRATCHPAD_KEYS"]
+        self.assertEqual(wispr_loopback.SCRATCHPAD_FALLBACK, 79)
+
+    def test_releasing_a_held_key_twice_is_harmless(self):
+        """The watchdog and `__exit__` race by design; both must be safe."""
+        import wispr_loopback
+        held = wispr_loopback.HeldKey([79])
+        # never entered, so nothing is down and release is a no-op that says so
+        self.assertFalse(held.release())
+        self.assertFalse(held.release())
+
+
 class Pasteboard(unittest.TestCase):
     """`--no-sink`'s witness. **Read-only here** — nothing in this file writes.
 

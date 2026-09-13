@@ -979,6 +979,69 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
     return out
 
 
+# ══ Wispr's Scratchpad: the notes, the windows, the front app ═══════════════
+def wispr_notes() -> dict:
+    """A snapshot of `Notes` and `NoteVersions`, read-only, for diffing.
+
+    The Scratchpad is a note, so a sentence dictated into it lands here rather
+    than in whatever had focus — which is the entire point of the experiment.
+    `content` is kept whole: the question is not only *did a row change* but
+    *did our sentence appear in it*.
+    """
+    if not os.path.exists(WISPR_DB):
+        return {"notes": {}, "versions": {}}
+    uri = "file:%s?mode=ro" % WISPR_DB.replace("?", "%3f").replace("#", "%23")
+    try:
+        db = sqlite3.connect(uri, uri=True, timeout=15)
+        db.row_factory = sqlite3.Row
+    except Exception:
+        return {"notes": {}, "versions": {}}
+    try:
+        notes = {r["id"]: {"title": r["title"] or "", "content": r["content"] or "",
+                           "preview": r["contentPreview"] or "", "modifiedAt": str(r["modifiedAt"])}
+                 for r in db.execute("select id, title, contentPreview, content, modifiedAt from Notes")}
+        versions = {r["id"]: {"noteId": r["noteId"], "content": r["content"] or "",
+                              "source": r["source"] or "", "createdAt": str(r["createdAt"])}
+                    for r in db.execute("select id, noteId, content, source, createdAt from NoteVersions")}
+        return {"notes": notes, "versions": versions}
+    except Exception:
+        return {"notes": {}, "versions": {}}
+    finally:
+        db.close()
+
+
+def notes_diff(before: dict, after: dict) -> list[dict]:
+    """What changed between two snapshots — new rows and modified ones alike.
+
+    Kept pure so `evals/test_wispr_loop.py` can hold it to the one behaviour
+    that matters: a note whose `content` gained our sentence must be reported
+    even though its `id` was there before, because the Scratchpad is a *single*
+    note that is appended to, not a new note per dictation.
+    """
+    changes = []
+    for table in ("notes", "versions"):
+        old, new = before.get(table) or {}, after.get(table) or {}
+        for key, row in new.items():
+            if key not in old:
+                changes.append(dict(row, table=table, id=key, change="new"))
+            elif row != old[key]:
+                changes.append(dict(row, table=table, id=key, change="modified",
+                                    was=(old[key].get("content") or "")[:80]))
+    return changes
+
+
+def wispr_windows() -> list[str]:
+    """Wispr Flow's window titles. `Status` is its pill and is always there."""
+    out = _osascript('tell application "System Events" to tell process "Wispr Flow" to '
+                     "name of windows")
+    return [w.strip() for w in (out or "").split(",") if w.strip()]
+
+
+def frontmost_app() -> str:
+    return _osascript('tell application "System Events" to name of first application '
+                      "process whose frontmost is true")
+
+
 # ══ scenarios ════════════════════════════════════════════════════════════════
 def _open_sink(relay: Relay):
     """Make the relay's own window key, and empty it.
@@ -1723,6 +1786,168 @@ def scenario_dismiss_before_paste(ctx) -> Result:
     return result
 
 
+def scenario_scratchpad_hold(ctx) -> Result:
+    """**Dictate into Wispr's own Scratchpad, and let nothing else be touched.**
+
+    Victor's chosen direction after the other two closed. Wispr's *Open
+    Scratchpad* shortcut has three readings on one binding, per Wispr's own
+    documentation: **tap** opens and closes the window, **hold** is push-to-talk
+    dictating *into the Scratchpad*, double-tap is hands-free into it. The hold
+    is the one that matters, because it names a destination that is **not
+    "whatever has focus"** — which is the problem every wrap so far has been
+    trying to work around.
+
+    The binding is being moved to a single **F18** (keycode 79) for a reason
+    worth keeping: a held ⌘⌥ chord would hijack every key Victor pressed for the
+    length of a sentence. F18 is a key no keyboard here sends by itself, so
+    holding it costs him nothing.
+
+    The run holds the key across the microphone wait **and** the whole clip, so
+    `HeldKey` carries a watchdog and an idempotent release: a key left down is
+    the one failure here that outlives the process.
+
+    Four questions, each with its own witness, and all four have to be answered
+    before this is a wrap and not a hope:
+
+    * **did the text reach a note?** `Notes` / `NoteVersions`, diffed around the
+      run — and the Scratchpad is *one* note that gets appended to, so a
+      modified row counts as much as a new one.
+    * **was the victim left alone?** A real TextEdit document, front and key
+      throughout, read with `osascript` afterwards.
+    * **did a window open?** Wispr's window list before, during and after. A
+      Scratchpad that steals the screen mid-sentence is not usable on a
+      projector.
+    * **did focus move?** The frontmost app, sampled during the run. It must
+      stay TextEdit.
+
+    No sink: a window of ours in front is the thing this would replace.
+    """
+    relay, result, mark = ctx.relay, ctx.result, ctx.mark
+    victim = None
+    clipboard = None
+    held = None
+    board_before = None
+    try:
+        import wispr_loopback as wl
+
+        keys = wl.scratchpad_keys()
+        result.note("Open Scratchpad is bound to keycode(s) %s" % keys)
+        if not relay.dry_run and not wl.accessibility_ok():
+            result.check(False, "this interpreter may synthesise the held key",
+                         "Accessibility is NOT granted — CGEventPost would fail silently")
+            return result
+
+        if relay.dry_run:
+            print("   · osascript: open %s/victim.txt in TextEdit" % ctx.scratch)
+            victim = "victim.txt"
+        else:
+            victim = _open_victim(ctx.scratch)
+            clipboard = pasteboard_snapshot()
+        result.check(bool(victim), "a victim document, front and key for the whole run",
+                     victim or "none")
+        if not victim:
+            return result
+
+        board_before = pasteboard_change_count()
+        notes_before = wispr_notes()
+        windows_before = [] if relay.dry_run else wispr_windows()
+        result.note("Wispr windows before: %s" % (windows_before or "—"))
+
+        # ── hold the key ────────────────────────────────────────────────
+        if relay.dry_run:
+            print("   · CGEventPost keyDown %s (held), wait for the mic edge, play, keyUp" % keys)
+            opened, waited = True, 0.0
+        else:
+            held = wl.HeldKey(keys, max_seconds=60.0)
+            held.__enter__()
+            opened, waited = await_microphone(relay, mark, timeout=8.0)
+
+        if not opened and not relay.dry_run:
+            held.release()
+            result.check(False, "Wispr reacted to the held key",
+                         "no microphone edge in %.1f s — Wispr did not react to the held key" % waited)
+            return result
+        result.check(True, "Wispr reacted to the held key",
+                     "microphone open after %.0f ms" % (waited * 1000))
+
+        windows_during = [] if relay.dry_run else wispr_windows()
+        front_during = "TextEdit" if relay.dry_run else frontmost_app()
+        result.note("Wispr windows during: %s" % (windows_during or "—"))
+
+        play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        if held is not None:
+            held.release()
+        result.note("key released after the clip")
+
+        # ── what Wispr made of it ───────────────────────────────────────
+        row, why = ((None, "dry-run") if relay.dry_run
+                    else wait_for_history(ctx.started, timeout=45))
+        text = ""
+        if row:
+            text = (row.formatted_text or row.pasted_text or "").strip()
+        result.check(bool(text) or relay.dry_run, "Wispr produced a sentence",
+                     "%r (status %s, app %s)" % (text[:50], row.status if row else why,
+                                                 row.app if row else "—"))
+        if row:
+            result.note("History row %d: app=%s, mic=%s, e2e %.0f ms"
+                        % (row.rowid, row.app or "—", row.mic_device or "—", row.e2e_latency))
+
+        # Notes are written a beat after the row; wait on the change rather than
+        # guessing at a sleep, and fall through with an empty diff if none comes.
+        changes = []
+        if not relay.dry_run:
+            found, _ = wait_for(lambda: notes_diff(notes_before, wispr_notes()) or None,
+                                timeout=10, poll=0.3)
+            changes = found or []
+        for change in changes:
+            result.note("%s %s %s — %r (modifiedAt %s)"
+                        % (change["change"], change["table"], change["id"][:8],
+                           (change.get("content") or "")[-80:], change.get("modifiedAt")
+                           or change.get("createdAt")))
+
+        in_notes = any(similarity(c.get("content") or "", ctx.fixture.get("transcript", "")) >= 0.5
+                       or normalise(ctx.fixture.get("transcript", "")) in normalise(c.get("content") or "")
+                       for c in changes)
+        victim_text = "" if relay.dry_run else _victim_text(victim)
+        board_after = pasteboard_change_count()
+        windows_after = [] if relay.dry_run else wispr_windows()
+        front_after = "TextEdit" if relay.dry_run else frontmost_app()
+
+        window_opened = len(windows_during) > len(windows_before) or len(windows_after) > len(windows_before)
+        focus_moved = (front_during or "").strip() not in ("TextEdit", "")
+
+        result.check(in_notes or relay.dry_run, "the sentence reached a Wispr note",
+                     "%d note change(s); match=%s" % (len(changes), in_notes))
+        result.check(not victim_text.strip(), "the victim document was left alone",
+                     "%d chars — %r" % (len(victim_text), victim_text[:60]))
+        result.check(not window_opened, "no Wispr window opened",
+                     "before %s / during %s / after %s" % (windows_before, windows_during, windows_after))
+        result.check(not focus_moved, "focus stayed on the victim",
+                     "during: %r, after: %r" % (front_during, front_after))
+
+        result.timings = read_timings(mark.lines())
+        result.note("pasteboard changeCount: %s → %s (%s)"
+                    % (board_before, board_after,
+                       "written" if board_before != board_after else "unchanged"))
+        result.note("probe: %s" % ("; ".join(result.timings.probes) or "none"))
+        result.answer = ("text in Notes: %s; victim untouched: %s; window opened: %s; focus moved: %s"
+                         % ("YES" if in_notes else "no",
+                            "YES" if not victim_text.strip() else "no",
+                            "YES" if window_opened else "no",
+                            "YES" if focus_moved else "no"))
+    finally:
+        # **The key first, before anything that could itself throw.**
+        if held is not None:
+            held.release()
+        if clipboard is not None and board_before is not None \
+                and pasteboard_change_count() != board_before:
+            pasteboard_restore(clipboard)
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
 SCENARIOS = {
     # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
     # for the microphone before playing, so it measures the caret path without
@@ -1750,6 +1975,9 @@ SCENARIOS = {
     # an anecdote.
     "sink-key-at-start": (scenario_sink_key_at_start,
                           "the sink is key BEFORE the chord — the control for the two below", False),
+    "scratchpad-hold": (scenario_scratchpad_hold,
+                        "hold Wispr's Open Scratchpad key and dictate into the Scratchpad — "
+                        "a destination that is not 'whatever has focus'", False),
     "dismiss-before-paste": (scenario_dismiss_before_paste,
                              "let Wispr finish, read its row, then post its own ⌃Escape before it "
                              "inserts — the wrap that needs no permission and no app change", False),

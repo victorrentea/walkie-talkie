@@ -329,6 +329,93 @@ def post_wispr_dismiss(keys=None):
     return True
 
 
+#: Wispr's *Open Scratchpad* binding. Per Wispr's own documentation it has three
+#: readings on one shortcut: **tap** opens and closes the window, **hold** is
+#: push-to-talk dictating *into the Scratchpad*, and double-tap is hands-free
+#: into it (only with the window already visible). The hold is the one that
+#: matters here — it puts the sentence somewhere that is not "whatever has
+#: focus", which is the whole problem.
+#:
+#: Read from `prefs.user.shortcuts` by **value**, not by key, because the key is
+#: the chord and the chord is exactly what is being changed: it shipped as
+#: `35+54+61` (⌘⌥P) and is being rebound to a single **F18** (keycode 79) so
+#: that holding it touches none of Victor's own keys. A held ⌘⌥ would hijack
+#: every keystroke he made for the length of a sentence, which was his objection
+#: and is a fair one.
+SCRATCHPAD_FALLBACK = 79
+
+
+def scratchpad_keys() -> list[int]:
+    """The keycodes bound to `open_scratchpad`, or `[79]` (F18)."""
+    override = os.environ.get("WISPR_SCRATCHPAD_KEYS")
+    if override:
+        return [int(k) for k in override.split(",") if k.strip()]
+    try:
+        import json
+
+        config = os.path.join(HOME, "Library/Application Support/Wispr Flow/config.json")
+        with open(config, encoding="utf-8") as handle:
+            shortcuts = json.load(handle).get("prefs", {}).get("user", {}).get("shortcuts", {})
+        for chord, action in (shortcuts or {}).items():
+            if action == "open_scratchpad":
+                return [int(part) for part in str(chord).split("+") if part.strip().isdigit()]
+    except Exception:
+        pass
+    return [SCRATCHPAD_FALLBACK]
+
+
+class HeldKey:
+    """Holds one key (or chord) down for the length of a `with` block.
+
+    A context manager with a **watchdog**, and both halves are the point. The
+    failure that matters is a key left down: this one is held across a
+    microphone wait *and* a whole clip, so an exception anywhere in the middle
+    would otherwise leave a key pressed for the rest of the session — and if it
+    is a modifier, every keystroke Victor makes afterwards becomes a shortcut.
+
+    So: released in `__exit__` on every path, released by a timer at
+    `max_seconds` even if `__exit__` never runs, and the release is idempotent
+    so the two can race harmlessly.
+    """
+
+    def __init__(self, keys=None, max_seconds: float = 60.0):
+        self.keys = list(keys or scratchpad_keys())
+        self.max_seconds = max_seconds
+        self._down = False
+        self._lock = __import__("threading").Lock()
+        self._timer = None
+
+    def __enter__(self):
+        import threading
+
+        with self._lock:
+            for code in self.keys:
+                _post(code, True)
+                time.sleep(0.01)
+            self._down = True
+        self._timer = threading.Timer(self.max_seconds, self.release)
+        self._timer.daemon = True
+        self._timer.start()
+        return self
+
+    def release(self) -> bool:
+        """Let go. Safe to call twice, from two threads, in either order."""
+        with self._lock:
+            if not self._down:
+                return False
+            for code in reversed(self.keys):
+                _post(code, False)
+                time.sleep(0.01)
+            self._down = False
+        return True
+
+    def __exit__(self, *exc):
+        self.release()
+        if self._timer is not None:
+            self._timer.cancel()
+        return False
+
+
 def accessibility_ok() -> bool:
     """Can this interpreter synthesise keystrokes at all?
 

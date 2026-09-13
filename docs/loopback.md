@@ -321,6 +321,7 @@ a failed assertion, not papered over.
 | **`spawn-click-in-settle`** | `forward-up` · play · `forward-click` · *(settling)* · `forward-click` | **nothing** in the sink; an outbox line whose `delivery.to` starts `spawn:` and whose text matches |
 | **`bound`** | bind a scratch tty · `forward-right` · play · `forward-right` | the words are typed into `bound-sink.txt`, nothing in the sink |
 | **`cancel`** | `forward-click` · play · `forward-left` | no words anywhere, no outbox line, ring down ≤ 1000 ms after the gesture, reason says *cancel* |
+| **`scratchpad-hold`** | hold the *Open Scratchpad* key (F18) · play · release | the sentence reaches a Wispr **note**, the victim is untouched, no window opens, focus never moves |
 | **`dismiss-before-paste`** | raw chord · play · stop · *wait for `formatted`* · `--dismiss-delay` ms · ⌃Escape | **answered, negatively** — see below |
 | **`sink-key-at-start`** | sink key · `forward-click` · play · `forward-click` | the control for the pair below: the words are in the sink, the victim document is empty |
 | **`sink-key-at-stop`** | `forward-click` · play · `forward-click` · **sink key** | the same, with the keyboard taken ~100 ms *after* the stop chord — see below |
@@ -359,6 +360,40 @@ session simply vanished.
 A real spawn **opens a Terminal window with `claude` in it**. That is a side
 effect on Victor's desktop; the runner reports the spawned destination in its
 notes so the window can be closed.
+
+### `scratchpad-hold` — dictating somewhere that is not "whatever has focus"
+
+The direction after the other two closed. Wispr's *Open Scratchpad* shortcut
+carries three readings on one binding, per Wispr's own documentation: **tap**
+opens and closes the window, **hold** is push-to-talk dictating **into the
+Scratchpad**, double-tap is hands-free into it. The hold is the one that
+matters, because it is the only gesture Wispr offers that names a destination
+instead of meaning *wherever the caret is*.
+
+The binding moves to a single **F18** (keycode 79), read from
+`prefs.user.shortcuts` by **value** (`open_scratchpad`) rather than by key —
+the key *is* the chord, and the chord is what changed. It shipped as `35+54+61`
+(⌘⌥P), and a held ⌘⌥ would hijack every key Victor pressed for the length of a
+sentence. F18 is a key nothing here sends by itself.
+
+Four questions, four independent witnesses, and all four have to answer before
+this is a wrap rather than a hope:
+
+| question | witness |
+|---|---|
+| did the text reach a note? | `Notes` / `NoteVersions`, diffed around the run |
+| was the victim left alone? | a real TextEdit document, read with `osascript` |
+| did a window open? | Wispr's window list before / during / after |
+| did focus move? | the frontmost app, sampled during the run |
+
+**A *modified* note counts as much as a new one.** The Scratchpad is one note
+that gets appended to, not a note per dictation, so a diff that only reports new
+ids would report nothing for ever — unit-tested, because it is invisible.
+
+The key is held across the microphone wait *and* the whole clip, so `HeldKey`
+carries a watchdog (60 s) and an idempotent release: a key left down is the one
+failure in this harness that outlives the process, and if it were a modifier it
+would turn every subsequent keystroke into a shortcut.
 
 ### `dismiss-before-paste` — measured, and the answer is no (2026-09-13)
 
