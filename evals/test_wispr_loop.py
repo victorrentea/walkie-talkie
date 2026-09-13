@@ -244,6 +244,43 @@ class Arrival(unittest.TestCase):
         self.assertNotIn("formatted", wl.DEAD_STATUSES)
 
 
+class Playback(unittest.TestCase):
+    """The signal that actually leaves the machine.
+
+    Every one of these was a silent wrong answer before it was a test: a rate
+    mismatch PortAudio is not obliged to raise, a level under Wispr's own voice
+    activity threshold, and a mono array on a two-channel device.
+    """
+
+    def setUp(self):
+        import wispr_loopback
+        self.wl = wispr_loopback
+
+    def test_sixteen_k_resamples_to_the_device_rate(self):
+        import numpy as np
+        a = np.sin(2 * np.pi * 440 * np.arange(16000) / 16000).astype(np.float32)
+        out, rate = self.wl.resample(a, 16000, 48000)
+        self.assertEqual(rate, 48000)
+        self.assertEqual(len(out), 48000)          # one second stays one second
+
+    def test_a_matching_rate_is_left_alone(self):
+        import numpy as np
+        a = np.zeros(100, dtype=np.float32)
+        out, rate = self.wl.resample(a, 48000, 48000)
+        self.assertIs(out, a)
+        self.assertEqual(rate, 48000)
+
+    def test_the_pinned_device_is_recognised_by_name(self):
+        """`🎓 TO Wispr` means: Wispr is pinned to it, leave the system input alone."""
+        self.assertTrue(self.wl.is_pinned_device("🎓 TO Wispr"))
+        self.assertTrue(self.wl.is_pinned_device("to wispr"))
+        self.assertFalse(self.wl.is_pinned_device("🎙️TO Zoom"))
+        self.assertFalse(self.wl.is_pinned_device(""))
+
+    def test_the_pinned_device_is_preferred_first(self):
+        self.assertEqual(self.wl.DEVICE_PREFERENCE[0], "🎓 TO Wispr")
+
+
 class Fixtures(unittest.TestCase):
     def test_every_scenario_resolves_to_a_clip_that_is_on_disk(self):
         for name in wl.SCENARIOS:

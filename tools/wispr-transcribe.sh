@@ -43,6 +43,9 @@ ROUTES="/test/state,/test/sink,/test/wispr-handsfree"
 WAV=""
 DEVICE=""
 DRY_RUN=0
+# The system default input is left alone unless the device is a pre-2026-09-13
+# fallback Wispr is not pinned to.
+FORCE_SWITCH=0
 WAIT_ROUTES=0
 ARGS=()
 
@@ -50,7 +53,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --device)      DEVICE="$2"; ARGS+=(--device "$2"); shift 2 ;;
     --json|--verbose) ARGS+=("$1"); shift ;;
+    --repeat)      ARGS+=(--repeat "$2"); shift 2 ;;
+    --transcript)  ARGS+=(--transcript "$2"); shift 2 ;;
     --dry-run)     DRY_RUN=1; ARGS+=(--dry-run); shift ;;
+    --switch-input) FORCE_SWITCH=1; shift ;;
     --wait-routes) WAIT_ROUTES="${2:-600}"; shift 2 ;;
     -h|--help)     sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)            wispr_act_say "unknown flag: $1"; exit 2 ;;
@@ -74,7 +80,12 @@ if [ "$DRY_RUN" = 1 ]; then
   exec "$WISPR_ACT_PY" "$WISPR_ACT_REPO/helpers/wispr_loop.py" --transcribe "$WAV" "${ARGS[@]+"${ARGS[@]}"}"
 fi
 
-wispr_act_switch_input "$DEVICE" >&2
+if wispr_act_needs_switch "$DEVICE" "$FORCE_SWITCH"; then
+  wispr_act_switch_input "$DEVICE" >&2
+else
+  wispr_act_say "🎚️ Wispr is pinned to the device — the system default input is left alone" >&2
+  trap wispr_act_stand_down EXIT INT TERM
+fi
 wispr_act_run "wispr-transcribe $(basename "$WAV")" -- \
   "$WISPR_ACT_PY" "$WISPR_ACT_REPO/helpers/wispr_loop.py" --transcribe "$WAV" "${ARGS[@]+"${ARGS[@]}"}"
 STATUS=$?

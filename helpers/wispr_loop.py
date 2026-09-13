@@ -237,6 +237,16 @@ class HistoryRow:
     e2e_latency: float
     app: str
     started_at: float
+    #: Wispr's LLM pass — punctuation, capitalisation, its custom dictionary.
+    #: **This is the text a dictation delivers**, so it is what the harness
+    #: reports.
+    formatted_text: str = ""
+    #: The recogniser's raw reading, before that pass. Reported beside it and
+    #: never instead of it: it is the column `docs/teacher-loopback.md` labels a
+    #: corpus with, and the two answer different questions.
+    asr_text: str = ""
+    duration: float = 0.0
+    speech_duration: float = 0.0
     #: **Wispr's own record of which microphone it used.** The one column that
     #: catches the failure that wasted 2026-09-13: the system default pointed at
     #: the Loopback device and this still said `Built-in mic (recommended)`.
@@ -259,7 +269,9 @@ def wispr_history_newest() -> HistoryRow | None:
     try:
         row = db.execute(
             "select rowid, coalesce(status,''), coalesce(pastedText,''), coalesce(e2eLatency,0),"
-            "       coalesce(app,''), coalesce(strftime('%s', timestamp), '0'), coalesce(micDevice,'')"
+            "       coalesce(app,''), coalesce(strftime('%s', timestamp), '0'), coalesce(micDevice,''),"
+            "       coalesce(formattedText,''), coalesce(asrText,''), coalesce(duration,0),"
+            "       coalesce(speechDuration,0)"
             "  from History order by rowid desc limit 1").fetchone()
     except Exception:
         return None
@@ -269,7 +281,8 @@ def wispr_history_newest() -> HistoryRow | None:
         return None
     return HistoryRow(rowid=row[0], status=row[1], pasted_text=row[2],
                       e2e_latency=float(row[3]), app=row[4], started_at=float(row[5] or 0),
-                      mic_device=row[6])
+                      mic_device=row[6], formatted_text=row[7], asr_text=row[8],
+                      duration=float(row[9]), speech_duration=float(row[10]))
 
 
 # ══ the relay, as this runner talks to it ════════════════════════════════════
@@ -516,6 +529,15 @@ def fixture_for(scenario: str, wav: str | None = None, transcript: str | None = 
     return entry
 
 
+def _device_name(device: str | None) -> str:
+    """The name of the device this run plays into, resolved once."""
+    try:
+        import wispr_loopback as wl
+        return wl.resolve_device(device)[1]
+    except Exception:
+        return ""
+
+
 def play_wav(path: str, device_name: str | None, dry_run: bool = False) -> float:
     """Play the clip into the virtual input, blocking. Returns its length in seconds."""
     import wispr_loopback as wl
@@ -674,6 +696,65 @@ def wait_for_arrival(relay: Relay, timeout: float, started: float,
     return (text, events, "timeout")
 
 
+#: Wispr is finished and there is a sentence.
+DONE_STATUSES = ("formatted",)
+#: Wispr is still working. `raw_transcript` and `processing` are **not** verdicts
+#: — measured 2026-09-13, a row sits in them for seconds and then fills in, and
+#: treating either as terminal reports "no transcript" for a dictation that was
+#: about to produce one.
+BUSY_STATUSES = ("", "raw_transcript", "processing", "recording", "transcribing")
+#: How long to let a row stay busy. Wispr's own e2e over 30 days: p99 7.1 s, max
+#: 13.7 s — 45 s is that with room for a bad network, and the dead statuses end
+#: the wait long before it on the ordinary failures.
+HISTORY_TIMEOUT = 45.0
+
+
+def wispr_history_for(started: float, tolerance: float = 5.0) -> HistoryRow | None:
+    """Wispr's row for **this** dictation, or None.
+
+    The row is created at the chord, so one that started before this run did
+    belongs to a sentence somebody else spoke — and a chord Wispr ignored leaves
+    the previous finished row on top, which is exactly how a harness reports the
+    last thing Victor said as its own answer.
+    """
+    row = wispr_history_newest()
+    return row if row and row.started_at >= started - tolerance else None
+
+
+def wait_for_history(started: float, timeout: float = HISTORY_TIMEOUT,
+                     poll: float = 0.3) -> tuple[HistoryRow | None, str]:
+    """Poll Wispr's own row until its `status` is terminal. Returns `(row, why)`.
+
+    **This is the primary text source**, and it is a deliberate departure from
+    the app's rule. `.claude/rules/dictation-source.md` forbids *the relay*
+    reading Wispr's database for words — the relay is a live path where the
+    pasteboard is the answer and the row is only the *is it done* signal. This
+    is a **test harness**, which has the opposite problem: it wants the text
+    Wispr produced regardless of where Wispr put it, and the sink can miss it
+    (an insertion by a route no tap sees) or be polluted by the chord's own
+    keystrokes. `docs/teacher-loopback.md` labelled a corpus from this same
+    table for the same reason. Read-only, `mode=ro`, one query per poll.
+
+    `why` is `done`, one of `DEAD_STATUSES`, `timeout`, or `no-row`.
+    """
+    deadline = time.monotonic() + timeout
+    row = None
+    while time.monotonic() < deadline:
+        row = wispr_history_for(started)
+        if row:
+            if row.status in DONE_STATUSES:
+                return row, "done"
+            if row.status in DEAD_STATUSES:
+                return row, row.status
+            if row.status not in BUSY_STATUSES:
+                # An unknown status is not assumed to be either. Reported by
+                # name, because the last one that turned up (`raw_transcript`)
+                # cost an evening being read as a failure.
+                return row, "unknown:%s" % row.status
+        time.sleep(poll)
+    return row, ("timeout" if row else "no-row")
+
+
 def transcribe(wav: str, device: str | None = None, port: int | None = None,
                timeout: float | None = None, verbose: bool = False,
                dry_run: bool = False) -> dict:
@@ -735,59 +816,67 @@ def transcribe(wav: str, device: str | None = None, port: int | None = None,
         out["seconds"] = round(seconds, 2)
         relay.post("/test/wispr-handsfree")   # the chord is a toggle
 
-        text, events, outcome = wait_for_arrival(relay, timeout or (seconds + 60), started)
-        # `status` is **Wispr's** word and only ever Wispr's; `outcome` is ours.
-        # Printing our own "timeout" under a heading that says *Wispr's History
-        # status* is how a harness invents a fact about somebody else's app.
-        out["text"], out["outcome"] = text, outcome
-        out["route"] = (events[-1].get("route") if events else "") or ""
-        out["events"] = events
+        # ── the answer, from Wispr's own row ────────────────────────────
+        # A dry run played nothing, so there is no row coming and waiting 45 s
+        # for one is 45 s of a walkthrough nobody can read.
+        row, why = ((None, "dry-run") if dry_run
+                    else wait_for_history(started, timeout or HISTORY_TIMEOUT))
+        out["status"] = row.status if row else ""
+        out["outcome"] = why
+        out["wisprApp"] = row.app if row else ""
+        out["wisprMic"] = row.mic_device if row else ""
+        text = ""
+        if row:
+            # `formattedText` is what a dictation actually delivers; `pastedText`
+            # is the same sentence when Wispr has already inserted it. `asrText`
+            # is reported beside them and never instead: it is the raw reading,
+            # the column a corpus is labelled with, and a different question.
+            text = (row.formatted_text or row.pasted_text or "").strip()
+            out["asrText"] = row.asr_text
+            out["speechDuration"] = row.speech_duration
+            out["wisprDuration"] = row.duration
+
+        # ── the sink, now a cross-check and not the source ──────────────
+        sink_text, sink_events = sink_arrival(relay.sink_read() or {})
+        out["sinkText"] = sink_text
+        out["sinkRoute"] = (sink_events[-1].get("route") if sink_events else "") or ""
+        out["sinkMatched"] = bool(text) and similarity(sink_text, text) >= SIMILARITY_FLOOR
+        out["events"] = sink_events
 
         t = read_timings(mark.lines())
-        row = wispr_history_newest()
-        row = row if row and row.started_at >= started - 5 else None
-        out["status"] = row.status if row else ""
+        out["text"], out["route"] = text, out["sinkRoute"]
         out["timings"] = {
             "gestureToMicOpenMs": t.gesture_to_mic_open_ms,
+            "micOpenWaitMs": out.get("micOpenWaitMs"),
             "micCloseToArrivalMs": t.delivery_ms if t.delivery_ms is not None else t.done_ms,
-            "micCloseToWisprDoneMs": t.done_ms,
-            "wisprDoneSource": t.done_source,
-            # Wispr's column is in **milliseconds** — 937.0 on a 20 s clip, and
-            # 470 in the relay's own `Wispr's own e2e 470 ms`. Reporting it as
-            # seconds turned a 0.9 s round trip into "937 s".
             "e2eLatencyMs": row.e2e_latency if row else None,
             "ringDownReason": t.ring_down_reason,
         }
-        out["wisprApp"] = row.app if row else ""
-        # **Which microphone Wispr actually used.** Asked after the fact because
-        # it is the only place the answer is written, and because the preflight's
-        # reading of `config.json` turned out not to predict it.
-        out["wisprMic"] = row.mic_device if row else ""
-        wrong_mic = bool(out["wisprMic"]) and not any(
-            hint in out["wisprMic"].lower() for hint in ("zoom", "wispr", "loopback", "os output"))
-        if wrong_mic:
-            # **The root cause outranks the symptom.** `raw_transcript` and
-            # `no_audio` are what a recogniser says about silence; the reason
-            # there was silence is that Wispr was listening to a different
-            # microphone, and reporting the symptom sends the reader to the
-            # network, the ASR and the channel in that order — all three fine.
-            out["reason"] = (
-                "Wispr recorded through %r, not the Loopback device — it never heard the clip. "
-                "Pin its microphone: Wispr → Settings → Microphone." % out["wisprMic"])
-        elif outcome in DEAD_STATUSES:
-            out["reason"] = "Wispr finished with status %r — there is no transcript" % outcome
-        elif text.strip():
+
+        # **Wispr's own record of the microphone it used, against the device we
+        # played into.** Not a hint list: the preflight reads `config.json` and
+        # that turned out not to predict what Wispr does with it, so the run
+        # asserts the two names are the same device and reports it either way.
+        out["playedInto"] = _device_name(device)
+        wrong_mic = bool(out["wisprMic"]) and not pf._same_device(out["wisprMic"], out["playedInto"])
+        if text:
             out["ok"] = True
-        elif out["status"] in STALLED_STATUSES:
-            out["reason"] = (
-                "Wispr's row stalled at %r — it heard the audio (%s s of speech) and called its "
-                "recogniser, then never wrote the text. Nothing is wrong with the channel."
-                % (out["status"], out.get("seconds")))
-        elif outcome == "timeout":
-            out["reason"] = ("nothing arrived in the sink within the timeout"
-                             + (" (ring down: %s)" % t.ring_down_reason if t.ring_down_reason else ""))
+        elif wrong_mic:
+            # The root cause outranks the symptom: an empty row is what a
+            # recogniser says about silence, and the reason there was silence is
+            # that Wispr was listening to a different microphone.
+            out["reason"] = ("Wispr recorded through %r, but the clip was played into %r — it never "
+                            "heard it. Pin its microphone: Wispr → Settings → Microphone → 🎓 TO Wispr."
+                            % (out["wisprMic"], out["playedInto"]))
+        elif why in DEAD_STATUSES:
+            out["reason"] = "Wispr finished with status %r — there is no transcript" % why
+        elif why == "no-row":
+            out["reason"] = "Wispr never opened a row for this chord — it ignored it"
+        elif why == "timeout":
+            out["reason"] = ("Wispr's row was still %r after %.0f s"
+                            % (out["status"] or "(blank)", timeout or HISTORY_TIMEOUT))
         else:
-            out["reason"] = "the sink settled empty"
+            out["reason"] = "Wispr's row ended %s with no text" % why
         out["log"] = [line.raw for line in mark.lines()]
     finally:
         # Before anything else: a microphone this run opened and did not close.
@@ -1499,9 +1588,80 @@ def summary(results: list[Result]) -> str:
     return "\n".join(rows)
 
 
+def _expected_for(wav: str, given: str | None) -> str:
+    """The known transcript for this clip: `--transcript`, else the fixture's."""
+    if given is not None:
+        return given
+    if not os.path.exists(FIXTURES):
+        return ""
+    with open(FIXTURES, encoding="utf-8") as handle:
+        data = json.load(handle)
+    for entry in data.values():
+        if isinstance(entry, dict) and os.path.expanduser(entry.get("wav") or "") == os.path.abspath(wav):
+            return entry.get("transcript") or ""
+    return ""
+
+
+def _reliability_table(runs: list[dict], expected: str) -> str:
+    """The deliverable: is **WAV → text** reliable, and how reliable.
+
+    One row per run and a verdict, because the question is not whether a
+    transcription can work — it plainly can — but whether five in a row do. A
+    single green run of something with a 0.7–13 s round trip in it is an
+    anecdote.
+    """
+    head = ("  %-4s %9s %9s %-15s %9s %6s  %s"
+            % ("run", "mic open", "speech", "status", "e2e", "simil", "sink route"))
+    rows = [head, "  " + "-" * (len(head) - 2)]
+    good = 0
+    for i, r in enumerate(runs, 1):
+        t = r.get("timings") or {}
+        score = similarity(r.get("text") or "", expected) if expected else float("nan")
+        if expected and score >= SIMILARITY_FLOOR:
+            good += 1
+        rows.append("  %-4d %9s %9s %-15s %9s %6s  %s"
+                    % (i,
+                       _ms(t.get("gestureToMicOpenMs")),
+                       "%.1f s" % r["speechDuration"] if r.get("speechDuration") else "—",
+                       (r.get("status") or r.get("outcome") or "—")[:15],
+                       "%.0f ms" % t["e2eLatencyMs"] if t.get("e2eLatencyMs") else "—",
+                       "%.2f" % score if expected else "—",
+                       (r.get("sinkRoute") or "—") + ("" if r.get("sinkMatched") else " (no match)")))
+    rows.append("")
+    rows.append("  %d/%d runs at similarity >= %.2f%s"
+                % (good, len(runs), SIMILARITY_FLOOR,
+                   "   PASS" if good == len(runs) and runs else "   FAIL"))
+    mics = {r.get("wisprMic") for r in runs if r.get("wisprMic")}
+    if mics:
+        rows.append("  Wispr recorded through: %s" % ", ".join(sorted(mics)))
+    return "\n".join(rows)
+
+
 def _transcribe_cli(args, port: int) -> int:
     """`--transcribe`: the primitive, printed. 0 words, 1 nothing arrived,
     3 Wispr itself said there would be nothing (`dismissed` / `empty` / …)."""
+    repeat = max(1, args.repeat)
+    if repeat > 1:
+        expected = _expected_for(args.transcribe, args.transcript)
+        runs = []
+        for i in range(repeat):
+            if i:
+                time.sleep(5)   # a few seconds apart, never two chords in flight
+            print("── run %d of %d ─────────────────────────────" % (i + 1, repeat), file=sys.stderr)
+            run = transcribe(args.transcribe, device=args.device, port=port,
+                             verbose=args.verbose, dry_run=args.dry_run)
+            runs.append(run)
+            print("   %s" % (run.get("text") or ("✗ " + (run.get("reason") or "no transcript"))),
+                  file=sys.stderr)
+        if args.json:
+            print(json.dumps({"runs": runs, "expected": expected}, ensure_ascii=False, indent=2))
+        else:
+            print("", file=sys.stderr)
+            print(_reliability_table(runs, expected), file=sys.stderr)
+        if args.dry_run:
+            return 0
+        return 0 if all(r.get("ok") for r in runs) else 1
+
     out = transcribe(args.transcribe, device=args.device, port=port,
                      verbose=args.verbose, dry_run=args.dry_run)
     if args.json:
@@ -1513,7 +1673,15 @@ def _transcribe_cli(args, port: int) -> int:
         else:
             print("✗ %s" % (out.get("reason") or "no transcript"), file=sys.stderr)
         print("", file=sys.stderr)
-        print("  route                    %s" % (out.get("route") or "—"), file=sys.stderr)
+        print("  Wispr's History status   %s  (%s)" % (out.get("status") or "—", out.get("outcome") or "—"),
+              file=sys.stderr)
+        print("  speechDuration           %s" % (
+            "%.2f s" % out["speechDuration"] if out.get("speechDuration") else "—"), file=sys.stderr)
+        print("  raw asrText              %r" % ((out.get("asrText") or "")[:70]), file=sys.stderr)
+        print("  sink cross-check         %s via %s%s" % (
+            "matched" if out.get("sinkMatched") else "did NOT match",
+            out.get("sinkRoute") or "nothing",
+            (" — %r" % out["sinkText"][:50]) if out.get("sinkText") else ""), file=sys.stderr)
         print("  gesture → mic open       %s%s" % (
             _ms(t.get("gestureToMicOpenMs")),
             "" if out.get("micOpened", True) else "   ← never opened; the clip was played anyway"),
@@ -1521,13 +1689,15 @@ def _transcribe_cli(args, port: int) -> int:
         print("  mic close → arrival      %s" % _ms(t.get("micCloseToArrivalMs")), file=sys.stderr)
         print("  Wispr's own e2eLatency   %s" % (
             "%.0f ms" % t["e2eLatencyMs"] if t.get("e2eLatencyMs") else "—"), file=sys.stderr)
-        print("  Wispr's History status   %s" % (out.get("status") or "—"), file=sys.stderr)
-        print("  how this run ended       %s" % (out.get("outcome") or "the sink settled"),
-              file=sys.stderr)
+
         if out.get("wisprApp"):
             print("  Wispr says it inserted into  %s" % out["wisprApp"], file=sys.stderr)
     if out.get("wisprMic"):
-        print("  Wispr recorded through   %s" % out["wisprMic"], file=sys.stderr)
+        print("  Wispr recorded through   %s%s" % (
+            out["wisprMic"],
+            "" if pf._same_device(out["wisprMic"], out.get("playedInto") or "")
+            else "   ← NOT %r, the device the clip was played into" % (out.get("playedInto") or "?")),
+            file=sys.stderr)
     if True:
         print("  relay listening / ring   %s / %s"
               % (out.get("relayListening"), out.get("relayRingUp")), file=sys.stderr)

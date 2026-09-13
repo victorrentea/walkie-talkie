@@ -7838,6 +7838,22 @@ microphone. Six runs, six times `Built-in mic (recommended)`.
 Two hours went into "Wispr is not completing transcriptions", and Wispr was completing them
 correctly — of silence.
 
+**The topology that came out of it (2026-09-13, later).** Not just the click: a new Loopback device
+**`🎓 TO Wispr`** whose sources are the physical `MacBook Pro Microphone` *and* Pass-Thru, with
+Wispr's microphone pinned to it permanently. Victor's daily dictation goes mic → device → Wispr
+exactly as before, and the rig plays its WAVs into the same device. Nothing has to steer the system
+default input any more, which removes the switch, the restore, and the whole class of bug where a
+run leaves his Mac recording from a virtual cable. `--switch-input` keeps the old path for the
+devices Wispr is not pinned to.
+
+Two more things the same evening: the clip is **resampled to the device's rate** (16 kHz corpus,
+48 kHz device — PortAudio is not obliged to raise a mismatch, and 3×-speed audio comes back as
+confident nonsense rather than as an error), and the harness's **primary text source moved to
+Wispr's own `History` row**. That is a departure from *do not read Wispr's database*, and a
+deliberate one: the rule is about the **relay**, a live path where the pasteboard is the answer;
+a harness wants the text regardless of where Wispr put it, and the sink can miss an insertion no
+tap sees. The sink stays as a cross-check.
+
 **The fix is the one `docs/teacher-loopback.md` wrote down in the first place**: *Wispr → Settings →
 Microphone → the Loopback device*. The Auto-detect route was invented to avoid asking Victor for that
 click, because the device id is a salted hash; the click is not avoidable. `wispr_preflight.py` now

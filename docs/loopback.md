@@ -25,6 +25,7 @@ precondition failed · **3** the running build has not got the loopback routes.
 ```sh
 tools/wispr-transcribe.sh clip.wav           # the sentence, on stdout
 tools/wispr-transcribe.sh clip.wav --json    # + route and timings
+tools/wispr-transcribe.sh clip.wav --repeat 5   # the reliability table
 ```
 
 **Feed Wispr an arbitrary WAV, print what it transcribed.** No scenario, no
@@ -44,12 +45,26 @@ start a dictation *with a destination* and deliver the sentence to a terminal,
 which is right for a scenario and wrong for a transcription. The run reports
 `relayListening` / `relayRingUp` so a caller can see which of the two it got.
 
+**The clip is resampled to the device's own rate before anything else.** The
+corpus is 16 kHz and these devices run at 48 kHz, and what PortAudio does with a
+mismatch is up to the host API — CoreAudio may refuse the stream, or open it at
+the device's rate and play the samples through unchanged, which is the same
+audio at 3× speed. That comes back as confident nonsense rather than as an
+error, so it is done here (`scipy.signal.resample_poly`, linear interpolation if
+scipy is gone) and the answer is the same on every Mac.
+
 **The clip is normalised before it is played.** The corpus clips sit at peak
 ≈ 0.087 of full scale — a laptop microphone across a room — and a virtual cable
 has no reason to reproduce that distance. `wispr_loopback.play()` normalises to
 `PLAY_PEAK` (0.5, `WISPR_PLAY_PEAK` overrides) and duplicates mono across the
 device's channels, because handing PortAudio a mono array leaves the signal on
 one side and anything downstream that averages the two loses 6 dB.
+
+`--repeat N` runs the same clip N times, a few seconds apart, never with two
+chords in flight, and prints one row per run — mic-open latency, `speechDuration`
+from the row, status, `e2eLatency`, similarity against the fixture, sink route —
+then `N/N runs at similarity >= 0.80`. The question is never whether *a*
+transcription can work; it is whether five in a row do.
 
 **Every run reports which microphone Wispr actually used** (`wisprMic`, from the
 `micDevice` column) and fails if it was not the Loopback device. That column is
@@ -72,14 +87,25 @@ own chords back. `sink_arrival()` drops `keyDown` events of one character or les
 and every other route counts at any length; a one-character *paste* is Wispr
 delivering something, a one-character keystroke is us.
 
-**Waiting on a condition, with two exits.** The sink is polled until its text is
-non-empty **and has not changed for 300 ms** (`StableText`, `STABLE_MS`) —
-because Wispr inserts some sentences in more than one event, and reading the
-sink the instant the first one lands scores a half-written sentence as a bad
-transcript. The other exit is Wispr's own `History` row reaching `dismissed`,
-`empty`, `no_audio` or `error`: there is no transcript coming, and waiting out
-the timeout for it is the twenty-second stall the `WisprHistory` work removed
-from the app. The status is printed and the exit code is 3.
+**The text comes from Wispr's own `History` row, and the sink is a cross-check.**
+The row is polled (read-only, `mode=ro`) until `status` is terminal:
+`formatted` → `formattedText`, falling back to `pastedText`, with `asrText`
+reported separately as the raw reading; `dismissed` / `empty` / `no_audio` /
+`error` → exit 3 with the status; `raw_transcript` and `processing` are
+**intermediate** and it keeps waiting, up to 45 s.
+
+This is a deliberate departure from the app's rule.
+`.claude/rules/dictation-source.md` forbids *the relay* reading Wispr's database
+for words — the relay is a live path where the pasteboard is the answer and the
+row is only the *is it done* signal. A **harness** has the opposite problem: it
+wants the text Wispr produced regardless of where Wispr put it, and the sink can
+miss it entirely (an insertion by a route no tap sees) or be polluted by the
+chord's own keystrokes. `docs/teacher-loopback.md` labelled a corpus from this
+same table for the same reason.
+
+The sink is still opened and made key — the relay is bound to Victor's terminal
+and a swallowed ⌘V would be *routed there* — and what lands in it is reported as
+a cross-check: whether it matched the row, and by which route.
 
 The scenarios call the same waits — `_await_microphone` before the clip and
 `_settled_sink` after — so none of them plays into a closed microphone or scores
@@ -163,8 +189,14 @@ when Victor wants it, is small:
 
 Four things make it work, and each of them is load-bearing:
 
-1. **Wispr's microphone pinned to the Loopback device, in Wispr's own UI.**
-   *Auto-detect is not enough, and that is measured* (2026-09-13): with the
+1. **`🎓 TO Wispr`, and Wispr's microphone pinned to it.** A Loopback device
+   whose sources are the physical `MacBook Pro Microphone` **and** Pass-Thru:
+   Victor's daily dictation goes mic → device → Wispr unchanged, and the rig
+   plays WAVs into the same device. Nothing steers the system default input any
+   more — `--switch-input` keeps that path for the older devices Wispr is not
+   pinned to, and it is the only way to reach them.
+   **Auto-detect = the built-in microphone, measured 2026-09-13** (RMS 1714
+   played vs 59 stored). In detail: with the
    system default input on `🎙️TO Zoom`, Wispr's own `micDevice` column said
    **`Built-in mic (recommended)` on five runs out of five**. It resolves
    *Auto-detect* to the built-in microphone, **not** to the system default. What

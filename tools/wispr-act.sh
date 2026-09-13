@@ -112,6 +112,28 @@ wispr_act_restore_input() {
   wispr_act_say "↩︎ system input is ${now:-$name}"
 }
 
+# **Is the system default input any of our business?**
+#
+# Since 2026-09-13 it normally is not. `🎓 TO Wispr` is a Loopback device whose
+# sources are the physical MacBook Pro Microphone *and* Pass-Thru, and **Wispr's
+# microphone is pinned to it**: Victor's own dictation goes mic → device → Wispr
+# unchanged, and the rig plays WAVs into the same device. Nothing has to be
+# steered, so nothing is — the switch existed only to point *Auto-detect* at a
+# device, and Auto-detect turned out to mean the built-in microphone anyway.
+#
+# The old devices are kept as a fallback and need `--switch-input`, because Wispr
+# is not pinned to them.
+#   wispr_act_needs_switch <device-substring> <forced 0|1>
+wispr_act_needs_switch() {
+  [ "${2:-0}" = 1 ] && return 0
+  "$WISPR_ACT_PY" - "$WISPR_ACT_REPO" "${1:-}" <<'EOF'
+import sys
+sys.path.insert(0, sys.argv[1] + "/helpers")
+import wispr_loopback as wl
+sys.exit(0 if not wl.is_pinned_device(wl.resolve_device(sys.argv[2] or None)[1]) else 1)
+EOF
+}
+
 # Point the system's default input at the Loopback device and arrange for it to
 # be put back on EXIT, INT and TERM — every path, including a kill.
 #   wispr_act_switch_input [device-substring]

@@ -56,6 +56,9 @@ ROUTES="/test/state,/test/sink,/test/gesture"
 
 DEVICE=""
 DRY_RUN=0
+# The system default input is left alone unless the device is a pre-2026-09-13
+# fallback Wispr is not pinned to.
+FORCE_SWITCH=0
 WAIT_ROUTES=0
 PASSTHROUGH=()
 # A string and not an array: /bin/bash on macOS is 3.2, where `${arr[*]}` on an
@@ -72,6 +75,7 @@ while [ $# -gt 0 ]; do
     --json|--verbose|--all|--list) PASSTHROUGH+=("$1"); shift ;;
     --repeat)      PASSTHROUGH+=(--repeat "$2"); shift 2 ;;
     --dry-run)     DRY_RUN=1; PASSTHROUGH+=(--dry-run); shift ;;
+    --switch-input) FORCE_SWITCH=1; shift ;;
     # For the hour between "the routes are being written" and "the routes are
     # there": poll instead of failing, so this can be started and left.
     --wait-routes) WAIT_ROUTES="${2:-600}"; shift 2 ;;
@@ -111,7 +115,12 @@ if [ "$DRY_RUN" = 1 ]; then
   exec "$PY" "$REPO/helpers/wispr_loop.py" "${PASSTHROUGH[@]}"
 fi
 
-wispr_act_switch_input "$DEVICE"
+if wispr_act_needs_switch "$DEVICE" "$FORCE_SWITCH"; then
+  wispr_act_switch_input "$DEVICE"
+else
+  say "🎚️ Wispr is pinned to the device — the system default input is left alone"
+  trap wispr_act_stand_down EXIT INT TERM
+fi
 
 say ""
 wispr_act_run "wispr-loop ${SCENARIO_LABEL:-all}" -- \

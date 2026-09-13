@@ -317,27 +317,26 @@ def checks(device_name: str | None = None, speaker: bool = False,
     elif wanted and _same_device(mic_name, wanted):
         rows.append(Row(True, "Wispr microphone: %s — the device this plays into" % mic_name, key="mic"))
     elif mic == "auto":
-        # **A warning and not a refusal.** Auto-detect was measured resolving to
-        # the built-in microphone on 2026-09-13 — but those runs also fell inside
-        # a DNS outage that had Wispr's remote recogniser returning nothing, so
-        # the two explanations are entangled and neither is proven alone. The run
-        # goes ahead and settles it: every run reads Wispr's own `micDevice`
-        # column afterwards and fails on a mismatch. A preflight guesses; the
-        # column knows.
-        rows.append(Row(None, "Wispr microphone is Auto-detect, not %s — going ahead, and the run "
-                        "will report which microphone Wispr actually used" % wanted, key="mic"))
-    else:
-        rows.append(Row(False, "Wispr microphone is %s, not %s"
-                        % ("Auto-detect" if mic == "auto" else repr(mic_name), wanted or "the Loopback device"),
+        # **Auto-detect is a hard failure, and it is measured.** It resolves to
+        # the built-in microphone, not to the system default input: six runs,
+        # six times `micDevice = Built-in mic (recommended)`, and the audio to
+        # match — the clip goes out at RMS 1714 and Wispr's own stored blob comes
+        # back at RMS 59, 0% of frames voiced. A 29× drop is not something a
+        # digital pass-through can do; that is a room.
+        rows.append(Row(False, "Wispr microphone is Auto-detect, which means the built-in mic",
                         fatal=True, key="mic",
-                        remedy="Victor: Wispr → Settings → Microphone → '%s'.\n"
-                               "**Auto-detect is not enough** — measured 2026-09-13: with the system\n"
-                               "default input on the Loopback device, Wispr's own micDevice column said\n"
-                               "'Built-in mic (recommended)' on five runs out of five. It resolves\n"
-                               "Auto-detect to the built-in microphone, not to the system default, so the\n"
-                               "WAV is never heard and the row ends raw_transcript / no_audio.\n"
-                               "Nothing here may edit Wispr's config.json — the id is a salted hash in a\n"
-                               "file Wispr's own process rewrites." % (wanted or "the Loopback device")))
+                        remedy="Victor: Wispr → Settings → Microphone → 🎓 TO Wispr.\n"
+                               "Auto-detect does NOT follow the system default input — measured\n"
+                               "2026-09-13, six runs out of six: RMS 1714 played, 59 stored, 0%\n"
+                               "voiced. The WAV is never heard."))
+    else:
+        rows.append(Row(False, "Wispr microphone is %r, not %s" % (mic_name, wanted or "the Loopback device"),
+                        fatal=True, key="mic",
+                        remedy="Victor: Wispr → Settings → Microphone → 🎓 TO Wispr.\n"
+                               "That device's sources are the physical MacBook Pro Microphone AND\n"
+                               "Pass-Thru, so his own dictation is unaffected and the rig plays into the\n"
+                               "same device. Nothing here may edit Wispr's config.json — the id is a\n"
+                               "salted hash in a file Wispr's own process rewrites."))
 
     target = get(port, "/target") or {}
     if target.get("bound"):
@@ -358,8 +357,11 @@ def checks(device_name: str | None = None, speaker: bool = False,
             import wispr_loopback as wl
             idx, name = wl.resolve_device(device_name)
             note = "playing into: %s (index %d)" % (name, idx)
-            if "wispr" not in name.lower():
-                note += " — no '🎓 TO Wispr' device exists; this Loopback pass-through does the same job"
+            if wl.is_pinned_device(name):
+                note += " — Wispr is pinned to it, so the system default input is left alone"
+            else:
+                note += (" — a fallback device; Wispr is not pinned to it, so this needs "
+                         "--switch-input and steers the system default")
             rows.append(Row(True, note, key="device"))
         except SystemExit as e:
             rows.append(Row(False, "no usable virtual output device", fatal=True, key="device",

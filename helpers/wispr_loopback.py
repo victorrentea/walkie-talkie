@@ -80,10 +80,29 @@ WISPR_DB = os.path.join(HOME, "Library/Application Support/Wispr Flow/flow.sqlit
 PTT_KEYS = [
     int(k) for k in os.environ.get("WISPR_PTT_KEYS", "54,61").split(",") if k.strip()
 ]
-# Preferred virtual input devices, most specific first. The `🎓` one does not
-# exist yet — it is what the setup above creates — and naming it here is how the
-# rig picks it up the moment it does.
+# Preferred virtual input devices, most specific first.
+#
+# **`🎓 TO Wispr` is the topology now** (2026-09-13): a Loopback device whose
+# sources are the physical `MacBook Pro Microphone` *and* Pass-Thru, with Wispr's
+# microphone pinned to it permanently. Victor's daily dictation goes mic →
+# device → Wispr unchanged, and the rig plays WAVs into the same device. Nothing
+# has to touch the system default input any more, which is the point: the switch
+# was only ever a way to steer Auto-detect, and Auto-detect turned out to mean
+# the built-in microphone (measured: RMS 1714 played against 59 stored).
+#
+# The rest are the devices that existed before it and are kept only as a
+# fallback, which needs `--switch-input` because they are not what Wispr is
+# pinned to.
 DEVICE_PREFERENCE = ["🎓 TO Wispr", "TO Wispr", "🎙️TO Zoom", "🔊OS Output"]
+
+#: The name that means "Wispr is already pinned to this one, leave the system
+#: default input alone".
+PINNED_DEVICE_HINT = "to wispr"
+
+
+def is_pinned_device(name: str) -> bool:
+    """Is this the device Wispr itself is pinned to, rather than a fallback?"""
+    return PINNED_DEVICE_HINT in (name or "").lower()
 
 SAMPLE_RATE = 16000
 # Silence played after the file, so Wispr's endpointing sees an ending rather
@@ -154,22 +173,66 @@ def read_wav(path):
 PLAY_PEAK = float(os.environ.get("WISPR_PLAY_PEAK", "0.5"))
 
 
+def resample(audio, rate, target_rate):
+    """Band-limited resample to the device's own rate, or linear if scipy is gone.
+
+    **Not optional.** The corpus is 16 kHz and the Loopback devices run at 48 kHz,
+    and what PortAudio does with a mismatch is up to the host API: CoreAudio may
+    refuse the stream outright, or open it at the device's rate and play the
+    samples through unchanged — which is the same audio at 3× the speed and a
+    recogniser's worst case, because it comes back as confident nonsense rather
+    than as an error. Doing it here means the answer is the same on every Mac.
+
+    `scipy.signal.resample_poly` when scipy is there (it is, 1.17); linear
+    interpolation otherwise, which for a 3× integer ratio is good enough for
+    speech and far better than the wrong rate.
+    """
+    if not target_rate or int(target_rate) == int(rate):
+        return audio, rate
+    target_rate = int(target_rate)
+    try:
+        from math import gcd
+        from scipy.signal import resample_poly
+
+        g = gcd(target_rate, int(rate))
+        out = resample_poly(audio, target_rate // g, int(rate) // g)
+    except Exception:
+        n = int(round(len(audio) * target_rate / float(rate)))
+        out = np.interp(np.linspace(0, len(audio) - 1, n),
+                        np.arange(len(audio)), audio)
+    return np.asarray(out, dtype=np.float32), target_rate
+
+
 def play(audio, rate, device_index, gain=1.0, peak=None):
     """Play through to the end, blocking. Real time, by construction.
 
-    Two things beyond `sd.play`, both learned the hard way on 2026-09-13:
+    Three things beyond `sd.play`, all learned the hard way on 2026-09-13:
 
-    * **Normalised to `PLAY_PEAK`.** See above — a clip at the level a room
-      microphone recorded it lands under Wispr's own voice activity threshold.
-    * **Matched to the device's channel count.** `🎙️TO Zoom` is two-channel;
-      handing PortAudio a mono array leaves the signal on one side, and anything
-      downstream that averages the two loses 6 dB — which is most of the gap
-      measured above.
+    * **Resampled to the device's own rate.** See `resample` — a rate mismatch
+      is not an error PortAudio is obliged to raise.
+    * **Normalised to `PLAY_PEAK`.** A clip at the level a room microphone
+      recorded it (peak 0.087 of full scale) lands under Wispr's own voice
+      activity threshold. A virtual cable has no reason to reproduce the
+      distance.
+    * **Matched to the device's channel count.** These devices are
+      two-channel; handing PortAudio a mono array leaves the signal on one side,
+      and anything downstream that averages the two loses 6 dB.
     """
     import sounddevice as sd
 
-    target = PLAY_PEAK if peak is None else peak
+    device_rate = rate
+    channels = 1
+    try:
+        info = sd.query_devices(device_index)
+        device_rate = int(info.get("default_samplerate") or rate)
+        channels = max(1, int(info["max_output_channels"]))
+    except Exception:
+        pass
+
     signal = np.asarray(audio, dtype=np.float32) * gain
+    signal, rate = resample(signal, rate, device_rate)
+
+    target = PLAY_PEAK if peak is None else peak
     if target:
         loudest = float(np.max(np.abs(signal))) or 1.0
         signal = signal * (target / loudest)
@@ -177,11 +240,6 @@ def play(audio, rate, device_index, gain=1.0, peak=None):
     tail = np.zeros(int(rate * TAIL_SEC), dtype=np.float32)
     signal = np.clip(np.concatenate([lead, signal, tail]), -1.0, 1.0)
 
-    channels = 1
-    try:
-        channels = max(1, int(sd.query_devices(device_index)["max_output_channels"]))
-    except Exception:
-        pass
     if channels > 1:
         signal = np.repeat(signal[:, None], channels, axis=1)
     sd.play(signal, samplerate=rate, device=device_index, blocking=True)
