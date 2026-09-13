@@ -253,6 +253,32 @@ def _same_device(a: str, b: str) -> bool:
     return bool(a and b) and (strip(b) in strip(a) or strip(a) in strip(b))
 
 
+def wispr_settings_open() -> str:
+    """Wispr's own window, if one is in front. `""` when only its pill is up.
+
+    **Wispr's Settings → Microphone page holds the microphone open** for its
+    level meter. A run made while it is up is poisoned three ways, all observed
+    2026-09-13 22:13: `WisprWatch` sees no *transition* to recording, so the
+    relay reports `no microphone within 12 s of the hotkey — Wispr ignored the
+    chord` for a dictation Wispr was recording perfectly well; the row never
+    leaves `processing`; and `micDevice` is never written, so the one column
+    that is ground truth about the microphone stays blank.
+
+    Read with `osascript`, which activates nothing.
+    """
+    try:
+        out = subprocess.run(
+            ["/usr/bin/osascript", "-e",
+             'tell application "System Events" to tell process "Wispr Flow" to '
+             "name of windows"],
+            capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return ""
+    # "Status" is the pill and is always there; anything else is a real window.
+    windows = [w.strip() for w in (out or "").split(",") if w.strip() and w.strip() != "Status"]
+    return ", ".join(windows)
+
+
 def audio_stack() -> tuple[bool, str]:
     try:
         import numpy  # noqa: F401
@@ -358,6 +384,15 @@ def checks(device_name: str | None = None, speaker: bool = False,
                         % (target.get("address") or "?"), key="target"))
     else:
         rows.append(Row(None, "unbound — the transcript should land at the caret", key="target"))
+
+    settings = wispr_settings_open()
+    if settings:
+        rows.append(Row(False, "a Wispr Flow window is open (%s)" % settings, fatal=True, key="wispr-ui",
+                        remedy="Close it. Wispr's Settings → Microphone page holds the microphone\n"
+                               "open for its level meter, and a run made while it is up gets no\n"
+                               "microphone *transition* for WisprWatch to see: the relay reports\n"
+                               "'Wispr ignored the chord' for a dictation Wispr is recording fine,\n"
+                               "the row never leaves 'processing', and micDevice is never written."))
 
     ok, detail = audio_stack()
     rows.append(Row(ok, "python audio: %s" % detail, fatal=not speaker, key="audio",
