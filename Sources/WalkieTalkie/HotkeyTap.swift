@@ -182,8 +182,26 @@ final class HotkeyTap {
     /// observed to be open — a few hundred milliseconds, measured — and it
     /// expires on its own after `redirectCeiling` whatever anyone forgets.
     /// `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
+    /// **Zeroed at the chord, whether or not the guard then arms.** The loop read
+    /// `keys = 5` on runs where nothing had been redirected at all — the counts
+    /// and the target were the *previous* dictation's, because only a successful
+    /// arm reset them, and a run that never armed inherited them wholesale.
+    func resetKeyRedirect() {
+        stateLock.lock()
+        redirectPid = 0
+        redirectTarget = 0
+        redirectUntil = 0
+        redirectCount = 0
+        redirectPassed = 0
+        stateLock.unlock()
+    }
+
     func armKeyRedirect(to pid: pid_t) {
-        guard Self.redirectEnabled, pid > 0 else { return }
+        guard Self.redirectEnabled, pid > 0 else {
+            Log.error("⌨️ the keyboard guard did NOT arm — "
+                      + (Self.redirectEnabled ? "no application to give his keys to" : "WT_SCRATCHPAD_REDIRECT_KEYS=0"))
+            return
+        }
         stateLock.lock()
         redirectPid = pid
         redirectTarget = pid
@@ -246,6 +264,48 @@ final class HotkeyTap {
     private static let redirectDictationCeiling: TimeInterval = 300
     private static let redirectEnabled =
         ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0"
+
+    // ── `WT_KEY_TRACE=1` — every keyboard event, and what became of it ───────
+
+    /// **Every keyboard event this tap sees, and the decision it made**, for the
+    /// one question that three nights of inference could not settle: *who is
+    /// eating his keystrokes.*
+    ///
+    /// Off by default and deliberately not clever. It logs a **keycode**, the
+    /// posting process and the verdict — never a character, because a log that
+    /// records what he typed is a log that must not exist. One line per event
+    /// for the length of a dictation is a few dozen lines; the alternative is
+    /// another night of reading outcomes backwards.
+    ///
+    /// A line with no matching verdict is an event that reached the end of
+    /// `handle` untouched — `passed` says so explicitly.
+    /// `WT_KEY_TRACE=1` at launch, or `POST /test/key-trace {"on": true}` at any
+    /// moment — the second because an installed app started by LaunchServices
+    /// does not inherit a shell's environment, and a debugging aid nobody can
+    /// switch on is not one.
+    static var keyTrace = ProcessInfo.processInfo.environment["WT_KEY_TRACE"] == "1" {
+        didSet {
+            guard keyTrace != oldValue else { return }
+            Log.info("⌨️trace \(keyTrace ? "on — every keyboard event and what became of it" : "off")")
+        }
+    }
+
+    private func trace(_ verdict: String, _ type: CGEventType, _ event: CGEvent) {
+        guard Self.keyTrace else { return }
+        let code = event.getIntegerValueField(.keyboardEventKeycode)
+        let pid = event.getIntegerValueField(.eventSourceUnixProcessID)
+        let stamped = event.getIntegerValueField(.eventSourceUserData) == Self.backButtonStamp
+        let kind = type == .keyDown ? "↓" : type == .keyUp ? "↑" : "⇧"
+        Log.info(String(format: "⌨️trace %@ key %d pid %d%@ flags 0x%llx — %@",
+                        kind, code, pid, stamped ? " (ours)" : "",
+                        event.flags.rawValue, verdict))
+    }
+
+    /// Swallow, and say which branch did it.
+    private func swallow(_ why: String, _ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
+        trace("SWALLOWED by \(why)", type, event)
+        return nil
+    }
 
     /// The pid to redirect to, or 0. Cheap enough for the tap thread: a lock and
     /// two comparisons, no window server and no Accessibility.
@@ -1531,7 +1591,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         countPassed()
                         Log.info("⌨️ key \(code) passed (modifier) — chords are never redirected")
                     }
-                } else if WisprScratchpad.focusOwnerIsWispr() {
+                } else if !WisprScratchpad.focusOwnerIsWispr() {
+                    // **Passed, untouched, and counted as such.** The guard is
+                    // armed for the whole sentence but acts only while Wispr
+                    // actually holds the focus; the rest of the time his keys are
+                    // nobody's business but his.
+                    if type == .keyDown { countPassed() }
+                } else {
                     // **Decided per key, at the key.** The window is up for
                     // seconds and he may have clicked away in the middle of them;
                     // redirecting a key whose focus is somewhere else entirely
@@ -1542,9 +1608,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // what he typed is a log that must not exist.
                         Log.info("⌨️ key \(code) → pid \(target) (#\(countRedirect())) — Wispr's Scratchpad had the focus")
                     }
-                    return nil
-                } else if type == .keyDown {
-                    countPassed()
+                    return swallow("the keyboard guard (re-posted to pid \(target))", type, event)
                 }
             }
         }
@@ -1566,12 +1630,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     stateLock.lock()
                     let swallow = injectionSwallows
                     stateLock.unlock()
-                    if swallow { return nil }
+                    if swallow { return self.swallow("the Wispr ⌘V capture", type, event) }
                 }
             }
         }
 
-        guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+        guard type == .keyDown else {
+            if Self.keyTrace, type == .keyUp || type == .flagsChanged {
+                trace("passed (not a keyDown)", type, event)
+            }
+            return Unmanaged.passUnretained(event)
+        }
 
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
@@ -1589,7 +1658,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER) && promptHeld
             && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
             DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
-            return nil   // swallow: the panel took it, so nothing behind it should
+            return swallow("the prompt panel's ⏎", type, event)   // the panel took it
         }
 
         // ⎋ cancels the prompt that is on screen, the mirror of the ⏎ above and
@@ -1830,13 +1899,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
         }
 
-        guard ctrl && opt && !cmd else { return Unmanaged.passUnretained(event) }
+        guard ctrl && opt && !cmd else {
+            trace("passed", type, event)
+            return Unmanaged.passUnretained(event)
+        }
 
         if keyCode == VK_P {
             let cursor = NSEvent.mouseLocation
             DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
-            return nil   // swallow
+            return swallow("⌃⌥P screenshot", type, event)
         }
+        trace("passed", type, event)
         return Unmanaged.passUnretained(event)
     }
 

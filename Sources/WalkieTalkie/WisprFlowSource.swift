@@ -804,6 +804,9 @@ final class WisprFlowSource: DictationSource {
         }
         guard !isRecording, !speculative else { return }
         speculative = true
+        // The guard's counters belong to this dictation and start at zero, armed
+        // or not — see `HotkeyTap.resetKeyRedirect`.
+        hotkeys.resetKeyRedirect()
         // **Whose keyboard, decided here and in every mode.** The relay's own
         // menu can be in front at this instant (a spawn offers its folder list
         // on the gesture), so the frontmost application is taken only when it is

@@ -737,6 +737,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHotkey = { [weak self] in
             DispatchQueue.main.async { self?.wisprSource.simulateHotkey() }
         }
+        picker.onTestKeyTrace = { on in
+            HotkeyTap.keyTrace = on
+            return ["keyTrace": on]
+        }
         picker.onTestScratchpadPark = {
             var answer: [String: Any] = [:]
             DispatchQueue.main.sync { answer = WisprScratchpad.park() }
@@ -2980,6 +2984,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // handed on — the answer to *did one of his keystrokes reach the
             // note*, which is the one question this mode has to keep answering
             // no to.
+            "keyTrace": HotkeyTap.keyTrace,
             "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
                             "pid": Int(hotkeys.keyRedirect.pid),
                             "keys": hotkeys.keyRedirect.keys,

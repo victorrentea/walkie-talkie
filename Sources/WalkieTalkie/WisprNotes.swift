@@ -438,14 +438,39 @@ enum WisprScratchpad {
     /// is cached above.
     static func focusOwnerIsWispr() -> Bool {
         guard wisprPid != 0 else { return false }
+        // **The system-wide element does not answer on this Mac.** Measured
+        // 2026-09-14 by the loop: `AXUIElementCreateSystemWide` +
+        // `kAXFocusedUIElementAttribute` returns `kAXErrorCannotComplete`, so a
+        // check written on it silently answers *no* for ever — which is exactly
+        // what it had been doing. It is still asked first, because where it
+        // works it is the most direct reading there is, and a failure now says
+        // so once instead of passing for an answer.
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(),
-                                            kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
+        let err = AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(),
+                                                kAXFocusedUIElementAttribute as CFString, &focused)
+        if err == .success, let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() {
+            var owner: pid_t = 0
+            if AXUIElementGetPid(element as! AXUIElement, &owner) == .success { return owner == wisprPid }
+        } else if !warnedAboutSystemWide {
+            warnedAboutSystemWide = true
+            Log.error("wispr scratchpad: the system-wide focused element is unreadable (AXError \(err.rawValue)) — falling back to asking Wispr's own window")
+        }
+        // **So ask Wispr's own application instead**: is the Scratchpad the
+        // window it considers focused, and does that window say it is. Both
+        // together, because a window can be an app's focused one while the app
+        // holds no keyboard at all.
+        guard let window = windowElement() else { return false }
+        var isFocused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXFocusedAttribute as CFString, &isFocused) == .success,
+              (isFocused as? Bool) == true else { return false }
+        let app = AXUIElementCreateApplication(wisprPid)
+        var appFocused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &appFocused) == .success,
+              let w = appFocused, CFGetTypeID(w) == AXUIElementGetTypeID() else { return false }
         var owner: pid_t = 0
-        guard AXUIElementGetPid(element as! AXUIElement, &owner) == .success else { return false }
-        return owner == wisprPid
+        return AXUIElementGetPid(w as! AXUIElement, &owner) == .success && owner == wisprPid
     }
+    private static var warnedAboutSystemWide = false
 
     private static func appElement() -> (AXUIElement, pid_t)? {
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.electron.wispr-flow").first

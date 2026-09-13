@@ -115,6 +115,21 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
   disarmed when the window is confirmed gone, **10 s ceiling from the release**, below the app's
   own chords so ⌘⌃B and ⌘⌃D keep working, logged **by keycode only**.
   `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
+- **`keyRedirect`'s counters are this dictation's, zeroed at the chord** whether or not the guard
+  then arms — the loop read `keys = 5` on runs where nothing had been redirected at all, because
+  only a successful arm reset them and a run that never armed inherited the previous one's numbers
+  wholesale. A failure to arm now says so in the log instead of leaving stale evidence behind.
+- **The focus-owner check does not use the system-wide element.** Measured 2026-09-14:
+  `AXUIElementCreateSystemWide` + `kAXFocusedUIElementAttribute` returns **`kAXErrorCannotComplete`**
+  on this Mac, so a check written on it silently answers *no* for ever. It is still asked first —
+  where it works it is the most direct reading there is — and a failure is logged once, after which
+  the question goes to **Wispr's own application**: is the Scratchpad the window it considers
+  focused, and does that window say it is.
+- **`WT_KEY_TRACE=1` / `POST /test/key-trace {"on": true}`** logs every keyboard event the tap sees
+  and the verdict it reached — `passed`, or `SWALLOWED by <branch>` — with the **keycode and the
+  posting pid only, never a character**. An event that reached the end of `handle` untouched says
+  `passed` explicitly, so a missing verdict means a branch that has not been instrumented rather
+  than a key that vanished.
 - **Its limit, and it is a hard one: it cannot manufacture a key window.** An application that is
   frontmost with **no key window has no first responder**, and a character posted to it is dropped.
   `wrap-caret` lands 7/7 because TextEdit keeps its key window; `wrap-bound` lands 0/7 with the
