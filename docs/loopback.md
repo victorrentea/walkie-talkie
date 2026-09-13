@@ -386,6 +386,27 @@ this is a wrap rather than a hope:
 | did a window open? | Wispr's window list before / during / after |
 | did focus move? | the frontmost app, sampled during the run |
 
+**First run, 2026-09-13 22:54 — three of four, and the fourth is a judgement
+call.** Wispr reacted to the held F18 (microphone open after 1488 ms), produced
+`Commit and push the fix.` (`formatted`, e2e 432 ms, `🎓 TO Wispr (Virtual)`),
+and wrote it into a **new** `Notes` row plus a matching `NoteVersions` row. The
+victim TextEdit document was left at **0 chars** — the first time in this whole
+investigation that a Wispr dictation produced text without inserting it into the
+focused app — and the frontmost app stayed TextEdit throughout.
+
+The fourth: a **`Scratchpad` window did open** (`['Status']` → `['Status',
+'Scratchpad']`) and stayed open afterwards. It did **not** take focus, so the
+strict assertion fails while the thing Victor cares about holds. Whether a
+background window appearing mid-sentence is acceptable on a projector is his
+call, not the harness's.
+
+Two details worth carrying forward. The History row's `app` said
+`com.apple.TextEdit` even though the words went to the Scratchpad — **that column
+is what was in front, not where the text went**, so it cannot be used as the
+destination witness. And the pasteboard *was* written (4493 → 4496) with **no
+`probe:` line at all**: Wispr put the sentence on the clipboard and wrote it into
+its own window without ever posting a ⌘V.
+
 **A *modified* note counts as much as a new one.** The Scratchpad is one note
 that gets appended to, not a note per dictation, so a diff that only reports new
 ids would report nothing for ever — unit-tested, because it is invisible.
