@@ -177,7 +177,22 @@ final class WisprFlowSource: DictationSource {
     /// `DictationResult.focusPid` so the caret paste can be *addressed* instead
     /// of aimed at whatever holds the focus, which is what lets the delivery fire
     /// at `formatted` rather than waiting for Wispr's window to close.
+    ///
+    /// **Remembered in every mode, not only the caret's** (2026-09-14). It was
+    /// filled inside `guardTheKeyboard`, behind a guard that returned early when
+    /// the frontmost application was the relay itself — and a spawn dictation
+    /// puts the relay's own folder menu in front at exactly that moment, so
+    /// `wrap-spawn` and `wrap-bound` armed no redirect at all and lost every
+    /// probe keystroke. The destination of the sentence has nothing to do with
+    /// whose keyboard it is.
     private(set) var focusPid: pid_t?
+
+    /// **The last application that was frontmost and was not this one.**
+    ///
+    /// The fallback for the moment the relay's own menu or panel is in front
+    /// when the chord goes out. Kept by subscription rather than asked for,
+    /// because by the time it is wanted the answer has already been spoiled.
+    private var lastFrontPid: pid_t = 0
 
     /// For `GET /test/state` — the flag above, which is not `startedMode`.
     var isIntercepting: Bool { intercepting }
@@ -437,6 +452,15 @@ final class WisprFlowSource: DictationSource {
 
     func prepare() {
         watch.start()
+        // Whose keyboard it is, kept current — see `lastFrontPid`.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] note in
+                guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      app.bundleIdentifier != Bundle.main.bundleIdentifier,
+                      app.processIdentifier > 0 else { return }
+                self?.lastFrontPid = app.processIdentifier
+            }
     }
 
     // MARK: - DictationSource
@@ -536,19 +560,32 @@ final class WisprFlowSource: DictationSource {
     /// is taken by the tap and re-posted to the app he was looking at when he
     /// stopped talking.
     private func guardTheKeyboard() {
-        // **Whose keyboard it is** — read at the chord, which is the last moment
-        // nothing has interfered with it. It is not read again afterwards: the
-        // window that steals the focus never becomes frontmost, so there is
-        // nothing later that would say so.
-        let victim = NSWorkspace.shared.frontmostApplication
-        let pid = victim?.processIdentifier ?? 0
-        guard pid != 0, victim?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
-        focusPid = pid
+        // `focusPid` was decided at the gesture, in every mode — see its note.
+        guard let pid = focusPid, pid != 0 else {
+            Log.error("⌨️ no application to give his keys back to — the keyboard is not guarded for this dictation")
+            return
+        }
+        let name = NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)"
+        // **Take the keyboard back rather than work around it.** The Scratchpad
+        // becomes key without becoming frontmost, and an app that is frontmost
+        // but not key has **no first responder** — so keys re-posted to it with
+        // `postToPid` are simply dropped (measured 2026-09-14: five re-posted to
+        // TextEdit, five lost). Re-activating the application he was using is
+        // the only thing that actually puts the caret back where he left it. It
+        // is one call, once per dictation, aimed at the app he is already in,
+        // and the Scratchpad it takes the focus from is parked off the edge of
+        // the screen by the time this runs.
+        WisprScratchpad.onKeyStolen = {
+            guard let app = NSRunningApplication(processIdentifier: pid) else { return }
+            Log.info("⌨️ Wispr's Scratchpad took the keyboard — giving it back to \(name)")
+            app.activate(options: [])
+        }
         WisprScratchpad.onWindowGone = { [weak self] openMs in
+            WisprScratchpad.onKeyStolen = nil
             self?.hotkeys.disarmKeyRedirect()
             if let openMs {
                 Log.info(String(format: "🗒️ the Scratchpad existed for %.0f ms; his keys were watched throughout and went to %@",
-                                openMs, victim?.localizedName ?? "the front app"))
+                                openMs, name))
             }
         }
         hotkeys.armKeyRedirect(to: pid)
@@ -733,7 +770,14 @@ final class WisprFlowSource: DictationSource {
         }
         guard !isRecording, !speculative else { return }
         speculative = true
-        focusPid = nil
+        // **Whose keyboard, decided here and in every mode.** The relay's own
+        // menu can be in front at this instant (a spawn offers its folder list
+        // on the gesture), so the frontmost application is taken only when it is
+        // somebody else's, and the last one that was is the fallback.
+        let front = NSWorkspace.shared.frontmostApplication
+        let frontPid = front?.bundleIdentifier == Bundle.main.bundleIdentifier
+            ? 0 : (front?.processIdentifier ?? 0)
+        focusPid = frontPid != 0 ? frontPid : (lastFrontPid != 0 ? lastFrontPid : nil)
         relayStarted = relay
         startedMode = relay ? (mode ?? wrapMode) : .off
         intercepting = relay && wrapWispr
@@ -856,6 +900,13 @@ final class WisprFlowSource: DictationSource {
         // keyboard guard is allowed to outlive it start counting here.
         if startedMode == .scratchpad {
             WisprScratchpad.armCloseOnSight()
+            // **And nothing else may ask again.** The close is a *toggle*: a
+            // second tap behind the first one closes the window and opens it
+            // straight back up. `wrap-cancel` left `['Status', 'Scratchpad']`
+            // behind for exactly that reason (2026-09-14) — the cancel path ran
+            // `closeListening`'s close and then `endCapture`'s, three seconds
+            // apart, and the second undid the first. One owner per close.
+            scratchpadWindowHandled = true
             hotkeys.startKeyRedirectCountdown()
         }
         didStopListening?()

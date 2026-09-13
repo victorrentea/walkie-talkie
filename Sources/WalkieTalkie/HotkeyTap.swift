@@ -186,6 +186,7 @@ final class HotkeyTap {
         guard Self.redirectEnabled, pid > 0 else { return }
         stateLock.lock()
         redirectPid = pid
+        redirectTarget = pid
         // **No countdown while he is still talking.** A dictation runs to a
         // minute or more; the ten seconds is measured from the release, where
         // it means *the window should have gone by now*.
@@ -216,13 +217,22 @@ final class HotkeyTap {
         Log.info("⌨️ keys are unwatched again — \(n) redirected to pid \(was), \(passed) passed through")
     }
 
-    /// For `GET /test/state`.
-    var keyRedirect: (pid: pid_t, keys: Int) {
+    /// For `GET /test/state`, and it answers three separate questions because
+    /// one field answering all of them was unreadable after the fact: the loop
+    /// read `pid = 0, keys = 5` on a run where seven letters had been redirected
+    /// correctly — `pid` went to zero the moment the guard disarmed, and `keys`
+    /// was a total across every dictation of the session. **The pid it was aimed
+    /// at survives the disarm, and the counts are this dictation's.**
+    var keyRedirect: (armed: Bool, pid: pid_t, keys: Int, passed: Int) {
         stateLock.lock(); defer { stateLock.unlock() }
-        return (redirectUntil > CFAbsoluteTimeGetCurrent() ? redirectPid : 0, redirectCount)
+        return (redirectPid != 0 && CFAbsoluteTimeGetCurrent() < redirectUntil,
+                redirectTarget, redirectCount, redirectPassed)
     }
 
     private var redirectPid: pid_t = 0
+    /// The pid the guard was aimed at, kept after the disarm so a test can read
+    /// *who was protected* rather than *is it still running*.
+    private var redirectTarget: pid_t = 0
     private var redirectUntil: CFAbsoluteTime = 0
     private var redirectCount = 0
     private var redirectPassed = 0

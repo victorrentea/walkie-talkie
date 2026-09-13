@@ -1226,7 +1226,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The sink is not wired into any real dictation** (2026-09-13) and must
         // not be until the loop has measured which of the two timing hypotheses
         // holds — see `WisprSink`. These four are the whole of its surface.
-        picker.onTestSink = { command in
+        picker.onTestSink = { [weak self] command in
+            // **The sink may not take the keyboard during a Scratchpad
+            // dictation** (2026-09-14). The `bound` scenario opens the sink and
+            // makes it key, and in Scratchpad mode that dictation never came
+            // back: the row stayed non-terminal through the whole 30 s capture
+            // and the relay reported *No words came back*. Wispr appears to
+            // choose its target from the key window, and a test instrument
+            // holding it while the Scratchpad chord is down is a test measuring
+            // itself. Refused with a sentence rather than obeyed, because the
+            // failure it produces looks exactly like Wispr being broken.
+            if command == .key, let self {
+                let box = StateBox()
+                let done = DispatchSemaphore(value: 0)
+                DispatchQueue.main.async {
+                    box.value = ["scratchpad": self.wisprSource.startedMode == .scratchpad
+                                    && (self.wisprSource.isRecording || self.wisprSource.capturing)]
+                    done.signal()
+                }
+                _ = done.wait(timeout: .now() + 2)
+                if box.value["scratchpad"] as? Bool == true {
+                    return ["error": "a Scratchpad dictation is in flight — the sink may not take the key window, "
+                            + "because Wispr chooses its target from it and the sentence would be lost",
+                            "wrapMode": "scratchpad"]
+                }
+            }
             DispatchQueue.main.async {
                 switch command {
                 case .open:    WisprSink.shared.open()
@@ -1235,6 +1259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .restore: WisprSink.shared.restoreFocus()
                 }
             }
+            return nil
         }
         picker.onTestSinkClear = { DispatchQueue.main.async { WisprSink.shared.clear() } }
         picker.describeSink = {
@@ -2955,7 +2980,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // handed on — the answer to *did one of his keystrokes reach the
             // note*, which is the one question this mode has to keep answering
             // no to.
-            "keyRedirect": ["pid": Int(hotkeys.keyRedirect.pid), "keys": hotkeys.keyRedirect.keys],
+            "keyRedirect": ["armed": hotkeys.keyRedirect.armed,
+                            "pid": Int(hotkeys.keyRedirect.pid),
+                            "keys": hotkeys.keyRedirect.keys,
+                            "passed": hotkeys.keyRedirect.passed],
             // Kept beside the object above because it is what every assertion
             // written before tonight asks for.
             "scratchpadWindowOpen": WisprScratchpad.windowIsOpen(),

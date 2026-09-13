@@ -415,12 +415,16 @@ final class ElementPicker {
     /// time.** Hold the keyboard from the start of the dictation, or take it
     /// only at the stop gesture and give it back a moment later — the two give
     /// opposite instructions and only a measurement can choose.
-    var onTestSink: ((SinkCommand) -> Void)?
+    /// Answers nil when it did as it was asked, or a refusal to hand back as a
+    /// 409 — `{"key": true}` is refused while a Scratchpad dictation is in
+    /// flight, because the sink taking the key window is the one thing that can
+    /// make Wispr dictate somewhere other than its own note.
+    var onTestSink: ((SinkCommand) -> [String: Any]?)?
     var describeSink: (() -> [String: Any])?
     var onTestSinkClear: (() -> Void)?
 
     /// What `POST /test/sink` was asked to do.
-    enum SinkCommand {
+    enum SinkCommand: Equatable {
         case open
         case close
         /// Take the keyboard, remembering whose it was.
@@ -824,15 +828,17 @@ final class ElementPicker {
             // Checked before `on`, so `{"key": true}` on a sink already open is
             // not read as a second request to open it.
             if body?["key"] as? Bool == true {
-                onTestSink?(.key)
+                if let refusal = onTestSink?(.key) {
+                    return respond(conn, 409, ["ok": false].merging(refusal) { _, new in new })
+                }
                 return respond(conn, 200, ["ok": true, "did": "key"])
             }
             if body?["restore"] as? Bool == true {
-                onTestSink?(.restore)
+                _ = onTestSink?(.restore)
                 return respond(conn, 200, ["ok": true, "did": "restore"])
             }
             let on = body?["on"] as? Bool ?? true
-            onTestSink?(on ? .open : .close)
+            _ = onTestSink?(on ? .open : .close)
             respond(conn, 200, ["ok": true, "open": on])
 
         case ("GET", "/test/sink"):

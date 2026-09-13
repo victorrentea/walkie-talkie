@@ -316,6 +316,24 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   size is **300×300**. Parked at the bottom-right of the only display it ends up at `1720,1089` on
   a `1728×1079` screen, clamped from the `1720,1109` asked for. **Wispr does not remember the
   frame**: it reopens at `1428,817` every time, so parking is done on every open, not once.
+- **One owner per close.** The close is a *toggle*, so a second tap behind the first closes the
+  window and opens it straight back up — `wrap-cancel` left `['Status', 'Scratchpad']` behind for
+  exactly that reason (2026-09-14): `closeListening` armed the close and `endCapture` asked again
+  three seconds later. `armCloseOnSight` is idempotent and claims `scratchpadWindowHandled`, and
+  every other path checks it.
+- **The sink may not take the key window during a Scratchpad dictation.** `POST /test/sink
+  {"key": true}` is **refused with a 409** while one is in flight. The `bound` scenario did it and
+  the dictation never came back — the row stayed non-terminal through the whole 30 s capture and
+  the relay reported *No words came back*. Wispr appears to choose its target from the key window,
+  so a test instrument holding it while the chord is down is a test measuring itself, and the
+  failure it produces looks exactly like Wispr being broken.
+- **The victim pid is remembered in EVERY mode**, at the gesture, and never the relay's own: a
+  spawn dictation puts the relay's folder menu in front at exactly that moment, so the pid is taken
+  from the frontmost application only when it is somebody else's, with the last non-relay frontmost
+  app (kept by `NSWorkspace` subscription) as the fallback. It used to be filled inside
+  `guardTheKeyboard` behind a guard that returned early on the relay, which is why `wrap-spawn`
+  armed no protection at all. The destination of the sentence has nothing to do with whose
+  keyboard it is.
 - **And for exactly that stretch, his keys are re-posted to the app he was looking at.**
   `HotkeyTap.armKeyRedirect(to:)` takes every **real** key (pid 0, unstamped) and hands it on with
   `postToPid` to the application that was frontmost at the **stop gesture** — the last moment that

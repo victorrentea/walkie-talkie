@@ -548,6 +548,14 @@ enum WisprScratchpad {
     /// Called the moment the window is confirmed gone, with how long it was up,
     /// or nil when it never appeared inside the ceiling.
     static var onWindowGone: ((Double?) -> Void)?
+    /// **Called the moment the Scratchpad is seen to hold the key focus**, so
+    /// somebody can take it back. Re-posting his keys elsewhere was tried first
+    /// and does not work: an application that is frontmost but whose windows are
+    /// not key has no first responder, so a `postToPid` keystroke arrives and is
+    /// dropped — measured 2026-09-14, five keys re-posted to TextEdit and all
+    /// five lost. The theft has to be undone, not compensated for.
+    static var onKeyStolen: (() -> Void)?
+    private static var toldAboutTheft = false
     /// The longest the watcher waits for a window that may never come.
     private static let appearCeiling: TimeInterval = 8
     /// What a whole open→closed cycle has cost, most recent first.
@@ -561,6 +569,7 @@ enum WisprScratchpad {
     /// floating on top of his work, is happening while he is still talking. It
     /// is parked on first sight, and closed later.
     static func beginDictation() {
+        toldAboutTheft = false
         closeASAP = false
         closeRequested = false
         appearedAt = nil
@@ -572,6 +581,7 @@ enum WisprScratchpad {
 
     /// The sentence is over — now it may go.
     static func armCloseOnSight() {
+        guard !closeASAP else { return }
         closeASAP = true
         armedAt = Date()
         closeAskedAt = Date()
@@ -688,6 +698,10 @@ enum WisprScratchpad {
             }
         }
         guard let why else { return }
+        if !toldAboutTheft {
+            toldAboutTheft = true
+            onKeyStolen?()
+        }
         if !everBecameKey {
             everBecameKey = true
             lastKeyAt = Date()
