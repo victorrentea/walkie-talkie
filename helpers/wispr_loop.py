@@ -1282,11 +1282,25 @@ def _await_settled(relay: Relay, mark: LogMark, timeout: float) -> tuple[bool, f
     Wispr had said anything at all. The settle has its own line, `✍️ the words
     landed`, and `/test/state.settling` is the belt to its braces.
     """
+    # **Idle has to hold, not merely be observed once.** Between the stop chord
+    # and the settle opening there is a window where `listening` has already
+    # gone false and `settling` has not yet gone true, and a single sample there
+    # reads as "the run is over" — measured 2026-09-14, `bound` ended 0.2 s after
+    # the stop and reported no settle for a dictation that had not started
+    # settling yet. The log line is still the authority; this is the fallback,
+    # and it now needs the state to stay idle across several polls.
+    idle_needed = 8          # × 0.2 s ≈ 1.6 s of continuous idle
+    seen_idle = [0]
+
     def done():
         if "✍️ the words landed" in mark.fresh():
             return True
         state = relay.state()
-        return state and not state.get("listening") and not state.get("settling")
+        if state and not state.get("listening") and not state.get("settling"):
+            seen_idle[0] += 1
+        else:
+            seen_idle[0] = 0
+        return seen_idle[0] >= idle_needed
 
     got, waited = wait_for(done, timeout, poll=0.2, dry=relay.dry_run)
     if got and not relay.dry_run:
@@ -1504,8 +1518,12 @@ def scenario_bound(ctx) -> Result:
 
         typed, _ = wait_for(lambda: _read(sink_file).strip(), timeout=10, poll=0.25,
                             dry=relay.dry_run)
-        _assert_text(result, "the words were typed into the bound tty",
-                     typed or "", ctx.fixture.get("transcript", ""))
+        # Containment, not similarity: what reaches a bound session is the
+        # sentence *inside* the envelope, so scoring the whole payload against
+        # the bare fixture reads 0.11 on a delivery that is perfectly correct.
+        result.check(normalise(ctx.fixture.get("transcript", "")) in normalise(typed or "")
+                     or relay.dry_run, "the words reached the bound tty",
+                     "%d chars — %r" % (len(typed or ""), (typed or "")[:60]))
 
         text, events = _sink_text(relay)
         result.check(not events, "nothing leaked into the window in front",
@@ -1548,8 +1566,21 @@ def scenario_cancel(ctx) -> Result:
         time.sleep(1.0)     # the ring-down line is written a beat after the state flips
     t = read_timings(mark.lines())
     result.timings = t
-    result.check("cancel" in (t.ring_down_reason or "").lower(),
-                 "the ring's reason says it was cancelled", t.ring_down_reason or "(none)")
+    # **The settle's reason, not the ring's.** Since the split the ring always
+    # comes down with `the microphone closed — the words are in flight`,
+    # whatever happened next, so asserting on it tests nothing. What a cancel
+    # changes is how the settle *ended*.
+    # **This run's own log, never `/test/state.lastSettled`.** That field keeps
+    # the *previous* dictation's reason when the current one produced no settle
+    # at all — which is exactly what a cancel does — so reading it reported
+    # `routed to workspace` for a cancel that had worked perfectly (2026-09-14).
+    # A cancelled sentence never reaches a settle, so **no settle line is the
+    # right answer**; a settle that does appear must say it was cancelled.
+    settled_why = t.landed_reason
+    result.check(not settled_why or "cancel" in settled_why.lower()
+                 or "abandon" in settled_why.lower() or relay.dry_run,
+                 "the sentence never reached a settle",
+                 settled_why or "no settle line — the cancel took it")
 
     text, events = _sink_text(relay)
     result.check(not events and not text, "no words anywhere in the sink",
@@ -2630,9 +2661,15 @@ def scenario_wrap_off(ctx) -> Result:
 
         # Wispr's own ⌘V, *not* swallowed — the probe line is the proof, and the
         # sentence arriving exactly once is the proof that nobody added a second.
+        # **Reported, not asserted.** The `probe:` line comes from the tap's own
+        # synthetic-key watch, and with the wrap off there is nothing to arm it
+        # — so an absent line says nothing about whether Wispr pasted. What
+        # proves the paste is the sentence being in the victim, which is the
+        # assertion below.
         wispr_paste = [p for p in t.probes if "Wispr Flow" in p and "key 9" in p]
-        result.check(bool(wispr_paste) or relay.dry_run, "Wispr posted its own ⌘V",
-                     "; ".join(t.probes) or "no probe lines at all")
+        result.note("Wispr's ⌘V in the tap's probe lines: %s"
+                    % ("; ".join(wispr_paste) if wispr_paste
+                       else "none — the probe is not armed with the wrap off"))
         result.check(_count_occurrences(victim_text, want) == 1 or relay.dry_run,
                      "Wispr pasted the sentence into the victim exactly once",
                      "%d occurrence(s) — %r" % (_count_occurrences(victim_text, want),
