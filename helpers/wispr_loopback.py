@@ -506,8 +506,14 @@ PROBE_CHAR = "z"
 #: Eleven of them, because the offsets now run on **both** sides of the stop
 #: gesture — the Scratchpad is open from the hold, so the interesting window
 #: starts during the recording, not after it.
-PROBE_LETTERS = [("q", 12), ("z", 6), ("j", 38), ("k", 40), ("w", 13),
-                 ("y", 16), ("v", 9), ("b", 11), ("g", 5), ("l", 37), ("r", 15)]
+PROBE_LETTERS = [("q", 12), ("z", 6), ("j", 38), ("k", 40), ("y", 16),
+                 ("g", 5), ("l", 37), ("b", 11)]
+#: `w`, `v` and `r` were dropped on 2026-09-14 when the short fixture became
+#: *"What car do I have?"* — it carries a `w`, a `v` and an `r` of its own, and a
+#: probe letter the sentence already contains cannot be attributed to a
+#: keystroke. `evals/test_wispr_loop.py` asserts the disjointness, so a future
+#: re-baseline that reintroduces a collision fails there rather than in a run
+#: whose verdicts have quietly stopped meaning anything.
 
 
 def _post_bare(keycode: int, down: bool):

@@ -21,16 +21,28 @@
     "",
     "Both clips are English. Wispr's language pick is its own and unpinned, and an",
     "English clip gives the fuzzy match the least to argue about; the corpus is mostly",
-    "Romanian, so these were picked for being clean rather than for being typical."
+    "Romanian, so these were picked for being clean rather than for being typical.",
+    "",
+    "RE-BASELINED AGAIN 2026-09-14, and not for accuracy. The short fixture used",
+    "to be 'Commit and push the fix.' — which is a live instruction, and on",
+    "2026-09-14 01:47 a scenario delivered it into Victor's own Claude session",
+    "(the relay was still bound to it) where his agent read it as a command and",
+    "came within a step of committing this harness's open files. A test fixture",
+    "that any agent receiving it would act on is a loaded gun; the isolation is",
+    "airtight now AND the sentence is inert.",
+    "",
+    "'What car do I have?' is a question nobody acts on, and it contains none of",
+    "the probe letters (q z j k y g l b) — which matters, because a probe letter",
+    "the sentence already carries cannot be attributed to a keystroke."
   ],
   "default": {
-    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-09-04/13-25-48-fab7e654.wav",
-    "transcript": "Commit and push the fix.",
-    "seconds": 2.17,
-    "language": "en",
+    "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-08-12/11-10-31-45fee527.wav",
+    "transcript": "What car do I have?",
+    "seconds": 1.93,
     "engine": "wispr",
-    "why": "2.2 s, four words, no proper nouns — the shortest clean English clip in the corpus. The short caret scenario needs a sentence that is over before Wispr's microphone is warm, which is the whole of incident 1.",
-    "verified": "2026-09-13 — one run through 🎓 TO Wispr returned this verbatim (asrText: 'Commit push the fix.', formatting adds the 'and'); sink cross-check matched via paste"
+    "why": "1.9 s, English, and INERT — a question no agent acts on. It also shares no letter with the probe set, so every probe letter found anywhere is the rig's.",
+    "verified": "2026-09-14 — one run through 🎓 TO Wispr returned it verbatim (asrText identical), e2e 323 ms",
+    "language": "en"
   },
   "caret-long": {
     "wav": "/Users/victorrentea/.walkie-talkie/voice-corpus/2026-09-12/22-31-12-wispr243.wav",

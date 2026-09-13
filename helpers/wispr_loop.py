@@ -1786,6 +1786,45 @@ def _osascript(script: str, timeout: float = 20) -> str:
         return ""
 
 
+#: Every tty this process opened itself. **Nothing else may be dictated into.**
+OWNED_TTYS: set[str] = set()
+
+
+def current_binding(port: int) -> str:
+    """The tty the relay is pointed at right now, or ""."""
+    target = pf.get(port, "/target") or {}
+    return (target.get("address") or "").strip() if target.get("bound") else ""
+
+
+def isolate_binding(port: int) -> str:
+    """**Take the relay off Victor's session before any scenario runs.**
+
+    Returns the binding that was there, for the outermost `finally` to put back.
+
+    This exists because of 2026-09-14 01:47:18. The relay was still bound to
+    Victor's own Claude session — `workspace-b6` — and a scenario delivered the
+    fixture into it. The fixture says *"Commit and push the fix."*, so his agent
+    read it as an instruction and came within a step of committing the files
+    this harness had open. Nothing in the run was wrong except its aim.
+
+    A rig that posts real dictations must never be pointed at a session it did
+    not create. Unbinding costs one call and is put back at the end; the
+    alternative costs somebody else's repository.
+    """
+    was = current_binding(port)
+    if was:
+        pf.post(port, "/unbind", {})
+    return was
+
+
+def restore_binding(port: int, tty: str) -> bool:
+    """Put Victor's binding back, exactly as it was."""
+    if not tty:
+        return False
+    pf.post(port, "/bind", {"tty": tty})
+    return current_binding(port) == tty
+
+
 def _open_scratch_terminal(sink_file: str) -> str | None:
     """A Terminal window running `cat >> <file>`, and its tty.
 
@@ -1802,7 +1841,10 @@ def _open_scratch_terminal(sink_file: str) -> str | None:
         '  delay 0.6\n'
         '  return tty of t\n'
         'end tell' % command.replace('"', '\\"'))
-    return tty.split("/")[-1] if tty.startswith("/dev/") else (tty or None)
+    tty = tty.split("/")[-1] if tty.startswith("/dev/") else (tty or None)
+    if tty:
+        OWNED_TTYS.add(tty)
+    return tty
 
 
 def scratch_terminal_window_id(tty: str) -> str:
@@ -1940,6 +1982,17 @@ def _open_victim(scratch: str) -> str | None:
     return name
 
 
+#: One AppleScript conversation with TextEdit at a time.
+#:
+#: **The probe timers and the main thread both read the victim**, and two
+#: `osascript` calls racing for the same app is how the last read of a run came
+#: back empty while the snapshot taken 400 ms earlier held all seven letters —
+#: `'qzjkwyv'` in the document, `''` in the verdict. Not a lost keystroke, a lost
+#: *answer*, which is the same failure as `_osascript`'s timeout-to-`""` but
+#: arriving by a different road.
+_TEXTEDIT_LOCK = __import__("threading").Lock()
+
+
 def _victim_text(name: str, tries: int = 3) -> str:
     """What is in the victim now. A **read** — it activates nothing and steals no focus.
 
@@ -1957,8 +2010,9 @@ def _victim_text(name: str, tries: int = 3) -> str:
     an empty answer is asked again rather than believed the first time.
     """
     for attempt in range(tries):
-        text = _osascript('tell application "TextEdit" to get text of document "%s"' % name,
-                          timeout=8)
+        with _TEXTEDIT_LOCK:
+            text = _osascript('tell application "TextEdit" to get text of document "%s"' % name,
+                              timeout=8)
         if text:
             return text
         if attempt + 1 < tries:
@@ -3220,6 +3274,12 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
     result.note("clip: %s (%.1fs) — %r"
                 % (os.path.basename(fixture["wav"]), float(fixture.get("seconds") or 0),
                    (fixture.get("transcript") or "")[:60]))
+    bound_now = "" if dry_run else current_binding(port)
+    if bound_now and bound_now not in OWNED_TTYS:
+        # **Never dictate into somebody else's session.** See `isolate_binding`.
+        result.check(False, "the relay is not bound to a session this runner did not open",
+                     "bound to %r, which this run did not create — refusing" % bound_now)
+        return result
     try:
         func(ctx)
     finally:
@@ -3507,6 +3567,12 @@ def main(argv):
     if not names:
         ap.error("a scenario, --all, or --transcribe <wav>")
 
+    # **The whole suite runs unbound**, and Victor's binding goes back at the end.
+    victors_binding = isolate_binding(port) if not args.dry_run else ""
+    if victors_binding:
+        print("🔓 unbound from %r for the run — it will be put back at the end" % victors_binding,
+              file=sys.stderr)
+
     results = []
     for index in range(1, max(1, args.repeat) + 1):
         for name in names:
@@ -3516,6 +3582,11 @@ def main(argv):
                 options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss,
                          "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
                                            if x.strip()]}))
+
+    if victors_binding:
+        ok = restore_binding(port, victors_binding)
+        print("🔒 binding restored to %r: %s" % (victors_binding, "yes" if ok else "FAILED"),
+              file=sys.stderr)
 
     if args.json:
         print(json.dumps({"pass": all(r.passed for r in results),

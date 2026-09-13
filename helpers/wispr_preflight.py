@@ -198,17 +198,22 @@ def relay_process() -> tuple[bool, str]:
     **silently** — every gesture this harness posts would go nowhere and the run
     would report the app ignoring it. Worth one `ps`.
     """
+    # **The executable path, not the command line.** `-o command=` includes every
+    # argument, and a `swift-driver` compiling this very app mentions
+    # `-module-name WalkieTalkie` and half a dozen paths under
+    # `walkie-talkie/.build` — so a build running in the background was matched
+    # as "the running relay", and the preflight refused with a 2 KB compiler
+    # invocation quoted back at it (2026-09-14). `comm=` is the binary alone and
+    # cannot be confused with something that merely talks about it.
     try:
-        out = subprocess.run(["/bin/ps", "-Ao", "pid=,command="], capture_output=True,
+        out = subprocess.run(["/bin/ps", "-Ao", "pid=,comm="], capture_output=True,
                              text=True, timeout=10).stdout
     except Exception:
         return (False, "?")
     for line in out.splitlines():
-        if "WalkieTalkie" in line or "Walkie Talkie.app" in line:
-            if "grep" in line:
-                continue
-            command = line.strip().split(" ", 1)[-1]
-            return (INSTALLED in command, command.strip())
+        binary = line.strip().split(" ", 1)[-1].strip()
+        if binary.endswith("/WalkieTalkie") or binary.endswith("/Walkie Talkie"):
+            return (binary.startswith(INSTALLED), binary)
     return (False, "(not running)")
 
 
