@@ -62,16 +62,16 @@ enum WisprHistory {
         let startedAt: TimeInterval
     }
 
-    static let url = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Wispr Flow/flow.sqlite")
+    /// The same file `WisprNotes` reads. Kept here as well because every rule
+    /// and every journal entry names `WisprHistory.url`.
+    static var url: URL { WisprFlowDB.url }
 
-    private static var db: OpaquePointer?
-    private static let lock = NSLock()
+    private static var lock: NSLock { WisprFlowDB.lock }
 
     /// The newest row, or nil when the file is missing or cannot be read.
     static func newest() -> Entry? {
         lock.lock(); defer { lock.unlock() }
-        guard let db = open() else { return nil }
+        guard let db = WisprFlowDB.open() else { return nil }
         let sql = """
             select rowid, coalesce(status, ''), coalesce(pastedText, ''), coalesce(formattedText, ''),
                    coalesce(e2eLatency, 0), coalesce(app, ''), coalesce(micDevice, ''),
@@ -81,7 +81,7 @@ enum WisprHistory {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
             Log.error("wispr history: \(String(cString: sqlite3_errmsg(db)))")
-            reset()
+            WisprFlowDB.reset()
             return nil
         }
         defer { sqlite3_finalize(stmt) }
@@ -95,26 +95,4 @@ enum WisprHistory {
                      startedAt: Double(text(8)) ?? 0)
     }
 
-    private static func open() -> OpaquePointer? {
-        if let db { return db }
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        var handle: OpaquePointer?
-        // `mode=ro` in the URI on top of the flag: neither the journal nor the
-        // shm may be created by this process if they are somehow absent.
-        let uri = "file:" + url.path.replacingOccurrences(of: " ", with: "%20") + "?mode=ro"
-        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI
-        guard sqlite3_open_v2(uri, &handle, flags, nil) == SQLITE_OK, let handle else {
-            if let h = handle { sqlite3_close(h) }
-            Log.error("wispr history: could not open \(url.path) read-only")
-            return nil
-        }
-        sqlite3_busy_timeout(handle, 50)
-        db = handle
-        return handle
-    }
-
-    private static func reset() {
-        if let db { sqlite3_close(db) }
-        db = nil
-    }
 }

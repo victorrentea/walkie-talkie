@@ -210,6 +210,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Every selection and every pick says when, and a pick says what it said (2026-09-13)](#every-selection-and-every-pick-says-when-and-a-pick-says-what-it-said-2026-09-13)
 - [Version row and ⌘Q (2026-09-13)](#version-row-and-q-2026-09-13)
 - [Three witnesses instead of one, and the ring stops waiting for CoreAudio (2026-09-13, evening)](#three-witnesses-instead-of-one-and-the-ring-stops-waiting-for-coreaudio-2026-09-13-evening)
+- [The numbers, and the Scratchpad is the one that works (2026-09-13, night)](#the-numbers-and-the-scratchpad-is-the-one-that-works-2026-09-13-night)
 
 ---
 
@@ -8632,3 +8633,87 @@ out of its own tap**. `HotkeyTap`'s `fn ⌃ Space` branch gained the `backButton
 hands-free chord seen while a dictation is open is now read as Victor ending it — and without
 the stamp `postWisprHandsFree` would hand the source its own start back as a stop, a
 millisecond later.
+
+## The numbers, and the Scratchpad is the one that works (2026-09-13, night)
+
+Built, installed and verified on the running app. Four things were being asked, and the third
+answered a question the design had only argued about.
+
+**The state machine at rest and on a script.** `GET /test/state` answers `phase: "idle"` and a
+`wispr` block; `POST /test/wispr-state/simulate` runs a scripted day in under a millisecond.
+Six scenarios, all passing — the happy path with both lags, the 09-13 Word failure (**no
+microphone signal at all**, the row as the only witness, `done(formatted)`), a chord Wispr
+ignored (`done(timeout)`, no row), a late notification producing exactly **one** `listening`
+transition, and all five terminal statuses plus an unknown one terminating.
+
+The simulator earned its keep in its first minute by finding a bug in the thing it was written
+to test. `chordAt > 0` was standing in for *a chord has been seen*, and a fake clock that starts
+at zero makes those two different questions — the route came back with null lags and no offsets
+on a script that had both. Wall-clock time is never zero, so the real path had hidden it
+perfectly. That is the whole argument for an injectable clock in one bug.
+
+**One real caret dictation, 22.5 s through `🎓 TO Wispr`.** The transcript came back
+character-for-character, and the three witnesses answered in this order:
+
+| witness | when |
+|---|---|
+| Wispr's `History` row appeared | **357 ms** after the chord |
+| the 100 ms poll saw the microphone | **607 ms** |
+| `WisprWatch`'s CoreAudio notification | **5590 ms** |
+
+`wispr state: warming → listening — Wispr created a row, poll saw it never after the chord,
+notification never` is the line at 357 ms, and it is the thesis: at the moment the dictation was
+confirmed **neither microphone signal had spoken**. The notification arrived 9.2× later than the
+poll and 15.7× later than the row. Under yesterday's code that dictation had one witness and it
+was the slowest of the three.
+
+The rest of the run, in order: the stop chord closed the listening phase itself
+(`🎙️ the microphone is closed — POST /test/wispr-handsfree (22521 ms of speech)`), `⚡ ring down`
+followed immediately, the row went to `processing` and the settle waited on it, Wispr's ⌘V
+arrived 790 ms after the close and was **taken** — armed since the start chord — and
+`✍️ the words landed: pasting at the caret` closed it at 792 ms. `lastRingDown` and `lastSettled`
+name the two events separately, 793 ms apart.
+
+**A forward click inside the settle does nothing, and says so.** With `settling` true,
+`ringUp` **false** and the chip reading `["Transcribing...", "bind to send"]`,
+`POST /test/gesture forward-click` put `🔼 forward click while the words are still in flight —
+nothing to start, nothing to stop` in the log and left `listening` false. That is 2026-09-13's
+second failure, posted from a script, refusing to happen.
+
+Two more numbers off the same run. The settle's extension works —
+`the settle waits: Wispr Flow is still working — 8 s in` and `— 17 s in` on a row that never
+answered, then `done(timeout)` at 30 s with `Wispr never created a row`, which is the *other*
+message and the right one. And Wispr's Scratchpad toggles on a **250 ms** press-and-release but
+not on a 60 ms one, so `{"tap": true}` is reported as a tap rather than as a hold and a caller
+that wants the window toggled times its own.
+
+### `WisprNotes`, and the `History` row is not the witness there
+
+The runner's experiment settled the wrap. F18 held 20 s: the text landed in Wispr's own `Notes`
+(a **new note per dictation**, with a `NoteVersions` row beside it, `source = initial`), the
+victim TextEdit document was untouched, **focus never moved**, **no ⌘V was posted**, the
+pasteboard was written and then restored by Wispr, and the round trip was **432 ms**. The
+Scratchpad window opened in the background. Nothing was inserted anywhere, which is the whole
+thing every previous candidate was trying to buy with either a stolen focus or a revoked
+permission.
+
+`WisprNotes` is the reading half — `Notes` joined to its newest `NoteVersions` row, read-only,
+`via: "wispr-notes"`, wired to no gesture. Three things it had to get right:
+
+- **The `History` row cannot be the witness here.** Measured in the same run: on a Scratchpad
+  dictation `History.app` names the **front app**, not the destination — it said TextEdit for a
+  sentence that went into Wispr's note. `app` answers *what was in front*, which for every other
+  kind of dictation is accidentally the same thing as *where the words went*, and here is not.
+- **A modified note counts as much as a new one.** The run measured a new note per dictation, and
+  the Scratchpad is a *notepad*: nothing promises it will not append to an existing one, and a
+  reader watching only for new ids would go silent for ever the day it starts. The test is
+  `max(createdAt, modifiedAt) >= since`; the delivery is the newest `NoteVersions` **content**
+  rather than the accumulated note, or a dictation appended to yesterday's note would deliver
+  yesterday's note too.
+- **One handle, not two.** `WisprFlowDB` now holds the read-only connection both readers share —
+  `mode=ro` in the URI on top of the flag, 50 ms busy timeout, dropped on any error. Opening a
+  second connection against a 3.5 GB WAL file another process is writing is not a thing worth
+  doing twice for the sake of file locality.
+
+Verified against the runner's own dictation: `GET /test/wispr-notes` answers note
+`3e088dcb-…`, 24 characters, `"Commit and push the fix "`, version `initial`.

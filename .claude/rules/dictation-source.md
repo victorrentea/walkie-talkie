@@ -171,7 +171,24 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   row's 23, a match. With the swallow armed at the start chord, a **correct** run leaves the sink
   empty, so a runner assertion of *sink text equals row text* now fails on every good run and has to
   be inverted.
-- **The third candidate is Wispr's own Scratchpad** (2026-09-13, untested): per Wispr's docs its
+- **The third candidate is Wispr's own Scratchpad, and it is the one that works** (2026-09-13,
+  measured): F18 held 20 s put the text in `Notes` (a new note per dictation, with a
+  `NoteVersions` row beside it), left the victim TextEdit document untouched, **never moved the
+  focus**, posted **no ⌘V**, wrote and then restored the pasteboard, and came back in **432 ms**.
+  The Scratchpad window opened in the background. `WisprNotes` is the read half
+  (`GET`/`POST /test/wispr-notes`, `via: "wispr-notes"`), wired to no gesture yet.
+- **On a Scratchpad dictation the `History` row is not the witness.** Its `app` column named the
+  **front app** (TextEdit) for a sentence that went into Wispr's own note: `app` answers *what was
+  in front*, which for every other kind of dictation is accidentally the same thing as *where the
+  words went*. The note is the only place the destination is written.
+- **A modified note counts as much as a new one.** The run measured a new note per dictation, but
+  the Scratchpad is a notepad and nothing promises it will not append — so `WisprNotes.newest` tests
+  `max(createdAt, modifiedAt) >= since` and delivers the newest `NoteVersions` **content** rather
+  than the accumulated note.
+- **One read-only handle for both readers** (`WisprFlowDB`): `mode=ro` in the URI on top of the
+  flag, 50 ms busy timeout, dropped on any error. Two connections opened independently against a
+  3.5 GB WAL file another process is writing is not a thing to do twice.
+- **Historical — the Scratchpad as an untested hypothesis** (2026-09-13, midday): per Wispr's docs its
   *Open Scratchpad* shortcut taps to open/close, **holds to dictate into the Scratchpad**, and
   double-taps for hands-free into it. `POST /test/wispr-scratchpad {"down"|"up"|"tap": true}` posts
   it, reading the chord from `prefs.user.shortcuts` by **action name** at call time (fallback

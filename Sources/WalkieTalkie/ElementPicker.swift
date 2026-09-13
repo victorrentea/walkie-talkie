@@ -296,7 +296,15 @@ final class ElementPicker {
     /// **hold**. See `HotkeyTap.postWisprScratchpad`.
     var onTestScratchpad: ((ScratchpadCommand) -> [String: Any])?
 
-    enum ScratchpadCommand {
+    /// `GET /test/wispr-notes` / `POST /test/wispr-notes {"since": <unix s>}` —
+    /// Wispr Flow's **Scratchpad**, read-only (`WisprNotes`). The GET is the
+    /// baseline a run takes before it holds the chord; the POST is the delivery
+    /// read afterwards, and answers `{"note": null}` when nothing was written
+    /// since. Not wired to any gesture: this is the reading half of a wrap whose
+    /// other half is still `POST /test/wispr-scratchpad`.
+    var onTestWisprNotes: ((TimeInterval?) -> [String: Any])?
+
+    enum ScratchpadCommand: String {
         /// Press and keep it pressed — per Wispr's docs, push-to-talk into its
         /// own Scratchpad note.
         case down
@@ -751,6 +759,15 @@ final class ElementPicker {
                 return respond(conn, 500, ["ok": false, "error": "no simulator wired"])
             }
             respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // Wispr's Scratchpad note, read — see `onTestWisprNotes`.
+        case ("GET", "/test/wispr-notes"):
+            respond(conn, 200, ["ok": true].merging(onTestWisprNotes?(nil) ?? [:]) { _, new in new })
+
+        case ("POST", "/test/wispr-notes"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let since = (body?["since"] as? Double) ?? (body?["since"] as? Int).map(Double.init)
+            respond(conn, 200, ["ok": true].merging(onTestWisprNotes?(since) ?? [:]) { _, new in new })
 
         // Wispr's Scratchpad chord, held — see `onTestScratchpad`.
         case ("POST", "/test/wispr-scratchpad"):

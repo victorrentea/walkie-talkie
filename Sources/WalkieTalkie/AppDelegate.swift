@@ -746,6 +746,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // put the relay into a state in order to assert on the state machine is
         // a test of the relay.
         picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
+        // Wispr's Scratchpad note, read — see `WisprNotes`. Read-only and wired
+        // to no gesture: the Scratchpad is the candidate wrap (it inserts
+        // nothing and never moves the focus, measured 2026-09-13) and this is
+        // the half that reads the answer back.
+        picker.onTestWisprNotes = { since in
+            let note = since.map { WisprNotes.newest(since: $0) } ?? WisprNotes.newest()
+            if let note {
+                Log.info("🗒️ wispr notes: \(note.id) — \(note.text.count) chars, version \(note.versionSource)")
+            }
+            return WisprNotes.describe(note)
+        }
         // Wispr's Scratchpad chord, and the one this app has to hold — see
         // `HotkeyTap.postWisprScratchpad`.
         picker.onTestScratchpad = { command in
@@ -755,7 +766,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .up: HotkeyTap.postWisprScratchpad(down: false)
             case .tap: HotkeyTap.tapWisprScratchpad()
             }
-            return ["chord": chord, "held": HotkeyTap.scratchpadIsHeld]
+            // **The tap's release is 60 ms away**, so reading `scratchpadIsHeld`
+            // here would answer `held: true` for a chord that is about to be
+            // let go — measured, and it read as a stuck key that was not one.
+            // Measured the same minute: a 60 ms tap did **not** toggle the
+            // Scratchpad window and a 250 ms press/release did, so the tap is
+            // reported as what it is and the caller times its own.
+            let held = command == .tap ? false : HotkeyTap.scratchpadIsHeld
+            return ["chord": chord, "held": held, "did": "\(command)"]
         }
         // The real chord on the wire, for the end-to-end harness — see
         // `tools/wispr-test.sh`. Only useful from the installed build: a

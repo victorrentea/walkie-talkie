@@ -150,6 +150,16 @@ final class WisprState {
     private(set) var since: CFAbsoluteTime
     /// When the start chord went out — the zero every lag is measured from.
     private(set) var chordAt: CFAbsoluteTime = 0
+    /// **Whether a chord has been seen at all**, and not `chordAt > 0`.
+    ///
+    /// Found by the simulator the hour it was written: `POST
+    /// /test/wispr-state/simulate` starts its fake clock at zero, so *the chord
+    /// went out at t=0* and *no chord has gone out* were the same test, and the
+    /// route answered with null lags and no offsets on a script that had both.
+    /// Wall-clock time is never zero, so the real path had hidden it — which is
+    /// exactly the class of bug a machine with an injectable clock exists to
+    /// find.
+    private(set) var hasChord = false
     /// Wispr's row for this dictation, once one has been found.
     private(set) var row: Int64?
     /// The row's last-read status, whatever the phase.
@@ -198,6 +208,7 @@ final class WisprState {
     /// against it.
     func startChord(_ why: String) {
         chordAt = now()
+        hasChord = true
         row = nil
         status = ""
         pollMs = nil
@@ -228,7 +239,7 @@ final class WisprState {
 
     private func microphone(_ on: Bool, from source: String) {
         if on {
-            let lag = chordAt > 0 ? (now() - chordAt) * 1000 : nil
+            let lag = hasChord ? (now() - chordAt) * 1000 : nil
             if source == "poll", pollMs == nil { pollMs = lag }
             if source == "notification", notifyMs == nil { notifyMs = lag }
             switch phase {
@@ -268,6 +279,21 @@ final class WisprState {
         }
     }
 
+    /// **The words arrived, by whatever route.** Measured on the first real run
+    /// (2026-09-13, 23:02): the ⌘V landed 790 ms after the stop while the row
+    /// still said `processing`, so the machine went straight from `transcribing`
+    /// to `idle` and the transition log never said *this one finished*. It says
+    /// so now, and it says **how** — `done(wispr-cmdv)` when Wispr's own row has
+    /// not caught up, `done(formatted)` when it has, which is exactly the
+    /// distinction worth keeping.
+    func delivered(via: String) {
+        switch phase {
+        case .idle, .done: return
+        default: enter(.done(Self.isTerminal(status) && !status.isEmpty ? status : via),
+                       "delivered via \(via)")
+        }
+    }
+
     /// Nothing came back inside `captureTimeout`.
     func timedOut(_ why: String) {
         switch phase {
@@ -303,7 +329,7 @@ final class WisprState {
         if next == .listening {
             out += String(format: ", poll saw it %@ after the chord, notification %@",
                           Self.ms(pollMs), Self.ms(notifyMs))
-        } else if chordAt > 0 {
+        } else if hasChord {
             out += String(format: " (%.0f ms after the chord)", (since - chordAt) * 1000)
         }
         return out
@@ -325,12 +351,16 @@ final class WisprState {
             "status": phase.status.isEmpty ? status : phase.status,
             "lags": ["pollMs": pollMs.map { NSNumber(value: $0.rounded()) } ?? NSNull(),
                      "notifyMs": notifyMs.map { NSNumber(value: $0.rounded()) } ?? NSNull()],
+            // Milliseconds into the dictation, which is the reading a fake clock
+            // can also give — `since` is a wall-clock stamp and reads as 2001
+            // under the simulator.
+            "sinceMs": hasChord ? NSNumber(value: Int(((since - chordAt) * 1000).rounded())) : NSNull(),
         ]
         out["row"] = row.map { NSNumber(value: $0) } ?? NSNull()
         out["transitions"] = transitions.map { t -> [String: Any] in
             var obj: [String: Any] = ["state": t.phase.name, "why": t.why]
             if !t.phase.status.isEmpty { obj["status"] = t.phase.status }
-            if chordAt > 0 { obj["atMs"] = Int(((t.at - chordAt) * 1000).rounded()) }
+            if hasChord { obj["atMs"] = Int(((t.at - chordAt) * 1000).rounded()) }
             return obj
         }
         return out

@@ -135,7 +135,13 @@ struct DictationResult {
     /// Whether the relay still has to put these words somewhere.
     let delivery: DictationDelivery
     /// **Which of the recogniser's delivery routes produced this text** —
-    /// `wispr-cmdv`, `wispr-history`, `pasteboard`, `local-whisper` (2026-09-13).
+    /// `wispr-cmdv`, `wispr-history`, `wispr-notes`, `pasteboard`,
+    /// `local-whisper` (2026-09-13).
+    ///
+    /// `wispr-notes` is the Scratchpad: Wispr dictating into its own note rather
+    /// than into whatever has the caret, which is the one delivery of Wispr's
+    /// that inserts nothing anywhere and never moves the focus. Read by
+    /// `WisprNotes`; not wired to a gesture yet.
     ///
     /// It is recorded and never branched on, which is why it is a string and not
     /// an enum: the router's question is `delivery` above, and this one is only

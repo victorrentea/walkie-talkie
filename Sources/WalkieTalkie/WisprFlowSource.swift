@@ -343,7 +343,6 @@ final class WisprFlowSource: DictationSource {
     func stop() {
         guard isRecording || speculative else { return }
         HotkeyTap.postWisprHandsFree()
-        state.stopChord("the relay asked for the dictation to end")
         closeListening("the relay's own stop gesture")
     }
 
@@ -362,7 +361,6 @@ final class WisprFlowSource: DictationSource {
         cancelling = true
         Log.info("🗑️ Wispr Flow dictation cancelled — posting ⌃Escape")
         HotkeyTap.postWisprCancel()
-        state.stopChord("cancelled")
         // **The cancel closes it here too.** Same change as `stop()`, same
         // reason: waiting for a CoreAudio edge that may never come left the ring
         // up over a dictation Victor had already thrown away.
@@ -393,8 +391,7 @@ final class WisprFlowSource: DictationSource {
     func postStartChord() {
         HotkeyTap.postWisprHandsFree()
         if isRecording || speculative {
-            state.stopChord("POST /test/wispr-handsfree — the toggle's second press")
-            closeListening("POST /test/wispr-handsfree")
+            closeListening("POST /test/wispr-handsfree — the toggle's second press")
         } else {
             gestureSeen("POST /test/wispr-handsfree", confident: true)
         }
@@ -434,7 +431,6 @@ final class WisprFlowSource: DictationSource {
         // keyboard — which the relay used to learn only from a CoreAudio edge
         // that may be six seconds late or absent.
         if confident, isRecording || speculative {
-            state.stopChord(why)
             closeListening("Victor's own \(why)")
             return
         }
@@ -527,6 +523,13 @@ final class WisprFlowSource: DictationSource {
     /// heard and starts being waited for.
     private func closeListening(_ why: String) {
         guard isRecording || speculative else { return }
+        // **The machine closes here too, and only here.** It used to be told
+        // separately at each call site, and the one site that forgot was the
+        // CoreAudio edge — so a dictation the relay had settled sat in `warming`
+        // for ever as far as the phase was concerned, which is precisely the
+        // kind of disagreement between two records of the same fact this file
+        // exists to remove.
+        state.stopChord(why)
         isRecording = false
         speculativeDrop?.cancel()
         speculativeDrop = nil
@@ -594,7 +597,6 @@ final class WisprFlowSource: DictationSource {
         if isRecording || speculative {
             Log.info("🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand")
             cancelling = true
-            state.stopChord("⌃Escape")
             closeListening("Victor's own ⌃Escape")
             state.reset("dismissed by hand")
             return
@@ -940,6 +942,9 @@ final class WisprFlowSource: DictationSource {
             return
         }
         let took = CFAbsoluteTimeGetCurrent() - captureFrom
+        // Before `endCapture` resets it, or the machine goes `transcribing` →
+        // `idle` and the transition log never says this one finished.
+        if armedAt >= state.chordAt { state.delivered(via: via) }
         endCapture(quiet: true)
         guard !text.isEmpty else {
             Log.error("wispr: \(reason) carried nothing")

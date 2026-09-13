@@ -139,6 +139,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/wispr-handsfree` | post the **real** chord (fn ⌃ Space) — a real Wispr dictation starts, and the relay's own state machine is driven with it (this app's posts are stamped out of its own tap since 2026-09-13, so the chord no longer comes back as Victor's). A second call is the toggle's stop. Installed build only: `.build/debug` has no Accessibility grant and `CGEventPost` fails silently |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
 | `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
+| `GET /test/wispr-notes` · `POST /test/wispr-notes` `{"since": <unix s>}` | Wispr Flow's **Scratchpad**, read-only (`WisprNotes`, `Notes` + `NoteVersions`): the GET is the baseline before the chord, the POST the delivery read after it (`{"note": null}` when nothing was written since). Wired to no gesture — the reading half of the candidate wrap |
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
 | `POST /test/input` `{"name": "…"}` | point the **system's** default input at a device (substring match) and say what it was; with no name it only reports. For `tools/wispr-test.sh` |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
@@ -167,13 +168,18 @@ sits at rest there.
   dictation is not something to do to a man who may be clicking or typing at that instant. Revoking
   Wispr's Accessibility grant was rejected for its own reason: Wispr has to go on working standalone.
   The sink stays a **test instrument**, opened by `POST /test/sink` and nothing else. The candidate now
-  is Wispr's own **Scratchpad** (`POST /test/wispr-scratchpad`, held) with the words read out of the
-  `History` row (`historyRoute`).
+  is Wispr's own **Scratchpad** (`POST /test/wispr-scratchpad`, held) with the words read out of
+  `Notes` / `NoteVersions` (`WisprNotes`, `via: "wispr-notes"`). Measured 2026-09-13, F18 held 20 s:
+  the text landed in `Notes` (a new note per dictation, plus a `NoteVersions` row), the victim
+  TextEdit document was untouched, **focus never moved**, no ⌘V was posted, the pasteboard was
+  written and restored by Wispr, e2e **432 ms**; the Scratchpad window opened in the background.
+  The `History` row is **not** the witness here — its `app` column named the front app, not the
+  destination.
 - **The sink cross-check only ever sees what leaks.** With the swallow armed at the **start** chord
   (2026-09-13), a correct run leaves the sink empty; it disagreed with the row 5/5 that evening only
   because Wispr's ⌘V arrived before the relay knew the microphone had shut and escaped into it.
 - **A dictation's `delivery` is written down now** (2026-09-13), in the outbox line and in
-  `/test/state.lastDelivery`: `{"via": "wispr-cmdv" | "wispr-history" | "pasteboard" | "local-whisper" |
+  `/test/state.lastDelivery`: `{"via": "wispr-cmdv" | "wispr-history" | "wispr-notes" | "pasteboard" | "local-whisper" |
   "test", "kind": "route" | "alreadyInserted" | "insertedElsewhere", "to": "terminal:ttysNNN" | "caret" |
   "spawn:<folder>" | "held", "at": ISO}`. It records and never decides — the caret, the held sentence and
   the two *somebody else inserted it* cases write no outbox line at all, and this is the only trace they
