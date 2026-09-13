@@ -289,6 +289,74 @@ DISMISS_KEYS = [
 ]
 
 
+#: Wispr's hands-free chord, from its own `shortcuts` map: `"49+59+63"` — Space
+#: (49), Control (59), Fn (63). The one Victor's own dictation uses when nothing
+#: of ours is running.
+HANDSFREE_KEYS = [
+    int(k) for k in os.environ.get("WISPR_HANDSFREE_KEYS", "59,63,49").split(",") if k.strip()
+]
+
+
+def _chord_flags(modifiers) -> int:
+    """The CGEvent flag mask for a set of modifier keycodes, and nothing else.
+
+    **Explicit, not inherited.** `CGEventCreateKeyboardEvent` picks up whatever
+    the hardware thinks is held, which on this rig is whatever Wispr happens to
+    be pressing at that instant — the reason a probe once went out as ⌘X. Here
+    the chord must carry *its own* modifiers and no others, or Wispr sees a
+    shortcut nobody bound.
+    """
+    import Quartz
+
+    masks = {
+        59: Quartz.kCGEventFlagMaskControl,      # left control
+        62: Quartz.kCGEventFlagMaskControl,      # right control
+        63: Quartz.kCGEventFlagMaskSecondaryFn,  # fn
+        55: Quartz.kCGEventFlagMaskCommand,
+        54: Quartz.kCGEventFlagMaskCommand,
+        58: Quartz.kCGEventFlagMaskAlternate,
+        61: Quartz.kCGEventFlagMaskAlternate,
+        56: Quartz.kCGEventFlagMaskShift,
+        60: Quartz.kCGEventFlagMaskShift,
+    }
+    flags = 0
+    for code in modifiers:
+        flags |= masks.get(code, 0)
+    return flags
+
+
+def post_chord(keys=None, flags=None):
+    """Post a chord: modifiers down, key with explicit flags, everything up.
+
+    The last keycode is the key; the ones before it are its modifiers. The key
+    event's flags are **set**, not inherited, so the chord is exactly itself.
+    """
+    import Quartz
+
+    keys = list(keys or HANDSFREE_KEYS)
+    if not keys:
+        return False
+    modifiers, key = keys[:-1], keys[-1]
+    mask = _chord_flags(modifiers) if flags is None else flags
+    for code in modifiers:
+        _post(code, True)
+        time.sleep(0.01)
+    for down in (True, False):
+        event = Quartz.CGEventCreateKeyboardEvent(None, key, down)
+        Quartz.CGEventSetFlags(event, mask)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        time.sleep(0.02)
+    for code in reversed(modifiers):
+        _post(code, False)
+        time.sleep(0.01)
+    return True
+
+
+def post_wispr_handsfree():
+    """Wispr's own `fn ⌃ Space`, posted from here — for when the relay is down."""
+    return post_chord(HANDSFREE_KEYS)
+
+
 def post_wispr_dismiss(keys=None):
     """Post Wispr's own **⌃Escape** — *discard this sentence*.
 

@@ -325,6 +325,8 @@ a failed assertion, not papered over.
 | **`wrap-bound`** | the same with `forward-right`, a bound `cat` terminal | the words in `bound-sink.txt`, victim untouched |
 | **`wrap-spawn`** | the same with `forward-up`, stopped with a click | an outbox `spawn:` delivery, victim untouched |
 | **`wrap-cancel`** | `forward-click` · play · `forward-left` | no note, no delivery, nothing anywhere |
+| **`wrap-off`** | `/test/wrap-mode off` · `forward-click` · play · `forward-click` | Wispr pastes into the victim itself, exactly once; the relay delivers nothing |
+| **`wispr-alone`** | the app stood all the way down, Wispr driven by its own `fn ⌃ Space` | the sentence in the front window exactly once, the row `formatted` — then relaunch and re-bind |
 | **`scratchpad-hold`** | hold the *Open Scratchpad* key (F18) · play · release | the sentence reaches a Wispr **note**, the victim is untouched, no window opens, focus never moves |
 | **`dismiss-before-paste`** | raw chord · play · stop · *wait for `formatted`* · `--dismiss-delay` ms · ⌃Escape | **answered, negatively** — see below |
 | **`sink-key-at-start`** | sink key · `forward-click` · play · `forward-click` | the control for the pair below: the words are in the sink, the victim document is empty |
@@ -466,6 +468,47 @@ projector, in front of a room — is invisible to a before/after pair. `FocusWat
 records every change at 0.4 s and the run reports the sequence. `wrap-spawn` is
 the one exception: its Terminal is *meant* to come forward, so there the
 assertion is that nothing **else** did.
+
+### The two controls: `wrap-off` and `wispr-alone`
+
+Everything above measures the wrapped path. Neither of these does, and that is
+the point.
+
+**`wrap-off`** is the same gesture with the tick off: the relay still opens a
+dictation and draws the ring, but posts Wispr's chord raw and swallows nothing,
+so the sentence goes where Wispr puts it and nothing is delivered, logged or
+noted. It exists because *"the wrap did not break Wispr"* is only believable if
+the un-wrapped path is measured on the same build, the same minute — a passing
+`wrap-caret` proves the wrap works and says nothing about what Victor gets when
+he unticks it. It restores `auto`, the tick's own setting, rather than whatever
+it happened to find.
+
+**`wispr-alone` is Victor's guarantee.** Every wrap is a way of standing between
+him and an app he relies on, and the day one of them leaves Wispr broken with the
+relay *not running* is the day the idea has to be abandoned. A suite that only
+tests the wrapped path cannot notice that. So this one stands the app all the way
+down — `relay-restart.sh`'s own stand-down and re-bind, reused rather than
+reimplemented — drives Wispr with `fn ⌃ Space` posted from here, and checks the
+sentence lands in the front window exactly once, as it did before any of this
+existed.
+
+Three things it has to get right:
+
+- **The bound tty is read before the stand-down.** `~/.walkie-talkie/bound-tty`
+  is cleared at quit, so reading it afterwards loses Victor's binding with no
+  sign of why.
+- **There is no microphone edge to wait on** — the relay is what publishes it, and
+  the relay is down. Wispr's own row appearing is the only signal that it heard
+  the chord, so the DB is polled.
+- **The app comes back whatever happens.** The relaunch, the re-bind and the
+  `wrapMode == scratchpad` check are in the `finally`: this is the one scenario
+  that leaves the Mac without its relay, and an exception in the middle must not
+  be how Victor finds out.
+
+The chord carries **explicit** flags (`fn` + `⌃` and nothing else).
+`CGEventCreateKeyboardEvent` inherits whatever the hardware thinks is held, which
+is how a probe once went out as ⌘X; a hands-free chord with a stray ⌘ on it is a
+shortcut nobody bound.
 
 ### `scratchpad-hold` — dictating somewhere that is not "whatever has focus"
 

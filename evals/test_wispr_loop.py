@@ -464,6 +464,38 @@ class Scratchpad(unittest.TestCase):
         self.assertFalse(held.release())
 
 
+class Chords(unittest.TestCase):
+    """`wispr-alone` drives Wispr with its own chord, so the chord has to be its own.
+
+    No keystroke is posted here — only the flag arithmetic, which is the half
+    that can be silently wrong: an inherited modifier once turned a probe into
+    ⌘X, and a hands-free chord carrying a stray ⌘ is a shortcut nobody bound.
+    """
+
+    def test_the_handsfree_chord_is_read_from_wispr_s_own_map(self):
+        import wispr_loopback
+        self.assertEqual(sorted(wispr_loopback.HANDSFREE_KEYS), [49, 59, 63])
+
+    def test_fn_control_is_exactly_those_two_flags(self):
+        import Quartz
+
+        import wispr_loopback
+        mask = wispr_loopback._chord_flags([59, 63])
+        self.assertTrue(mask & Quartz.kCGEventFlagMaskControl)
+        self.assertTrue(mask & Quartz.kCGEventFlagMaskSecondaryFn)
+        self.assertFalse(mask & Quartz.kCGEventFlagMaskCommand)
+        self.assertFalse(mask & Quartz.kCGEventFlagMaskShift)
+
+    def test_an_unknown_keycode_contributes_nothing(self):
+        import wispr_loopback
+        self.assertEqual(wispr_loopback._chord_flags([1, 2, 3]), 0)
+
+    def test_the_dismiss_and_handsfree_chords_are_different(self):
+        import wispr_loopback
+        self.assertNotEqual(sorted(wispr_loopback.DISMISS_KEYS),
+                            sorted(wispr_loopback.HANDSFREE_KEYS))
+
+
 class Pasteboard(unittest.TestCase):
     """`--no-sink`'s witness. **Read-only here** — nothing in this file writes.
 

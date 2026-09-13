@@ -2416,6 +2416,201 @@ def scenario_wrap_cancel(ctx) -> Result:
     return _wrap_run(ctx, "cancel")
 
 
+def scenario_wrap_off(ctx) -> Result:
+    """**The tick off: Wispr does what Wispr always did, and the relay watches.**
+
+    `wrap-off` is the control for every other `wrap-*` scenario. With the wrap
+    off the relay still opens a dictation on the gesture and still draws the
+    ring, but it posts Wispr's chord raw and swallows nothing — so the sentence
+    goes where Wispr puts it, which is the window in front, and nothing is
+    delivered, logged to the outbox or written to a note.
+
+    It is worth a scenario of its own because "the wrap did not break Wispr" is
+    only believable if the un-wrapped path is *also* measured, on the same build,
+    the same minute. Otherwise a passing `wrap-caret` proves the wrap works and
+    says nothing about what Victor gets when he unticks it.
+    """
+    relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
+    victim = None
+    was_mode = None
+    focus = FocusWatch()
+    try:
+        was_mode = wrap_mode(relay)
+        set_wrap_mode(relay, "off")
+        result.check(relay.dry_run or wrap_mode(relay) == "off", "the wrap is off",
+                     "was %r, now %r" % (was_mode or "—", wrap_mode(relay) or "—"))
+
+        if relay.dry_run:
+            print("   · osascript: open %s/victim.txt in TextEdit" % ctx.scratch)
+            victim = "victim.txt"
+        else:
+            victim = _open_victim(ctx.scratch)
+        result.check(bool(victim), "a victim document, front and key", victim or "none")
+        if not victim:
+            return result
+
+        notes_before = wispr_notes()
+        if not relay.dry_run:
+            focus.start()
+        before_delivery = (relay.state() or {}).get("lastDelivery")
+
+        relay.gesture("forward-click")
+        _await_listening(relay, result)
+        _await_microphone(ctx)
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.gesture("forward-click")
+
+        settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
+        result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
+        seen = [] if relay.dry_run else focus.stop()
+
+        t = read_timings(mark.lines())
+        result.timings = t
+        state = relay.state() or {}
+        victim_text = "" if relay.dry_run else _victim_text(victim)
+        want = ctx.fixture.get("transcript", "")
+
+        # Wispr's own ⌘V, *not* swallowed — the probe line is the proof, and the
+        # sentence arriving exactly once is the proof that nobody added a second.
+        wispr_paste = [p for p in t.probes if "Wispr Flow" in p and "key 9" in p]
+        result.check(bool(wispr_paste) or relay.dry_run, "Wispr posted its own ⌘V",
+                     "; ".join(t.probes) or "no probe lines at all")
+        result.check(_count_occurrences(victim_text, want) == 1 or relay.dry_run,
+                     "Wispr pasted the sentence into the victim exactly once",
+                     "%d occurrence(s) — %r" % (_count_occurrences(victim_text, want),
+                                                victim_text[:70]))
+        result.check(state.get("lastDelivery") == before_delivery or relay.dry_run,
+                     "the relay delivered nothing", "lastDelivery %s"
+                     % ("unchanged" if state.get("lastDelivery") == before_delivery else "MOVED"))
+        result.check(not outbox.fresh(), "no outbox line was written",
+                     "%d line(s)" % len(outbox.fresh()))
+        result.check(not notes_diff(notes_before, wispr_notes()) or relay.dry_run,
+                     "no note was written", "%d note change(s)"
+                     % len(notes_diff(notes_before, wispr_notes())))
+        result.check(state.get("intercepting") is False or relay.dry_run,
+                     "the relay is not intercepting", "intercepting=%s" % state.get("intercepting"))
+        result.check(bool(t.ring_down_reason), "the ring came down at the stop",
+                     t.ring_down_reason or "(no ring down line)")
+        result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
+        result.answer = ("wrap off: Wispr pasted into the victim itself, the relay delivered nothing")
+    finally:
+        focus.stop()
+        stand_down(relay)
+        # **Back to `auto`**, which is the tick's own setting — not to whatever
+        # this run happened to find, in case it found a mode a previous run left.
+        set_wrap_mode(relay, "auto")
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
+def scenario_wispr_alone(ctx) -> Result:
+    """**Does Wispr still work with Walkie Talkie switched off?**
+
+    Victor's guarantee, and the reason it belongs in the suite rather than in
+    somebody's memory: every wrap so far has been a way of standing between him
+    and an app he relies on, and the day one of them leaves Wispr broken with the
+    relay *not running* is the day the whole idea has to be abandoned. A suite
+    that only ever tests the wrapped path cannot notice that.
+
+    So this one stands the app all the way down — `relay-restart.sh`'s own
+    stand-down and re-bind, reused rather than reimplemented — drives Wispr with
+    its own `fn ⌃ Space` posted from here, and checks the sentence lands in the
+    front window exactly once, the way it did before any of this existed.
+
+    **The bound tty is read before the stand-down and put back after**, because
+    `~/.walkie-talkie/bound-tty` is cleared at quit: losing it would leave Victor
+    pointed at nothing with no sign of why.
+    """
+    relay, result = ctx.relay, ctx.result
+    victim = None
+    tty = None
+    relaunched = False
+    try:
+        import wispr_loopback as wl
+
+        bound_file = os.path.expanduser("~/.walkie-talkie/bound-tty")
+        tty = (_read(bound_file).split(" ")[0] or "").strip() or None
+        result.note("bound tty before the stand-down: %s" % (tty or "nothing"))
+
+        if relay.dry_run:
+            print("   · pkill -f '/Applications/Walkie Talkie.app'  (stand the app down)")
+            victim = "victim.txt"
+        else:
+            victim = _open_victim(ctx.scratch)
+            subprocess.run(["/usr/bin/pkill", "-f", "/Applications/Walkie Talkie.app"],
+                           capture_output=True, timeout=10)
+            time.sleep(1.0)
+        result.check(bool(victim), "a victim document, front and key", victim or "none")
+
+        down, waited = wait_for(lambda: not pf.relay_process()[0], timeout=15, poll=0.5,
+                                dry=relay.dry_run)
+        result.check(bool(down), "Walkie Talkie is not running",
+                     "after %.1f s — %s" % (waited, pf.relay_process()[1]))
+
+        # ── Wispr, on its own ───────────────────────────────────────────
+        started = time.time()
+        if relay.dry_run:
+            print("   · CGEventPost fn ⌃ Space (Wispr's own chord)")
+            print("   · poll flow.sqlite for a new row (the relay is down)")
+        else:
+            wl.post_wispr_handsfree()
+
+        # The relay is down, so there is no microphone edge to watch: Wispr's own
+        # row appearing is the only signal that it heard the chord.
+        row_seen, waited = wait_for(lambda: wispr_history_for(started), timeout=10, poll=0.2,
+                                    dry=relay.dry_run)
+        result.check(bool(row_seen), "Wispr opened a row for the chord",
+                     "after %.1f s" % waited if row_seen else "no row in %.1f s" % waited)
+
+        play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        if not relay.dry_run:
+            wl.post_wispr_handsfree()
+
+        row, why = ((None, "dry-run") if relay.dry_run
+                    else wait_for_history(started, timeout=45))
+        result.check((row is not None and row.status in DONE_STATUSES) or relay.dry_run,
+                     "Wispr's row reached `formatted`",
+                     "status %r (%s)" % (row.status if row else "no row", why))
+
+        want = ctx.fixture.get("transcript", "")
+        typed, _ = wait_for(lambda: _victim_text(victim).strip(), timeout=10, poll=0.4,
+                            dry=relay.dry_run)
+        times = _count_occurrences(typed or "", want)
+        result.check(times == 1 or relay.dry_run,
+                     "Wispr pasted the sentence into the victim exactly once",
+                     "%d occurrence(s) — %r" % (times, (typed or "")[:70]))
+        result.answer = ("Wispr alone: row %s, sentence in the front window %d time(s)"
+                         % (row.status if row else "—", times))
+    finally:
+        # **Whatever happened above, the app comes back.** This is the one
+        # scenario that leaves Victor's Mac without its relay, and an exception
+        # in the middle must not be how he finds out.
+        if not relay.dry_run:
+            subprocess.run(["/usr/bin/open", "/Applications/Walkie Talkie.app"],
+                           capture_output=True, timeout=20)
+            relaunched = True
+            up, waited = wait_for(pf.relay_port, timeout=40, poll=1.0)
+            ctx.result.check(bool(up), "Walkie Talkie came back up",
+                             "port %s after %.1f s" % (up, waited))
+            if up and tty:
+                pf.post(up, "/bind", {"tty": tty})
+                target = pf.get(up, "/target") or {}
+                ctx.result.check(bool(target.get("bound")), "the binding was put back",
+                                 "%s" % (target.get("address") or "—"))
+            if up:
+                engine = pf.get(up, "/engine") or {}
+                ctx.result.check(engine.get("wrapMode") == "scratchpad",
+                                 "the wrap came back up in Scratchpad mode",
+                                 "wrapMode=%s" % (engine.get("wrapMode") or "—"))
+        elif relay.dry_run:
+            print("   · open '/Applications/Walkie Talkie.app', wait for /up, re-bind %s" % tty)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+        result.note("relaunched: %s" % relaunched)
+    return result
+
+
 SCENARIOS = {
     # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
     # for the microphone before playing, so it measures the caret path without
@@ -2453,6 +2648,12 @@ SCENARIOS = {
                    "Scratchpad mode, 🔼 ↑ — the words go to a session that did not exist", False),
     "wrap-cancel": (scenario_wrap_cancel,
                     "Scratchpad mode, 🔼 ← mid-dictation — no note, no delivery, nothing anywhere", False),
+    "wrap-off": (scenario_wrap_off,
+                 "the tick off — Wispr pastes into the front window itself and the relay "
+                 "delivers nothing; the control for every wrap-* above", False),
+    "wispr-alone": (scenario_wispr_alone,
+                    "Walkie Talkie stood all the way down — does Wispr still work on its own? "
+                    "Victor's guarantee, and it relaunches and re-binds afterwards", False),
     "scratchpad-hold": (scenario_scratchpad_hold,
                         "hold Wispr's Open Scratchpad key and dictate into the Scratchpad — "
                         "a destination that is not 'whatever has focus'", False),
