@@ -408,6 +408,17 @@ sentence. In `wrap-caret` it looks like the probe "arrived" — it did, but by t
 paste, not from his keyboard; `wrap-bound` removes the ambiguity, because there
 the victim stays empty and the `z` turns up in the bound tty.
 
+**Offsets run either side of the stop.** A *negative* offset is that many seconds
+**before** the stop gesture — i.e. while the clip is still playing and Victor
+would still be talking. That is not an edge case: the Scratchpad is open from the
+moment the relay takes the hold, so the window in which a keystroke can be stolen
+**begins during the recording**, not after it. The probes are therefore scheduled
+from the start of playback (`_clip_seconds` + offset), not from the stop.
+
+A letter typed during the recording must land in the victim and must appear in
+**neither** the note nor the delivered portion. Pass them as one token —
+`--probe-offsets=-3,-1,0.3,1.5,4` — since argparse reads a bare `-3,…` as a flag.
+
 **`--probe-offsets 0.3,0.8,1.5,2.5,4` maps the theft window in one run.** One
 **distinct** letter per offset — `q z j k w`, none of which appears in the
 fixture or in anything the formatting pass adds — so a letter found anywhere is
@@ -419,6 +430,18 @@ reached nothing`, and asserts that **no letter was taken by the Scratchpad**.
 takes the note's newly added portion (`🗒️ wispr scratchpad: note … (typed) — N
 chars`), so `added_portion()` is the note's content after minus its content
 before. A letter in there is a letter that was folded into somebody's sentence.
+
+Each run also reports what the **app** saw of its own Scratchpad, from
+`/test/state.scratchpad` — `existed` ms, `visible on the main display` ms,
+`everBecameKey`, `parkedFrame`, `reopenedElsewhere` — and the redirected
+keycodes from `/test/state.keyRedirect`. No amount of `osascript` polling can
+answer those: a window parked off-screen is still "open", and one that never
+became key never took anything. `everBecameKey` is asserted false.
+
+Delivery is asserted as **`wispr-history`** (row-first): the words come from
+Wispr's row as soon as it is terminal rather than from the note. The note is
+still written — it is simply no longer on the path the sentence travels, which is
+why the probe letters should stop appearing in it.
 
 `wrap-spawn` carries the probe too. Its Terminal only comes forward at delivery,
 so the letters should reach the victim; landing in the **new Terminal** instead

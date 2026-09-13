@@ -376,9 +376,28 @@ class ProbeLetters(unittest.TestCase):
         chars = [c for c, _ in wispr_loopback.PROBE_LETTERS]
         self.assertEqual(len(chars), len(set(chars)))
 
-    def test_there_are_enough_letters_for_the_asked_for_offsets(self):
+    def test_there_are_enough_letters_for_offsets_on_both_sides(self):
+        """The offsets run either side of the stop now, so seven is the working
+        set and eleven is the headroom."""
         import wispr_loopback
-        self.assertGreaterEqual(len(wispr_loopback.PROBE_LETTERS), 5)
+        self.assertGreaterEqual(len(wispr_loopback.PROBE_LETTERS), 7)
+
+    def test_a_negative_offset_lands_inside_the_recording(self):
+        """`-3` means three seconds *before* the stop, i.e. while Victor is still
+        talking — which is when the Scratchpad is already open."""
+        clip = 3.37          # the short fixture plus lead and tail
+        for offset, expected in ((-3.0, 0.37), (-1.0, 2.37), (0.3, 3.67)):
+            self.assertAlmostEqual(max(0.05, clip + offset), expected, places=2)
+
+    def test_the_clip_length_includes_the_lead_and_tail(self):
+        """The probes are scheduled off it, so it has to be the *played* length —
+        `wispr_loopback` pads both ends and the stop chord comes after the pad."""
+        import wispr_loopback
+        entry = wl.fixture_for("caret-short")
+        played = wl._clip_seconds(entry["wav"])
+        bare = float(entry["seconds"])
+        self.assertAlmostEqual(played - bare,
+                               wispr_loopback.LEAD_SEC + wispr_loopback.TAIL_SEC, places=1)
 
     def test_the_delivered_portion_is_what_the_note_gained(self):
         """The relay delivers the newly added part, so that is what a letter has

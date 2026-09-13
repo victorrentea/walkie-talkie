@@ -434,7 +434,12 @@ PROBE_CHAR = "z"
 #: letter here is absent from the fixture (*"Commit and push the fix."*) and from
 #: anything Wispr's formatting pass is likely to add, so a letter found anywhere
 #: is this rig's and its offset is known. US keycodes.
-PROBE_LETTERS = [("q", 12), ("z", 6), ("j", 38), ("k", 40), ("w", 13)]
+#:
+#: Eleven of them, because the offsets now run on **both** sides of the stop
+#: gesture — the Scratchpad is open from the hold, so the interesting window
+#: starts during the recording, not after it.
+PROBE_LETTERS = [("q", 12), ("z", 6), ("j", 38), ("k", 40), ("w", 13),
+                 ("y", 16), ("v", 9), ("b", 11), ("g", 5), ("l", 37), ("r", 15)]
 
 
 def _post_bare(keycode: int, down: bool):

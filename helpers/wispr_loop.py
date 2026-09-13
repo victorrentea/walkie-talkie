@@ -568,6 +568,16 @@ def _device_name(device: str | None) -> str:
         return ""
 
 
+def _clip_seconds(path: str) -> float:
+    """How long the clip is, without playing it — the probes need it up front."""
+    try:
+        import wispr_loopback as wl
+        audio, rate, _ = wl.read_wav(os.path.expanduser(path))
+        return len(audio) / float(rate) + wl.LEAD_SEC + wl.TAIL_SEC
+    except Exception:
+        return 0.0
+
+
 def play_wav(path: str, device_name: str | None, dry_run: bool = False) -> float:
     """Play the clip into the virtual input, blocking. Returns its length in seconds."""
     import wispr_loopback as wl
@@ -2152,6 +2162,32 @@ def _wrap_run(ctx, destination: str) -> Result:
         relay.gesture(gesture)
         _await_listening(relay, result)
         _await_microphone(ctx)
+
+        # **The probes are scheduled from the start of playback, not from the
+        # stop gesture**, so a *negative* offset can reach back into the
+        # recording. That matters now: the Scratchpad is open from the moment
+        # the relay takes the hold, so the window in which a keystroke can be
+        # stolen begins while Victor is still talking — not after he stops.
+        # Every offset is relative to the stop, which lands `seconds` from here.
+        typed_probe = destination in ("caret", "bound", "spawn")
+        offsets = ctx.options.get("probe_offsets") or [1.5]
+        seconds = _clip_seconds(ctx.fixture["wav"])
+        probes: list[tuple[str, float]] = []
+        if typed_probe:
+            import wispr_loopback as wl
+
+            for (char, code), offset in zip(wl.PROBE_LETTERS, offsets):
+                probes.append((char, offset))
+                delay = max(0.05, seconds + offset)
+                when = "%.1f s %s the stop" % (abs(offset), "before" if offset < 0 else "after")
+                if relay.dry_run:
+                    print("   · CGEventPost `%s` %s (%.1f s into the run)" % (char, when, delay))
+                else:
+                    import threading
+                    threading.Timer(delay, wl.tap_key, args=(code,)).start()
+            result.note("probe letters: %s"
+                        % ", ".join("`%s` %s" % (c, "%+.1fs" % o) for c, o in probes))
+
         seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
 
         if destination == "cancel":
@@ -2165,24 +2201,7 @@ def _wrap_run(ctx, destination: str) -> Result:
         # while Wispr writes the note; if it takes the keyboard, this `x` lands
         # there instead of in the document Victor was typing into — which is the
         # failure he would notice first and forgive last.
-        # **One distinct letter per offset**, so a single run maps *when* a
-        # keystroke is taken rather than only *whether*. The default is the one
-        # letter the plain scenarios have always typed.
-        typed_probe = destination in ("caret", "bound", "spawn")
-        offsets = ctx.options.get("probe_offsets") or [1.5]
-        probes: list[tuple[str, float]] = []
-        if typed_probe:
-            import wispr_loopback as wl
 
-            for (char, code), offset in zip(wl.PROBE_LETTERS, offsets):
-                probes.append((char, offset))
-                if relay.dry_run:
-                    print("   · CGEventPost `%s` %.1f s after the stop gesture" % (char, offset))
-                else:
-                    import threading
-                    threading.Timer(offset, wl.tap_key, args=(code,)).start()
-            result.note("probe letters: %s"
-                        % ", ".join("`%s` at %.1fs" % (c, o) for c, o in probes))
 
         settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
         result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
@@ -2226,8 +2245,14 @@ def _wrap_run(ctx, destination: str) -> Result:
         # the first time Wispr reuses it.
         result.check(len(changes) >= 1 or relay.dry_run, "Wispr's notes changed (new or appended)",
                      "%d note change(s)" % len(changes))
-        result.check(delivery.get("via") == "wispr-notes" or relay.dry_run,
-                     "the delivery came by `wispr-notes`",
+        # **`wispr-history`, not `wispr-notes`** (row-first delivery): the words
+        # come from Wispr's own row as soon as it is terminal, rather than from
+        # the note after the Scratchpad has written it. The note is still
+        # written — it is just no longer on the path the sentence travels, which
+        # is the whole point of the change and the reason the probe letters
+        # should stop appearing in it.
+        result.check(delivery.get("via") == "wispr-history" or relay.dry_run,
+                     "the delivery came by `wispr-history` (row-first)",
                      "via=%s kind=%s to=%s" % (delivery.get("via") or "—",
                                                delivery.get("kind") or "—",
                                                delivery.get("to") or "—"))
@@ -2314,12 +2339,44 @@ def _wrap_run(ctx, destination: str) -> Result:
             stolen = [c for c, _ in probes if c in note_tail.lower()]
             result.check(not stolen, "no probe letter was taken by the Scratchpad",
                          "taken: %s" % (", ".join(stolen) or "none"))
+            # And none of them may be in what was *delivered* — that is the
+            # difference between a keystroke that was merely overheard and one
+            # that was posted to Victor's agent inside his own sentence.
+            in_delivered = [c for c, _ in probes if c in delivered.lower()]
+            result.check(not in_delivered, "the note's added portion contains no probe letter",
+                         "found: %s — added %r" % (", ".join(in_delivered) or "none", delivered[:60]))
+            # The ones typed **during the recording** are the sharpest case: the
+            # Scratchpad is already open by then, so a letter that goes astray
+            # here was stolen while Victor was still speaking.
+            during = [c for c, o in probes if o < 0]
+            astray = [c for c in during if c in note_tail.lower() or c not in victim_text.lower()]
+            if during:
+                result.check(not astray, "letters typed during the recording reached the victim",
+                             "astray: %s of %s" % (", ".join(astray) or "none", ", ".join(during)))
             if lost:
                 result.note("letters that reached nothing at all: %s" % ", ".join(lost))
 
         _assert_ring(result, t, budget_ms=4000)
         result.note("Wispr done → words landed: %s"
                     % ("%d ms" % t.done_to_landed_ms if t.done_to_landed_ms is not None else "—"))
+        # What the app itself saw of its own Scratchpad, which no amount of
+        # `osascript` polling can answer: a window that is parked off-screen is
+        # still "open", and one that never became key never took anything.
+        pad = (state.get("scratchpad") or {}) if isinstance(state, dict) else {}
+        if pad:
+            result.note("scratchpad: existed %s ms, visible on the main display %s ms, "
+                        "everBecameKey=%s, parked at %s, reopenedElsewhere=%s"
+                        % (pad.get("existedMs", "—"), pad.get("visibleMs", "—"),
+                           pad.get("everBecameKey"), pad.get("parkedFrame") or "—",
+                           pad.get("reopenedElsewhere")))
+            result.check(not pad.get("everBecameKey") or relay.dry_run,
+                         "the Scratchpad never became the key window",
+                         "everBecameKey=%s, visible %s ms"
+                         % (pad.get("everBecameKey"), pad.get("visibleMs", "—")))
+        redirect = (state.get("keyRedirect") or {}) if isinstance(state, dict) else {}
+        if redirect:
+            result.note("key redirect: %s" % (redirect.get("keycodes")
+                                              or redirect.get("keys") or redirect))
         result.note("windows before %s, after %s"
                     % (windows_before, [] if relay.dry_run else wispr_windows()))
         for change in changes:
