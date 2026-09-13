@@ -3175,6 +3175,34 @@ SCENARIOS = {
 }
 
 
+#: The modifiers a run must never leave behind.
+_MODIFIER_MASKS = [("⌘", 0x00100000), ("⌃", 0x00040000), ("⌥", 0x00080000),
+                   ("⇧", 0x00020000), ("fn", 0x00800000), ("caps", 0x00010000)]
+
+
+def stuck_modifiers() -> list[str]:
+    """Modifiers the window server still thinks are held. Empty is the only good answer.
+
+    **The fourth stale-modifier bug in this repo deserves a standing check.**
+    The last one cost a day: the selection watcher's ⌘C probe posted its `C`
+    keyUp *with the ⌘ flag still on*, so the session's modifier state stayed at
+    ⌘-down for ever after — and every probe letter that followed arrived as a
+    shortcut. `q` quit TextEdit, `w` closed the document, `z` undid the typing.
+    The victim read empty, the letters looked lost, and the cause was three
+    scenarios upstream. Nothing in the run said so, because nothing was asking.
+
+    `combinedSessionState` is the state a *newly posted* event would inherit,
+    which is exactly the thing that poisons the next keystroke.
+    """
+    try:
+        import Quartz
+
+        flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
+        return [name for name, mask in _MODIFIER_MASKS if flags & mask]
+    except Exception:
+        return []
+
+
 def run_scenario(name: str, port: int, device: str | None, wav: str | None,
                  transcript: str | None, scratch: str, dry_run: bool,
                  verbose: bool, run_index: int = 1, options: dict | None = None) -> Result:
@@ -3195,6 +3223,10 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
     try:
         func(ctx)
     finally:
+        if not dry_run:
+            stuck = stuck_modifiers()
+            result.check(not stuck, "no modifier was left held down",
+                         ("still held: %s" % " ".join(stuck)) if stuck else "none")
         if stand_down(relay):
             result.note("a dictation was still open at the end of the scenario and was cancelled")
         if not dry_run:
