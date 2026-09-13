@@ -454,6 +454,23 @@ enum WisprScratchpad {
         return (value as? Bool) == true
     }
 
+    /// **Is the window up right now, cached** — the gate the keyboard guard
+    /// swallows on, updated by the 25 ms watcher so the tap can read it with a
+    /// lock and no AX call at all.
+    ///
+    /// It is *existence*, not focus, and that is the finding rather than a
+    /// convenience. Accessibility answers the focus question wrongly in **both**
+    /// directions: the Scratchpad window reports `AXFocused == false` while it is
+    /// taking the keystrokes, and the victim's application reports its own
+    /// `AXTextArea` as focused while it is receiving none of them. Measured
+    /// 2026-09-14 — five probe letters passed through a gate that asked AX, and
+    /// every one of them landed in Wispr's note.
+    ///
+    /// What does correlate, exactly, is the window's life: the two probes typed
+    /// after it closed (`+2.5 s`, `+4.0 s`) reached the victim, and the five
+    /// before it did not.
+    private(set) static var windowIsUp = false
+
     static func focusOwnerIsWispr() -> Bool {
         guard wisprPid != 0 else { return false }
         // **The system-wide element does not answer on this Mac.** Measured
@@ -721,6 +738,7 @@ enum WisprScratchpad {
 
     private static func tick() {
         guard let window = windowElement() else {
+            windowIsUp = false
             if sawWindow, closeRequested {
                 let ms = appearedAt.map { Date().timeIntervalSince($0) * 1000 }
                 lastOpenMs = ms
@@ -773,6 +791,7 @@ enum WisprScratchpad {
             HotkeyTap.tapWisprScratchpad()
         }
         lastSeenFrame = f
+        windowIsUp = true
         // **Does it have the keyboard?** And the obvious test is the wrong one.
         //
         // The first version of this asked *is Wispr frontmost and is this its

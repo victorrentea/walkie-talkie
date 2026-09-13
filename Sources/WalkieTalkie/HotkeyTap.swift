@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 import VictorMacKit
 
@@ -271,6 +272,27 @@ final class HotkeyTap {
     private static let redirectEnabled =
         ProcessInfo.processInfo.environment["WT_SCRATCHPAD_REDIRECT_KEYS"] != "0"
 
+    /// **Insert printable characters through Accessibility — off by default, and
+    /// the default is the measurement** (2026-09-14).
+    ///
+    /// The reasoning for it is sound and is written out at `insertViaAX`: a key
+    /// cannot reach an application with no key window, and `AXSelectedText`
+    /// needs none. What the run said is that the *place* is wrong. An
+    /// `AXUIElementCopyAttributeValue` is a synchronous round trip into another
+    /// application, and this code runs **inside the event tap's callback** —
+    /// where a slow answer stalls every keystroke on the Mac and macOS may
+    /// disable the tap outright. Measured once: the run that switched it on
+    /// produced a single trace line and then silence, and the dictation never
+    /// finished at all.
+    ///
+    /// `postToPid` is what ships, because it measured **7/7 letters into the
+    /// victim** on the build before this one. The AX path stays behind a flag
+    /// rather than being deleted: it is the only route that does not need a key
+    /// window, and the way to make it safe is to move it off the tap thread —
+    /// which is a change worth making deliberately and not at two in the morning.
+    private static let axInsert =
+        ProcessInfo.processInfo.environment["WT_SCRATCHPAD_AX_INSERT"] == "1"
+
     // ── `WT_KEY_TRACE=1` — every keyboard event, and what became of it ───────
 
     /// **Every keyboard event this tap sees, and the decision it made**, for the
@@ -349,6 +371,15 @@ final class HotkeyTap {
     private func redirectTargetNow() -> pid_t {
         stateLock.lock(); defer { stateLock.unlock() }
         guard redirectPid != 0, CFAbsoluteTimeGetCurrent() < redirectUntil else { return 0 }
+        // **Whoever is in front at this keystroke wins**, when that is somebody
+        // else and alive. He may have clicked into another app since the chord,
+        // and an insertion into the app he has left is worse than a dropped key.
+        if currentFrontPid != 0, currentFrontPid != redirectPid, kill(currentFrontPid, 0) == 0 {
+            Log.info("⌨️ the front app changed since the chord — his keys go to pid \(currentFrontPid), not \(redirectPid)")
+            redirectPid = currentFrontPid
+            redirectTarget = currentFrontPid
+            return currentFrontPid
+        }
         if kill(redirectPid, 0) == 0 { return redirectPid }
         let replacement = currentFrontPid
         guard replacement != 0, replacement != redirectPid, kill(replacement, 0) == 0 else { return 0 }
@@ -392,18 +423,63 @@ final class HotkeyTap {
                                             text as CFString) == .success
     }
 
-    /// What this key would type, and whether that is a character at all. Return,
-    /// Tab, the arrows and Delete have no text to insert and go by key.
+    /// **What this key would type, and whether that is a character at all.**
+    ///
+    /// The event is asked first — and on a **synthetic** one it answers nothing.
+    /// `keyboardGetUnicodeString` returns the string the window server put there
+    /// during translation, and an event built with `CGEvent(keyboardEventSource:
+    /// virtualKey:keyDown:)` has never been translated: measured 2026-09-14, the
+    /// loop's seven probe letters every one of them came back empty and took the
+    /// *non-printable* path, so the Accessibility insertion this was written for
+    /// was never once exercised by the test that exists to exercise it.
+    ///
+    /// So the keycode is translated against the **current keyboard layout**,
+    /// which is what a real keystroke would have been translated against anyway.
+    /// `UCKeyTranslate` is the only API that answers it, and it needs the layout
+    /// data from the current input source; the dead-key state is deliberately
+    /// discarded — a dead key produces no character on its own and belongs on the
+    /// key path with the arrows.
     private static func printable(_ event: CGEvent) -> String? {
         var length = 0
         var chars = [UniChar](repeating: 0, count: 8)
         event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length,
                                        unicodeString: &chars)
-        guard length > 0 else { return nil }
-        let text = String(utf16CodeUnits: chars, count: length)
-        guard text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7F })
+        if length > 0 {
+            return usable(String(utf16CodeUnits: chars, count: length))
+        }
+        let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        return usable(translate(code, flags: event.flags))
+    }
+
+    private static func usable(_ text: String?) -> String? {
+        guard let text, !text.isEmpty,
+              text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7F })
         else { return nil }
         return text
+    }
+
+    /// The keycode through the current layout — `UCKeyTranslate`.
+    private static func translate(_ code: CGKeyCode, flags: CGEventFlags) -> String? {
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        else { return nil }
+        let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
+        var modifiers: UInt32 = 0
+        if flags.contains(.maskShift) { modifiers |= UInt32(shiftKey >> 8) }
+        if flags.contains(.maskAlphaShift) { modifiers |= UInt32(alphaLock >> 8) }
+        if flags.contains(.maskAlternate) { modifiers |= UInt32(optionKey >> 8) }
+        var dead: UInt32 = 0
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 8)
+        let status = data.withUnsafeBytes { raw -> OSStatus in
+            guard let layout = raw.bindMemory(to: UCKeyboardLayout.self).baseAddress
+            else { return OSStatus(paramErr) }
+            return UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), modifiers,
+                                  UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysMask),
+                                  &dead, 8, &length, &chars)
+        }
+        guard status == noErr, length > 0 else { return nil }
+        return String(utf16CodeUnits: chars, count: length)
     }
 
     private func countRedirect() -> Int {
@@ -1680,14 +1756,24 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         countPassed()
                         Log.info("⌨️ key \(code) passed (modifier) — chords are never redirected")
                     }
-                // **The strict gate.** Only while the Scratchpad *itself* says it
-                // is focused. The loop sampled TextEdit's `AXTextArea` as focused
-                // at every probe of a run where the guard swallowed all seven
-                // letters — a swallow there is pure loss, so anything short of a
-                // *yes* passes the key through untouched.
-                } else if !WisprScratchpad.scratchpadHasFocus() {
+                // **The gate is the window's existence, because no focus reading
+                // is true** (2026-09-14, measured twice).
+                //
+                // Asking the Scratchpad window whether it is focused answers
+                // **no** while it is taking the keystrokes; asking the victim's
+                // application answers **its own `AXTextArea`** while it is
+                // receiving none of them. A gate built on either passed five
+                // probe letters straight into Wispr's note. What does correlate
+                // exactly is the window's life: the two probes typed after it
+                // closed reached the victim and the five before it did not.
+                //
+                // So: while that window is up, a real keystroke is his and goes
+                // to the app he is in — and the moment it is gone the guard stops
+                // touching anything. `windowIsUp` is the 25 ms watcher's own
+                // reading, cached, so this costs a lock and no AX call.
+                } else if !WisprScratchpad.windowIsUp {
                     if type == .keyDown { countPassed() }
-                } else if let text = Self.printable(event) {
+                } else if Self.axInsert, let text = Self.printable(event) {
                     // **Printable characters go in through Accessibility.** A
                     // key event cannot be delivered to an application with no key
                     // window — it has no first responder — and that is the whole

@@ -563,6 +563,34 @@ final class WisprFlowSource: DictationSource {
     /// the close itself takes; and for exactly that stretch every real keystroke
     /// is taken by the tap and re-posted to the app he was looking at when he
     /// stopped talking.
+    /// **The owner of the frontmost window that is neither this app's nor
+    /// Wispr's** — the fallback when `NSWorkspace` says the relay itself is in
+    /// front, which a **spawn** guarantees: `startDictation(spawn:)` offers the
+    /// folder menu on the gesture, and a menu makes its own app frontmost.
+    ///
+    /// The cached *last* frontmost app was the fallback before this and it is
+    /// empty after a restart and stale after a relaunch of the victim — measured
+    /// 2026-09-14, `wrap-spawn` aimed every keystroke at pid 56416, which had
+    /// been dead for two builds. The window server's own front-to-back order
+    /// cannot be stale: it is asked here and now, and the first window in it that
+    /// belongs to somebody else *is* the app he is looking at.
+    private static func frontWindowOwner() -> pid_t? {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return nil }
+        let mine = ProcessInfo.processInfo.processIdentifier
+        for w in windows {
+            guard let pid = w[kCGWindowOwnerPID as String] as? pid_t, pid != mine,
+                  pid != WisprScratchpad.wisprPid,
+                  // Layer 0 is an ordinary window; the menu bar, the Dock and
+                  // Wispr's own floating pill all sit above it.
+                  (w[kCGWindowLayer as String] as? Int) == 0
+            else { continue }
+            return pid
+        }
+        return nil
+    }
+
     /// The window he was typing in, read once at the chord — `AXFocusedWindow`
     /// of the application that was frontmost then.
     private static func focusedWindow(of pid: pid_t) -> AXUIElement? {
@@ -817,7 +845,8 @@ final class WisprFlowSource: DictationSource {
         let front = NSWorkspace.shared.frontmostApplication
         let frontPid = front?.bundleIdentifier == Bundle.main.bundleIdentifier
             ? 0 : (front?.processIdentifier ?? 0)
-        focusPid = frontPid != 0 ? frontPid : (lastFrontPid != 0 ? lastFrontPid : nil)
+        focusPid = frontPid != 0 ? frontPid
+            : (Self.frontWindowOwner() ?? (lastFrontPid != 0 ? lastFrontPid : nil))
         relayStarted = relay
         startedMode = relay ? (mode ?? wrapMode) : .off
         intercepting = relay && wrapWispr
