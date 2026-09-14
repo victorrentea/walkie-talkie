@@ -705,6 +705,11 @@ enum WisprScratchpad {
     }
 
     /// The sentence is over — now it may go.
+    /// Idempotent while a close is already in flight — a second ask is a second
+    /// *toggle*, which re-opens the window the first one shut. But a close that
+    /// has already finished must be re-armable, or a window that came back after
+    /// it (Wispr reopens one when it writes a note) stands until the next
+    /// dictation and eats his typing in the meantime.
     static func armCloseOnSight() {
         guard !closeASAP else { return }
         closeASAP = true

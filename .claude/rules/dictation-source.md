@@ -213,6 +213,22 @@ measurement of this is worth anything without it.
 - **The swallow does not leak.** Where a letter appeared twice, it had been
   *posted* twice from two different pids, each copy with its own `SWALLOWED`
   line; `noteDuplicate` says so in the log now.
+- **Wispr's own ⌘V leaves ⌘ down in the session, and only this app puts it back**
+  (the sixth stale ⌘, 2026-09-14). Its paste is `keycode 9, flags 0x20100000` —
+  ⌘ stamped on the key *and on its release* — and it posts no `flagsChanged`
+  after it, so `flagsState` reports ⌘ held until Victor's next real keystroke:
+  every gesture gated on `bare` refuses and every *wait for a bare wire* loop
+  spins its full allowance. It shows only with the **wrap off**, which is the
+  tell that found it — wrapped, the swallow eats both halves and the session
+  never sees the release. The tap posts the clearing `flagsChanged` on ⌘'s own
+  keycode for any Wispr ⌘V key-up it is **letting through**, stamped, off the tap
+  thread, and says so in the log.
+- **A dictation that came back with nothing owes the window and the keyboard back
+  most, not least.** `endCapture` claimed `scratchpadWindowHandled` at the
+  *release*, so a timeout left the Scratchpad standing — the runner watched it for
+  three seconds after `No words came back`, with his keystrokes going into the
+  note throughout. It now disarms the guard and closes the window on **every**
+  exit from a Scratchpad capture, whatever ended it.
 
 ### The measured truth about his keystrokes, and what is accepted
 

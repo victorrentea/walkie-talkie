@@ -1804,7 +1804,23 @@ final class WisprFlowSource: DictationSource {
         }
         // **And the window Wispr just opened**, which is the next dictation's
         // precondition and not this one's housekeeping.
-        if startedMode == .scratchpad, !scratchpadWindowHandled { closeScratchpadAfterwards() }
+        //
+        // **Whatever happened**, and that word is the fix (2026-09-14). This
+        // read `!scratchpadWindowHandled`, and the flag is claimed at the
+        // *release* — so a dictation that came back with nothing had already
+        // marked the window as somebody else's problem, and nobody else picked
+        // it up: the runner watched it stand open for three seconds after
+        // `No words came back`, with his keystrokes going into the note the
+        // whole time. A sentence Wispr never finished is exactly when the window
+        // and the keyboard are most owed back, not least.
+        if startedMode == .scratchpad {
+            // Idempotent, and the guard must never outlive the capture.
+            hotkeys.disarmKeyRedirect()
+            if !scratchpadWindowHandled || WisprScratchpad.windowIsUp {
+                scratchpadWindowHandled = true
+                closeScratchpadAfterwards()
+            }
+        }
         captureDeadline?.cancel()
         captureDeadline = nil
         // The machine goes back to rest with the capture, which is also what

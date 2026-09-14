@@ -456,6 +456,24 @@ final class HotkeyTap {
     }
     private var lastKey: (code: CGKeyCode, pid: pid_t, at: CFAbsoluteTime)?
 
+    /// **Put ⌘ back down after Wispr's paste.** Announced on the ⌘ key's own
+    /// keycode, because a `flagsChanged` is a modifier transition and one
+    /// carrying the letter is not one — the lesson of the fifth occurrence.
+    /// Stamped, so this app's own tap does not read it as Victor's, and posted
+    /// off the tap thread because nothing that can wait belongs there.
+    private func clearCommandAfterWisprPaste() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let source = CGEventSource(stateID: .hidSystemState)
+            source?.userData = Self.backButtonStamp
+            guard let clear = CGEvent(keyboardEventSource: source,
+                                      virtualKey: Self.VK_COMMAND, keyDown: true) else { return }
+            clear.type = .flagsChanged
+            clear.flags = []
+            clear.post(tap: .cghidEventTap)
+            Log.info("⌨️ Wispr's ⌘V released with ⌘ still stamped on it — the flag has been put back down")
+        }
+    }
+
     private func countSeen() {
         stateLock.lock(); redirectSeen += 1; stateLock.unlock()
     }
@@ -1979,6 +1997,29 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     if swallow { return self.swallow("the Wispr ⌘V capture", type, event) }
                 }
             }
+        }
+
+        // ── Wispr's ⌘V leaves ⌘ down, and only this app can put it back ──────
+        //
+        // **The fifth stale ⌘ was ours; the sixth is Wispr's.** Its paste is
+        // `keycode 9, flags 0x20100000` — ⌘ stamped on the key **and on its
+        // release** — and it posts no `flagsChanged` after it. Since
+        // `CGEventSource.flagsState` reports whatever the last event's flags
+        // said, the whole session believes ⌘ is held from that moment until
+        // Victor's next real keystroke: every gesture gated on `bare` refuses,
+        // and every *wait for a bare wire* loop in this file spins its full
+        // allowance.
+        //
+        // It shows up **only with the wrap off**, which is the tell that
+        // identified it: wrapped, the swallow eats both halves and the session
+        // never sees the release at all. So the clearing event is posted exactly
+        // where the swallow is not — for a key-up we are letting through.
+        if type == .keyUp,
+           CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == Self.VK_V,
+           event.flags.contains(.maskCommand),
+           event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+            let owner = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
+            if owner != 0, isWispr(owner) { clearCommandAfterWisprPaste() }
         }
 
         guard type == .keyDown else {
