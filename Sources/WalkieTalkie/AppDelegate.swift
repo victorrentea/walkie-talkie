@@ -2958,6 +2958,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || (speculative && !listening)
             || (listening && !isBound && !spawnPending)
             || (settling && settlingAtCaret)
+        // **The heads stay up through the settle of a caret sentence**
+        // (2026-09-15) — *"rămân săgețile care curg până când efectiv se inseră
+        // textul la caret … să nu plec cu cursorul de acolo"*. The ring is still
+        // *microphone open* and still goes down at the stop; what the split of
+        // 09-13 left behind was this second or two, in which the pointer is the
+        // destination and nothing on screen said so. Only the caret case has
+        // anything to ask: a bound sentence's words are addressed to a terminal
+        // and the mouse can go where it likes.
+        //
+        // **Before `setActive`**, because the collapse it triggers is what reads
+        // the flag to decide whether the arrow goes with the ring.
+        caretHalo.setDelivering(settling && settlingAtCaret)
         caretHalo.setActive(listening || speculative,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
@@ -3438,6 +3450,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The source's: is a microphone actually open.
             "isRecording": source.isRecording,
             "ringUp": caretHalo.live,
+            // The six heads, held past the ring for a caret sentence still in
+            // flight — see `CaretHalo.setDelivering`. Nothing that rides the
+            // pointer can be screenshot, so this flag is the only way an
+            // assertion can ask whether they are up.
+            "arrowsUp": caretHalo.delivering,
             "chip": overlay.renderedRows,
             // The destination, in the three flags that decide it plus the one
             // latched at the microphone's close.

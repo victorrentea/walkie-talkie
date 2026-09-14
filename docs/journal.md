@@ -234,6 +234,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)](#the-fifth-stale--and-the-guard-that-finally-works-2026-09-14-0248)
 - [What the cancel cost the sentence after it (2026-09-14, 03:30)](#what-the-cancel-cost-the-sentence-after-it-2026-09-14-0330)
 - [The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)](#the-adversarys-second-round-four-things-that-outlived-their-dictation-2026-09-14-0430)
+- [The heads stay up while the words travel to the caret (2026-09-15)](#the-heads-stay-up-while-the-words-travel-to-the-caret-2026-09-15)
 
 ---
 
@@ -9834,3 +9835,44 @@ The call site is one line — `opening: (listening && !atCaret) ? .afterFlash : 
 covers the speculative ring as well, which is the one Victor sees most: a dictation he starts from
 Wispr's own chord now comes out of his mouse like the rest of them. `WT_HALO_DEMO` opens
 `.fromPointer` too, since that is the one run of this panel a screen recording can contain.
+
+## The heads stay up while the words travel to the caret (2026-09-15)
+
+Victor, at the end of a caret dictation: *"Dacă dictez la caret, după ce dictarea se oprește,
+fulgerul dispare, doar că rămân săgețile care curg până când efectiv se inseră textul la caret.
+Rămân săgețile … în sensul în care să-mi atragă atenția că dictarea încă se procesează și curge
+spre cursor și să nu plec cu cursorul de acolo."*
+
+It is the hole the 2026-09-13 split left, and it only exists for one kind of sentence. The ring
+means **microphone open** and goes down at the stop gesture — that was the whole point of the
+split, because a ring standing for twelve seconds over a sentence Wispr had already pasted into
+Word was indistinguishable from a ring still hearing him. The chip took over the wait with
+`Transcribing...`. Which is the right thing to say, in the wrong place: he is looking at the
+cursor, not at the chip, and a **caret** sentence is the one case where where he is looking is
+also *where the words are going to land*. Half a second to two seconds of nothing on screen, at
+the one moment moving the mouse costs him the destination.
+
+So the six heads — which were never about the microphone at all — stay. `CaretHalo.setDelivering`
+is `settling && settlingAtCaret`, set from `syncBorrowedGestures` **before** `setActive`, because
+the collapse that follows is what reads the flag to decide whether the arrow goes down with the
+ring. `arrow.armed` becomes `(on && atCaret) || delivering`.
+
+Three things had to give, and each of them is a thing that used to belong to the ring:
+
+- **The meter stops being the driver.** `DropArrow.refresh(quiet:)` ramps the heads in over
+  `patience` + `swell` — four seconds of silence — which is a question about whether he has
+  stopped talking. Past the microphone's close the answer is yes and is not in doubt, and a meter
+  that keeps answering must not be allowed to dim them. `hold(at:)` sets them to `ceiling` and
+  `holding` makes `refresh` a no-op until `hide()`. The fade in is `recall`'s 0.18 s, not the
+  swell's two seconds: the wait has already started.
+- **The pointer monitors outlive the ring.** They were installed in `show()` and removed in the
+  collapse's completion; `follow()` is what moves the heads, so that teardown would have left them
+  standing where the pointer used to be. `releaseMonitorsIfIdle()` — `!live && !closing &&
+  !delivering` — and `follow()` runs on the same three.
+- **They go in a cut.** `endSettling` for this mode is the paste itself (`pasting at the caret`, a
+  line before `pasteText`), so the heads vanish on the frame the words appear on, and the words are
+  what replaces them. A fade there would still be asking him to stay put after the sentence had
+  landed.
+
+Nothing that rides the pointer can be screenshot, so `GET /test/state.arrowsUp` is the only way an
+assertion can ask whether they are up.

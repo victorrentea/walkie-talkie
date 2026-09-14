@@ -152,6 +152,9 @@ final class DropArrow {
     /// silence-that-ended would start another one, and the completion handler of
     /// a fade that has since been overruled would order out a visible panel.
     private var fading = false
+    /// The heads are up for the words in flight rather than for the silence —
+    /// see `hold`. Cleared only by `hide`, which is the delivery.
+    private var holding = false
 
     /// Moved by `CaretHalo.follow`, with the ring and in the same call — see the
     /// type comment for why this is not its own monitor.
@@ -159,12 +162,61 @@ final class DropArrow {
         panel?.setFrameOrigin(origin)
     }
 
+    /// **The words are on their way to the caret — the heads stay up and stop
+    /// listening to the microphone** (2026-09-15).
+    ///
+    /// Victor: *"după ce dictarea se oprește, fulgerul dispare, doar că rămân
+    /// săgețile care curg până când efectiv se inseră textul la caret … să-mi
+    /// atragă atenția că dictarea încă se procesează și curge spre cursor și să
+    /// nu plec cu cursorul de acolo."* Between the microphone closing and the
+    /// ⌘V there is a second or two in which the pointer must not wander, and
+    /// until now there was nothing on screen saying so: the ring goes down at the
+    /// close (it means *microphone open*) and these went down with it.
+    ///
+    /// It is the same wave, at full strength, for a reason: the shape already
+    /// means *the sentence lands here* and a second vocabulary for the same
+    /// place would be one more thing to learn. What changes is only what drives
+    /// it — `refresh` ramps it in with the silence, which is a question about
+    /// whether he has stopped talking; this is past that question and the
+    /// answer is yes.
+    ///
+    /// Idempotent, because it is called from every `follow()` the pointer
+    /// produces: the fade in runs once, on the edge, and a second call only
+    /// moves the window.
+    func hold(at origin: NSPoint) {
+        let p = panel ?? makePanel()
+        p.setFrameOrigin(origin)
+        guard !holding else { return }
+        holding = true
+        // A fade already in flight is overruled rather than waited out — its
+        // completion handler orders the window out, and this is the one state
+        // where the window has to stay.
+        fading = false
+        if !p.isVisible {
+            p.alphaValue = 0
+            p.orderFrontRegardless()
+        }
+        // `recall`'s length, not the swell's: the wait has already begun, and
+        // two seconds of fading in is two seconds of the message he needs *now*
+        // arriving late. Short enough to read as *and now they are up*, long
+        // enough not to be its own flash.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.recall
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            p.animator().alphaValue = CGFloat(Self.ceiling)
+        }
+    }
+
     /// Sampled at the halo's own 20 Hz rather than animated, for the halo's own
     /// reason: the input is a continuous function of a clock that restarts every
     /// time he says a word, so an animation would be interpolating toward a
     /// target that has already moved.
     func refresh(quiet: TimeInterval, at origin: NSPoint) {
-        guard armed else { return }
+        // **`holding` outranks the microphone**, and it has to: the meter keeps
+        // answering after the close, and the one thing that must not happen
+        // while the words are in flight is the heads dimming because a clock
+        // somewhere says he is talking again.
+        guard armed, !holding else { return }
         let t = max(0, min(1, (quiet - CaretHalo.patience) / CaretHalo.swell))
         guard t > 0 else { return fadeAway() }
         let p = panel ?? makePanel()
@@ -201,8 +253,14 @@ final class DropArrow {
 
     /// The hard stop — a bind mid-sentence, or the dictation ending. Nothing is
     /// being asked for any more, so there is nothing to fade out of.
+    ///
+    /// **A cut, and after a `hold` that is the point**: the heads go at the
+    /// instant the ⌘V does, so what replaces them is the words appearing. A fade
+    /// there would still be on screen asking him to stay put after the sentence
+    /// had already landed.
     func hide() {
         fading = false
+        holding = false
         panel?.orderOut(nil)
         panel?.alphaValue = 0
     }

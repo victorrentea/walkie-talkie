@@ -454,6 +454,10 @@ final class CaretHalo {
     private var atCaret = false
     private let arrow = DropArrow()
 
+    /// **The microphone is shut and the words are still travelling to the
+    /// caret** (2026-09-15) — see `setDelivering`.
+    private(set) var delivering = false
+
     /// On or off, and whether the words have a destination. Idempotent, and
     /// driven from `syncBorrowedGestures` — the one switch every edge of a
     /// dictation already passes through, so this cannot drift out of step with
@@ -475,7 +479,10 @@ final class CaretHalo {
     func setActive(_ on: Bool, atCaret: Bool = false, opening: Opening = .whole) {
         if live == on, self.atCaret == atCaret { return }
         self.atCaret = atCaret
-        arrow.armed = on && atCaret
+        // **`delivering` holds the heads past the microphone's close.** The
+        // dictation is over as far as `live` is concerned and the words are not
+        // there yet, which is the whole of the state `setDelivering` names.
+        arrow.armed = (on && atCaret) || delivering
         guard live != on else { return }
         live = on
         // Both edges, for the reason the selection watcher logs both: "why did
@@ -484,6 +491,50 @@ final class CaretHalo {
         Log.info(on ? "◯ caret halo on — the microphone is open\(atCaret ? ", and these words go wherever the caret is" : "")\(opening == .whole ? "" : ", growing out of the pointer")"
                     : "◯ caret halo off")
         on ? show(opening: opening) : hide()
+    }
+
+    /// **The ring is down, the words are still coming, and the heads stay up
+    /// pointing at the place they will land** (2026-09-15).
+    ///
+    /// Victor: *"dacă dictez la caret, după ce dictarea se oprește, fulgerul
+    /// dispare, doar că rămân săgețile care curg până când efectiv se inseră
+    /// textul la caret … să nu plec cu cursorul de acolo."*
+    ///
+    /// It is the one state the 2026-09-13 split left with nothing on screen. The
+    /// ring means *the microphone is open* and goes down at the stop gesture,
+    /// deliberately — a ring standing over a sentence already pasted into Word
+    /// is indistinguishable from one still hearing him. But a **caret** sentence
+    /// has a second promise to keep that a bound one does not: it lands wherever
+    /// the pointer is when it arrives, so the seconds between the close and the
+    /// ⌘V are seconds in which moving the mouse costs him the sentence's
+    /// destination. The chip says `Transcribing...`, which is the right thing to
+    /// say and the wrong place to say it — he is looking at the cursor.
+    ///
+    /// **Only the heads, never the ring.** Bringing the ring back for the settle
+    /// is the thing that was measured to be a lie; these were never about the
+    /// microphone at all, which is why they are the half that can stay.
+    ///
+    /// Driven from `syncBorrowedGestures` with `settling && settlingAtCaret`,
+    /// **before** `setActive`, so the collapse that follows knows to leave them
+    /// standing. It ends at `endSettling` — which for this mode is the ⌘V — and
+    /// they go in a cut, because what replaces them is the words.
+    func setDelivering(_ on: Bool) {
+        guard delivering != on else { return }
+        delivering = on
+        Log.info(on ? "⬇︎ the heads stay up while the words travel to the caret"
+                    : "⬇︎ the heads go — the words landed")
+        guard on else {
+            // `armed` going down hides them; the monitors only outlive the
+            // collapse for their sake, so they go too unless the ring is up.
+            arrow.armed = false
+            releaseMonitorsIfIdle()
+            return
+        }
+        arrow.armed = true
+        // Placed from here as well as from `follow`: the pointer may not move
+        // again between the stop gesture and the delivery, and the heads have to
+        // be up either way.
+        arrow.hold(at: Self.origin())
     }
 
     /// **The bubble is on screen — let the ring out.** Called where
@@ -642,11 +693,16 @@ final class CaretHalo {
         // **Straight out, not collapsed.** The ring shrinking into the pointer
         // says *the sentence went there*; an arrow still asking him to place the
         // caret while it does would be asking for something already decided.
-        arrow.hide()
+        //
+        // **Unless the sentence has not gone anywhere yet** (2026-09-15): a
+        // caret dictation in its settle is precisely the case where the place
+        // has *not* been decided — it is decided by where the pointer is when
+        // the ⌘V goes out — so the heads stay up through the collapse and
+        // `setDelivering(false)` takes them down. See `setDelivering`.
+        if !delivering { arrow.hide() }
 
         guard panel != nil, let stage = stage else {
-            for m in monitors { NSEvent.removeMonitor(m) }
-            monitors = []
+            releaseMonitorsIfIdle()
             self.panel?.orderOut(nil)
             return
         }
@@ -691,12 +747,25 @@ final class CaretHalo {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapse) { [weak self] in
             guard let self = self, self.closingGeneration == generation, !self.live else { return }
             self.closing = false
-            for m in self.monitors { NSEvent.removeMonitor(m) }
-            self.monitors = []
+            self.releaseMonitorsIfIdle()
             self.panel?.orderOut(nil)
             stage.removeAnimation(forKey: "collapse")
             stage.removeAnimation(forKey: "collapse-ink")
         }
+    }
+
+    /// **The pointer monitors belong to whatever is still riding the pointer.**
+    ///
+    /// They used to be the ring's alone and were torn down with it. Since
+    /// 2026-09-15 the heads outlive the collapse (`setDelivering`), and they are
+    /// moved by `follow` — off these very monitors — so a teardown that only
+    /// asked about the ring would leave them standing still on screen while the
+    /// pointer walked away from them, which is the opposite of the thing they
+    /// are up to say.
+    private func releaseMonitorsIfIdle() {
+        guard !live, !closing, !delivering else { return }
+        for m in monitors { NSEvent.removeMonitor(m) }
+        monitors = []
     }
 
     /// Centred on the pointer, every time the pointer reports. Off the events
@@ -710,7 +779,10 @@ final class CaretHalo {
         // are going, and a ring shrinking onto the spot the pointer has left is
         // converging on nothing. Same reason `BindFlight` re-reads the cursor
         // every frame instead of sampling it once.
-        guard live || closing, let panel = panel else { return }
+        // **And through the delivery**, where the ring's own window is already
+        // out and the heads are the only thing left: they are what says *the
+        // words are landing here*, so they have to go on meaning the pointer.
+        guard live || closing || delivering, let panel = panel else { return }
         let wanted = Self.origin()
         panel.setFrameOrigin(wanted)
         // **Who moved it?** (2026-09-14). Victor: *"pe retina merge bine, pe
@@ -740,7 +812,10 @@ final class CaretHalo {
         }
         // The arrow's window rides the same origin, in the same call — see
         // `DropArrow` for why it is a window and why it is not its own monitor.
-        arrow.place(at: Self.origin())
+        // `hold` while the words are in flight rather than `place`: it is
+        // idempotent after the first call and it is also what raises them again
+        // if the pointer's first move is what wakes this.
+        delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
     }
 
     /// Where a panel the size of this one has to sit for its centre to be the

@@ -231,6 +231,35 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
 - **`DropArrow.picture()` is posed, not animated** (`ChipWipe.shoot`'s rule) — the middle ring lit,
   the only frame that shows what the sweep is doing. → journal: *Six heads closing in, instead of one arrow hanging above (2026-09-12)*
 
+## The heads stay up while the words travel to the caret (2026-09-15)
+
+Victor: *"dacă dictez la caret, după ce dictarea se oprește, fulgerul dispare, doar că rămân
+săgețile care curg până când efectiv se inseră textul la caret … să-mi atragă atenția că dictarea
+încă se procesează și curge spre cursor și să nu plec cu cursorul de acolo."*
+
+- **`CaretHalo.setDelivering(settling && settlingAtCaret)`**, driven from `syncBorrowedGestures`
+  **before** `setActive` — the collapse reads the flag to decide whether the arrow goes down with
+  the ring. `arrow.armed = (on && atCaret) || delivering`.
+- **Only the caret case, and only the heads.** A bound sentence is addressed to a terminal and the
+  mouse may go where it likes; the ring stays *microphone open* and still goes down at the stop,
+  because a ring standing over a sentence already pasted into Word is the 09-13 lie this must not
+  bring back. The heads were never about the microphone, which is why they are the half that can
+  stay.
+- **`DropArrow.hold(at:)` outranks the meter.** `refresh(quiet:)` ramps with the silence, which is a
+  question about whether he has stopped talking; past the close the answer is yes, and a meter still
+  answering must not dim the heads. `holding` is idempotent (it is called from every `follow`), fades
+  in over `recall` rather than the swell's 2 s — the wait has already begun — and is cleared only by
+  `hide()`.
+- **They go in a cut, at the ⌘V.** `endSettling` for this mode *is* the paste (`pasting at the
+  caret`, a line before `pasteText`), and what replaces them is the words appearing. A fade there is
+  a hint still asking him to stay put after the sentence has landed.
+- **The pointer monitors outlive the ring now** — `releaseMonitorsIfIdle()` (`!live && !closing &&
+  !delivering`), and `follow()` runs on `live || closing || delivering`. `follow` is what moves the
+  heads; a teardown that asked only about the ring would leave them standing where the pointer used
+  to be, which is the opposite of what they are up to say.
+- **`GET /test/state.arrowsUp`** is the only way to assert this — nothing that rides the pointer can
+  be screenshot.
+
 ## The ring is up before anything is opened (2026-09-12)
 
 Victor, 2026-09-12: the ⚡ ring has to be on screen **when Wispr Flow starts recording** — not
