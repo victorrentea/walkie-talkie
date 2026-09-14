@@ -1565,13 +1565,24 @@ private let frontLabel = NSTextField(labelWithString: "")
         // much as fits comfortably" means in a row that has to stay a receipt.
         var selectionWidth: CGFloat = 0
         if let selection = selection {
-            if selectionSettled {
-                selectionHead = "×\(selectionCount)"
-                selectionBody = ""
-            } else {
-                selectionHead = ""
-                selectionBody = Self.fitHead(singleLine(selection), 34)
-            }
+            // **The last quote stays, and the number counts what came before it**
+            // (2026-09-14, Victor: *"ultimul citat selectat, textul selectat
+            // trebuie întotdeauna arătat … în fața lui va apărea ori unu plus,
+            // ori doi plus, în sensul de a arăta câte citate au fost în trecut,
+            // plus citatul ultimul selectat, care trebuie să rămână mereu
+            // vizibil"*).
+            //
+            // A deliberate reversal of the collapse-to-`×N` above. That was
+            // written so the chip would not carry a line of somebody else's code
+            // beside the cursor for the rest of the sentence — a real cost, and
+            // he has weighed it against the thing it took away: with the text
+            // gone there was no way to see *which* highlight the relay had, only
+            // how many, and a count is no use when the question is whether it
+            // caught the right one. `1+` is one earlier quote and this one.
+            // The space is in the head, not the join: `applySelectionText`
+            // concatenates the two and an empty head must not indent the quote.
+            selectionHead = selectionCount > 1 ? "\(selectionCount - 1)+ " : ""
+            selectionBody = Self.fitHead(singleLine(selection), 34)
             applySelectionText()
             // Off the label rather than the font: the mark is in the icon column
             // now, so the text is plain `hintFont` — but it is set as an
