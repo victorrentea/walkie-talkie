@@ -16,6 +16,18 @@ while let arg = args.next() {
         }
     case "--label":
         if let label = args.next() { SessionLabel.override(label) }
+    case "--simulate-gestures":
+        // **The gesture machine, headless.** Reads a script as JSON on stdin
+        // (or from the path that follows) and prints what the machine did.
+        //
+        // It exits before `relaunchThroughLaunchServicesIfNeeded`, before
+        // `NSApplication`, before any permission is asked for and before
+        // `SingleInstance` can stand the running relay down — so
+        // `evals/test_gesture_machine.py` can assert the whole vocabulary with
+        // the real app still bound to a terminal and hearing him. That is the
+        // property `POST /test/wispr-state/simulate` does not have, and the
+        // reason this exists beside the route rather than instead of it.
+        simulateGesturesAndExit(scriptPath: args.next())
     case "--help", "-h":
         print("""
         Walkie Talkie — floating overlay that records what you dictate,
@@ -173,4 +185,23 @@ private func relaunchThroughLaunchServicesIfNeeded() {
         return
     }
     exit(0)
+}
+
+
+/// `--simulate-gestures [script.json]` — see the flag's own note above.
+private func simulateGesturesAndExit(scriptPath: String?) -> Never {
+    let data: Data
+    if let path = scriptPath, let d = FileManager.default.contents(atPath: path) {
+        data = d
+    } else {
+        data = FileHandle.standardInput.readDataToEndOfFile()
+    }
+    let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    let answer = GestureMachineSimulation.run(body)
+    let out = (try? JSONSerialization.data(withJSONObject: answer,
+                                           options: [.prettyPrinted, .sortedKeys]))
+        ?? Data("{\"ok\": false}".utf8)
+    FileHandle.standardOutput.write(out)
+    FileHandle.standardOutput.write(Data("\n".utf8))
+    exit((answer["ok"] as? Bool) == true ? 0 : 1)
 }

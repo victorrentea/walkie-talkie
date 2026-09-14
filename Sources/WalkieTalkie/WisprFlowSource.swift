@@ -963,7 +963,8 @@ final class WisprFlowSource: DictationSource {
             // **And nothing is being waited for any more** (2026-09-14). The
             // capture stays armed because Wispr may still paste; the *phase*
             // stayed `transcribing` with it, and that is a different claim and a
-            // false one — `isWaitingForWords` is what `onPasteToggle` and the
+            // false one — `isWaitingForWords` is what the gesture machine's `Settling`
+            // state and the
             // settle read to decide whether a sentence is still on its way, and
             // for up to thirty seconds after the cancel it told them one was.
             // The next 🔼 click was answered with *nothing to start, nothing to
@@ -1605,11 +1606,14 @@ final class WisprFlowSource: DictationSource {
     /// flight**, and a new gesture does not get to disarm it.
     ///
     /// This is the second failure of 2026-09-13 in one method. A 🔼 click landed
-    /// inside a settle, `onPasteToggle` asked only about `listening` and started
+    /// inside a settle, the forward click's handler asked only about `listening`
+    /// and started
     /// a phantom dictation, and `gestureSeen`'s unconditional `endCapture` threw
     /// away the *first* sentence's swallow window — so Wispr's ⌘V, a second
     /// later, went into whatever Terminal happened to be in front. The click is
-    /// now a stop (`AppDelegate.onPasteToggle`); this is the guard behind it, for
+    /// now a no-op — `Settling` in `docs/gestures.puml` has no arrow out of it for
+    /// a forward click, so the phantom dictation is not merely guarded against but
+    /// unreachable (2026-09-14). This is the guard behind that, for
     /// the dictation Victor starts from his own keyboard while the last one is
     /// still being transcribed.
     private func retireCaptureIfSettled() {

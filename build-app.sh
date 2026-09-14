@@ -16,6 +16,17 @@ MACOS="$CONTENTS/MacOS"
 
 echo "Building WalkieTalkie (release)…"
 cd "$DIR"
+# **The diagram is validated before the bundle is touched.** docs/gestures.puml
+# is the gesture program, and the bundle is removed outright a few lines down, so
+# a diagram that will not load must stop the build here rather than ship an app
+# whose mouse does nothing. Both checks are cheap and neither needs the app.
+if command -v plantuml >/dev/null 2>&1; then
+  plantuml -checkonly "$DIR/docs/gestures.puml" || {
+    echo "docs/gestures.puml is not valid PlantUML — the bundle was not touched" >&2
+    exit 1
+  }
+fi
+
 swift build -c release
 
 BIN="$DIR/.build/release/WalkieTalkie"
@@ -25,6 +36,15 @@ echo "Assembling $APP_NAME.app…"
 # Remembered across the wipe so the icon caches are only kicked when the picture
 # actually changed — see the note beside `dock.iconcache` at the end of the file.
 OLD_ICON_SUM="$(shasum -a 256 "$CONTENTS/Resources/AppIcon.icns" 2>/dev/null | cut -d' ' -f1 || true)"
+# The parser's own verdict, which "plantuml -checkonly" cannot give: every action
+# and guard name in the diagram must resolve to something in GestureActions.
+# "--simulate-gestures" exits before AppKit and before SingleInstance, so this
+# cannot stand the running relay down mid-sentence.
+echo '{"steps":[]}' | "$BIN" --simulate-gestures >/dev/null || {
+  echo "gestures.puml did not load — the bundle was not touched" >&2
+  exit 1
+}
+
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS"
 cp "$BIN" "$MACOS/$APP_NAME"
@@ -34,6 +54,10 @@ cp "$BIN" "$MACOS/$APP_NAME"
 # falls back to <repo>/helpers for a `swift build` run, so both work unswitched.
 mkdir -p "$CONTENTS/Resources"
 cp "$DIR/helpers/whisper_helper.py" "$CONTENTS/Resources/whisper_helper.py"
+# The gesture program. Found at runtime by GestureDiagramFile, which also walks up
+# from the binary for a "swift build" run — docs/shoot-overlay-states.sh runs
+# ./.build/debug/WalkieTalkie, which has no Contents/Resources at all.
+cp "$DIR/docs/gestures.puml" "$CONTENTS/Resources/gestures.puml"
 # The spawn menu's recent-projects half is measured by this one, run in the
 # background at most once a day. `RecentProjects.helperPath` looks here first and
 # falls back to <repo>/helpers, exactly as the whisper helper does.

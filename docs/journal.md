@@ -234,6 +234,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)](#the-fifth-stale--and-the-guard-that-finally-works-2026-09-14-0248)
 - [What the cancel cost the sentence after it (2026-09-14, 03:30)](#what-the-cancel-cost-the-sentence-after-it-2026-09-14-0330)
 - [The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)](#the-adversarys-second-round-four-things-that-outlived-their-dictation-2026-09-14-0430)
+- [The diagram is the program (2026-09-14)](#the-diagram-is-the-program-2026-09-14)
 
 ---
 
@@ -9661,3 +9662,144 @@ that answered **`Terminal` while `NSWorkspace.frontmostApplication` answered `Wi
 `wrap-caret` and `wrap-bound` pass on the fixed build with `['TextEdit']`, and that is worth
 exactly as much as the witness is. A rig that is meant to catch a stolen front has to read the
 front the way the window server does.
+
+# The diagram is the program (2026-09-14)
+
+Victor: *"vreau un state machine care să-mi arate pe tranziții ce gest fac cu mouse-ul,
+pe stări ce tooltip se vede lângă mouse, și tot pe tranziții dacă se întâmplă vreo
+transcriere sau acțiune de genul pauză. Pentru a preveni riscul de drift, vreau să
+implementezi acest state machine în cod extras din diagramă — îți faci un PlantUML și
+apoi codul execută PlantUML-ul, în stilul BPM Camunda."*
+
+## What it replaced
+
+What a mouse gesture meant was the emergent behaviour of about twenty booleans across
+three objects — `listening`, `speculative`, `settling`, `settlingAtCaret`, `pasteMode`,
+`latchedAtCaret`, `spawnPending`, `awaitingBind`, `recordWhenSourceReady`,
+`hasDestination`, `holdsForBind`, plus `HotkeyTap`'s mirrors and `WisprFlowSource`'s
+`capturing` / `discardOnArrival` / `retiredDiscardRow`. The answer to *what does 🔼 →
+do while unbound* was a four-clause boolean expression:
+
+```swift
+let atCaret = pasteMode
+    || (speculative && !listening)
+    || (listening && !isBound && !spawnPending)
+    || (settling && settlingAtCaret)
+```
+
+That is a state function written as an expression, and almost every rule in
+`.claude/rules/dictation-source.md` that cost a night is a missing guard on one of the
+states it stands for: `onPasteToggle` asking only about `listening` and not `settling`
+(the phantom dictation of 09-13); the unconditional `endCapture` in `gestureSeen`;
+`lateOpenEdge()` needing to be asked before `state.notify`.
+
+## The shape
+
+`docs/gestures.puml` is the program. `GestureDiagram` parses it, `GestureMachine`
+executes it, `GestureActions` resolves its names, `docs/gestures.svg` is what it looks
+like. One table, parsed at launch — no codegen, no baked-in fallback, and no `switch`
+over gesture names left anywhere in `Sources/`.
+
+Two machines, one seam. `WisprState` answers *where is the recogniser in its round
+trip*; this one answers *what does the mouse mean*. They compose by event
+(`@micOpened`, `@delivered`) and neither re-derives the other — collapsing them would
+produce two opinions about whether a microphone is open, which is 09-13 with a layer
+on top. Victor scoped it that way: *"doar partea de interacțiune cu mouse-ul, nu
+motorul de hackuire al lui Wispr Flow, care trebuie cu grijă decuplat oricum și pus
+sub un strat, ca să poată jongla ușor între modelul local și modelul remote."*
+
+`GestureActions.swift` names `DictationSource` and nothing behind it. That is the seam
+made structural rather than conventional, and an eval asserts the word `Wispr` does
+not appear in the file.
+
+## The vocabulary changed, and the change is one line each
+
+*"la apăsarea forward simplă începe dictarea, dar apoi dictarea aceea se poate duce în
+diverse locuri, în funcție de cum se termină gestul"* — **the gesture that ends the
+sentence names where it goes**, where before the destination was latched at the start
+and the ending gesture merely stopped the microphone. 🔼 click ends at the caret, 🔼 →
+at the bound terminal, 🔼 ↑ at a session that does not exist yet, 🔼 ← throws it away,
+and 🔼 ↓ binds mid-sentence so a 🔼 → after it has somewhere to go.
+
+And the one that shaped the grammar: *"dacă în timpul dictării trimit ca și cum aș
+trimite pe binding către ceva și nu e nimic bindat, atunci dictarea nu se termină, ci
+așteaptă să se înțeleagă unde se trimite. De aia apare warning. Nu la început."*
+
+## Three rules, each bought by a bug the same afternoon
+
+**`A --> A` is a parse error.** A UML self-transition re-runs `exit` and `entry`, so a
+loop arrow on `Listening` would resume the music and drop the ring for a gesture meant
+to change nothing. Refusing the syntax is what makes Victor's rule above *unwriteable
+wrong*: the refusal has to be an internal transition, and an internal transition
+cannot run `exit`. The simulator shows it holding — `resumeMusic` appears on the arrow
+out of `Listening` and **not** on the refusal.
+
+**The unguarded transition must be written last.** The first run of the diagram was
+refused with two line numbers: `Listening : 🔼 forward-right / warnNothingBound`, sitting
+inside the state block, shadowed the guarded `forward-right [bound]` arrow below it and
+would have refused every delivery to a bound terminal. Reading order is evaluation
+order, and the parser now enforces that they agree.
+
+**Reserved words are refused as triggers.** `Listening : exit  / resumeMusic` — two
+spaces, aligned under `entry /`, which is how a person writes it — did not match the
+`exit /` prefix and was accepted as *a transition whose trigger was the word `exit`*.
+It raised nothing at all and cost `resumeMusic`: the music stayed paused after every
+sentence. Whitespace is collapsed before the keyword tests now, and `entry` / `exit` /
+`chip` / `mic` / `note` cannot be trigger names. Silence is the failure this grammar
+can least afford.
+
+## Two things that are deliberately not in the diagram
+
+**The machine does not deliver.** `deliver` → `commit` is a four-way fork over a dead
+tty, a blind-paste target and a spawn that failed to open — delivery routing, not
+gesture semantics. The first draft had `@wordsLanded / deliver` on an arrow, which
+would have sent every sentence twice, because `@wordsLanded` is fired *by* the
+delivery. The machine is told `@delivered` / `@held` and follows.
+
+**The diagram names events; code owns clocks.** `settleTimeout` (8 s, Wispr's p99),
+`speculativeGrace` (12 s), `captureTimeout` (30 s) stay Swift constants with their
+measurements beside them. A duration in a `.puml` is a duration nobody can attach the
+evidence to, and the evidence is the only reason that number is 8 and not 20.
+
+Likewise the ring, the borrowed gestures and the chip are **functions of the state**,
+re-derived by one reconciler after every transition, and appear on no arrow. The music
+pause is the exception and is a genuine edge — `MusicBridge` is told once at the open
+and once at the close — so it is `Listening`'s `entry` / `exit`. An effect that is a
+function of the state and an effect that fires at an instant are two different things,
+and the file distinguishes them.
+
+## The physics stays in the tap
+
+`leftIsHeld` asks the window server and reconciles stale bookkeeping synchronously,
+before the swallow verdict. A guard containing that could not be simulated, which
+destroys the property the simulator exists for. So `HotkeyTap` turns physics into a
+**word** — `forward-bind` against `forward-click` — and the diagram turns the word into
+behaviour. A side effect worth having: `forward-bind` is now fireable in the simulator,
+where `POST /test/gesture` still cannot fake it because the chord needs a real finger.
+
+## Where it will not load
+
+Build time validates before `build-app.sh` touches `/Applications`.
+`~/.walkie-talkie/gestures.last-good.puml` is the net in between, and a run on it says
+so. Both failing is Safe Mode: the chords are still swallowed and do nothing, loudly —
+deliberately not a fall-back to the old imperative path, because a second brain that
+wakes only when the first is ill is the drift this removes. ⌘⌃B, ⌘⌃D and ⌘⌃P stay
+outside the machine and are the way back from a bad edit.
+
+The fallback cost twenty minutes the day it was written. A duplicated `@settleGaveUp`
+line made the checked-in diagram unparseable, the last-known-good copy loaded silently,
+and the simulator's answer complained about five action names that had already been
+deleted. So **a simulation refuses to run on the fallback**: a test that quietly
+asserts against yesterday's diagram is worse than one that fails.
+
+## What it did not fix
+
+`AppDelegate.swift` loses its gesture wiring and stays a 5,000-line file. `commit`'s
+four-way fork is untouched. `WisprFlowSource`'s wrap, Scratchpad, swallow window and
+`History` poll are untouched — a statechart of that would be a statechart of Wispr's
+bugs. The Options+ half of the keycode table is still duplicated in another app's
+preferences UI and is not closable from code; what is closed is that the diagram holds
+**no keycodes**, so it cannot become a third copy.
+
+And a wrong diagram is still a wrong app. What changed is that it is wrong **on a
+picture**, at build time, at boot, and in four evals — rather than on line 2646.

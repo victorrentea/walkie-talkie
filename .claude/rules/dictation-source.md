@@ -268,8 +268,9 @@ measurement of this is worth anything without it.
   things refused it. `retireCaptureIfSettled` saw a row that was not terminal and
   kept the capture, so `beginCapture` returned early and the new sentence had no
   swallow, no row poll and no delivery; and the **phase** stayed `transcribing`,
-  which is what `onPasteToggle` and `startDictation` read as *words in flight*, so
-  the click was answered with *nothing to start, nothing to stop*. Both are fixed
+  which is what the machine's `Settling` state and `startDictation` read as
+  *words in flight*, so the click was answered with *nothing to start, nothing to
+  stop*. Both are fixed
   in `WisprFlowSource`. `cancel()` calls `state.reset`: the swallow is armed but
   nothing is **awaited**, which are two claims and only the first was ever true
   after a cancel — and `pollHistory` no longer feeds `state.sawRow` while
@@ -601,8 +602,10 @@ Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e
   re-arms while `phase.isWaitingForWords`, bounded by 30 s). Eight seconds is right for *nothing
   came back* and wrong for a row that says `processing`.
 - **A 🔼 click while the words are in flight is a stop, or nothing — never a new dictation.**
-  `onPasteToggle` asks `listening || isRecording` first, then `settling || phase.isWaitingForWords`
-  and does nothing; `startDictation` carries `!settling`; and `retireCaptureIfSettled` replaces the
+  `Settling` in `docs/gestures.puml` has no arrow out of it for a forward click, so
+  a click there is an internal no-op rather than a guarded one (2026-09-14) — the
+  phantom dictation is unreachable, not merely defended against. `startDictation`
+  carries `!settling` behind it; and `retireCaptureIfSettled` replaces the
   unconditional `endCapture` in `gestureSeen` — a capture whose row is not terminal belongs to a
   sentence still in flight.
 
@@ -716,7 +719,7 @@ Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e
   it.
 - **The two failures all of this exists for** (2026-09-13): a 2.5 s caret dictation into Word
   produced no CoreAudio edge at all, so `beginCapture` never armed and Wispr's ⌘V went straight
-  into Word; and a second 🔼 click landed inside the settle, where `onPasteToggle` asked only about
+  into Word; and a second 🔼 click landed inside the settle, where the handler asked only about
   `listening`, and started a phantom dictation whose `gestureSeen` disarmed the first sentence's
   swallow window. Both are invisible from outside the process, which is what `/test/state` is for.
 
