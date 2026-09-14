@@ -223,6 +223,21 @@ measurement of this is worth anything without it.
   never sees the release. The tap posts the clearing `flagsChanged` on ⌘'s own
   keycode for any Wispr ⌘V key-up it is **letting through**, stamped, off the tap
   thread, and says so in the log.
+- **A cancel during the settle must NOT disarm the swallow** (adversarial run,
+  2026-09-14 03:04). `forward-left` posted 200 ms after the stop tore the capture
+  down while Wispr's ⌘V was still 300 ms away, and the trace shows what that
+  costs: `↓ key 9 pid 81316 flags 0x20100000 — passed`. Wispr's text went into
+  TextEdit — the one promise the whole wrap exists to keep — and its ⌘-stamped
+  key-up left `sessionFlags ['command']` behind. **Never disarm while Wispr may
+  still paste.** The cancel now sets `discardOnArrival`: Victor is told it is
+  cancelled at once, Wispr is told to dismiss, everything stays armed, and
+  whatever still arrives — a ⌘V, a row going terminal, a note, or nothing by
+  `captureTimeout` — is swallowed and **dropped**. The Scratchpad closes with the
+  capture, which is to say after Wispr has finished with it. `capturing` stays
+  true for that stretch, which is honest: the swallow really is armed.
+- **A gesture during the settle that is not a cancel was already safe** — the same
+  run's `forward-click` 100 ms after the stop is a no-op (`nothing to start,
+  nothing to stop`), the ⌘V is swallowed and the sentence delivers normally.
 - **A dictation that came back with nothing owes the window and the keyboard back
   most, not least.** `endCapture` claimed `scratchpadWindowHandled` at the
   *release*, so a timeout left the Scratchpad standing — the runner watched it for

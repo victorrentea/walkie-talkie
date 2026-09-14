@@ -384,6 +384,15 @@ final class WisprFlowSource: DictationSource {
 
     private var cancelling = false
 
+    /// **The sentence is cancelled but Wispr has not finished with it.**
+    ///
+    /// Set by a cancel that lands during the settle. Everything stays armed —
+    /// the swallow, the row poll, the deadline — and every route that would
+    /// have delivered drops the words instead. It is cleared by `endCapture`,
+    /// which runs when Wispr's row goes terminal, when its ⌘V is seen, or at
+    /// `captureTimeout`; the Scratchpad window goes with it.
+    private var discardOnArrival = false
+
     /// **Wispr's own row for this dictation** (`WisprHistory`, 2026-09-12) —
     /// the completion signal for a delivery the tap cannot see. Taken at the
     /// microphone's close as the newest row whose `startedAt` is this
@@ -756,8 +765,25 @@ final class WisprFlowSource: DictationSource {
         // still this app's to throw away — and it is exactly the stretch in
         // which Victor realises he does not want it.
         if !isRecording, !speculative, capturing {
-            Log.info("🗑️ Wispr Flow's transcript abandoned before it arrived")
-            endCapture(quiet: true)
+            // **A cancel during the settle must not disarm the swallow.**
+            //
+            // It used to `endCapture` here, and the adversarial run found what
+            // that costs: a `forward-left` 200 ms after the stop tore the
+            // capture down while Wispr's ⌘V was still 300 ms from arriving, and
+            // the trace shows exactly what happened next —
+            // `↓ key 9 pid 81316 flags 0x20100000 — passed`. Wispr's text went
+            // into TextEdit, which is the one promise this whole wrap exists to
+            // keep. **Never disarm while Wispr may still paste.**
+            //
+            // So the capture stays armed and the sentence is *discarded on
+            // arrival*: Victor is told it is cancelled now, Wispr is told to
+            // dismiss, and whatever still comes — a ⌘V, a row going terminal, a
+            // note — is swallowed and dropped rather than let through. The
+            // Scratchpad closes with the capture, which is to say after Wispr is
+            // finished with it and not before.
+            discardOnArrival = true
+            Log.info("🗑️ cancelled while the words were in flight — the swallow stays armed until Wispr is done, and the words are dropped")
+            HotkeyTap.postWisprCancel()
             didEnd?(.cancelled(audio: nil, duration: 0))
             return
         }
@@ -1333,6 +1359,7 @@ final class WisprFlowSource: DictationSource {
     /// lets the router decide whether that was the destination.
     private func pollHistory() {
         guard capturing else { return }
+        let wasDiscarding = discardOnArrival
         // **The note is never the delivered text in Scratchpad mode, and that is
         // now a rule rather than a default** (2026-09-14). Two runs delivered
         // `added 'qz'` — a pair of probe *keystrokes* that had landed in the note
@@ -1447,12 +1474,14 @@ final class WisprFlowSource: DictationSource {
         case "dismissed":
             Log.info(String(format: "wispr history: dismissed — %.0f ms after the microphone closed", took))
             endCapture(quiet: true)
-            didEnd?(.cancelled(audio: nil, duration: 0))
+            // A sentence already cancelled has had its ending; a second one
+            // would clear the *next* dictation's state from under it.
+            if !wasDiscarding { didEnd?(.cancelled(audio: nil, duration: 0)) }
             return
         case "empty", "no_audio":
             Log.info(String(format: "wispr history: %@ — %.0f ms after the microphone closed", e.status, took))
             endCapture(quiet: true)
-            didEnd?(.silent("No words detected"))
+            if !wasDiscarding { didEnd?(.silent("No words detected")) }
         default:
             // A status nobody has seen ends the dictation rather than hanging it
             // — today's behaviour, kept — but it says so, because the alternative
@@ -1666,7 +1695,13 @@ final class WisprFlowSource: DictationSource {
     /// Wispr pressed ⌘V. Under the wrap the tap has already eaten it, so the
     /// words are nowhere yet and this is the whole delivery.
     private func injected(from process: String) {
-        guard capturing, intercepting else { return }
+        guard capturing else { return }
+        if discardOnArrival {
+            Log.info("🗑️ ⌘V from \(process) after the cancel — swallowed and dropped; the capture closes now")
+            endCapture(quiet: true)
+            return
+        }
+        guard intercepting else { return }
         // **Taken and dropped.** In Scratchpad mode the words are already the
         // row's; this key exists only so that it cannot land anywhere, and the
         // line is the probe's record of Wispr still delivering the way it did.
@@ -1713,6 +1748,11 @@ final class WisprFlowSource: DictationSource {
                     delivery: wrapWispr ? .route : .alreadyInserted)
             return
         }
+        if discardOnArrival {
+            Log.info("🗑️ nothing came back for the cancelled sentence within \(Int(Self.captureTimeout)) s — closing the capture")
+            endCapture(quiet: true)
+            return
+        }
         let waiting = historyRow.map { "Wispr's row \($0) is still \(status(of: $0).isEmpty ? "empty" : status(of: $0))" }
             ?? "Wispr never created a row"
         state.timedOut("nothing came back within \(Int(Self.captureTimeout)) s")
@@ -1730,6 +1770,15 @@ final class WisprFlowSource: DictationSource {
     private func deliver(reason: String, via: String, delivery: DictationDelivery,
                          text given: String? = nil) {
         guard capturing else { return }
+        // **Cancelled, and the words arrived anyway.** They were swallowed on
+        // the way in, so they are nowhere; this is the moment to say so and let
+        // the capture — and the Scratchpad with it — go.
+        if discardOnArrival {
+            let count = (given ?? clipboardMoved ?? "").count
+            Log.info("🗑️ \(reason) arrived after the cancel — \(count) chars dropped, and the capture can close now")
+            endCapture(quiet: true)
+            return
+        }
         // The one gate that says *these words are the relay's to route*. Every
         // caller is already behind it; it is here because the cost of one of
         // them ever not being is a sentence Victor spoke into another app
@@ -1794,6 +1843,7 @@ final class WisprFlowSource: DictationSource {
         priorNoteId = nil
         priorNoteStamp = 0
         priorNoteText = nil
+        discardOnArrival = false
         // **Never leave the sink holding his keyboard.** Every ordinary sink
         // delivery restores focus on arrival; this is the path where nothing
         // arrived and the capture timed out.
