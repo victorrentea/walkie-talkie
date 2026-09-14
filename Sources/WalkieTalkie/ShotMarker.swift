@@ -317,6 +317,58 @@ enum ShotMarker {
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
     }
 
+    // MARK: - The same marker, as samples
+
+    private static var converted: [Int: AVAudioPCMBuffer] = [:]
+    private static var convertedTo: AVAudioFormat?
+
+    /// **The marker as PCM in someone else's format**, for a source that records
+    /// the audio it transcribes and can therefore splice rather than play —
+    /// `MicRecorder.insert(_:)`.
+    ///
+    /// Converted once and cached, because the caller is a shutter press and
+    /// building an `AVAudioConverter` under one is the kind of work that turns a
+    /// gesture into a stutter. Nil until `prepare()` has loaded the clips.
+    static func pcm(index: Int, in format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        guard isEnabled, index >= 1, index <= maximumIndex else { return nil }
+        return queue.sync {
+            if convertedTo?.sampleRate != format.sampleRate
+                || convertedTo?.channelCount != format.channelCount {
+                converted = [:]
+                convertedTo = format
+            }
+            if let cached = converted[index] { return cached }
+            guard let source = buffers[index], let out = convert(source, to: format) else { return nil }
+            converted[index] = out
+            return out
+        }
+    }
+
+    private static func convert(_ buffer: AVAudioPCMBuffer,
+                                to format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        guard let converter = AVAudioConverter(from: buffer.format, to: format) else { return nil }
+        // Rounded up with room to spare: a resampler's output length is not
+        // exactly the ratio, and a buffer one frame short truncates the word.
+        let ratio = format.sampleRate / buffer.format.sampleRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
+        guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return nil }
+        var supplied = false
+        var error: NSError?
+        // One buffer per call — `MicRecorder.append`'s reason: handing the same
+        // one back twice loops it into the output for ever.
+        let status = converter.convert(to: out, error: &error) { _, outStatus in
+            if supplied { outStatus.pointee = .noDataNow; return nil }
+            supplied = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+        guard status != .error, out.frameLength > 0 else {
+            Log.error("shot marker: could not convert — \(error?.localizedDescription ?? "no frames")")
+            return nil
+        }
+        return out
+    }
+
     // MARK: - Reading them back out
 
     /// Every form the marker has been measured to come back as.

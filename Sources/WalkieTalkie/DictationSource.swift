@@ -66,6 +66,16 @@ protocol DictationSource: AnyObject {
     /// instead, which is a different mechanism and not built.
     var acceptsAudioMarkers: Bool { get }
 
+    /// **Put the marker for picture `index` where this recogniser will hear it.**
+    ///
+    /// The mechanism is the source's, because the two are not the same move and
+    /// only one of them works per source: Wispr hears a Loopback device, so its
+    /// marker is *played* into it and is **summed** with his voice; the local
+    /// model transcribes a file this app writes, so its marker is **spliced into
+    /// that file** between two of his buffers, which is the same idea without
+    /// the collision. Called from the shutter, off the main thread.
+    func markShot(_ index: Int)
+
     /// Whether `start()` would work this instant. The local model answers *are
     /// the weights loaded*; Wispr answers *is it running*.
     var isReady: Bool { get }
@@ -127,6 +137,7 @@ struct DictationResult {
     /// the Loopback device), so a corpus pair carrying `Screenshot one.` against
     /// audio that does not is a poisoned sample. → `ShotMarker`
     var text: String
+
     /// What the recogniser thought it was, when it says. Whisper answers;
     /// Wispr's pasteboard delivery carries no language.
     let language: String?
@@ -180,6 +191,16 @@ struct DictationResult {
     /// had to wait for that window to close before it could fire, which cost
     /// 0.5–3.3 s of a round trip that was ready at 400 ms.
     var focusPid: pid_t?
+    /// **Is the marker in the audio as well as in the words?**
+    ///
+    /// True only where the source *spliced* rather than played — the local model,
+    /// whose WAV is the thing it transcribed. It decides one thing and it is the
+    /// corpus's: a pair is only worth keeping if its transcript says what its
+    /// audio contains, and the two mechanisms fail that test in opposite
+    /// directions. Wispr's audio has no marker and its text does, so the corpus
+    /// gets the **cleaned** text; the local model's audio has one, so the corpus
+    /// gets the **raw** text. → `ShotMarker`, `AppDelegate.deliver`
+    var markersInAudio: Bool = false
 }
 
 /// **Who inserts the text.**
@@ -220,4 +241,9 @@ extension DictationSource {
     /// a word bitten out of his sentence for nothing, so silence is the safe
     /// answer for any recogniser added later.
     var acceptsAudioMarkers: Bool { false }
+
+    /// A source that cannot place a marker is never asked to — `reserveMarker`
+    /// checks `acceptsAudioMarkers` first — so this is the honest no-op rather
+    /// than a fallback anybody relies on.
+    func markShot(_ index: Int) {}
 }

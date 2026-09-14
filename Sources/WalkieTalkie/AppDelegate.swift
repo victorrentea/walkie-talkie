@@ -306,11 +306,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `clearCancelledDictationState`, and each of those clears both.
     private var markersSpoken = 0
 
-    /// **The meter the marker waits for a gap in, or nil when this source cannot
-    /// hear an injected sound.** Published by `wireDictationSource` and read by
-    /// `reserveMarker`, both under `stateLock`, because the shutter is not on the
-    /// main thread. Nil is the whole of *do not speak markers*.
-    private var markerMeter: MicRecorder?
+    /// **How this source places a marker, or nil when it cannot place one.**
+    ///
+    /// Published by `wireDictationSource` and read by `reserveMarker`, both under
+    /// `stateLock`, because the shutter is **not on the main thread**
+    /// (`HotkeyTap.onScreenshot` → `DispatchQueue.global()`) and `setEngine`
+    /// reassigns `source` from the main one. A captured closure rather than the
+    /// property, and nil is the whole of *do not mark*.
+    ///
+    /// What it does differs per source and nothing here knows which: Wispr plays
+    /// into the device it listens to, the local model splices into the file it
+    /// transcribes. → `DictationSource.markShot`
+    private var markShot: ((Int) -> Void)?
     /// When each deliberate shot was taken, in seconds since this dictation
     /// opened — parallel to `pendingShots`, written under the same lock.
     ///
@@ -946,17 +953,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return FileManager.default.fileExists(atPath: kept.url.path)
         }
         status.onStartDictation = { [weak self] in self?.startDictation() }
-        // **Close Wispr's Scratchpad window** — the one thing the wrap leaves
-        // behind. In Scratchpad mode Wispr opens its own note window in the
-        // background on the first dictation and never closes it; Victor has not
-        // decided whether that should be automatic, so it is a row he clicks.
-        // 250 ms, because a 60 ms tap does not toggle it (measured 2026-09-13).
-        // **Through `ensureClosed` like every other close** (2026-09-14): the
-        // chord is a toggle, and a row clicked at a window that has gone in the
-        // meantime opens one instead of closing it.
-        status.onCloseScratchpad = {
-            WisprScratchpad.ensureClosed(reason: "the menu's Close Wispr Scratchpad")
-        }
+        // The *Close Wispr Scratchpad* row went from the menu on 2026-09-14
+        // (Victor: *"sterge!"*) — the window is closed by
+        // `closeScratchpadAfterwards` and the idle sweep already, so the row was
+        // a button for a job the app does for itself. See `StatusItem`.
         // **On main, like the toggle two lines down.** It was not, and the
         // asymmetry is the whole bug: the tap dispatches globally, so cancelling
         // reached `RelayWindow.layoutContent` → `NSWindow.setFrame` on
@@ -1549,7 +1549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is two facts that only change when the source does, so they are
         // published here, under the lock the shutter already takes.
         stateLock.lock()
-        markerMeter = source.acceptsAudioMarkers ? source.meter : nil
+        markShot = source.acceptsAudioMarkers ? { [weak source] in source?.markShot($0) } : nil
         stateLock.unlock()
         Log.info("dictation source: \(source.name)")
     }
@@ -1711,7 +1711,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // WAV does not contain, which is the one thing that corpus must never
         // hold. Everything downstream (the outbox, the panel, the envelope, the
         // agent) reads the cleaned text for free by being downstream of here.
+        // **The rewrite first, but the corpus does not always get its result.**
+        // A pair is only worth keeping if the transcript says what the audio
+        // contains, and the two marker mechanisms fail that test in opposite
+        // directions: Wispr's recording never heard the marker, so the corpus
+        // takes the **cleaned** words; the local model spliced it into the very
+        // file it transcribed, so that pair keeps the **raw** ones and stays
+        // honest about a clip with two seconds in it he did not say.
+        // → `DictationResult.markersInAudio`
+        let spokenText = result.text
         result.text = resolvingShotMarkers(result.text)
+        let corpusText = result.markersInAudio ? spokenText : result.text
 
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
@@ -1719,7 +1729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `~/.walkie-talkie/voice-corpus/` goes on growing. The bytes are read on
         // this thread so the staged WAV can go immediately after.
         if let wav = result.audio {
-            corpus.captureLocal(wav: wav, text: result.text, language: result.language,
+            corpus.captureLocal(wav: wav, text: corpusText, language: result.language,
                                 duration: result.duration, app: localRecordingApp,
                                 engine: result.engine)
             try? FileManager.default.removeItem(at: wav)
@@ -4462,16 +4472,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reserveMarker() -> Int? {
         guard ShotMarker.isEnabled else { return nil }
         stateLock.lock()
-        let meter = markerMeter
-        let open = dictationInFlight && meter != nil
+        let mark = markShot
+        let open = dictationInFlight && mark != nil
         if open { markersSpoken += 1 }
         let number = markersSpoken
         stateLock.unlock()
-        guard open, let meter = meter, number <= ShotMarker.maximumIndex else { return nil }
-        // **Into the gap between his words, not over them** — see
-        // `ShotMarker.maskCeiling`.
-        ShotMarker.play(index: number,
-                        whenQuiet: { meter.quietSeconds >= ShotMarker.gapNeeded })
+        guard open, let mark = mark, number <= ShotMarker.maximumIndex else { return nil }
+        mark(number)
         return number
     }
 
