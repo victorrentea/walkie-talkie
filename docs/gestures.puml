@@ -1,0 +1,229 @@
+@startuml gestures
+' ╔══════════════════════════════════════════════════════════════════════════╗
+' ║  THIS FILE IS THE PROGRAM.                                               ║
+' ║  Sources/WalkieTalkie/GestureDiagram.swift parses it at launch and       ║
+' ║  Sources/WalkieTalkie/GestureMachine.swift executes it. Nothing in       ║
+' ║  Sources/ decides what a mouse gesture means — this file does.           ║
+' ║  Render with ./docs/build-gestures.sh; never hand-edit docs/gestures.svg.║
+' ╚══════════════════════════════════════════════════════════════════════════╝
+'
+' GRAMMAR (the parser accepts exactly this; everything else is decoration):
+'
+'   [*] --> S                     the initial state, exactly one
+'   state S <<stereo>> { … }      one level of nesting; deeper is a parse error
+'   S : chip "…"                  one chip row, in file order. THE tooltip.
+'   S : entry / a, b              actions run on entering S
+'   S : exit  / a                 actions run on leaving S
+'   S : 🔼 trigger [g] / a        an INTERNAL transition: no exit, no entry
+'   A --> B : 🔼 trigger [g] / a  trigger [guard] / actions
+'
+'   · The trigger is the LAST whitespace-separated token. The 🔼 / 🔽 / arrow
+'     in front is a glyph for the reader and is checked against HotkeyTap's
+'     own table by evals/test_gesture_glyphs.py.
+'   · A bare trigger must exist in HotkeyTap.triggerNames. An @name is an
+'     event the app fires (the world answering, not his hand).
+'   · `A --> A` is a PARSE ERROR. A UML self-transition re-runs exit and entry,
+'     which here would resume the music and drop the ring for a gesture that is
+'     supposed to change nothing. Write an internal transition instead.
+'   · Guards and actions are NAMES, never expressions. `!` is the only operator.
+'   · Two transitions on the same (state, trigger) are tried in file order,
+'     first passing guard wins; at most one unguarded, and it must be last.
+'
+' THE VOCABULARY, in Victor's words (2026-09-14):
+'   "la apăsarea forward simplă începe dictarea, dar apoi dictarea aceea se
+'    poate duce în diverse locuri, în funcție de cum se termină gestul"
+'   — so the gesture that ENDS the sentence is the one that names where it goes.
+
+hide empty description
+skinparam shadowing false
+skinparam state {
+  BackgroundColor<<rest>>    #F6F6F4
+  BackgroundColor<<mic>>     #FFF3E2
+  BackgroundColor<<waiting>> #ECF2FF
+  BorderColor #4A4A4A
+  FontName Helvetica
+}
+title The mouse vocabulary — walkie-talkie
+
+[*] --> Idle
+
+' ── At rest ────────────────────────────────────────────────────────────────
+state Idle <<rest>>
+Idle : chip ""
+' 🔼 ↓ — the left button held, then the forward click. **No toggle**, exactly as
+' the left-plus-wheel chord it replaces: the gesture is made while pointing at the
+' terminal he means, and making it twice means "again", never "let go".
+'
+' 🔽 ↓ is the same call the menu's **Disconnect** row makes, so the gesture cannot
+' end up meaning something subtly other than the row that documents it — including
+' the chip's burst, which is the only thing on screen that says it happened.
+Idle : 🔼 forward-bind / bindFrontmost
+Idle : 🔽 back-down / unbind
+Idle : 🔽 back-click / postReturn
+Idle : 🔽 back-right / postWisprHandsFree
+Idle : @bindArrived / showBinding
+Idle : @unbound / showUnbound
+
+' The aim is set BEFORE the microphone is asked for, and again by whichever
+' gesture ends the sentence. It has to be first in the list: `openDictation`
+' reaches the source, and the local recogniser can raise `didBegin`
+' synchronously inside that call.
+'
+' Where a fresh dictation points is *what a plain ending would do*: at the
+' terminal when there is one, at the caret when there is not. 🔼 click says
+' caret outright whatever is bound, which is the vocabulary Victor fixed on
+' 2026-09-12 and this change does not touch.
+'
+' **The bind grace is gone from the click**, and stays gone. For three days a
+' click made within five seconds of a bind went to the terminal instead, on the
+' argument that a bind is him naming a precise destination and the caret is the
+' vaguest one. Victor's vocabulary, restated 2026-09-12: *"butonul forward
+' pornește dictare la caret (indiferent dacă e legat ceva); forward + right move:
+' dictare legată"*. The two gestures are the two destinations, and a click that
+' sometimes means the other one is a click he cannot trust.
+Idle --> AtCaret  : 🔼 forward-click / aimAtCaret, openDictation
+Idle --> ToBound  : 🔼 forward-right [bound] / aimAtBound, openDictation
+Idle --> AtCaret  : 🔼 forward-right / aimAtCaret, openDictation
+Idle --> ToBound  : ⌨ key-dictate [bound] / aimAtBound, openDictation
+Idle --> AtCaret  : ⌨ key-dictate / aimAtCaret, openDictation
+' 🔼 ↑ — **dictate at a session that does not exist yet.** A gesture of its own,
+' where from 2026-09-05 it was the wheel clicked twice converting a dictation
+' already in flight: the wheel had one press to spend and no working hold, so the
+' second click was the only spare gesture on it. This button has four directions,
+' so the spawn gets one outright and needs nothing to reinterpret. The wheel's
+' double click still says this same word (`HotkeyTap.fire`), and at rest it
+' therefore *opens* a dictation that is a spawn from its first sample rather than
+' converting one.
+'
+' The context shot is taken at the press, like every other dictation's.
+' `deferContext` went with the wheel: it existed because the wheel's *release* was
+' the moment the picture wanted — the screen his finger had left, before a second
+' click could land — and a gesture that ends with the mouse already moved has no
+' such moment. What survives of it is `HotkeyTap.onWheelRelease`, which is a cue
+' about *when* to take the frame and deliberately not a gesture.
+Idle --> ToSpawn  : 🔼 forward-up / aimAtSpawn, openDictation
+
+' ── The microphone is open ─────────────────────────────────────────────────
+' Everything that is true for the whole sentence, whatever it is aimed at,
+' is declared once here rather than re-derived per destination.
+state Listening <<mic>> {
+  ' The music pause is a genuine EDGE — MusicBridge is told once when the
+  ' microphone opens and once when it shuts. The ring, the borrowed gestures
+  ' and the chip are NOT actions: they are functions of the state, re-derived
+  ' by one reconciler after every transition, which is why they are not on any
+  ' arrow. An effect that is a function of the state and an effect that fires
+  ' at an instant are two different things and this file distinguishes them.
+  Listening : entry / pauseMusic
+  Listening : exit  / resumeMusic
+  Listening : 🔽 back-click / captureScreenshot
+  Listening : 🔽 back-right / postWisprHandsFree
+  Listening : @micOpened / confirmMicOpen
+  Listening : @micConfirmedShut / noteShut
+
+  ' Where a plain ending would send it. The substate IS the chip.
+  state AtCaret
+  AtCaret : chip "⌨️ at the caret"
+  ' 🔼 ↓ — the left button held 0.3 s, then the forward click. HotkeyTap
+  ' judges the chord and fires `forward-bind`; a bare click is `forward-click`.
+  ' Victor: "dacă pe drum fac gestul de forward în jos, asta leagă dictarea
+  ' de terminalul de sub mouse."
+  ' 🔼 → with NOTHING bound does not end the sentence. It refuses, it warns,
+  ' and the microphone stays open until he says where the words go. Victor:
+  ' "dictarea nu se termină, ci așteaptă să se înțeleagă unde se trimite.
+  '  De aia apare warning. Nu la început."  — an INTERNAL transition, so
+  ' Listening's exit does not run: music still paused, ring still up.
+
+  state ToBound
+  ToBound : chip "🎙️ {boundFolder}"
+
+  state ToSpawn
+  ToSpawn : chip "✨ {spawnFolder}"
+  ToSpawn : @spawnFolderChosen / nameSpawnFolder
+
+  AtCaret --> ToBound : 🔼 forward-bind / bindFrontmost
+  AtCaret --> ToBound : @bindArrived / aimAtBound
+  ToSpawn --> ToBound : 🔼 forward-bind / bindFrontmost
+  ToBound --> AtCaret : @unbound / aimAtCaret
+}
+
+' ── How a sentence ends ────────────────────────────────────────────────────
+' The gesture that ENDS the sentence names where it goes — whatever it was
+' aimed at while he was talking. Victor: "dictarea aceea se poate duce în
+' diverse locuri, în funcție de cum se termină gestul."
+'
+' These leave the COMPOSITE, so they apply from all three destinations. A
+' substate's own transition outranks its parent's (plain UML), which is how
+' AtCaret's refusal below gets first refusal on 🔼 →.
+Listening --> Settling : 🔼 forward-click / aimAtCaret, stopDictation
+Listening --> Settling : 🔼 forward-right [bound] / aimAtBound, stopDictation
+' Mid-sentence, 🔼 ↑ **converts the dictation to a spawn**: same recording, same
+' words — only the destination changes. The terminal it opens in does not exist
+' yet, so the folder menu is offered exactly as it is at a fresh spawn press.
+Listening --> Settling : 🔼 forward-up / aimAtSpawn, stopDictation
+Listening --> Settling : ⌨ key-dictate / aimWhereAimed, stopDictation
+' ⬅️ — the forward button held and the mouse flicked left (and the wheel held,
+' with Logi gestures off). Since 2026-09-12 it throws a **Wispr Flow** dictation
+' away too, through the same one call the ✕ and the menu row make. Victor's ask:
+' the gesture that abandons a sentence must not depend on which app happens to be
+' hearing it.
+Listening --> Idle     : 🔼 forward-left / cancelDictation
+Listening --> Idle     : @sourceGaveUp / warnSourceSilent
+
+' 🔼 → with NOTHING bound does not end the sentence. Written HERE, after the
+' guarded arrow above, because reading order is evaluation order: the guarded
+' one gets first refusal and this unguarded one answers when it declines. The
+' parser enforces that ordering — writing this line inside the state block
+' above shadowed the delivery, and it said so.
+'
+' Being INTERNAL, Listening's exit does not run: the music stays paused, the
+' ring stays up, the microphone stays open. Victor: "dictarea nu se termină, ci
+' așteaptă să se înțeleagă unde se trimite. De aia apare warning. Nu la început."
+Listening : 🔼 forward-right / warnNothingBound
+
+' ── The words are in flight ────────────────────────────────────────────────
+' A click here is a stop or nothing, never a new dictation — 2026-09-13's
+' phantom dictation, made structurally impossible by there being no arrow.
+'
+' What it cost the first time, in one line of the imperative code this replaces:
+' the first click stopped the microphone; the closing edge came three seconds
+' late; a second click landed inside the settle, where the branch asked only about
+' `listening`, and started a **phantom dictation** whose `gestureSeen` disarmed
+' the first sentence's swallow window. Wispr's ⌘V arrived a second later and
+' landed in the Terminal that happened to be in front, and the chip spent twelve
+' seconds on a dictation that did not exist. A click while the words are in flight
+' is him ending a sentence he has already ended: it is a stop, or it is nothing.
+state Settling <<waiting>>
+Settling : chip "⏳ Transcribing..."
+Settling : 🔼 forward-click / sayInFlight
+Settling : 🔼 forward-right / sayInFlight
+Settling : 🔼 forward-up / sayInFlight
+Settling : 🔽 back-click / captureScreenshot
+Settling : @bindArrived / reaim
+
+' **The machine does not deliver.** Where a sentence goes once the words are
+' back is `AppDelegate.deliver` → `commit`, a four-way fork over a dead tty, a
+' blind-paste target and a spawn that failed to open — delivery routing, not
+' gesture semantics, and none of it is decided by the mouse. So `commit` says
+' which way it went and the machine follows. Firing `deliver` from here as well
+' would send the sentence twice.
+Settling --> Idle        : @delivered
+Settling --> HeldForBind : @held
+Settling --> Idle        : @settleGaveUp / sayNoWords
+Settling --> Idle        : 🔼 forward-left / cancelDictation
+
+' ── Nothing was bound when the words landed ────────────────────────────────
+' The five-minute hold (holdsForBind, 2026-09-11). Reachable only through
+' @held — never through a gesture, because 🔼 → refuses above rather than
+' ending a sentence with nowhere to go.
+state HeldForBind <<waiting>>
+HeldForBind : chip "⏳ bind to send — ⌘⌃B"
+HeldForBind : 🔼 forward-bind / bindFrontmost
+
+' `releaseAwaitingBind` is reached from `showBound`, which every route into a
+' binding passes through — so the bind delivers the held sentence and says so,
+' the same way `commit` does above.
+HeldForBind --> Idle : @delivered
+HeldForBind --> Idle : @holdExpired / warnHoldExpired
+HeldForBind --> Idle : 🔼 forward-left / dropHeld
+
+@enduml

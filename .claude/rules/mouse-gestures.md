@@ -1,17 +1,35 @@
----
-paths:
-  - "Sources/WalkieTalkie/HotkeyTap.swift"
----
 # Mouse gestures and the two global keys
 
-What `HotkeyTap` may and may not do with the two keyboard chords and with the mouse, in both gesture modes (*Use Logi Gestures* ticked — the default — and unticked). Full history and reasoning: docs/journal.md — see the sections named after each rule below.
+What `HotkeyTap` may and may not do with the two keyboard chords and with the mouse, in both gesture modes. Full history and reasoning: docs/journal.md — see the sections named after each rule below.
+
+## ⚠️ What a gesture MEANS is no longer in this file (2026-09-14)
+
+**It is in `docs/gestures.puml`**, which `GestureMachine` executes.
+`HotkeyTap`'s job now ends at *naming* the gesture: swallow the chord, refuse
+autorepeat, look the keycode up in `gestureVocabulary`, and `fire(name)`. The ten
+`case VK_F…` branches that each carried a paragraph of policy are gone, and
+`evals/test_gesture_no_second_brain.py` fails the build if they come back — no
+`DispatchQueue`, no per-gesture `case`, and exactly one gesture callback
+(`onGesture`) on this class.
+
+**The one exception is physics.** `leftIsHeld` asks the window server and
+reconciles stale bookkeeping *synchronously*, before the swallow verdict — a
+clock and an I/O round trip that could not live in a diagram guard without making
+the machine unsimulatable. So the tap decides **which word** the gesture is,
+`forward-bind` against `forward-click`, and the diagram decides what the word
+does. The same rule covers the wheel mode: both devices now speak the same
+vocabulary, so a gesture is the same gesture whichever hand made it.
+
+The rules below about *how* the tap reads the wire — the chord judgement, the
+orphan-release rule, the autorepeat swallow, `postReturn`, the keycode table —
+all still hold, and are still this file's. → `.claude/rules/gesture-machine.md`
 
 ## The two global keys: ⌘⌃B binds, ⌘⌃D dictates
 
 | key | call | note |
 |---|---|---|
 | **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
-| **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | new — the wheel's click, from the keyboard |
+| **⌘⌃D** | `fire("key-dictate")` → `docs/gestures.puml` | new — the wheel's click, from the keyboard |
 
 - **Swallow both unconditionally, autorepeat included.** A held ⌘⌃D would open the microphone and shut it again on the next repeat; a held ⌘⌃B would bind and then immediately stop the session it started. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
 - **⌘⌃D is ungated at the tap.** A key that sometimes falls through to macOS's "look up in dictionary" would be worse than one that never does; with nothing bound the sentence is held for five minutes and delivered when a bind lands (`awaitingBind`, 2026-09-11), so the press costs nothing. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
@@ -24,21 +42,28 @@ What `HotkeyTap` may and may not do with the two keyboard chords and with the mo
 
 In this mode the app takes **no mouse button at all**. Every mouse event is handed straight back one comparison later in `HotkeyTap.handle`; the side buttons arrive as ⌃⌥⌘F-key chords posted by Logi Options+.
 
-| gesture | chord | what it does |
-|---|---|---|
-| 🔼 → | ⌃⌥⌘F10 | start the dictation, or end the one open (the same call ⌘⌃D makes) |
-| 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away |
-| 🔼 ↑ | ⌃⌥⌘F8 | dictate at a session that does not exist yet |
-| ◀️ held, then 🔼 | ⌃⌥⌘F7 | **bind** the terminal in front — no toggle |
-| 🔼 | ⌃⌥⌘F7 | dictate **at the caret** — in both engines, whatever is bound (2026-09-12) |
-| 🔽 ↓ | ⌃⌥⌘F12 | unbind — the menu's Disconnect |
-| 🔽 | ⌃⌥⌘F6 | a picture while dictating, **Return** at every other moment |
-| 🔽 → | ⌃⌥⌘F5 | Wispr Flow's **raw** hands-free chord, in both modes (2026-09-12) — the relay routes that sentence by state |
-| 🔼 ↓ · 🔽 ↑ · 🔽 ← | ⌃⌥⌘F9 · F4 · F3 | assigned in Options+, unclaimed here — free rows |
+**The chord→name table is `gestureVocabulary`; the name→behaviour table is
+`docs/gestures.puml`.** This one is a reading aid and the diagram wins.
+
+| gesture | chord | the word it becomes | what the diagram does with it |
+|---|---|---|---|
+| 🔼 | ⌃⌥⌘F7 | `forward-click` | open a dictation; **end one at the caret** |
+| ◀️ held, then 🔼 | ⌃⌥⌘F7 | `forward-bind` | **bind** the terminal in front — no toggle. Mid-sentence it re-aims the words at it |
+| 🔼 → | ⌃⌥⌘F10 | `forward-right` | open a dictation; **end one at the bound terminal**. With nothing bound it **refuses, warns and keeps the microphone open** |
+| 🔼 ← | ⌃⌥⌘F11 | `forward-left` | cancel — throw the audio away (kept five minutes) |
+| 🔼 ↑ | ⌃⌥⌘F8 | `forward-up` | open a dictation at a session that does not exist yet; **end one into the folder menu** |
+| 🔽 ↓ | ⌃⌥⌘F12 | `back-down` | unbind — the menu's Disconnect |
+| 🔽 | ⌃⌥⌘F6 | `back-click` | a picture while dictating, **Return** at every other moment |
+| 🔽 → | ⌃⌥⌘F5 | `back-right` | Wispr Flow's **raw** hands-free chord — the one gesture whose sentence this app does not route |
+| 🔼 ↓ · 🔽 ↑ · 🔽 ← | ⌃⌥⌘F9 · F4 · F3 | `forward-down`, `back-up`, `back-left` | assigned in Options+, named in the vocabulary, on no arrow — free rows |
+
+- **🔼 ↓ is not F9.** Victor calls the bind gesture *"forward în jos"* and defines it
+  himself as *"click, left click apăsat lung cu forward"* — the left button held, then
+  the forward click, i.e. F7 with `leftIsHeld`. F9 stays a free row.
 
 - **The side buttons never reach any tap; do not look for a hold.** Measured 2026-09-09: a probe reading raw HID input reports *below every event tap*, beside a `.cghidEventTap` listener, saw the wheel perfectly (`WHEEL ▼ … ▲ ținut 5272 ms`) and the side buttons **not once**, held or clicked; killing `com.logi.cp-dev-mgr` changed nothing (the divert lives in the mouse, over Logitech's GATT service on Bluetooth LE — there is no Bolt receiver). What arrives is what Options+ *synthesises*: `TAP tastă ▼ code=124 (pid 75980)`, pid 75980 being `logioptionsplus_agent`. The earlier "~18 ms down-and-up pair" claim was wrong. → journal: *The side buttons speak in function keys (2026-09-09)*
 - **The numbers are duplicated in two places and must not drift**: Options+'s own custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`. Change one and the gesture goes to whatever app claims that chord instead — silently, since a chord nothing handles is a chord nothing complains about. → journal: *The side buttons speak in function keys (2026-09-09)*
-- **The forward click (F7) is a caret dictation, in both engines, whatever is bound** (2026-09-12) — `onPasteToggle` → `startDictation(paste: true)`, and the source does the starting (Wispr by posting its own chord). It used to post the raw chord with Replace Wispr unticked, and that sentence was routed *by state* — to the bound terminal — which is the bug Victor found the evening the wrap shipped: *"apăsând butonul forward, click normal, el tot dictează legat de fereastră"*. His vocabulary: **🔼 click = caret (indiferent dacă e legat ceva); 🔼 → = legată; 🔼 ← = cancel (la caret sau legată); 🔼 ↑ = terminal nou — toate indiferent că Wispr sau modelul local e selectat.** The five-second bind grace that sent the click to the terminal is gone from this path for the same reason. → journal: *The forward click is the caret, and the arrow is the terminal (2026-09-12)*
+- **The forward click (F7) is a caret dictation, in both engines, whatever is bound** (2026-09-12, and since 2026-09-14 it is the diagram that says so: `Idle --> AtCaret : 🔼 forward-click / aimAtCaret, openDictation`) — the source does the starting (Wispr by posting its own chord). It used to post the raw chord with Replace Wispr unticked, and that sentence was routed *by state* — to the bound terminal — which is the bug Victor found the evening the wrap shipped: *"apăsând butonul forward, click normal, el tot dictează legat de fereastră"*. His vocabulary: **🔼 click = caret (indiferent dacă e legat ceva); 🔼 → = legată; 🔼 ← = cancel (la caret sau legată); 🔼 ↑ = terminal nou — toate indiferent că Wispr sau modelul local e selectat.** The five-second bind grace that sent the click to the terminal is gone from this path for the same reason. → journal: *The forward click is the caret, and the arrow is the terminal (2026-09-12)*
 - **⌃Escape typed by Victor is watched** (`onWisprMaybeCancelling`, 2026-09-12): it is Wispr's `dismiss` (`53+59`), and a sentence dismissed on Wispr's side pastes nothing, so the source ends the capture and the ring at once instead of at `settleTimeout`. Never taken; this app's own `postWisprCancel` is stamped and not reported. → journal: *The ring goes down when he dismisses in Wispr (2026-09-12)*
 - **Historical — the forward click used to post Wispr's chord.** `postWisprHandsFree` types `fn ⌃ Space` — `fn ⌃ Space`, read from `prefs.user.shortcuts` in `~/Library/Application Support/Wispr Flow/config.json` as `"49+59+63": "popo"` (also there: `"54+61": "ptt"`, `"178+59+63": "lens"`, `"53+59": "dismiss"`). Wispr cannot take the button itself: the ⌃⌥⌘F-key is refused with *"Shortcut must include a modifier key or a valid mouse button"* because Options+ stamps ⌃⌥⌘ into the flags rather than pressing them. → journal: *The forward click starts Wispr Flow too, because Wispr cannot take the button (2026-09-09)*
 - **Press the chord's modifiers as keys, not just flags, and wait `settleForOptionsPlus` first.** Wispr stores three keycodes (49 Space, 59 Control, 63 fn), so fn and Control go out as real `flagsChanged` events around the Space — four events, correct under either reading — after the same settle `postReturn` waits, because it is posted from the F7 callback while Options+ has ⌃⌥⌘ on the wire. → journal: *The forward click starts Wispr Flow too, because Wispr cannot take the button (2026-09-09)*

@@ -19,6 +19,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `overlay-chip.md` | `RelayWindow`, `OverlayStates`, `Glyphs`, `docs/states/`, the shoot script |
   | `chip-wipe.md` | `ChipWipe` |
   | `mouse-gestures.md` | `HotkeyTap` |
+  | `gesture-machine.md` | `GestureDiagram`, `GestureMachine`, `GestureActions`, `GestureSimulation`, `docs/gestures.puml` |
   | `area-crop.md` | `HotkeyTap`, `ScreenCapture`, `Package.swift` |
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
@@ -143,6 +144,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/wrap-mode` `{"mode": "scratchpad"｜"sink"｜"off"｜"auto"}` | pick how the relay takes Wispr's words for this run; `auto` hands the decision back to the tick and to Wispr's own configuration. The menu tick follows |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
 | `POST /test/shot-marker` `{"text": …, "available": [1,2]}` · `{"play": 1}` | **the shot marker's unit test, both halves** — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
+| `POST /test/gesture-machine/simulate` `{"world": …, "steps": […]}` | **the gesture machine's unit test** — a fresh `GestureMachine` over the checked-in `docs/gestures.puml`, a fake clock and a fake world, driven by `{"fire": "forward-right", "atMs": …}` and `{"set": {"bound": true}}`. Answers the transitions, **`chipAt`** (which tooltip was showing when) and **`refused`** (a gesture that hit no transition at all — the answer to *why did nothing happen*). It **refuses to run on the last-known-good copy**, because a test that quietly asserts against yesterday's diagram is worse than one that fails |
 | `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
 | `GET /test/wispr-notes` · `POST /test/wispr-notes` `{"since": <unix s>}` | Wispr Flow's **Scratchpad**, read-only (`WisprNotes`, `Notes` + `NoteVersions`): the GET is the baseline before the chord, the POST the delivery read after it (`{"note": null}` when nothing was written since). Wired to no gesture — the reading half of the candidate wrap |
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
@@ -199,24 +201,52 @@ sits at rest there.
   dictation from a WAV through the virtual microphone, asserted end to end, with the
   scenarios, the preconditions and the timing table in `docs/loopback.md`.
 
-## Gestures, current
+## Gestures: the diagram is the program (2026-09-14)
 
-- **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds), ⌘⌃D starts /
-  ends a dictation, ⌘⌃P pastes the last envelope. All swallowed, autorepeat included. ⌘⌃⌥D is
-  Victor Addons' dark-mode toggle.
-- **Mouse:** *Use Logi Gestures* is ticked by default (2026-09-09) — the side buttons arrive
-  from Options+ as ⌃⌥⌘F3…F12 and every mouse button is passed through; the wheel is untouched
-  except a **drag** while dictating, which crops a screen area (2026-09-10). The chords are
-  duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. Unticked, the
-  wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
-- **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,
-  whatever is bound; 🔼 → = dictate at the **bound** terminal; 🔼 ← = cancel either; 🔼 ↑ = a new
-  session. The relay starts every one of them (`startDictation`); no gesture posts Wispr's chord
-  raw except 🔽 →.
-- **Unbound, the app does everything it does bound** (2026-09-11, `holdsForBind`): the sentence
-  is held five minutes for the bind that follows; the chip says `⏳ bind to send — ⌘⌃B`.
-- **The recipient is whoever the relay is pointed at when the microphone closes.** A deliberate
-  bind mid-sentence redirects the words; the 10 s poll never may.
+- **What a mouse gesture means lives in `docs/gestures.puml` and nowhere else.**
+  `GestureDiagram` parses it at launch, `GestureMachine` executes it,
+  `GestureActions` turns its names into Swift, and `docs/gestures.svg` is the picture
+  it renders to. There is no second copy of the transition table — no codegen, no
+  fallback table, no `switch` over gesture names in `Sources/`. Edit the diagram.
+  → `.claude/rules/gesture-machine.md`
+- **`./docs/build-gestures.sh` after every change to it**, exactly as
+  `./docs/shoot-overlay-states.sh` is run after every overlay change. Never hand-edit
+  `docs/gestures.svg`.
+- **The vocabulary, in Victor's words:** *"la apăsarea forward simplă începe
+  dictarea, dar apoi dictarea aceea se poate duce în diverse locuri, în funcție de
+  cum se termină gestul"* — **the gesture that ends the sentence names where it
+  goes**: 🔼 click = the caret, 🔼 → = the bound terminal, 🔼 ↑ = a new session
+  (folder menu), 🔼 ← = cancel. 🔼 ↓ (the left button held, then the forward click)
+  **binds mid-sentence**, so a 🔼 → after it has somewhere to go.
+- **🔼 → with nothing bound does not end the sentence.** It refuses, it warns, and
+  the microphone stays open: *"dictarea nu se termină, ci așteaptă să se înțeleagă
+  unde se trimite. De aia apare warning. Nu la început."* It is an **internal**
+  transition, so `Listening`'s exit does not run — the music stays paused and the
+  ring stays up. The grammar refuses `A --> A` precisely so that rule cannot be
+  written the wrong way.
+- **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds),
+  ⌘⌃D starts / ends a dictation (it reaches the diagram as `key-dictate`), ⌘⌃P pastes
+  the last envelope. All swallowed, autorepeat included. ⌘⌃⌥D is Victor Addons'
+  dark-mode toggle. **⌘⌃B / ⌘⌃D / ⌘⌃P stay outside the machine** and are the way back
+  from a bad edit to the diagram.
+- **Mouse:** the side buttons arrive from Options+ as ⌃⌥⌘F3…F12 and every mouse
+  button is passed through; the wheel is untouched except a **drag** while dictating,
+  which crops a screen area. The chords are duplicated in Options+ and in
+  `HotkeyTap`'s `VK_F3…VK_F12` and must not drift — the diagram holds **no keycodes**
+  and names gestures only, so it cannot become a third copy.
+- **`HotkeyTap` turns physics into a word; the diagram turns the word into
+  behaviour.** `leftIsHeld` asks the window server synchronously before the swallow
+  verdict, which is a clock and an I/O round trip that could not live in a guard — so
+  the tap decides `forward-bind` against `forward-click` and nothing more.
+- **Safe Mode.** A diagram that will not load leaves the chords swallowed and inert,
+  with a sticky banner saying so; `build-app.sh` validates before it touches
+  `/Applications`, and `~/.walkie-talkie/gestures.last-good.puml` is the net in
+  between. Deliberately **not** a fall-back to the old imperative path.
+- **Unbound, the app does everything it does bound** (2026-09-11, `holdsForBind`): a
+  sentence that lands with its aim no longer honourable is held five minutes for the
+  bind that follows; the chip says `⏳ bind to send — ⌘⌃B`.
+- **The recipient is whoever the relay is pointed at when the microphone closes.** A
+  deliberate bind mid-sentence redirects the words; the 10 s poll never may.
 
 ## The dictation source (2026-09-12)
 

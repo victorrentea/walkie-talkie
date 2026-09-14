@@ -291,6 +291,20 @@ final class ElementPicker {
     /// transition with two lags, with no Wispr, no microphone and no waiting.
     var onTestWisprStateSimulate: (([[String: Any]]) -> [String: Any])?
 
+    /// `POST /test/gesture-machine/simulate` — run a script through a **fresh**
+    /// `GestureMachine` over the checked-in `docs/gestures.puml`, with a fake
+    /// clock and a fake world, and answer what it did.
+    ///
+    /// The sibling of `onTestWisprStateSimulate` and a route for the same reason.
+    /// What it buys is the thing the old imperative gesture code could least do:
+    /// assert that 🔼 → with nothing bound **warns and leaves the microphone
+    /// open** — that the transition is internal, that `resumeMusic` did not run
+    /// and that the state never left `Listening` — without speaking a word.
+    ///
+    /// `./.build/debug/WalkieTalkie --simulate-gestures` is the same simulator
+    /// from a shell, and is what `evals/` uses: it needs no running relay at all.
+    var onTestGestureMachineSimulate: (([String: Any]) -> [String: Any])?
+
     /// `POST /test/shot-marker` — **the marker's unit test, both halves.**
     ///
     /// `{"text": …, "available": [1, 2]}` runs the written half: the rewrite that
@@ -814,6 +828,14 @@ final class ElementPicker {
                 return respond(conn, 503, ["ok": false, "error": "no handler"])
             }
             respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
+        // The gesture machine, run on a script — see `onTestGestureMachineSimulate`.
+        case ("POST", "/test/gesture-machine/simulate"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let result = onTestGestureMachineSimulate?(body) else {
+                return respond(conn, 500, ["ok": false, "error": "no gesture simulator wired"])
+            }
+            respond(conn, (result["ok"] as? Bool) == true ? 200 : 400, result)
 
         case ("POST", "/test/wispr-state/simulate"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]

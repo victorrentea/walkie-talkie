@@ -60,31 +60,22 @@ final class HotkeyTap {
     /// Measured, on the first run of this gesture.
     var onAreaEnd: (() -> Void)?
 
-    /// The wheel, clicked on its own — **or ⌘⌃D**: start the recording, or end
-    /// the one that is open. A toggle and not a push-to-talk — a dictation at an agent runs to a
-    /// minute or more, and a button held for a minute is a hand that cannot do
-    /// anything else, including take the screenshots the same minute is for.
-    var onLocalToggle: (() -> Void)?
-
-
-
-
-
-    /// **The forward side button, in Replace Wispr mode** — open the microphone,
-    /// or close the one that is open and paste what was said at the caret. See
-    /// `AppDelegate.replaceWispr`: it is the mode in which the relay stops being
-    /// a way to talk to an agent and becomes a way to type.
+    /// **The one gesture callback.** What the word means is `docs/gestures.puml`'s
+    /// business; this tap's job ends at naming it. There were eight of these until
+    /// 2026-09-14 — `onPasteToggle`, `onGestureBind`, `onGestureSpawn`,
+    /// `onGestureUnbind`, `onLocalCancel` and the wheel's three — and each carried a
+    /// paragraph of policy that `evals/test_gesture_no_second_brain.py` now refuses
+    /// to let back in.
     ///
-    /// It consults **only** the mode flag — not `localCapture`, not `bound`. A
-    /// dictation that is going to the caret carries its own destination, exactly
-    /// as the spawn chord does, so *Unbound is inert* has nothing to say about it.
-    var onPasteToggle: (() -> Void)?
-
-    /// The wheel held down **while a dictation is running** — throw it away.
-    /// Same verdict as the menu's Cancel Dictation, and the same verdict as
-    /// pressing Cancel on the panel a moment later, without waiting for the model
-    /// to transcribe something already known to be unwanted.
-    var onLocalCancel: (() -> Void)?
+    /// **Both gesture modes hand their words in here.** The side buttons were
+    /// converted first and the wheel followed the same afternoon, because a
+    /// gesture is the same gesture whichever device makes it: the wheel's click
+    /// *is* ⌘⌃D's `key-dictate`, its 2s hold *is* 🔼 ←, its double click *is*
+    /// 🔼 ↑, and its two chords *are* `forward-bind` and `back-down`. A second
+    /// set of callbacks reachable only with *Use Logi Gestures* off was a second
+    /// brain for one vocabulary — and, being the set nobody exercises, the one
+    /// that would drift away from the diagram unnoticed.
+    var onGesture: ((String) -> Void)?
 
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
@@ -743,53 +734,22 @@ final class HotkeyTap {
     /// event tap and a pid does not change identity.
     private var wisprPids: [pid_t: Bool] = [:]
 
-    /// The wheel clicked **with the left button already held** — point the relay
-    /// The wheel clicked **with the left button already held** — point the relay
-    /// at the window in front. Same call ⌘⌃B makes, including its toggle: made on
-    /// the terminal already bound, it lets go.
-    ///
-    /// Still returns whether anything was bound, and the return is now only
-    /// logged: the click is never handed back to the app underneath, because with
-    /// the left button down a replayed middle click would land in the middle of
-    /// whatever drag or selection that button is in.
-    var onGestureBind: (() -> Bool)?
-
-    /// **⬆️ — the forward button held, mouse moved up.** Dictate at a session
-    /// that does not exist yet: the folder menu opens and the words go to the
-    /// terminal it spawns.
-    ///
-    /// A gesture of its own again. From 2026-09-05 to 2026-09-09 the spawn was a
-    /// *conversion* — the wheel clicked twice, the second click turning the
-    /// dictation the first had started into a spawn — because the wheel had only
-    /// one press to spend and the hold on it had already failed. A direction has
-    /// no such shortage: there are four of them on this button, so the spawn gets
-    /// one and needs no first click to reinterpret.
-    var onGestureSpawn: (() -> Void)?
-
     // ── Only reachable with *Use Logi Gestures* off ─────────────────────────
     //
-    // The wheel's own vocabulary, kept whole. Every one of these is dead code
-    // while the flag is on, and that is the point: the old gesture set is a
-    // switch away rather than a `git revert` away.
+    // What is left of the wheel's own wiring. Its **vocabulary** is gone from
+    // here (2026-09-14): the click, the 2s hold, the double click and both chords
+    // all say the same words the side buttons say, through `onGesture`. What
+    // survives is the one thing that was never a gesture at all.
 
-    /// **The wheel pressed at rest, bound: start a dictation — and defer its
-    /// context shot to the release** (Victor, 2026-09-04). Distinct from
-    /// `onLocalToggle` because the bare wheel's press is only half a verdict:
-    /// a second click on its heels turns the dictation into a spawn, and the
-    /// picture is of the screen his finger left, not of the one it landed on.
-    /// The shot fires at the release instead, through `onWheelRelease`.
-    var onWheelDictate: (() -> Void)?
-    /// **The wheel clicked twice** — turn the dictation the first click started
-    /// into a spawn: same words being recorded, but the destination becomes a
-    /// session that does not exist yet, and the folder menu opens on the second
-    /// click. Victor's design, 2026-09-05, replacing the 2s wheel hold of the
-    /// day before, which never fired (see `spawnDoubleSeconds`).
-    var onWheelDoubleSpawn: (() -> Void)?
-    /// The same double click made **with nothing bound**, where there is no
-    /// dictation yet to convert: it opens one, already aimed at a new session.
-    var onWheelIdleDoubleSpawn: (() -> Void)?
-    /// The wheel came up after a press that started a dictation — the deferred
-    /// context shot's cue (`onWheelDictate`). Fires on no other release.
+    /// **The wheel came up after a press that started a dictation** — the cue for
+    /// the deferred context shot, and nothing else. It fires on no other release.
+    ///
+    /// It is not a gesture and must not become one: it says *when* to take the
+    /// frame, not what the hand meant. The bare wheel's press is only half a
+    /// verdict — a second click on its heels turns the dictation into a spawn —
+    /// so the picture is taken of the screen his finger left rather than the one
+    /// it landed on (Victor, 2026-09-04). This is the only place `deferContext`
+    /// is reachable.
     var onWheelRelease: (() -> Void)?
     /// **Mouse 5, twice quickly — bind, exactly as ⌘⌃B does.** The keyboard
     /// shortcut asks for both hands at the moment his pointing hand is already
@@ -804,23 +764,6 @@ final class HotkeyTap {
     /// is under `MicRecorder.minimumDuration` and is thrown away by the guard
     /// that already exists for a slipped click.
     var onMouse5Double: (() -> Void)?
-
-
-    /// The wheel clicked **with the right button already held** — let the
-    /// binding go. The same call the menu's `Disconnect` row makes, so the
-    /// gesture and the row cannot drift apart.
-    ///
-    /// **The mirror of the rebind chord, and deliberately shaped like it**: one
-    /// button held as a modifier, the wheel clicked on top, judged at the press.
-    /// Left points the relay somewhere; right takes it back. Nothing else in
-    /// this app has to be learned twice to know both.
-    ///
-    /// Why it needed a gesture at all: disconnecting was only ever in the menu,
-    /// which means going to the menu bar — the one place the hand on the mouse
-    /// is not. Every other thing the wheel does (bind, dictate, cancel, spawn)
-    /// is reachable without leaving the pointer, and the one that *ends* the
-    /// session was the exception.
-    var onGestureUnbind: (() -> Void)?
 
     /// Whether the frontmost app is one `bind` would take. Pushed from
     /// `AppDelegate` on every app switch rather than asked here: the answer needs
@@ -1267,16 +1210,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     // on 2026-09-09, and the two halves must not drift: change one here and the
     // gesture goes to whatever app claims that chord instead. They are written
     // down in CLAUDE.md under *The side buttons speak in function keys*.
-    private let VK_F3:  CGKeyCode = 0x63
-    private let VK_F4:  CGKeyCode = 0x76
-    private let VK_F5:  CGKeyCode = 0x60
-    private let VK_F6:  CGKeyCode = 0x61
-    private let VK_F7:  CGKeyCode = 0x62
-    private let VK_F8:  CGKeyCode = 0x64
-    private let VK_F9:  CGKeyCode = 0x65
-    private let VK_F10: CGKeyCode = 0x6D
-    private let VK_F11: CGKeyCode = 0x67
-    private let VK_F12: CGKeyCode = 0x6F
+    private static let VK_F3:  CGKeyCode = 0x63
+    private static let VK_F4:  CGKeyCode = 0x76
+    private static let VK_F5:  CGKeyCode = 0x60
+    private static let VK_F6:  CGKeyCode = 0x61
+    private static let VK_F7:  CGKeyCode = 0x62
+    private static let VK_F8:  CGKeyCode = 0x64
+    private static let VK_F9:  CGKeyCode = 0x65
+    private static let VK_F10: CGKeyCode = 0x6D
+    private static let VK_F11: CGKeyCode = 0x67
+    private static let VK_F12: CGKeyCode = 0x6F
     private let MOUSE_BUTTON_4: Int64 = 3   // 0-indexed "back" side button — LinearMouse types Return with it
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
     private let MOUSE_BUTTON_MIDDLE: Int64 = 2   // the wheel, pressed
@@ -1478,7 +1421,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     swallowMouse5Up = true
                     lastMouse5DownAt = 0
                     Log.info("🎙️ forward button — Replace Wispr")
-                    DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
+                    // **`forward-click`** — the caret dictation, which is what this
+                    // mode is: press to start, press to stop, and the words appear
+                    // where he is typing. The same word the F7 chord says with
+                    // nothing held, because it is the same button meaning the same
+                    // thing. `Idle --> AtCaret : 🔼 forward-click / openDictation`
+                    // and `Listening --> Settling : 🔼 forward-click /
+                    // stopDictation, aimAtCaret` live in `docs/gestures.puml`.
+                    fire("forward-click")
                     return nil
                 }
 
@@ -1621,6 +1571,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // reading, nothing to wait out, and the unbind burst goes off under
                 // the finger that ordered it.
                 //
+                // **The mirror of the rebind chord, and deliberately shaped like
+                // it**: one button held as a modifier, the wheel clicked on top,
+                // judged at the press. Left points the relay somewhere; right takes
+                // it back. Nothing else in this app has to be learned twice to know
+                // both. Why it needed a gesture at all: disconnecting was only ever
+                // in the menu, which means going to the menu bar — the one place the
+                // hand on the mouse is not. Every other thing the wheel does (bind,
+                // dictate, cancel, spawn) is reachable without leaving the pointer,
+                // and the one that *ends* the session was the exception.
+                //
                 // The press is swallowed either way — `wheelArmed` claims the
                 // release with it — so a right-held wheel click never falls through
                 // to the dictation branches below and never reaches the app
@@ -1636,7 +1596,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     wheelLeftChord = false
                     if bound {
                         Log.info("🔌 right held + wheel — disconnecting")
-                        DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }
+                        // **`back-down`, the same word 🔽 ↓ says** — the call the
+                        // menu's `Disconnect` row makes, so the gesture and the row
+                        // cannot drift apart. The gate is `bound` and deliberately
+                        // not `localCapture`: the flag that means *there is a
+                        // binding to let go of* must not be the one that means *the
+                        // wheel may open the microphone*. With nothing bound the
+                        // chord is simply inert — the press is swallowed either
+                        // way, so it never falls through to the branches below.
+                        // → `docs/gestures.puml`
+                        fire("back-down")
                     }
                     return nil
                 }
@@ -1690,7 +1659,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     wheelHold = nil
                     // A press that started a dictation takes its context shot
                     // **now**, at the release, per Victor 2026-09-04 (see
-                    // `onWheelDictate`).
+                    // `onWheelRelease`).
                     let contextAtRelease = wheelHeldFromPress
                     wheelHeldFromPress = false
                     guard tapped else {
@@ -1705,7 +1674,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     } else if localCapture || dictating {
                         Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
                                            : "🎙️ wheel tapped — starting a dictation")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                        // **`key-dictate` both ways round**, which is the whole
+                        // point of it being one word: a tap with no direction in it
+                        // is a toggle, and the diagram answers it with
+                        // `openDictation` from `Idle` and `stopDictation,
+                        // aimWhereAimed` from `Listening`. A dictation started with
+                        // the wheel can therefore be ended with ⌘⌃D or with the
+                        // forward button, and the other way round.
+                        // → `docs/gestures.puml`
+                        fire("key-dictate")
                     }
                     return nil
                 }
@@ -1723,12 +1700,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if button == MOUSE_BUTTON_MIDDLE && type == .otherMouseDown && bare && leftIsHeld {
                     wheelArmed = true    // the release is ours too
                     Log.info("🎯 left held + wheel — binding")
-                    // **Global, not main** — the same queue ⌘⌃B uses, and for the
-                    // reason it uses it: `bindFrontmostTerminal` asks the main thread
-                    // for the frontmost app with `main.sync`, so arriving there
-                    // already on main is a wait for a queue that is waiting for you.
-                    // libdispatch does not deadlock on that, it traps.
-                    DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
+                    // **`forward-bind`, the same word the F7 chord coins**, because
+                    // it is the same gesture: one button held as a modifier, the
+                    // wheel (or the forward click) on top of it. Same call ⌘⌃B
+                    // makes, **without** its toggle — letting go already has two
+                    // routes that mean nothing else, the right-held chord and the
+                    // menu's Disconnect, and a toggle is a trap on a gesture that
+                    // has them (2026-09-01). Whether anything was actually bound is
+                    // only ever logged: the click is never handed back to the app
+                    // underneath, because with the left button down a replayed
+                    // middle click would land in the middle of whatever drag or
+                    // selection that button is in.
+                    //
+                    // The hop to the main thread is `fire`'s, and the queue
+                    // discipline behind `bindFrontmost` is `GestureMachine`'s — the
+                    // tap's job ends at naming the gesture. → `docs/gestures.puml`
+                    fire("forward-bind")
 
                     // **…and keeping the wheel down starts the dictation.** The two
                     // halves of *point at that terminal and start talking to it* were
@@ -1754,7 +1741,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // holding must not be ended by this timer.
                         guard !self.dictating else { return }
                         Log.info("🎙️ left held + wheel held — bound, now dictating")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+                        // `key-dictate` again — the bind above already said where
+                        // the words go, so this half only has to open the
+                        // microphone. → `docs/gestures.puml`
+                        fire("key-dictate")
                     }
                     wheelHold = work
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordDictateSeconds, execute: work)
@@ -1812,7 +1802,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         wheelDown = false
                         wheelHeldFromPress = false
                         Log.info("🎙️✨ wheel double-clicked — this dictation opens a new Claude Code")
-                        DispatchQueue.global().async { [weak self] in self?.onWheelDoubleSpawn?() }
+                        // **The conversion is `forward-up`**, the same word ⬆️ says:
+                        // same words being recorded, but the destination becomes a
+                        // session that does not exist yet, and the folder menu opens
+                        // on this click. Victor's design, 2026-09-05, replacing the
+                        // 2s wheel hold of the day before, which never fired (see
+                        // `spawnDoubleSeconds`). `ToSpawn`, its chip and the re-aim
+                        // are `docs/gestures.puml`'s.
+                        fire("forward-up")
                         return nil
                     }
 
@@ -1847,7 +1844,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // so no chord and no cancel can be doubled into a spawn.
                         wheelDictateAt = CFAbsoluteTimeGetCurrent()
                         Log.info("🎙️ wheel pressed — starting a dictation")
-                        DispatchQueue.global().async { [weak self] in self?.onWheelDictate?() }
+                        // **The bare wheel at rest is `key-dictate`**, the same
+                        // word ⌘⌃D says, and for the same reason: a press with no
+                        // direction in it cannot name a destination, so the diagram
+                        // opens it and lets the gesture that *ends* the sentence
+                        // say where the words go. → `docs/gestures.puml`
+                        //
+                        // The deferred context shot is deliberately **not** part of
+                        // that word. It is a cue about *when* to take the frame —
+                        // the picture is of the screen his finger left, not the one
+                        // it landed on (Victor, 2026-09-04) — and it still rides
+                        // `onWheelRelease` at the release above, where the second
+                        // click of a double click has had its chance to re-aim.
+                        fire("key-dictate")
                         return nil
                     }
                     wheelHeldFromPress = false
@@ -1857,7 +1866,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // his finger must not have its cancel land on the next one.
                         guard let self = self, self.dictating, self.claimWheelPress() else { return }
                         Log.info("🗑️ wheel held while dictating — cancelling it")
-                        DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
+                        // **A cancel is a cancel whichever finger makes it** — the
+                        // same word 🔼 ← says. Same verdict as the menu's Cancel
+                        // Dictation, and the same as pressing Cancel on the panel a
+                        // moment later, without waiting for the model to transcribe
+                        // something already known to be unwanted. The two seconds
+                        // are this tap's, because a hold has to be told from a tap;
+                        // `Listening --> Idle / cancelDictation` is
+                        // `docs/gestures.puml`'s.
+                        fire("forward-left")
                     }
                     wheelHold = work
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelHoldSeconds, execute: work)
@@ -1904,7 +1921,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // the first having gone to the app underneath.
                         wheelHeldFromPress = true
                         Log.info("🎙️✨ wheel double-clicked at rest — dictating at a new Claude Code")
-                        DispatchQueue.global().async { [weak self] in self?.onWheelIdleDoubleSpawn?() }
+                        // **The same word ⬆️ on the forward button says**, because
+                        // it is the same gesture made with another finger: dictate
+                        // at a session that does not exist yet. That it brings its
+                        // own destination is why this branch may ignore the gate
+                        // the one above carries — and what the word then does,
+                        // `Idle --> ToSpawn : 🔼 forward-up / aimAtSpawn,
+                        // openDictation`, lives in `docs/gestures.puml`.
+                        fire("forward-up")
                         return nil
                     }
                     idleWheelClickAt = now
@@ -2180,9 +2204,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return nil
         }
 
-        // ⌘⌃D — **dictate**: the wheel's click, from the keyboard. Same call, so
-        // it is the same toggle, and a dictation started with the key can be
-        // ended with the wheel and the other way round.
+        // ⌘⌃D — **dictate**: the wheel's click, from the keyboard. The same
+        // word, `key-dictate`, so it is the same toggle, and a dictation started
+        // with the key can be ended with the wheel and the other way round.
+        // What that word *does* — open at the caret, or end the sentence
+        // wherever it was already aimed — is `docs/gestures.puml`'s business,
+        // not this tap's.
+        //
+        // It is a word of its own rather than `forward-click` because the
+        // keyboard has no direction to give: it cannot point at a terminal, so
+        // the diagram ends it with `aimWhereAimed` and the chip keeps the aim it
+        // was already showing.
         //
         // Not ⌘⌃⌥D — that one is Victor Addons' dark-mode toggle, and the two are
         // told apart by ⌥ alone. It shadows the system-wide ⌘⌃D "look up in
@@ -2197,7 +2229,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // open the microphone and close it again on the next repeat.
         if keyCode == VK_D && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+            fire("key-dictate")
             return nil
         }
 
@@ -2220,128 +2252,33 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // which is why that shape was picked — the tap can swallow them all
         // outright without shadowing anything.
         //
+        // **What each one MEANS is not here any more** (2026-09-14). It is in
+        // `docs/gestures.puml`, which `GestureMachine` executes. This branch
+        // does only what a tap can do and a diagram cannot: swallow the chord,
+        // refuse autorepeat, and turn *physics* into a word.
+        //
+        // The one piece of physics is F7. `leftIsHeld` asks the window server as
+        // well as our own bookkeeping, synchronously, before the swallow verdict
+        // — a clock and an I/O round trip that could not live in a guard without
+        // making the diagram unsimulatable. So the tap decides *which word* the
+        // gesture is (`forward-bind` against `forward-click`) and the diagram
+        // decides what the word does. → `.claude/rules/mouse-gestures.md`
+        //
         // **Autorepeat is swallowed on every one.** Options+ sends a single tap
         // per gesture, so a repeat can only be the key stuck down; acting on it
         // would bind twice, or open and close the microphone in a loop.
-        if useLogiGestures && ctrl && opt && cmd {
-            switch keyCode {
-            // ➡️ — the mouse moved right with the forward button held: start the
-            // dictation, or end the one already open. The same call ⌘⌃D makes,
-            // so a dictation started with the key ends with the gesture and the
-            // other way round. Where it goes is not this gesture's business: a
-            // bound terminal takes it, and Replace Wispr sends it to the caret.
-            case VK_F10:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                return nil
-
-            // ⬅️ — throw the running dictation away. Deliberately the mirror
-            // direction of the one that starts it: the two gestures that open
-            // and abandon a sentence are the same hand movement, reversed.
-            case VK_F11:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
-                return nil
-
-            // ⬆️ — dictate at a session that does not exist yet: the spawn, which
-            // used to be the wheel clicked twice. A gesture of its own again,
-            // rather than a conversion of a dictation already in flight, because
-            // there is no longer a first click to convert.
-            case VK_F8:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                DispatchQueue.global().async { [weak self] in self?.onGestureSpawn?() }
-                return nil
-
-            // ⬇️ on the **back** button — let the binding go. The same call the
-            // menu's Disconnect row makes, so the gesture and the row cannot
-            // drift apart.
-            case VK_F12:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }
-                return nil
-
-            // The forward button **clicked** — two readings, told apart by the
-            // left button.
-            //
-            // **⬅️ held, then the forward button: bind** (2026-09-09). It was
-            // 🔼 ↓ — the forward button held while the mouse moved down — and
-            // Victor replaced it with the chord for what the hand is already
-            // doing: *"it's more natural, click to focus the thing and then grab
-            // it"*. Pointing at a terminal starts with a click into it, so the
-            // button that says *this window* is already down when the gesture is
-            // made; a drag downwards says nothing about which window it means.
-            // It is the left-plus-wheel chord returning with the forward button
-            // where the wheel was, which is also why it is judged the same way —
-            // `leftIsHeld`, i.e. the button genuinely down and down for
-            // `chordHoldSeconds`, so a click that merely overlaps the gesture is
-            // not one. **No toggle**, like the chord it descends from: the
-            // ordinary reason to make it twice is not being sure the first one
-            // landed.
-            //
-            // With the left button up it is **a dictation at the caret — in
-            // both engines, whatever is bound** (2026-09-12). It used to be
-            // gated on Replace Wispr: ticked, this app's microphone at the
-            // caret; unticked, the raw Wispr chord — which opened a dictation
-            // the relay then routed *by state*, i.e. to the bound terminal.
-            // Victor, testing the wrap: *"apăsând butonul forward, click
-            // normal, el tot dictează legat de fereastră … butonul forward
-            // pornește dictare la caret (indiferent dacă e legat ceva)"*. So the
-            // click goes through `startDictation(paste:)` like every other
-            // gesture, and the source — Wispr posting its own chord, or the
-            // local microphone — is the source's business. The bind is **not**
-            // gated on anything either — it is the one gesture that says where
-            // words go. The chord is eaten in every branch.
-            case VK_F7:
+        if useLogiGestures && ctrl && opt && cmd,
+           var gesture = Self.gestureName(forKeyCode: keyCode) {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            if gesture == "forward-click" {
                 // Our own bookkeeping can go stale — a release this tap never
                 // saw would leave the button held for good and read every plain
                 // click as a bind.
                 reconcileButtons()
-                if leftIsHeld {
-                    if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                    Log.info("🎯 ⬅️ held + forward button — binding")
-                    DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
-                    return nil
-                }
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                Log.info("🎙️ forward button — a dictation at the caret")
-                DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
-                return nil
-
-            // 🔽 → — Wispr Flow's **raw** hands-free chord, in both modes since
-            // 2026-09-12. It was gated on Replace Wispr because with the tick
-            // off the forward click already posted this chord; the click is a
-            // caret dictation in every mode now, so this is the one gesture
-            // left that hands the sentence to Wispr and lets the relay route it
-            // by state. Same chord, same `postWisprHandsFree`.
-            case VK_F5:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                Log.info("🎙️ 🔽 → — Wispr Flow's hands-free toggle")
-                Self.postWisprHandsFree()
-                return nil
-
-            // The back button **clicked** — a picture while a dictation is
-            // running, and Return at every other moment.
-            //
-            // **The Return is posted here now, and that is new.** The button used
-            // to type it itself: LinearMouse, then Victor Addons' `BackButtonEnter`,
-            // remapped it upstream of this tap, and the tap's only job was to
-            // *withhold* that Return mid-dictation and take the shot instead.
-            // Options+ owns the button now, so nothing upstream types anything —
-            // if this branch does not post the Return, the key Victor submits with
-            // all day simply stops existing.
-            case VK_F6:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                if dictating {
-                    let cursor = NSEvent.mouseLocation
-                    DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
-                } else {
-                    Self.postReturn()
-                }
-                return nil
-
-            default:
-                break
+                if leftIsHeld { gesture = "forward-bind" }
             }
+            fire(gesture)
+            return nil
         }
 
         guard ctrl && opt && !cmd else {
@@ -2959,21 +2896,49 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// The three free rows are listed too. Options+ sends them and nothing here
     /// claims them, so posting one must visibly do nothing — which is a fact
     /// worth being able to assert rather than assume.
-    var gestureNames: [String] {
+    var gestureNames: [String] { Self.gestureNames }
+
+    static var gestureNames: [String] {
         gestureVocabulary.map { $0.name }
     }
 
-    private var gestureVocabulary: [(name: String, key: CGKeyCode, label: String, what: String)] {
-        [("forward-click", VK_F7,  "⌃⌥⌘F7",  "dictate at the caret — or bind, with the left button held"),
-         ("forward-right", VK_F10, "⌃⌥⌘F10", "start the dictation, or end the one open"),
-         ("forward-left",  VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
-         ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
-         ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "free row — assigned in Options+, unclaimed here"),
-         ("back-click",    VK_F6,  "⌃⌥⌘F6",  "a picture while dictating, Return otherwise"),
-         ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
-         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Wispr Flow's raw hands-free chord"),
-         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "free row — assigned in Options+, unclaimed here"),
-         ("back-up",       VK_F4,  "⌃⌥⌘F4",  "free row — assigned in Options+, unclaimed here")]
+    /// **Every word the diagram may use as a bare trigger.** The ten Options+
+    /// makes, plus the two this tap coins itself out of physics it can see and a
+    /// guard could not: `forward-bind` (F7 with the left button genuinely held)
+    /// and `key-dictate` (⌘⌃D, which has no direction to give).
+    ///
+    /// `evals/test_gesture_glyphs.py` asserts `docs/gestures.puml` uses nothing
+    /// outside this set, so the diagram cannot name a gesture the mouse cannot
+    /// make — the one half of the Options+ drift that is closable from code.
+    static var triggerNames: [String] { gestureNames + ["forward-bind", "key-dictate"] }
+
+    /// **Hand the word to the machine, on the main thread.**
+    ///
+    /// `GestureMachine` is main-only for the same reason every `DictationSource`
+    /// callback is: what it drives is AppKit. The hop costs nothing the tap can
+    /// feel — the swallow verdict is already returned by the time this lands, and
+    /// the one gesture with a latency budget (`back-click`'s Return) waits
+    /// `settleForOptionsPlus` = 45 ms on a serial queue afterwards regardless.
+    private func fire(_ gesture: String) {
+        DispatchQueue.main.async { [weak self] in self?.onGesture?(gesture) }
+    }
+
+    /// The keycode Options+ sent, as the word the diagram knows it by.
+    static func gestureName(forKeyCode key: CGKeyCode) -> String? {
+        gestureVocabulary.first { $0.key == key }?.name
+    }
+
+    private static var gestureVocabulary: [(name: String, key: CGKeyCode, label: String, what: String)] {
+        [("forward-click", Self.VK_F7,  "⌃⌥⌘F7",  "dictate at the caret — or bind, with the left button held"),
+         ("forward-right", Self.VK_F10, "⌃⌥⌘F10", "start the dictation, or end the one open"),
+         ("forward-left",  Self.VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
+         ("forward-up",    Self.VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
+         ("forward-down",  Self.VK_F9,  "⌃⌥⌘F9",  "free row — assigned in Options+, unclaimed here"),
+         ("back-click",    Self.VK_F6,  "⌃⌥⌘F6",  "a picture while dictating, Return otherwise"),
+         ("back-down",     Self.VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
+         ("back-right",    Self.VK_F5,  "⌃⌥⌘F5",  "Wispr Flow's raw hands-free chord"),
+         ("back-left",     Self.VK_F3,  "⌃⌥⌘F3",  "free row — assigned in Options+, unclaimed here"),
+         ("back-up",       Self.VK_F4,  "⌃⌥⌘F4",  "free row — assigned in Options+, unclaimed here")]
     }
 
     /// **Make a mouse gesture without a mouse** — `POST /test/gesture`.
@@ -3009,7 +2974,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// - Returns: the chord that went out, or nil for a name nobody knows.
     @discardableResult
     func postGesture(_ name: String) -> (label: String, what: String)? {
-        guard let g = gestureVocabulary.first(where: { $0.name == name }) else { return nil }
+        guard let g = Self.gestureVocabulary.first(where: { $0.name == name }) else { return nil }
         DispatchQueue.global().async {
             // The same settle `postReturn` documents at length. Nothing here is
             // posted from inside a tap callback, so the window server has no

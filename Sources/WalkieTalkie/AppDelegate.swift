@@ -446,6 +446,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the `Message` beside `spawn` itself and clears it, for that flag's reason
     /// — the panel holds a prompt for seconds, and the next dictation may have
     /// started by the time this one is delivered.
+    /// **The gesture machine, executing `docs/gestures.puml`.**
+    ///
+    /// `nil` is Safe Mode: the diagram could not be loaded, every side-button
+    /// chord is still swallowed (nothing else claims ⌃⌥⌘F-keys) and does nothing,
+    /// and the overlay says so. Deliberately **not** a fall-back to the old
+    /// imperative branch — a second brain that only wakes up when the first one
+    /// is ill is the drift this whole change exists to remove. ⌘⌃B, ⌘⌃D and ⌘⌃P
+    /// stay outside the machine, which is the way back from a bad edit.
+    var machine: GestureMachine?
+
+    /// Where the sentence will go when it ends. Set by the gesture that opens it
+    /// and re-set by the one that ends it, so `startDictation` can read an aim
+    /// decided a moment before the microphone existed.
+    var pendingAim: GestureAim = .caret
+
     private var spawnFolder: String?
 
     /// **Replace Wispr — the relay as a way to type, not a way to talk to an
@@ -883,6 +898,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let resolved = ShotMarker.resolve(text: text, available: available)
             return ["text": resolved.text, "found": resolved.found]
         }
+        // The gesture machine's unit test, over the loopback. The same simulator
+        // `./.build/debug/WalkieTalkie --simulate-gestures` runs from a shell,
+        // which is what `evals/` uses — this one is for asserting against a relay
+        // that is already up.
+        picker.onTestGestureMachineSimulate = { body in
+            GestureMachineSimulation.run(body)
+        }
         picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
         // Wispr's Scratchpad note, read — see `WisprNotes`. Read-only and wired
         // to no gesture: the Scratchpad is the candidate wrap (it inserts
@@ -957,35 +979,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onCloseScratchpad = {
             WisprScratchpad.ensureClosed(reason: "the menu's Close Wispr Scratchpad")
         }
-        // **On main, like the toggle two lines down.** It was not, and the
-        // asymmetry is the whole bug: the tap dispatches globally, so cancelling
-        // reached `RelayWindow.layoutContent` → `NSWindow.setFrame` on
-        // `com.apple.root.default-qos` and AppKit trapped. Crash log
-        // 2026-08-29 11:04:40, EXC_BREAKPOINT, one frame under
-        // `cancelLocalRecording`.
-        // **⬅️ — the forward button held and the mouse flicked left** (and the
-        // wheel held, with Logi gestures off) — and since 2026-09-12 it throws a
-        // **Wispr Flow** dictation away too, through the same one call the ✕ and
-        // the menu row make. Victor's ask: the gesture that abandons a sentence
-        // must not depend on which app happens to be hearing it. Local behaviour
-        // is untouched — `cancelDictationInFlight` tries `localRecording` first.
-        hotkeys.onLocalCancel = { [weak self] in
-            DispatchQueue.main.async {
-                _ = self?.cancelDictationInFlight(reason: "⬅️ forward button flicked left")
-            }
-        }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
         // source that decides what a gesture on the wire means, and it takes the
         // callback in its own initialiser.
-        // ⬆️ held, mouse moved down. **No toggle**, exactly as the left-plus-wheel
-        // chord it replaces: the gesture is made while pointing at the terminal he
-        // means, and making it twice means "again", never "let go".
-        hotkeys.onGestureBind = { [weak self] in self?.bindFrontmostTerminal(toggle: false) != nil }
-        // ⬇️ held on the **back** button, mouse moved down. **The same call the
-        // menu's Disconnect row makes**, so the gesture cannot end up meaning
-        // something subtly other than the row that documents it — including the
-        // chip's burst, which is the only thing on screen that says it happened.
-        hotkeys.onGestureUnbind = { [weak self] in self?.unbindTerminal() }
         // The menu's copy of the spawn chord. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
@@ -1035,73 +1031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Main, because it touches the overlay's own state; and `async`, because
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
-        hotkeys.onLocalToggle = { [weak self] in
-            DispatchQueue.main.async { self?.toggleDictation() }
-        }
-        // ⬆️ held, mouse moved up — **dictate at a session that does not exist
-        // yet.** A gesture of its own, where from 2026-09-05 it was the wheel
-        // clicked twice converting a dictation already in flight: the wheel had
-        // one press to spend and no working hold, so the second click was the
-        // only spare gesture on it. This button has four directions, so the spawn
-        // gets one outright and needs nothing to reinterpret.
-        //
-        // The context shot is taken at the press like every other dictation's.
-        // `deferContext` went with the wheel: it existed because the wheel's
-        // *release* was the moment the picture wanted — the screen his finger had
-        // left, before a second click could land — and a gesture that ends with
-        // the mouse already moved has no such moment.
-        hotkeys.onGestureSpawn = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                guard !self.listening, !self.recordWhenSourceReady else { return }
-                self.startDictation(spawn: true)
-            }
-        }
-        // ── Only reachable with *Use Logi Gestures* off ─────────────────────
-        // **The bare wheel at rest** — distinct from the toggle above because its
-        // press is only half a verdict: a second click on its heels turns the
-        // dictation into a spawn, so the context shot waits for the release
-        // (`onWheelRelease`) and pictures the screen his finger left.
-        hotkeys.onWheelDictate = { [weak self] in
-            DispatchQueue.main.async { self?.startDictation(deferContext: true) }
-        }
-        // **The wheel clicked a second time: convert the dictation to a spawn.**
-        // Same recording, same words — only the destination changes: the terminal
-        // it opens in does not exist yet, so the folder menu is offered exactly
-        // as at a fresh spawn press.
-        // **The same double click made at rest** — nothing bound, no dictation
-        // to convert, so this one *opens* one that is a spawn from its first
-        // sample. `startLocalRecording(spawn:)` is the whole implementation:
-        // `spawnPending` is set before the `hasDestination` gate is read, which
-        // is exactly how a spawn is allowed through the gate a bare dictation is
-        // not — see its doc comment. `deferContext` is on for the same reason it
-        // is on the bare wheel: the picture wanted is the screen his finger
-        // *left*, so the second click's release is what asks for it.
-        hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                guard !self.listening, !self.recordWhenSourceReady else { return }
-                self.startDictation(spawn: true, deferContext: true)
-            }
-        }
-        hotkeys.onWheelDoubleSpawn = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                // **`recordWhenModelReady` counts as a dictation.** On a cold
-                // model the first click has not opened the microphone yet — it
-                // banked the gesture and is waiting on the weights — and the
-                // second click lands half a second later, long before that. The
-                // resumed start reads `spawnPending`, so setting it here is
-                // exactly how the conversion survives the wait.
-                guard self.listening || self.recordWhenSourceReady else { return }
-                guard !self.spawnPending, !self.pasteMode else { return }
-                self.spawnPending = true
-                self.spawnFolder = nil
-                self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
-                self.offerSpawnFolders()
-            }
-        }
-        // The deferred context shot's cue — see `onWheelDictate`.
+        // The deferred context shot's cue — see `HotkeyTap.onWheelRelease`.
         hotkeys.onWheelRelease = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self, self.contextAtWheelRelease else { return }
@@ -1109,42 +1039,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Ended under the finger (menu, ⌘⌃D) — no sentence, no picture.
                 guard self.listening else { return }
                 self.captureContext()
-            }
-        }
-        // The forward side button **clicked** — a dictation at the caret, in
-        // every mode and whatever is bound (2026-09-12). Shaped exactly like a
-        // spawn dictation, and ending the same way: whichever gesture opened
-        // the microphone, closing it is closing it, and the destination was
-        // decided at the press.
-        //
-        // **The bind grace is gone from here.** For three days the click made
-        // within five seconds of a bind went to the terminal instead, on the
-        // argument that a bind is him naming a precise destination and the
-        // caret is the vaguest one. Victor's vocabulary, restated 2026-09-12:
-        // *"butonul forward pornește dictare la caret (indiferent dacă e legat
-        // ceva); forward + right move: dictare legată"*. The two gestures are
-        // the two destinations, and a click that sometimes means the other one
-        // is a click he cannot trust. `takeBindGrace` still serves the
-        // left-held chord's own dictation.
-        // **And it asks about the settle, not only about `listening`** —
-        // 2026-09-13's second failure in one line. The first click stopped the
-        // microphone; the closing edge came three seconds late; a second click
-        // landed inside the settle, where this asked only `listening`, and
-        // started a **phantom dictation** whose `gestureSeen` disarmed the first
-        // sentence's swallow window. Wispr's ⌘V arrived a second later and landed
-        // in the Terminal that happened to be in front, and the chip spent twelve
-        // seconds on a dictation that did not exist.
-        //
-        // A click while the words are in flight is him ending a sentence he has
-        // already ended. It is a stop, or it is nothing; it is never a start.
-        hotkeys.onPasteToggle = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                if self.listening || self.source.isRecording { self.endDictation() }
-                else if self.settling || self.source.phase.isWaitingForWords {
-                    Log.info("🔼 forward click while the words are still in flight — nothing to start, nothing to stop")
-                }
-                else { self.startDictation(paste: true) }
             }
         }
         picker.onPick = { [weak self] pick in self?.record(pick) }
@@ -1423,6 +1317,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return out
         }
 
+        // **The diagram is read before the tap is started**, so the first chord
+        // of the day cannot reach a machine that does not exist yet. It is the
+        // only ordering constraint between the two: the tap names gestures, the
+        // machine is what a name means.
+        wireGestureMachine()
+
         let trusted = AXIsProcessTrusted()
         let tapped = hotkeys.start()
         Log.info("accessibility trusted=\(trusted) eventTap=\(tapped)")
@@ -1526,6 +1426,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - The gesture machine
+
+    /// **Load `docs/gestures.puml` and hand it the words the tap makes.**
+    ///
+    /// This method is the whole of the wiring, and it is deliberately short:
+    /// `HotkeyTap` turns a button and a flick into a *name*, the machine decides
+    /// what the name means, and `GestureActions` turns the diagram's own words
+    /// back into calls on the `GestureWorld` at the bottom of this file. There is
+    /// no second copy of the transition table anywhere in `Sources/` — see
+    /// `.claude/rules/gesture-machine.md`.
+    ///
+    /// ## Safe Mode — when the file will not load
+    ///
+    /// `machine` stays **nil**, and that is a mode rather than an accident.
+    /// `onGesture` is wired either way, so every ⌃⌥⌘F-key chord Options+ sends is
+    /// still **swallowed** — nothing else on this Mac claims them, and letting
+    /// them through would type F-keys into whatever he is working in — and every
+    /// one of them then does **nothing**. The overlay says so for twenty seconds,
+    /// because a vocabulary that has quietly stopped answering is the one failure
+    /// a gesture layer cannot afford: he would read it as the mouse being broken.
+    ///
+    /// **⌘⌃B, ⌘⌃D and ⌘⌃P stay outside the machine**, which is the way back from
+    /// a bad edit: bind, dictate and paste go on working with no diagram at all,
+    /// so a typo at four in the afternoon costs the mouse and not the afternoon.
+    ///
+    /// It is **not** a fall-back to the old imperative path, and must never become
+    /// one. A second brain that wakes only when the first is ill is exactly the
+    /// drift this change removes — being the copy nobody exercises, it would be
+    /// the copy that is wrong on the day it is finally needed.
+    ///
+    /// A third case sits between the two and is said out loud as well: the file on
+    /// disk did not parse and the **last-known-good** copy did. The vocabulary
+    /// works, but it is not the one in the repo, and `GET
+    /// /test/state.gestureMachine.diagram.origin` says so for anything asserting
+    /// against it.
+    private func wireGestureMachine() {
+        // Wired before anything can fail below: in Safe Mode the chords must still
+        // arrive here and die here, rather than being let through to the app
+        // underneath. `HotkeyTap.fire` already hopped to main — `GestureMachine` is
+        // main-only, like every `DictationSource` callback, because what it drives
+        // is AppKit.
+        hotkeys.onGesture = { [weak self] name in self?.machine?.fire(name) }
+        guard let loaded = GestureDiagramFile.loadDiagram() else {
+            Log.error("🖱️ gestures.puml was not found in the bundle, beside the executable or in the last-known-good copy — Safe Mode: the chords are swallowed and do nothing")
+            overlay.flash("⚠️ gestures are off — gestures.puml did not load", duration: 20)
+            return
+        }
+        do {
+            let machine = try GestureMachine(diagram: loaded.diagram, world: self,
+                                             origin: loaded.origin)
+            // **Nothing hooked, on purpose.** `GestureMachine` already writes one
+            // line per transition into `relay.log`, and a second observer logging
+            // the same step beside it is how a log stops being read. The hook is
+            // there for the shadow harness, which is not this.
+            machine.onStep = nil
+            self.machine = machine
+        } catch {
+            // The `Unresolved` throw, overwhelmingly: a name in the diagram that
+            // nothing in `GestureActions` answers. It carries every missing name
+            // rather than the first, because a rename breaks several at once.
+            Log.error("🖱️ \(error) — Safe Mode: the chords are swallowed and do nothing")
+            overlay.flash("⚠️ gestures are off — gestures.puml did not load", duration: 20)
+            return
+        }
+        if let problem = loaded.problem {
+            // It runs, and it is not what is on disk. Twenty seconds, like the two
+            // refusals above: this is the case that would otherwise pass for
+            // success and be discovered by a gesture behaving as it did yesterday.
+            Log.error("🖱️ running the last good gestures.puml — \(problem)")
+            overlay.flash("⚠️ running the last good gestures.puml — \(problem)", duration: 20)
+        }
+        Log.info("🖱️ gestures: \(loaded.diagram.order.count) states, \(loaded.diagram.transitions.count) transitions, from \(loaded.origin)")
+    }
+
     // MARK: - The dictation source
 
     /// **Wire whichever recogniser is live into the one lifecycle below.**
@@ -1627,6 +1601,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setListening(true)
         publishShotCount()
         publishPicks()
+        // **The world answering the diagram.** The machine reached `Listening` on
+        // the *gesture*, seconds earlier and possibly before any microphone
+        // existed; this is the microphone agreeing, and it is fired last because
+        // an event is a report about work already done. `Listening`'s own
+        // `@micOpened` is internal, so nothing here is re-entered.
+        machine?.fire("@micOpened")
     }
 
     /// Open the sentence without taking a picture of it: `dictationInFlight` is
@@ -1671,6 +1651,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // does. `Transcribing...` beside the cursor is the same claim the ring
         // used to make by standing, minus the lie that a microphone is open.
         overlay.setTranscribing(true)
+        // The close, reported after the fact like `@micOpened` above. The gesture
+        // that ended the sentence has usually taken the machine to `Settling`
+        // already — `endDictation` reaches `source.stop()`, which for the local
+        // recogniser raises this **synchronously** inside the transition's own
+        // action list — so the machine queues it and `Settling` refuses it with a
+        // line in the log. That is the honest answer: the close was expected and
+        // there is nothing left for it to change.
+        machine?.fire("@micConfirmedShut")
     }
 
     /// Where this sentence is going, decided at the close and read when the words
@@ -1788,6 +1776,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
             pasteText(line, to: result.focusPid)
+            // **The one delivery that never reaches `commit`**, and therefore the
+            // one the machine would otherwise never hear about: a caret sentence
+            // writes no outbox line, opens no panel and asks nobody anything. Left
+            // out, `Settling` would stand for ever on every caret dictation, which
+            // is most of them.
+            machine?.fire("@delivered")
             return
         }
         send(kind: "dictation", text: result.text, app: app)
@@ -1795,6 +1789,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The session is over, whichever way it ended.
     private func dictationEnded(_ end: DictationEnd) {
+        // **Which giving-up this is depends on whether a microphone ever opened**,
+        // and that has to be read before the flag below is cleared. A ring that
+        // was speculative and never confirmed means the recogniser ignored the
+        // chord: the machine is still in `Listening`, nothing was ever said, and
+        // `@sourceGaveUp` is the arrow out of it. A sentence that really was
+        // spoken and came back empty is the *settle* giving up, and the machine is
+        // in `Settling`. Two states, two events; firing the wrong one leaves the
+        // machine somewhere reality is not.
+        //
+        // Written `!listening && speculative` rather than the other way round on
+        // purpose: `speculative && !listening` is one of the three clauses
+        // `evals/test_gesture_no_second_brain.py` refuses, because that shape is
+        // how the *destination* used to be re-derived by hand. This is a different
+        // question asked of the same two flags — *did a microphone ever open*, not
+        // *where do the words go* — and the order is what says so.
+        let neverOpened = !listening && speculative
         // **A guess that was never confirmed ends here too.** The source drops a
         // speculative ring 1.5 s after a chord no microphone followed, and the
         // flag it raised lives on this side of the protocol.
@@ -1803,11 +1813,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .delivered:
             break
         case .silent(let why):
-            endSettling(reason: why.isEmpty ? "nothing was recorded" : why)
+            endSettling(reason: why.isEmpty ? "nothing was recorded" : why,
+                        gaveUp: !neverOpened)
             if !why.isEmpty { overlay.flash(why, duration: 8) }
             overlay.setTranscribing(false)
             clearSpawn()
             abandonDictation("the source returned nothing")
+            // After all of it, like every other event: `Listening --> Idle :
+            // @sourceGaveUp / warnSourceSilent`.
+            if neverOpened { machine?.fire("@sourceGaveUp") }
         case .cancelled(let audio, let duration):
             endSettling(reason: "cancelled", quiet: true)
             if let audio { keepCancelled(wav: audio, duration: duration) }
@@ -1863,7 +1877,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 waited))
                 return self.armSettleGiveUp()
             }
-            self.endSettling(reason: "timed out waiting for the text")
+            self.endSettling(reason: "timed out waiting for the text", gaveUp: true)
         }
         settleGiveUp = giveUp
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleTimeout, execute: giveUp)
@@ -1872,7 +1886,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The words landed, or gave up, or a new dictation overtook this one.
     /// Says which, and how long after the microphone closed — the one line that
     /// makes *"the ring went away too early"* answerable from the file.
-    private func endSettling(reason: String, quiet: Bool = false) {
+    ///
+    /// - Parameter gaveUp: **the settle ended with no words**, which is a
+    ///   different fact from the settle ending. Every other call here is a
+    ///   landing (`routed to …`, `pasting at the caret`) or a quiet overtake, and
+    ///   the diagram distinguishes them: `@settleGaveUp` is what takes `Settling`
+    ///   back to `Idle` when nothing came, while a landing leaves through
+    ///   `@delivered` from `commit`. It is a parameter rather than a match on
+    ///   `reason` because a log string is not an interface — the day somebody
+    ///   rewords it, a string test would silently stop firing and the machine
+    ///   would sit in `Settling` for ever.
+    private func endSettling(reason: String, quiet: Bool = false, gaveUp: Bool = false) {
         guard settling else { return }
         settling = false
         settlingAtCaret = false
@@ -1892,6 +1916,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             reason, (CFAbsoluteTimeGetCurrent() - settlingFrom) * 1000))
         }
         syncBorrowedGestures()
+        // After the work, and only for the giving-up: `Settling --> Idle :
+        // @settleGaveUp / sayNoWords`. The note is log-only on purpose — the
+        // source has already flashed its own reason through `DictationEnd
+        // .silent(why)`, and a second banner over it would say less, not more.
+        if gaveUp { machine?.fire("@settleGaveUp") }
     }
 
 
@@ -2084,6 +2113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.overlay.setSpawnDestination(choice.name, mark: "✨",
                                              icon: Self.appIcon("com.apple.Terminal", height: 18))
             Log.info("✨ spawn folder chosen — \(choice.path)")
+            // `ToSpawn : @spawnFolderChosen / nameSpawnFolder` — internal, so the
+            // sentence is not disturbed: he picked a folder, not an ending.
+            self.machine?.fire("@spawnFolderChosen")
         }
     }
 
@@ -2643,9 +2675,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // no way to tell which he was looking at. The ring goes down on the
         // relay's own stop gesture — `WisprFlowSource.closeListening` — rather
         // than on a CoreAudio edge measured at 0–6 s late and sometimes absent.
-        let atCaret = pasteMode
-            || (speculative && !listening)
-            || (listening && !isBound && !spawnPending)
+        // **The destination is a state now, not an expression** (2026-09-14).
+        // Three of the four clauses this used to carry — `pasteMode`,
+        // `speculative && !listening`, and `listening && !isBound &&
+        // !spawnPending` — were one question asked three ways: *is this sentence
+        // pointed at the caret*. The machine answers it, and answers it from the
+        // **gesture** onwards rather than from the microphone, which is what the
+        // middle clause was there to paper over.
+        //
+        // The fourth is still its own fact and stays: once the microphone has
+        // closed, the aim is latched on the sentence and the machine has moved on
+        // to `Settling`, which deliberately does not carry a destination.
+        //
+        // `pasteMode` is the fallback for Safe Mode, where there is no machine —
+        // the gestures are dead there anyway, but the ring should not start
+        // lying about where a dictation from the menu is pointed.
+        // → `.claude/rules/gesture-machine.md`
+        let atCaret = (machine.map { $0.isIn("AtCaret") } ?? pasteMode)
             || (settling && settlingAtCaret)
         caretHalo.setActive(listening || speculative,
                             atCaret: atCaret,
@@ -2662,7 +2708,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictation: in all of them he is speaking into this app's microphone
         // with a track playing over it, which is the one thing the pause exists
         // to stop. Same switch as the ring, and for the same reason.
-        music.setActive(listening)
+        //
+        // **It is not done here any more** (2026-09-14). The line moved to
+        // `Listening`'s `entry / pauseMusic` and `exit / resumeMusic` in
+        // `docs/gestures.puml`, and the reason is the distinction that file is
+        // built on: the music pause is a genuine **edge** — `MusicBridge` is told
+        // once when the microphone opens and once when it shuts — while the ring,
+        // the borrowed gestures and the chip are **functions of the state**,
+        // re-derived by this reconciler after every transition. An effect fired at
+        // an instant belongs on a transition; an effect that is a function of the
+        // state belongs here. Reconciling an edge on every pass is how it ends up
+        // being sent twice, and putting the ring on an arrow is how it ends up
+        // missing from a path nobody drew.
         // **The watcher runs in Replace Wispr too, since 2026-09-09.** It was
         // `live && !pasteMode`, on the argument that `caretLine` carried no
         // highlight at all so a watcher there would gather text nothing would
@@ -2976,6 +3033,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setBound(label: nil)
             status.setDestination(nil, icon: nil)
             publishBinding(nil)
+            // **The binding went** — `unbindTerminal`, `/unbind`, and a target
+            // found gone at delivery all arrive here, which is why the event is
+            // fired from this branch rather than from each of them. A sentence
+            // aimed at that terminal is re-aimed at the caret by the diagram
+            // (`ToBound --> AtCaret : @unbound / aimAtCaret`); at rest it is one
+            // line in the log.
+            machine?.fire("@unbound")
             return
         }
         // A target with no readable directory (a blind-paste app) says its own
@@ -3068,6 +3132,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if awaitingBind != nil {
             DispatchQueue.main.async { [weak self] in self?.releaseAwaitingBind() }
         }
+        // **A binding was taken**, and `deliberate` is the whole of what that
+        // means here: every route into a binding somebody *asked for* passes
+        // through this method with it true, and the one caller that does not is
+        // `refreshBoundTitle`, the overlay's 10 s tick calling back with the
+        // binding that was already there. That distinction is load-bearing for the
+        // machine exactly as it is for the two take-backs above — *"a deliberate
+        // bind mid-sentence redirects the words; the 10 s poll never may"* — and a
+        // poll firing `@bindArrived` would re-aim a caret sentence at a terminal
+        // every ten seconds without him touching anything.
+        if deliberate { machine?.fire("@bindArrived") }
     }
 
     /// Write the marker the status line reads — see `Outbox.publishBound`.
@@ -3193,6 +3267,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["phaseStatus"] = source.phase.status
         out["wispr"] = wisprSource.state.snapshot()
         out["historyRoute"] = wisprSource.historyIsTheRoute
+        // **What the mouse means right now**, and where the vocabulary was read
+        // from. `off` is Safe Mode — the diagram did not load, the chords are
+        // swallowed and do nothing — and it is a state like any other here so an
+        // assertion does not have to tell *absent* from *broken*.
+        out["gestureMachine"] = machine?.snapshot() ?? ["state": "off"]
         out["lastRingDown"] = RingDown.last ?? NSNull()
         out["lastSettled"] = RingDown.lastSettled ?? NSNull()
         deliveryLock.lock()
@@ -5316,6 +5395,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     },
                     app: m.app, elements: m.elements.map { $0.json(since: m.startedAt) },
                     line: line, delivery: delivery)
+        // **Here, because this is the line past which the sentence has somewhere
+        // to be.** All three exits below — the outbox on its own, the spawn, the
+        // bound terminal — go through it, and the hold is the one path that does
+        // not reach here at all (it returned above, with `@held`). The machine
+        // does not deliver and is told afterwards: `commit` says which way it went
+        // and `Settling --> Idle : @delivered` follows. Firing it from a
+        // transition as well would send the sentence twice.
+        machine?.fire("@delivered")
         guard m.kind != "session_end" else { return }
         guard !m.spawn else { return spawnClaude(m) }
         deliverToTerminal(m)
@@ -5363,10 +5450,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Said out loud, because the alternative is a sentence he believes
             // is still going to arrive somewhere. ⌘⌃P is the way back to it.
             self.overlay.flash("⏳ held dictation expired — ⌘⌃P to paste it", duration: 4)
+            // `HeldForBind --> Idle : @holdExpired / warnHoldExpired`. The flash
+            // above is the same sentence the diagram's own action would say, and
+            // it is said here rather than left to the machine because it must
+            // happen in Safe Mode too — a held sentence that expires silently is
+            // one he goes on believing is on its way.
+            self.machine?.fire("@holdExpired")
         }
         awaitingBindExpiry = expiry
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
         overlay.flash("⏳ held — bind a terminal to send it", duration: 3)
+        // `Settling --> HeldForBind : @held` — the one state only the world can
+        // put the machine into. No gesture reaches it, because 🔼 → with nothing
+        // bound refuses to end the sentence rather than ending one with nowhere
+        // to go.
+        machine?.fire("@held")
     }
 
     /// Called from `showBound`, which is the one place every route into a
@@ -5390,6 +5488,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // first half of what a delivery is.
         commit(m)
         overlay.flash("🎙️ sent — the sentence you were holding", duration: 3)
+        // **Almost always already fired**, by the `commit` two lines up — which is
+        // exactly what the diagram says beside `HeldForBind --> Idle`: the bind
+        // delivers the held sentence and says so the same way `commit` does. It is
+        // asked again here for the paths where `commit` cannot answer (a target
+        // that went away between the bind and the delivery), and asked *only* from
+        // `HeldForBind`, because a second `@delivered` into `Idle` is a refusal
+        // line in the log for a delivery that worked perfectly.
+        if machine?.isIn("HeldForBind") == true { machine?.fire("@delivered") }
     }
 
     /// **⌘⌃P — the last dictation, again, wherever the caret is.**
@@ -5578,3 +5684,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+
+// MARK: - The gesture machine's world
+
+/// **What `docs/gestures.puml` is allowed to command.**
+///
+/// The conformance lives in this file rather than beside `GestureActions.swift`
+/// because everything it reaches is `private` to `AppDelegate` — and keeping it
+/// private is the point: the protocol is the list of what a mouse gesture can
+/// ask for, and a shorter list is a better answer.
+///
+/// Nothing here names a recogniser. `openDictation` asks `source`, which is a
+/// `DictationSource`; which engine hears it is the `Engine` menu row's business.
+/// → `.claude/rules/dictation-source.md`, *One interface*
+extension AppDelegate: GestureWorld {
+
+    // MARK: What a guard may ask
+
+    var bound: Bool { isBound }
+
+    // MARK: Opening and closing
+
+    func openDictation() {
+        startDictation(spawn: pendingAim == .spawn, paste: pendingAim == .caret)
+    }
+
+    func stopDictation() { endDictation() }
+
+    func cancelDictation() {
+        _ = cancelDictationInFlight(reason: "⬅️ forward button flicked left")
+    }
+
+    // MARK: Where the words go
+    //
+    // **Before the microphone, and before the stop.** `startDictation` reads the
+    // aim to decide what it is opening, and `endDictation` reaches `source.stop()`
+    // — which for the local recogniser can raise `didStopListening`
+    // *synchronously*, latching the destination inside the call. So the diagram
+    // writes `aimAtCaret, stopDictation` and never the other way round; the
+    // ordering is visible on the arrow rather than remembered.
+
+    func aimAtCaret() {
+        pendingAim = .caret
+        guard listening else { return }
+        pasteMode = true
+        if spawnPending { clearSpawn() }
+    }
+
+    func aimAtBound() {
+        pendingAim = .bound
+        guard listening else { return }
+        pasteMode = false
+        if spawnPending { clearSpawn() }
+    }
+
+    func aimAtSpawn() {
+        pendingAim = .spawn
+        // Before the microphone is open there is nothing to re-aim: the offer
+        // rides `startDictation`, which makes it once per gesture and skips it on
+        // a resumed start so a cold model cannot flicker the menu under his hand.
+        guard listening else { return }
+        guard !spawnPending else { return }
+        pasteMode = false
+        spawnPending = true
+        spawnFolder = nil
+        overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+        offerSpawnFolders()
+    }
+
+    /// ⌘⌃D has no direction to give, so it ends wherever the chip already says.
+    func aimWhereAimed() {}
+
+    // MARK: The binding
+
+    func bindFrontmost() {
+        // **No toggle**, like the chord it descends from: the ordinary reason to
+        // make this gesture twice is not being sure the first one landed.
+        // `bindFrontmostTerminal` asks AppKit for the front app with `main.sync`,
+        // so it may not be called *on* main.
+        DispatchQueue.global().async { [weak self] in _ = self?.bindFrontmostTerminal(toggle: false) }
+    }
+
+    func unbind() { unbindTerminal() }
+
+    // MARK: The other buttons
+
+    func captureScreenshot() { plusOneShot(cursor: NSEvent.mouseLocation) }
+
+    /// If this stops being reached, the key Victor submits with all day stops
+    /// existing — Options+ owns the back button and nothing upstream types a
+    /// Return any more. → `.claude/rules/mouse-gestures.md`
+    func postReturn() { HotkeyTap.postReturn() }
+
+    func postHandsFreeChord() { HotkeyTap.postWisprHandsFree() }
+
+    // MARK: Delivery — only the giving-up
+
+    func dropHeld() {
+        guard awaitingBind != nil else { return }
+        awaitingBind = nil
+        awaitingBindExpiry?.cancel()
+        awaitingBindExpiry = nil
+        overlay.flash("🗑️ the held sentence was dropped", duration: 2)
+    }
+
+    // MARK: The one genuine edge among the side effects
+
+    func pauseMusic() { music.setActive(true) }
+    func resumeMusic() { music.setActive(false) }
+
+    // MARK: Saying something
+
+    func warn(_ english: String) { overlay.flash(english, duration: 4) }
+    func note(_ line: String) { Log.info(line) }
+
+    // MARK: Derived, not commanded
+
+    /// **The ring, the borrowed gestures and the destination row are functions of
+    /// the state**, not effects fired at an instant — which is why they are not
+    /// actions on any arrow. `syncBorrowedGestures` is the one reconciler and has
+    /// been since long before this machine; all that changed is that it is now
+    /// called from one place with the state in hand.
+    func reconcile(state: String, chip: [String]) {
+        syncBorrowedGestures()
+        // The destination row is the machine's to write while a sentence is in
+        // flight. Outside one it belongs to the bind, which has its own title.
+        guard machine?.isIn("Listening") == true || state == "HeldForBind" else { return }
+        guard let row = chip.first else { return overlay.setSpawnDestination(nil) }
+        overlay.setSpawnDestination(row, mark: row.hasPrefix("✨") ? "✨" : nil)
+    }
+}
+
+/// Where a sentence will go when it ends, as set by the gesture that opened it
+/// and re-set by the gesture that ends it. It is the machine's substate made
+/// storable — `Listening.AtCaret` / `.ToBound` / `.ToSpawn` — so `startDictation`
+/// can read an aim decided a moment before the microphone existed.
+enum GestureAim { case caret, bound, spawn }

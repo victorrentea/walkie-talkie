@@ -324,7 +324,7 @@ closes. Between the two is the whole transcription — the stretch in which he i
   *during* a dictation — so at the one moment it is reachable it must mean *stop this sentence*, not
   *quit the app that drew the ring*. `AppDelegate.cancelDictationInFlight` returns whether there was
   anything to cancel; the ✕ falls through to `endSession` when there was not. → journal: *The ✕ cancels the dictation (2026-09-12)*
-- **⬅️ cancels a Wispr dictation too** (2026-09-12): `hotkeys.onLocalCancel` — the forward button
+- **⬅️ cancels a Wispr dictation too** (2026-09-12): `fire("forward-left")` → the diagram's `cancelDictation` — the forward button
   held and the mouse flicked left (`VK_F11` under ⌃⌥⌘), and the wheel held with Logi gestures off —
   goes through `cancelDictationInFlight` like the ✕ and the menu row. The gesture that abandons a
   sentence must not depend on which app is hearing it; local behaviour is untouched because

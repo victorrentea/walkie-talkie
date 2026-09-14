@@ -3,3 +3,8 @@
 evals/work/
 evals/*.log
 __pycache__/
+
+# The gesture diagram renders to SVG (committed, diffable). A PNG is for
+# looking at in Preview and is regenerated on demand — do not commit binary
+# churn for a picture the SVG already carries.
+docs/gestures.png
