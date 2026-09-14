@@ -1903,7 +1903,8 @@ def _close_scratch_terminal(tty: str):
                              capture_output=True, text=True, timeout=10).stdout
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) >= 3 and parts[1] == tty and parts[2].rsplit("/", 1)[-1] == "cat":
+            if len(parts) >= 3 and parts[1] == tty \
+                    and parts[2].rsplit("/", 1)[-1] in ("cat", "claude", "node"):
                 subprocess.run(["/bin/kill", parts[0]], capture_output=True, timeout=5)
         time.sleep(0.4)
     except Exception:
@@ -2942,8 +2943,11 @@ def _wrap_run(ctx, destination: str) -> Result:
             if spawned:
                 _assert_text(result, "the spawned session got the words",
                              spawned[-1].get("text") or spawned[-1].get("line") or "", want)
-                result.note("spawned destination: %s — close that Terminal when you are done"
+                result.note("spawned destination: %s"
                             % ((spawned[-1].get("delivery") or {}).get("to")))
+            bound_to = (relay.state() or {}).get("bound")
+            if bound_to:
+                ctx.options["spawned_tty"] = str(bound_to)
             # **The sentence, not the document.** With the probe sweep on the
             # victim is *supposed* to hold the probe letters — that is the
             # measurement — so "left alone" became the wrong question the moment
@@ -3101,6 +3105,16 @@ def _wrap_run(ctx, destination: str) -> Result:
         focus.stop()
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
+        if destination == "spawn" and not relay.dry_run:
+            # **Finding 4: the binding was only half of it.** The spawned
+            # Terminal keeps running a `claude` nobody asked for, and the next
+            # dictation could still be routed at it. Unbind, then close the exact
+            # window this run created — identified by the tty the relay bound to.
+            target = ctx.options.get("spawned_tty") or ""
+            relay.post("/unbind")
+            if target:
+                _close_scratch_terminal(str(target).split("/")[-1])
+                result.note("closed the spawned Terminal on %s" % target)
         if destination == "bound":
             relay.post("/unbind")
             if tty and not relay.dry_run:
@@ -3495,6 +3509,10 @@ def _in_settle_run(ctx, second: str) -> Result:
                          else "no microphone edge in %.1f s" % waited)
             relay.gesture("forward-left")
             time.sleep(0.5)
+            # The follow-up dictation is itself a cancel, so it gets the same
+            # watch — the orphan the adversary found arrived *after* one of
+            # these.
+            watch_for_reopen(relay, result, label="after the follow-up dictation")
     finally:
         focus.stop()
         if not relay.dry_run:
@@ -3513,6 +3531,256 @@ def scenario_wrap_cancel_in_settle(ctx) -> Result:
 
 def scenario_wrap_gesture_in_settle(ctx) -> Result:
     return _in_settle_run(ctx, "click")
+
+
+def scenario_wispr_dies_mid_settle(ctx) -> Result:
+    """**Kill Wispr while the sentence is settling, and see what the relay does.**
+
+    The worst moment to lose the recogniser: the microphone is closed, the words
+    are in flight, and the relay is holding a capture, a guard and an open
+    Scratchpad on Wispr's behalf. If it waits out its whole timeout Victor has a
+    dead keyboard guard and an orphan window for half a minute; if it gives up
+    promptly it should say so and let go of all three.
+
+    Wispr is killed by its **anchored executable path** — never `pkill -x
+    "Wispr Flow"`, which also matches its nested Accessibility helper — and
+    relaunched with `open "/Applications/Wispr Flow.app"`, never `-a`, for the
+    same reason (`docs/loopback.md`, *Two apps are called Wispr Flow*).
+
+    A relaunch puts up Wispr's main window, which is a window on Victor's screen
+    that no one asked for, so the scenario closes it and reports the focus
+    sequence either way.
+    """
+    relay, result, mark = ctx.relay, ctx.result, ctx.mark
+    victim = None
+    focus = FocusWatch()
+    try:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
+        set_wrap_mode(relay, "scratchpad")
+        victim = _open_witness(ctx)
+        if not victim:
+            return result
+        if not relay.dry_run:
+            focus.start()
+
+        relay.gesture("forward-click")
+        _await_listening(relay, result)
+        _await_microphone(ctx)
+        play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.gesture("forward-click")
+
+        settling, waited = wait_for(lambda: (relay.state() or {}).get("settling"),
+                                    timeout=10, poll=0.05, dry=relay.dry_run)
+        result.check(bool(settling), "the dictation reached the settle",
+                     "settling after %.0f ms" % (waited * 1000) if settling
+                     else "never settled (%.1f s)" % waited)
+
+        killed_at = time.monotonic()
+        if relay.dry_run:
+            print("   · pkill -f '^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow'")
+            print("   · open '/Applications/Wispr Flow.app'")
+        else:
+            subprocess.run(["/usr/bin/pkill", "-f",
+                            "^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"],
+                           capture_output=True, timeout=10)
+        gone, waited = wait_for(lambda: not pf.wispr_running(), timeout=10, poll=0.2,
+                                dry=relay.dry_run)
+        result.check(bool(gone), "Wispr Flow is gone", "after %.1f s" % waited)
+
+        # **Within about a second**, not a timeout: the relay has to notice and
+        # let go of the capture, the guard and the window.
+        noticed, waited = wait_for(lambda: "Wispr Flow quit" in mark.fresh(),
+                                   timeout=6, poll=0.1, dry=relay.dry_run)
+        result.check(bool(noticed), "the relay noticed within ~1 s and said `Wispr Flow quit`",
+                     "after %.1f s" % waited if noticed else "no such line in %.1f s" % waited)
+        result.check(waited <= 2.0 or relay.dry_run, "it gave up promptly", "%.1f s" % waited)
+
+        state = relay.state() or {}
+        result.check(not state.get("keyGuardArmed", (state.get("keyRedirect") or {}).get("armed")),
+                     "the keyboard guard was released", "keyRedirect=%s" % state.get("keyRedirect"))
+        closed, closed_after = ((True, 0.0) if relay.dry_run
+                                else _await_scratchpad_closed(timeout=5.0))
+        result.check(closed, "the Scratchpad closed", "after %.1f s" % closed_after)
+
+        if not relay.dry_run:
+            # `open <bundle path>`, never `open -a "Wispr Flow"` — that name
+            # resolves to the nested Accessibility helper, which quits itself in
+            # ~100 ms (docs/loopback.md, *Two apps are called Wispr Flow*).
+            subprocess.run(["/usr/bin/open", "/Applications/Wispr Flow.app"],
+                           capture_output=True, timeout=20)
+            back, waited = wait_for(pf.wispr_running, timeout=30, poll=0.5)
+            result.check(bool(back), "Wispr Flow came back", "after %.1f s" % waited)
+            # The relaunch puts up a main window nobody asked for.
+            time.sleep(2.0)
+            extra = [w for w in wispr_windows() if w != "Status"]
+            if extra:
+                result.note("Wispr's relaunch opened %s — closing it" % extra)
+                _osascript('tell application "System Events" to tell process "Wispr Flow" to '
+                           'click button 1 of window 1', timeout=8)
+                time.sleep(1.0)
+            result.note("Wispr windows after the relaunch: %s" % wispr_windows())
+
+        seen = [] if relay.dry_run else focus.stop()
+        result.note("frontmost through the kill and relaunch: %s" % (" → ".join(seen) or "—"))
+        result.check(not _count_occurrences(_witness_text(ctx, victim),
+                                            ctx.fixture.get("transcript", "")),
+                     "nothing was delivered into the victim", "%r"
+                     % _witness_text(ctx, victim)[:60])
+        result.answer = ("Wispr killed %.1f s into the settle; relay let go after %.1f s"
+                         % (time.monotonic() - killed_at, waited))
+    finally:
+        focus.stop()
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
+def scenario_wrap_silence(ctx) -> Result:
+    """**Two seconds of digital silence** — Wispr has nothing to say, and the
+    relay must not wait thirty seconds to find out.
+
+    Round 2 measured the relay holding its capture for the full 30 s and only
+    then reporting `No words came back`, on a row that stayed `raw_transcript`
+    with every text field empty. That is half a minute of ring, guard and
+    Scratchpad over a sentence that was never going to arrive.
+
+    The clip is generated rather than fetched: there is no silent recording in a
+    corpus of somebody talking, and `ffmpeg -f lavfi -i anullsrc` is exact.
+    """
+    relay, result, mark = ctx.relay, ctx.result, ctx.mark
+    silence = os.path.join(ctx.scratch, "silence-2s.wav")
+    # Made even for a dry run: `_clip_seconds` reads it to schedule the probes,
+    # and a walkthrough that dies on a missing file reviews nothing.
+    if not os.path.exists(silence):
+        subprocess.run(["/opt/homebrew/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                        "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "2",
+                        "-c:a", "pcm_s16le", silence], capture_output=True, timeout=60)
+    ctx.fixture = dict(ctx.fixture, wav=silence, transcript="", seconds=2.0)
+    result.note("clip: two seconds of digital silence")
+
+    victim = None
+    try:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
+        set_wrap_mode(relay, "scratchpad")
+        victim = _open_witness(ctx)
+        if not victim:
+            return result
+
+        relay.gesture("forward-click")
+        _await_listening(relay, result)
+        _await_microphone(ctx)
+        if not relay.dry_run:
+            import threading
+            import wispr_loopback as wl
+            for (char, code), offset in zip(wl.PROBE_LETTERS, (-1.0, 0.3, 1.0)):
+                threading.Timer(max(0.05, 2.6 + offset), wl.tap_key, args=(code,)).start()
+        play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.gesture("forward-click")
+        stopped = time.monotonic()
+
+        gave_up, waited = wait_for(
+            lambda: "✍️ the words landed" in mark.fresh() or not (relay.state() or {}).get("settling"),
+            timeout=40, poll=0.2, dry=relay.dry_run)
+        elapsed = time.monotonic() - stopped
+        result.check(bool(gave_up), "the settle ended", "after %.1f s" % elapsed)
+        result.check(elapsed <= 8.0 or relay.dry_run,
+                     "silence was given up on within 8 s of the stop, not 30",
+                     "%.1f s — settle said %r" % (elapsed, read_timings(mark.lines()).landed_reason))
+
+        time.sleep(1.0) if not relay.dry_run else None
+        victim_text = _witness_text(ctx, victim)
+        result.check(not [c for c in victim_text if c.isalpha() and c not in "qzjkyglb"],
+                     "only the probe letters reached the victim", "%r" % victim_text[:60])
+        result.check(len(ctx.outbox.fresh()) == 0, "nothing was delivered",
+                     "%d outbox line(s)" % len(ctx.outbox.fresh()))
+        result.answer = "silence: settle ended after %.1f s, nothing delivered" % elapsed
+    finally:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
+def scenario_hand_started(ctx) -> Result:
+    """**Victor's own dictation: the relay watches and touches nothing.**
+
+    Finding 3 of round 2. `POST /test/wispr-handsfree` was meant to stand in for
+    Victor pressing Wispr's own chord — ring only, no swallow, no delivery — and
+    instead the relay took the ⌘V, completed the capture as `wispr-cmdv`,
+    recorded a delivery and pasted the words itself. The route said
+    *hand-started* and the code said `relay: true`.
+
+    This asserts the contract rather than the implementation: `intercepting`
+    false, **Wispr's own paste** reaching the victim exactly once, no outbox
+    line, no note, and the ring going up and down around it. The `{"hand": true}`
+    flag is what the app now offers to mean it.
+    """
+    relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
+    victim = None
+    try:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
+        victim = _open_witness(ctx)
+        if not victim:
+            return result
+        notes_before = wispr_notes()
+        before_delivery = (relay.state() or {}).get("lastDelivery")
+
+        answer = relay.post("/test/wispr-handsfree", {"hand": True})
+        result.check(relay.dry_run or answer is not None,
+                     "the hand-started chord was posted", json.dumps(answer or {})[:60])
+        _await_microphone(ctx)
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.post("/test/wispr-handsfree", {"hand": True})
+
+        state_during = relay.state() or {}
+        result.check(state_during.get("intercepting") is False or relay.dry_run,
+                     "the relay is not intercepting a hand-started dictation",
+                     "intercepting=%s" % state_during.get("intercepting"))
+
+        settled, waited = _await_settled(relay, mark, timeout=seconds + 45)
+        result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
+
+        want = ctx.fixture.get("transcript", "")
+        typed, _ = wait_for(lambda: _witness_text(ctx, victim).strip(), timeout=10, poll=0.4,
+                            dry=relay.dry_run)
+        times = _count_occurrences(typed or "", want)
+        result.check(times == 1 or relay.dry_run, "Wispr pasted into the victim exactly once",
+                     "%d occurrence(s) — %r" % (times, (typed or "")[:60]))
+
+        state = relay.state() or {}
+        result.check(state.get("lastDelivery") == before_delivery or relay.dry_run,
+                     "the relay delivered nothing",
+                     "lastDelivery %s" % ("unchanged" if state.get("lastDelivery") == before_delivery
+                                          else "MOVED to %s" % state.get("lastDelivery")))
+        result.check(not outbox.fresh(), "no outbox line was written",
+                     "%d line(s)" % len(outbox.fresh()))
+        result.check(not notes_diff(notes_before, wispr_notes()) or relay.dry_run,
+                     "no note was written", "%d change(s)"
+                     % len(notes_diff(notes_before, wispr_notes())))
+        t = read_timings(mark.lines())
+        result.check(bool(t.ring_down_reason), "the ring went down",
+                     t.ring_down_reason or "(no ring down line)")
+        # The tap must have let Wispr's own ⌘V through, not taken it.
+        taken = [line.text for line in mark.lines()
+                 if "key 9" in line.text and "Wispr" in line.text and "SWALLOWED" in line.text]
+        result.check(not taken, "Wispr's ⌘V was not swallowed",
+                     taken[0] if taken else "passed through, as a hand-started one must")
+        result.answer = "hand-started: Wispr pasted %d copy, relay delivered nothing" % times
+    finally:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
 
 
 SCENARIOS = {
@@ -3556,6 +3824,14 @@ SCENARIOS = {
                    "Scratchpad mode, 🔼 → — the words are typed into the bound tty", False),
     "wrap-spawn": (scenario_wrap_spawn,
                    "Scratchpad mode, 🔼 ↑ — the words go to a session that did not exist", False),
+    "hand-started": (scenario_hand_started,
+                     "POST /test/wispr-handsfree {\"hand\": true} — Victor's own chord: ring only, "
+                     "Wispr pastes, the relay touches nothing", False),
+    "wispr-dies-mid-settle": (scenario_wispr_dies_mid_settle,
+                              "kill Wispr while the words are in flight — the relay must let go "
+                              "of the capture, the guard and the window within about a second", False),
+    "wrap-silence": (scenario_wrap_silence,
+                     "two seconds of digital silence — given up on in 8 s, not 30", False),
     "wrap-cancel-in-settle": (scenario_wrap_cancel_in_settle,
                               "🔼 ← a few hundred ms after the stop — the adversary's leak: "
                               "Wispr's pending ⌘V reaching the window in front", False),
@@ -3610,6 +3886,45 @@ def stuck_modifiers() -> list[str]:
         return []
 
 
+#: When to look again for a Scratchpad that came back. **Finding 1, round 2.**
+#: The harness sampled `['Status']`, exited 0, and 3–13 s later a delayed
+#: scratchpad chord reopened the window — with the keyboard guard disarmed. A
+#: window that is closed at the instant you look and open a moment later is not
+#: closed; it is a window nobody is watching.
+REOPEN_WATCH_POINTS = (3.0, 15.0)
+
+
+def watch_for_reopen(relay: Relay, result: Result, points=REOPEN_WATCH_POINTS,
+                     label: str = "after the scenario"):
+    """Sample the Scratchpad again at each point; any reopen fails the run.
+
+    Both witnesses, because they disagree in useful ways: `/test/state`'s
+    `scratchpadWindowOpen` is the app's own belief, and the AX window list is
+    what is actually on Victor's screen. The adversary caught this with the
+    second; the first says whether the app knows.
+    """
+    if relay.dry_run:
+        return True
+    started = time.monotonic()
+    clean = True
+    for point in points:
+        remaining = point - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(remaining)
+        state = relay.state() or {}
+        app_says = bool(state.get("scratchpadWindowOpen"))
+        windows = wispr_windows()
+        on_screen = [w for w in windows if w != "Status"]
+        if app_says or on_screen:
+            clean = False
+            result.check(False, "the Scratchpad stayed closed (+%.0f s %s)" % (point, label),
+                         "scratchpadWindowOpen=%s, AX windows %s — reopened after the run ended"
+                         % (app_says, windows))
+        else:
+            result.note("+%.0f s %s: Scratchpad still closed" % (point, label))
+    return clean
+
+
 def run_scenario(name: str, port: int, device: str | None, wav: str | None,
                  transcript: str | None, scratch: str, dry_run: bool,
                  verbose: bool, run_index: int = 1, options: dict | None = None) -> Result:
@@ -3635,6 +3950,9 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
         return result
     try:
         func(ctx)
+        # **Look again, twice, after everything.** See `watch_for_reopen`.
+        if not dry_run and not result.contaminated:
+            watch_for_reopen(relay, result)
     finally:
         if not dry_run:
             # **Give the relay its moment to put them back.** A modifier that is

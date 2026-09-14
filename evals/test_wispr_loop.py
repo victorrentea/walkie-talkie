@@ -598,6 +598,34 @@ class InSettle(unittest.TestCase):
         self.assertNotIn("in-settle", "caret-long")
 
 
+class Adversary(unittest.TestCase):
+    """What round 2 of the adversarial testing left behind, as standing checks."""
+
+    def test_the_reopen_watch_looks_twice_and_late(self):
+        """Finding 1: the harness sampled `['Status']`, exited 0, and 3–13 s
+        later a delayed chord reopened the window with the guard disarmed. One
+        sample at the end could never have seen it."""
+        self.assertEqual(len(wl.REOPEN_WATCH_POINTS), 2)
+        self.assertLessEqual(min(wl.REOPEN_WATCH_POINTS), 3.0)
+        self.assertGreaterEqual(max(wl.REOPEN_WATCH_POINTS), 13.0)
+
+    def test_the_three_new_scenarios_are_registered(self):
+        for name in ("wispr-dies-mid-settle", "wrap-silence", "hand-started"):
+            self.assertIn(name, wl.SCENARIOS)
+            _f, blurb, expected_red = wl.SCENARIOS[name]
+            self.assertFalse(expected_red)
+            self.assertTrue(blurb)
+
+    def test_no_scenario_kills_wispr_by_bare_name(self):
+        """`pkill -x "Wispr Flow"` also matches the nested Accessibility helper.
+        Every kill and every launch must use the anchored bundle path."""
+        source = open('helpers/wispr_loop.py', encoding='utf-8').read()
+        self.assertNotIn('"-x", "Wispr Flow"', source)
+        self.assertNotIn('open -a "Wispr Flow"', source)
+        self.assertIn("^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow", source)
+        self.assertIn('"/Applications/Wispr Flow.app"', source)
+
+
 class Pasteboard(unittest.TestCase):
     """`--no-sink`'s witness. **Read-only here** — nothing in this file writes.
 
