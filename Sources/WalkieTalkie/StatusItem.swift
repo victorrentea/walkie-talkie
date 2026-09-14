@@ -799,7 +799,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private func gesture(_ row: (item: NSMenuItem, label: String, logi: String, wheel: String)) -> String {
         logiGesturesOn ? row.logi : row.wheel
     }
-    /// Where that column's right edge sits, measured once from the widest row.
+    /// Where that column's right edge sits, measured from the widest row.
     private var gestureTab: CGFloat = 0
 
     /// **One tab stop for the whole menu**, so the chords line up with each other
@@ -807,6 +807,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// of two things: the longest plain row in the menu, and the longest
     /// label + gap + chord — whichever it is, no row can then need more width
     /// than the column gives it, and none of them collide.
+    ///
+    /// **Re-measured on every open, not once at build** (2026-09-14). Half the
+    /// rows get their real title long after the menu is assembled — `Engine:
+    /// Local (2.6 GB)`, `Mouse Gestures: Wheel`, and above all `Bound to:
+    /// <folder>@<branch>`, which is as long as the branch name is. A title wider
+    /// than the tab widens the menu without moving the tab, and the chords then
+    /// hang in the middle of a menu that has grown to the right of them.
+    ///
+    /// **The plain rows are read off `item.title`, the gesture rows off the
+    /// stored label** — never off the item. A gesture row's `title` is the
+    /// attributed one AppKit wrote back, `label \t chord`, so measuring *that*
+    /// would add the chord a second time and push the column right on every
+    /// open, one chord's width at a time.
     private func layOutGestures(in menu: NSMenu) {
         let font = NSFont.menuFont(ofSize: 0)
         func width(_ text: String) -> CGFloat {
@@ -816,7 +829,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // of the sentence — the same distance AppKit leaves before its own.
         let gap: CGFloat = 28
         var tab: CGFloat = 0
-        for item in menu.items where !item.isSeparatorItem { tab = max(tab, width(item.title)) }
+        let drawn = Set(gestureRows.map { ObjectIdentifier($0.item) })
+        for item in menu.items
+        where !item.isSeparatorItem && !drawn.contains(ObjectIdentifier(item)) {
+            tab = max(tab, width(item.title))
+        }
         // **Measured against the widest of *both* legend sets**, not just the one
         // showing: the tick can be flipped with the menu open, and a column that
         // resized under the pointer would move every chord on screen.
@@ -1182,7 +1199,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyEngineRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
-        restyleGestures()
+        // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`
+        // above have just written the titles that are longest, and the column
+        // has to be laid out against the menu he is about to see.
+        layOutGestures(in: menu)
     }
 
     /// **`Bound to: petclinic@main`**, not the bare line the chip shows.
