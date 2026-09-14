@@ -23,7 +23,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `DecodeRate`, `InputDevice`, `VoiceCorpus`, `helpers/`, `evals/` |
-  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `tools/wispr-test.sh` |
+  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ShotMarker`, `tools/wispr-test.sh` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, the halo asset |
   | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ProjectList`, `helpers/recent_projects.py` |
   | `menu-bar.md` | `StatusItem`, `MenuBarMirror`, `MessageLog`, `AboutPage` |
@@ -142,6 +142,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/scratchpad/park` | move Wispr's Scratchpad window to its corner now — smallest size Wispr allows, bottom-right of the second display (the main one's when there is one), all but an 8 pt sliver off the edge; answers the frame it ended up at |
 | `POST /test/wrap-mode` `{"mode": "scratchpad"｜"sink"｜"off"｜"auto"}` | pick how the relay takes Wispr's words for this run; `auto` hands the decision back to the tick and to Wispr's own configuration. The menu tick follows |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
+| `POST /test/shot-marker` `{"text": …, "available": [1,2]}` · `{"play": 1}` | **the shot marker's unit test, both halves** — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
 | `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
 | `GET /test/wispr-notes` · `POST /test/wispr-notes` `{"since": <unix s>}` | Wispr Flow's **Scratchpad**, read-only (`WisprNotes`, `Notes` + `NoteVersions`): the GET is the baseline before the chord, the POST the delivery read after it (`{"note": null}` when nothing was written since). Wired to no gesture — the reading half of the candidate wrap |
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
@@ -232,20 +233,22 @@ sits at rest there.
   buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
   picks the local model, which is **retired, not deleted**: no gesture starts it and the weights
   are no longer loaded at launch.
-- **Wrap Wispr Flow** (menu tick, default **on**) picks between three *relationships with another
-  app*, and `/engine` and `/test/state` say which is in force and why (`wrapMode` · `wrapWhy`):
+- **The wrap** (`wrapWispr`, always **on** unless a switch below says otherwise — the *Wrap Wispr
+  Flow* menu tick went on 2026-09-14 as redundant beside `Engine`) picks between three
+  *relationships with another app*, and `/engine` and `/test/state` say which is in force and why
+  (`wrapMode` · `wrapWhy`):
   | mode | Wispr is told | the words come from | what it costs |
   |---|---|---|---|
   | **`scratchpad`** (default) | *Open Scratchpad*, **held** for the sentence | the `History` row at `formatted` (`via: "wispr-history"`); the note is the cross-check | nothing — no insertion, no focus moved |
   | `sink` (emergency) | the hands-free chord | the relay's own key window, taken at the **stop** (`via: "wispr-sink"`) | his keyboard, for a moment, every dictation |
-  | `off` (tick off) | the hands-free chord | nobody — Wispr inserts where the focus is | the wrap |
+  | `off` (the harness's control) | the hands-free chord | nobody — Wispr inserts where the focus is | the wrap |
   Automatic fallback to `sink` when Wispr has no `open_scratchpad` shortcut, and when the
   Scratchpad window will not close — both said out loud in `wrapWhy`.
 - **Every switch the dictation source reads**, in one place:
   | variable | what it does |
   |---|---|
   | `WT_SOURCE=whisper` | the local model instead of Wispr Flow (also the `dictationSource` default) |
-  | `WT_WRAP_WISPR=0` | the *Wrap Wispr Flow* tick off for one run |
+  | `WT_WRAP_WISPR=0` | the wrap off for one run (there is no menu row for it) |
   | `WT_WRAP_MODE=scratchpad｜sink｜off` | force the mode for one run (`POST /test/wrap-mode` at runtime, `auto` to hand it back) |
   | `WT_SCRATCHPAD_DELIVER=note` | wait for the Scratchpad note instead of delivering from the row — 2.8 s slower, kept for the day the two disagree |
   | `WT_SCRATCHPAD_REDIRECT_KEYS=0` | stop taking his keystrokes while Wispr's window is up — **on by default**: measured 7/7 letters into the victim in all three `wrap-*` scenarios, none in the note, deliveries 12–18 ms |
@@ -254,6 +257,8 @@ sits at rest there.
   | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
   | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — **on by default**, on a serial queue off the tap thread, 200 ms a character. `POST /test/ax-insert` / `POST /test/key-guard` flip both at runtime |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
+  | `WT_SHOT_MARKERS=0` | stop speaking a marker into Wispr's ear when he presses the shutter — on by default, see *Shot markers* |
+  | `WT_MARKER_DEVICE=<name>` | the output device the marker is played into; substring, default `TO Wispr` |
   | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
 - **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord
   writes a note only while the window is closed; with it open Wispr transcribes and writes **no
@@ -335,6 +340,30 @@ sits at rest there.
 - **`tools/wispr-test.sh <file.wav>`** drives one dictation end to end and prints the transcript
   and the ⚡ timings. It needs **Wispr → Settings → Microphone → Auto-detect** (Wispr's own device
   id is a salted Chromium hash and is not scriptable); it says so rather than failing silently.
+
+## Shot markers (2026-09-14)
+
+- **A shutter press during a dictation says `screenshot one` into Wispr's ear**, so the
+  transcript carries `[shot 1]` at the word he pressed at rather than a second he has to
+  estimate against. Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e
+  greu să estimezi."* `ShotMarker` holds both halves — the spoken one and the rewrite that
+  reads it back — in one file, because they are one vocabulary.
+- **It reaches Wispr and nothing else.** The marker is played into the Loopback device
+  `🎓 TO Wispr`; the relay's own `MicRecorder` is on the **physical** microphone. Measured:
+  the corpus WAV recorded in parallel with a marker run is `-91.0 dB`, digital silence. The
+  words are also rewritten **before** the corpus is filed (`resolvingShotMarkers`, called from
+  `deliver`), so no pair is ever stored whose transcript says words its audio does not.
+- **The frame list is numbered where markers exist**, and the clause says what `[shot N]`
+  means. A dictation with no markers is byte-for-byte the envelope it always was.
+- **The safety net is a set, not a count**: `shotMarkerNumbers` is keyed by path and reserved
+  at the **shutter**, before `screencapture` runs, so a number is never read off a list
+  position two overlapping captures can reorder. A marker naming a picture that is not
+  attached is taken out of the words and logged.
+- **A marker played over continuous speech is lost** — measured, and it is not a level that
+  can be turned up (the marker is the *louder* signal at −15.7 dB against −26.8). So it waits
+  for a gap in his speech, `MicRecorder.quietSeconds ≥ 0.12 s`, up to a **1.5 s** ceiling and
+  then speaks anyway. The wait is logged: `(1540 ms for a gap)` means the ceiling was reached
+  and the marker went out into speech regardless.
 
 ## Never reintroduce
 

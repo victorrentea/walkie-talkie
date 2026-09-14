@@ -291,6 +291,19 @@ final class ElementPicker {
     /// transition with two lags, with no Wispr, no microphone and no waiting.
     var onTestWisprStateSimulate: (([[String: Any]]) -> [String: Any])?
 
+    /// `POST /test/shot-marker` — **the marker's unit test, both halves.**
+    ///
+    /// `{"text": …, "available": [1, 2]}` runs the written half: the rewrite that
+    /// turns the words Wispr heard back into `[shot N]`, with `available` standing
+    /// in for the pictures that are really attached. `{"play": 2}` runs the spoken
+    /// half into the Loopback device, so *is the sound reaching Wispr's ear* is a
+    /// question answerable from a desk with nothing dictated.
+    ///
+    /// A route and not an XCTest for `onTestWisprStateSimulate`'s reason: the
+    /// package is one `executableTarget` with a `main.swift` in it. It touches
+    /// nothing in the running relay. → `ShotMarker`
+    var onTestShotMarker: (([String: Any]) -> [String: Any])?
+
     /// `POST /test/wispr-scratchpad` `{"down"|"up"|"tap": true}` — Wispr's
     /// *Open Scratchpad* chord, and the one chord this app has to be able to
     /// **hold**. See `HotkeyTap.postWisprScratchpad`.
@@ -791,6 +804,17 @@ final class ElementPicker {
             respond(conn, 200, ["ok": true].merging(posted) { _, new in new })
 
         // The state machine, run on a script — see `onTestWisprStateSimulate`.
+        case ("POST", "/test/shot-marker"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let body = body, body["text"] != nil || body["play"] != nil else {
+                return respond(conn, 400, ["ok": false,
+                                           "error": "expected {\"text\": …, \"available\": [1,2]} or {\"play\": 1}"])
+            }
+            guard let result = onTestShotMarker?(body) else {
+                return respond(conn, 503, ["ok": false, "error": "no handler"])
+            }
+            respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
         case ("POST", "/test/wispr-state/simulate"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             let steps = (body?["steps"] as? [[String: Any]]) ?? []

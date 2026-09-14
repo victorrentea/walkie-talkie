@@ -32,8 +32,10 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
 
 ## The wrap, end to end (2026-09-14)
 
-**Wrap Wispr Flow** is a menu tick, default **on**, and it chooses between three *relationships
-with another app*. `/engine` and `GET /test/state` answer `wrapMode` **and `wrapWhy`**, because a
+**The wrap** (`wrapWispr`) is **on** and is no longer a menu row — *Wrap Wispr Flow* went on
+2026-09-14 as redundant beside `Engine`, and its stored preference went with it; `off` is the
+harness's control, through `WT_WRAP_WISPR=0` or `POST /test/wrap-mode`. It chooses between three
+*relationships with another app*. `/engine` and `GET /test/state` answer `wrapMode` **and `wrapWhy`**, because a
 wrap that quietly fell back to the emergency path is exactly what nobody notices.
 
 | mode | Wispr is told | the words come from | what it costs |
@@ -491,6 +493,66 @@ is a thing he is speaking, not typing, through.
   releasing that key. The second says *does the relay deliver these words*. They come apart on
   `POST /test/wispr-handsfree`, which posts Wispr's own chord (nothing held, no sink) while the
   wrap is on and the ⌘V is still the relay's to swallow.
+
+## Shot markers — a spoken index injected into the recogniser's ear (2026-09-14)
+
+Rules for `ShotMarker`. The problem: every frame carries the second it was taken at
+(`shot-00:56…`) and an agent handed five of those has to guess which clause each belongs to.
+Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e greu să estimezi."*
+
+- **The mechanism is two microphones, one voice.** Wispr is pinned to the Loopback device
+  `🎓 TO Wispr`; the relay's `MicRecorder` opens the **physical** device. So a sound played into
+  the Loopback device's output side reaches **Wispr and nothing else** — not the speakers, not
+  the corpus. Measured: the corpus WAV recorded in parallel with a marker run is `-91.0 dB`.
+- **Both halves live in `ShotMarker`** — `play(index:whenQuiet:)` says it, `resolve(text:available:)`
+  reads it back. One vocabulary (the phrase, the number words, the digit forms); split over two
+  files it drifts the first time somebody rewords one end.
+- **The source is asked `acceptsAudioMarkers`, never *are you Wispr*.** Default `false` on the
+  protocol; only `WisprFlowSource` says yes. The local model opens the physical microphone
+  itself and would need the marker spliced into its own buffer — a different mechanism, not built.
+
+### What was measured the day it was built
+
+| | |
+|---|---|
+| markers in `asrText`, spliced into a 20 s clip of his voice | both, in position |
+| the same in `formattedText` | both, **promoted to their own paragraphs** |
+| three markers into a **silent** dictation | `Screenshot one. Screenshot two. Screenshot three.` |
+| one marker 6 s into an **unbroken** 12 s sentence | **no trace at all** |
+| marker level against the voice | −15.7 dB mean against −26.8 — the marker is the *louder* one |
+| a marker landing mid-word | cuts it: `pus sub un strat` → `pus sub un-` / `Strat` |
+
+- **Masking is not a level problem and cannot be turned up.** The marker already wins on level
+  and still vanished: a recogniser handed two voices at once transcribes the one that makes a
+  sentence. Hence the gate — `MicRecorder.quietSeconds ≥ 0.12 s`, polled every 40 ms on
+  `ShotMarker`'s own queue, ceiling **1.5 s** and then spoken anyway, because a marker lost
+  costs nothing and a marker never said costs the picture its place in the sentence. The wait is
+  in the log: `(1540 ms for a gap)` is the ceiling being reached.
+- **Overlapping is his gesture, not an edge case** — *"De exemplu, ăsta acum"*, pressed
+  mid-clause. A marker that only worked in a pause he happened to leave would mostly not work.
+
+### The rules that cost something
+
+- **The number is reserved at the shutter, before `screencapture` runs**, and stored **by path**
+  (`shotMarkerNumbers`, carried on the `Message` beside `sources`). Two presses a third of a
+  second apart can finish in the other order, and a number read off the list's position would
+  then name the wrong frame — the one failure that makes the feature untrustworthy.
+- **The safety net is a set of real pictures, not a count.** A capture that failed leaves a
+  number spoken with nothing behind it, and a count would renumber every marker after it onto
+  the wrong frame. A marker outside the set is taken out of the words and logged.
+- **The words are rewritten before the corpus is filed** (`resolvingShotMarkers`, at the top of
+  `deliver`). The relay's own recording never heard the marker, so filing `Screenshot one.`
+  against it would put a pair in the corpus whose transcript says words its audio does not.
+- **`onTestDictation` calls the same helper**, because that route's claim is that a fabricated
+  transcript enters where a real one does — and it enters *below* `deliver`.
+- **The shutter is not on the main thread** (`HotkeyTap.onScreenshot` → `DispatchQueue.global()`),
+  so `reserveMarker` may not read `source`: `setEngine` reassigns it from the main thread.
+  `wireDictationSource` publishes `markerMeter` under `stateLock` instead, and nil is the whole
+  of *do not speak markers*.
+- **`POST /test/shot-marker` is the unit test**, both halves, for `wispr-state/simulate`'s reason.
+- `WT_SHOT_MARKERS=0` off for a run; `WT_MARKER_DEVICE` points it elsewhere. With no matching
+  device it says so **once** and stays quiet — a Mac where Wispr has been moved back to the
+  built-in microphone is one where a marker reaches nobody.
 
 ## Three witnesses, and none of them alone (2026-09-13)
 

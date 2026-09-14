@@ -75,7 +75,18 @@ PRE=(--no-idle-check)
 PORT=$("$PY" "$REPO/helpers/wispr_preflight.py" --print port) \
   || fail "the relay is not listening on 8917–8919 — is Walkie Talkie running?"
 
-post() { curl -s -m 10 -X POST "http://127.0.0.1:$PORT$1" -H 'content-type: application/json' -d "${2:-{}}"; }
+# **`"${2:-{}}"` sends a stray `}` and it cost a run** (2026-09-14). Bash closes
+# the expansion at the *first* `}`, so the default is `{` and the second brace
+# falls through as literal text: a call with a body posted `{"hand": true}}`,
+# JSONSerialization refused it, the route read its flag as absent and took the
+# default branch. The failure is silent at every step — curl is happy, the route
+# answers 200, and only the echoed flag says the body never arrived. Spelled out
+# in two statements rather than cleverly, because the clever form is the bug.
+post() {
+  local body="${2:-}"
+  [ -n "$body" ] || body='{}'
+  curl -s -m 10 -X POST "http://127.0.0.1:$PORT$1" -H 'content-type: application/json' -d "$body"
+}
 
 if [ "$SPEAKER" = 1 ]; then
   DEV_NAME="(speakers)"

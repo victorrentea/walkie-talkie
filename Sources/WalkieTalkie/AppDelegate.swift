@@ -288,6 +288,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// different things at once. Keyed by path, the source travels with the
     /// picture no matter which of those two routes the picture took.
     private var shotSources: [String: String] = [:]
+
+    /// **Which spoken marker names each picture** — see `ShotMarker`.
+    ///
+    /// Keyed by path, like `shotSources` and for a sharper version of its reason:
+    /// the number is reserved at the **shutter**, before `screencapture` has run,
+    /// and the append happens a subprocess later. Two presses a third of a second
+    /// apart can finish in the other order, and a number read off the list's
+    /// position would then name the wrong frame — which is the one failure that
+    /// makes the whole feature untrustworthy. Carried on the `Message` beside
+    /// `sources` and printed by `shotsClause`.
+    private var shotMarkerNumbers: [String: Int] = [:]
+
+    /// How many markers this dictation has spoken; the next one is this plus one.
+    /// Reset wherever `shotSources` is, because it has exactly that lifecycle —
+    /// every dictation ends through `send`, `flushOrphaned`, `caretLine` or
+    /// `clearCancelledDictationState`, and each of those clears both.
+    private var markersSpoken = 0
+
+    /// **The meter the marker waits for a gap in, or nil when this source cannot
+    /// hear an injected sound.** Published by `wireDictationSource` and read by
+    /// `reserveMarker`, both under `stateLock`, because the shutter is not on the
+    /// main thread. Nil is the whole of *do not speak markers*.
+    private var markerMeter: MicRecorder?
     /// When each deliberate shot was taken, in seconds since this dictation
     /// opened — parallel to `pendingShots`, written under the same lock.
     ///
@@ -616,7 +639,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// Path → what was in front when that frame was taken. Covers both
         /// `paths` and `screen`, which is the reason it is keyed rather than
         /// ordered.
-        var sources: [String: String] = [:]
+            var sources: [String: String] = [:]
+        /// Path → the marker number Wispr heard for that frame. Carried for
+        /// `sources`'s reason — the panel holds a prompt for seconds and the
+        /// next dictation may have started — and empty for every dictation with
+        /// no markers. → `ShotMarker`
+        var shotNumbers: [String: Int] = [:]
         let app: String?
         let elements: [ElementPick]
         /// When the microphone opened, kept so `terminalLine` can stamp each
@@ -655,6 +683,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyTap.clearStaleModifiersAtLaunch()
         Self.startAtLogin()
         Outbox.prepare()
+        // Synthesised once per Mac and loaded off the main thread — a shutter
+        // press must never wait for `say`. → `ShotMarker`
+        ShotMarker.prepare()
         overlay = RelayWindow()
 
         // **The ✕ cancels the dictation before it ends anything.** It ended the
@@ -699,12 +730,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Pushed **through the flag and the tap by hand** rather than through
         // `setReplaceWispr`: that call flashes the overlay, and a mode restored
         // from the last launch is not an event to announce.
-        // **The wrap, restored from the last launch** — see
-        // `StatusItem.isWrapWispr`. `WT_WRAP_WISPR=0` overrides it for one run,
-        // which is what the harness uses to watch Wispr paste for itself.
+        // **The wrap is on, and is no longer a preference** (2026-09-14): the
+        // menu tick went as redundant beside `Engine`, and with it the stored
+        // `wrapWispr` key — a session that had switched it off would otherwise
+        // start wrapped-off for ever with nothing in the UI to say so.
+        // `WT_WRAP_WISPR=0` still overrides it for one run, which is what the
+        // harness uses to watch Wispr paste for itself, and `POST
+        // /test/wrap-mode` still moves it at runtime.
         let wrapOverride = ProcessInfo.processInfo.environment["WT_WRAP_WISPR"]
-        wisprSource.wrapWispr = wrapOverride.map { $0 != "0" } ?? status.isWrapWispr
-        status.onToggleWrapWispr = { [weak self] on in self?.wisprSource.wrapWispr = on }
+        wisprSource.wrapWispr = wrapOverride.map { $0 != "0" } ?? true
         // The ⏳ in the menu bar belongs to whichever source is slow to come up,
         // and only one of them ever is.
         whisperSource.onLoadingChanged = { [weak self] loading in
@@ -826,9 +860,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return ["ok": false, "error": "gone"] }
             var answer: [String: Any] = [:]
             DispatchQueue.main.sync { answer = self.wisprSource.setWrapMode(mode) }
-            // The tick on the menu follows the mode, or the row and the
-            // behaviour behind it disagree for the rest of the session.
-            DispatchQueue.main.async { self.status.setWrapWispr(self.wisprSource.wrapWispr) }
             return answer
         }
         picker.onTestHistoryRoute = { [weak self] on in
@@ -839,6 +870,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // It touches nothing in the running app on purpose: a test that has to
         // put the relay into a state in order to assert on the state machine is
         // a test of the relay.
+        // The marker's unit test — see `ElementPicker.onTestShotMarker`. Pure:
+        // `available` comes from the request, not from this dictation, so the
+        // rewrite can be asserted with nothing attached and nobody talking.
+        picker.onTestShotMarker = { body in
+            if let index = body["play"] as? Int {
+                ShotMarker.play(index: index)
+                return ["played": index, "enabled": ShotMarker.isEnabled]
+            }
+            let text = (body["text"] as? String) ?? ""
+            let available = Set((body["available"] as? [Int]) ?? [])
+            let resolved = ShotMarker.resolve(text: text, available: available)
+            return ["text": resolved.text, "found": resolved.found]
+        }
         picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
         // Wispr's Scratchpad note, read — see `WisprNotes`. Read-only and wired
         // to no gesture: the Scratchpad is the candidate wrap (it inserts
@@ -1201,6 +1245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestDictation = { [weak self] text in
             guard let self = self else { return }
+            let text = self.resolvingShotMarkers(text)
             // **It goes to the caret when that is where a real one would go.**
             // The route's whole claim is that a fabricated transcript enters
             // exactly where a spoken one does, and after 2026-09-08 that stopped
@@ -1497,6 +1542,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
         source.prepare()
+        // **The shutter runs on `DispatchQueue.global()`, not the main thread**
+        // (`HotkeyTap.onScreenshot`), so `reserveMarker` may not read `source` —
+        // `setEngine` reassigns it from the main thread and that is a race on a
+        // gesture Victor presses mid-sentence. What the marker needs of a source
+        // is two facts that only change when the source does, so they are
+        // published here, under the lock the shutter already takes.
+        stateLock.lock()
+        markerMeter = source.acceptsAudioMarkers ? source.meter : nil
+        stateLock.unlock()
         Log.info("dictation source: \(source.name)")
     }
 
@@ -1628,7 +1682,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The one router, for both sources. Nothing here asks which recogniser
     /// produced the text: a transcript is a transcript, and the only question
     /// left is the one the chip has been answering all along.
+    /// **Turn the markers Wispr heard back into `[shot N]`** — see `ShotMarker`.
+    ///
+    /// Called from `deliver` for a spoken sentence and from `onTestDictation`
+    /// for a fabricated one, because that route's whole claim is that a made-up
+    /// transcript enters exactly where a real one does — and it enters *below*
+    /// `deliver`, so a rewrite living only there would be the one thing no test
+    /// could reach.
+    private func resolvingShotMarkers(_ text: String) -> String {
+        stateLock.lock()
+        let marked = Set(shotMarkerNumbers.values)
+        stateLock.unlock()
+        let resolved = ShotMarker.resolve(text: text, available: marked)
+        if !resolved.found.isEmpty {
+            Log.info("📣 \(resolved.found.count) shot marker(s) placed in the words: "
+                     + resolved.found.map(String.init).joined(separator: ", "))
+        }
+        return resolved.text
+    }
+
     private func deliver(_ result: DictationResult) {
+        var result = result
+        // **The spoken markers come out of the words first of all, and before
+        // the corpus** (2026-09-14). The relay's own recording is on the physical
+        // microphone and never heard them — they were played into the Loopback
+        // device Wispr listens to — so filing `Screenshot one.` against that
+        // audio would put a pair in the corpus whose transcript says words the
+        // WAV does not contain, which is the one thing that corpus must never
+        // hold. Everything downstream (the outbox, the panel, the envelope, the
+        // agent) reads the cleaned text for free by being downstream of here.
+        result.text = resolvingShotMarkers(result.text)
+
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
         // this — and with the local model retired this is the only path by which
@@ -2075,6 +2159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelectionIn = nil
         pendingExtraSelections = []
         shotSources = [:]
+        shotMarkerNumbers = [:]
+        markersSpoken = 0
         dictationStartedAt = nil
         pendingScreen = nil
         dictationInFlight = false
@@ -2428,6 +2514,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelectionIn = nil
         pendingExtraSelections = []
         shotSources = [:]
+        shotMarkerNumbers = [:]
+        markersSpoken = 0
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -3652,6 +3740,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingShotOffsets = []
         let sources = shotSources
         shotSources = [:]
+        let markerNumbers = shotMarkerNumbers
+        shotMarkerNumbers = [:]
+        markersSpoken = 0
         // **No context frame rides this envelope, and it is cleared rather than
         // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
         // in every real path through here — but `shotsClause` is called with
@@ -3699,7 +3790,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         parts.append(contentsOf: Self.selectionsClause(selection, at: selectionAt,
                                                        source: selectionIn,
                                                        extras: extraSelections))
-        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
+        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources,
+                                                  numbers: markerNumbers))
         if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
         guard parts.count > 1 else { return words }
         // The words, a blank line, then one clause per line — `terminalLine`'s
@@ -3740,7 +3832,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
+        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources,
+                                             numbers: m.shotNumbers))
         if let clause = picksClause(m.elements, since: m.startedAt) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
@@ -3818,8 +3911,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "$WALKIE_SHOTS" + dir.dropFirst(root.count)
     }
 
+    /// - Parameter numbers: path → the marker number Wispr heard for it, so the
+    ///   `[shot 2]` sitting in the middle of his sentence has something to point
+    ///   at. Empty for a dictation with no markers, and the list then keeps the
+    ///   bare `- ` bullets it has always had — nothing in the envelope changes
+    ///   for a sentence where he took no pictures or the source cannot hear.
+    ///   → `ShotMarker`
     private static func shotsClause(paths: [String], screen: String?,
-                                    sources: [String: String] = [:]) -> [String] {
+                                    sources: [String: String] = [:],
+                                    numbers: [String: Int] = [:]) -> [String] {
         guard paths.first != nil || screen != nil else { return [] }
         let dir = ((paths.first ?? screen!) as NSString).deletingLastPathComponent
         let shown = shotsRootAbbreviated(dir)
@@ -3872,6 +3972,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // happens to be small, and a small desktop is a display it should be
         // looking around in. Said once, in the clause, and carried per frame by
         // the `area-` its name starts with.
+        // **Said only when there is something to say it about.** An envelope for
+        // a dictation with no markers is byte-for-byte what it was before.
+        if !numbers.isEmpty {
+            note += " `[shot N]` in my words is where I pressed the shutter —"
+                + " it names the frame numbered N in this list."
+        }
         if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
             note += " Anything named `area-` is a region I dragged a box around, "
                 + "not the whole screen — its edges are mine, not the display's."
@@ -3893,7 +3999,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The note is a line of its own for the same reason it was ever a
         // separate sentence: it is about all of them, not about the last one.
         var clauses = ["screenshots during dictation are in: \(shown)/ oldest first:\n"
-                       + paths.map { "- " + described($0) }.joined(separator: "\n")
+                       + paths.map { path -> String in
+                           // **The number, where there is one, is the bullet.**
+                           // A `2.` in front of the frame is what makes `[shot 2]`
+                           // in the words resolvable without counting down a list
+                           // — and a list that is numbered only where markers
+                           // exist is honest about which frames were named.
+                           guard let n = numbers[path] else { return "- " + described(path) }
+                           return "\(n). " + described(path)
+                       }.joined(separator: "\n")
                        + "\n\(note)"]
         if let screen = screen {
             clauses.append("[and \(handed(screen)) is the screen when I started talking, "
@@ -4335,6 +4449,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Mouse 4 while dictating — one more shot for the dictation in
     /// progress, with the cursor recorded so the agent can see what he was
     /// pointing at when he pressed.
+    /// **Reserve this picture's marker number and say it into the recogniser's
+    /// ear** — see `ShotMarker`.
+    ///
+    /// Called at the **gesture**, before `screencapture` has run: the marker's
+    /// entire value is landing between the word before and the word after, and
+    /// a subprocess is a whole clause long. Returns nil — and says nothing —
+    /// when there is no dictation to mark, when the source cannot hear an
+    /// injected sound (`acceptsAudioMarkers`), or past `maximumIndex`; in every
+    /// one of those the picture is still taken, attached and listed by its
+    /// offset exactly as before.
+    private func reserveMarker() -> Int? {
+        guard ShotMarker.isEnabled else { return nil }
+        stateLock.lock()
+        let meter = markerMeter
+        let open = dictationInFlight && meter != nil
+        if open { markersSpoken += 1 }
+        let number = markersSpoken
+        stateLock.unlock()
+        guard open, let meter = meter, number <= ShotMarker.maximumIndex else { return nil }
+        // **Into the gap between his words, not over them** — see
+        // `ShotMarker.maskCeiling`.
+        ShotMarker.play(index: number,
+                        whenQuiet: { meter.quietSeconds >= ShotMarker.gapNeeded })
+        return number
+    }
+
     private func plusOneShot(cursor: NSPoint) {
         guard hasDestination else { return }
         // Sampled at the gesture, like the cursor and for the same reason: by the
@@ -4347,6 +4487,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Flash first, capture second — same reason as in `captureContext`: the
         // confirmation should land on the keypress, not on the subprocess.
         CaptureFlash.announce(cursor: cursor, cycleMarker: true)
+        // Beside the flash and for its reason: the confirmation — the one he
+        // sees and the one Wispr hears — belongs on the keypress, not on the
+        // subprocess.
+        let marker = reserveMarker()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -4386,6 +4530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let attaching = self.dictationInFlight
             if let source = source { self.shotSources[path] = source }
             if attaching {
+                if let marker = marker { self.shotMarkerNumbers[path] = marker }
                 self.pendingShots.append(path)
                 self.pendingShotOffsets.append(
                     takenAt.timeIntervalSince(self.dictationStartedAt ?? takenAt))
@@ -4484,6 +4629,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// flight, and let the chip count it.
     private func fileArea(_ selection: CropSelectionOverlay.Selection,
                           takenAt: Date, source: String?) {
+        // A dragged rectangle is a picture in the same list and gets the same
+        // marker; the gesture it belongs to is the release, which is here.
+        let marker = reserveMarker()
         stateLock.lock()
         let openNow = dictationInFlight
         let startedAt = dictationStartedAt
@@ -4499,6 +4647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let attaching = dictationInFlight
         if let source = source { shotSources[path] = source }
         if attaching {
+            if let marker = marker { shotMarkerNumbers[path] = marker }
             pendingShots.append(path)
             pendingShotOffsets.append(takenAt.timeIntervalSince(dictationStartedAt ?? takenAt))
         }
@@ -4922,6 +5071,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingExtraSelections = []
         let sources = shotSources
         shotSources = [:]
+        let markerNumbers = shotMarkerNumbers
+        shotMarkerNumbers = [:]
+        markersSpoken = 0
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
@@ -4962,6 +5114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               selectionAt: selectionAt, selectionSource: selectionIn,
                               extraSelections: extraSelections,
                               paths: attached, screen: screen, sources: sources,
+                              shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, deliveryKind: deliveryKind)
 

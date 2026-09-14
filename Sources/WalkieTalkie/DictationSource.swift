@@ -56,6 +56,16 @@ protocol DictationSource: AnyObject {
     /// *how far along*.
     var phase: DictationPhase { get }
 
+    /// **Does a sound played into the recogniser's ear reach its transcript?**
+    ///
+    /// The one question `ShotMarker` has to ask a source, and it is asked this
+    /// way round rather than as *are you Wispr* on purpose: nothing downstream
+    /// may name an implementation. Wispr hears a Loopback device this app can
+    /// speak into, so it answers yes; the local model opens the physical
+    /// microphone itself and would need the marker spliced into its own buffer
+    /// instead, which is a different mechanism and not built.
+    var acceptsAudioMarkers: Bool { get }
+
     /// Whether `start()` would work this instant. The local model answers *are
     /// the weights loaded*; Wispr answers *is it running*.
     var isReady: Bool { get }
@@ -111,7 +121,12 @@ protocol DictationSource: AnyObject {
 /// What a source hands back when the words arrive.
 struct DictationResult {
     /// What was said.
-    let text: String
+    /// `var` since 2026-09-14, so `AppDelegate.deliver` can rewrite the spoken
+    /// shot markers out of it **before** the corpus is filed: the relay's own
+    /// recording never heard them (it is on the physical microphone, Wispr is on
+    /// the Loopback device), so a corpus pair carrying `Screenshot one.` against
+    /// audio that does not is a poisoned sample. → `ShotMarker`
+    var text: String
     /// What the recogniser thought it was, when it says. Whisper answers;
     /// Wispr's pasteboard delivery carries no language.
     let language: String?
@@ -198,4 +213,11 @@ enum DictationEnd {
     /// cancelled dictation is held for five minutes so *Recover Cancelled
     /// Dictation* has something to re-read.
     case cancelled(audio: URL?, duration: TimeInterval)
+}
+
+extension DictationSource {
+    /// **No, unless a source says otherwise.** A marker that reaches nobody is
+    /// a word bitten out of his sentence for nothing, so silence is the safe
+    /// answer for any recogniser added later.
+    var acceptsAudioMarkers: Bool { false }
 }
