@@ -127,9 +127,19 @@ final class LocalWhisperSource: DictationSource {
             Log.error("marker: no samples for \(kind.rawValue) \(index) — is the clip loaded?")
             return
         }
-        meter.insert(pcm)
+        // **Into a breath, not into a word** — the same gate the played path has
+        // always had, shared since 2026-09-14 (`ShotMarker.afterGap`). Splicing
+        // overwrites nothing, so the wait costs only *where* the clip lands, and
+        // his own pause is the better place: it does not cut a word in half, and
+        // it hands the recogniser a segment boundary it was going to make anyway.
         markersInAudio = true
-        Log.info("📣 marker spliced into the recording: \(kind.words) \(index)")
+        ShotMarker.afterGap({ [weak self] in
+            (self?.meter.quietSeconds ?? 0) >= ShotMarker.gapNeeded
+        }) { [weak self] waited in
+            self?.meter.insert(pcm)
+            Log.info(String(format: "📣 marker spliced into the recording: %@ %d (%.0f ms for a gap)",
+                            kind.words, index, waited * 1000))
+        }
     }
 
     /// Reset at `start()`, because it describes one recording.

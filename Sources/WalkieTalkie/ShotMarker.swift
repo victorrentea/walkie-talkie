@@ -256,14 +256,33 @@ enum ShotMarker {
     static func play(_ kind: Kind = .shot, index: Int, whenQuiet: (() -> Bool)? = nil) {
         guard isEnabled, index >= 1, index <= maximumIndex else { return }
         let clip = Clip(kind: kind, index: index)
-        guard let whenQuiet = whenQuiet else { queue.async { speak(clip, waited: 0) }; return }
+        afterGap(whenQuiet) { waited in speak(clip, waited: waited) }
+    }
+
+    /// **Wait for a gap in his speech, then do the thing** — the gate both
+    /// mechanisms now share (2026-09-14).
+    ///
+    /// It was the played path's alone, on the reasoning that a marker *summed*
+    /// with his voice is lost. Victor, asking about the other one: *"tu cum îi
+    /// inserezi liniștea? Brutal, exact în momentul ăla? Sau când fac o mică
+    /// pauză? Ar fi mai prudent să aștept să iau un respiro."* He is right, and
+    /// the spliced path was doing the brutal thing — writing the clip at the
+    /// next input buffer after the press, mid-word if that is where he was.
+    ///
+    /// Splicing overwrites nothing, so waiting costs only *where* the marker
+    /// lands, and his own pause is the better place twice over: it does not cut
+    /// a word in half, and a recogniser that segments on pauses is handed a
+    /// boundary it was going to make anyway. `maskCeiling` still ends the wait,
+    /// because a marker late is worth more than a marker never.
+    ///
+    /// `asyncAfter` rather than a sleep: the queue is serial and shared with the
+    /// engine, and a second press must not queue behind this one's wait.
+    static func afterGap(_ whenQuiet: (() -> Bool)?, _ body: @escaping (TimeInterval) -> Void) {
+        guard let whenQuiet = whenQuiet else { queue.async { body(0) }; return }
         let askedAt = CFAbsoluteTimeGetCurrent()
-        // `asyncAfter` rather than a sleep: the queue is serial and shared with
-        // the engine, and a second shutter press must not queue behind this one's
-        // wait for a gap.
         func look() {
             let waited = CFAbsoluteTimeGetCurrent() - askedAt
-            guard !whenQuiet(), waited < maskCeiling else { return speak(clip, waited: waited) }
+            guard !whenQuiet(), waited < maskCeiling else { return body(waited) }
             queue.asyncAfter(deadline: .now() + gapTick) { look() }
         }
         queue.async { look() }
@@ -354,19 +373,27 @@ enum ShotMarker {
         }
     }
 
-    /// **Silence on each side of a spliced marker, and it is not cosmetic**
-    /// (2026-09-14). The very first measurement of this whole idea — a WAV with
-    /// the markers spliced into it by hand — put 0.2 s of silence around each
-    /// one and came back 2 out of 2. What ships splices the clip **bare**,
-    /// between two of his buffers with nothing between, and the hit rate shows
-    /// it: six selection markers in his dictation of 22:58, five recognised, and
-    /// the element marker lost into the words around it entirely.
+    /// **Zero, and the number is measured — silence around a spliced marker made
+    /// it three times worse** (2026-09-14, the same evening it was added).
     ///
-    /// A recogniser segments on pauses. Butted against his speech, the marker is
-    /// one more syllable in the middle of a phrase and is heard as part of it;
-    /// with a gap it is an utterance of its own, which is exactly what the
-    /// resolver is looking for — a marker that came back **punctuated**.
-    static let padSeconds: TimeInterval = 0.2
+    /// The reasoning for padding was sound and the evidence for it was borrowed:
+    /// the first hand-made experiment of this whole idea put 0.2 s of silence
+    /// around each marker and came back 2 of 2 — through **Wispr Flow**. It does
+    /// not transfer to the local model, and two of his own dictations say so:
+    ///
+    /// | | spliced | recognised |
+    /// |---|---|---|
+    /// | bare, 22:58 | 9 | **7** |
+    /// | 0.2 s of silence, 23:01 | 6 | **1** |
+    ///
+    /// Whisper decides per segment whether a segment contains speech at all, and
+    /// a short English utterance walled off by silence inside a Romanian
+    /// sentence is exactly the shape it drops. Butted against his words the clip
+    /// is part of a segment that is certainly speech, and it survives.
+    ///
+    /// Kept as a named constant rather than deleted, because the next person to
+    /// have this idea should find the measurement instead of the reasoning.
+    static let padSeconds: TimeInterval = 0
 
     private static func convert(_ buffer: AVAudioPCMBuffer,
                                 to format: AVAudioFormat) -> AVAudioPCMBuffer? {
