@@ -3400,10 +3400,19 @@ def _in_settle_run(ctx, second: str) -> Result:
         want = ctx.fixture.get("transcript", "")
         state = relay.state() or {}
 
-        result.check(_count_occurrences(victim_text, want) == 0 or relay.dry_run,
-                     "the sentence is not in the victim",
-                     "%d occurrence(s) — %r" % (_count_occurrences(victim_text, want),
-                                                victim_text[:60]))
+        # **The two scenarios want opposite things here, and copying the cancel's
+        # assertion to the click made it fail on a correct delivery.** A
+        # `forward-click` dictation is a *caret* dictation and the victim **is**
+        # the caret: the sentence belongs there, exactly once. The cancel throws
+        # the sentence away, so it belongs nowhere.
+        times = _count_occurrences(victim_text, want)
+        if second == "cancel":
+            result.check(times == 0 or relay.dry_run, "the sentence is not in the victim",
+                         "%d occurrence(s) — %r" % (times, victim_text[:60]))
+        else:
+            result.check(times == 1 or relay.dry_run,
+                         "the sentence reached the caret exactly once",
+                         "%d occurrence(s) — %r" % (times, victim_text[:60]))
         # **Wispr's ⌘V must have been swallowed, or never have come.** A
         # `passed` on key 9 from Wispr is the leak itself, in the tap's own words.
         leaked = [line.text for line in mark.lines()
@@ -3424,7 +3433,7 @@ def _in_settle_run(ctx, second: str) -> Result:
                          "listening=%s" % state.get("listening"))
             result.answer = ("click %d ms into the settle: %d delivery, victim %s"
                              % (delay_ms, len(rows),
-                                "clean" if not victim_text.strip() else "%d chars" % len(victim_text)))
+                                "the sentence once" if times == 1 else "%d copies" % times))
 
         flags = state.get("sessionFlags")
         result.check(not flags, "the app reports no session flags held",
