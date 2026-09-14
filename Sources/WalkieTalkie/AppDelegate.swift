@@ -2087,7 +2087,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// cannot do anything else — including take the screenshots (mouse 4) that
     /// the same minute is for.
     private func toggleDictation() {
-        if listening || source.isRecording { endDictation() } else { startDictation() }
+        guard listening || source.isRecording else { return startDictation() }
+        // **🔼→ during a caret dictation aims it at the terminal rather than
+        // ending it** (2026-09-14). Victor: *"if I am bound but I start a
+        // transcription at caret, if I do the gesture to start a bound
+        // transcription … then it should turn into a bound transcription to the
+        // terminal that is currently bound instead of being a free transcription
+        // at the caret"*.
+        //
+        // It is the rule the relay already keeps, applied to the one destination
+        // that could not be changed: *the recipient is whoever the relay is
+        // pointed at when the microphone closes*, which is why a deliberate bind
+        // mid-sentence redirects the words. The caret was the exception, because
+        // the only gesture that could have said *not the caret, the terminal*
+        // was spending itself as the stop.
+        //
+        // Nothing else moves: the gesture keeps its stop for a dictation already
+        // aimed at a terminal, and with nothing bound there is nowhere to aim, so
+        // it stops as it always did.
+        if pasteMode, isBound {
+            aimAtBoundTerminal()
+            return
+        }
+        endDictation()
+    }
+
+    /// Take a sentence already in flight off the caret and point it at the bound
+    /// terminal — see `toggleDictation`.
+    ///
+    /// `pasteMode` is the whole of the change: the destination is latched at the
+    /// microphone's close (`latchedAtCaret`), which has not happened yet, so
+    /// clearing the flag now is enough for the words to go the other way. The
+    /// ring is re-synced because its `atCaret` reading is what tells him which
+    /// of the two he is talking into, and a ring that goes on saying *caret*
+    /// after he has redirected is the kind of lie this app takes seriously.
+    private func aimAtBoundTerminal() {
+        pasteMode = false
+        Log.info("↪️ redirected mid-sentence — these words go to the bound terminal, not the caret")
+        syncBorrowedGestures()
+        overlay.flash("↪️ to \(terminal.target?.label ?? "the terminal")", duration: 1.5)
     }
 
     /// **Ask the source for a microphone**, and dress the gesture while it opens.
