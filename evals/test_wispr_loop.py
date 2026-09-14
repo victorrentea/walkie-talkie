@@ -558,6 +558,29 @@ class InSettle(unittest.TestCase):
         self.assertEqual(delays, [100, 200, 500, 1000])
         self.assertEqual(len(set(delays)), 4)
 
+    def test_a_gesture_after_the_words_landed_is_late_not_failed(self):
+        """`✍️ the words landed — N ms after the microphone closed` and the delay
+        are on the same clock (the microphone closes on the stop gesture), so a
+        delay greater than N means the gesture arrived on a **finished**
+        dictation. Expecting it to prevent a delivery that already happened is
+        expecting the past to change — the row is labelled `late`, not failed."""
+        blob = ("09-14 03:10:01 [relay] wispr flow closed the microphone\n"
+                "09-14 03:10:02 [relay] ✍️ the words landed: pasting at the caret — 480 ms "
+                "after the microphone closed\n")
+        landed = wl.read_timings(wl.parse_log(blob, year=2026)).landed_ms
+        self.assertEqual(landed, 480)
+        self.assertTrue(1000 > landed)     # the 1000 ms row is late
+        self.assertFalse(200 > landed)     # the 200 ms row is genuinely in the settle
+
+    def test_a_run_with_no_landing_line_is_never_called_late(self):
+        """No line means the sentence never landed — a cancel that worked. Calling
+        that `late` would excuse the very failure the scenario exists to catch."""
+        landed = wl.read_timings(wl.parse_log("", year=2026)).landed_ms
+        self.assertIsNone(landed)
+
+    def test_the_cancel_close_budget_is_tighter_than_the_ordinary_one(self):
+        self.assertLess(wl.CANCEL_CLOSE_BUDGET, 3.0)
+
     def test_an_empty_sweep_means_the_scenario_s_own_default(self):
         self.assertEqual([int(x) for x in "".split(",") if x.strip()] or [None], [None])
 

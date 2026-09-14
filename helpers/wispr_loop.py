@@ -1167,6 +1167,12 @@ def set_wrap_mode(relay: Relay, mode: str) -> dict:
     return relay.post("/test/wrap-mode", {"mode": mode})
 
 
+#: How long the Scratchpad may stay up after a **cancel**. The ordinary path
+#: closes it in 0.1–0.2 s; a cancelled settle was taking over 3 s, and the fix
+#: targets under this.
+CANCEL_CLOSE_BUDGET = 1.5
+
+
 def _await_scratchpad_closed(timeout: float = 3.0) -> tuple[bool, float]:
     """Wispr's window list back to just the pill.
 
@@ -3385,8 +3391,10 @@ def _in_settle_run(ctx, second: str) -> Result:
 
         settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
         result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
-        closed, closed_after = (True, 0.0) if relay.dry_run else _await_scratchpad_closed()
-        result.check(closed, "the Scratchpad closed again within 3 s",
+        budget = CANCEL_CLOSE_BUDGET if second == "cancel" else 3.0
+        closed, closed_after = ((True, 0.0) if relay.dry_run
+                                else _await_scratchpad_closed(timeout=budget))
+        result.check(closed, "the Scratchpad closed again within %.1f s" % budget,
                      "after %.1f s — windows %s"
                      % (closed_after, [] if relay.dry_run else wispr_windows()))
         seen = [] if relay.dry_run else focus.stop()
@@ -3406,13 +3414,40 @@ def _in_settle_run(ctx, second: str) -> Result:
         # the caret: the sentence belongs there, exactly once. The cancel throws
         # the sentence away, so it belongs nowhere.
         times = _count_occurrences(victim_text, want)
-        if second == "cancel":
+
+        # **Was the second gesture even in the settle?** `✍️ the words landed: …
+        # — N ms after the microphone closed` says when the sentence was
+        # delivered, and the microphone closes on the stop gesture, so N is
+        # effectively milliseconds after the stop — the same clock the delay is
+        # measured on. A gesture posted after that is not a race at all: it is a
+        # gesture on a finished dictation, and expecting it to prevent a
+        # delivery that already happened is expecting the past to change.
+        landed_ms = t.landed_ms
+        late = landed_ms is not None and delay_ms > landed_ms
+        if late:
+            result.run_label = "%d ms — late (words landed at %d ms)" % (delay_ms, landed_ms)
+            result.note("the second gesture was %d ms after the stop but the words had already "
+                        "landed at %d ms — this row measures a gesture on a finished dictation"
+                        % (delay_ms, landed_ms))
+
+        if second == "cancel" and not late:
             result.check(times == 0 or relay.dry_run, "the sentence is not in the victim",
                          "%d occurrence(s) — %r" % (times, victim_text[:60]))
-        else:
-            result.check(times == 1 or relay.dry_run,
-                         "the sentence reached the caret exactly once",
+        elif second == "cancel":
+            # The cancel is a logged no-op by then. What must not happen is a
+            # *second* copy arriving on top of the one already delivered.
+            result.check(times <= 1 or relay.dry_run,
+                         "the late cancel did not add a second copy",
                          "%d occurrence(s) — %r" % (times, victim_text[:60]))
+        else:
+            result.check(times >= 1 or relay.dry_run,
+                         "the sentence reached the caret%s"
+                         % (" (and a new dictation legitimately started)" if late
+                            else " exactly once"),
+                         "%d occurrence(s) — %r" % (times, victim_text[:60]))
+            if not late:
+                result.check(times == 1 or relay.dry_run, "and only once",
+                             "%d occurrence(s)" % times)
         # **Wispr's ⌘V must have been swallowed, or never have come.** A
         # `passed` on key 9 from Wispr is the leak itself, in the tap's own words.
         leaked = [line.text for line in mark.lines()
@@ -3429,8 +3464,12 @@ def _in_settle_run(ctx, second: str) -> Result:
         else:
             result.check(len(rows) <= 1, "exactly one delivery at most",
                          "%d outbox line(s)" % len(rows))
-            result.check(not state.get("listening"), "no second dictation was started",
-                         "listening=%s" % state.get("listening"))
+            if late:
+                result.note("a new dictation was %s — legitimate, the previous one had finished"
+                            % ("started" if state.get("listening") else "not started"))
+            else:
+                result.check(not state.get("listening"), "no second dictation was started",
+                             "listening=%s" % state.get("listening"))
             result.answer = ("click %d ms into the settle: %d delivery, victim %s"
                              % (delay_ms, len(rows),
                                 "the sentence once" if times == 1 else "%d copies" % times))
@@ -3438,6 +3477,21 @@ def _in_settle_run(ctx, second: str) -> Result:
         flags = state.get("sessionFlags")
         result.check(not flags, "the app reports no session flags held",
                      "sessionFlags=%s" % (flags if flags is not None else "not reported"))
+
+        # **Does the NEXT dictation still open?** A cancelled settle was leaving
+        # the following one unable to start for up to 30 s — which showed up in
+        # the sweep as the 200 ms row failing with `never listening`, i.e. the
+        # row *after* a cancel, not the row that cancelled. A cancel that costs
+        # Victor the next sentence is worse than one that leaks this one, and it
+        # is invisible unless the next one is actually attempted.
+        if second == "cancel" and not relay.dry_run:
+            relay.gesture("forward-click")
+            opened, waited = await_microphone(relay, mark, timeout=8.0)
+            result.check(opened, "the next dictation opens normally after a cancel",
+                         "microphone after %.1f s" % waited if opened
+                         else "no microphone edge in %.1f s" % waited)
+            relay.gesture("forward-left")
+            time.sleep(0.5)
     finally:
         focus.stop()
         if not relay.dry_run:
