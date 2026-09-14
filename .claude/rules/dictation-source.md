@@ -461,6 +461,17 @@ is a thing he is speaking, not typing, through.
   and +1.5 s, five per minute at most, logged under `🪟`. **Never on
   `didActivateApplication` during the sentence** — handing the front back while Wispr is still
   writing its note aims Wispr's own insertion at his document.
+- **`activate` does not take a front back; `AXFrontmost` does** (measured 2026-09-14, 06:13 vs
+  06:14, theft provoked on purpose). A background app asking for *another* app to be frontmost is
+  declined by macOS — the first build logged `it would not go back to Terminal` twice.
+  `AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute, true)` is
+  granted, because it is asked with the Accessibility trust. Both calls are made and both results
+  are in the log line.
+- **`frontmost_app()` in the rig cannot see a stolen front.** It asks System Events for the first
+  process whose `frontmost` is true, and that answered **`Terminal` while
+  `NSWorkspace.frontmostApplication` answered `Wispr Flow`** — so `focus never moved off the
+  victim` stayed green through the very loss Victor reported. Read the front with `NSWorkspace`
+  before trusting that assertion about a Wispr window.
 
 ### The sink, and everything the wrap is not
 

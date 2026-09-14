@@ -265,6 +265,12 @@ final class WisprFlowSource: DictationSource {
     var isReady: Bool { NSWorkspace.shared.runningApplications.contains {
         $0.bundleIdentifier?.hasPrefix(Self.bundlePrefix) == true } }
 
+    /// **Yes** — Wispr's microphone is pinned to the Loopback device
+    /// `🎓 TO Wispr`, whose output side any app can speak into, and measured
+    /// 2026-09-14 the marker arrives in `asrText` and survives the formatting
+    /// pass into `formattedText`. See `ShotMarker`.
+    var acceptsAudioMarkers: Bool { true }
+
     let meter = MicRecorder()
 
     private let watch = WisprWatch()
@@ -814,7 +820,18 @@ final class WisprFlowSource: DictationSource {
         }
         frontHandbacks.append(now)
         let name = app.localizedName ?? "pid \(victim)"
-        app.activate(options: [])
+        // **`activate` is not enough and measured not to be** (2026-09-14,
+        // 06:13): with Wispr holding the front, `activate(options: [])` plus
+        // `AXRaise`/`AXMain`/`AXFocused` on his window left Wispr exactly where
+        // it was, twice — `it would not go back to Terminal — Wispr Flow is in
+        // front`. A background application asking for somebody *else* to be
+        // frontmost is the request macOS declines; **`AXFrontmost` on the
+        // application element is the one that is granted**, because it is asked
+        // with the Accessibility trust this app already has and that is the
+        // grant the restriction defers to.
+        let activated = app.activate(options: [])
+        let axFront = AXUIElementSetAttributeValue(
+            AXUIElementCreateApplication(victim), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         // **The window, not only the application** — the same pair `onKeyStolen`
         // sets, plus the raise, because an application that comes forward with
         // no main window leaves him looking at a front with no caret in it.
@@ -828,7 +845,7 @@ final class WisprFlowSource: DictationSource {
             if front?.processIdentifier == victim {
                 Log.info("🪟 the close took the front to Wispr Flow (\(reason)) — \(name) has it back")
             } else {
-                Log.error("🪟 the close took the front to Wispr Flow (\(reason)) and it would not go back to \(name) — \(front?.localizedName ?? "?") is in front")
+                Log.error("🪟 the close took the front to Wispr Flow (\(reason)) and it would not go back to \(name) — \(front?.localizedName ?? "?") is in front (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
             }
         }
     }

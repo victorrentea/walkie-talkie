@@ -9636,3 +9636,28 @@ What it will not do:
 The handback logs under `🪟` and says whether it worked, because *the focus owner is still Wispr*
 is a thing this app has written before and it has to be as easy to see when it is a front as when
 it was a key window.
+
+### Measured, after the first attempt did not work (06:13 → 06:14)
+
+`activate` alone is **not** the sentence. The first build did what the failed experiment C in
+*Three ways to take the keyboard back* does — `activate(options: [])` plus
+`AXRaise` / `AXMain` / `AXFocused` on the window he was typing in — and with the theft provoked on
+purpose (tap the Scratchpad open, activate Wispr, let the idle sweep close it) it reported its own
+failure twice: `🪟 the close took the front to Wispr Flow … and it would not go back to Terminal —
+Wispr Flow is in front`. A **background** application asking for somebody *else* to be frontmost is
+the request macOS declines.
+
+**`AXFrontmost` on the application element is the one that is granted**, because it is asked with
+the Accessibility trust this app already holds. With
+`AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute, true)`
+added, the same provoked run reads `front after the tap: Wispr Flow` → `Terminal` 2.6 s later, and
+the log says `🪟 … — Terminal has it back`. The `activate` call stays beside it and both results
+are logged (`activate=…, AXFrontmost=…`) so the next failure names itself.
+
+**And the harness cannot see this loss, which is why it shipped.** `wispr_loop.frontmost_app()`
+asks System Events for *the first process whose frontmost is true*, and during the provoked theft
+that answered **`Terminal` while `NSWorkspace.frontmostApplication` answered `Wispr Flow`** — so
+`focus never moved off the victim` was green throughout a run in which the front was Wispr's. Both
+`wrap-caret` and `wrap-bound` pass on the fixed build with `['TextEdit']`, and that is worth
+exactly as much as the witness is. A rig that is meant to catch a stolen front has to read the
+front the way the window server does.
