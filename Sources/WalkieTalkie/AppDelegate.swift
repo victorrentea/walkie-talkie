@@ -1064,6 +1064,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // chord it replaces: the gesture is made while pointing at the terminal he
         // means, and making it twice means "again", never "let go".
         hotkeys.onGestureBind = { [weak self] in self?.bindFrontmostTerminal(toggle: false) != nil }
+        // **Bind, then talk to what was bound** — see `HotkeyTap.onGestureBindAndDictate`.
+        //
+        // In that order and only in that order: the destination is latched when
+        // the microphone closes, but everything a dictation opens with — the
+        // context frame, the highlight probe, the chip's own destination row —
+        // is read at the start, and a sentence that opened unbound and was bound
+        // a beat later would have gathered all of it against the wrong session.
+        //
+        // `toggle: false`, like the plain bind: this gesture means *point at
+        // this one*, never *let go of it*. A frontmost window nothing can be
+        // bound to leaves the dictation unstarted rather than opening one aimed
+        // at the caret, because the gesture named a terminal and there is not
+        // one — and the bind's own flash has already said so.
+        hotkeys.onGestureBindAndDictate = { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                guard self.bindFrontmostTerminal(toggle: false) != nil else { return }
+                self.startDictation()
+            }
+        }
         // ⬇️ held on the **back** button, mouse moved down. **The same call the
         // menu's Disconnect row makes**, so the gesture cannot end up meaning
         // something subtly other than the row that documents it — including the

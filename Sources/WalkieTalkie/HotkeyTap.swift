@@ -754,6 +754,18 @@ final class HotkeyTap {
     /// whatever drag or selection that button is in.
     var onGestureBind: (() -> Bool)?
 
+    /// **⬅️ held + forward button flicked right — bind, and start dictating at
+    /// what was just bound** (2026-09-14). Victor: *"click butonul principal de
+    /// mouse stânga și apoi forward și drag în dreapta, să facă bind și să și
+    /// înceapă transcrierea"*.
+    ///
+    /// The left-held sub-case of 🔼→, exactly as the plain bind is the left-held
+    /// sub-case of 🔼click. It is one gesture for the two things he always does
+    /// together — point the relay at the terminal under the cursor, then talk to
+    /// it — and the order matters, so `AppDelegate` does the bind first and only
+    /// dictates if it took.
+    var onGestureBindAndDictate: (() -> Void)?
+
     /// **⬆️ — the forward button held, mouse moved up.** Dictate at a session
     /// that does not exist yet: the folder menu opens and the words go to the
     /// terminal it spawns.
@@ -2232,6 +2244,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // bound terminal takes it, and Replace Wispr sends it to the caret.
             case VK_F10:
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                // Our own bookkeeping can go stale — `VK_F7`'s reason, and the
+                // same cost if it does: every plain flick right would read as a
+                // bind. Asked of the window server rather than remembered.
+                reconcileButtons()
+                if leftIsHeld {
+                    Log.info("🎯 ⬅️ held + forward button flicked right — bind, then dictate at it")
+                    DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
+                    return nil
+                }
                 DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                 return nil
 
@@ -2965,7 +2986,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
 
     private var gestureVocabulary: [(name: String, key: CGKeyCode, label: String, what: String)] {
         [("forward-click", VK_F7,  "⌃⌥⌘F7",  "dictate at the caret — or bind, with the left button held"),
-         ("forward-right", VK_F10, "⌃⌥⌘F10", "start the dictation, or end the one open"),
+         ("forward-right", VK_F10, "⌃⌥⌘F10",
+          "start the dictation, or end the one open — with the left button held, bind and dictate"),
          ("forward-left",  VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
          ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
          ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "free row — assigned in Options+, unclaimed here"),

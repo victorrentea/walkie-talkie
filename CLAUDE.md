@@ -218,7 +218,11 @@ sits at rest there.
   wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
 - **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,
   whatever is bound; 🔼 → = dictate at the **bound** terminal; 🔼 ← = cancel either; 🔼 ↑ = a new
-  session. The relay starts every one of them (`startDictation`); no gesture posts Wispr's chord
+  session. **With the left button held** the first two bind first: 🔼 click binds the terminal under
+  the cursor, and 🔼 → (2026-09-14) binds it **and starts the dictation at it** — one gesture for the
+  two things always done together, in that order because everything a dictation opens with is read
+  at the start. **Mid-sentence, 🔼 → aims a caret dictation at the bound terminal** rather than
+  ending it (2026-09-14). The relay starts every one of them (`startDictation`); no gesture posts Wispr's chord
   raw except 🔽 →.
 - **Unbound, the app does everything it does bound** (2026-09-11, `holdsForBind`): the sentence
   is held five minutes for the bind that follows; the chip says `⏳ bind to send — ⌘⌃B`.
