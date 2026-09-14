@@ -9800,3 +9800,37 @@ The arguments travel with it, so a `--home` or `--label` instance restarts as it
 Reachable from a desk without touching the mouse, which is how all of the above was measured:
 `open "/Applications/Walkie Talkie.app"` on the running app sends the same reopen event the Dock
 does. 1.3 s from the click to a re-bound relay, three times over.
+
+## Every ring grows out of the pointer now (2026-09-14)
+
+*"Când începe o dictare, acel cerc de fulgere să apară din mouse, să se mărească în momentul în
+care începe să asculte. Tot timpul apare cât se poate de repede și apoi face un fel de zoom in…
+așa cum face zoom out, se micșorează la final, se mărește din centru spre exterior când începe
+dictarea, pentru o durată comparabilă cu cea de închidere."*
+
+The bloom was built on 2026-09-12 for one case: a **bound** sentence takes a picture, `CaptureFlash`
+marks the point the pointer was at, and the ring grows out of the mark the bubble just made. The
+caret ring was left arriving whole on the argument that nothing marks the pointer there — which was
+an argument about the *bubble*, not about the ring. What Victor is describing is the collapse played
+backwards, and the collapse is the same half-second whatever the words were aimed at.
+
+So `fromPointer: Bool` became `CaretHalo.Opening`, three cases and the difference between two of
+them is only *what the bloom waits for*:
+
+| | held at | blooms |
+|---|---|---|
+| `.afterFlash` | `collapseEnd`, 2 % | on `grow()`, beside `CaptureFlash.announce` — the bound and spawn sentences, in the order he asked for on 09-12 |
+| `.fromPointer` | `collapseEnd`, 2 % | one main-queue hop after the panel is ordered front — everything else |
+| `.whole` | full size | — the state shots, and `setActive(false)` |
+
+`.fromPointer` could not simply reuse the waiting path: `growGrace` is 1.5 s, and a dictation with
+nothing to announce would have stood as a four-point dot for a second and a half before doing
+anything. It could not skip the hop either — the bloom has to start after `orderFrontRegardless`,
+or the first frame on screen is a ring that is already half grown. Nothing else moved: the keyframes,
+the smoothstep and `expand` (0.5 s, which *is* `collapse`) are the ones the collapse has used since
+2026-09-10, so *"o durată comparabilă cu cea de închidere"* was already true and stayed untouched.
+
+The call site is one line — `opening: (listening && !atCaret) ? .afterFlash : .fromPointer` — and it
+covers the speculative ring as well, which is the one Victor sees most: a dictation he starts from
+Wispr's own chord now comes out of his mouse like the rest of them. `WT_HALO_DEMO` opens
+`.fromPointer` too, since that is the one run of this panel a screen recording can contain.

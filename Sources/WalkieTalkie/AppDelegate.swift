@@ -2755,9 +2755,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `wisprSpeculative` is *the key that opens one has just been pressed*
         // (dropped again after `wisprSpeculativeGrace` if no microphone follows);
         // `settling` is *it closed, and the words have not landed yet*.
-        // **A bound sentence's ring grows out of the pointer** (2026-09-12) —
-        // the caret's comes up whole, because nothing marks the pointer first
-        // there: no picture is taken and no bubble announces one.
+        // **Every ring grows out of the pointer** (2026-09-14). A bound
+        // sentence's has since 2026-09-12, where the yellow bubble marks the
+        // point first and `grow()` follows it; Victor asked for the same of all
+        // the others — *"să apară din mouse, să se mărească în momentul în care
+        // începe să asculte"* — so a caret or a Wispr-started ring blooms the
+        // moment it is up instead of arriving full size. `.afterFlash` is the
+        // only case that waits, and the only case that has something to wait
+        // for: nothing announces a dictation that takes no picture.
         // **The ring is *microphone open*, and nothing else** (Victor,
         // 2026-09-13). It used to stand through the settle as well, on the
         // 2026-09-12 argument that the dictation is not over until the words
@@ -2777,7 +2782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || (settling && settlingAtCaret)
         caretHalo.setActive(listening || speculative,
                             atCaret: atCaret,
-                            fromPointer: listening && !atCaret)
+                            opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // The status line goes yellow → red on the same edge, and reads the same
         // `listening` the ring does rather than a flag of its own.
         publishBinding(terminal.target)

@@ -372,6 +372,24 @@ final class CaretHalo {
     /// screen) must not leave a four-point dot standing for a whole sentence.
     private static let growGrace: TimeInterval = 1.5
 
+    /// **How a ring comes up.** The close is a collapse into the pointer, so
+    /// the way in is described in the same terms as the way out — and since
+    /// 2026-09-14 every dictation takes one of the two blooming cases. Victor:
+    /// *"acel cerc de fulgere să apară din mouse, să se mărească în momentul în
+    /// care începe să asculte … se mărește din centru spre exterior când începe
+    /// dictarea, pentru o durată comparabilă cu cea de închidere"*.
+    enum Opening {
+        /// Full size, where it is — the state shots and anything that is not a
+        /// dictation opening.
+        case whole
+        /// Small at the pointer, blooming the moment the panel is up: nothing
+        /// else is going to mark that point, so the bloom *is* the arrival.
+        case fromPointer
+        /// Small at the pointer, blooming when `grow()` says the yellow receipt
+        /// has landed — a bound dictation, which marks the pointer first.
+        case afterFlash
+    }
+
     /// The ring is being held at the pointer's dot, waiting for `grow()`.
     private var small = false
     /// `grow()` was asked for before the ring was up; honoured by `show`.
@@ -444,17 +462,17 @@ final class CaretHalo {
     /// `atCaret` is read on every call rather than only on the rising edge: a
     /// ⌘⌃B made mid-sentence gives the words a terminal, and the arrow has to
     /// stop asking him to place them the moment that happens.
-    /// - Parameter fromPointer: open **small at the pointer and grow** rather
-    ///   than appear at full size — a bound dictation, since 2026-09-12. Victor:
-    ///   *"haloul de fulgere să înceapă mărindu-se din cursor, unde apare mic …
-    ///   după ce apare bula galbenă … practic să apară din cursor și să se
-    ///   mărească inelul dictării"*. The collapse already says *the sentence
-    ///   went into the pointer*; this is the same motion the other way round —
-    ///   the sentence comes out of the point the bubble has just marked. The
-    ///   growth itself is started by `grow()`, from the bubble's own call site,
-    ///   so the two are in the order he described; `growGrace` is the net for a
-    ///   bubble that never comes.
-    func setActive(_ on: Bool, atCaret: Bool = false, fromPointer: Bool = false) {
+    /// - Parameter opening: how the ring comes up — see `Opening`. A bound
+    ///   dictation has been growing out of the pointer since 2026-09-12 (*"să
+    ///   apară din cursor și să se mărească inelul dictării"*, after the yellow
+    ///   bubble); **since 2026-09-14 every dictation does**, because the thing
+    ///   he is describing is the collapse played backwards and that is true
+    ///   whatever the words are aimed at. The two cases differ only in what they
+    ///   wait for: `.afterFlash` for the receipt, so the bound order he asked
+    ///   for survives, `.fromPointer` for nothing at all. Both bloom over
+    ///   `expand`, which is `collapse` — *"o durată comparabilă cu cea de
+    ///   închidere"*.
+    func setActive(_ on: Bool, atCaret: Bool = false, opening: Opening = .whole) {
         if live == on, self.atCaret == atCaret { return }
         self.atCaret = atCaret
         arrow.armed = on && atCaret
@@ -463,17 +481,18 @@ final class CaretHalo {
         // Both edges, for the reason the selection watcher logs both: "why did
         // the ring not come up" has to be answerable from the file, and the
         // conditions behind it are not all visible on screen.
-        Log.info(on ? "◯ caret halo on — the microphone is open\(atCaret ? ", and these words go wherever the caret is" : "")\(fromPointer ? ", growing out of the pointer" : "")"
+        Log.info(on ? "◯ caret halo on — the microphone is open\(atCaret ? ", and these words go wherever the caret is" : "")\(opening == .whole ? "" : ", growing out of the pointer")"
                     : "◯ caret halo off")
-        on ? show(fromPointer: fromPointer) : hide()
+        on ? show(opening: opening) : hide()
     }
 
     /// **The bubble is on screen — let the ring out.** Called where
     /// `CaptureFlash.announce` is, so the growth follows the receipt. A ring
-    /// that is not being held small is left alone: a caret dictation came up
-    /// whole, and a second bloom over a full-size ring is the flicker this file
-    /// keeps removing. Before `show` it is remembered, because `dictationBegan`
-    /// takes the picture a line before it raises the ring.
+    /// that is not being held small is left alone — a `.fromPointer` ring has
+    /// bloomed already by the time a stray receipt arrives, and a second bloom
+    /// over a full-size ring is the flicker this file keeps removing. Before
+    /// `show` it is remembered, because `dictationBegan` takes the picture a
+    /// line before it raises the ring.
     func grow() {
         guard live else { growOnShow = true; return }
         guard small, let stage = stage else { return }
@@ -525,7 +544,7 @@ final class CaretHalo {
                         (CFAbsoluteTimeGetCurrent() - t0) * 1000))
     }
 
-    private func show(fromPointer: Bool) {
+    private func show(opening: Opening) {
         let panel = self.panel ?? makePanel()
         // **A collapse still in the air is taken back whole**, before anything
         // else: he stopped and started again inside half a second, and what has
@@ -544,16 +563,27 @@ final class CaretHalo {
         // ended, and a ring that comes up 20% oversized on a syllable nobody has
         // said yet is the same lie a frozen indicator tells. The stage is set
         // to full size or to the pointer's dot, depending on how this one opens.
-        small = fromPointer
+        small = opening != .whole
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         pulse?.transform = CATransform3DIdentity
-        stage?.transform = fromPointer
+        stage?.transform = small
             ? CATransform3DMakeScale(Self.collapseEnd, Self.collapseEnd, 1) : CATransform3DIdentity
         CATransaction.commit()
         growGraceTimer?.invalidate()
         growGraceTimer = nil
-        if fromPointer {
+        switch opening {
+        case .whole:
+            growOnShow = false
+        case .fromPointer:
+            // **The bloom is the arrival.** Nothing marks the pointer for this
+            // one, so there is nothing to wait for and `growGrace` would be a
+            // second and a half of a four-point dot. A main-queue hop all the
+            // same, so the panel is ordered front first: the ring has to *be*
+            // there before it is seen getting bigger.
+            growOnShow = false
+            DispatchQueue.main.async { [weak self] in self?.grow() }
+        case .afterFlash:
             if growOnShow {
                 growOnShow = false
                 DispatchQueue.main.async { [weak self] in self?.grow() }
@@ -562,8 +592,6 @@ final class CaretHalo {
                 growGraceTimer = t
                 RunLoop.main.add(t, forMode: .common)
             }
-        } else {
-            growOnShow = false
         }
         arrow.hide()
         follow()
@@ -1595,7 +1623,7 @@ extension CaretHalo {
             return Float(0.25 + 0.75 * abs(sin(t * .pi * 3)))
         }
         halo.quietSeconds = { max(0, phase() - 6) }
-        halo.setActive(true, atCaret: true)
+        halo.setActive(true, atCaret: true, opening: .fromPointer)
         // **It ends the way a dictation ends, not with `exit(0)`.** The collapse
         // is the half of this that no still can show and that a demo cut off
         // mid-frame cannot either — so the last half-second of every demo is the
