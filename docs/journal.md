@@ -9661,3 +9661,89 @@ that answered **`Terminal` while `NSWorkspace.frontmostApplication` answered `Wi
 `wrap-caret` and `wrap-bound` pass on the fixed build with `['TextEdit']`, and that is worth
 exactly as much as the witness is. A rig that is meant to catch a stolen front has to read the
 front the way the window server does.
+
+## Nothing this app draws is in the picture (2026-09-14)
+
+Victor, by mail while away from the keyboard: *"Atunci când faci poză la ecran în timpul dictării,
+în poză să nu apară decorațiunile puse de … Walkie-Talkie. Cercul de fulgere, săgețile verticale
+sau bila galbenă care crește, bum, efectul de tap. Pentru durata screenshot-ului, decorațiunile se
+ascund și apoi se reafișează."* The three are `CaretHalo` (the ring's lightning frames), `DropArrow`
+and the `.tapRipple` marker `CaptureFlash` draws at every shutter.
+
+**They are already invisible to every capture, and the guarantee was re-measured rather than
+quoted:**
+
+| | |
+|---|---|
+| every window this process owns | `kCGWindowSharingState == 0`, except AppKit's own menu-bar strips |
+| a control panel at `.readOnly`, `screencapture -x -D`, both displays | **3600 magenta samples** — it is in the frame |
+| the same panel at `.none` | **0** — it is not |
+| two real mid-dictation frames (13 and 14 Sep, halo riding every dictation since 2026-09-11) | no gold annulus at the recorded pointer |
+
+So the hide-and-restore he asked for was **not built**: it would buy nothing, and it would cost a
+blink of his own UI at the exact moment the shutter's confirmation is meant to be drawn — the tap
+ripple *is* the receipt for the capture it would be hidden from. What the request is really about
+is that the guarantee must not lapse silently, and the answer to that is a test, not a mechanism:
+`evals/test_capture_decorations.py` counts the windows each file makes against the `sharingType`
+lines it sets, and its `--self-test` proves it fails on a bare panel.
+
+**What *is* in his frames is the other two apps.** `victor-macos-addons` and `victor-effects`
+contain no `sharingType` anywhere, so the hands-off 🔒 corners, the amber frame, the bottom-left
+banner and any effect playing from the tablet all land in these pictures — the 14 Sep 06:27 frame
+has the hands-off badge sitting beside the pointer. That is defensible there (a decoration nobody
+can screen-share is not on the projector during a training), so it is left alone and named here
+instead of being quietly changed from this repo.
+
+## The highlight lands inside the sentence (2026-09-14)
+
+The same mail: *"Vreau același lucru și pentru selecție. Doar că textul selectat trebuie inserat
+într-o etapă de postprocesare în transcripție, în locul markerului pe care l-ai lăsat acolo. … Și
+ca fallback, în cazul în care markerul nu este detectat în textul transcris, pui transcripția ca
+acum, la final."*
+
+The shot marker built that morning says `screenshot one` into Wispr's ear and comes back as
+`[shot 1]` — a **reference**, because a picture cannot be inside a line of text. A highlight can:
+it is text already. So the second kind says `selected text one` and the rewrite puts **the words
+themselves** where the marker was, quoted, at the point in the sentence he made the selection at.
+
+What that cost, in order:
+
+- **`ShotMarker.Kind`** — `shot` | `selection`, and everything else shared: the `say` clips, the
+  gap gate, the Loopback device, the number words and the digit forms, and now a **single regex
+  with two alternatives**, so one scan over the transcript keeps a picture and a highlight in the
+  order he made them. Two passes would each rewrite the string the other was measured against.
+- **Two words, not one.** `selection one` is a phrase a recogniser hears in ordinary speech;
+  `selected text one` is not. The false-positive that matters is his own sentence being eaten.
+- **Separate counters per kind.** `screenshot three` and `selected text three` cannot be confused
+  for each other, so sharing a counter would only make the third picture `screenshot five`.
+- **Reserved under the lock that decided the highlight is new, spoken after it is released.**
+  `reserveMarkerLocked` is called inside `fileSelection`'s critical section — two highlights a
+  second apart can finish filing in the other order, and a number read off a list position would
+  then quote the wrong paragraph — while `speakMarker` runs outside it, because the marker waits
+  for a gap in his speech and `stateLock` is taken from the main queue by everything that draws
+  the chip.
+- **The fallback is an absence.** A highlight whose marker was found is **dropped** from
+  `text selected during dictation:`; one whose marker was lost keeps the line it always had. So
+  the list is exactly what it was, minus the rows that are already in the sentence — and nothing
+  is ever in both places, which is the way an agent comes to believe there were two highlights.
+- **The frozen selection gets no marker.** `stashSelection` runs at 0:00, before there is a
+  sentence for a marker to sit inside; it is the subject and it leads the list. The one that
+  arrives mid-sentence through `fillsTheBlank` goes through `fileSelection` and does get one.
+- **The corpus gets neither the marker nor the paragraph** —
+  `resolve(inlineSelections: false)`. Wispr's recording heard the marker and the relay's did not;
+  *neither* of them heard the text he had highlighted, and a transcript filed beside audio that
+  quotes a page of code is a pair whose words are not in its sound.
+- **Clamped at the same 400 characters the clause clamps at**, for the clause's own reason: a
+  selection can be an entire file, and this one goes into the middle of a sentence he reads back.
+  The outbox keeps the whole of it, now with `selections[].marker` and `selections[].inlined`
+  beside it — the one place *why is this highlight not under the sentence* is answerable later.
+- **A marker spoken by `finalSelectionRead` reaches nobody.** That read files a highlight after
+  the microphone has closed, so its number goes into a device Wispr has stopped listening to and
+  the fallback list is where the highlight lands. It costs one number out of ten; gating it would
+  mean reading a main-thread flag from the shutter's thread, which is the race `markMarker` exists
+  to avoid.
+
+The rewrite is unit-tested standalone (the `ShotMarker` half compiles against a `Log` stub):
+inline substitution inside a Romanian sentence, the digit form Wispr's `pastedText` column
+produces, both kinds in one sentence in order, the corpus form, a marker naming a highlight that
+was never filed, and ordinary prose (`the selected text below is fine`) left untouched.

@@ -189,6 +189,92 @@ class EnvelopeShape(unittest.TestCase):
             self.assertIn(stamp, self.line["line"])
 
 
+@unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
+class SelectionMarkers(unittest.TestCase):
+    """A highlight named by a spoken marker lands **in** the sentence (2026-09-14).
+
+    The other one is the control: it was filed the same way, its marker was never
+    said back by the "recogniser", and it therefore keeps the line under the
+    words that every highlight had before today. Victor's fallback is that
+    absence, so the test is as much about the second highlight as the first.
+
+    `/test/dictation` enters below the recogniser, which is exactly what makes
+    this assertable: the fabricated transcript is what Wispr *would* have
+    returned with the marker in it, and nothing else in the path is faked.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        state = _get(BASE, "/test/state")
+        if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
+            raise unittest.SkipTest("a real dictation is in flight — not touching it")
+        target = _get(BASE, "/target")
+        cls.previous = target.get("address") if target.get("bound") else None
+        cls.first = "the subject he was talking about %d" % int(time.time())
+        cls.second = "the paragraph he pointed at later"
+        cls.line = cls._run()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            if cls.previous:
+                _post(BASE, "/bind", {"tty": cls.previous})
+            else:
+                _post(BASE, "/unbind")
+        except Exception:
+            pass
+
+    @classmethod
+    def _run(cls):
+        _post(BASE, "/test/dictation/start")
+        time.sleep(1)
+        # Marker one: the frozen slot is empty at the start of a fabricated
+        # dictation, so this is the `fillsTheBlank` case — a subject arriving
+        # mid-sentence, and it is marked like any other.
+        _post(BASE, "/test/selection", {"text": cls.first})
+        time.sleep(2)
+        _post(BASE, "/test/selection", {"text": cls.second})   # marker two
+        time.sleep(1)
+        # What Wispr would hand back: his sentence with the second marker in it,
+        # promoted to its own paragraph the way the formatter does.
+        cls.marker = "uite ce zici de asta\n\nSelected text two.\n\nmerge?"
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/dictation", {"text": cls.marker})
+        for _ in range(10):
+            time.sleep(1)
+            entry = _last_line()
+            if entry.get("selection") == cls.first:
+                return entry
+            _post(BASE, "/bind", {"tty": NOWHERE})
+        raise AssertionError("the dictation never reached the outbox")
+
+    def test_the_marked_highlight_is_quoted_inside_the_sentence(self):
+        words = self.line["line"].split("\n\n")[0]
+        self.assertIn('"%s"' % self.second, words)
+        # …and the marker itself is gone, in every form it could have survived in.
+        self.assertNotIn("Selected text", words)
+        self.assertNotIn("[selection", words)
+
+    def test_the_marked_highlight_is_not_repeated_under_the_words(self):
+        """Inline *or* listed, never both — that is what makes it readable."""
+        listed = self.line["line"].split("text selected during dictation:")[-1]
+        self.assertNotIn(self.second, listed)
+
+    def test_the_unmarked_highlight_keeps_its_line(self):
+        """The fallback, and it is chosen by the marker's absence."""
+        self.assertIn("text selected during dictation:", self.line["line"])
+        listed = self.line["line"].split("text selected during dictation:")[-1]
+        self.assertIn('"%s"' % self.first, listed)
+
+    def test_the_outbox_says_which_marker_and_whether_it_landed(self):
+        extra = self.line["selections"][0]
+        self.assertEqual(extra["text"], self.second)
+        self.assertEqual(extra["marker"], 2)
+        self.assertTrue(extra["inlined"])
+        # The whole text is still in the outbox even when it was inlined clamped.
+        self.assertEqual(self.line["selection"], self.first)
+
+
 if __name__ == "__main__":
     if BASE is None:
         print("no relay on %s — start Walkie Talkie first" % (PORTS,), file=sys.stderr)

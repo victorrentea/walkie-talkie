@@ -94,6 +94,42 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 - **`mm:ss` in the envelope, `m:ss` on the chip, one calculation** (`AppDelegate.clock(_:pad:)`, with `stamp` and `envelopeStamp` over it). The envelope already carries a clock — every frame is named `shot-00:05(…)` — and a highlight reading `0:05` beside a frame reading `00:05` is two readings to reconcile; the chip is a few characters wide beside the cursor and cannot spend the column. Never fork the arithmetic. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
 - **`POST /test/selection {"text": …}` files a highlight as though he had made one**, entering at `fileSelection` so the offset, the window reading, the frozen-slot rule and the *already carried* skip all run. It fakes the **reading** and nothing else — it is the only desk-reachable route into the one attachment that is read off the screen. `evals/test_envelope.py` is what it exists for. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*
 
+## The highlight lands *inside* the sentence (2026-09-14)
+
+- **Every highlight filed mid-dictation is announced to the recogniser as `selected text N`, and
+  the words replace the marker at delivery.** The sentence comes back with the paragraph quoted
+  where he said it instead of a line under it he has to align by its `mm:ss`. The mechanism, the
+  vocabulary and the costs are `ShotMarker`'s — read `.claude/rules/dictation-source.md`, *The
+  second kind*. → journal: *The highlight lands inside the sentence (2026-09-14)*
+- **The list under the words is the fallback, and it is chosen by the absence of the marker.** A
+  highlight whose marker was found is left out of `selectionsClause`; a highlight whose marker was
+  lost — masked by continuous speech, filed after the microphone closed, past the tenth — keeps the
+  line it always had. Victor: *"în cazul în care markerul nu este detectat în textul transcris, pui
+  transcripția ca acum, la final"*. → journal: *The highlight lands inside the sentence (2026-09-14)*
+- **Inline text is clamped at the same 400 characters the clause clamps at** (`clampForTerminal`),
+  and the outbox still carries the whole of it, plus `selections[].marker` and
+  `selections[].inlined` — the one place *why is this highlight not under the sentence* is
+  answerable after the fact. → journal: *The highlight lands inside the sentence (2026-09-14)*
+
+## Nothing this app draws is in the picture, and a test says so (2026-09-14)
+
+- **The lightning ring, the drop arrow and the tap ripple are already invisible to every capture**
+  — `sharingType = .none` on every panel, re-measured the day Victor asked for them to be hidden
+  during the shutter: a control panel at `.readOnly` comes back in the frame and the same panel at
+  `.none` does not (`screencapture -x -D`, both displays, macOS 15.7), every window this process
+  owns reports `kCGWindowSharingState == 0`, and two real mid-dictation frames have no gold annulus
+  at the recorded pointer. **Do not add a hide-and-restore around the capture**: it buys nothing and
+  costs a blink of his own UI at the moment the shutter's confirmation is supposed to be drawn.
+  → journal: *Nothing this app draws is in the picture (2026-09-14)*
+- **`evals/test_capture_decorations.py` is the guard** — it counts the windows each file makes
+  against the `sharingType` lines it sets, and `--self-test` proves it fails on a bare panel. A
+  guarantee nobody can see is one that lapses silently. → journal: *Nothing this app draws is in the picture (2026-09-14)*
+- **What *is* in his frames comes from the other two apps.** Victor Addons and Victor Effects set no
+  sharing type anywhere, so the hands-off 🔒 corners, the amber frame, the banners and any effect
+  playing from the tablet do land in these pictures. That is deliberate there — an effect nobody can
+  screen-share is an effect that is not on the projector — and changing it is a decision for those
+  repos, not this one. → journal: *Nothing this app draws is in the picture (2026-09-14)*
+
 ## The selection: frozen, and not outliving the dictation
 
 - **The first non-empty read wins for the whole dictation.** `stashSelection` bails when `pendingSelection` is already set; `captureContext` clears it only when a *new* dictation opens. Later probes exist only to fill a blank the first one left. → journal: *The selection is frozen for the whole dictation*
@@ -108,4 +144,5 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 - Do not go looking for tokens in the wording again; they are in the pixels.
 - Do not put `[selected: …]` / `[selected 0:31: …]` back, and do not fork the stamp arithmetic between the chip and the envelope.
 - Do not call `WindowContext.describe()` while holding `stateLock`.
+- Do not hide the overlay's own decorations around a capture — they are not in it (`sharingType`).
 - Read `docs/pointer-line.md` before either building the pointer line or re-deriving it.

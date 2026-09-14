@@ -549,10 +549,49 @@ Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e
   so `reserveMarker` may not read `source`: `setEngine` reassigns it from the main thread.
   `wireDictationSource` publishes `markerMeter` under `stateLock` instead, and nil is the whole
   of *do not speak markers*.
-- **`POST /test/shot-marker` is the unit test**, both halves, for `wispr-state/simulate`'s reason.
+- **`POST /test/shot-marker` is the unit test**, both halves and both kinds, for
+  `wispr-state/simulate`'s reason — `{"kind": "selection"}` on `play`/`splice`, `{"selections":
+  {"1": "…"}}` on the rewrite.
 - `WT_SHOT_MARKERS=0` off for a run; `WT_MARKER_DEVICE` points it elsewhere. With no matching
   device it says so **once** and stays quiet — a Mac where Wispr has been moved back to the
   built-in microphone is one where a marker reaches nobody.
+
+### The second kind: `selected text N` (2026-09-14)
+
+Victor, the same day: *"Vreau același lucru și pentru selecție. Doar că textul selectat trebuie
+inserat într-o etapă de postprocesare în transcripție, în locul markerului."*
+
+- **One mechanism, two vocabularies, one file.** `ShotMarker.Kind` is `shot` | `selection`;
+  everything else — the clips, the gap gate, the Loopback device, the number words, the single
+  regex that reads both back — is shared. The phrase is **two words** (`selected text one`), because
+  `selection one` is a thing a recogniser hears in ordinary speech and `selected text one` is not.
+- **A shot marker becomes a reference, a selection marker becomes the words.** `[shot 2]` points at
+  a file listed under the sentence — there is no way to put a picture inside a line of text. The
+  highlight *is* text, so it is spliced in where he said it, quoted and clamped at the 400
+  characters `selectionsClause` already clamps at. The full text is still in the outbox.
+- **A highlight that got inlined is dropped from the list under the words** (`inlinedSelections`,
+  `Message.inlinedSelections`); one that did not keeps its `- 00:08 in '…': "…"` line exactly as
+  before. That absence *is* the fallback Victor asked for, and it is the whole of it.
+- **The counters are separate per kind and the numbers restart at one.** `screenshot three` and
+  `selected text three` cannot be confused for each other, so a shared counter would only make the
+  third picture `screenshot five` for no reason a listener can reconstruct.
+- **The number is reserved under the same lock that decided the highlight is new**
+  (`reserveMarkerLocked`, called from inside `fileSelection`'s critical section) and **spoken after
+  the lock is released** — `mark` waits for a gap in his speech on `ShotMarker`'s own queue, and
+  holding `stateLock` across a silence that is his to break would stall the chip.
+- **The highlight he was already holding gets no marker.** `stashSelection` runs at 0:00, before
+  there is a sentence for a marker to be *inside* of; it is the subject, it leads the list, and that
+  is where it reads best. A highlight that fills the empty frozen slot mid-sentence
+  (`fillsTheBlank`) goes through `fileSelection` and does get one.
+- **The corpus gets neither the marker nor the paragraph** (`resolve(inlineSelections: false)`).
+  Wispr's recording heard the marker and the relay's did not; *neither* heard the text he had
+  highlighted. So the pair filed beside the audio is the sentence with the selection markers taken
+  out and nothing put in their place.
+- **A marker spoken by the final read is a marker nobody hears.** `finalSelectionRead` files a
+  highlight *after* the microphone closed, so its number is said into a device Wispr is no longer
+  listening to and the fallback list is where that highlight lands. It costs a number out of ten and
+  nothing else; gating it on `listening` would mean reading a main-thread flag from the shutter's
+  thread, which is the race `markMarker` exists to avoid.
 
 ## Three witnesses, and none of them alone (2026-09-13)
 

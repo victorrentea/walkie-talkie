@@ -102,14 +102,14 @@ final class LocalWhisperSource: DictationSource {
     /// travels to `deliver` on the result, because it is the corpus that has to
     /// know: this WAV contains words he did not say, and its transcript must be
     /// the one that still names them.
-    func markShot(_ index: Int) {
-        guard let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) else {
-            Log.error("shot marker: no samples for \(index) — is the clip loaded?")
+    func mark(_ kind: ShotMarker.Kind, index: Int) {
+        guard let pcm = ShotMarker.pcm(kind, index: index, in: MicRecorder.fileFormat) else {
+            Log.error("marker: no samples for \(kind.rawValue) \(index) — is the clip loaded?")
             return
         }
         meter.insert(pcm)
         markersInAudio = true
-        Log.info("📣 marker spliced into the recording: screenshot \(index)")
+        Log.info("📣 marker spliced into the recording: \(kind.words) \(index)")
     }
 
     /// Reset at `start()`, because it describes one recording.

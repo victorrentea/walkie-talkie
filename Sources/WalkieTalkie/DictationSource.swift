@@ -66,15 +66,17 @@ protocol DictationSource: AnyObject {
     /// instead, which is a different mechanism and not built.
     var acceptsAudioMarkers: Bool { get }
 
-    /// **Put the marker for picture `index` where this recogniser will hear it.**
+    /// **Put the marker for `index` of `kind` where this recogniser will hear
+    /// it** — a picture he just took, or a highlight he just made.
     ///
     /// The mechanism is the source's, because the two are not the same move and
     /// only one of them works per source: Wispr hears a Loopback device, so its
     /// marker is *played* into it and is **summed** with his voice; the local
     /// model transcribes a file this app writes, so its marker is **spliced into
     /// that file** between two of his buffers, which is the same idea without
-    /// the collision. Called from the shutter, off the main thread.
-    func markShot(_ index: Int)
+    /// the collision. Called from the shutter and from the selection watcher,
+    /// off the main thread.
+    func mark(_ kind: ShotMarker.Kind, index: Int)
 
     /// Whether `start()` would work this instant. The local model answers *are
     /// the weights loaded*; Wispr answers *is it running*.
@@ -245,5 +247,5 @@ extension DictationSource {
     /// A source that cannot place a marker is never asked to — `reserveMarker`
     /// checks `acceptsAudioMarkers` first — so this is the honest no-op rather
     /// than a fallback anybody relies on.
-    func markShot(_ index: Int) {}
+    func mark(_ kind: ShotMarker.Kind, index: Int) {}
 }

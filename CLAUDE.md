@@ -142,7 +142,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/scratchpad/park` | move Wispr's Scratchpad window to its corner now — smallest size Wispr allows, bottom-right of the second display (the main one's when there is one), all but an 8 pt sliver off the edge; answers the frame it ended up at |
 | `POST /test/wrap-mode` `{"mode": "scratchpad"｜"sink"｜"off"｜"auto"}` | pick how the relay takes Wispr's words for this run; `auto` hands the decision back to the tick and to Wispr's own configuration. The menu tick follows |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
-| `POST /test/shot-marker` `{"text": …, "available": [1,2]}` · `{"play": 1}` | **the shot marker's unit test, both halves** — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
+| `POST /test/shot-marker` `{"text": …, "available": [1,2], "selections": {"1": "…"}}` · `{"play": 1, "kind": "selection"}` | **the marker's unit test, both halves and both kinds** — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
 | `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
 | `GET /test/wispr-notes` · `POST /test/wispr-notes` `{"since": <unix s>}` | Wispr Flow's **Scratchpad**, read-only (`WisprNotes`, `Notes` + `NoteVersions`): the GET is the baseline before the chord, the POST the delivery read after it (`{"note": null}` when nothing was written since). Wired to no gesture — the reading half of the candidate wrap |
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
@@ -345,7 +345,7 @@ sits at rest there.
   and the ⚡ timings. It needs **Wispr → Settings → Microphone → Auto-detect** (Wispr's own device
   id is a salted Chromium hash and is not scriptable); it says so rather than failing silently.
 
-## Shot markers (2026-09-14)
+## Spoken markers (2026-09-14)
 
 - **A shutter press during a dictation says `screenshot one` into Wispr's ear**, so the
   transcript carries `[shot 1]` at the word he pressed at rather than a second he has to
@@ -368,6 +368,17 @@ sits at rest there.
   for a gap in his speech, `MicRecorder.quietSeconds ≥ 0.12 s`, up to a **1.5 s** ceiling and
   then speaks anyway. The wait is logged: `(1540 ms for a gap)` means the ceiling was reached
   and the marker went out into speech regardless.
+- **A highlight made mid-dictation says `selected text one` the same way, and at delivery the
+  marker is replaced by the highlighted text itself** — quoted, where he said it, clamped at 400
+  characters. `ShotMarker.Kind` is the only difference between the two; the clips, the gap gate,
+  the device and the rewrite are one mechanism. Victor: *"textul selectat trebuie inserat …
+  în locul markerului"*.
+- **A highlight that got inlined is left out of `text selected during dictation:`; one whose
+  marker was lost keeps its line there.** That absence is the fallback, and it is all of it. The
+  highlight he was already holding when he started talking never gets a marker — it is the
+  subject, and it leads the list.
+- **The corpus gets the words with the markers taken out and nothing put in their place** — the
+  relay's own recording heard neither the marker nor the paragraph he had highlighted.
 
 ## Never reintroduce
 

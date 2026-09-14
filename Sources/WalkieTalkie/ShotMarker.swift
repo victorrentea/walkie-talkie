@@ -50,11 +50,59 @@ enum ShotMarker {
 
     // MARK: - What is said
 
+    /// **What a marker is naming** (2026-09-14, the same day the shot marker was
+    /// built — Victor: *"Vreau același lucru și pentru selecție"*).
+    ///
+    /// Two kinds, one mechanism, and deliberately one file: the phrase, the
+    /// number words, the digit forms and the pattern that reads them back are a
+    /// single vocabulary, and a vocabulary spread over two files drifts the
+    /// first time somebody rewords one end of it.
+    ///
+    /// What they do **not** share is what the marker becomes in the words. A
+    /// shot marker turns into `[shot 2]`, a reference to a file listed below the
+    /// sentence — there is no way to put a picture inside a line of text. A
+    /// selection marker turns into **the selected text itself**, because that is
+    /// a thing a sentence can hold, and holding it inline is the whole point:
+    /// *"textul selectat trebuie inserat într-o etapă de postprocesare în
+    /// transcripție, în locul markerului"*. → `resolve`
+    enum Kind: String, CaseIterable {
+        case shot
+        case selection
+
+        /// The spoken form's opening words. English for the reason the whole
+        /// phrase is (see `phrase`), and two words rather than one for the
+        /// selection because `selection one` is a thing a recogniser hears in
+        /// ordinary speech, while `selected text one` is not.
+        var words: String {
+            switch self {
+            case .shot: return "screenshot"
+            case .selection: return "selected text"
+            }
+        }
+
+        /// The clip's file name. Hyphenated, because it is a path.
+        var slug: String {
+            switch self {
+            case .shot: return "screenshot"
+            case .selection: return "selected-text"
+            }
+        }
+    }
+
+    /// One spoken clip: which kind of thing it names and which one of them.
+    struct Clip: Hashable {
+        let kind: Kind
+        let index: Int
+    }
+
     /// **Ten, because an eleventh picture in one sentence is not a thing that
     /// happens** — and every marker is a word cut out of what he was saying, so
     /// the vocabulary is deliberately small rather than open-ended. A shot past
     /// the ceiling is still taken, still attached and still listed by its
-    /// offset; it simply gets no marker.
+    /// offset; it simply gets no marker. The same ceiling counts each kind
+    /// separately: a sentence with three pictures and three highlights in it
+    /// says `screenshot three` and `selected text three`, and the two numbers
+    /// never have to be told apart because the words in front of them differ.
     static let maximumIndex = 10
 
     /// The spoken form. English, like every other string this app renders, and
@@ -65,7 +113,9 @@ enum ShotMarker {
     private static let words = ["one", "two", "three", "four", "five",
                                 "six", "seven", "eight", "nine", "ten"]
 
-    private static func phrase(_ index: Int) -> String { "screenshot \(words[index - 1])" }
+    private static func phrase(_ clip: Clip) -> String {
+        "\(clip.kind.words) \(words[clip.index - 1])"
+    }
 
     // MARK: - Where it is played
 
@@ -99,7 +149,7 @@ enum ShotMarker {
 
     private static var engine: AVAudioEngine?
     private static var player: AVAudioPlayerNode?
-    private static var buffers: [Int: AVAudioPCMBuffer] = [:]
+    private static var buffers: [Clip: AVAudioPCMBuffer] = [:]
     /// Said once, not once per press — see `deviceNeedle`.
     private static var complained = false
 
@@ -118,25 +168,29 @@ enum ShotMarker {
         guard isEnabled else { return }
         queue.async {
             try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-            for index in 1...maximumIndex where buffers[index] == nil {
-                guard let url = synthesise(index) else { continue }
-                guard let file = try? AVAudioFile(forReading: url),
-                      let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
-                                                    frameCapacity: AVAudioFrameCount(file.length)),
-                      (try? file.read(into: buffer)) != nil else {
-                    Log.error("shot marker: could not load \(url.lastPathComponent)")
-                    continue
+            for kind in Kind.allCases {
+                for index in 1...maximumIndex {
+                    let clip = Clip(kind: kind, index: index)
+                    guard buffers[clip] == nil else { continue }
+                    guard let url = synthesise(clip) else { continue }
+                    guard let file = try? AVAudioFile(forReading: url),
+                          let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                                        frameCapacity: AVAudioFrameCount(file.length)),
+                          (try? file.read(into: buffer)) != nil else {
+                        Log.error("shot marker: could not load \(url.lastPathComponent)")
+                        continue
+                    }
+                    buffers[clip] = buffer
                 }
-                buffers[index] = buffer
             }
-            Log.info("📣 shot markers ready — \(buffers.count) of \(maximumIndex)")
+            Log.info("📣 markers ready — \(buffers.count) of \(maximumIndex * Kind.allCases.count)")
         }
     }
 
-    /// One `say` per index, ever. AIFF because `AVAudioFile` reads it directly and
+    /// One `say` per clip, ever. AIFF because `AVAudioFile` reads it directly and
     /// a conversion step is one more thing to be wrong about.
-    private static func synthesise(_ index: Int) -> URL? {
-        let url = cacheDir.appendingPathComponent("screenshot-\(index).aiff")
+    private static func synthesise(_ clip: Clip) -> URL? {
+        let url = cacheDir.appendingPathComponent("\(clip.kind.slug)-\(clip.index).aiff")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/say")
@@ -145,7 +199,7 @@ enum ShotMarker {
         // whole feature rests on the recogniser hearing two ordinary words.
         // `-r 190` is a shade quicker than speech, to keep the bite out of his
         // sentence as short as it can be.
-        task.arguments = ["-v", "Samantha", "-r", "190", "-o", url.path, phrase(index)]
+        task.arguments = ["-v", "Samantha", "-r", "190", "-o", url.path, phrase(clip)]
         do { try task.run() } catch {
             Log.error("shot marker: say failed — \(error.localizedDescription)")
             return nil
@@ -192,30 +246,31 @@ enum ShotMarker {
     ///   which costs nothing, while a marker never said is a picture with no
     ///   place in the sentence at all. Nil skips the gate entirely — the test
     ///   route, where there is no voice to collide with.
-    static func play(index: Int, whenQuiet: (() -> Bool)? = nil) {
+    static func play(_ kind: Kind = .shot, index: Int, whenQuiet: (() -> Bool)? = nil) {
         guard isEnabled, index >= 1, index <= maximumIndex else { return }
-        guard let whenQuiet = whenQuiet else { queue.async { speak(index, waited: 0) }; return }
+        let clip = Clip(kind: kind, index: index)
+        guard let whenQuiet = whenQuiet else { queue.async { speak(clip, waited: 0) }; return }
         let askedAt = CFAbsoluteTimeGetCurrent()
         // `asyncAfter` rather than a sleep: the queue is serial and shared with
         // the engine, and a second shutter press must not queue behind this one's
         // wait for a gap.
         func look() {
             let waited = CFAbsoluteTimeGetCurrent() - askedAt
-            guard !whenQuiet(), waited < maskCeiling else { return speak(index, waited: waited) }
+            guard !whenQuiet(), waited < maskCeiling else { return speak(clip, waited: waited) }
             queue.asyncAfter(deadline: .now() + gapTick) { look() }
         }
         queue.async { look() }
     }
 
-    private static func speak(_ index: Int, waited: TimeInterval) {
-        guard let buffer = buffers[index] else { return }
+    private static func speak(_ clip: Clip, waited: TimeInterval) {
+        guard let buffer = buffers[clip] else { return }
         guard let player = startedPlayer(format: buffer.format) else { return }
         player.scheduleBuffer(buffer, at: nil, options: .interrupts)
         player.play()
         // The wait is logged because it is the number that says whether the gate
         // is earning its keep: a marker that always waits the full ceiling is a
         // marker being spoken into speech anyway.
-        Log.info(String(format: "📣 marker: %@ (%.0f ms for a gap)", phrase(index), waited * 1000))
+        Log.info(String(format: "📣 marker: %@ (%.0f ms for a gap)", phrase(clip), waited * 1000))
     }
 
     /// The engine is built once and kept: the device is virtual, so a running
@@ -266,7 +321,7 @@ enum ShotMarker {
 
     // MARK: - The same marker, as samples
 
-    private static var converted: [Int: AVAudioPCMBuffer] = [:]
+    private static var converted: [Clip: AVAudioPCMBuffer] = [:]
     private static var convertedTo: AVAudioFormat?
 
     /// **The marker as PCM in someone else's format**, for a source that records
@@ -276,17 +331,18 @@ enum ShotMarker {
     /// Converted once and cached, because the caller is a shutter press and
     /// building an `AVAudioConverter` under one is the kind of work that turns a
     /// gesture into a stutter. Nil until `prepare()` has loaded the clips.
-    static func pcm(index: Int, in format: AVAudioFormat) -> AVAudioPCMBuffer? {
+    static func pcm(_ kind: Kind = .shot, index: Int, in format: AVAudioFormat) -> AVAudioPCMBuffer? {
         guard isEnabled, index >= 1, index <= maximumIndex else { return nil }
+        let clip = Clip(kind: kind, index: index)
         return queue.sync {
             if convertedTo?.sampleRate != format.sampleRate
                 || convertedTo?.channelCount != format.channelCount {
                 converted = [:]
                 convertedTo = format
             }
-            if let cached = converted[index] { return cached }
-            guard let source = buffers[index], let out = convert(source, to: format) else { return nil }
-            converted[index] = out
+            if let cached = converted[clip] { return cached }
+            guard let source = buffers[clip], let out = convert(source, to: format) else { return nil }
+            converted[clip] = out
             return out
         }
     }
@@ -341,47 +397,82 @@ enum ShotMarker {
     /// English words in the middle of his sentence. Taking them out puts the
     /// sentence back the way he said it, with the reference inline where the
     /// words were.
+    ///
+    /// **One expression for both kinds, so one scan keeps their order.** A
+    /// sentence can hold a picture and a highlight in either order — he presses
+    /// the shutter, talks, selects a paragraph, talks — and two passes over the
+    /// same text would each rewrite the string the other was measured against.
+    /// Group 1 says it was a shot, group 2 a selection, group 3 is the number in
+    /// whichever form it came back as.
     private static let pattern = try? NSRegularExpression(
-        pattern: #"\s*\bscreen[ -]?shots?\s+(\w+)\s*[.,!;:]*\s*"#,
+        pattern: #"\s*\b(?:(screen[ -]?shots?)|(selected\s+texts?))\s+(\w+)\s*[.,!;:]*\s*"#,
         options: [.caseInsensitive])
 
-    /// **Rewrite the spoken markers into references an agent can resolve, and
-    /// say which pictures were named.**
+    /// **Rewrite the spoken markers — a shot into a reference an agent can
+    /// resolve, a selection into the words he had highlighted — and say which
+    /// of each were named.**
     ///
-    /// - Parameter available: the marker numbers that actually have a picture
+    /// - Parameter shots: the marker numbers that actually have a picture
     ///   behind them — `shotMarkerNumbers.values`. It is the **safety net**, and
     ///   it is a set rather than a count on purpose: a capture that failed leaves
     ///   a number spoken with nothing behind it, and a count would then renumber
     ///   every marker after it onto the wrong frame. The relay knows the truth;
     ///   the marker only ever supplies *position*.
-    /// - Returns: the rewritten text and the indices it resolved, in the order
-    ///   they were spoken.
-    static func resolve(text: String, available: Set<Int>) -> (text: String, found: [Int]) {
-        guard !available.isEmpty, let pattern = pattern, !text.isEmpty else { return (text, []) }
+    /// - Parameter selections: the marker number → **the text that was
+    ///   highlighted at that moment**, already clamped by the caller. A selection
+    ///   marker does not become a reference the way a shot does: it is replaced
+    ///   by the words themselves, quoted, where he said them. What is not in
+    ///   this map is a marker for a highlight that never got filed, and it is
+    ///   taken out of the sentence like an unattached picture.
+    /// - Parameter inlineSelections: false leaves the *sentence* without the
+    ///   marker and without the highlight — the form the **corpus** takes. The
+    ///   relay's own recording heard neither the marker nor the paragraph he
+    ///   selected, and a transcript filed beside it that quotes a page of code
+    ///   is a pair whose words are not in its audio. → `AppDelegate.deliver`
+    /// - Returns: the rewritten text and, per kind, the indices it resolved in
+    ///   the order they were spoken.
+    static func resolve(text: String,
+                        shots: Set<Int> = [],
+                        selections: [Int: String] = [:],
+                        inlineSelections: Bool = true)
+        -> (text: String, shots: [Int], selections: [Int]) {
+        guard !(shots.isEmpty && selections.isEmpty),
+              let pattern = pattern, !text.isEmpty else { return (text, [], []) }
         let full = NSRange(text.startIndex..., in: text)
         let matches = pattern.matches(in: text, range: full)
-        guard !matches.isEmpty else { return (text, []) }
+        guard !matches.isEmpty else { return (text, [], []) }
 
         var out = ""
-        var found: [Int] = []
+        var foundShots: [Int] = []
+        var foundSelections: [Int] = []
         var cursor = text.startIndex
         var dropped = 0
         for match in matches {
             guard let range = Range(match.range, in: text),
-                  let word = Range(match.range(at: 1), in: text) else { continue }
+                  let word = Range(match.range(at: 3), in: text) else { continue }
+            let kind: Kind = match.range(at: 1).location == NSNotFound ? .selection : .shot
             let token = text[word].lowercased()
             let index = spoken[token] ?? Int(token)
-            // Not a marker at all — `screenshots and notes`, `screenshot folder`.
-            // Left exactly as it was, whitespace included: only a match this app
-            // could have spoken is a match.
+            // Not a marker at all — `screenshots and notes`, `screenshot folder`,
+            // `selected text below`. Left exactly as it was, whitespace
+            // included: only a match this app could have spoken is a match.
             guard let index = index else { continue }
+            // A leading space rather than none, because the whitespace that was
+            // there has just been eaten; the trailing one closes the gap to the
+            // word after. Doubles are tidied below.
+            let replacement: String?
+            switch kind {
+            case .shot:
+                replacement = shots.contains(index) ? " [shot \(index)] " : nil
+                if replacement != nil { foundShots.append(index) }
+            case .selection:
+                guard let selected = selections[index] else { replacement = nil; break }
+                replacement = inlineSelections ? " \"\(selected)\" " : " "
+                foundSelections.append(index)
+            }
             out += text[cursor..<range.lowerBound]
-            if available.contains(index) {
-                // A leading space rather than none, because the whitespace that
-                // was there has just been eaten; the trailing one closes the gap
-                // to the word after. Doubles are tidied below.
-                out += " [shot \(index)] "
-                found.append(index)
+            if let replacement = replacement {
+                out += replacement
             } else {
                 out += " "
                 dropped += 1
@@ -391,10 +482,11 @@ enum ShotMarker {
         out += text[cursor...]
 
         if dropped > 0 {
-            Log.error("shot markers: \(dropped) marker(s) named a picture that is "
-                      + "not attached — have \(available.sorted()). Dropped from the text.")
+            Log.error("markers: \(dropped) marker(s) named something that is not "
+                      + "attached — have shots \(shots.sorted()), selections "
+                      + "\(selections.keys.sorted()). Dropped from the text.")
         }
-        return (tidy(out), found)
+        return (tidy(out), foundShots, foundSelections)
     }
 
     /// The seams the substitution leaves: a doubled space where two bits of

@@ -282,12 +282,12 @@ final class WisprFlowSource: DictationSource {
     /// continuous speech — and it is not a level that can be raised, since it is
     /// already the louder of the two. So that path waits for a gap and accepts
     /// the ceiling. → `AudioBridge`, `ShotMarker.maskCeiling`
-    func markShot(_ index: Int) {
-        if bridge.isRunning, let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) {
+    func mark(_ kind: ShotMarker.Kind, index: Int) {
+        if bridge.isRunning, let pcm = ShotMarker.pcm(kind, index: index, in: MicRecorder.fileFormat) {
             meter.insert(pcm)
             return
         }
-        ShotMarker.play(index: index,
+        ShotMarker.play(kind, index: index,
                         whenQuiet: { [weak self] in
                             (self?.meter.quietSeconds ?? 0) >= ShotMarker.gapNeeded
                         })

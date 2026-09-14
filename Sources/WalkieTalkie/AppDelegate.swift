@@ -245,6 +245,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// title read at delivery names whatever he ended up in front of.
     private var pendingSelectionAt: TimeInterval?
     private var pendingSelectionIn: String?
+    /// The spoken marker that names the frozen selection, when one was said —
+    /// only the mid-sentence case (`fillsTheBlank`) ever has one, because a
+    /// highlight read at 0:00 has no place *inside* the sentence to be marked
+    /// at. → `SelectionRecord.marker`
+    private var pendingSelectionMarker: Int?
 
     /// Text he highlighted **later in the same dictation**, each stamped with
     /// where in the sentence he was when he took the shot that carried it.
@@ -263,11 +268,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// when a timer fired.
     private var pendingExtraSelections: [SelectionRecord] = []
 
-    /// One highlight, as it travels: when in the sentence, what it said, and
-    /// where it was read. `source` is nil when nothing could be asked — a frozen
-    /// app, an AX read that came back empty-handed — and prints nothing rather
-    /// than guessing a window.
-    typealias SelectionRecord = (at: TimeInterval, text: String, source: String?)
+    /// One highlight, as it travels: when in the sentence, what it said, where
+    /// it was read, and which spoken marker names it. `source` is nil when
+    /// nothing could be asked — a frozen app, an AX read that came back
+    /// empty-handed — and prints nothing rather than guessing a window.
+    ///
+    /// `marker` is nil for every highlight this app could not say out loud: the
+    /// one read before he started talking, a source that cannot hear an injected
+    /// sound, the eleventh highlight of a sentence. Those keep the behaviour
+    /// they have always had — a line of their own under the words. → `ShotMarker`
+    typealias SelectionRecord = (at: TimeInterval, text: String, source: String?, marker: Int?)
 
     /// The screen Victor was looking at when he started talking, captured
     /// automatically. Offered as context ("look if you need to"), unlike the
@@ -300,11 +310,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `sources` and printed by `shotsClause`.
     private var shotMarkerNumbers: [String: Int] = [:]
 
-    /// How many markers this dictation has spoken; the next one is this plus one.
-    /// Reset wherever `shotSources` is, because it has exactly that lifecycle —
-    /// every dictation ends through `send`, `flushOrphaned`, `caretLine` or
-    /// `clearCancelledDictationState`, and each of those clears both.
-    private var markersSpoken = 0
+    /// How many markers of each kind this dictation has spoken; the next one is
+    /// this plus one. Reset wherever `shotSources` is, because it has exactly
+    /// that lifecycle — every dictation ends through `send`, `flushOrphaned`,
+    /// `caretLine` or `clearCancelledDictationState`, and each of those clears
+    /// all of them.
+    ///
+    /// **Two counters and not one**, because the two vocabularies are separate:
+    /// `screenshot two` and `selected text two` cannot be confused for each
+    /// other, and a shared counter would make the second picture of a sentence
+    /// `screenshot four` for no reason a listener could reconstruct.
+    private var markersSpoken: [ShotMarker.Kind: Int] = [:]
+
+    /// **Which selection markers made it into the words.** Filled by
+    /// `resolvingMarkers` at delivery and read when the envelope is built: a
+    /// highlight whose marker landed is already *in* the sentence, quoted where
+    /// he said it, and listing it again under `text selected during dictation:`
+    /// would hand the agent the same paragraph twice. The ones that are not here
+    /// are the fallback Victor asked for — *"în cazul în care markerul nu este
+    /// detectat în textul transcris, pui transcripția ca acum, la final"*.
+    private var selectionMarkersInlined: Set<Int> = []
 
     /// **How this source places a marker, or nil when it cannot place one.**
     ///
@@ -316,8 +341,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// What it does differs per source and nothing here knows which: Wispr plays
     /// into the device it listens to, the local model splices into the file it
-    /// transcribes. → `DictationSource.markShot`
-    private var markShot: ((Int) -> Void)?
+    /// transcribes. → `DictationSource.mark`
+    private var markMarker: ((ShotMarker.Kind, Int) -> Void)?
     /// When each deliberate shot was taken, in seconds since this dictation
     /// opened — parallel to `pendingShots`, written under the same lock.
     ///
@@ -637,10 +662,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// the highlight when he started talking.
         var selectionAt: TimeInterval?
         var selectionSource: String?
+        /// The spoken marker that names the frozen selection, if one was said —
+        /// `pendingSelectionMarker`, carried for `shotNumbers`'s reason: the
+        /// panel holds a prompt for seconds and the next dictation may already
+        /// have started by the time this envelope is built.
+        var selectionMarker: Int?
         /// Highlighted later in the same dictation, each with its offset. Empty
         /// in the ordinary case, which is why `selection` above stays exactly
         /// what it was rather than becoming element zero of a list.
         var extraSelections: [SelectionRecord] = []
+        /// The selection markers that were found in the words and replaced by
+        /// the highlight itself. Those rows are **left out** of the list under
+        /// the sentence: the paragraph is already in it, where he said it.
+        /// → `ShotMarker.resolve`, `selectionsClause`
+        var inlinedSelections: Set<Int> = []
         let paths: [String]
         let screen: String?
         /// Path → what was in front when that frame was taken. Covers both
@@ -886,9 +921,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return ["bridge": on]
         }
         picker.onTestShotMarker = { body in
+            // `{"kind": "selection"}` on either audio half, so both vocabularies
+            // are reachable from a desk. Default `shot`, which is what the route
+            // shipped as and what every existing script passes.
+            let kind = ShotMarker.Kind(rawValue: (body["kind"] as? String) ?? "shot") ?? .shot
             if let index = body["play"] as? Int {
-                ShotMarker.play(index: index)
-                return ["played": index, "enabled": ShotMarker.isEnabled]
+                ShotMarker.play(kind, index: index)
+                return ["played": index, "kind": kind.rawValue, "enabled": ShotMarker.isEnabled]
             }
             // **The splice, reachable whatever source is live.** Without it the
             // only way to exercise `MicRecorder.insert` is to switch to the
@@ -898,7 +937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // runs during a Wispr dictation too — so the file it marks is a
             // corpus clip nobody transcribed from. A test artefact, said plainly.
             if let index = body["splice"] as? Int {
-                guard let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) else {
+                guard let pcm = ShotMarker.pcm(kind, index: index, in: MicRecorder.fileFormat) else {
                     return ["spliced": false, "why": "no samples — is the clip loaded?"]
                 }
                 DispatchQueue.main.async { [weak self] in self?.source.meter.insert(pcm) }
@@ -907,8 +946,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let text = (body["text"] as? String) ?? ""
             let available = Set((body["available"] as? [Int]) ?? [])
-            let resolved = ShotMarker.resolve(text: text, available: available)
-            return ["text": resolved.text, "found": resolved.found]
+            // `{"selections": {"1": "the highlighted paragraph"}}` — the other
+            // half of the same rewrite, and the only way to exercise it without
+            // talking: the map stands in for the highlights really filed, the
+            // way `available` stands in for the pictures really attached.
+            var selections: [Int: String] = [:]
+            for (key, value) in (body["selections"] as? [String: String]) ?? [:] {
+                if let index = Int(key) { selections[index] = value }
+            }
+            let inline = (body["inline"] as? Bool) ?? true
+            let resolved = ShotMarker.resolve(text: text, shots: available,
+                                              selections: selections, inlineSelections: inline)
+            return ["text": resolved.text, "found": resolved.shots,
+                    "selections": resolved.selections]
         }
         picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
         // Wispr's Scratchpad note, read — see `WisprNotes`. Read-only and wired
@@ -1265,7 +1315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestDictation = { [weak self] text in
             guard let self = self else { return }
-            let text = self.resolvingShotMarkers(text)
+            let text = self.resolvingMarkers(text)
             // **It goes to the caret when that is where a real one would go.**
             // The route's whole claim is that a fabricated transcript enters
             // exactly where a spoken one does, and after 2026-09-08 that stopped
@@ -1569,7 +1619,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is two facts that only change when the source does, so they are
         // published here, under the lock the shutter already takes.
         stateLock.lock()
-        markShot = source.acceptsAudioMarkers ? { [weak source] in source?.markShot($0) } : nil
+        markMarker = source.acceptsAudioMarkers
+            ? { [weak source] kind, index in source?.mark(kind, index: index) } : nil
         stateLock.unlock()
         Log.info("dictation source: \(source.name)")
     }
@@ -1709,15 +1760,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// transcript enters exactly where a real one does — and it enters *below*
     /// `deliver`, so a rewrite living only there would be the one thing no test
     /// could reach.
-    private func resolvingShotMarkers(_ text: String) -> String {
+    private func resolvingMarkers(_ text: String, inlineSelections: Bool = true) -> String {
         stateLock.lock()
         let marked = Set(shotMarkerNumbers.values)
-        stateLock.unlock()
-        let resolved = ShotMarker.resolve(text: text, available: marked)
-        if !resolved.found.isEmpty {
-            Log.info("📣 \(resolved.found.count) shot marker(s) placed in the words: "
-                     + resolved.found.map(String.init).joined(separator: ", "))
+        // **The highlight as it was at that moment, not as it is now.** Both
+        // slots are still pending here — `send` and `caretLine` drain them a
+        // beat later — and each carries the number this app said out loud when
+        // it filed it. Clamped exactly as the list below the words clamps, for
+        // the same reason: a selection can be an entire file, and this one is
+        // going into the middle of a sentence he has to be able to read back.
+        var selections: [Int: String] = [:]
+        if let selection = pendingSelection, let marker = pendingSelectionMarker {
+            selections[marker] = Self.clampForTerminal(selection)
         }
+        for extra in pendingExtraSelections {
+            guard let marker = extra.marker else { continue }
+            selections[marker] = Self.clampForTerminal(extra.text)
+        }
+        stateLock.unlock()
+        let resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
+                                          inlineSelections: inlineSelections)
+        guard inlineSelections else { return resolved.text }
+        if !resolved.shots.isEmpty {
+            Log.info("📣 \(resolved.shots.count) shot marker(s) placed in the words: "
+                     + resolved.shots.map(String.init).joined(separator: ", "))
+        }
+        if !resolved.selections.isEmpty {
+            Log.info("📣 \(resolved.selections.count) selection(s) spliced into the words at the "
+                     + "marker: " + resolved.selections.map(String.init).joined(separator: ", "))
+        }
+        // **What the marker did NOT reach is the fallback, and it is the
+        // absence that says so.** Anything not in here keeps its line under the
+        // sentence; anything in here has already been said inline.
+        stateLock.lock()
+        selectionMarkersInlined.formUnion(resolved.selections)
+        stateLock.unlock()
         return resolved.text
     }
 
@@ -1740,8 +1817,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // honest about a clip with two seconds in it he did not say.
         // → `DictationResult.markersInAudio`
         let spokenText = result.text
-        result.text = resolvingShotMarkers(result.text)
-        let corpusText = result.markersInAudio ? spokenText : result.text
+        result.text = resolvingMarkers(result.text)
+        // **The corpus gets neither the marker nor the paragraph.** Wispr's
+        // recording heard the marker and the relay's did not; *neither* of them
+        // heard the text he had highlighted, which this app has just written
+        // into the middle of the sentence. So the pair filed beside the audio is
+        // the one with the selection markers taken out and nothing put in their
+        // place — the words as he actually said them.
+        let corpusText = result.markersInAudio
+            ? spokenText : resolvingMarkers(spokenText, inlineSelections: false)
 
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
@@ -2187,10 +2271,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
+        pendingSelectionMarker = nil
         pendingExtraSelections = []
         shotSources = [:]
         shotMarkerNumbers = [:]
-        markersSpoken = 0
+        markersSpoken = [:]
+        selectionMarkersInlined = []
         dictationStartedAt = nil
         pendingScreen = nil
         dictationInFlight = false
@@ -2454,6 +2540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingSelection = nil
             pendingSelectionAt = nil
             pendingSelectionIn = nil
+            pendingSelectionMarker = nil
             pendingExtraSelections = []
             contextShotPending = true
             // The zero of every offset in this dictation, set the moment the
@@ -2542,10 +2629,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
+        pendingSelectionMarker = nil
         pendingExtraSelections = []
         shotSources = [:]
         shotMarkerNumbers = [:]
-        markersSpoken = 0
+        markersSpoken = [:]
+        selectionMarkersInlined = []
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -3772,7 +3861,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotSources = [:]
         let markerNumbers = shotMarkerNumbers
         shotMarkerNumbers = [:]
-        markersSpoken = 0
+        markersSpoken = [:]
+        // Read before it is cleared: `deliver` has already rewritten the words
+        // with whichever highlights it found markers for, and this is the list
+        // of rows the clause below must therefore not repeat.
+        let inlined = selectionMarkersInlined
+        selectionMarkersInlined = []
         // **No context frame rides this envelope, and it is cleared rather than
         // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
         // in every real path through here — but `shotsClause` is called with
@@ -3792,10 +3886,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let selection = pendingSelection
         let selectionAt = pendingSelectionAt
         let selectionIn = pendingSelectionIn
+        let selectionMarker = pendingSelectionMarker
         let extraSelections = pendingExtraSelections
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
+        pendingSelectionMarker = nil
         pendingExtraSelections = []
         // Read before it is cleared, and for the reason `Message.startedAt`
         // exists: it is the zero every pick's stamp is measured from, and one
@@ -3819,7 +3915,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // shapes are two things to learn instead of one.
         parts.append(contentsOf: Self.selectionsClause(selection, at: selectionAt,
                                                        source: selectionIn,
-                                                       extras: extraSelections))
+                                                       marker: selectionMarker,
+                                                       extras: extraSelections,
+                                                       inlined: inlined))
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources,
                                                   numbers: markerNumbers))
         if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
@@ -3838,7 +3936,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
-                                                  extras: m.extraSelections))
+                                                  marker: m.selectionMarker,
+                                                  extras: m.extraSelections,
+                                                  inlined: m.inlinedSelections))
         // **What was in front of him is not a caption for a picture.**
         // It used to ride inside the context frame's clause, as
         // `shot-00:00(…).jpg = Terminal — ✳ walkie-talkie`, which made a fact
@@ -4079,14 +4179,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - **Quoted, and clamped where it always was** (`clampForTerminal`, 400).
     ///   A selection can be an entire file, and this line is read by Victor as
     ///   often as by an agent; the whole text is in the outbox either way.
+    /// - Parameter inlined: the selection markers `deliver` found in the words
+    ///   and replaced with the highlight itself. Those rows are dropped from
+    ///   this list — the paragraph is already in the sentence, quoted where he
+    ///   said it, and printing it twice is how an agent comes to think there
+    ///   were two of them. What is left is exactly Victor's fallback: *"în cazul
+    ///   în care markerul nu este detectat în textul transcris, pui transcripția
+    ///   ca acum, la final"*. → `ShotMarker`
     private static func selectionsClause(_ selection: String?, at: TimeInterval?,
-                                         source: String?,
-                                         extras: [SelectionRecord]) -> [String] {
+                                         source: String?, marker: Int? = nil,
+                                         extras: [SelectionRecord],
+                                         inlined: Set<Int> = []) -> [String] {
         var rows: [SelectionRecord] = []
         if let selection = selection, !selection.isEmpty {
-            rows.append((at: at ?? 0, text: selection, source: source))
+            rows.append((at: at ?? 0, text: selection, source: source, marker: marker))
         }
         rows.append(contentsOf: extras)
+        rows = rows.filter { row in row.marker.map { !inlined.contains($0) } ?? true }
         guard !rows.isEmpty else { return [] }
         let lines = rows.map { row -> String in
             var line = "- " + envelopeStamp(row.at)
@@ -4148,6 +4257,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // is the whole point of printing an offset at all.
             pendingSelectionAt = opened.map { Date().timeIntervalSince($0) } ?? 0
             pendingSelectionIn = source
+            // **No spoken marker for this one**, and the nil is written rather
+            // than assumed: this is the highlight he was *already holding* when
+            // he started talking, so there is no moment inside the sentence for
+            // a marker to name. It is the subject, it leads the list under the
+            // words, and that is where it reads best. The mid-sentence case goes
+            // through `fileSelection`, which does reserve one.
+            pendingSelectionMarker = nil
         }
         stateLock.unlock()
         guard !stale else {
@@ -4411,15 +4527,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it is the subject, arriving late. Only once that slot is taken does a
         // highlight become an extra.
         let fillsTheBlank = novel && pendingSelection == nil
+        // **The marker is reserved here, under the lock that decided the
+        // highlight is new** (2026-09-14). Same rule as the shutter's: the
+        // number is taken at the gesture rather than read off a list position
+        // later, because two highlights a second apart can finish filing in the
+        // other order and a number that names the wrong paragraph is worse than
+        // no number at all. Nil whenever the marker cannot be said — no source
+        // that hears one, past the ceiling — and the highlight then keeps the
+        // line under the words it has always had.
+        let marker = novel ? reserveMarkerLocked(.selection) : nil
         if fillsTheBlank {
             pendingSelection = text
             pendingSelectionAt = offset
             pendingSelectionIn = source
+            pendingSelectionMarker = marker
         } else if novel {
-            pendingExtraSelections.append((at: offset, text: text, source: source))
+            pendingExtraSelections.append((at: offset, text: text, source: source, marker: marker))
         }
         let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
         stateLock.unlock()
+
+        // **Said into the recogniser's ear, never under the lock.** `mark` waits
+        // for a gap in his speech on its own queue; holding `stateLock` across
+        // that would put the chip behind a silence that is his to break.
+        if let marker = marker { speakMarker(.selection, marker) }
 
         // **The receipt is not behind `novel`, the filing is.** Three reads are
         // skipped as noise — nothing highlighted, the text the frozen slot
@@ -4490,16 +4621,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// one of those the picture is still taken, attached and listed by its
     /// offset exactly as before.
     private func reserveMarker() -> Int? {
-        guard ShotMarker.isEnabled else { return nil }
         stateLock.lock()
-        let mark = markShot
-        let open = dictationInFlight && mark != nil
-        if open { markersSpoken += 1 }
-        let number = markersSpoken
+        let number = reserveMarkerLocked(.shot)
         stateLock.unlock()
-        guard open, let mark = mark, number <= ShotMarker.maximumIndex else { return nil }
-        mark(number)
+        guard let number = number else { return nil }
+        speakMarker(.shot, number)
         return number
+    }
+
+    /// The half of `reserveMarker` that has to run **inside** a decision already
+    /// being made under `stateLock` — `fileSelection` works out whether a
+    /// highlight is new while holding it, and a marker taken a lock-release
+    /// later could be taken by the shutter in between.
+    ///
+    /// The counter is advanced whether or not the number is usable, so the
+    /// eleventh thing of a sentence is silent rather than a second `ten`.
+    /// - Precondition: `stateLock` is held.
+    private func reserveMarkerLocked(_ kind: ShotMarker.Kind) -> Int? {
+        guard ShotMarker.isEnabled, dictationInFlight, markMarker != nil else { return nil }
+        let number = (markersSpoken[kind] ?? 0) + 1
+        markersSpoken[kind] = number
+        guard number <= ShotMarker.maximumIndex else { return nil }
+        return number
+    }
+
+    /// Say a reserved marker. **Never under `stateLock`** — it is read here, and
+    /// the source's own wait for a gap in his speech happens on `ShotMarker`'s
+    /// queue behind it.
+    private func speakMarker(_ kind: ShotMarker.Kind, _ number: Int) {
+        stateLock.lock()
+        let mark = markMarker
+        stateLock.unlock()
+        mark?(kind, number)
     }
 
     private func plusOneShot(cursor: NSPoint) {
@@ -5091,16 +5244,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let selection = pendingSelection
         let selectionAt = pendingSelectionAt
         let selectionIn = pendingSelectionIn
+        let selectionMarker = pendingSelectionMarker
+        // Taken with the highlights it talks about, and cleared with them: which
+        // markers landed in the words is a fact about **this** sentence, and the
+        // words have already been rewritten by the time we get here (`deliver`).
+        let inlined = selectionMarkersInlined
+        selectionMarkersInlined = []
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
+        pendingSelectionMarker = nil
         let extraSelections = pendingExtraSelections
         pendingExtraSelections = []
         let sources = shotSources
         shotSources = [:]
         let markerNumbers = shotMarkerNumbers
         shotMarkerNumbers = [:]
-        markersSpoken = 0
+        markersSpoken = [:]
+        selectionMarkersInlined = []
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
@@ -5139,7 +5300,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let message = Message(kind: kind, text: text, selection: selection,
                               selectionAt: selectionAt, selectionSource: selectionIn,
+                              selectionMarker: selectionMarker,
                               extraSelections: extraSelections,
+                              inlinedSelections: inlined,
                               paths: attached, screen: screen, sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
@@ -5335,6 +5498,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                   "seconds": Int(extra.at.rounded()),
                                                   "text": extra.text]
                         if let source = extra.source, !source.isEmpty { obj["in"] = source }
+                        // Which marker named it, and whether that marker made it
+                        // into the words — the one place *why is this highlight
+                        // not under the sentence* is answerable after the fact.
+                        if let marker = extra.marker {
+                            obj["marker"] = marker
+                            obj["inlined"] = m.inlinedSelections.contains(marker)
+                        }
                         return obj
                     },
                     paths: m.paths, screen: m.screen,
