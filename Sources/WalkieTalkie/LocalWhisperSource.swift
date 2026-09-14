@@ -93,6 +93,28 @@ final class LocalWhisperSource: DictationSource {
     /// recogniser that is a fallback.
     func prepare() {}
 
+    /// **Yes, and by the mechanism that cannot collide.** The file this records
+    /// *is* the file it transcribes, so the marker goes **into** it rather than
+    /// over him — no mixing, no gap to wait for, no masking. → `ShotMarker`
+    var acceptsAudioMarkers: Bool { true }
+
+    /// Splice it between two of his buffers — `MicRecorder.insert(_:)`. The flag
+    /// travels to `deliver` on the result, because it is the corpus that has to
+    /// know: this WAV contains words he did not say, and its transcript must be
+    /// the one that still names them.
+    func markShot(_ index: Int) {
+        guard let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) else {
+            Log.error("shot marker: no samples for \(index) — is the clip loaded?")
+            return
+        }
+        meter.insert(pcm)
+        markersInAudio = true
+        Log.info("📣 marker spliced into the recording: screenshot \(index)")
+    }
+
+    /// Reset at `start()`, because it describes one recording.
+    private var markersInAudio = false
+
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
@@ -102,6 +124,7 @@ final class LocalWhisperSource: DictationSource {
         }
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
         if let why = meter.start(to: wav) { return why }
+        markersInAudio = false
         isRecording = true
         phase = .listening
         Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
@@ -151,7 +174,7 @@ final class LocalWhisperSource: DictationSource {
                 self.didTranscribe?(DictationResult(
                     text: r.text, language: r.language, audio: wav, duration: duration,
                     engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
-                    via: "local-whisper"))
+                    via: "local-whisper", markersInAudio: self.markersInAudio))
                 self.phase = .done("formatted")
                 self.didEnd?(.delivered)
             }

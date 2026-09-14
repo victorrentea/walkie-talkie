@@ -20,7 +20,9 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   → journal: *UI language: English only*
 - **The header `Bound to: folder@branch` is written from `AppDelegate.showBound` only** — the
   single place the chip's line and the menu's header are set, so they cannot disagree. Only the
-  bound form carries the prefix; unbound the header falls back to `🤖 <launch label>`. The chip
+  bound form carries the prefix; unbound the header is the drawn map pin (`Glyphs.mapPin`) plus
+  **`Unbound`** (2026-09-14) — it was `🤖 <launch label>`, and a login item's launch label is `/`,
+  so the row named the directory `launchd` started the app in as though it were a destination. The chip
   shows the same line without `Bound to:` — beside the cursor a folder name has nothing else to
   name; above a stack of commands a bare name reads as a section title.
   → journal: *The menu bar item*
@@ -61,13 +63,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
 | `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
+| `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
 
-- **The shortcut column above is the wheel vocabulary — live only with *Use Logi Gestures*
-  unticked.** Each `gestureRows` entry carries two legends, `(item, label, logi, wheel)`, and
+- **The shortcut column above is the wheel vocabulary — live only with *Mouse Gestures: Wheel*.** Each `gestureRows` entry carries two legends, `(item, label, logi, wheel)`, and
   `restyleGestures` picks one; the Logi set (default since 2026-09-09) is `◀️ + 🔼` bind, `🔽 ↓`
   disconnect, `🔼 →` start/end, `🔼 ↑` new claude, `🔼 ←` cancel, `🔽`
   screenshot, `🛞 drag` area, `⌘⇧◀️` pick. Vocabulary: an emoji for the button (`◀️`/`▶️` left
@@ -139,14 +141,15 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **`GET /engine` answers `engine` (`wispr` / `whisper`) beside `source`**, so a test asserts the
   pick without matching a display name.
 
-## Switches: Autosend, Use Logi Gestures
+## Autosend, and the Mouse Gestures row
 
 - **Switch state lives in the icon column — a `checkmark` when on, a blank image of the column's
   exact width when off — never `NSMenuItem.state`.** A ticked row makes AppKit reserve the state
   column for the **whole** menu, shoving every other row sideways the moment one is switched on.
   Blank, not ⏸️ or ⏩: a picture in the column claims the row is *doing* something, and these two
-  are the menu's only switches, so the one fact to carry is on or off (*"autosend să aibă bifă în
-  față, nu ⏩ când e activ"*, 2026-09-07).
+  is the menu's only switch left, so the one fact to carry is on or off (*"autosend să aibă bifă în
+  față, nu ⏩ când e activ"*, 2026-09-07). The same `checkmark`-or-blank pair draws the tick inside
+  the `Engine` and `Mouse Gestures` submenus, where the chosen row wears it.
   → journal: *Autosend*
 - **Autosend persists across launches** (since 2026-09-07; so does the caret-paste mode, whose
   preference moved to `AppDelegate.replaceWisprKey` when its row went). Ticked,
@@ -155,7 +158,15 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   two buttons up for one second are two buttons nobody can reach. State lives on the item and is
   pushed through `onToggleAutosend`, so tick and behaviour cannot disagree.
   → journal: *Autosend*
-- **Use Logi Gestures defaults to on, and the default has to be written out:**
+- **The two mouse wirings are a submenu, not a tick** (2026-09-14, Victor: *"cu submeniu din care
+  aleg cele 2 variante (ca la Engine)"*). The row reads `Mouse Gestures: Logi` or `: Wheel` and
+  opens `Logi — side buttons from Options+` / `Wheel — the wheel carries the dictation`; it was the
+  checkbox `Use Logi Gestures`, which could say that Logi was off but had no word for what was on
+  instead. `applyLogiGesturesRow` rebuilds both rows, `gesturesPicked` ignores a click on the row
+  already ticked, and `setLogiGestures` is still the one writer of the preference and of
+  `restyleGestures`.
+  → journal: *Use Logi Gestures — the tick that chooses between the two sets*
+- **It defaults to Logi, and the default has to be written out:**
   `object(forKey:) as? Bool ?? true`. `UserDefaults.bool(forKey:)` answers `false` for a key never
   written, which would have shipped the wheel gestures to the Mac already configured for the new
   ones.
@@ -186,9 +197,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `<model> — loading…` in the menu. `AppDelegate.setEngineLoading` is a one-liner into
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
-- **The local model's name reads `mlx-community/whisper-large-v3-turbo — 1.6 GB RAM`, in full,
-  read when the menu opens.** It was a disabled row of its own at the bottom of the menu until
-  2026-09-14; it is now the Engine row's own title and the second line of its submenu. The org
+- **The local model's name reads `mlx-community/whisper-large-v3-turbo — 2.6 GB RAM`, in full,
+  read when the menu opens — in the *submenu*.** It was a disabled row of its own at the bottom of
+  the menu until 2026-09-14, then the Engine row's own title; since the same day the top-level row
+  says only `Engine: Local (2.6 GB)` (`engineShortTitle`) and the full id stays one hover away, in
+  the list under the arrow. A model id on the top-level row stretched the whole menu to the width
+  of a string nobody reads with the menu open over their work; the size stays on both because it is
+  the half that changes. The org
   prefix stays — *"trece numele modelului: mlx…"* is how Victor says it, and a name he has to
   reassemble to repeat is not the name. **It is never `Local Whisper`**: that category was the
   fallback while the helper was down, i.e. most of the time the row is read;

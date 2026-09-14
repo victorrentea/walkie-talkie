@@ -27,6 +27,14 @@ final class MicRecorder {
     /// costs an agent turn; dropping half a second of silence costs nothing.
     static let minimumDuration: TimeInterval = 0.35
 
+    /// **What every WAV this recorder writes is in**, named once because two
+    /// things now have to agree on it: the recording itself and anything spliced
+    /// into it (`insert(_:)`). 16 kHz mono 16-bit for the reason at the top of
+    /// this file — Whisper resamples to it and the whole corpus is already in it.
+    static let fileFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                          sampleRate: 16000, channels: 1,
+                                          interleaved: true)!
+
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
@@ -262,9 +270,8 @@ final class MicRecorder {
         guard inFormat.channelCount > 0, inFormat.sampleRate > 0 else {
             return "no input device"
         }
-        guard let outFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                                            sampleRate: 16000, channels: 1, interleaved: true),
-              let conv = AVAudioConverter(from: inFormat, to: outFormat) else {
+        let outFormat = Self.fileFormat
+        guard let conv = AVAudioConverter(from: inFormat, to: outFormat) else {
             return "cannot convert \(Int(inFormat.sampleRate))Hz to 16kHz mono"
         }
 
@@ -318,6 +325,68 @@ final class MicRecorder {
 
     /// Closes the file and hands back what was recorded, or nil when there was
     /// nothing worth transcribing.
+    /// **Splice a buffer into the recording between two of his**, rather than
+    /// playing it over him (2026-09-14).
+    ///
+    /// This is the whole difference between a marker that survives and one that
+    /// does not. Played into the Loopback device Wispr listens to, a marker is
+    /// **summed** with his voice, and a recogniser handed two voices at once
+    /// transcribes the one that makes a sentence — measured, with the marker as
+    /// the *louder* of the two. Written into the file here it is not a second
+    /// voice at all: his speech stops, the marker is the only thing there, and
+    /// his speech resumes. The very first measurement of the idea worked for
+    /// exactly this reason — it was a WAV with the markers spliced in.
+    ///
+    /// It lands at the next input buffer, so within one `bufferSize` of the
+    /// press — 4096 frames, under 90 ms at 48 kHz. Nothing of his is lost or
+    /// overwritten: the recording simply grows by the marker's length, and
+    /// `stop()` adds it to the duration so the number still describes the file.
+    ///
+    /// The buffer must already be in the recorder's own format (16 kHz mono
+    /// int16) — `ShotMarker.pcm(index:in:)` does that conversion once and caches
+    /// it, because this is called from a gesture and `AVAudioConverter` is not
+    /// something to build under a shutter press.
+    ///
+    /// - Note: **only for a source that transcribes this file.** The local model
+    ///   does; Wispr Flow reads its own microphone and would never hear this, so
+    ///   splicing there would put words in the corpus that Wispr's transcript
+    ///   does not have. `DictationResult.markersInAudio` is how `deliver` tells
+    ///   the two apart.
+    func insert(_ buffer: AVAudioPCMBuffer) {
+        lock.lock(); defer { lock.unlock() }
+        // **Said out loud, both ways.** A marker that does not land leaves no
+        // trace anywhere else: the file is simply a little shorter and nobody
+        // notices until a transcript comes back without it.
+        guard isRecording, file != nil, let format = outputFormat else {
+            Log.error("mic: a marker arrived with no recording open "
+                      + "(recording \(isRecording), file \(file != nil))")
+            return
+        }
+        guard buffer.format.sampleRate == format.sampleRate,
+              buffer.format.channelCount == format.channelCount else {
+            Log.error("mic: refused a marker in the wrong format")
+            return
+        }
+        pendingInserts.append(buffer)
+        inserted += Double(buffer.frameLength) / format.sampleRate
+        Log.info("✂️ marker queued into the recording — \(buffer.frameLength) frames")
+    }
+
+    /// Written on the gesture's thread, read on the audio thread — the same
+    /// bargain every other field here makes, through the same lock.
+    private var pendingInserts: [AVAudioPCMBuffer] = []
+    /// How many seconds of this recording are not his, so `stop()` can report a
+    /// duration that still matches the file.
+    private var inserted: TimeInterval = 0
+
+    private func takeInserts() -> [AVAudioPCMBuffer] {
+        lock.lock(); defer { lock.unlock() }
+        guard !pendingInserts.isEmpty else { return [] }
+        let taken = pendingInserts
+        pendingInserts = []
+        return taken
+    }
+
     func stop() -> (url: URL, duration: TimeInterval)? {
         lock.lock(); defer { lock.unlock() }
         guard isRecording else { return nil }
@@ -332,8 +401,13 @@ final class MicRecorder {
         converter = nil
         outputFormat = nil
 
-        let elapsed = startedAt.map { Date().timeIntervalSince($0) } ?? 0
+        // The wall clock plus whatever was spliced in: the file is longer than
+        // the sentence took, and every reader of this number — the corpus row,
+        // `DecodeRate` — is describing the file.
+        let elapsed = (startedAt.map { Date().timeIntervalSince($0) } ?? 0) + inserted
         startedAt = nil
+        inserted = 0
+        pendingInserts = []
         guard let out = url else { return nil }
         url = nil
         guard elapsed >= Self.minimumDuration else {
@@ -381,6 +455,14 @@ final class MicRecorder {
             return
         }
         if let file {
+            // **Spliced in, not mixed over** — see `insert(_:)`. Ahead of his
+            // buffer rather than behind it, because the moment the marker is
+            // meant to name is the shutter press, which has already happened.
+            for marker in takeInserts() {
+                do { try file.write(from: marker) } catch {
+                    Log.error("mic: could not write marker — \(error.localizedDescription)")
+                }
+            }
             do { try file.write(from: out) } catch {
                 Log.error("mic: could not write buffer — \(error.localizedDescription)")
             }

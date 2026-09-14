@@ -271,6 +271,19 @@ final class WisprFlowSource: DictationSource {
     /// pass into `formattedText`. See `ShotMarker`.
     var acceptsAudioMarkers: Bool { true }
 
+    /// **Played into `🎓 TO Wispr`, and therefore summed with his voice** — which
+    /// is why it waits for a gap first. Measured 2026-09-14: a marker over
+    /// continuous speech leaves no trace at all, and it is not a level that can
+    /// be raised (it is already the louder signal). The only way to stop summing
+    /// is for the relay to own the audio path into Wispr, which it does not.
+    /// → `ShotMarker.maskCeiling`
+    func markShot(_ index: Int) {
+        ShotMarker.play(index: index,
+                        whenQuiet: { [weak self] in
+                            (self?.meter.quietSeconds ?? 0) >= ShotMarker.gapNeeded
+                        })
+    }
+
     let meter = MicRecorder()
 
     private let watch = WisprWatch()

@@ -820,9 +820,10 @@ final class ElementPicker {
         // The state machine, run on a script — see `onTestWisprStateSimulate`.
         case ("POST", "/test/shot-marker"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
-            guard let body = body, body["text"] != nil || body["play"] != nil else {
+            guard let body = body,
+                  body["text"] != nil || body["play"] != nil || body["splice"] != nil else {
                 return respond(conn, 400, ["ok": false,
-                                           "error": "expected {\"text\": …, \"available\": [1,2]} or {\"play\": 1}"])
+                                           "error": "expected {\"text\": …, \"available\": [1,2]}, {\"play\": 1} or {\"splice\": 1}"])
             }
             guard let result = onTestShotMarker?(body) else {
                 return respond(conn, 503, ["ok": false, "error": "no handler"])
