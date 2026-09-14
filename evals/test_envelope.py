@@ -190,6 +190,75 @@ class EnvelopeShape(unittest.TestCase):
 
 
 @unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
+class FrameList(unittest.TestCase):
+    """The frames clause, after the 2026-09-14 tidy.
+
+    Four things went at once and each was its own kind of waste: `oldest first`
+    said what the names already show, the `[shot N]` legend explained a
+    correspondence the file names now carry themselves (`shot-1-00:08`), the
+    opening frame had a bracketed sentence of its own although it is picture 0 of
+    the same enumeration, and the hint did not say which recogniser had heard
+    him. This pins the shape so none of them creeps back.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        state = _get(BASE, "/test/state")
+        if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
+            raise unittest.SkipTest("a real dictation is in flight — not touching it")
+        target = _get(BASE, "/target")
+        cls.previous = target.get("address") if target.get("bound") else None
+        cls.marker = "uite aici. Screenshot one. si mai jos. Screenshot 2. gata."
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/dictation/start")
+        time.sleep(1)
+        # The app posts the real ⌃⌥⌘F6 chord; this file synthesises nothing.
+        for _ in range(2):
+            _post(BASE, "/test/gesture", {"name": "back-click"})
+            time.sleep(2)
+        _post(BASE, "/test/dictation", {"text": cls.marker})
+        for _ in range(10):
+            time.sleep(1)
+            entry = _last_line()
+            if "uite aici" in (entry.get("text") or ""):
+                cls.line = entry["line"]
+                return
+            _post(BASE, "/bind", {"tty": NOWHERE})
+        raise AssertionError("the dictation never reached the outbox")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            if cls.previous:
+                _post(BASE, "/bind", {"tty": cls.previous})
+            else:
+                _post(BASE, "/unbind")
+        except Exception:
+            pass
+
+    def test_the_index_is_in_the_file_name(self):
+        """`[shot 1]` resolves against `shot-1-…` with nothing to explain it."""
+        self.assertIn("[shot 1]", self.line)
+        self.assertIn("[shot 2]", self.line)
+        self.assertRegex(self.line, r"shot-1-\d\d:\d\d\(")
+        self.assertRegex(self.line, r"shot-2-\d\d:\d\d\(")
+
+    def test_the_opening_frame_is_a_row_of_the_same_list(self):
+        """Picture 0, in the list, keeping its permission to be skipped."""
+        self.assertRegex(self.line, r"- shot-0-00:00\(.*the screen when I started talking")
+        # The clause it used to have is gone — one list, not two.
+        self.assertNotIn("[and shot-", self.line)
+        self.assertNotIn("[the screen when I started talking", self.line)
+
+    def test_what_was_said_twice_is_no_longer_said_at_all(self):
+        self.assertNotIn("oldest first", self.line)
+        self.assertNotIn("in my words is where I pressed the shutter", self.line)
+
+    def test_the_hint_names_the_recogniser_and_drops_the_warning(self):
+        self.assertIn("transcribed by ", self.line)
+        self.assertNotIn("hallucinate", self.line)
+
+
 class SelectionMarkers(unittest.TestCase):
     """A highlight named by a spoken marker lands **in** the sentence (2026-09-14).
 

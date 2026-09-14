@@ -712,6 +712,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// written at `commit`, seconds after the words arrived, and by then the
         /// next dictation may have started. Recorded, never acted on.
         var via: String = "test"
+        /// **Which recogniser produced these words** (`DictationResult.engine`),
+        /// carried for `via`'s reason: the panel holds every prompt for seconds
+        /// and the engine is a menu row that may have been switched by then.
+        /// Read only by `dictatedHint`.
+        var engine: String = ""
         /// …and what the source said about who had already inserted it.
         var deliveryKind: DictationDelivery = .route
     }
@@ -1883,6 +1888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // From here the route travels with the sentence — `send` moves it onto
         // the `Message` and `commit` writes it beside the words.
         pendingVia = result.via
+        pendingEngine = result.engine
         pendingDeliveryKind = result.delivery
 
         // **The ring goes down when the words land**, and for a bound sentence
@@ -2590,7 +2596,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !alreadyOpen else { return }
             // Named by its offset — 0:00 for a capture at the press, the hold's
             // length when the wheel path deferred it to the release.
-            let path = ScreenCapture.grab(cursor: cursor, offset: offset)
+            // **Index 0, because it is picture zero of the enumeration.** He did
+            // not press a shutter for it — he took it by starting to talk — so it
+            // gets the number in front of the ones he did, and the list can carry
+            // it as a row rather than as a separate sentence underneath.
+            let path = ScreenCapture.grab(cursor: cursor, offset: offset, index: 0)
             self.stateLock.lock()
             self.pendingScreen = path
             if let path = path, let source = source { self.shotSources[path] = source }
@@ -3821,9 +3831,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// — *"elimină bucata aceea din text pentru că acum poate să fie și Wispr
     /// Flow"*. What the reader needs is that the words were spoken and heard by
     /// a machine, and that is true of both.
-    private static let dictatedHint =
-        "[this text was dictated in RO or EN and transcribed automatically — "
-        + "it can hallucinate a fluent sentence that was never said]"
+    ///
+    /// **It names the recogniser again, and drops the warning** (2026-09-14, a
+    /// deliberate reversal of the note above). Two things changed under it.
+    /// The engine is a menu row now, so *which one heard this* is a question
+    /// with a different answer from one sentence to the next and the reader
+    /// cannot infer it — Victor: *"you can say instead … the name of the local
+    /// model or the fact that it was a Wispr Flow"*. And the hallucination
+    /// sentence had become redundant: *"the fact that it can hallucinate a
+    /// fluent sentence is a bit redundant, you can just strip this off"* — an
+    /// agent that knows the words came out of a speech recogniser already
+    /// discounts them, and the clause was spending a line of every envelope to
+    /// say so twice.
+    private static func dictatedHint(_ engine: String) -> String {
+        "[this text was dictated in RO or EN and transcribed by \(engineName(engine))]"
+    }
+
+    /// The recogniser's id as the reader should see it: the local model by the
+    /// **name of the weights** (`mlx-community/` dropped — it is the account,
+    /// not the model), Wispr by its product name. An id nobody has taught this
+    /// function is passed through rather than guessed at.
+    private static func engineName(_ engine: String) -> String {
+        switch engine {
+        case "whisper-local":
+            let model = LocalWhisperSource.configuredModel
+            return model.contains("/") ? String(model.split(separator: "/").last!) : model
+        case "wispr-flow": return "Wispr Flow"
+        default: return engine.isEmpty ? "a speech recogniser" : engine
+        }
+    }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
     /// what he deliberately attached** (2026-09-08).
@@ -3932,8 +3968,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                        marker: selectionMarker,
                                                        extras: extraSelections,
                                                        inlined: inlined))
-        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources,
-                                                  numbers: markerNumbers))
+        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
         if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
         guard parts.count > 1 else { return words }
         // The words, a blank line, then one clause per line — `terminalLine`'s
@@ -3946,7 +3981,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
-            parts.append(dictatedHint)
+            parts.append(dictatedHint(m.engine))
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
@@ -3976,8 +4011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources,
-                                             numbers: m.shotNumbers))
+        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
         if let clause = picksClause(m.elements, since: m.startedAt) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
@@ -4055,15 +4089,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "$WALKIE_SHOTS" + dir.dropFirst(root.count)
     }
 
-    /// - Parameter numbers: path → the marker number Wispr heard for it, so the
-    ///   `[shot 2]` sitting in the middle of his sentence has something to point
-    ///   at. Empty for a dictation with no markers, and the list then keeps the
-    ///   bare `- ` bullets it has always had — nothing in the envelope changes
-    ///   for a sentence where he took no pictures or the source cannot hear.
-    ///   → `ShotMarker`
     private static func shotsClause(paths: [String], screen: String?,
-                                    sources: [String: String] = [:],
-                                    numbers: [String: Int] = [:]) -> [String] {
+                                    sources: [String: String] = [:]) -> [String] {
         guard paths.first != nil || screen != nil else { return [] }
         let dir = ((paths.first ?? screen!) as NSString).deletingLastPathComponent
         let shown = shotsRootAbbreviated(dir)
@@ -4116,12 +4143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // happens to be small, and a small desktop is a display it should be
         // looking around in. Said once, in the clause, and carried per frame by
         // the `area-` its name starts with.
-        // **Said only when there is something to say it about.** An envelope for
-        // a dictation with no markers is byte-for-byte what it was before.
-        if !numbers.isEmpty {
-            note += " `[shot N]` in my words is where I pressed the shutter —"
-                + " it names the frame numbered N in this list."
-        }
+        // **The legend is gone** (2026-09-14). It explained that `[shot N]` in
+        // his words named the frame numbered N here — and once the number moved
+        // into the file's own name (`shot-1-00:08(…)`, `ScreenCapture.stem`)
+        // there is nothing left to explain: the reference and the file say the
+        // same digit. Victor: *"you shouldn't say … it should be obvious"*.
         if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
             note += " Anything named `area-` is a region I dragged a box around, "
                 + "not the whole screen — its edges are mine, not the display's."
@@ -4135,6 +4161,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + "\(shown)/\(handed(screen)). \(note)]"]
         }
 
+        // **The opening frame is a row of this list, not a sentence under it**
+        // (2026-09-14, Victor: *"the shot zero zero zero — consolidate that with
+        // the other two shots"*). It was its own bracketed clause because it is
+        // the one frame he did not ask for; but it is still picture **0** of the
+        // same enumeration, taken by the same camera into the same folder, and
+        // an agent reading two lists has to work out that they are one. What it
+        // keeps is the permission to skip it, said on its own row where it
+        // belongs, rather than a paragraph of its own.
+        let opening = screen.map { "- \(handed($0)) — the screen when I started"
+                                   + " talking, open only if the words need it" }
+
         // **One frame per line, under a heading, instead of one long sentence.**
         // Five shots joined with `; ` is a paragraph an agent has to parse back
         // into a list, and Victor reads these himself — a `- ` list is where a
@@ -4142,22 +4179,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // semicolons through window titles that contain their own punctuation.
         // The note is a line of its own for the same reason it was ever a
         // separate sentence: it is about all of them, not about the last one.
-        var clauses = ["screenshots during dictation are in: \(shown)/ oldest first:\n"
-                       + paths.map { path -> String in
-                           // **The number, where there is one, is the bullet.**
-                           // A `2.` in front of the frame is what makes `[shot 2]`
-                           // in the words resolvable without counting down a list
-                           // — and a list that is numbered only where markers
-                           // exist is honest about which frames were named.
-                           guard let n = numbers[path] else { return "- " + described(path) }
-                           return "\(n). " + described(path)
-                       }.joined(separator: "\n")
-                       + "\n\(note)"]
-        if let screen = screen {
-            clauses.append("[and \(handed(screen)) is the screen when I started talking, "
-                           + "open it only if the words need it]")
-        }
-        return clauses
+        // **`oldest first` is gone with the legend.** The names carry their own
+        // order now — `shot-0-00:00`, `shot-1-00:08`, `shot-2-00:13` — and a list
+        // that says out loud what its own rows already show is a line of tokens
+        // spent twice.
+        let rows = ([opening].compactMap { $0 } + paths.map { "- " + described($0) })
+            .joined(separator: "\n")
+        return ["screenshots during dictation are in: \(shown)/\n" + rows + "\n\(note)"]
     }
 
     /// **Everything he highlighted, as a list, each line saying when** (2026-09-13).
@@ -4715,7 +4743,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // changes nothing, and the clipboard is put back.
             if let offset = offset { self.stashExtraSelection(at: offset) }
 
-            guard let path = ScreenCapture.grab(cursor: cursor, offset: offset) else {
+            guard let path = ScreenCapture.grab(cursor: cursor, offset: offset,
+                                                index: marker) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }
@@ -4832,7 +4861,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.unlock()
         let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
 
-        guard let path = ScreenCapture.grabArea(selection.rect, on: selection.screen, offset: offset) else {
+        guard let path = ScreenCapture.grabArea(selection.rect, on: selection.screen,
+                                                offset: offset, index: marker) else {
             DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
             return
         }
@@ -5349,9 +5379,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // route the words arrived by belongs to *this* sentence, and the panel
         // holds it for seconds.
         let via = pendingVia ?? "test"
+        let engine = pendingEngine ?? ""
         let deliveryKind = pendingDeliveryKind ?? .route
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
-                                 pendingVia = nil; pendingDeliveryKind = nil }
+                                 pendingVia = nil; pendingEngine = nil
+                                 pendingDeliveryKind = nil }
         // **A dictation is never dropped for want of a binding any more**
         // (`holdsForBind`): it is built, shown and read exactly as a bound one
         // is, and `commit` parks it for the terminal Victor is about to point
@@ -5429,7 +5461,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               paths: attached, screen: screen, sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
-                              directory: directory, via: via, deliveryKind: deliveryKind)
+                              directory: directory, via: via, engine: engine,
+                              deliveryKind: deliveryKind)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -5577,6 +5610,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The route and the case the sentence being assembled arrived by, taken off
     /// the `DictationResult` in `deliver` and moved onto the `Message` in `send`.
     private var pendingVia: String?
+    /// The engine behind this sentence, taken and cleared with `pendingVia`.
+    private var pendingEngine: String?
     private var pendingDeliveryKind: DictationDelivery?
 
     private func commit(_ m: Message) {

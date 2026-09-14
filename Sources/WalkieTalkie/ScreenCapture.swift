@@ -27,14 +27,15 @@ enum ScreenCapture {
     /// capture, which he took by starting to talk. nil for a shot with no
     /// dictation around it (bare F3), where there is no clock for it to be an
     /// offset into and the name falls back to a timestamp.
-    static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil) -> String? {
+    static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil,
+                     index: Int? = nil) -> String? {
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
         let spot = cursorFraction(mouse: mouse, screen: screen)
         // Provisional: the pixel reading in the final name is measured against the
         // frame `screencapture` actually produces, which does not exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("shot-\(stem(offset)).jpg")
+        let file = Outbox.shotsDir.appendingPathComponent("shot-\(stem(offset, index)).jpg")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -60,7 +61,7 @@ enum ScreenCapture {
         //
         // It also drops a second JPEG pass over a frame `screencapture` already
         // encoded: ~100ms and a file that came back *larger* at quality 1.0.
-        let final = tagCursor(spot, on: file, offset: offset)
+        let final = tagCursor(spot, on: file, offset: offset, index: index)
         writeHandoverCopy(of: final)
         prune()
         return final.path
@@ -89,16 +90,17 @@ enum ScreenCapture {
     /// pointer is merely the corner he happened to let go on. What takes its
     /// place is the size, which is the one fact about a crop that is not
     /// obvious from looking at it.
-    static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?) -> String? {
+    static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?,
+                         index: Int? = nil) -> String? {
         // Provisional, for the same reason `grab` names provisionally: the pixel
         // reading in the final name is measured off the file, which does not
         // exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("area-\(stem(offset)).jpg")
+        let file = Outbox.shotsDir.appendingPathComponent("area-\(stem(offset, index)).jpg")
         guard CropCapture.capture(rect, on: screen, to: file) else {
             Log.error("could not crop the selected area (Screen Recording permission?)")
             return nil
         }
-        let final = tagSize(of: file, offset: offset)
+        let final = tagSize(of: file, offset: offset, index: index)
         writeHandoverCopy(of: final)
         prune()
         return final.path
@@ -106,10 +108,10 @@ enum ScreenCapture {
 
     /// `area-00:38(1200x800px).jpg` — measured off the JPEG, never multiplied
     /// out of the screen's backing scale, for `tagCursor`'s reason.
-    private static func tagSize(of file: URL, offset: TimeInterval?) -> URL {
+    private static func tagSize(of file: URL, offset: TimeInterval?, index: Int?) -> URL {
         guard let size = pixelSize(of: file) else { return file }
         let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("area-\(stem(offset))(\(Int(size.width))x\(Int(size.height))px).jpg"))
+            .appendingPathComponent("area-\(stem(offset, index))(\(Int(size.width))x\(Int(size.height))px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged
@@ -241,15 +243,24 @@ enum ScreenCapture {
     /// handles these paths is POSIX — but **the Finder renders it as `/`**
     /// (`shot-00/00(…)`), the old HFS separator swap, so a folder Victor opens
     /// by hand will read slightly differently from what the agent sees.
-    private static func stem(_ offset: TimeInterval?) -> String {
+    ///
+    /// **The index goes in front of the offset** (2026-09-14). `shot-1-00:08(…)`
+    /// rather than `shot-00:08(…)`, so the `[shot 1]` sitting in the middle of
+    /// his sentence names a file by itself and the envelope needs no legend
+    /// explaining the correspondence — Victor: *"it should be obvious"*. The
+    /// offset stays because it is the thing that locates a frame for a human
+    /// scrolling the folder; the index is what an agent resolves. Nil for a
+    /// frame outside a dictation, which has no index to have.
+    private static func stem(_ offset: TimeInterval?, _ index: Int? = nil) -> String {
+        let prefix = index.map { "\($0)-" } ?? ""
         guard let offset = offset else {
             let stamp = DateFormatter()
             stamp.locale = Locale(identifier: "en_US_POSIX")
             stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-            return stamp.string(from: Date())
+            return prefix + stamp.string(from: Date())
         }
         let seconds = max(0, Int(offset.rounded()))
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        return prefix + String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     /// Rename the shot to its final form:
@@ -280,12 +291,13 @@ enum ScreenCapture {
     /// Renaming rather than naming up front is what buys that — the file has to
     /// exist before it can be measured. On failure the provisional name stands:
     /// a shot with no pointer in its name is still a shot.
-    private static func tagCursor(_ spot: CGPoint?, on file: URL, offset: TimeInterval?) -> URL {
+    private static func tagCursor(_ spot: CGPoint?, on file: URL,
+                                  offset: TimeInterval?, index: Int?) -> URL {
         guard let spot = spot, let size = pixelSize(of: file) else { return file }
         let x = Int((spot.x * size.width).rounded())
         let y = Int((spot.y * size.height).rounded())
         let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("shot-\(stem(offset))(mouse-at-\(x)x\(y)px).jpg"))
+            .appendingPathComponent("shot-\(stem(offset, index))(mouse-at-\(x)x\(y)px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged

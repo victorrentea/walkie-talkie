@@ -389,6 +389,18 @@ enum ShotMarker {
         "unu": 1, "doi": 2, "trei": 3, "patru": 4, "cinci": 5,
         "șase": 6, "sase": 6, "șapte": 7, "sapte": 7,
         "opt": 8, "nouă": 9, "noua": 9, "zece": 10,
+        // **The homophones, because a recogniser hears sounds and not numbers**
+        // (2026-09-14, measured on a real dictation). `selected text two` came
+        // back from the local model as **`Selected text to`**, so the second
+        // highlight was not recognised as a marker at all and fell through to
+        // the list at the end — while the first one had been inlined correctly,
+        // which is the shape of failure that looks like a feature half-working.
+        //
+        // Safe because the pattern requires the marker phrase immediately in
+        // front: `to` only counts as a number when `selected text` or
+        // `screenshot` precedes it, and a sentence never says either of those
+        // followed by a bare preposition by accident.
+        "to": 2, "too": 2, "won": 1, "for": 4, "fore": 4, "ate": 8,
     ]
 
     /// **The whitespace around the marker is eaten with it.** Wispr promotes the
@@ -467,7 +479,14 @@ enum ShotMarker {
                 if replacement != nil { foundShots.append(index) }
             case .selection:
                 guard let selected = selections[index] else { replacement = nil; break }
-                replacement = inlineSelections ? " \"\(selected)\" " : " "
+                // **Bracketed as well as quoted** (2026-09-14). Bare double
+                // quotes are the ones he might have dictated himself — *"it
+                // seemed to be inserted in dictation, but without clear double
+                // quotes. Clearly delimitate them"* — and they break outright on
+                // a highlight that contains a quote of its own, which a line of
+                // code very often does. The bracket says what it is and cannot
+                // be confused with anything he said.
+                replacement = inlineSelections ? " [selected: \"\(selected)\"] " : " "
                 foundSelections.append(index)
             }
             out += text[cursor..<range.lowerBound]

@@ -285,6 +285,13 @@ final class WisprFlowSource: DictationSource {
     func mark(_ kind: ShotMarker.Kind, index: Int) {
         if bridge.isRunning, let pcm = ShotMarker.pcm(kind, index: index, in: MicRecorder.fileFormat) {
             meter.insert(pcm)
+            // One sequence, two destinations (`MicRecorder.onBuffer`): the same
+            // buffer reaches Wispr's ear *and* the WAV this app is filing. So
+            // this pair is now one whose audio contains the marker, and the
+            // corpus must keep the words that name it rather than the cleaned
+            // ones. Without this the bridged path files exactly the poisoned
+            // pair `markersInAudio` was invented to prevent.
+            markersInAudio = true
             return
         }
         ShotMarker.play(kind, index: index,
@@ -306,6 +313,11 @@ final class WisprFlowSource: DictationSource {
     /// is up, a shot marker is *spliced* into the stream instead of played over
     /// it, which is the whole point of owning the path.
     private let bridge = AudioBridge()
+
+    /// Whether this sentence's WAV has a marker spliced into it — true only on
+    /// the bridged path, where `mark` splices rather than plays. Reset with the
+    /// meter, because it describes one recording.
+    private var markersInAudio = false
 
     private let watch = WisprWatch()
     private let hotkeys: HotkeyTap
@@ -1488,6 +1500,7 @@ final class WisprFlowSource: DictationSource {
             // **Before the recorder opens**, so no buffer is produced that the
             // bridge has not been told about: the first syllable is the one most
             // often worth carrying.
+            self.markersInAudio = false
             if AudioBridge.isEnabled, self.bridge.start(format: MicRecorder.fileFormat) {
                 self.meter.onBuffer = { [weak self] buffer in self?.bridge.schedule(buffer) }
             }
@@ -2377,7 +2390,8 @@ final class WisprFlowSource: DictationSource {
                     via: via,
                     // Only where the recogniser may have moved the focus under
                     // the sentence; every other path means *the caret*.
-                    focusPid: self.startedMode == .scratchpad ? self.focusPid : nil))
+                    focusPid: self.startedMode == .scratchpad ? self.focusPid : nil,
+                    markersInAudio: self.markersInAudio))
                 self.didEnd?(.delivered)
             }
         }
