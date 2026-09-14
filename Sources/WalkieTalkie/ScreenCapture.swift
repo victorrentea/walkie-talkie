@@ -90,28 +90,58 @@ enum ScreenCapture {
     /// pointer is merely the corner he happened to let go on. What takes its
     /// place is the size, which is the one fact about a crop that is not
     /// obvious from looking at it.
+    /// **The whole screen, with the region he dragged written into the name**
+    /// (2026-09-14). Victor: *"să se trimită nu doar decupată poza, ci poza e
+    /// ecranul integral, dar cu coordonate ce zonă am selectat … nu doar decupez
+    /// o bucată, ci arăt: în zona aia vreau să dispară, să apară ceva"*.
+    ///
+    /// The drag stopped being a crop and became a **pointing gesture**. A crop
+    /// answers *look at this*; it cannot say *put something here*, because the
+    /// thing he is pointing at is often the empty space and the surroundings are
+    /// what make it meaningful. So the frame is the display, exactly as the
+    /// shutter's is, and the rectangle travels as four numbers in the name —
+    /// where the cursor's position already travels, and for the same reason
+    /// (nothing is drawn into the picture; see `grab`).
     static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?,
                          index: Int? = nil) -> String? {
-        // Provisional, for the same reason `grab` names provisionally: the pixel
-        // reading in the final name is measured off the file, which does not
-        // exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("area\(stem(offset, index)).jpg")
-        guard CropCapture.capture(rect, on: screen, to: file) else {
-            Log.error("could not crop the selected area (Screen Recording permission?)")
+        let file = Outbox.shotsDir.appendingPathComponent("shot\(stem(offset, index)).jpg")
+        let display = activeDisplayNumber(of: screen)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-t", "jpg", "-D", String(display), file.path]
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            Log.error("screencapture failed: \(error)")
             return nil
         }
-        let final = tagSize(of: file, offset: offset, index: index)
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            Log.error("screencapture produced no file (Screen Recording permission?)")
+            return nil
+        }
+        let final = tagArea(rect, on: screen, of: file, offset: offset, index: index)
         writeHandoverCopy(of: final)
         prune()
         return final.path
     }
 
-    /// `area-00:38(1200x800px).jpg` — measured off the JPEG, never multiplied
-    /// out of the screen's backing scale, for `tagCursor`'s reason.
-    private static func tagSize(of file: URL, offset: TimeInterval?, index: Int?) -> URL {
-        guard let size = pixelSize(of: file) else { return file }
+    /// `shot#01(area-317x210-to-1204x880px).jpg` — the dragged rectangle **in the
+    /// pixels of this image**, top-left origin like the image itself.
+    ///
+    /// Measured off the JPEG rather than multiplied out of the screen's backing
+    /// scale, for `tagCursor`'s reason: the two displays here have different
+    /// scales and the file is the only thing that knows which one it came from.
+    private static func tagArea(_ rect: NSRect, on screen: NSScreen, of file: URL,
+                                offset: TimeInterval?, index: Int?) -> URL {
+        guard let size = pixelSize(of: file),
+              let a = cursorFraction(mouse: NSPoint(x: rect.minX, y: rect.maxY), screen: screen),
+              let b = cursorFraction(mouse: NSPoint(x: rect.maxX, y: rect.minY), screen: screen)
+        else { return file }
+        let x1 = Int((a.x * size.width).rounded()), y1 = Int((a.y * size.height).rounded())
+        let x2 = Int((b.x * size.width).rounded()), y2 = Int((b.y * size.height).rounded())
         let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("area\(stem(offset, index))(\(Int(size.width))x\(Int(size.height))px).jpg"))
+            .appendingPathComponent("shot\(stem(offset, index))(area-\(x1)x\(y1)-to-\(x2)x\(y2)px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged
@@ -125,9 +155,10 @@ enum ScreenCapture {
     /// also what says it to the agent — a second flag beside the path would be a
     /// second thing to keep in step with it.
     static func isArea(_ path: String) -> Bool {
-        // Both shapes: `area#01(…)` inside a dictation, `area-00:08(…)` for one
-        // that had an offset but no index, `area-2026-…` outside one entirely.
-        (path as NSString).lastPathComponent.hasPrefix("area")
+        // **The token, not the prefix** (2026-09-14). These frames are whole
+        // screens now — the name starts `shot` like every other one — and what
+        // makes them different is the rectangle inside the parentheses.
+        (path as NSString).lastPathComponent.contains("(area-")
     }
 
     /// The width of the copy the **agent** is given. Victor still gets the retina

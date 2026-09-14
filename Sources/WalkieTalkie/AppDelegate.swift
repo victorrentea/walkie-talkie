@@ -4326,8 +4326,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // there is nothing left to explain: the reference and the file say the
         // same digit. Victor: *"you shouldn't say … it should be obvious"*.
         if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
-            note += " Anything named `area` is a region I dragged a box around, "
-                + "not the whole screen — its edges are mine, not the display's."
+            note += " A name with `area-x1xy1-to-x2xy2px` in it is a whole screen "
+                + "with a rectangle I dragged on it, in that picture's own pixels, "
+                + "top-left origin — I am pointing at that region, not cropping to it."
         }
 
         // Nothing but the automatic frame — 168 of the 180 dictations in the
