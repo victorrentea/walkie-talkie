@@ -21,13 +21,29 @@ No model runs here and none is called. This is a copy, a checksum and an INSERT.
 
 ## Why it also comes back to rows it has already taken
 
-`editedText` is the text Victor *fixed by hand* after Wispr got it wrong, and it
-is the most valuable column in the source: a free human correction of a machine
-transcript, which is exactly the supervision a fine-tune wants. Wispr fills it in
-**later**, by watching what he types over the pasted text — so a row harvested
-the minute it appeared usually has no correction yet and would be frozen wrong.
-Every run therefore re-reads the rows it took in the last fortnight and updates
-the text if it has moved. The audio never changes; only the reading of it does.
+`editedText` moves after a row is written, so every run re-reads the rows it took
+in the last fortnight and updates the text if it has changed. The audio never
+changes; only the reading of it does.
+
+**It is NOT a human correction, and this file said for two weeks that it was**
+(corrected 2026-09-15, when Victor read the claim and said he had never edited a
+hundred and fifty transcripts in his life). Wispr fills it by *watching the text
+box* it pasted into for a short window afterwards — `contentObservationEndReason`
+is `observation_window_elapsed` / `next_paste_started` / `anchor_mismatch` — and
+what comes back is overwhelmingly **Wispr's own `formattedText`, read back off
+the screen**: 125 of the 149 rows in this corpus that have one are word-for-word
+identical to it, `editedTextStatus` is `NOT_EXTRACTED` on every single one, and
+the 15 with `numWordsCorrected > 0` differ only in whitespace and a trailing
+newline. There is **no human-corrected reference in this corpus**, and anything
+that treats this column as ground truth is scoring Wispr against itself.
+
+Two consequences worth keeping. `best_text` still prefers it, which is mostly
+harmless — it usually *is* the formatted text — but an observation cut short by
+`anchor_mismatch` or `textbox_emptied` reads back a half-typed box, so a
+`final_text` can be a truncation of what was actually said (measured: 1 of 149,
+so the corpus is not badly hurt and the ordering is left alone). And the day a
+genuine human reference is wanted, it has to be *made* — none is being collected
+today.
 
 ## Reading a database another app has open
 
@@ -77,7 +93,8 @@ CREATE TABLE IF NOT EXISTS samples (
     language      TEXT,
     asr_text      TEXT,               -- the recogniser's raw reading
     formatted_text TEXT,              -- after Wispr's LLM formatting
-    edited_text   TEXT,               -- what Victor corrected it to, if he did
+    edited_text   TEXT,               -- Wispr's read-back of the text box it pasted into;
+                                      -- NOT a human correction (see the note above)
     final_text    TEXT,               -- best reference available: edited > formatted > asr
     app           TEXT,
     mic           TEXT,

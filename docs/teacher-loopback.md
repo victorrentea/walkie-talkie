@@ -155,24 +155,35 @@ that is indistinguishable from a good one by length, confidence or plausibility*
 and it would be filed as truth. The canned-phrase filter is cheap and catches
 this class; run it over `teacher_text` before anything is trained on it.
 
-### The one real reference in the corpus says the teacher is ahead
+### There is no human reference in this corpus — the column that looked like one is not
 
-`edited_text` — what Victor changed the transcript to by hand — is the only
-column neither recogniser wrote. 149 clips, 83 of which differ in their *words*.
-It is not clean (some of it is him tidying his own stutters) and it is selected
-*for* Wispr having been wrong, so the absolute numbers mean little; both
-recognisers scored against the **same** biased reference does mean something:
+The first version of this section scored both recognisers against `edited_text`
+and concluded the teacher was clearly ahead. **That was wrong and the conclusion
+is withdrawn.** Victor read it and said he had never hand-corrected a hundred and
+fifty transcripts; he is right, and checking Wispr's own database says what the
+column actually is:
 
-| against Victor's own text | all 149 | the 83 he really changed |
-|---|---|---|
-| Wispr | **13.9%** | **18.9%** |
-| local | 24.1% | 26.5% |
-| clips where the student was closer | 12 | 12 |
-| tied | 68 | 24 |
-| teacher closer | 69 | 47 |
+| | |
+|---|---|
+| `editedTextStatus` on all 149 rows | `NOT_EXTRACTED` |
+| word-for-word identical to Wispr's **`formattedText`** | **125 of 149 (84%)** |
+| `numWordsCorrected > 0` | 15 — and every one of them is whitespace or a trailing newline |
+| `contentObservationEndReason` | `next_paste_started` 47 · `anchor_mismatch_transcript_intact` 45 · `observation_window_elapsed` 40 · `trailing_newline_added` 8 · `anchor_mismatch` 5 · `textbox_emptied` 4 |
 
-**The teacher is genuinely ahead, and not by a rounding error.** Distillation has
-somewhere to go.
+`editedText` is **Wispr watching the text box it pasted into** for a few seconds
+afterwards and writing down what it sees. What it sees is, almost always, its own
+formatted output. So scoring Wispr's raw ASR against it is **scoring Wispr
+against itself**, and the 13.9% against the student's 24.1% measured exactly that
+and nothing else.
+
+**Nothing in this corpus is ground truth.** The teacher may well be better — the
+disagreement figures above are consistent with it, and so are the hallucination
+counts — but *it has not been shown*, and the ceiling of a distillation nobody
+has measured the teacher against stays unknown. If that matters before the night
+is spent, the cheap way to settle it is fifty clips read by Victor, sampled from
+the disagreement band: an hour of listening buys a real number on both sides.
+`helpers/corpus_harvest.py` carried the same wrong belief in its own docstring
+and has been corrected in place.
 
 ### What the run is worth per clip
 
@@ -196,8 +207,9 @@ artefact of the junk.
 3. Keep the ~600 agreeing clips as labels with no review. Read the rest, or
    weight them lower — the disagreement set is where both the teacher's errors
    and the student's live.
-4. `edited_text` stays the most valuable column in the store, and it is 149 rows.
-   Weight it hardest.
+4. **Do not treat `edited_text` as a reference** — it is Wispr's own formatted
+   output read back off the screen (see above). If a human reference is wanted,
+   it has to be made: fifty clips from the disagreement band, read by Victor.
 
 ## The three hazards, and what is done about each
 
@@ -242,12 +254,19 @@ written.
 ## The ceiling, written down so it is not forgotten
 
 **Distillation reaches Wispr's level on Victor's voice and no further.** By
-construction: the student is being trained to agree with the teacher. The only
-labels in this corpus that could ever teach it to *beat* Wispr are the ones Wispr
-did not write — `editedText`, what Victor fixed by hand after a wrong word, which
-`corpus_harvest.py` already comes back for on a fortnight's re-read. There is not
-much of it and it is the most valuable column in the whole store; weight those
-samples harder at training time.
+construction: the student is being trained to agree with the teacher.
+
+The escape from that ceiling would be labels Wispr did not write, and **this
+corpus has none** — the `editedText` column that looked like them turns out to be
+Wispr reading its own paste back off the screen (2026-09-15; the section *There
+is no human reference in this corpus* has the evidence). So the ceiling is real
+and currently unmeasured: nothing here establishes how good the teacher is in
+absolute terms, only that the two recognisers disagree on 23.3% of the words.
+
+Beating it needs a reference that is made rather than harvested. The cheapest
+version is Victor reading fifty clips sampled from the disagreement band — it
+scores both recognisers honestly *and* produces the first gold labels in the
+store.
 
 ## Already measured and lost — do not re-try
 

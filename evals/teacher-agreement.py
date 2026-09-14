@@ -254,51 +254,70 @@ def report(done):
 
 
 def gold(done):
-    """The one place in this corpus with something better than a vote.
+    """**There is no gold here, and that is the finding.**
 
-    `edited_text` is what Victor changed Wispr's transcript to by hand, and it is
-    the only column neither recogniser wrote. It is **not clean ground truth**:
-    83 of the 149 differ from `asr_text` in their words at all, and among those
-    are him tidying his own stutters (`Vreau să, vreau să` -> `Vreau să`) as well
-    as him fixing a mishearing. It is also selected *for* Wispr having been
-    wrong, which is exactly the set Wispr scores worst on.
+    This function scored both recognisers against `edited_text` and reported that
+    the teacher was clearly ahead -- 13.9% against the student's 24.1%. Victor
+    read that and said he had never hand-corrected a hundred and fifty
+    transcripts. He is right, and Wispr's own database says what the column is:
 
-    So the absolute numbers here mean little. What means something is that both
-    recognisers are scored against the **same** biased reference, on the same
-    audio: if the teacher is not clearly ahead here, distilling from it buys
-    nothing.
+    * `editedTextStatus` is `NOT_EXTRACTED` on all 149 rows;
+    * **125 of 149 are word-for-word Wispr's own `formattedText`**;
+    * `contentObservationEndReason` is `observation_window_elapsed` /
+      `next_paste_started` / `anchor_mismatch` -- Wispr *watching the text box it
+      pasted into* and writing down what it sees;
+    * the 15 with `numWordsCorrected > 0` differ in whitespace and a newline.
+
+    So the old measurement was **Wispr scored against Wispr**, and a recogniser
+    compared with its own formatted output will beat any outsider every time. The
+    conclusion is withdrawn; `helpers/corpus_harvest.py` carried the same wrong
+    belief in its docstring and has been corrected too.
+
+    What is left is the evidence, printed so that nobody rebuilds the mistake. A
+    real reference has to be *made* -- fifty clips from the disagreement band,
+    read by Victor -- because nothing in this corpus is one.
     """
     db = sqlite3.connect("file:" + DB + "?mode=ro", uri=True)
-    ref = {r[0]: r[1] for r in db.execute(
-        "SELECT id, edited_text FROM samples"
-        " WHERE edited_text IS NOT NULL AND trim(edited_text) != ''")}
-    pairs = []
-    for sid, victor in ref.items():
-        rec = done.get(sid)
-        if not rec:
-            continue
-        w, n = wer(victor, rec["ref"])          # teacher against Victor
-        l, _ = wer(victor, rec["hyp"])          # student against Victor
-        if w is None or l is None:
-            continue
-        pairs.append((sid, n, w, l, norm(victor) != norm(rec["ref"])))
-    if not pairs:
-        print("no hand-edited clip has been decoded yet")
+    ids = [r[0] for r in db.execute(
+        "SELECT id FROM samples WHERE edited_text IS NOT NULL"
+        " AND trim(edited_text) != ''")]
+    flow = os.path.expanduser(
+        "~/Library/Application Support/Wispr Flow/flow.sqlite")
+    if not os.path.exists(flow):
+        print("\nno human reference in this corpus; Wispr's db is not here to prove it")
         return
-    for label, sub in (("all hand-edited clips", pairs),
-                       ("only those Victor really changed", [p for p in pairs if p[4]])):
-        if not sub:
+    w = sqlite3.connect("file:" + flow + "?mode=ro", uri=True)
+    w.row_factory = sqlite3.Row
+    same = corrected = n = 0
+    reasons = {}
+    for i in ids:
+        r = w.execute(
+            "SELECT formattedText, editedText, numWordsCorrected,"
+            " contentObservationEndReason FROM History"
+            " WHERE transcriptEntityId = ?", (i,)).fetchone()
+        if not r:
             continue
-        words = sum(p[1] for p in sub) or 1
-        tw = 100 * sum(p[2] * p[1] for p in sub) / words
-        sw = 100 * sum(p[3] * p[1] for p in sub) / words
-        better = len([p for p in sub if p[3] < p[2]])
-        tie = len([p for p in sub if p[3] == p[2]])
-        print("\n%s (%d clips, %d words)" % (label, len(sub), words))
-        print("  Wispr  vs Victor's own text: %.1f%%" % tw)
-        print("  local  vs Victor's own text: %.1f%%" % sw)
-        print("  clips where the student is closer: %d   tied: %d   teacher closer: %d"
-              % (better, tie, len(sub) - better - tie))
+        n += 1
+        if norm(r["editedText"]) == norm(r["formattedText"]):
+            same += 1
+        if (r["numWordsCorrected"] or 0) > 0:
+            corrected += 1
+        k = r["contentObservationEndReason"]
+        reasons[k] = reasons.get(k, 0) + 1
+    if not n:
+        return
+    print("\nedited_text is NOT a human correction -- it is Wispr reading back its"
+          "\nown paste, and this is the evidence (%d rows):" % n)
+    print("  word-for-word identical to Wispr's formattedText: %d (%.0f%%)"
+          % (same, 100 * same / n))
+    print("  rows Wispr itself counts as corrected:            %d "
+          "(all whitespace or a trailing newline)" % corrected)
+    print("  how the observation ended: %s"
+          % ", ".join("%s %d" % kv for kv in
+                      sorted(reasons.items(), key=lambda x: -x[1])))
+    print("  => scoring a recogniser against it scores it against itself.")
+    print("  A reference has to be made, not harvested: ~50 clips from the"
+          " 15-40% band, read by Victor.")
 
 
 def main():
