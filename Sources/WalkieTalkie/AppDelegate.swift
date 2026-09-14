@@ -1077,12 +1077,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // bound to leaves the dictation unstarted rather than opening one aimed
         // at the caret, because the gesture named a terminal and there is not
         // one — and the bind's own flash has already said so.
+        // **`bindFrontmostTerminal` must NOT be called on the main thread** — it
+        // hops to main itself, with `sync`, so a caller already there traps:
+        // `BUG IN CLIENT OF LIBDISPATCH: dispatch_sync called on queue already
+        // owned by current thread`, `EXC_BREAKPOINT`, the app gone. That is what
+        // this closure did for one build (2026-09-14, twice in a minute): the
+        // tap hands it over on `DispatchQueue.global()` — which is exactly the
+        // thread it wants — and wrapping the body in `main.async` threw that
+        // away. `onGestureBind` one line up is the shape to copy: it calls
+        // straight through. Only `startDictation` goes to main.
         hotkeys.onGestureBindAndDictate = { [weak self] in
             guard let self = self else { return }
-            DispatchQueue.main.async {
-                guard self.bindFrontmostTerminal(toggle: false) != nil else { return }
-                self.startDictation()
-            }
+            guard self.bindFrontmostTerminal(toggle: false) != nil else { return }
+            DispatchQueue.main.async { self.startDictation() }
         }
         // ⬇️ held on the **back** button, mouse moved down. **The same call the
         // menu's Disconnect row makes**, so the gesture cannot end up meaning
