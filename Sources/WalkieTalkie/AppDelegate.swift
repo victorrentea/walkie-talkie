@@ -153,13 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(id, forKey: Self.engineKey)
         wireDictationSource()
         status.setEngine(engineId)
-        // **The weights come up on the pick, not on the first gesture.**
-        // `LocalWhisperSource.prepare()` is deliberately a no-op — it is a
-        // fallback and nothing should pay ten seconds for it at launch — but
-        // choosing it from the menu *is* the gesture that asks for it, and a
-        // first dictation answered with "the local model is still loading" reads
-        // as the switch having failed.
-        (source as? LocalWhisperSource)?.bringUpModel()
+        // The weights come up in `prepare()`, which `wireDictationSource` above
+        // has just called — see `LocalWhisperSource.prepare`. It used to be a
+        // no-op with this line doing the work; both existed for a while, which
+        // meant the switch loaded the model twice (harmless, `bringUpModel` is
+        // guarded) and left this comment describing the opposite of the truth.
         Log.info("🎙️ dictation engine switched to \(source.name)")
         overlay.flash("🎙️ \(source.name)", duration: 2.5)
     }
@@ -967,7 +965,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let inline = (body["inline"] as? Bool) ?? true
             let resolved = ShotMarker.resolve(text: text, shots: available,
-                                              selections: selections, inlineSelections: inline)
+                                              selections: selections, inline: inline)
             return ["text": resolved.text, "found": resolved.shots,
                     "selections": resolved.selections]
         }
@@ -1780,7 +1778,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// transcript enters exactly where a real one does — and it enters *below*
     /// `deliver`, so a rewrite living only there would be the one thing no test
     /// could reach.
-    private func resolvingMarkers(_ text: String, inlineSelections: Bool = true) -> String {
+    private func resolvingMarkers(_ text: String, inline: Bool = true) -> String {
         stateLock.lock()
         let marked = Set(shotMarkerNumbers.values)
         // **The highlight as it was at that moment, not as it is now.** Both
@@ -1805,8 +1803,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.unlock()
         let resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
                                           elements: elements,
-                                          inlineSelections: inlineSelections)
-        guard inlineSelections else { return resolved.text }
+                                          inline: inline)
+        guard inline else { return resolved.text }
         if !resolved.shots.isEmpty {
             Log.info("📣 \(resolved.shots.count) shot marker(s) placed in the words: "
                      + resolved.shots.map(String.init).joined(separator: ", "))
@@ -1856,7 +1854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the one with the selection markers taken out and nothing put in their
         // place — the words as he actually said them.
         let corpusText = result.markersInAudio
-            ? spokenText : resolvingMarkers(spokenText, inlineSelections: false)
+            ? spokenText : resolvingMarkers(spokenText, inline: false)
 
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
@@ -1905,7 +1903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // From here the route travels with the sentence — `send` moves it onto
         // the `Message` and `commit` writes it beside the words.
         pendingVia = result.via
-        pendingEngine = result.engine
+        pendingEngine = result.engineLabel
         pendingDeliveryKind = result.delivery
 
         // **The ring goes down when the words land**, and for a bound sentence
@@ -2289,9 +2287,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.cancel()
         if sourceWasIdle {
             Log.info("🗑️ …and the recogniser had nothing to cancel — putting the ring down here")
-            if settling { endSettling(reason: "cancelled with no recogniser behind it") }
+            // `quiet`, because `endSettling`'s ordinary line is `✍️ the words
+            // landed` and they did not — this is the wait being abandoned.
+            if settling { endSettling(reason: "cancelled with no recogniser behind it", quiet: true) }
             dictationStoppedListening()
-            abandonDictation("cancelled with no recogniser behind it")
+            // **`clearCancelledDictationState`, never `abandonDictation`** (found
+            // in review, 2026-09-14). The second one *releases* what the sentence
+            // had gathered — `flushOrphaned` sends the pictures on to the bound
+            // terminal as a screenshot message — which is the right thing for a
+            // dictation that produced no transcript and exactly the wrong thing
+            // for one he cancelled: two frames arriving in his terminal a moment
+            // after `🗑️ Cancelled`. A cancel takes everything with it.
+            clearCancelledDictationState()
         }
         overlay.flash("🗑️ Cancelled", duration: 1.5)
         return true
@@ -3893,14 +3900,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **name of the weights** (`mlx-community/` dropped — it is the account,
     /// not the model), Wispr by its product name. An id nobody has taught this
     /// function is passed through rather than guessed at.
-    private static func engineName(_ engine: String) -> String {
-        switch engine {
-        case "whisper-local":
-            let model = LocalWhisperSource.configuredModel
-            return model.contains("/") ? String(model.split(separator: "/").last!) : model
-        case "wispr-flow": return "Wispr Flow"
-        default: return engine.isEmpty ? "a speech recogniser" : engine
-        }
+    private static func engineName(_ label: String) -> String {
+        // **The source says its own name** (found in review, 2026-09-14). This
+        // was a `switch` on the engine id that reached into
+        // `LocalWhisperSource.configuredModel` — downstream code naming a
+        // concrete implementation, which is the one thing `DictationSource`
+        // exists to prevent, and a second place the model's default name would
+        // have to be kept in step. `DictationResult.engineLabel` carries it now.
+        label.isEmpty ? "a speech recogniser" : label
     }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
@@ -4195,7 +4202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // there is nothing left to explain: the reference and the file say the
         // same digit. Victor: *"you shouldn't say … it should be obvious"*.
         if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
-            note += " Anything named `area-` is a region I dragged a box around, "
+            note += " Anything named `area` is a region I dragged a box around, "
                 + "not the whole screen — its edges are mine, not the display's."
         }
 

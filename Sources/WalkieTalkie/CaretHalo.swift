@@ -594,6 +594,7 @@ final class CaretHalo {
             }
         }
         arrow.hide()
+        Self.followTraceLeft = 6
         follow()
         panel.orderFrontRegardless()
 
@@ -710,7 +711,33 @@ final class CaretHalo {
         // converging on nothing. Same reason `BindFlight` re-reads the cursor
         // every frame instead of sampling it once.
         guard live || closing, let panel = panel else { return }
-        panel.setFrameOrigin(Self.origin())
+        let wanted = Self.origin()
+        panel.setFrameOrigin(wanted)
+        // **Who moved it?** (2026-09-14). Victor: *"pe retina merge bine, pe
+        // ecranul al doilea îmi aleargă, îmi fuge de acolo, acolo"* — a ring that
+        // tracks the pointer on the built-in display and runs away on the second
+        // one. Nothing that rides the pointer can be screenshot, and the two
+        // candidates leave no other trace: either the origin this app asks for is
+        // already wrong for that display, or something puts the window somewhere
+        // else after it is asked. The read-back tells them apart in one line, and
+        // it is the only way this bug can be reviewed at all.
+        //
+        // Rate-limited to the first few disagreements of a dictation: `follow` is
+        // driven by a pointer monitor and a per-event log line would be the
+        // sentence's own noise floor. A tolerance of 1 pt, because a rounded
+        // origin on a fractional-scale display is not a bug.
+        if Self.followTraceLeft > 0 {
+            let got = panel.frame.origin
+            if abs(got.x - wanted.x) > 1 || abs(got.y - wanted.y) > 1 {
+                Self.followTraceLeft -= 1
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.firstIndex { NSMouseInRect(mouse, $0.frame, false) }
+                Log.error(String(format:
+                    "◯ halo moved: asked (%.0f, %.0f), got (%.0f, %.0f) — mouse (%.0f, %.0f) on screen %@ of %d",
+                    wanted.x, wanted.y, got.x, got.y, mouse.x, mouse.y,
+                    screen.map(String.init) ?? "none", NSScreen.screens.count))
+            }
+        }
         // The arrow's window rides the same origin, in the same call — see
         // `DropArrow` for why it is a window and why it is not its own monitor.
         arrow.place(at: Self.origin())
@@ -718,6 +745,10 @@ final class CaretHalo {
 
     /// Where a panel the size of this one has to sit for its centre to be the
     /// pointer. Two windows read it, which is why it is a function.
+    /// How many disagreements this dictation may still report — see `follow`.
+    /// Reset when the ring comes up, so every sentence gets a fresh few.
+    private static var followTraceLeft = 6
+
     private static func origin() -> NSPoint {
         let p = NSEvent.mouseLocation
         return NSPoint(x: (p.x - side / 2).rounded(), y: (p.y - side / 2).rounded())

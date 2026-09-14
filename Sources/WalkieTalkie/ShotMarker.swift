@@ -396,18 +396,21 @@ enum ShotMarker {
         "unu": 1, "doi": 2, "trei": 3, "patru": 4, "cinci": 5,
         "șase": 6, "sase": 6, "șapte": 7, "sapte": 7,
         "opt": 8, "nouă": 9, "noua": 9, "zece": 10,
-        // **The homophones, because a recogniser hears sounds and not numbers**
-        // (2026-09-14, measured on a real dictation). `selected text two` came
-        // back from the local model as **`Selected text to`**, so the second
-        // highlight was not recognised as a marker at all and fell through to
-        // the list at the end — while the first one had been inlined correctly,
-        // which is the shape of failure that looks like a feature half-working.
+        // **The homophones are gone, and the reasoning that put them here was
+        // simply wrong** (2026-09-14, same evening, found in review).
         //
-        // Safe because the pattern requires the marker phrase immediately in
-        // front: `to` only counts as a number when `selected text` or
-        // `screenshot` precedes it, and a sentence never says either of those
-        // followed by a bare preposition by accident.
-        "to": 2, "too": 2, "won": 1, "for": 4, "fore": 4, "ate": 8,
+        // They were added because `selected text two` came back from the local
+        // model as `Selected text to`. The comment then claimed a sentence never
+        // says `screenshot` or `selected text` followed by a bare preposition by
+        // accident — which it does, constantly: *attach the screenshot **to** the
+        // PR*, *take a screenshot **for** the readme*, *copy the selected text
+        // **to** the clipboard*. Every one of those became a marker, and the
+        // sentence lost the words. `won`, `ate` and `fore` are ordinary words
+        // with the same problem and were never even motivated by a measurement.
+        //
+        // What the miss costs is one highlight falling back to the list under
+        // the words; what the false positive costs is his sentence. The trade is
+        // not close. Digits and real number words only.
     ]
 
     /// **The whitespace around the marker is eaten with it.** Wispr promotes the
@@ -443,7 +446,7 @@ enum ShotMarker {
     ///   by the words themselves, quoted, where he said them. What is not in
     ///   this map is a marker for a highlight that never got filed, and it is
     ///   taken out of the sentence like an unattached picture.
-    /// - Parameter inlineSelections: false leaves the *sentence* without the
+    /// - Parameter inline: false leaves the *sentence* without the
     ///   marker and without the highlight — the form the **corpus** takes. The
     ///   relay's own recording heard neither the marker nor the paragraph he
     ///   selected, and a transcript filed beside it that quotes a page of code
@@ -454,7 +457,7 @@ enum ShotMarker {
                         shots: Set<Int> = [],
                         selections: [Int: String] = [:],
                         elements: [Int: String] = [:],
-                        inlineSelections: Bool = true)
+                        inline: Bool = true)
         -> (text: String, shots: [Int], selections: [Int], elements: [Int]) {
         guard !(shots.isEmpty && selections.isEmpty && elements.isEmpty),
               let pattern = pattern, !text.isEmpty else { return (text, [], [], []) }
@@ -462,7 +465,13 @@ enum ShotMarker {
         let matches = pattern.matches(in: text, range: full)
         guard !matches.isEmpty else { return (text, [], [], []) }
 
-        var out = ""
+        // **The seams are tidied, the insertions are not** (found in review,
+        // 2026-09-14). `tidy` ran over the whole result, so a highlight of four
+        // lines of Java arrived with every indent collapsed to one space — the
+        // clause it replaced never went through that. So the pieces are kept
+        // apart: what came out of *his* text may be squeezed, what this app put
+        // in is delivered byte for byte.
+        var pieces: [(text: String, verbatim: Bool)] = []
         var foundShots: [Int] = []
         var foundSelections: [Int] = []
         var foundElements: [Int] = []
@@ -497,9 +506,15 @@ enum ShotMarker {
                 // what the envelope's *clauses* use; and the frame's real file
                 // name rather than an index, so the reference and the row in the
                 // list below are the same string.
-                replacement = shots.contains(index)
-                    ? String(format: " (screenshot: shot#%02d) ", index) : nil
-                if replacement != nil { foundShots.append(index) }
+                // **`inline` governs this arm too** — it did not, and the corpus
+                // paid for it (found in review, 2026-09-14): a Wispr dictation
+                // with one picture filed `pune asta (screenshot: shot#01) sub un
+                // strat` against a recording that contains only `pune asta sub un
+                // strat`. That is precisely the poisoned pair the flag exists to
+                // prevent, and the shot was the one kind still ignoring it.
+                guard shots.contains(index) else { replacement = nil; break }
+                replacement = inline ? String(format: " (screenshot: shot#%02d) ", index) : " "
+                foundShots.append(index)
             case .selection:
                 guard let selected = selections[index] else { replacement = nil; break }
                 // **Bracketed as well as quoted** (2026-09-14). Bare double
@@ -509,7 +524,7 @@ enum ShotMarker {
                 // a highlight that contains a quote of its own, which a line of
                 // code very often does. The bracket says what it is and cannot
                 // be confused with anything he said.
-                replacement = inlineSelections
+                replacement = inline
                     ? " (selected text: \"\(selected)\") " : " "
                 foundSelections.append(index)
             case .element:
@@ -519,26 +534,39 @@ enum ShotMarker {
                 // here would send him to a list to reassemble a sentence he is
                 // already reading.
                 guard let described = elements[index] else { replacement = nil; break }
-                replacement = inlineSelections ? " (\(described)) " : " "
+                replacement = inline ? " (\(described)) " : " "
                 foundElements.append(index)
             }
-            out += text[cursor..<range.lowerBound]
-            if let replacement = replacement {
-                out += replacement
-            } else {
-                out += " "
+            // **A match with nothing behind it is left exactly as it was.**
+            //
+            // It used to be replaced with a space, which is how one wrong guess
+            // turned into missing words: `screenshot to` with no second picture
+            // attached deleted both words and delivered *attach the the PR*. The
+            // relay is guessing when it decides a phrase was its own marker, and
+            // a guess that turns out wrong must cost nothing — the text goes
+            // through untouched and the fallback list still names the picture.
+            guard let replacement = replacement else {
                 dropped += 1
+                continue
             }
+            pieces.append((String(text[cursor..<range.lowerBound]), false))
+            pieces.append((replacement, true))
             cursor = range.upperBound
         }
-        out += text[cursor...]
+        pieces.append((String(text[cursor...]), false))
+        let out = pieces.map { $0.verbatim ? $0.text : tidy($0.text) }.joined()
 
         if dropped > 0 {
-            Log.error("markers: \(dropped) marker(s) named something that is not "
-                      + "attached — have shots \(shots.sorted()), selections "
-                      + "\(selections.keys.sorted()). Dropped from the text.")
+            // `info`, not `error`: with the text now left alone this is a phrase
+            // that merely *looked* like a marker, which is a thing his sentences
+            // will do — `screenshot folder`, `selected text below`.
+            Log.info("markers: \(dropped) phrase(s) looked like a marker with nothing "
+                     + "attached — have shots \(shots.sorted()), selections "
+                     + "\(selections.keys.sorted()). Left in the words untouched.")
         }
-        return (tidy(out), foundShots, foundSelections, foundElements)
+        // The ends are his text's, so trimming them is a seam like any other.
+        return (out.trimmingCharacters(in: .whitespacesAndNewlines),
+                foundShots, foundSelections, foundElements)
     }
 
     /// The seams the substitution leaves: a doubled space where two bits of
@@ -549,7 +577,6 @@ enum ShotMarker {
                                             options: .regularExpression)
         out = out.replacingOccurrences(of: " ([.,!?;:])", with: "$1",
                                        options: .regularExpression)
-        // A marker at the very start or end of the sentence leaves its own edge.
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return out
     }
 }

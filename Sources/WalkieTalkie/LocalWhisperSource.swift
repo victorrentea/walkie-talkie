@@ -74,6 +74,13 @@ final class LocalWhisperSource: DictationSource {
     /// is the other question, *what is about to be believed*, and it has to have
     /// an answer before the model is up. **Keep it in step with
     /// `whisper_helper.py`'s `MODEL`.**
+    /// The weights without the account in front — `mlx-community/` is who
+    /// published them, not what they are.
+    static var modelLabel: String {
+        configuredModel.contains("/")
+            ? String(configuredModel.split(separator: "/").last!) : configuredModel
+    }
+
     static let configuredModel = ProcessInfo.processInfo.environment["RELAY_WHISPER_MODEL"]
         ?? "mlx-community/whisper-large-v3-turbo"
     var displayModelName: String { whisper.modelName ?? Self.configuredModel }
@@ -187,7 +194,8 @@ final class LocalWhisperSource: DictationSource {
                 self.didTranscribe?(DictationResult(
                     text: r.text, language: r.language, audio: wav, duration: duration,
                     engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
-                    via: "local-whisper", markersInAudio: self.markersInAudio))
+                    via: "local-whisper", markersInAudio: self.markersInAudio,
+                    engineLabel: Self.modelLabel))
                 self.phase = .done("formatted")
                 self.didEnd?(.delivered)
             }

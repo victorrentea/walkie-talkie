@@ -2391,7 +2391,8 @@ final class WisprFlowSource: DictationSource {
                     // Only where the recogniser may have moved the focus under
                     // the sentence; every other path means *the caret*.
                     focusPid: self.startedMode == .scratchpad ? self.focusPid : nil,
-                    markersInAudio: self.markersInAudio))
+                    markersInAudio: self.markersInAudio,
+                    engineLabel: "Wispr Flow"))
                 self.didEnd?(.delivered)
             }
         }

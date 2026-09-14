@@ -203,6 +203,14 @@ struct DictationResult {
     /// gets the **cleaned** text; the local model's audio has one, so the corpus
     /// gets the **raw** text. → `ShotMarker`, `AppDelegate.deliver`
     var markersInAudio: Bool = false
+
+    /// **What to call the recogniser in front of Victor** — the local model's
+    /// weights by name, `Wispr Flow` for Wispr. Written by the source, because
+    /// only the source knows, and read by exactly one thing: the envelope's
+    /// `[this text dictated and transcribed in RO or EN by …]`. Distinct from
+    /// `engine`, which is the stable id the corpus files rows under and must
+    /// never become a display string.
+    var engineLabel: String = ""
 }
 
 /// **Who inserts the text.**
