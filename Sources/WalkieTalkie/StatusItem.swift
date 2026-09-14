@@ -924,15 +924,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
     /// `LocalWhisper.footprintBytes` for why not RSS.
     ///
-    /// **The bare model id, and nothing else.** `Local Whisper` names a category
-    /// and the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
-    /// the model, and the id is what a comparison between recognisers is written
-    /// down against. The org prefix goes with the category — `mlx-community/` is
-    /// where the weights were downloaded from, not what is doing the listening.
+    /// **The model id in full, org prefix included** — `mlx-community/whisper-
+    /// large-v3-turbo`, which is how Victor names it (*"trece numele modelului:
+    /// mlx…"*, 2026-09-14). The prefix was stripped for one build on the
+    /// argument that it says where the weights were downloaded from rather than
+    /// what is doing the listening; that is true and beside the point — it is
+    /// the half he says out loud, and a name he has to reassemble to repeat is
+    /// not the name.
+    ///
+    /// **Never `Local Whisper`.** The category was the fallback while
+    /// `whisperModel` answered nil, which is whenever the weights are down —
+    /// i.e. most of the time this row is read. `LocalWhisperSource` now answers
+    /// the configured id instead; see its note.
     private func engineTitle(_ id: String) -> String {
         guard id == "whisper" else { return "Wispr Flow" }
-        let name = whisperModel?().map { $0.split(separator: "/").last.map(String.init) ?? $0 }
-            ?? "Local Whisper"
+        let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
         if let bytes = whisperFootprint?() {
             return String(format: "%@ — %.1f GB RAM", name, Double(bytes) / 1_073_741_824)

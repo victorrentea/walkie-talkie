@@ -53,7 +53,30 @@ final class LocalWhisperSource: DictationSource {
 
     /// For the menu bar's ⏳ and the About row — asked, never pushed, because
     /// the one moment the answer has to be right is the moment the row is drawn.
+    ///
+    /// **The helper's own answer, so nil until it has spoken.** Everything that
+    /// asks *what did this transcript come out of* wants exactly that and must
+    /// not be given a guess.
     var modelName: String? { whisper.modelName }
+
+    /// **What the Engine row shows, which is never nothing** (2026-09-14).
+    ///
+    /// The row read `Local Whisper` whenever the weights were down — which is
+    /// most of the time, since they are only brought up by a gesture that asks
+    /// for them — and Victor's answer to that was *"în loc de local wispr trece
+    /// numele modelului: mlx…"*. A row whose whole job is to name what he is
+    /// dictating with may not fall back to naming a *category*.
+    ///
+    /// So: the helper's answer while it is up, and the id it **would** load
+    /// otherwise. That is a second copy of a constant that lives in
+    /// `helpers/whisper_helper.py`, which `Transcriber.modelName`'s note argues
+    /// against — rightly, for the question *what produced this transcript*. This
+    /// is the other question, *what is about to be believed*, and it has to have
+    /// an answer before the model is up. **Keep it in step with
+    /// `whisper_helper.py`'s `MODEL`.**
+    static let configuredModel = ProcessInfo.processInfo.environment["RELAY_WHISPER_MODEL"]
+        ?? "mlx-community/whisper-large-v3-turbo"
+    var displayModelName: String { whisper.modelName ?? Self.configuredModel }
     var footprintBytes: UInt64? { whisper.footprintBytes }
     /// Whether the weights are on their way up, so two gestures cannot stack two
     /// loads on one another.

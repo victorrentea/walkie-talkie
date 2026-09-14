@@ -186,9 +186,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `<model> — loading…` in the menu. `AppDelegate.setEngineLoading` is a one-liner into
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
-- **The local model's name reads `<model> — 1.6 GB RAM` (bare model name, org prefix stripped),
+- **The local model's name reads `mlx-community/whisper-large-v3-turbo — 1.6 GB RAM`, in full,
   read when the menu opens.** It was a disabled row of its own at the bottom of the menu until
-  2026-09-14; it is now the Engine row's own title, and the second line of its picker. The number is `ri_phys_footprint` from
+  2026-09-14; it is now the Engine row's own title and the second line of its submenu. The org
+  prefix stays — *"trece numele modelului: mlx…"* is how Victor says it, and a name he has to
+  reassemble to repeat is not the name. **It is never `Local Whisper`**: that category was the
+  fallback while the helper was down, i.e. most of the time the row is read;
+  `LocalWhisperSource.configuredModel` answers the id that *would* load instead, and must be kept
+  in step with `helpers/whisper_helper.py`'s `MODEL`. The number is `ri_phys_footprint` from
   `proc_pid_rusage` — Activity Monitor's "Memory", not `ps`'s RSS, because MLX puts weights in
   unified memory and the two disagree. It doubles as liveness: a dead helper has no footprint and
   the row goes back to its bare name.

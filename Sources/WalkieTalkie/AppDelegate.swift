@@ -775,7 +775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment
         // its answer has to be right.
-        status.whisperModel = { [weak self] in self?.whisperSource.modelName }
+        status.whisperModel = { [weak self] in self?.whisperSource.displayModelName }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
