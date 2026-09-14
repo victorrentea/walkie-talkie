@@ -512,6 +512,18 @@ final class WisprFlowSource: DictationSource {
 
     func prepare() {
         watch.start()
+        // **The orphan sweep runs for the life of the app** (2026-09-14). It was
+        // armed for twelve seconds after each capture and that is exactly when
+        // it cannot work: the orphan it is looking for is made by a toggle that
+        // lands late, so the window does not exist yet while the sweep is
+        // looking, and by +3 s and +15 s — where the runner found it standing —
+        // nothing was watching at all. One AX existence read every half second,
+        // and only while this source says nothing is going on.
+        WisprScratchpad.startIdleSweep { [weak self] in
+            guard let self else { return true }
+            return self.state.phase == .idle && !self.capturing
+                && !self.isRecording && !self.speculative
+        }
         // Whose keyboard it is, kept current — see `lastFrontPid`.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -1331,6 +1343,7 @@ final class WisprFlowSource: DictationSource {
         // and nothing is delivered.
         let takes = intercepting
         sawWisprGone = 0
+        wisprPidAtChord = Self.wisprMainPid
         armedAt = CFAbsoluteTimeGetCurrent()
         captureFrom = armedAt
         askedForCopy = false
@@ -1611,9 +1624,12 @@ final class WisprFlowSource: DictationSource {
         // promising words from a process that no longer exists. Two consecutive
         // ticks, because `runningApplications` is KVO-updated and a single blank
         // reading during Wispr's own relaunch is not a death.
-        if !Self.wisprMainIsRunning {
+        let pid = Self.wisprMainPid
+        if pid == 0 {
             sawWisprGone += 1
-            if sawWisprGone >= 2 { return abandonForDeadWispr() }
+            if sawWisprGone >= 2 { return abandonForDeadWispr("it is not running") }
+        } else if wisprPidAtChord != 0, pid != wisprPidAtChord {
+            return abandonForDeadWispr("it is pid \(pid) now, and this sentence was given to pid \(wisprPidAtChord)")
         } else {
             sawWisprGone = 0
         }
@@ -1783,21 +1799,36 @@ final class WisprFlowSource: DictationSource {
     /// `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app` as well, so a
     /// check written on either reports Wispr running when only the helper is —
     /// the same trap `open -a "Wispr Flow"` is in *Never reintroduce* for.
-    private static var wisprMainIsRunning: Bool {
-        NSWorkspace.shared.runningApplications.contains {
+    private static var wisprMainPid: pid_t {
+        NSWorkspace.shared.runningApplications.first {
             $0.executableURL?.path == mainExecutable
-        }
+        }?.processIdentifier ?? 0
     }
+    private static var wisprMainIsRunning: Bool { wisprMainPid != 0 }
     private static let mainExecutable = "/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"
     private var sawWisprGone = 0
+    /// **Which Wispr this sentence was given to**, read at the chord.
+    ///
+    /// Absence is not the only way a recogniser dies, and on this rig it is not
+    /// even the likely one: the harness relaunches Wispr **200 ms** after killing
+    /// it, so a rule built on two consecutive absences 300 ms apart never sees
+    /// the death at all — which is why `wispr-dies-mid-settle` still waited out
+    /// its 30 s on the build that was supposed to have fixed it. A **different
+    /// pid** is the same fact and it cannot be missed: the process this sentence
+    /// was dictated into is gone, whatever is running now has never heard of it.
+    private var wisprPidAtChord: pid_t = 0
 
     /// **Wispr is gone and the sentence went with it.** Everything this capture
     /// holds is handed back on the way out: `closeListening` releases the chord
     /// and asks the Scratchpad close, `endCapture` disarms the keyboard guard
     /// and takes the window down for good.
-    private func abandonForDeadWispr() {
+    private func abandonForDeadWispr(_ why: String) {
         sawWisprGone = 0
-        Log.error("⚠️ Wispr Flow quit — the sentence is lost")
+        wisprPidAtChord = 0
+        Log.error("⚠️ Wispr Flow quit — the sentence is lost (\(why))")
+        // **And the window the dead instance left behind.** It belongs to a
+        // process that no longer exists, so nothing else is going to ask.
+        WisprScratchpad.ensureClosed(reason: "Wispr Flow quit mid-sentence")
         if isRecording || speculative { closeListening("Wispr Flow quit") }
         // After the close, or `stopChord` would transition out of the `done`
         // this puts the machine in and the phase would say the sentence ended
@@ -2216,15 +2247,6 @@ final class WisprFlowSource: DictationSource {
             } else if !scratchpadWindowHandled || WisprScratchpad.windowIsUp {
                 scratchpadWindowHandled = true
                 closeScratchpadAfterwards()
-            }
-            // **And then watch for a window nobody owns.** Every close above
-            // belongs to a dictation; this is the one that belongs to none — a
-            // chord that went out late, a window Wispr re-opened after the last
-            // reader had gone home. It is a no-op unless one really is standing
-            // there with nothing being dictated.
-            WisprScratchpad.armOrphanSweep { [weak self] in
-                guard let self else { return true }
-                return !self.isRecording && !self.speculative && !self.capturing
             }
         }
         captureDeadline?.cancel()

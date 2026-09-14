@@ -844,9 +844,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // background on the first dictation and never closes it; Victor has not
         // decided whether that should be automatic, so it is a row he clicks.
         // 250 ms, because a 60 ms tap does not toggle it (measured 2026-09-13).
+        // **Through `ensureClosed` like every other close** (2026-09-14): the
+        // chord is a toggle, and a row clicked at a window that has gone in the
+        // meantime opens one instead of closing it.
         status.onCloseScratchpad = {
-            Log.info("🗒️ Close Wispr Scratchpad — tapping \(HotkeyTap.scratchpadChord().map(String.init).joined(separator: "+"))")
-            HotkeyTap.tapWisprScratchpad()
+            WisprScratchpad.ensureClosed(reason: "the menu's Close Wispr Scratchpad")
         }
         // **On main, like the toggle two lines down.** It was not, and the
         // asymmetry is the whole bug: the tap dispatches globally, so cancelling

@@ -305,14 +305,43 @@ measurement of this is worth anything without it.
   failure by a wide margin) but is dropped when the hold it releases never went
   out, so the pair leaves the wire untouched. `tapWisprScratchpad` carries no
   epoch: it belongs to the window, not to a sentence.
-- **And the window with no dictation behind it is swept up.**
-  `WisprScratchpad.armOrphanSweep`, armed by `endCapture` on every Scratchpad
-  capture: 0.5 s ticks for 12 s, a no-op unless the window is open **and** the
-  source says nothing is in flight **and** no close is already running, and then
-  `🗒️ orphan Scratchpad closed`. The toggle rule holds across it —
-  `closeIsInFlight` now covers `closeWindow`'s own path (`closingNow`) as well as
-  `armCloseOnSight`'s `closeASAP`, because the sweep and a `closeWhenItAppears`
-  already running would otherwise tap twice and re-open what the first shut.
+- **…and the close that was *itself* opening the window** (the same finding, one
+  build later: the epoch fix was necessary and not sufficient). Every cancel row
+  still left an orphan at +3 s and +15 s, and the log said why —
+  `the Scratchpad window appeared — closing it on sight`, then `chord DOWN/UP`,
+  and no `orphan Scratchpad closed` anywhere. **After a dismissed dictation Wispr
+  closes its own Scratchpad**, and the close asked while the window was up is
+  *emitted* a moment later, after the wire has gone bare, into a world with
+  nothing to close — so the toggle **opened** one. The 25 ms watcher had already
+  finished (it saw the window go), and the sweep was looking for a window that
+  did not exist yet.
+  **`WisprScratchpad.ensureClosed(reason:)` is now the only way this app closes
+  that window** — close-on-sight, after a delivery, after a cancel, the hold's
+  precondition, the sweep and the menu row all go through it, and `closeWindow`
+  is a one-line alias so every existing caller does too. It re-reads the window's
+  existence **at post time, riding with the keys**
+  (`HotkeyTap.tapWisprScratchpad(if:)`, checked on the posting queue immediately
+  before they go out, a skipped press taking its own release with it), and
+  afterwards looks once more, `recheckAfterClose` = 0.6 s — longer than the tap's
+  own 250 ms hold plus the queue's settle — so a window that is there now is one
+  **this app** put there: `🗒️ the close opened it — toggled back`, up to
+  `closeAttempts`. `closingNow` keeps two callers from overlapping, and
+  `closeIsInFlight` covers it as well as `armCloseOnSight`'s `closeASAP`.
+  The one deliberate exception is `POST /test/wispr-scratchpad {"tap": true}`,
+  which is the raw toggle the harness opens a window *with*.
+- **The orphan sweep runs continuously while idle, and does not care what ended.**
+  `WisprScratchpad.startIdleSweep(isIdle:)` from `WisprFlowSource.prepare()`: one
+  AX existence read every 0.5 s, and any window that has stood for more than
+  **1 s** while `phase == idle` with no capture, no microphone and no speculation
+  is closed through `ensureClosed` and logged `🗒️ orphan Scratchpad closed`.
+  Arming it *for twelve seconds after a capture* was exactly wrong: the orphan is
+  made by a toggle that lands late, so it does not exist yet while such a sweep
+  is looking, and by the +3 s and +15 s where the runner found the window
+  standing, nothing was watching at all. Verified from a desk with no dictation
+  at all — `POST /test/wispr-scratchpad {"tap": true}` to open one, then
+  `a Scratchpad window has stood for 1.0 s with no dictation in flight`,
+  `the Scratchpad closed on attempt 1`, `orphan Scratchpad closed`, **2.6 s** from
+  open to closed.
 - **A late *open* edge is the last sentence's, not the next one's** (Finding 2,
   `notifyMs = 4109`). The notification's OPEN arrived after the relay's own stop —
   in Attack 7 *before* the delivery, in Attack 10 with no Scratchpad involved at
@@ -346,7 +375,15 @@ measurement of this is worth anything without it.
   `runningApplications` is KVO-updated and one blank reading during Wispr's own
   relaunch is not a death) end it with `⚠️ Wispr Flow quit — the sentence is
   lost`. `closeListening` releases the chord and asks the Scratchpad close,
-  `endCapture` disarms the guard and takes the window down.
+  `endCapture` disarms the guard and takes the window down, and `ensureClosed`
+  is asked for any window the dead instance left — nothing else is going to.
+  **Absence is not the only way it dies, and on this rig not the likely one**:
+  the harness relaunches Wispr **200 ms** after the kill, so two absences 300 ms
+  apart never see it, which is why `wispr-dies-mid-settle` still waited out its
+  30 s on the build that was supposed to have fixed it. The pid of Wispr's main
+  process is therefore read at the chord (`wisprPidAtChord`) and a **different**
+  pid is the same fact and cannot be missed: the process this sentence was
+  dictated into is gone, and whatever is running now has never heard of it.
 - **A row with nothing in it stops being progress after 8 s** (Attack 12). Two
   seconds of digital silence left row 12814 in `raw_transcript` with `asrText`,
   `formattedText` and `pastedText` all empty **for ever** — Wispr never made it

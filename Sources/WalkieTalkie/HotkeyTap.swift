@@ -2599,11 +2599,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// toggle the window at all and a 250 ms one did, twice. Wispr is telling a
     /// tap from a hold by duration and 60 ms is below whatever floor it uses. It
     /// is still far under any hold a dictation would be.
-    static func tapWisprScratchpad() {
+    ///
+    /// - Parameter stillWanted: **asked on the posting queue, immediately before
+    ///   the keys go out** (2026-09-14, adversarial round 2). The toggle waits
+    ///   `settleForOptionsPlus` and then for a bare wire, and Wispr closes its
+    ///   own Scratchpad after a dismissed dictation — so a close asked while the
+    ///   window was up can be *emitted* after it has gone, and a toggle posted
+    ///   into that gap **opens** one. Every cancel row left an orphan window that
+    ///   way. The check is a cheap AX existence read and it belongs here, riding
+    ///   with the keys, because a check made at the call is a check made too
+    ///   early. A skipped press takes its own release with it
+    ///   (`scratchpadDownEmitted`), so nothing half-posted is left on the wire.
+    static func tapWisprScratchpad(if stillWanted: @escaping () -> Bool = { true }) {
         // The 250 ms is measured from the press that actually went out, not from
         // this call — the press waits for a bare wire first, and the gap between
         // the two is exactly what Wispr is reading.
-        postScratchpad(down: true)
+        postScratchpad(down: true, stillWanted: stillWanted)
         scratchpadQueue.async { usleep(UInt32(Self.scratchpadTapHold * 1_000_000)) }
         postScratchpad(down: false)
     }
@@ -2684,7 +2695,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     ///   hold**, which a dictation that has since ended may cancel. The close's
     ///   own `tapWisprScratchpad` does not: it belongs to the window, not to a
     ///   sentence, and dropping it would leave the thing it was closing open.
-    private static func postScratchpad(down: Bool, forDictation: Bool = false) {
+    private static func postScratchpad(down: Bool, forDictation: Bool = false,
+                                       stillWanted: (() -> Bool)? = nil) {
         let codes = down ? scratchpadChord() : (scratchpadDownCodes.isEmpty ? scratchpadChord() : scratchpadDownCodes)
         // **The flag moves now, the keys move on the queue.** `stop()` reads
         // `scratchpadIsHeld` a few milliseconds after `start()` returns, and a
@@ -2707,7 +2719,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             scratchpadDeadMan = nil
         }
         let epoch = (down && forDictation) ? dictationEpoch : nil
-        scratchpadQueue.async { emitScratchpad(codes, down: down, epoch: epoch) }
+        scratchpadQueue.async { emitScratchpad(codes, down: down, epoch: epoch, stillWanted: stillWanted) }
     }
 
     /// **Was the last hold actually put on the wire.** Touched only on
@@ -2716,12 +2728,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private static var scratchpadDownEmitted = false
 
     /// The keys themselves, on the serial queue, after the wire is clear.
-    private static func emitScratchpad(_ codes: [CGKeyCode], down: Bool, epoch: UInt64? = nil) {
+    private static func emitScratchpad(_ codes: [CGKeyCode], down: Bool, epoch: UInt64? = nil,
+                                       stillWanted: (() -> Bool)? = nil) {
         // **Checked here, at post time, and not at the call** — the whole point
         // is that this runs later than the code that asked for it.
         if down, let epoch, epoch != dictationEpoch {
             scratchpadDownEmitted = false
             Log.info("🗒️ scratchpad chord DOWN dropped — the dictation it belonged to ended while it waited for a bare wire")
+            return
+        }
+        // …and the same question for a *toggle*: is the thing it was going to
+        // close still there. A toggle posted at a window that has already gone
+        // opens one.
+        if down, let stillWanted, !stillWanted() {
+            scratchpadDownEmitted = false
+            Log.info("🗒️ the Scratchpad went on its own — the close toggle is not posted, which would have re-opened it")
             return
         }
         if !down, !scratchpadDownEmitted {

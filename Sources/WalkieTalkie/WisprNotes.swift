@@ -342,27 +342,45 @@ enum WisprScratchpad {
     /// dictation but the **next** one, which is transcribed and written nowhere.
     /// So it is asked up to `closeAttempts` times before anyone concludes
     /// anything, and the log says which attempt worked.
-    static func closeWindow(_ done: @escaping (Bool) -> Void) {
-        guard windowIsOpen() else { return DispatchQueue.main.async { done(true) } }
-        // **One close at a time, and this is the other half of the rule**
-        // (2026-09-14). `armCloseOnSight` has guarded itself on `closeASAP`
-        // since the night it was written; this path had no such guard, so the
-        // orphan sweep and a `closeWhenItAppears` already running could tap the
-        // toggle twice — which closes the window and opens it straight back up.
+    /// **The one way this app closes Wispr's Scratchpad** (2026-09-14,
+    /// adversarial round 2, Finding 1 — the fix for the fix).
+    ///
+    /// Everything that wants the window shut comes through here: the close on
+    /// sight, the close after a delivery, the close after a cancel, the
+    /// precondition before a hold, the idle sweep and the menu row. There is one
+    /// of these because the thing it is driving is a **toggle**, and a toggle
+    /// asked for twice is a window that closes and re-opens.
+    ///
+    /// The failure it is written against: after a dismissed dictation **Wispr
+    /// closes its own Scratchpad**, and a close asked while the window was still
+    /// up is *emitted* a moment later — after the wire has gone bare — into a
+    /// world where there is nothing to close. The toggle then **opens** one, the
+    /// 25 ms watcher has already finished (it saw the window go), and the orphan
+    /// stands. Every cancel row in the round left one that way, at +3 s and
+    /// +15 s, with no `orphan Scratchpad closed` line anywhere because the sweep
+    /// was watching for a window that did not exist yet when it looked.
+    ///
+    /// So: the existence check **rides with the keys** rather than being made
+    /// here (`HotkeyTap.tapWisprScratchpad(if:)`), and afterwards the window is
+    /// looked at again — if one is there, this app put it there, and it is
+    /// toggled back.
+    static func ensureClosed(reason: String, _ done: ((Bool) -> Void)? = nil) {
         guard !closingNow else {
-            Log.info("\u{1F5D2}\u{FE0F} a close is already running — not asking again (it is a toggle)")
-            return DispatchQueue.main.async { done(true) }
+            Log.info("🗒️ a close is already running (\(closingReason)) — \(reason) does not ask again (it is a toggle)")
+            return DispatchQueue.main.async { done?(!windowIsOpen()) }
         }
+        guard windowIsOpen() else { return DispatchQueue.main.async { done?(true) } }
         closingNow = true
-        attempt(1) { gone in
-            closingNow = false
-            done(gone)
-        }
+        closingReason = reason
+        ensureStep(1, reason: reason, parked: isWhereItWasParked(), done)
     }
-    private static var closingNow = false
 
-    private static func attempt(_ n: Int, _ done: @escaping (Bool) -> Void) {
-        let parked = isWhereItWasParked()
+    /// The old name, kept because every caller already reads well with it.
+    static func closeWindow(_ done: @escaping (Bool) -> Void) {
+        ensureClosed(reason: "closeWindow", done)
+    }
+
+    private static func ensureStep(_ n: Int, reason: String, parked: Bool, _ done: ((Bool) -> Void)?) {
         // A minimized window may not answer the toggle; from the second attempt
         // it is brought back (still parked off the edge, so still unseen) before
         // asking again.
@@ -370,26 +388,49 @@ enum WisprScratchpad {
             Log.info("🗒️ un-minimizing the Scratchpad before asking again")
             unminimize()
         }
-        HotkeyTap.tapWisprScratchpad()
+        HotkeyTap.tapWisprScratchpad(if: { windowIsOpen() })
         poll(deadline: Date().addingTimeInterval(closeCeiling)) { gone in
-            if gone {
-                // **Which attempt worked, and whether it was parked at the
-                // time.** The open question is whether a window pushed to the
-                // edge of the screen is harder for Wispr to toggle; nothing is
-                // un-parked to find out, because un-parking would put it back
-                // over his work, which is the thing being avoided. The log is
-                // the measurement and the decision comes after enough of them.
-                Log.info("🗒️ the Scratchpad closed on attempt \(n) (it was \(parked ? "parked" : "where Wispr had put it"))")
-                return done(true)
+            // **Look once more after it has gone.** `poll` answers the instant
+            // the window is not there, and a toggle still in flight can put one
+            // back — which is the whole bug. The recheck is longer than the
+            // tap's own 250 ms hold plus the queue's settle.
+            DispatchQueue.main.asyncAfter(deadline: .now() + recheckAfterClose) {
+                guard windowIsOpen() else {
+                    if gone {
+                        // **Which attempt worked, and whether it was parked at
+                        // the time.** The open question is whether a window
+                        // pushed to the edge of the screen is harder for Wispr
+                        // to toggle; nothing is un-parked to find out, because
+                        // un-parking would put it back over his work. The log is
+                        // the measurement and the decision comes after enough of
+                        // them.
+                        Log.info("🗒️ the Scratchpad closed on attempt \(n) (it was \(parked ? "parked" : "where Wispr had put it")) — \(reason)")
+                    }
+                    return finishEnsure(true, done)
+                }
+                guard n < closeAttempts else {
+                    Log.error("🗒️ the Scratchpad did not close in \(closeAttempts) attempts — it is at \(describe(currentFrame())), \(parked ? "parked" : "unparked"); un-parking first was not tried")
+                    return finishEnsure(false, done)
+                }
+                Log.info(gone
+                    ? "🗒️ the close opened it — toggled back (\(reason))"
+                    : "🗒️ the Scratchpad did not close on attempt \(n) — it is at \(describe(currentFrame())); asking again")
+                ensureStep(n + 1, reason: reason, parked: parked, done)
             }
-            guard n < closeAttempts else {
-                Log.error("🗒️ the Scratchpad did not close in \(closeAttempts) attempts — it is at \(describe(currentFrame())), \(parked ? "parked" : "unparked"); un-parking first was not tried")
-                return done(false)
-            }
-            Log.info("🗒️ the Scratchpad did not close on attempt \(n) — it is at \(describe(currentFrame())), \(parked ? "parked" : "unparked"); asking again")
-            attempt(n + 1, done)
         }
     }
+
+    private static func finishEnsure(_ gone: Bool, _ done: ((Bool) -> Void)?) {
+        closingNow = false
+        closingReason = ""
+        done?(gone)
+    }
+
+    private static var closingNow = false
+    private static var closingReason = ""
+    /// Longer than the tap's 250 ms hold plus the posting queue's own settle, so
+    /// a toggle that is still on its way has landed before the window is judged.
+    private static let recheckAfterClose: TimeInterval = 0.6
 
     private static func currentFrame() -> CGRect? {
         windowElement().flatMap { frame(of: $0) }
@@ -401,8 +442,6 @@ enum WisprScratchpad {
         return abs(now.minX - parked.minX) <= 2 && abs(now.minY - parked.minY) <= 2
     }
 
-    /// 2.5 s per attempt — measured at "within 1.5 s", with room over it for a
-    /// busy Electron.
     private static let closeCeiling: TimeInterval = 2.5
     private static let closeAttempts = 3
 
@@ -708,7 +747,7 @@ enum WisprScratchpad {
     /// floating on top of his work, is happening while he is still talking. It
     /// is parked on first sight, and closed later.
     static func beginDictation() {
-        endOrphanSweep()
+        orphanSince = nil
         toldAboutTheft = false
         closeASAP = false
         closeRequested = false
@@ -741,8 +780,7 @@ enum WisprScratchpad {
         // Already up and already parked: ask now rather than waiting a tick.
         if sawWindow, !closeRequested {
             closeRequested = true
-            Log.info("🗒️ the Scratchpad window is up — closing it")
-            HotkeyTap.tapWisprScratchpad()
+            ensureClosed(reason: "the Scratchpad window is up when the close was asked")
         }
     }
 
@@ -765,54 +803,56 @@ enum WisprScratchpad {
 
     // MARK: - The orphan
 
-    /// **A Scratchpad window with no dictation behind it** (2026-09-14).
+    /// **A Scratchpad window with no dictation behind it** (2026-09-14,
+    /// adversarial round 2).
     ///
-    /// Every close in this file belongs to a dictation, and the adversarial
-    /// round found the case that has none: a chord that went out *after*
-    /// everything ended re-opened the window, and it stood for **57 s** with the
-    /// keyboard guard already disarmed, taking his keystrokes into Wispr's note.
-    /// The 25 ms watcher cannot catch that — it is off by then, because the
-    /// sentence it was watching is over.
+    /// Every close in this file belongs to a dictation. This is the one that
+    /// belongs to none, and the round showed why it cannot be armed *for a
+    /// while, after a capture*: the orphan it is looking for is created by a
+    /// toggle that lands late, so it does not exist yet at the moment the old
+    /// sweep looked, and the sweep had ended long before +3 s and +15 s where
+    /// the runner found the window standing.
     ///
-    /// So the relay sweeps for a little while after it goes idle. Half a second
-    /// is fast enough (the failure is measured in tens of seconds) and twelve is
-    /// long enough to cover a chord that has been waiting for a bare wire; the
-    /// sweep is a **no-op** unless the window is up and `isIdle` agrees that
-    /// nothing is being dictated, and it never asks for a close while one is
-    /// already in flight, because the close is a toggle.
-    static func armOrphanSweep(isIdle: @escaping () -> Bool) {
+    /// So it runs **continuously while the relay is idle** — one AX existence
+    /// read every half second, which is the cheapest question in this file — and
+    /// closes anything that has been standing for more than a second with
+    /// nothing being dictated. It is deliberately **not** gated on a dictation
+    /// having just ended: a window that exists while the relay is idle is an
+    /// orphan whatever put it there.
+    static func startIdleSweep(isIdle: @escaping () -> Bool) {
         orphanIsIdle = isIdle
-        orphanUntil = Date().addingTimeInterval(orphanSweepFor)
         guard orphanSweep == nil else { return }
         let t = Timer(timeInterval: 0.5, repeats: true) { _ in orphanTick() }
         orphanSweep = t
         RunLoop.main.add(t, forMode: .common)
     }
 
-    static func endOrphanSweep() {
-        orphanSweep?.invalidate()
-        orphanSweep = nil
-        orphanUntil = nil
-    }
-
     private static func orphanTick() {
-        guard let until = orphanUntil, Date() < until else { return endOrphanSweep() }
-        // A dictation is running: the window is its own and not an orphan.
-        guard orphanIsIdle?() == true else { return }
+        // A dictation is running: the window is its own, and the 25 ms watcher
+        // owns it.
+        guard orphanIsIdle?() == true else { return orphanSince = nil }
         // Somebody is already asking, and a second ask re-opens what the first shut.
-        guard !closeIsInFlight else { return }
-        guard windowIsOpen() else { return }
-        Log.error("🗒️ orphan Scratchpad closed — the window was open with no dictation in flight")
-        endOrphanSweep()
-        closeWindow { gone in
-            if !gone { Log.error("🗒️ the orphan Scratchpad would not close — the next dictation would be written nowhere") }
+        guard !closeIsInFlight else { return orphanSince = nil }
+        guard windowIsOpen() else { return orphanSince = nil }
+        let now = Date()
+        guard let since = orphanSince else { return orphanSince = now }
+        guard now.timeIntervalSince(since) >= orphanGrace else { return }
+        orphanSince = nil
+        Log.error(String(format: "🗒️ a Scratchpad window has stood for %.1f s with no dictation in flight — closing it",
+                         now.timeIntervalSince(since)))
+        ensureClosed(reason: "orphan — no dictation in flight") { gone in
+            if gone { Log.info("🗒️ orphan Scratchpad closed") }
+            else { Log.error("🗒️ the orphan Scratchpad would not close — the next dictation would be written nowhere") }
         }
     }
 
     private static var orphanSweep: Timer?
-    private static var orphanUntil: Date?
+    /// When a window was first seen standing with nothing in flight.
+    private static var orphanSince: Date?
     private static var orphanIsIdle: (() -> Bool)?
-    private static let orphanSweepFor: TimeInterval = 12
+    /// A second, so a window on its way out between two ticks is never called an
+    /// orphan — the close itself takes 417–445 ms.
+    private static let orphanGrace: TimeInterval = 1
 
     private static func tick() {
         guard let window = windowElement() else {
@@ -865,8 +905,7 @@ enum WisprScratchpad {
         // in Wispr's note.
         if closeASAP, !closeRequested {
             closeRequested = true
-            Log.info("🗒️ the Scratchpad window appeared — closing it on sight")
-            HotkeyTap.tapWisprScratchpad()
+            ensureClosed(reason: "closing it on sight")
         }
         lastSeenFrame = f
         windowIsUp = true
