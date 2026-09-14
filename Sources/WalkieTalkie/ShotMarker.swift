@@ -354,13 +354,28 @@ enum ShotMarker {
         }
     }
 
+    /// **Silence on each side of a spliced marker, and it is not cosmetic**
+    /// (2026-09-14). The very first measurement of this whole idea — a WAV with
+    /// the markers spliced into it by hand — put 0.2 s of silence around each
+    /// one and came back 2 out of 2. What ships splices the clip **bare**,
+    /// between two of his buffers with nothing between, and the hit rate shows
+    /// it: six selection markers in his dictation of 22:58, five recognised, and
+    /// the element marker lost into the words around it entirely.
+    ///
+    /// A recogniser segments on pauses. Butted against his speech, the marker is
+    /// one more syllable in the middle of a phrase and is heard as part of it;
+    /// with a gap it is an utterance of its own, which is exactly what the
+    /// resolver is looking for — a marker that came back **punctuated**.
+    static let padSeconds: TimeInterval = 0.2
+
     private static func convert(_ buffer: AVAudioPCMBuffer,
                                 to format: AVAudioFormat) -> AVAudioPCMBuffer? {
         guard let converter = AVAudioConverter(from: buffer.format, to: format) else { return nil }
         // Rounded up with room to spare: a resampler's output length is not
         // exactly the ratio, and a buffer one frame short truncates the word.
         let ratio = format.sampleRate / buffer.format.sampleRate
-        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
+        let pad = AVAudioFrameCount(padSeconds * format.sampleRate)
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024 + pad * 2
         guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return nil }
         var supplied = false
         var error: NSError?
@@ -376,6 +391,25 @@ enum ShotMarker {
             Log.error("shot marker: could not convert — \(error?.localizedDescription ?? "no frames")")
             return nil
         }
+        return padded(out, by: pad) ?? out
+    }
+
+    /// The converted clip with `pad` frames of silence at each end. Nil rather
+    /// than a half-padded buffer if anything is unexpected — the bare clip is
+    /// worse than this but it is not wrong.
+    private static func padded(_ clip: AVAudioPCMBuffer, by pad: AVAudioFrameCount) -> AVAudioPCMBuffer? {
+        guard pad > 0, clip.frameLength > 0 else { return clip }
+        let total = clip.frameLength + pad * 2
+        guard let out = AVAudioPCMBuffer(pcmFormat: clip.format, frameCapacity: total),
+              let src = clip.int16ChannelData, let dst = out.int16ChannelData else { return nil }
+        let channels = Int(clip.format.channelCount)
+        // `AVAudioPCMBuffer` does not promise zeroed memory, and a marker
+        // surrounded by whatever was on the heap is worse than no padding.
+        for c in 0..<channels {
+            dst[c].update(repeating: 0, count: Int(total))
+            dst[c].advanced(by: Int(pad)).update(from: src[c], count: Int(clip.frameLength))
+        }
+        out.frameLength = total
         return out
     }
 
