@@ -35,7 +35,7 @@ enum ScreenCapture {
         let spot = cursorFraction(mouse: mouse, screen: screen)
         // Provisional: the pixel reading in the final name is measured against the
         // frame `screencapture` actually produces, which does not exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("shot-\(stem(offset, index)).jpg")
+        let file = Outbox.shotsDir.appendingPathComponent("shot\(stem(offset, index)).jpg")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -95,7 +95,7 @@ enum ScreenCapture {
         // Provisional, for the same reason `grab` names provisionally: the pixel
         // reading in the final name is measured off the file, which does not
         // exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("area-\(stem(offset, index)).jpg")
+        let file = Outbox.shotsDir.appendingPathComponent("area\(stem(offset, index)).jpg")
         guard CropCapture.capture(rect, on: screen, to: file) else {
             Log.error("could not crop the selected area (Screen Recording permission?)")
             return nil
@@ -111,7 +111,7 @@ enum ScreenCapture {
     private static func tagSize(of file: URL, offset: TimeInterval?, index: Int?) -> URL {
         guard let size = pixelSize(of: file) else { return file }
         let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("area-\(stem(offset, index))(\(Int(size.width))x\(Int(size.height))px).jpg"))
+            .appendingPathComponent("area\(stem(offset, index))(\(Int(size.width))x\(Int(size.height))px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged
@@ -125,7 +125,9 @@ enum ScreenCapture {
     /// also what says it to the agent — a second flag beside the path would be a
     /// second thing to keep in step with it.
     static func isArea(_ path: String) -> Bool {
-        (path as NSString).lastPathComponent.hasPrefix("area-")
+        // Both shapes: `area#01(…)` inside a dictation, `area-00:08(…)` for one
+        // that had an offset but no index, `area-2026-…` outside one entirely.
+        (path as NSString).lastPathComponent.hasPrefix("area")
     }
 
     /// The width of the copy the **agent** is given. Victor still gets the retina
@@ -251,16 +253,25 @@ enum ScreenCapture {
     /// offset stays because it is the thing that locates a frame for a human
     /// scrolling the folder; the index is what an agent resolves. Nil for a
     /// frame outside a dictation, which has no index to have.
+    /// Returns the separator too, because the two shapes take different ones:
+    /// `#01` reads as an index, `-00:08` as a time, and `shot-#01` reads as
+    /// neither.
     private static func stem(_ offset: TimeInterval?, _ index: Int? = nil) -> String {
-        let prefix = index.map { "\($0)-" } ?? ""
+        // **`#01` and no offset** (2026-09-14, Victor's own mock of the envelope:
+        // `shot#01(mouse-at-1077x424px)-small.jpg`). The offset was how a frame
+        // was located in the sentence, and it is not needed for that any more —
+        // the marker puts `(screenshot: shot#01)` at the word he pressed at, so
+        // the name only has to be the thing that reference names. Two digits so
+        // ten frames sort the way they were taken.
+        if let index = index { return String(format: "#%02d", index) }
         guard let offset = offset else {
             let stamp = DateFormatter()
             stamp.locale = Locale(identifier: "en_US_POSIX")
             stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-            return prefix + stamp.string(from: Date())
+            return "-" + stamp.string(from: Date())
         }
         let seconds = max(0, Int(offset.rounded()))
-        return prefix + String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        return String(format: "-%02d:%02d", seconds / 60, seconds % 60)
     }
 
     /// Rename the shot to its final form:
@@ -297,7 +308,7 @@ enum ScreenCapture {
         let x = Int((spot.x * size.width).rounded())
         let y = Int((spot.y * size.height).rounded())
         let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("shot-\(stem(offset, index))(mouse-at-\(x)x\(y)px).jpg"))
+            .appendingPathComponent("shot\(stem(offset, index))(mouse-at-\(x)x\(y)px).jpg"))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
             return tagged

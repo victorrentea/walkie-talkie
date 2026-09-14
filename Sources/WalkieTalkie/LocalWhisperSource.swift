@@ -91,7 +91,20 @@ final class LocalWhisperSource: DictationSource {
     /// path now. It is brought up by the gesture that asks for it, which is the
     /// arrangement this app had before 2026-09-04 and is the right one for a
     /// recogniser that is a fallback.
-    func prepare() {}
+    /// **The weights come up when this source becomes the live one** (2026-09-14).
+    ///
+    /// It was an empty body for as long as the local model was retired — nothing
+    /// started it, so loading it at launch was 2 GB spent on a recogniser nobody
+    /// was going to use. Since the `Engine` row put it back within one click, and
+    /// Victor went back to it (*"we'll keep on using the local model for a
+    /// while"*), the cost has reversed: every restart left the first ⌘⌃D
+    /// answering *the local model is still loading*, and a dictation helper whose
+    /// first sentence of the session is refused is one he has to think about.
+    ///
+    /// `prepare()` is called from `wireDictationSource`, so this loads when the
+    /// source is **chosen** — at launch if it is the default, at the click if he
+    /// switches — and never when Wispr is the one listening.
+    func prepare() { bringUpModel() }
 
     /// **Yes, and by the mechanism that cannot collide.** The file this records
     /// *is* the file it transcribes, so the marker goes **into** it rather than

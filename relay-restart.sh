@@ -25,12 +25,49 @@ set -euo pipefail
 
 RELAY_BOUND_FILE="${WALKIE_HOME:-$HOME/.walkie-talkie}/bound-tty"
 
+# Does the **source** have a sentence in flight? Asked of the running relay, not
+# of the file. Answers false (idle) only on a clear no; an unreachable relay is
+# not an idle one, so a port that does not answer keeps the caller waiting.
+relay_source_is_idle() {
+  local port state
+  for port in 8917 8918 8919; do
+    state=$(curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null) || continue
+    [ -n "$state" ] || continue
+    printf '%s' "$state" | /usr/bin/python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+idle = (not d.get("isRecording") and not d.get("settling")
+        and not d.get("speculative") and d.get("phase") == "idle")
+sys.exit(0 if idle else 1)'
+    return $?
+  done
+  return 1
+}
+
 # Block while a dictation is running. Not a timeout to be got past: a sentence
 # ends when Victor ends it, and the decode plus the held panel is a handful of
 # seconds after that.
+#
+# **A stuck flag is not a sentence, and telling them apart is a reading rather
+# than a timeout** (2026-09-14). `bound-tty` says `listening` for as long as the
+# relay believes a dictation is open — and it can believe that with no microphone
+# behind it at all: `/test/dictation/start` opens exactly such a dictation, and so
+# does a recogniser that dies between the chord and the words. This script then
+# waited for a sentence nobody was speaking, for ever, which is how it was found.
+# So the file is the fast check and the relay's own state is the arbiter: a source
+# that is not recording, not settling and `idle` has no sentence in flight, whatever
+# the file says.
 relay_wait_idle() {
   local waited=0
   while grep -q listening "$RELAY_BOUND_FILE" 2>/dev/null; do
+    if [ "$waited" -ge 5 ] && relay_source_is_idle; then
+      echo "⚠️  the relay still says listening but its recogniser is idle —"
+      echo "    a dictation flag left standing, not a sentence. Going ahead."
+      return 0
+    fi
     [ "$waited" = 0 ] && echo "⏳ a dictation is running — waiting for it to be delivered…"
     sleep 1
     waited=$((waited + 1))

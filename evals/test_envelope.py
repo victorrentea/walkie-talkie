@@ -208,7 +208,8 @@ class FrameList(unittest.TestCase):
             raise unittest.SkipTest("a real dictation is in flight — not touching it")
         target = _get(BASE, "/target")
         cls.previous = target.get("address") if target.get("bound") else None
-        cls.marker = "uite aici. Screenshot one. si mai jos. Screenshot 2. gata."
+        cls.marker = ("uite aici. Screenshot one. si mai jos. Screenshot 2. "
+                      "si elementul picked element one. gata.")
         _post(BASE, "/bind", {"tty": NOWHERE})
         _post(BASE, "/test/dictation/start")
         time.sleep(1)
@@ -216,6 +217,10 @@ class FrameList(unittest.TestCase):
         for _ in range(2):
             _post(BASE, "/test/gesture", {"name": "back-click"})
             time.sleep(2)
+        _post(BASE, "/pick", {
+            "path": "body > table > th", "tag": "th", "text": "Header1",
+            "url": "https://interact.victorrentea.ro", "title": "Interact"})
+        time.sleep(1)
         _post(BASE, "/test/dictation", {"text": cls.marker})
         for _ in range(10):
             time.sleep(1)
@@ -236,26 +241,38 @@ class FrameList(unittest.TestCase):
         except Exception:
             pass
 
-    def test_the_index_is_in_the_file_name(self):
-        """`[shot 1]` resolves against `shot-1-…` with nothing to explain it."""
-        self.assertIn("[shot 1]", self.line)
-        self.assertIn("[shot 2]", self.line)
-        self.assertRegex(self.line, r"shot-1-\d\d:\d\d\(")
-        self.assertRegex(self.line, r"shot-2-\d\d:\d\d\(")
+    def test_the_reference_names_the_file(self):
+        """`(screenshot: shot#01)` and `shot#01(…)` are the same string."""
+        self.assertIn("(screenshot: shot#01)", self.line)
+        self.assertIn("(screenshot: shot#02)", self.line)
+        self.assertIn("shot#01(", self.line)
+        self.assertIn("shot#02(", self.line)
+        # The shapes this replaced, both of them.
+        self.assertNotIn("[shot 1]", self.line)
+        self.assertNotRegex(self.line, r"shot-\d\d:\d\d\(")
 
     def test_the_opening_frame_is_a_row_of_the_same_list(self):
-        """Picture 0, in the list, keeping its permission to be skipped."""
-        self.assertRegex(self.line, r"- shot-0-00:00\(.*the screen when I started talking")
-        # The clause it used to have is gone — one list, not two.
-        self.assertNotIn("[and shot-", self.line)
+        """Picture zero, in the list, with no sentence of its own."""
+        self.assertIn("- shot#00(", self.line)
+        self.assertNotIn("[and shot", self.line)
         self.assertNotIn("[the screen when I started talking", self.line)
+        # The permission moved up to the clause, where it covers all of them.
+        self.assertIn("open only if the words need it:", self.line)
 
     def test_what_was_said_twice_is_no_longer_said_at_all(self):
         self.assertNotIn("oldest first", self.line)
         self.assertNotIn("in my words is where I pressed the shutter", self.line)
 
+    def test_a_picked_element_is_described_where_he_clicked_it(self):
+        """The three facts inline, and no row repeating them underneath."""
+        self.assertIn('(selected DOM element: body > table > th, with text: '
+                      '"Header1" in page "https://interact.victorrentea.ro")',
+                      self.line)
+        self.assertNotIn("picked element one", self.line)
+        self.assertNotIn("element picked in Chrome during dictation", self.line)
+
     def test_the_hint_names_the_recogniser_and_drops_the_warning(self):
-        self.assertIn("transcribed by ", self.line)
+        self.assertIn("dictated and transcribed in RO or EN by ", self.line)
         self.assertNotIn("hallucinate", self.line)
 
 

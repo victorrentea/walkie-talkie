@@ -68,6 +68,9 @@ enum ShotMarker {
     enum Kind: String, CaseIterable {
         case shot
         case selection
+        /// An element ⌘-clicked in a Chrome page. Inline since 2026-09-14, for
+        /// the reason the highlight is: it belongs to the clause he said it in.
+        case element
 
         /// The spoken form's opening words. English for the reason the whole
         /// phrase is (see `phrase`), and two words rather than one for the
@@ -77,6 +80,9 @@ enum ShotMarker {
             switch self {
             case .shot: return "screenshot"
             case .selection: return "selected text"
+            // Two words again, and neither of them common on its own: `element
+            // one` is a thing a sentence about code says by accident.
+            case .element: return "picked element"
             }
         }
 
@@ -85,6 +91,7 @@ enum ShotMarker {
             switch self {
             case .shot: return "screenshot"
             case .selection: return "selected-text"
+            case .element: return "picked-element"
             }
         }
     }
@@ -417,7 +424,7 @@ enum ShotMarker {
     /// Group 1 says it was a shot, group 2 a selection, group 3 is the number in
     /// whichever form it came back as.
     private static let pattern = try? NSRegularExpression(
-        pattern: #"\s*\b(?:(screen[ -]?shots?)|(selected\s+texts?))\s+(\w+)\s*[.,!;:]*\s*"#,
+        pattern: #"\s*\b(?:(screen[ -]?shots?)|(selected\s+texts?)|(picked\s+elements?))\s+(\w+)\s*[.,!;:]*\s*"#,
         options: [.caseInsensitive])
 
     /// **Rewrite the spoken markers — a shot into a reference an agent can
@@ -446,23 +453,32 @@ enum ShotMarker {
     static func resolve(text: String,
                         shots: Set<Int> = [],
                         selections: [Int: String] = [:],
+                        elements: [Int: String] = [:],
                         inlineSelections: Bool = true)
-        -> (text: String, shots: [Int], selections: [Int]) {
-        guard !(shots.isEmpty && selections.isEmpty),
-              let pattern = pattern, !text.isEmpty else { return (text, [], []) }
+        -> (text: String, shots: [Int], selections: [Int], elements: [Int]) {
+        guard !(shots.isEmpty && selections.isEmpty && elements.isEmpty),
+              let pattern = pattern, !text.isEmpty else { return (text, [], [], []) }
         let full = NSRange(text.startIndex..., in: text)
         let matches = pattern.matches(in: text, range: full)
-        guard !matches.isEmpty else { return (text, [], []) }
+        guard !matches.isEmpty else { return (text, [], [], []) }
 
         var out = ""
         var foundShots: [Int] = []
         var foundSelections: [Int] = []
+        var foundElements: [Int] = []
         var cursor = text.startIndex
         var dropped = 0
         for match in matches {
             guard let range = Range(match.range, in: text),
-                  let word = Range(match.range(at: 3), in: text) else { continue }
-            let kind: Kind = match.range(at: 1).location == NSNotFound ? .selection : .shot
+                  let word = Range(match.range(at: 4), in: text) else { continue }
+            // **One group per kind, and the number is the last group.** Adding a
+            // kind means adding an alternative *and* moving the number's index;
+            // the element marker shipped once with neither, so `picked element
+            // one` stayed in his sentence as though he had said it.
+            let kind: Kind
+            if match.range(at: 1).location != NSNotFound { kind = .shot }
+            else if match.range(at: 2).location != NSNotFound { kind = .selection }
+            else { kind = .element }
             let token = text[word].lowercased()
             let index = spoken[token] ?? Int(token)
             // Not a marker at all — `screenshots and notes`, `screenshot folder`,
@@ -475,7 +491,14 @@ enum ShotMarker {
             let replacement: String?
             switch kind {
             case .shot:
-                replacement = shots.contains(index) ? " [shot \(index)] " : nil
+                // **`(screenshot: shot#01)`** — Victor's own mock of the
+                // envelope, 2026-09-14. A parenthesis rather than a bracket
+                // because this is an aside inside his sentence and brackets are
+                // what the envelope's *clauses* use; and the frame's real file
+                // name rather than an index, so the reference and the row in the
+                // list below are the same string.
+                replacement = shots.contains(index)
+                    ? String(format: " (screenshot: shot#%02d) ", index) : nil
                 if replacement != nil { foundShots.append(index) }
             case .selection:
                 guard let selected = selections[index] else { replacement = nil; break }
@@ -486,8 +509,18 @@ enum ShotMarker {
                 // a highlight that contains a quote of its own, which a line of
                 // code very often does. The bracket says what it is and cannot
                 // be confused with anything he said.
-                replacement = inlineSelections ? " [selected: \"\(selected)\"] " : " "
+                replacement = inlineSelections
+                    ? " (selected text: \"\(selected)\") " : " "
                 foundSelections.append(index)
+            case .element:
+                // **The whole description, not a reference.** A picked element
+                // is three short facts — the selector, what it said, the page —
+                // and a reader who has them needs nothing looked up; a `#01`
+                // here would send him to a list to reassemble a sentence he is
+                // already reading.
+                guard let described = elements[index] else { replacement = nil; break }
+                replacement = inlineSelections ? " (\(described)) " : " "
+                foundElements.append(index)
             }
             out += text[cursor..<range.lowerBound]
             if let replacement = replacement {
@@ -505,7 +538,7 @@ enum ShotMarker {
                       + "attached — have shots \(shots.sorted()), selections "
                       + "\(selections.keys.sorted()). Dropped from the text.")
         }
-        return (tidy(out), foundShots, foundSelections)
+        return (tidy(out), foundShots, foundSelections, foundElements)
     }
 
     /// The seams the substitution leaves: a doubled space where two bits of

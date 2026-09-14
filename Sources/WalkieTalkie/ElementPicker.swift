@@ -6,7 +6,31 @@ import Network
 /// The whole reason this exists: "make *this* button blue" is a sentence the
 /// agent cannot act on. A CSS path is the same sentence with the pronoun
 /// resolved.
+extension ElementPick {
+    /// **The whole of it, for the middle of his sentence** — Victor's own mock,
+    /// 2026-09-14: `(selected DOM element: body > table > th, with text:
+    /// "Header1" in page "https://interact.victorrentea.ro")`.
+    ///
+    /// Three short facts and no lookup: the selector that resolves it, what it
+    /// said, and where. The parentheses are added by `ShotMarker.resolve`, which
+    /// owns the punctuation of every inline marker.
+    var inlineDescription: String {
+        var out = "selected DOM element: \(path)"
+        if let text = text, !text.isEmpty {
+            out += ", with text: \"\(text)\""
+        }
+        if let url = url, !url.isEmpty { out += " in page \"\(url)\"" }
+        return out
+    }
+}
+
 struct ElementPick {
+    /// **Which spoken marker names this one**, when it was picked during a
+    /// dictation and the relay said one out loud — see `ShotMarker`. Nil for a
+    /// pick that arrived before the sentence, past the marker ceiling, or with
+    /// the markers off; those keep their line in the clause underneath instead.
+    var marker: Int?
+
     /// When he clicked. Absolute, because a pick can happen before the dictation
     /// it belongs to has even started — see `ElementPicker.stamp`.
     let at: Date

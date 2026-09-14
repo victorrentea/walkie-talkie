@@ -331,6 +331,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// detectat în textul transcris, pui transcripția ca acum, la final"*.
     private var selectionMarkersInlined: Set<Int> = []
 
+    /// The same, for picked elements: one that went into the sentence does not
+    /// also get a row underneath it. → `picksClause`
+    private var elementMarkersInlined: Set<Int> = []
+
     /// **How this source places a marker, or nil when it cannot place one.**
     ///
     /// Published by `wireDictationSource` and read by `reserveMarker`, both under
@@ -676,6 +680,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// the sentence: the paragraph is already in it, where he said it.
         /// → `ShotMarker.resolve`, `selectionsClause`
         var inlinedSelections: Set<Int> = []
+        /// The same for picked elements — see `picksClause`.
+        var inlinedElements: Set<Int> = []
         let paths: [String]
         let screen: String?
         /// Path → what was in front when that frame was taken. Covers both
@@ -1791,8 +1797,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let marker = extra.marker else { continue }
             selections[marker] = Self.clampForTerminal(extra.text)
         }
+        var elements: [Int: String] = [:]
+        for pick in pendingPicks {
+            guard let marker = pick.marker else { continue }
+            elements[marker] = pick.inlineDescription
+        }
         stateLock.unlock()
         let resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
+                                          elements: elements,
                                           inlineSelections: inlineSelections)
         guard inlineSelections else { return resolved.text }
         if !resolved.shots.isEmpty {
@@ -1808,6 +1820,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence; anything in here has already been said inline.
         stateLock.lock()
         selectionMarkersInlined.formUnion(resolved.selections)
+        elementMarkersInlined.formUnion(resolved.elements)
+        if !resolved.elements.isEmpty {
+            Log.info("📣 \(resolved.elements.count) element(s) placed in the words at the marker: "
+                     + resolved.elements.map(String.init).joined(separator: ", "))
+        }
         stateLock.unlock()
         return resolved.text
     }
@@ -2252,7 +2269,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cancelDictationInFlight(reason: String) -> Bool {
         guard listening || source.isRecording || speculative || settling else { return false }
         Log.info("🗑️ dictation cancelled via \(reason)")
+        // **A recogniser with nothing to cancel leaves the relay's own state
+        // standing, and until now nothing could take it down** (2026-09-14,
+        // Victor, twice: *"the lightning circle keeps rotating around the mouse
+        // … but I can't really cancel it somehow. It stays there. Blocked in the
+        // dictating state"*).
+        //
+        // `listening` is the relay's claim that a sentence is in flight;
+        // `isRecording` is the source's claim that a microphone is open. They
+        // come apart whenever the relay opens a dictation the recogniser knows
+        // nothing about — `/test/dictation/start` does exactly that, and so does
+        // any source that dies between the chord and the words. `source.cancel()`
+        // then returns without doing anything, because from its side there is
+        // nothing to cancel, and the ring goes on turning over a sentence that
+        // does not exist. The escape hatch has to be on **this** side of the
+        // protocol, keyed on the source having been idle *before* the call so an
+        // ordinary cancel still takes its ordinary path.
+        let sourceWasIdle = !source.isRecording && !speculative
         source.cancel()
+        if sourceWasIdle {
+            Log.info("🗑️ …and the recogniser had nothing to cancel — putting the ring down here")
+            if settling { endSettling(reason: "cancelled with no recogniser behind it") }
+            dictationStoppedListening()
+            abandonDictation("cancelled with no recogniser behind it")
+        }
         overlay.flash("🗑️ Cancelled", duration: 1.5)
         return true
     }
@@ -2292,6 +2332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         selectionMarkersInlined = []
+        elementMarkersInlined = []
         dictationStartedAt = nil
         pendingScreen = nil
         dictationInFlight = false
@@ -2654,6 +2695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         selectionMarkersInlined = []
+        elementMarkersInlined = []
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -3844,7 +3886,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// discounts them, and the clause was spending a line of every envelope to
     /// say so twice.
     private static func dictatedHint(_ engine: String) -> String {
-        "[this text was dictated in RO or EN and transcribed by \(engineName(engine))]"
+        "[this text dictated and transcribed in RO or EN by \(engineName(engine))]"
     }
 
     /// The recogniser's id as the reader should see it: the local model by the
@@ -3916,7 +3958,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // with whichever highlights it found markers for, and this is the list
         // of rows the clause below must therefore not repeat.
         let inlined = selectionMarkersInlined
+        let inlinedElements = elementMarkersInlined
         selectionMarkersInlined = []
+        elementMarkersInlined = []
         // **No context frame rides this envelope, and it is cleared rather than
         // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
         // in every real path through here — but `shotsClause` is called with
@@ -3969,7 +4013,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                        extras: extraSelections,
                                                        inlined: inlined))
         parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
-        if let clause = Self.picksClause(picks, since: since) { parts.append(clause) }
+        if let clause = Self.picksClause(picks, since: since,
+                                         inlined: inlinedElements) { parts.append(clause) }
         guard parts.count > 1 else { return words }
         // The words, a blank line, then one clause per line — `terminalLine`'s
         // shape, for `terminalLine`'s reason: he reads this one too, and more
@@ -4012,7 +4057,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
-        if let clause = picksClause(m.elements, since: m.startedAt) { parts.append(clause) }
+        if let clause = picksClause(m.elements, since: m.startedAt,
+                                    inlined: m.inlinedElements) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
         // textele ajutătoare să fie fiecare începând pe rând nou"*).
@@ -4169,8 +4215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // an agent reading two lists has to work out that they are one. What it
         // keeps is the permission to skip it, said on its own row where it
         // belongs, rather than a paragraph of its own.
-        let opening = screen.map { "- \(handed($0)) — the screen when I started"
-                                   + " talking, open only if the words need it" }
+        // The permission to skip moved up into the clause's opening line, where
+        // it covers every frame, so row zero is now just row zero.
+        let opening = screen.map { "- " + described($0) }
 
         // **One frame per line, under a heading, instead of one long sentence.**
         // Five shots joined with `; ` is a paragraph an agent has to parse back
@@ -4185,7 +4232,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // spent twice.
         let rows = ([opening].compactMap { $0 } + paths.map { "- " + described($0) })
             .joined(separator: "\n")
-        return ["screenshots during dictation are in: \(shown)/\n" + rows + "\n\(note)"]
+        // **One bracket around the whole thing**, like every other clause in the
+        // envelope — Victor's mock, 2026-09-14. The words carry the references
+        // now; this is the lookup table behind them, and a reader who does not
+        // need a picture can skip the bracket whole.
+        return ["[screenshots are in \(shown)/ open only if the words need it:\n"
+                + rows + "\n\(note)]"]
     }
 
     /// **Everything he highlighted, as a list, each line saying when** (2026-09-13).
@@ -4913,14 +4965,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // Matched on the path and only against the newest entry, so two
         // deliberate picks of two different things can never collapse into one.
+        var amended: Int?
         if pick.move != nil, pendingPicks.last?.path == pick.path {
+            amended = pendingPicks.last?.marker
             pendingPicks.removeLast()
         }
+        // **Inside the lock, like a highlight and for its reason**: a number
+        // taken a lock-release later could be taken by the shutter in between.
+        // A drag that amended the press above keeps the press's marker, because
+        // the relay already said that number out loud.
+        var pick = pick
+        pick.marker = amended ?? reserveMarkerLocked(.element)
         pendingPicks.append(pick)
         pruneStalePicks()
         let count = pendingPicks.count
         let last = pendingPicks.last?.short ?? ""
+        let spoke = amended == nil ? pick.marker : nil
         stateLock.unlock()
+        if let spoke = spoke { speakMarker(.element, spoke) }
         Log.info("🎯 \(count) element(s) waiting on a sentence — newest \(last)")
         publishPicks()
     }
@@ -4983,7 +5045,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shared by `terminalLine` and `caretLine` — the two envelopes name picks
     /// identically on purpose, and the day they stopped doing so would be the
     /// day a caret dictation quietly lost half of what it was carrying.
-    private static func picksClause(_ picks: [ElementPick], since: Date?) -> String? {
+    private static func picksClause(_ picks: [ElementPick], since: Date?,
+                                    inlined: Set<Int> = []) -> String? {
+        // **A pick that went into his sentence does not also get a row here**
+        // (2026-09-14) — the highlight's rule, for the highlight's reason:
+        // inline *or* listed, never both, or the envelope says the same thing
+        // twice and the reader has to work out that it is one thing.
+        let picks = picks.filter { $0.marker.map { !inlined.contains($0) } ?? true }
         guard !picks.isEmpty else { return nil }
         let urls = Set(picks.map { $0.url ?? "" })
         // One page and every pick actually carrying it: an empty URL among them
@@ -5404,7 +5472,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // markers landed in the words is a fact about **this** sentence, and the
         // words have already been rewritten by the time we get here (`deliver`).
         let inlined = selectionMarkersInlined
+        let inlinedElements = elementMarkersInlined
         selectionMarkersInlined = []
+        elementMarkersInlined = []
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
@@ -5417,6 +5487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         selectionMarkersInlined = []
+        elementMarkersInlined = []
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
@@ -5458,6 +5529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               selectionMarker: selectionMarker,
                               extraSelections: extraSelections,
                               inlinedSelections: inlined,
+                              inlinedElements: inlinedElements,
                               paths: attached, screen: screen, sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
