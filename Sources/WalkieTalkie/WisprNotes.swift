@@ -710,6 +710,13 @@ enum WisprScratchpad {
     /// has already finished must be re-armable, or a window that came back after
     /// it (Wispr reopens one when it writes a note) stands until the next
     /// dictation and eats his typing in the meantime.
+    /// **Is somebody already asking for the close**, so nobody asks a second
+    /// time. The close is a *toggle*: a second tap behind the first closes the
+    /// window and opens it straight back up, which is what left `wrap-cancel`
+    /// with `['Status', 'Scratchpad']` behind. `armCloseOnSight` guards itself;
+    /// this is the same guard for the callers that go in through `closeWindow`.
+    static var closeIsInFlight: Bool { closeASAP }
+
     static func armCloseOnSight() {
         guard !closeASAP else { return }
         closeASAP = true

@@ -228,6 +228,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Three ways to take the keyboard back, and what each one measured (2026-09-14, 01:00–01:15)](#three-ways-to-take-the-keyboard-back-and-what-each-one-measured-2026-09-14-010001-15)
 - [The night the wrap found its shape (2026-09-13/14)](#the-night-the-wrap-found-its-shape-2026-09-1314)
 - [The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)](#the-fifth-stale--and-the-guard-that-finally-works-2026-09-14-0248)
+- [What the cancel cost the sentence after it (2026-09-14, 03:30)](#what-the-cancel-cost-the-sentence-after-it-2026-09-14-0330)
 
 ---
 
@@ -9387,3 +9388,52 @@ the same function out of git and asserts the scan rejects each:
 Two occurrences of one bug in one function, four builds apart, and the second was
 introduced by the fix for the first. That is the argument for the test existing
 rather than the paragraph.
+
+## What the cancel cost the sentence after it (2026-09-14, 03:30)
+
+Three defects the runner measured on `3b4be96`, and two of them are the same
+mistake: *the sentence Victor threw away went on being treated as a sentence in
+flight*.
+
+**The regression, and it is the price of the `discardOnArrival` fix.** Keeping
+everything armed after a cancel is right — Wispr may still paste, and that key
+belongs to nobody — but it was written as though nothing else would happen for
+the thirty seconds of `captureTimeout`, and what happens is that Victor asks for
+the **next** dictation. Two independent refusals, measured as `never listening
+(8.1 s)`: `retireCaptureIfSettled` would not let a non-terminal row go, so
+`beginCapture` returned early and the new sentence had no swallow, no row poll
+and no delivery at all; and the phase stayed `transcribing`, which
+`onPasteToggle` and `startDictation` read as *words in flight*, so the click was
+answered with *nothing to start, nothing to stop*. Both were true statements
+about the old sentence and neither was a reason to refuse the new one. The
+capture is now **retired on the gesture**: `endCapture` gives back everything it
+holds and arms the new dictation's own capture in the same call, and the one
+thing that outlives it is the swallow, **keyed by the rowid it was armed for**.
+`WisprHistory.entry(rowid:)` exists for that — once a second dictation has
+started, `newest()` is the new row, and the old `status(of:)` compared against it
+and answered `""` for ever, which reads as *not terminal* and is how the capture
+came to be immortal in the first place.
+
+**And the window Wispr reopens.** The close asked at `closeListening` works; what
+nobody was watching for is the **second** window, the one Wispr opens ~2 s later
+when it writes its note. On an ordinary dictation `endCapture` runs at ~450 ms
+and catches it. On a cancelled one `endCapture` waits for Wispr to finish
+transcribing words nobody wants, so the window stood over his work for **3.2 s**
+with his keystrokes going into the note. `armDiscardClose` now re-arms the close
+the moment the cancel has its answer — the row for that dictation terminal, or
+`pasteGrace` since the ⌃Escape — and `WisprScratchpad.closeIsInFlight` is there
+so that the earlier ask and this one cannot become the double tap that re-opens
+what the first one shut.
+
+**The seventh stale ⌘, and the first this app did not cause.** `wispr-alone`
+leaves the session at `sessionFlags == ["command"]`: Wispr's ⌘V key-up carries ⌘
+and posts no `flagsChanged` behind it, and with the relay stopped there is no tap
+to put it back. So the relay heals it at launch instead, after
+`SingleInstance.enforce`, by comparing what the window server believes against
+what is physically down — `flagsState` against `keyState` on both of each
+modifier's keycodes — and posting a stamped `flagsChanged` **on the modifier's
+own keycode**, carrying the state the keyboard is left in rather than `[]`, so a
+modifier he really is holding survives the clearing of one he is not. The rule of
+`area-crop.md` has now been paid for seven times and this is the first payment
+that is a *reader* rather than a poster: every previous occurrence was this app
+leaving a flag behind, and this one is this app finding one.

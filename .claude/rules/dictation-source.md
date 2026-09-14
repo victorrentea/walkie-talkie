@@ -223,6 +223,23 @@ measurement of this is worth anything without it.
   never sees the release. The tap posts the clearing `flagsChanged` on ⌘'s own
   keycode for any Wispr ⌘V key-up it is **letting through**, stamped, off the tap
   thread, and says so in the log.
+- **The seventh stale ⌘ is the sixth one with no tap running, and it is healed at
+  launch** (2026-09-14). `wispr-alone` — relay stopped, Wispr pastes for itself,
+  relay relaunched — came back with `/test/state.sessionFlags == ["command"]`:
+  Wispr's ⌘V key-up carries ⌘ and posts no `flagsChanged` behind it, and with no
+  tap alive there is nobody to put it back, so the session was already holding a
+  modifier before the relay's first line of log. It is the first occurrence this
+  app did not cause and the only one it can fix from outside a keystroke. So
+  `HotkeyTap.clearStaleModifiersAtLaunch()` runs from
+  `applicationDidFinishLaunching` **after `SingleInstance.enforce`** (the instance
+  just stood down is the likeliest poster of the last event): for each of ⌘ ⌥ ⌃ ⇧
+  fn it compares `CGEventSource.flagsState(.combinedSessionState)` against
+  `keyState` on **both** of that modifier's keycodes, and a flag no key is holding
+  down gets a stamped `flagsChanged` **on the modifier's own keycode**, carrying
+  the state the keyboard is left in rather than `[]` — a modifier he really is
+  holding survives the clearing of one he is not. `⌨️ a stale <modifier> from
+  before the relay started was put back down`, and silence when there is nothing
+  to say.
 - **A cancel during the settle must NOT disarm the swallow** (adversarial run,
   2026-09-14 03:04). `forward-left` posted 200 ms after the stop tore the capture
   down while Wispr's ⌘V was still 300 ms away, and the trace shows what that
@@ -235,6 +252,43 @@ measurement of this is worth anything without it.
   `captureTimeout` — is swallowed and **dropped**. The Scratchpad closes with the
   capture, which is to say after Wispr has finished with it. `capturing` stays
   true for that stretch, which is honest: the swallow really is armed.
+- **…but a cancelled capture may not outlive the gesture that supersedes it**
+  (the regression that fix left behind, measured on `3b4be96` by
+  `wrap-cancel-in-settle --settle-delay-ms=100,200,500,1000`). `capturing` stayed
+  true for up to the full **30 s** of `captureTimeout` and the **next** relay
+  dictation never opened — `never listening (8.1 s)` — because two different
+  things refused it. `retireCaptureIfSettled` saw a row that was not terminal and
+  kept the capture, so `beginCapture` returned early and the new sentence had no
+  swallow, no row poll and no delivery; and the **phase** stayed `transcribing`,
+  which is what `onPasteToggle` and `startDictation` read as *words in flight*, so
+  the click was answered with *nothing to start, nothing to stop*. Both are fixed
+  in `WisprFlowSource`. `cancel()` calls `state.reset`: the swallow is armed but
+  nothing is **awaited**, which are two claims and only the first was ever true
+  after a cancel — and `pollHistory` no longer feeds `state.sawRow` while
+  `discardOnArrival`, or the next tick would put the phase straight back.
+  `retireCaptureIfSettled` sends a discarded capture to `retireDiscardedCapture`,
+  which lets `endCapture` release everything it holds — the Scratchpad, the
+  keyboard guard, the sink, the deadline — and opens the new dictation's own
+  capture in the same call. What survives is only the swallow, **keyed by
+  `retiredDiscardRow`**: `WisprHistory.entry(rowid:)` watches that row (`newest()`
+  cannot answer about it any more — by then the new dictation is on top) and the
+  claim is let go when the row is terminal plus `pasteGrace`, when its ⌘V arrives
+  and is dropped, or at a **5 s** ceiling. `injected(from:)` checks the retired
+  row **before** `capturing`, because the capture running by then belongs to the
+  next sentence and that key is not its delivery.
+- **After a cancel the Scratchpad closes when Wispr is finished with it, not when
+  the capture is** (measured **3.2 s** on `3b4be96`; target < 1.5 s). The close
+  asked at `closeListening` works — what nobody was watching for is that Wispr
+  **reopens** the window ~2 s later when it writes its note, and a cancelled
+  sentence does not reach `endCapture` until Wispr has finished transcribing words
+  nobody wants, so the second window stood over his work taking his keystrokes for
+  the whole difference. `armDiscardClose` polls at `historyTick` from the dismiss
+  and re-arms the close as soon as either the row for **that** dictation is
+  terminal (`dismissed` / `empty` / …, read by rowid) or `pasteGrace` has passed
+  since the ⌃Escape went out, whichever comes first. The **ask-exactly-once** rule
+  is unchanged and now has a reader: `WisprScratchpad.closeIsInFlight` exposes
+  `closeASAP`, `armCloseOnSight` guards on it as it always did, and `endCapture`
+  consults it before starting a second close of its own.
 - **A gesture during the settle that is not a cancel was already safe** — the same
   run's `forward-click` 100 ms after the stop is a no-op (`nothing to start,
   nothing to stop`), the ⌘V is swallowed and the sentence delivers normally.

@@ -586,6 +586,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
+        // **Whatever the session was left holding while no tap was running.**
+        // After `SingleInstance.enforce`, so the relaunch path — the instance
+        // that has just been stood down being the likeliest poster of the last
+        // event — is behind it as well. See `clearStaleModifiersAtLaunch`.
+        HotkeyTap.clearStaleModifiersAtLaunch()
         Self.startAtLogin()
         Outbox.prepare()
         overlay = RelayWindow()

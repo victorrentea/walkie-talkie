@@ -393,6 +393,33 @@ final class WisprFlowSource: DictationSource {
     /// `captureTimeout`; the Scratchpad window goes with it.
     private var discardOnArrival = false
 
+    /// **When the ⌃Escape dismiss went out for a cancel during the settle.**
+    /// The clock the early close is measured from — see `armDiscardClose`.
+    private var dismissedAt: CFAbsoluteTime = 0
+    private var discardCloseTimer: Timer?
+
+    /// **The row of a cancelled sentence whose capture a new gesture superseded**
+    /// (2026-09-14).
+    ///
+    /// A cancel during the settle keeps everything armed until Wispr is finished,
+    /// and that is right — but it may not hold the *next* dictation hostage for
+    /// the 30 s of `captureTimeout`, which is exactly what it did: `capturing`
+    /// stayed true, `retireCaptureIfSettled` refused to let a non-terminal row
+    /// go, and the relay measured **never listening (8.1 s)** on the gesture
+    /// after it. So the capture is retired at once and only this much of it
+    /// survives: the swallow, **keyed by the rowid it was armed for**, so Wispr's
+    /// late ⌘V for the sentence Victor threw away still lands nowhere.
+    private var retiredDiscardRow: Int64?
+    private var retiredDiscardUntil: CFAbsoluteTime = 0
+    private var retiredDiscardTerminalAt: CFAbsoluteTime = 0
+    private var retiredDiscardTimer: Timer?
+    /// Five seconds, against Wispr's own p99 of 7.1 s counted from the *chord* —
+    /// this is counted from a row that is already being transcribed, and the
+    /// claim is let go earlier than this on every ordinary run (the row goes
+    /// terminal and `pasteGrace` passes). It exists so a row Wispr abandons
+    /// cannot keep the swallow armed over Victor's next sentence for ever.
+    private static let retiredDiscardCeiling: TimeInterval = 5
+
     /// **Wispr's own row for this dictation** (`WisprHistory`, 2026-09-12) —
     /// the completion signal for a delivery the tap cannot see. Taken at the
     /// microphone's close as the newest row whose `startedAt` is this
@@ -782,8 +809,22 @@ final class WisprFlowSource: DictationSource {
             // Scratchpad closes with the capture, which is to say after Wispr is
             // finished with it and not before.
             discardOnArrival = true
+            dismissedAt = CFAbsoluteTimeGetCurrent()
             Log.info("🗑️ cancelled while the words were in flight — the swallow stays armed until Wispr is done, and the words are dropped")
             HotkeyTap.postWisprCancel()
+            // **And nothing is being waited for any more** (2026-09-14). The
+            // capture stays armed because Wispr may still paste; the *phase*
+            // stayed `transcribing` with it, and that is a different claim and a
+            // false one — `isWaitingForWords` is what `onPasteToggle` and the
+            // settle read to decide whether a sentence is still on its way, and
+            // for up to thirty seconds after the cancel it told them one was.
+            // The next 🔼 click was answered with *nothing to start, nothing to
+            // stop* and the relay measured **never listening (8.1 s)**. The
+            // swallow is armed; the sentence is gone. The two are said
+            // separately now, and `pollHistory` no longer feeds the machine from
+            // a row it is only listening to in order to drop it.
+            state.reset("cancelled while the words were in flight — the swallow stays armed, nothing is awaited")
+            armDiscardClose()
             didEnd?(.cancelled(audio: nil, duration: 0))
             return
         }
@@ -1338,6 +1379,12 @@ final class WisprFlowSource: DictationSource {
     /// still being transcribed.
     private func retireCaptureIfSettled() {
         guard capturing else { return }
+        // **A cancelled capture is not a sentence in flight, and a new gesture
+        // supersedes it at once** (2026-09-14, the regression the
+        // `discardOnArrival` fix left behind). The words of the old sentence
+        // were thrown away by Victor; what is still owed is only that Wispr's
+        // late ⌘V lands nowhere, and that survives the retirement on its own.
+        if discardOnArrival { return retireDiscardedCapture() }
         if let row = historyRow, !WisprState.isTerminal(status(of: row)) {
             Log.info("wispr: a capture is still standing for row \(row) (\(status(of: row).isEmpty ? "no status yet" : status(of: row))) — the new gesture does not disarm it")
             return
@@ -1345,9 +1392,121 @@ final class WisprFlowSource: DictationSource {
         endCapture(quiet: true)
     }
 
+    /// **Retire a cancelled capture and keep only its swallow, keyed by its row.**
+    ///
+    /// Everything the capture *holds* goes back with it — the Scratchpad window,
+    /// the keyboard guard, the sink's key window, the row poll, the deadline —
+    /// because `endCapture` is the one place that lets all of them go, and the
+    /// new dictation then arms its own inside the same call. What outlives it is
+    /// the one promise the cancel made: Wispr may still press ⌘V for the
+    /// sentence Victor threw away, and that key belongs to nobody.
+    private func retireDiscardedCapture() {
+        retiredDiscardRow = historyRow
+        retiredDiscardUntil = CFAbsoluteTimeGetCurrent() + Self.retiredDiscardCeiling
+        retiredDiscardTerminalAt = 0
+        Log.info("🗑️ a new gesture supersedes the cancelled sentence — its capture is retired now"
+                 + (retiredDiscardRow.map { ", and the swallow stays armed for row \($0)'s ⌘V" }
+                    ?? "; Wispr never created a row for it, so there is no ⌘V to wait for"))
+        endCapture(quiet: true)
+        // **Armed again, because `endCapture` disarmed it and the dictation that
+        // follows may not want one.** A capture the relay is not intercepting —
+        // Victor's own chord, a moment after his cancel — arms no swallow at
+        // all, and the old row's ⌘V would then land in his document, which is
+        // the whole failure the cancel path exists to prevent.
+        if retiredDiscardRow != nil { hotkeys.armInjectionCapture(swallow: true) }
+        armRetiredDiscardWatch()
+    }
+
+    /// The claim is let go on the row's own evidence: terminal, plus the
+    /// `pasteGrace` in which the ⌘V that follows `formatted` would have arrived.
+    private func armRetiredDiscardWatch() {
+        retiredDiscardTimer?.invalidate()
+        retiredDiscardTimer = nil
+        guard retiredDiscardRow != nil else { return }
+        let t = Timer(timeInterval: Self.historyTick, repeats: true) { [weak self] _ in
+            self?.pollRetiredDiscard()
+        }
+        retiredDiscardTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    private func pollRetiredDiscard() {
+        guard let row = retiredDiscardRow else { return letRetiredDiscardGo("there was no row to wait for") }
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now < retiredDiscardUntil else {
+            return letRetiredDiscardGo("row \(row) produced no ⌘V within \(Int(Self.retiredDiscardCeiling)) s")
+        }
+        // **Asked about the row itself**, not about the newest one: by now the
+        // next dictation has a row of its own on top of it.
+        guard let e = WisprHistory.entry(rowid: row), WisprState.isTerminal(e.status) else { return }
+        if retiredDiscardTerminalAt == 0 {
+            retiredDiscardTerminalAt = now
+            return
+        }
+        guard now - retiredDiscardTerminalAt >= Self.pasteGrace else { return }
+        letRetiredDiscardGo("row \(row) is \(e.status) and no ⌘V followed it")
+    }
+
+    private func letRetiredDiscardGo(_ why: String) {
+        retiredDiscardTimer?.invalidate()
+        retiredDiscardTimer = nil
+        retiredDiscardTerminalAt = 0
+        guard retiredDiscardRow != nil else { return }
+        retiredDiscardRow = nil
+        Log.info("🗑️ the cancelled sentence's claim on the swallow is let go — \(why)")
+        // The swallow belongs to the running capture again — or to nobody.
+        if !(capturing && intercepting) { hotkeys.disarmInjectionCapture() }
+    }
+
+    /// **Close the Scratchpad as soon as the cancel has had its answer, not when
+    /// the capture ends** (2026-09-14).
+    ///
+    /// `closeListening` already asked for the close at the stop and the window
+    /// went; Wispr then **reopens** it when it writes its note, ~2 s later, and
+    /// nothing was watching for that second window until `endCapture` — which a
+    /// cancelled sentence does not reach until Wispr has finished transcribing
+    /// the words nobody wants. Measured **3.2 s** with the window standing over
+    /// his work and taking his keystrokes throughout. So the moment the cancel
+    /// has its answer — the row is terminal, or the dismiss is old enough that
+    /// no ⌘V can still follow it — the close is armed again.
+    ///
+    /// **Exactly once while one is in flight**: the close is a toggle, and the
+    /// second ask re-opens what the first shut.
+    private func armDiscardClose() {
+        guard startedMode == .scratchpad else { return }
+        discardCloseTimer?.invalidate()
+        let t = Timer(timeInterval: Self.historyTick, repeats: true) { [weak self] _ in
+            self?.pollDiscardClose()
+        }
+        discardCloseTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    private func pollDiscardClose() {
+        guard capturing, discardOnArrival else { return endDiscardClose() }
+        guard !WisprScratchpad.closeIsInFlight else { return }
+        let waited = CFAbsoluteTimeGetCurrent() - dismissedAt
+        var why: String?
+        if let row = historyRow, let e = WisprHistory.entry(rowid: row), WisprState.isTerminal(e.status) {
+            why = "Wispr's row \(row) is \(e.status)"
+        } else if waited >= Self.pasteGrace {
+            why = "the dismiss went out and no ⌘V can follow it"
+        }
+        guard let why else { return }
+        endDiscardClose()
+        scratchpadWindowHandled = true
+        Log.info(String(format: "🗒️ %@ — closing the Scratchpad now rather than at the end of the capture (%.0f ms after the cancel)",
+                        why, waited * 1000))
+        WisprScratchpad.armCloseOnSight()
+    }
+
+    private func endDiscardClose() {
+        discardCloseTimer?.invalidate()
+        discardCloseTimer = nil
+    }
+
     private func status(of row: Int64) -> String {
-        guard let e = WisprHistory.newest(), e.rowid == row else { return "" }
-        return e.status
+        WisprHistory.entry(rowid: row)?.status ?? ""
     }
 
     /// **What Wispr says about this dictation.** `status` stays empty while it
@@ -1400,7 +1559,11 @@ final class WisprFlowSource: DictationSource {
         // polling its own row, and feeding that row's terminal status into a
         // machine that is describing the *new* dictation would put it straight
         // into `done` before Wispr had heard a word of it.
-        if armedAt >= state.chordAt { state.sawRow(e.rowid, status: e.status) }
+        // …and **not for a sentence that has been cancelled**: the poll goes on
+        // running so the ⌘V can be swallowed, but a row fed into the machine
+        // would put the phase back into `transcribing` a tick after the cancel
+        // reset it, and the next gesture would be refused all over again.
+        if armedAt >= state.chordAt, !discardOnArrival { state.sawRow(e.rowid, status: e.status) }
 
         let took = (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000
         switch e.status {
@@ -1695,6 +1858,15 @@ final class WisprFlowSource: DictationSource {
     /// Wispr pressed ⌘V. Under the wrap the tap has already eaten it, so the
     /// words are nowhere yet and this is the whole delivery.
     private func injected(from process: String) {
+        // **The cancelled sentence's ⌘V, arriving after its capture was
+        // retired** (2026-09-14). It is keyed by the row it was armed for, and
+        // it is checked before `capturing` on purpose: the capture running now
+        // belongs to the *next* dictation, and this key is not its delivery.
+        if let row = retiredDiscardRow {
+            Log.info(String(format: "🗑️ ⌘V from %@ belongs to cancelled row %d — swallowed and dropped", process, row))
+            letRetiredDiscardGo("its ⌘V arrived and went nowhere")
+            return
+        }
         guard capturing else { return }
         if discardOnArrival {
             Log.info("🗑️ ⌘V from \(process) after the cancel — swallowed and dropped; the capture closes now")
@@ -1831,7 +2003,11 @@ final class WisprFlowSource: DictationSource {
     private func endCapture(quiet: Bool) {
         guard capturing else { return }
         capturing = false
-        hotkeys.disarmInjectionCapture()
+        // **Unless a cancelled row still has a claim on it** — the swallow is
+        // the one thing that outlives a retired capture, and disarming it here
+        // for even the turn it takes to arm the next one is a window in which
+        // Wispr's ⌘V for the sentence Victor cancelled reaches his document.
+        if retiredDiscardRow == nil { hotkeys.disarmInjectionCapture() }
         clipboardWatch?.invalidate()
         clipboardWatch = nil
         clipboardMoved = nil
@@ -1844,6 +2020,7 @@ final class WisprFlowSource: DictationSource {
         priorNoteStamp = 0
         priorNoteText = nil
         discardOnArrival = false
+        endDiscardClose()
         // **Never leave the sink holding his keyboard.** Every ordinary sink
         // delivery restores focus on arrival; this is the path where nothing
         // arrived and the capture timed out.
@@ -1866,7 +2043,22 @@ final class WisprFlowSource: DictationSource {
         if startedMode == .scratchpad {
             // Idempotent, and the guard must never outlive the capture.
             hotkeys.disarmKeyRedirect()
-            if !scratchpadWindowHandled || WisprScratchpad.windowIsUp {
+            // **A capture retired by a gesture leaves the window to that
+            // gesture** (2026-09-14). `holdScratchpad` owns the precondition —
+            // it checks the window and closes it before it holds the chord — and
+            // a close started here would be the second half of a toggle behind
+            // that one, which re-opens what the first shut.
+            if isRecording || speculative {
+                scratchpadWindowHandled = true
+                Log.info("🗒️ the next dictation is already opening — its own precondition closes the window, not this capture")
+            }
+            // **Unless one is already being asked for**, which the cancel path
+            // now does as soon as Wispr is finished rather than here — and a
+            // second ask behind the first is the toggle re-opening the window.
+            else if WisprScratchpad.closeIsInFlight {
+                scratchpadWindowHandled = true
+                Log.info("🗒️ a close is already in flight — not asking a second time (it is a toggle)")
+            } else if !scratchpadWindowHandled || WisprScratchpad.windowIsUp {
                 scratchpadWindowHandled = true
                 closeScratchpadAfterwards()
             }

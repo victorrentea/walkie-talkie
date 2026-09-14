@@ -380,6 +380,64 @@ final class HotkeyTap {
         return out
     }
 
+    /// **The modifiers, and the two keys that can each be holding one down.**
+    /// `CGEventFlags` has no names for *which* ⌘ — the device bits do — so both
+    /// are asked, and a modifier is stale only when neither is down.
+    private static let modifierKeys: [(mask: CGEventFlags, name: String, keys: [CGKeyCode])] = [
+        (.maskCommand,     "⌘", [55, 54]),
+        (.maskAlternate,   "⌥", [58, 61]),
+        (.maskControl,     "⌃", [59, 62]),
+        (.maskShift,       "⇧", [56, 60]),
+        (.maskSecondaryFn, "fn", [63]),
+    ]
+
+    /// **A modifier the session believes is held that no key is holding down —
+    /// put back at launch** (2026-09-14, the seventh occurrence of the stale-⌘
+    /// bug and the first this app did not cause).
+    ///
+    /// `wispr-alone` is the scenario: the relay is stopped, Wispr pastes for
+    /// itself, the relay is started again — and the session is left with
+    /// `sessionFlags == ["command"]`. Wispr's ⌘V is `keycode 9, flags
+    /// 0x20100000`, ⌘ stamped on the key **and on its release**, with no
+    /// `flagsChanged` behind it; with a tap running, `clearCommandAfterWisprPaste`
+    /// puts it back, and with no tap running there is nobody to. It self-heals on
+    /// Victor's next real keystroke, which is exactly why it survives a relaunch
+    /// unnoticed — and until it does, every gesture gated on `bare` refuses and
+    /// every *wait for a bare wire* loop spins its full allowance.
+    ///
+    /// So the first thing the relay does is read what the window server believes
+    /// and compare it against what is physically down. The comparison is the
+    /// whole safety of it: a man who launched the app with ⌥ held is holding ⌥,
+    /// and `keyState` says so.
+    ///
+    /// Called from `applicationDidFinishLaunching` after `SingleInstance.enforce`,
+    /// so the relaunch path — where the outgoing instance's last posted event is
+    /// the likeliest source of a stale flag — is covered by the same call.
+    static func clearStaleModifiersAtLaunch() {
+        var live = CGEventSource.flagsState(.combinedSessionState)
+        let stale = modifierKeys.filter { m in
+            live.contains(m.mask)
+                && !m.keys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
+        }
+        guard !stale.isEmpty else { return }
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.userData = Self.backButtonStamp
+        for m in stale {
+            // **What the keyboard is left in**, not nothing: a modifier he is
+            // really holding must survive the clearing of one he is not.
+            live.remove(m.mask)
+            // On the modifier's **own** keycode — a `flagsChanged` is a modifier
+            // transition, and one announced on any other key is not applied.
+            let key = m.keys[0]
+            guard let clear = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)
+            else { continue }
+            clear.type = .flagsChanged
+            clear.flags = live
+            clear.post(tap: .cghidEventTap)
+            Log.info("⌨️ a stale \(m.name) from before the relay started was put back down")
+        }
+    }
+
     private func trace(_ verdict: String, _ type: CGEventType, _ event: CGEvent) {
         guard Self.keyTrace else { return }
         let code = event.getIntegerValueField(.keyboardEventKeycode)

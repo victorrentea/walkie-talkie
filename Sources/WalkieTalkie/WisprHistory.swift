@@ -70,13 +70,32 @@ enum WisprHistory {
 
     /// The newest row, or nil when the file is missing or cannot be read.
     static func newest() -> Entry? {
+        read("from History order by rowid desc limit 1")
+    }
+
+    /// **One row by its rowid**, which `newest()` stops being able to answer the
+    /// moment a second dictation starts (2026-09-14).
+    ///
+    /// A sentence Victor cancelled during the settle keeps a claim on the
+    /// swallow until Wispr has finished with it, and a new gesture may open the
+    /// next dictation on top of that — so *is the cancelled row done yet* has to
+    /// be asked about **that** row and not about whatever is on top now, which
+    /// by then is the new dictation's. `status(of:)` compared against
+    /// `newest()` and silently answered `""` for ever.
+    static func entry(rowid: Int64) -> Entry? {
+        read("from History where rowid = \(rowid) limit 1")
+    }
+
+    /// The one query, with the column list stated once: two readers that select
+    /// different columns in the same order are a bug waiting for a schema change.
+    private static func read(_ tail: String) -> Entry? {
         lock.lock(); defer { lock.unlock() }
         guard let db = WisprFlowDB.open() else { return nil }
         let sql = """
             select rowid, coalesce(status, ''), coalesce(pastedText, ''), coalesce(formattedText, ''),
                    coalesce(e2eLatency, 0), coalesce(app, ''), coalesce(micDevice, ''),
                    coalesce(language, ''), coalesce(strftime('%s', timestamp), '0')
-            from History order by rowid desc limit 1
+            \(tail)
             """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
