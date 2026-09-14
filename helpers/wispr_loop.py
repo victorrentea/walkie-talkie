@@ -3655,11 +3655,23 @@ def scenario_wispr_dies_mid_settle(ctx) -> Result:
         focus.stop()
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
-            for name in ctx.options.get("wispr_windows_to_close") or []:
-                _osascript('tell application "System Events" to tell process "Wispr Flow" to '
-                           'tell window "%s" to click (first button whose subrole is '
-                           '"AXCloseButton")' % name, timeout=8)
-            time.sleep(1.0)
+            # **Retry until the window list says so.** A just-relaunched Wispr
+            # is not ready to be scripted the instant its window appears, and a
+            # single click that silently did nothing left the window up — which
+            # then failed the *next* scenario's preflight, so one scenario's
+            # untidiness became two scenarios' red rows.
+            for _attempt in range(6):
+                extra = [w for w in wispr_windows() if w != "Status"]
+                if not extra:
+                    break
+                for name in extra:
+                    _osascript('tell application "System Events" to tell process "Wispr Flow" to '
+                               'tell window "%s" to click (first button whose subrole is '
+                               '"AXCloseButton")' % name, timeout=8)
+                time.sleep(1.0)
+            left = [w for w in wispr_windows() if w != "Status"]
+            if left:
+                result.note("could not close Wispr's own window(s): %s — close by hand" % left)
         stand_down(relay)
         if victim and not relay.dry_run:
             _close_victim(victim)
