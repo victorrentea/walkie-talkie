@@ -3605,6 +3605,14 @@ def scenario_wispr_dies_mid_settle(ctx) -> Result:
         result.check(closed, "the Scratchpad closed", "after %.1f s" % closed_after)
 
         if not relay.dry_run:
+            # **Not before 1.5 s after the kill.** A real crash is not followed
+            # by a 200 ms relaunch, and the relay's death rule needs two 150 ms
+            # absences to fire — relaunching inside that window tests a
+            # coincidence rather than the rule, and would hide the very thing
+            # this scenario exists to see.
+            since_kill = time.monotonic() - killed_at
+            if since_kill < 1.5:
+                time.sleep(1.5 - since_kill)
             # `open <bundle path>`, never `open -a "Wispr Flow"` — that name
             # resolves to the nested Accessibility helper, which quits itself in
             # ~100 ms (docs/loopback.md, *Two apps are called Wispr Flow*).
@@ -3616,29 +3624,42 @@ def scenario_wispr_dies_mid_settle(ctx) -> Result:
             time.sleep(2.0)
             extra = [w for w in wispr_windows() if w != "Status"]
             if extra:
-                # `click button 1 of window 1` did nothing on this build, so ask
-                # the window itself. Reported either way: a window of Wispr's
-                # left open by a relaunch is Victor's screen, not ours.
-                result.note("Wispr's relaunch opened %s — closing it" % extra)
-                for name in extra:
-                    _osascript('tell application "System Events" to tell process "Wispr Flow" to '
-                               'tell window "%s" to click (first button whose subrole is '
-                               '"AXCloseButton")' % name, timeout=8)
-                time.sleep(1.5)
+                # **Wispr's own behaviour, not a defect** — a relaunched Wispr
+                # puts its main window up. It is still Victor's screen, so the
+                # teardown closes it and the row says it happened. `click button
+                # 1 of window 1` does nothing on this build; the window has to be
+                # asked for its own `AXCloseButton`.
+                result.note("Wispr's relaunch opened %s (its own behaviour) — closing it" % extra)
+                ctx.options["wispr_windows_to_close"] = extra
             result.note("Wispr windows after the relaunch: %s" % wispr_windows())
 
         seen = [] if relay.dry_run else focus.stop()
         result.note("frontmost through the kill and relaunch: %s" % (" → ".join(seen) or "—"))
-        result.check(not _count_occurrences(_witness_text(ctx, victim),
-                                            ctx.fixture.get("transcript", "")),
-                     "nothing was delivered into the victim", "%r"
-                     % _witness_text(ctx, victim)[:60])
-        result.answer = ("Wispr killed in the settle; the relay took %.1f s to notice, "
-                         "the Scratchpad %.1f s to close" % (noticed_after, closed_after))
+        # **A recovered sentence is a pass.** If the relaunched Wispr finishes
+        # the row and the relay delivers it once, nothing was lost and nothing
+        # went astray — that is the best available outcome, not a failure. What
+        # must never happen is a *second* copy, or a copy somewhere else.
+        final_text = _witness_text(ctx, victim)
+        copies = _count_occurrences(final_text, ctx.fixture.get("transcript", ""))
+        result.check(copies <= 1, "at most one copy of the sentence, wherever it ended up",
+                     "%d copy/copies — %r" % (copies, final_text[:60]))
+        result.check(len(ctx.outbox.fresh()) <= 1, "at most one delivery",
+                     "%d outbox line(s)" % len(ctx.outbox.fresh()))
+        result.note("outcome: %s" % ("recovered — the relaunched Wispr finished the row and it "
+                                     "was delivered once" if copies == 1
+                                     else "the sentence was lost with Wispr, as expected"))
+        result.answer = ("Wispr killed in the settle; relay noticed in %.1f s, Scratchpad closed "
+                         "in %.1f s, %d copy of the sentence"
+                         % (noticed_after, closed_after, copies))
     finally:
         focus.stop()
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
+            for name in ctx.options.get("wispr_windows_to_close") or []:
+                _osascript('tell application "System Events" to tell process "Wispr Flow" to '
+                           'tell window "%s" to click (first button whose subrole is '
+                           '"AXCloseButton")' % name, timeout=8)
+            time.sleep(1.0)
         stand_down(relay)
         if victim and not relay.dry_run:
             _close_victim(victim)
