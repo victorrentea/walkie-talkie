@@ -82,7 +82,7 @@ yields to `--label`).
   🔴 Listening... [HQ] (2m)
   [Terminal] petclinic@main
   📸 ×3
-  “  2+ public Order placeOrder(Cart…    ← the last quote, always
+  “  ×2 + public Order placeOrder(Cart…  ← the last quote, always
   [chrome] ×3 ⤢
   ```
 
@@ -90,8 +90,8 @@ yields to `--label`).
   seconds after the newest highlight, so the chip would not carry a line of somebody else's code
   beside the cursor for the rest of the sentence. Victor weighed that against what it took away —
   *"ultimul citat selectat, textul selectat trebuie întotdeauna arătat … în fața lui va apărea ori
-  unu plus, ori doi plus"* — and the text stays: `N+` counts the **earlier** quotes, the quote
-  itself is the last one caught. A count alone cannot answer the question he asks the row, which
+  unu plus, ori doi plus"* — and the text stays: `×N + ` counts the **earlier** quotes in the
+  tally's own notation, the quote itself is the last one caught. A count alone cannot answer the question he asks the row, which
   is whether the relay caught the right highlight.
 
   `×N`, **nothing at zero**; bound dictation says `×1` from the first frame (`publishShotCount`);

@@ -90,7 +90,7 @@
     "slug" : "replace-wispr-attached",
     "title" : "…and he attached things to it anyway",
     "when" : "The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.",
-    "width" : 311
+    "width" : 326
   },
   {
     "alpha" : 0,
@@ -207,7 +207,7 @@
     "slug" : "listening-selection-multi",
     "title" : "A highlight, four seconds later",
     "when" : "Every highlight ends here — the words have had their seconds and the row is the running count alone. Three of them, here.",
-    "width" : 314
+    "width" : 328
   },
   {
     "alpha" : 0.80000000000000004,
@@ -219,7 +219,7 @@
     "slug" : "listening-selection-caught",
     "title" : "The shutter caught a highlight",
     "when" : "For a beat after every side-button press that reads a new selection — including one in a Chrome page, which is where it used to read nothing at all.",
-    "width" : 311
+    "width" : 326
   },
   {
     "alpha" : 0.80000000000000004,

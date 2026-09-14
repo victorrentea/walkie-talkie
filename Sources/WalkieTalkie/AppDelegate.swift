@@ -1096,6 +1096,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // something subtly other than the row that documents it — including the
         // chip's burst, which is the only thing on screen that says it happened.
         hotkeys.onGestureUnbind = { [weak self] in self?.unbindTerminal() }
+        // **The end of a drag is when a highlight is finished** — see
+        // `HotkeyTap.onSelectionDragEnded`. On `selectionQueue`, which is the
+        // watcher's own serial queue, so the probe and the poll can never be
+        // reading and filing at the same time.
+        hotkeys.onSelectionDragEnded = { [weak self] in
+            self?.selectionQueue.async { self?.probeSelectionAfterDrag() }
+        }
         // The menu's copy of the spawn chord. The same call, so the window it opens
         // and the destination it arms cannot drift from the gesture's.
         status.onNewSession = { [weak self] in
@@ -4691,6 +4698,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// File one watched highlight. On `selectionQueue`.
+    /// **One full read at the end of a selection drag** — Accessibility, and the
+    /// synthetic ⌘C behind it when Accessibility answers nothing.
+    ///
+    /// This is the half of the watcher that could not be on a timer. `pollSelection`
+    /// uses `readQuiet` (Accessibility only) because a ⌘C every second would take
+    /// that key off him for the length of a sentence — and Accessibility is
+    /// exactly what IntelliJ's editor and WhatsApp do not answer, which is what
+    /// he reported: *"Am selectat text în IntelliJ, nu merge. Am selectat text în
+    /// WhatsApp, nimic."* Chrome and Terminal answered, which is why it looked
+    /// intermittent rather than absent.
+    ///
+    /// A drag's release is once per selection and the selection is complete by
+    /// definition, so the ⌘C is affordable here and the three settling reads are
+    /// not needed — the other half of the complaint, that a highlight *"intră
+    /// greu, cu întârziere"*.
+    ///
+    /// **In Replace Wispr too**, on the 2026-09-09 precedent that put the
+    /// shutter's probe there: the objection was always to the *automatic* probe
+    /// fired with no subject behind it, and a drag he made with his own hand is
+    /// as deliberate as a shutter press.
+    private func probeSelectionAfterDrag() {
+        stateLock.lock()
+        let opened = dictationStartedAt
+        stateLock.unlock()
+        guard let opened = opened else { return }
+        guard let text = SelectionCapture.read(), !text.isEmpty else { return }
+        // `polledSeen` is the watcher's, and it is the right set: a highlight the
+        // poll already filed must not arrive twice because he let the button go.
+        guard !polledSeen.contains(text) else { return }
+        take(text, firstSeen: Date(), opened: opened, how: "dragged")
+    }
+
     private func take(_ text: String, firstSeen: Date, opened: Date, how: String) {
         polledSeen.insert(text)
         polledSettling = nil

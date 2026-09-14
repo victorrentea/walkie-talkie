@@ -1579,9 +1579,15 @@ private let frontLabel = NSTextField(labelWithString: "")
             // gone there was no way to see *which* highlight the relay had, only
             // how many, and a count is no use when the question is whether it
             // caught the right one. `1+` is one earlier quote and this one.
-            // The space is in the head, not the join: `applySelectionText`
-            // concatenates the two and an empty head must not indent the quote.
-            selectionHead = selectionCount > 1 ? "\(selectionCount - 1)+ " : ""
+            // **`×2 + `**, in the tally's own notation (2026-09-14, Victor:
+            // *"înainte de numărul de citate deja capturate … aș mai vrea să am
+            // semnul X … apoi spațiu, plus și spațiu și textul"*). The `×N` is
+            // what every other row in the icon column says for a count, so the
+            // quoted row saying `2+` was the one place the same idea was written
+            // a different way. The space is in the head, not the join:
+            // `applySelectionText` concatenates the two and an empty head must
+            // not indent the quote.
+            selectionHead = selectionCount > 1 ? "×\(selectionCount - 1) + " : ""
             selectionBody = Self.fitHead(singleLine(selection), 34)
             applySelectionText()
             // Off the label rather than the font: the mark is in the icon column

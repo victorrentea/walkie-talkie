@@ -974,7 +974,47 @@ final class HotkeyTap {
 
     /// When the left button went down, or 0 while it is up. Written and read only
     /// from the tap callback, which is one thread.
+    /// **Where the left button went down**, so a release can tell a click from a
+    /// drag — see `onSelectionDragEnded`. Same thread as `leftDownAt`, no lock.
+    private var leftDownPoint: CGPoint = .zero
+    /// Further than this between press and release and it was a drag, not a
+    /// click. Four points: a hand resting on a mouse moves one or two.
+    private static let selectionDragSlop: CGFloat = 4
+
+    /// **The left button was released after a drag, during a dictation** — which
+    /// is what selecting text with a mouse looks like from here (2026-09-14).
+    ///
+    /// Victor: *"Am selectat text în IntelliJ, nu merge. Am selectat text în
+    /// WhatsApp, nimic."* The watcher polls Accessibility once a second and
+    /// `AXSelectedText` is simply not answered by IntelliJ's editor or by
+    /// WhatsApp — the ⌘C fallback that does reach them belongs to the shutter,
+    /// because a synthetic ⌘C every second for the length of a sentence would
+    /// take that key away from him for the whole dictation.
+    ///
+    /// The release of a drag is the one moment that is neither: the selection is
+    /// **complete** by definition, and it happens once per selection rather than
+    /// once per second. It also answers the other half of what he reported — the
+    /// watcher's three settling reads are why a highlight *"intră greu, cu
+    /// întârziere"*.
+    var onSelectionDragEnded: (() -> Void)?
+
     private var leftDownAt: CFTimeInterval = 0
+    /// Both left-up sites go through here, because they are the same fact and a
+    /// second copy is a second thing to forget. **Nothing is swallowed and
+    /// nothing blocks**: the callback is handed to a global queue, because this
+    /// runs inside the event tap and a probe that reaches for the pasteboard on
+    /// the tap's own thread would stall every click on the Mac.
+    private func noteLeftRelease(at point: CGPoint) {
+        let wasDown = leftDownAt > 0
+        let from = leftDownPoint
+        leftDownAt = 0
+        leftDownPoint = .zero
+        guard wasDown, dictating else { return }
+        let moved = hypot(point.x - from.x, point.y - from.y)
+        guard moved > Self.selectionDragSlop else { return }
+        DispatchQueue.global().async { [weak self] in self?.onSelectionDragEnded?() }
+    }
+
     private var leftIsHeld: Bool { leftDownAt > 0 && CACurrentMediaTime() - leftDownAt >= Self.chordHoldSeconds }
 
     /// When the right button went down, or 0 while it is up — the mirror of
@@ -1380,9 +1420,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             switch type {
             case .leftMouseDown:
                 leftDownAt = CACurrentMediaTime()
+                leftDownPoint = event.location
                 return Unmanaged.passUnretained(event)
             case .leftMouseUp:
-                leftDownAt = 0
+                noteLeftRelease(at: event.location)
                 return Unmanaged.passUnretained(event)
             case .rightMouseDown, .rightMouseUp:
                 return Unmanaged.passUnretained(event)
@@ -1408,10 +1449,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // is how the Mac is used.
             if type == .leftMouseDown {
                 leftDownAt = CACurrentMediaTime()
+                leftDownPoint = event.location
                 return Unmanaged.passUnretained(event)
             }
             if type == .leftMouseUp {
-                leftDownAt = 0
+                noteLeftRelease(at: event.location)
                 return Unmanaged.passUnretained(event)
             }
 
