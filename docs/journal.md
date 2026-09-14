@@ -37,6 +37,8 @@ The journal contradicts itself over time, because it was written as things chang
 - *The folder menu* — hardcoded six, below-left — pinned + recent since 2026-09-08; below-right since 2026-09-06
 - *The spawn's flight leaves the dialog* — `reversed:`, outline — the spawn flight carries pixels and runs forwards since 2026-09-09 (*The little terminal grows out of the dialog*)
 - *Autosend* / *Replace Wispr* — “deliberately not persisted” — both persist since 2026-09-07
+- *Replace Wispr*, *Every row has an icon* — “one menu tick”, the `🔼` legend, the `Replace WisprFlow` row — **the row is gone since 2026-09-14**, replaced by the `Engine` picker (*The engine is a choice with two names on it*); the mode, its flag and the forward button are unchanged
+- *The menu says what the model costs* — the disabled `Local Whisper — 1.6 GB RAM` row at the bottom of the menu — the same string is the `Engine` row's title since 2026-09-14
 - **The night of 2026-09-13/14 supersedes a great deal of the same night.** The wrap changed shape four times in eight hours and the earlier sections are kept because the reasoning is the evidence; *The night the wrap found its shape* is the one that holds. Specifically:
   - *The loopback closes: gestures, state, a sink and a delivery field* — “the sink is going to become the wrap itself” — **the sink is the emergency mode**, rejected as the primary path the same evening
   - *The wrap is Wispr's own Scratchpad* — “a new note per dictation”, “no ⌘V posted”, “focus never moved” — all three are wrong: Wispr **appends** with `source = typed`, it **does** post a ⌘V (aimed at its own note), and the window **takes the key focus**
@@ -144,6 +146,8 @@ The journal contradicts itself over time, because it was written as things chang
       - [The star](#the-star)
       - [`WT_SHOOT_MENU` — because this panel cannot be photographed either](#wtshootmenu--because-this-panel-cannot-be-photographed-either)
   - [Replace Wispr: the relay as a way to type](#replace-wispr-the-relay-as-a-way-to-type)
+  - [The engine is a choice with two names on it (2026-09-14)](#the-engine-is-a-choice-with-two-names-on-it-2026-09-14)
+  - [The front is a third thing Wispr takes, and the only one that can be given back (2026-09-14, 06:00)](#the-front-is-a-third-thing-wispr-takes-and-the-only-one-that-can-be-given-back-2026-09-14-0600)
     - [What a caret dictation carries (2026-09-08)](#what-a-caret-dictation-carries-2026-09-08)
     - [The ring round the pointer, when the destination is not a place (2026-09-09)](#the-ring-round-the-pointer-when-the-destination-is-not-a-place-2026-09-09)
       - [Spokes: the halo stylised with lines (2026-09-10, in progress)](#spokes-the-halo-stylised-with-lines-2026-09-10-in-progress)
@@ -9491,3 +9495,136 @@ calling it what it is: *No speech was heard*.
 
 Finding 4 is the runner's: a spawn scenario left its binding and its Terminal
 window behind.
+
+## The engine is a choice with two names on it (2026-09-14)
+
+`Replace WisprFlow` is off the menu. In its place is one row that says which
+recogniser is listening and opens the list of both:
+
+```
+  Engine: Wispr Flow…
+       ✓ Wispr Flow
+         whisper-large-v3-turbo — 1.6 GB RAM
+```
+
+**What the checkbox could not say.** Victor: *"în meniu nu mai trebuie să fie un
+checkbox «Wispr» sau nu, ci un submeniu din care să aleg modelul de utilizat …
+să fie acolo «Wispr Flow», respectiv numele modelului local MLX … aș vrea o
+distincție mai clară decât «da» sau «nu» pentru Wispr. Așa se vede și numele
+modelului, dacă mă întreabă cineva ce folosesc."* A tick names one engine and
+leaves the other one unnamed, and the unnamed one is precisely the half he is
+asked about in a room — *what are you dictating with?* has an answer with a
+version number in it, and the menu was the one place that answer could live.
+
+The engine had in fact never been pickable at all. It was `WT_SOURCE=whisper` or
+a `dictationSource` key written by hand; a doc comment in `AppDelegate` had been
+promising "the menu's *Dictation source* row" since 2026-09-12 to a menu that
+had no such row. The model's **name** was in the menu — a disabled readout at the
+bottom, `whisper-large-v3-turbo — 1.6 GB RAM` — which is how the two rows ended
+up being one: the readout is now the picker's second line, and its title when it
+is the one running.
+
+**Why that row and not another.** `Replace WisprFlow` reads, to the hand on the
+mouse, as *Wispr Flow: yes or no* — it is named after the app it competes with,
+which is exactly the question the new row answers, in the place he went looking
+for it. It is not the same question: the mode it ticked is *where a caret
+dictation goes*, and that mode is untouched — the forward side button still opens
+a dictation that is pasted at the caret, `AppDelegate.replaceWispr` still gates
+it, and the preference moved from the row to `AppDelegate.replaceWisprKey` so it
+still survives a launch. What the mode lost is its tick, and with it its mouse-5
+legend — the menu is the only place a gesture is written down in this app, so
+that is a real cost, taken deliberately on his instruction.
+
+**It pops up, it is not a submenu.** The same trap `Rebind to…` paid for on
+2026-09-10: one disclosure arrow makes AppKit reserve the gutter on every row of
+the menu and the gesture column runs away with it (*"a fugit toată coloana de
+meniuri din cauza >"*). The list is built on the click and `popUp`'d at the
+pointer, dispatched — a menu put up inside the closing of the menu it came from
+lands underneath it and takes no clicks.
+
+**The switch is five assignments and a re-wire.** `AppDelegate.setEngine` nils the
+old source's five callbacks, assigns `source`, writes the preference and re-runs
+`wireDictationSource()`. Nothing else in the app is told, because nothing else in
+the app knows there is more than one answer — which is what `DictationSource` was
+for (*One interface, because a second branch is how the first one rots*). This is
+the first time that protocol has been asked to do the thing it was written for.
+
+Two things it does that are not obvious:
+
+- **It refuses with a sentence in flight** — `listening`, `settling`,
+  `speculative` or `source.isRecording`. A source swapped between
+  `didStopListening` and `didTranscribe` takes the words with it: the old one is
+  left holding a transcript with nobody wired to receive it, and the settle then
+  runs out over a sentence that was already spoken. The menu is told what is
+  *actually* running either way, so a refused pick cannot leave a tick beside an
+  engine that is not listening. The tick is drawn from the app's answer and never
+  from the click, for that one reason.
+- **Picking the local model brings its weights up on the spot.**
+  `LocalWhisperSource.prepare()` is deliberately a no-op — it is a fallback and
+  nothing should pay ten seconds for it at launch — but choosing it from the menu
+  *is* the gesture that asks for it. A first dictation answered with `the local
+  model is still loading` would read as the switch having failed.
+
+`GET /engine` answers `engine` (`wispr` / `whisper`) beside the display name, so
+a test can assert the pick landed without matching a string meant for the eye.
+
+
+## The front is a third thing Wispr takes, and the only one that can be given back (2026-09-14, 06:00)
+
+Victor, after a morning of caret dictations out of a terminal: *"in timpul dictarii la caret cu
+wisprflow, am pierdut de 3 ori focusul pe aplicatia pe care eram. fix cand wisprflow pus sa
+transcrie. eram intrun terminal si focusul a fost pierdut de acolo. a trebuit sa dau click"*.
+
+**The log names the thief, twice, in the same second as this app's own chord.** Both losses are in
+`relay.log` under a `🎙️ forward button — a dictation at the caret`:
+
+```
+05:56:01  🗒️ scratchpad chord UP / DOWN / UP — 79
+05:56:01  ⌨️ the front app changed since the chord — his keys go to pid 92966, not 46446
+05:58:38  🗒️ scratchpad chord UP / DOWN / UP — 79
+05:58:38  ⌨️ the front app changed since the chord — his keys go to pid 92966, not 46446
+```
+
+46446 is Terminal. **92966 is `com.electron.wispr-flow`** — Wispr's own application, not the
+`accessibility-mac-app` helper that owns the Scratchpad and posts the ⌘V. So it is not the
+transcription taking the front and it is not Wispr's floating pill: it is the **close toggle the
+wrap posts at the stop gesture**, which Wispr answers by activating itself. Nothing was putting the
+front back afterwards, so he clicked his way back by hand — three times, which is how it got
+reported.
+
+**This is a third, separate loss, and the first one that can be undone.** The two already written
+down are the *key window* (`The keyboard, and the limit of what can be done about it`) and the
+*keystrokes in the tail* (`The measured truth about his keystrokes`). Both are Wispr's
+**non-activating** panel taking key focus while the victim stays frontmost, and *Three ways to take
+the keyboard back* closes that door: `activate` says *be frontmost* and the app already is. **The
+front is the opposite case.** When Wispr's application activates, the victim really is behind —
+`activate` has something left to say, and so does `AXRaise` on the window he was typing in. The
+line in `dictation-source.md` that says the theft cannot be undone is about the key window and
+stays true; it must not be read as *nothing about focus can be repaired*.
+
+**It hangs off the close, not off a watcher, and that is a safety decision.** Every close in
+`WisprScratchpad` — the dictation's, the precondition's at the chord, the idle sweep's orphan —
+now funnels through `finishEnsure` → `onCloseFinished`, and `WisprFlowSource.putTheFrontBack` is
+what listens. The alternative, reacting to `didActivateApplication` the moment Wispr comes forward,
+was rejected: it would hand the front back **while Wispr is still writing its note**, and Wispr
+picks its insertion target at the end — that is the failure `WisprHistory` exists because of, with
+the sentence landing in his document instead. After the close, the note is written and the window
+is gone, so there is nothing left to aim anywhere.
+
+What it will not do:
+
+- **Nothing at all unless Wispr is frontmost right now.** If he has already clicked back himself,
+  or never lost it, the whole thing is one `frontmostApplication` read.
+- **It gives the front to the app he was in when Wispr took it** (`frontBeforeLast`), not to the
+  one that was in front at the chord — he may have clicked elsewhere mid-sentence, and putting him
+  back into the window he left would be a second theft dressed as a fix. `focusPid` is the
+  fallback, and a dead pid is skipped (`kill(pid, 0)`).
+- **It stops rather than fight.** Five handbacks in a minute and it leaves the front where it is
+  and says so: Wispr and the relay each activating in answer to the other is a fight the man
+  watching loses either way.
+- **Twice per close, at +0.45 s and +1.5 s**, because the toggle's effect lands when Wispr gets to
+  it and not when the chord goes out.
+
+The handback logs under `🪟` and says whether it worked, because *the focus owner is still Wispr*
+is a thing this app has written before and it has to be as easy to see when it is a front as when
+it was a key window.

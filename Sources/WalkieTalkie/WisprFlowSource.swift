@@ -195,6 +195,23 @@ final class WisprFlowSource: DictationSource {
     /// because by the time it is wanted the answer has already been spoiled.
     private var lastFrontPid: pid_t = 0
 
+    /// **The app that was in front before the one that is in front now.**
+    ///
+    /// Whose front Wispr took is a different question from whose front it was at
+    /// the chord: he may have clicked into another window while he was talking,
+    /// and putting him back into the one he left would be a second theft dressed
+    /// as a fix. This is the first answer `putTheFrontBack` tries; `focusPid` is
+    /// the fallback.
+    private var frontBeforeLast: pid_t = 0
+
+    /// When the front was last given back, newest last — a rate limit and
+    /// nothing more. Wispr and the relay each activating in answer to the other
+    /// is a fight the man watching loses either way, so after
+    /// `frontHandbackLimit` inside `frontHandbackWindow` it stops.
+    private var frontHandbacks: [Date] = []
+    private static let frontHandbackLimit = 5
+    private static let frontHandbackWindow: TimeInterval = 60
+
     /// For `GET /test/state` — the flag above, which is not `startedMode`.
     var isIntercepting: Bool { intercepting }
 
@@ -524,6 +541,24 @@ final class WisprFlowSource: DictationSource {
             return self.state.phase == .idle && !self.capturing
                 && !self.isRecording && !self.speculative
         }
+        // **And whose front it is, given back after every close.** The close is
+        // a chord posted at Wispr and Wispr answers it by activating itself —
+        // see `putTheFrontBack`. A beat is left for the activation to land,
+        // because the chord is posted on its own queue and the front changes
+        // after it, not with it.
+        //
+        // **Twice, because the activation is not on the chord's clock.** The
+        // close is a toggle whose effect lands when Wispr gets to it; the
+        // second look costs one `frontmostApplication` read on a run where the
+        // first one already put him back, and catches the run where Wispr came
+        // forward a second after its own window went.
+        WisprScratchpad.onCloseFinished = { [weak self] reason, _ in
+            for delay in [0.45, 1.5] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self?.putTheFrontBack(after: reason)
+                }
+            }
+        }
         // Whose keyboard it is, kept current — see `lastFrontPid`.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -531,6 +566,7 @@ final class WisprFlowSource: DictationSource {
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                       app.bundleIdentifier != Bundle.main.bundleIdentifier,
                       app.processIdentifier > 0 else { return }
+                self?.frontBeforeLast = self?.lastFrontPid ?? 0
                 self?.lastFrontPid = app.processIdentifier
                 // The tap needs this too, and must not ask AppKit on its own
                 // thread — see `HotkeyTap.noteFrontmost`.
@@ -725,6 +761,76 @@ final class WisprFlowSource: DictationSource {
             }
         }
         hotkeys.armKeyRedirect(to: pid)
+    }
+
+    // MARK: - The front of the screen, and who took it
+
+    /// **Wispr's application comes to the front when the wrap closes its note
+    /// window, and the front is his.** Victor, 2026-09-14: *"in timpul dictarii
+    /// la caret … am pierdut de 3 ori focusul pe aplicatia pe care eram. fix
+    /// cand wisprflow pus sa transcrie"*.
+    ///
+    /// The log names the thief rather than guessing at it: on both of the caret
+    /// dictations he lost — 05:56:01 and 05:58:38, out of Terminal — the line
+    /// `the front app changed since the chord — his keys go to pid 92966, not
+    /// 46446` lands in the same second as `scratchpad chord DOWN/UP`, and 92966
+    /// is `com.electron.wispr-flow`. It is the close toggle doing it, not the
+    /// transcription, and nothing was putting the front back: he clicked his way
+    /// back by hand, three times.
+    ///
+    /// **This is a different loss from the one `dictation-source.md` calls the
+    /// theft, and unlike that one it can be undone.** The theft takes the *key
+    /// window* while the victim stays frontmost — `activate` has nothing to say
+    /// to it, which is what "the theft cannot be undone" means. This takes the
+    /// *front*, so the victim really is behind and activating it is exactly the
+    /// right sentence.
+    ///
+    /// **Only after the close, never during the sentence.** Handing the front
+    /// back while Wispr is still writing its note would be aiming Wispr's own
+    /// insertion at his document — the failure `WisprHistory` exists because of.
+    /// So it hangs off `WisprScratchpad.onCloseFinished`, which fires when the
+    /// wrap is finished with the window, and it costs him nothing that the
+    /// accepted "a second or two of the keyboard" did not already cost.
+    private func putTheFrontBack(after reason: String) {
+        guard let thief = NSWorkspace.shared.frontmostApplication,
+              thief.bundleIdentifier?.hasPrefix("com.electron.wispr-flow") == true
+        else { return }   // he is wherever he is; the close cost him nothing.
+        let now = Date()
+        frontHandbacks.removeAll { now.timeIntervalSince($0) > Self.frontHandbackWindow }
+        guard frontHandbacks.count < Self.frontHandbackLimit else {
+            Log.error("🪟 Wispr Flow is in front again after \(reason) — leaving it, \(Self.frontHandbackLimit) handbacks in a minute is a fight, not a fix")
+            return
+        }
+        let mine = ProcessInfo.processInfo.processIdentifier
+        let candidates = [frontBeforeLast, focusPid ?? 0, lastFrontPid]
+        guard let victim = candidates.first(where: { pid in
+            pid != 0 && pid != mine && pid != thief.processIdentifier
+                && kill(pid, 0) == 0
+                && NSRunningApplication(processIdentifier: pid)?
+                    .bundleIdentifier?.hasPrefix("com.electron.wispr-flow") != true
+        }), let app = NSRunningApplication(processIdentifier: victim) else {
+            Log.error("🪟 Wispr Flow took the front at \(reason) and there is nobody to give it back to")
+            return
+        }
+        frontHandbacks.append(now)
+        let name = app.localizedName ?? "pid \(victim)"
+        app.activate(options: [])
+        // **The window, not only the application** — the same pair `onKeyStolen`
+        // sets, plus the raise, because an application that comes forward with
+        // no main window leaves him looking at a front with no caret in it.
+        if let w = Self.focusedWindow(of: victim) {
+            AXUIElementPerformAction(w, kAXRaiseAction as CFString)
+            AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
+            AXUIElementSetAttributeValue(w, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let front = NSWorkspace.shared.frontmostApplication
+            if front?.processIdentifier == victim {
+                Log.info("🪟 the close took the front to Wispr Flow (\(reason)) — \(name) has it back")
+            } else {
+                Log.error("🪟 the close took the front to Wispr Flow (\(reason)) and it would not go back to \(name) — \(front?.localizedName ?? "?") is in front")
+            }
+        }
     }
 
     /// **Close it again when the sentence is over, and check that it went.**

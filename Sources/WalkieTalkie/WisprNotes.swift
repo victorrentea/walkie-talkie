@@ -372,6 +372,7 @@ enum WisprScratchpad {
         guard windowIsOpen() else { return DispatchQueue.main.async { done?(true) } }
         closingNow = true
         closingReason = reason
+        closingReasonForNote = reason
         ensureStep(1, reason: reason, parked: isWhereItWasParked(), done)
     }
 
@@ -423,8 +424,19 @@ enum WisprScratchpad {
     private static func finishEnsure(_ gone: Bool, _ done: ((Bool) -> Void)?) {
         closingNow = false
         closingReason = ""
+        let reason = closingReasonForNote
+        closingReasonForNote = ""
         done?(gone)
+        onCloseFinished?(reason, gone)
     }
+
+    /// **Every close this app asks for ends here**, whichever caller asked and
+    /// whether or not the window went — the dictation's, the precondition's at
+    /// the chord, and the idle sweep's orphan. It exists because the close is a
+    /// chord posted at Wispr, and posting it **brings Wispr's own application to
+    /// the front**: see `WisprFlowSource.putTheFrontBack`, which is what listens.
+    static var onCloseFinished: ((_ reason: String, _ gone: Bool) -> Void)?
+    private static var closingReasonForNote = ""
 
     private static var closingNow = false
     private static var closingReason = ""

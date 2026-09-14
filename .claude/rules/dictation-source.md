@@ -20,6 +20,12 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   a settle written against that cannot tell *the words are late* from *the words are lost*. The
   status string is the recogniser's own vocabulary and nothing outside the source may branch on
   it. → journal: *Three witnesses instead of one (2026-09-13, evening)*
+- **Which source is live is a menu row since 2026-09-14** — `Engine`, replacing `Replace
+  WisprFlow`. `AppDelegate.setEngine` nils the old source's five callbacks, assigns `source`, writes
+  `dictationSource` and re-runs `wireDictationSource()`; that is the whole switch, because nothing
+  downstream knows there is more than one answer. It **refuses while a sentence is in flight** and
+  tells the menu what is actually running either way. `WT_SOURCE=whisper` still wins for one run.
+  → `.claude/rules/menu-bar.md`, *The Engine row*
 - **`isRecording` is the source's; `listening` is the relay's.** The first answers *is a microphone
   open*, the second *does this app have a sentence in flight*. They are not the same instant and
   every gate in `AppDelegate` means the second.
@@ -443,6 +449,18 @@ is a thing he is speaking, not typing, through.
 - **The theft cannot be undone.** Re-activating the victim does nothing (`activate` says *be
   frontmost* and it already is); `AXMain` / `AXFocused` on the window he was typing in logs
   `the focus owner is still Wispr`.
+- **The FRONT is a different loss and it is given back** (2026-09-14). The bullet above is about
+  the *key window*, which cannot be recovered because the victim never stopped being frontmost.
+  The **close chord** posted at the stop is another matter: Wispr answers it by activating
+  `com.electron.wispr-flow`, so the victim really goes behind — measured on two caret dictations
+  Victor lost out of Terminal, `the front app changed since the chord — his keys go to pid 92966,
+  not 46446`, in the same second as `scratchpad chord DOWN/UP`. Every close now funnels through
+  `WisprScratchpad.onCloseFinished` and `WisprFlowSource.putTheFrontBack` hands the front back:
+  only when Wispr is frontmost at that moment, to `frontBeforeLast` (the app he was in when it was
+  taken, not the one from the chord), `activate` plus `AXRaise`/`AXMain`/`AXFocused`, at +0.45 s
+  and +1.5 s, five per minute at most, logged under `🪟`. **Never on
+  `didActivateApplication` during the sentence** — handing the front back while Wispr is still
+  writing its note aims Wispr's own insertion at his document.
 
 ### The sink, and everything the wrap is not
 
