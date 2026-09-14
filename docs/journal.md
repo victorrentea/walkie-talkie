@@ -9747,3 +9747,56 @@ The rewrite is unit-tested standalone (the `ShotMarker` half compiles against a 
 inline substitution inside a Romanian sentence, the digit form Wispr's `pastedText` column
 produces, both kinds in one sentence in order, the corpus form, a marker naming a highlight that
 was never filed, and ordinary prose (`the selected text below is fine`) left untouched.
+
+## The Dock tile restarts it (2026-09-14)
+
+Victor: *"When I open the walkie-talkie again from the sidebar in macOS, it should restart it
+rather than refocus on it. Instead of quitting and restarting, I should just click on the icon
+on the left that would restart the application."*
+
+The tile has been there since 2026-09-07 as the **escape hatch** — ⌥-click → Force Quit, the
+argument that won `.regular` over `.accessory`. What it has never had is a use for an ordinary
+click. The reopen it answers with is *make the app active and show its windows*, and there is
+nothing here to show: the overlay is a `.nonactivatingPanel` that is already on screen whatever
+is frontmost, so the default gesture is a menu bar appearing and nothing else. Meanwhile the
+thing the tile is actually next to in his day — the restart after a build — was a terminal, a
+script and a folder to be in.
+
+So `applicationShouldHandleReopen` is the restart, and returns `false`: the app is on its way
+out and a flash of a frontmost relay is exactly the refocus he asked to be rid of.
+
+**It is `relay-restart.sh` from the inside, and it keeps both of that script's promises.**
+
+- **A dictation in flight is a stop, not a thing to be got past.** The script waits on
+  `bound-tty` saying `listening` and then sleeps six seconds blind, because from outside the
+  process that is the whole of what can be known. Inside it, the same question is exact:
+  `listening || settling || phase.isWaitingForWords || overlay.isHoldingPrompt` — the microphone,
+  the recogniser still answering, and the panel with a Send button under it. The click says
+  `↻ restarting after this sentence` once and then waits with no ceiling, because a sentence ends
+  when Victor ends it. Measured with a faked microphone: the reopen at 15:14:12 logged the wait
+  and left the pid alone, and the restart went through in the same second the dictation was
+  cancelled.
+- **A binding is a thing to put back.** The tty cannot travel in `bound-tty` — that file is
+  cleared at quit *and* at launch — so it is parked in `~/.walkie-talkie/.rebind` (beside
+  `.replacing`, under `--home` with everything else) and taken exactly once by the instance that
+  comes up, time-boxed at 60 s so a relaunch that never happened cannot point tomorrow's relay at
+  a window he closed last night. The restore is `bind(tty:)` off the main thread with three
+  attempts a second apart, `showBound` and no flight, no toggle, no flash — a binding being
+  restored, not a gesture pointing at the window in front.
+
+**`open -g -n`, not a `pkill` and a launch.** The `-n` is `main.swift`'s own relaunch argument
+and it is doing the same work here: LaunchServices starts the replacement, so the privacy grants
+stay keyed to the bundle identifier, and `SingleInstance.enforce()` in the newcomer stands this
+instance down *and* writes `.replacing`, so `applicationWillTerminate` does not announce a
+`session_end` at the agent watching the outbox. Killing ourselves first would only add a window
+in which no relay is running. The `-g` is the half that is specific to this gesture: a Dock click
+activates the app on the way in — the Dock's doing, not the app's — and `open` would hand the
+front to the replacement as well, ending a restart with Walkie Talkie sitting in front of the
+terminal he was typing in. Measured: after the restart the frontmost app was still Code, and the
+`/target` route answered `bound: true, ttys018`.
+
+The arguments travel with it, so a `--home` or `--label` instance restarts as itself.
+
+Reachable from a desk without touching the mouse, which is how all of the above was measured:
+`open "/Applications/Walkie Talkie.app"` on the running app sends the same reopen event the Dock
+does. 1.3 s from the click to a re-bound relay, three times over.

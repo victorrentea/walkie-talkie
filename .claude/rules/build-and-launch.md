@@ -3,6 +3,7 @@ paths:
   - "build-app.sh"
   - "Sources/WalkieTalkie/main.swift"
   - "Sources/WalkieTalkie/SingleInstance.swift"
+  - "Sources/WalkieTalkie/Relaunch.swift"
   - "assets/**"
 ---
 
@@ -194,6 +195,36 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   either way.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
 
+## A click on the Dock tile is a restart (2026-09-14)
+
+- **`applicationShouldHandleReopen` restarts the app and returns `false`** (Victor: *"When I open
+  the walkie-talkie again from the sidebar in macOS, it should restart it rather than refocus on
+  it"*). There was nothing to refocus *to* — the overlay is a `.nonactivatingPanel` already on
+  screen whatever is frontmost — and the tile's other two uses are ⌥-click → Force Quit and the
+  restart after a build. `false` declines the default reopen, because the app is on its way out.
+  → journal: *The Dock tile restarts it (2026-09-14)*
+- **It obeys both halves of the 2026-09-09 rule, exactly**, and it can answer the first one
+  properly rather than by sleeping: `listening || settling || phase.isWaitingForWords ||
+  overlay.isHoldingPrompt` is the six blind seconds the script sleeps, asked. The click flashes
+  `↻ restarting after this sentence` once and waits with **no ceiling**.
+  → journal: *The Dock tile restarts it (2026-09-14)*
+- **The tty travels in `~/.walkie-talkie/.rebind`, not in `bound-tty`** — that file is cleared at
+  quit *and* at launch. Written by `Relaunch.stashBinding` before anything stands the instance
+  down, taken exactly once by the instance that comes up, time-boxed at 60 s. The restore is
+  `bind(tty:)` off the main thread, three attempts a second apart, no toggle, no flight, no flash.
+  → journal: *The Dock tile restarts it (2026-09-14)*
+- **`open -g -n`, never a `pkill` and a launch.** `-n` is `main.swift`'s own argument: LaunchServices
+  starts the replacement, so the grants stay keyed to the bundle id, and `SingleInstance.enforce()`
+  in the newcomer both kills this instance and writes `.replacing`, so no `session_end` reaches the
+  agent. **`-g` is load-bearing**: a Dock click activates the app on the way in, and without it
+  `open` hands the front to the replacement as well — a restart that ends with the relay sitting in
+  front of the terminal he was typing in. The process arguments travel with it, so a `--home`
+  instance restarts as itself.
+  → journal: *The Dock tile restarts it (2026-09-14)*
+- **Testable from a desk: `open "/Applications/Walkie Talkie.app"` on the running app sends the
+  same reopen event the Dock does.** 1.3 s from the click to a re-bound relay.
+  → journal: *The Dock tile restarts it (2026-09-14)*
+
 ## Do not
 
 - Do not launch `/Applications/Walkie Talkie.app` by its executable path, and do not remove
@@ -205,3 +236,5 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - Do not turn `adoptLegacyHome` into a rename-if-absent, and do not let it run under `--home`.
 - Do not restart the installed app while `bound-tty` says `listening`, and do not restore a
   binding with a one-second curl timeout.
+- Do not let the Dock tile's restart take the front: `open` without `-g` leaves the replacement
+  frontmost over whatever he was typing in.

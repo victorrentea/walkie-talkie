@@ -53,6 +53,12 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   while a dictation is running** — *"niciodată să nu mai dai restart la Walkie Talkie … în
   dictare — oprești și aștepți să se termine dictarea, să se livreze, abia apoi faci restart"*.
   A `.keystroke` target has no tty and cannot be restored; the script says so.
+- **A click on the Dock tile restarts it** (2026-09-14) — `applicationShouldHandleReopen` →
+  `Relaunch`, not a refocus: there is nothing to come forward to. It keeps both of the script's
+  promises from inside the process — a sentence in flight is waited out (`↻ restarting after this
+  sentence`, no ceiling) and the tty is put back through `~/.walkie-talkie/.rebind` — and relaunches
+  with `open -g -n` so the replacement does not land in front of him. `open "/Applications/Walkie
+  Talkie.app"` on the running app sends the same reopen event, which is how it is tested.
 - **Never launch the installed app by its executable path.** `open "/Applications/Walkie
   Talkie.app"`, never `…/Contents/MacOS/Walkie Talkie`. macOS keys TCC grants to the bundle id
   only for processes it launched itself; a path launch is filed as a *second* app with the same
@@ -107,7 +113,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 ## The overlay's states are photographed
 
 - **No change to the overlay is finished until `./docs/shoot-overlay-states.sh` has been run.**
-  It shoots all 40 states through `RelayWindow.snapshot` (always 2×) and regenerates
+  It shoots all 41 states through `RelayWindow.snapshot` (always 2×) and regenerates
   `docs/overlay-states.html`. A new state is a new `Shot` in `OverlayStates.swift`; a state that
   goes away is a deleted one. **Never edit `docs/overlay-states.html` by hand.** The script
   stands the installed app down and puts it back.

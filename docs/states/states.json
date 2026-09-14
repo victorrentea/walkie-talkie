@@ -342,6 +342,18 @@
     "width" : 312
   },
   {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
+    "image" : "flash-restarting.png",
+    "note" : "The one flash that is a **promise rather than an outcome**: the restart has not happened and will not until the words have been delivered, however long that takes. Said once and never repeated — a click he has already made does not need a countdown, and the restart announces itself again (`↻ restarting…`) the moment it actually goes.",
+    "shape" : "flash",
+    "slug" : "flash-restarting",
+    "title" : "Flash — the Dock tile was clicked mid-sentence",
+    "when" : "Three seconds, when a click on the Dock tile asks for a restart while a dictation is still in flight.",
+    "width" : 262
+  },
+  {
     "alpha" : 1,
     "group" : "The held prompt",
     "height" : 98,
@@ -435,7 +447,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,

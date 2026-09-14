@@ -1540,6 +1540,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nothing is bound yet, and a marker left by a relay that was killed
         // rather than quit would claim otherwise until the first bind.
         Outbox.publishBound(tty: nil)
+        // …unless this launch *is* the restart, in which case the instance that
+        // asked for it left the tty it was pointed at behind — see `Relaunch`.
+        // After `picker.start()`, so the loopback is already up: a bind that
+        // takes a couple of seconds of `osascript` must not be the thing holding
+        // the control surface closed.
+        if let tty = Relaunch.takePendingBinding() {
+            Log.info("↻ restarted — putting the binding to \(tty) back")
+            restoreBinding(tty: tty)
+        }
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
@@ -5174,6 +5183,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         whisperSource.shutDown()
         Log.info("session ended via \(reason)")
         Outbox.send(kind: "session_end", text: "user closed the relay")
+    }
+
+    // MARK: - The Dock tile restarts the relay
+
+    /// One restart per click, however many clicks. A double-click on the tile is
+    /// two reopen events, and a restart that is already waiting for a sentence
+    /// would otherwise queue a second one behind it.
+    private var restartAsked = false
+
+    /// **A click on the Dock tile is a restart** (Victor, 2026-09-14) — see
+    /// `Relaunch` for why the tile had nothing else to do.
+    ///
+    /// This is the reopen Apple Event: the Dock sends it on every click at a
+    /// running app, and so does `open "/Applications/Walkie Talkie.app"`, which
+    /// makes the shape reachable from a desk without touching the mouse. `false`
+    /// declines the default behaviour — unminimising windows and taking the
+    /// front — because the app is on its way out and a flash of a frontmost
+    /// relay is exactly the refocus he asked to be rid of.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        guard !restartAsked else { return false }
+        restartAsked = true
+        Log.info("↻ restart asked from the Dock tile")
+        restartWhenTheSentenceIsDelivered(announced: false)
+        return false
+    }
+
+    /// **A dictation in flight is a stop, not a thing to be got past** — the
+    /// rule `relay-restart.sh` was written around, in the one place that can see
+    /// the sentence rather than a file. A restart mid-sentence throws away audio
+    /// he has already spoken, and it is invisible from inside the session the
+    /// words were going to.
+    ///
+    /// So the click waits, and says so once. No ceiling: a sentence ends when
+    /// Victor ends it, and the panel holding the prompt is him reading it.
+    private func restartWhenTheSentenceIsDelivered(announced: Bool) {
+        guard sentenceInFlight else { return restartNow() }
+        if !announced {
+            Log.info("↻ a dictation is in flight — the restart waits for it to be delivered")
+            overlay.flash("↻ restarting after this sentence", duration: 3)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.restartWhenTheSentenceIsDelivered(announced: true)
+        }
+    }
+
+    /// Everything between the gesture and the words landing, in one question.
+    ///
+    /// `listening` is the microphone, `settling` and `phase.isWaitingForWords`
+    /// are the recogniser still answering — the six seconds the script sleeps
+    /// blind after the marker stops saying `listening`, asked properly — and the
+    /// held panel is the prompt on screen with a Send button under it.
+    private var sentenceInFlight: Bool {
+        listening || settling || source.phase.isWaitingForWords || (overlay?.isHoldingPrompt ?? false)
+    }
+
+    private func restartNow() {
+        // Read before anything stands this instance down: `bound-tty` is cleared
+        // at quit *and* at launch, so the tty has to travel out of band.
+        let tty = terminal.target?.handle.tty
+        Relaunch.stashBinding(tty: tty)
+        Log.info(tty.map { "↻ restarting — the binding to \($0) travels with it" }
+                 ?? "↻ restarting — nothing bound to put back")
+        overlay.flash("↻ restarting…", duration: 2)
+        // A beat, so the flash is drawn before the replacement arrives to knock:
+        // the newcomer's `SingleInstance.enforce()` is what actually ends this
+        // process, and it is about a second away.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard Relaunch.start() else {
+                // Nothing was launched, so nothing will replace this instance —
+                // let the tile work again rather than leaving a relay that has
+                // quietly stopped answering its own Dock icon.
+                self?.restartAsked = false
+                self?.overlay.flash("⚠️ could not restart — quit and start it by hand", duration: 5)
+                return
+            }
+        }
+    }
+
+    /// **Put the binding back, in the instance that has just come up.**
+    ///
+    /// The same route the restart script takes (`POST /bind {"tty"}`) and the
+    /// same discipline: no toggle, no bind flight, no flash and no `wakePointer`
+    /// — this is a binding being *restored*, not a gesture pointing at the window
+    /// in front, and at the end of a restart the frontmost window is whatever he
+    /// was looking at meanwhile.
+    ///
+    /// Retried, because `bind(tty:)` is several `osascript` round trips into a
+    /// Terminal that may still be answering the launch it has just been through;
+    /// three attempts a second apart, and then it says so on the overlay rather
+    /// than leaving him to discover it by talking into a void.
+    private func restoreBinding(tty: String, attempt: Int = 1) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            if let bound = self.terminal.bind(tty: tty) {
+                Log.info("📍 re-bound to \(bound.address) after the restart")
+                DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+                return
+            }
+            guard attempt < 3 else {
+                Log.error("could not re-bind to \(tty) after the restart — bind it by hand (⌘⌃B)")
+                DispatchQueue.main.async { [weak self] in
+                    self?.overlay.flash("⚠️ no terminal on \(tty) — ⌘⌃B to bind", duration: 6)
+                }
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.restoreBinding(tty: tty, attempt: attempt + 1)
+            }
+        }
     }
 
     /// Catches the quit routes the ✕ does not: ⌘Q, and the Apple Event a newly

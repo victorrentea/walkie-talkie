@@ -329,6 +329,14 @@ enum OverlayStates {
                 o.flash("⚠️ grant Accessibility to Walkie Talkie", duration: 60)
             },
 
+            Shot(slug: "flash-restarting", group: "Flashes", title: "Flash — the Dock tile was clicked mid-sentence",
+                 when: "Three seconds, when a click on the Dock tile asks for a restart while a dictation is still in flight.",
+                 note: "The one flash that is a **promise rather than an outcome**: the restart has not happened and will not until the words have been delivered, however long that takes. Said once and never repeated — a click he has already made does not need a countdown, and the restart announces itself again (`↻ restarting…`) the moment it actually goes.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash("↻ restarting after this sentence", duration: 60)
+            },
+
             // ---- the panel: the held prompt --------------------------------
             Shot(slug: "prompt", group: "The held prompt", title: "The held prompt",
                  when: "The seconds between the model answering and the words reaching the agent.",

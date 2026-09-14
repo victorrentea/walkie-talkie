@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 40 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 41 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -428,6 +428,16 @@
         <p class="note">The state that proves flashes must survive the unbound case: there is no title row above it, because nothing is bound yet, and this is the whole window.</p>
         <code class="slug">flash-accessibility</code>
       </section>
+      <section class="card" id="flash-restarting">
+        <header>
+          <h3>Flash — the Dock tile was clicked mid-sentence</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">262×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/flash-restarting.png" width="262" height="46" style="opacity:0.8" alt="Flash — the Dock tile was clicked mid-sentence"></div>
+        <p class="when">Three seconds, when a click on the Dock tile asks for a restart while a dictation is still in flight.</p>
+        <p class="note">The one flash that is a <strong>promise rather than an outcome</strong>: the restart has not happened and will not until the words have been delivered, however long that takes. Said once and never repeated — a click he has already made does not need a countdown, and the restart announces itself again (<code>↻ restarting…</code>) the moment it actually goes.</p>
+        <code class="slug">flash-restarting</code>
+      </section>
     </div>
     <h2 id="The held prompt">The held prompt</h2>
     <div class="grid">
@@ -504,9 +514,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -543,7 +553,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 54846be · 12 Sep 2026 · built 12 Sep 2026, 22:10
+  Generated from <code>OverlayStates.swift</code> · repo at bd99ea6 · 14 Sep 2026 · built 14 Sep 2026, 15:16
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>
