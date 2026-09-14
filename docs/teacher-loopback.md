@@ -109,6 +109,96 @@ Four questions, stopping at the first failure:
 4. **Is the teacher worth it?** The gap against the student, from
    `corpus_baseline.py`. The probe loads no model, on purpose.
 
+## Is the teacher worth it? Measured on 1197 clips (2026-09-15)
+
+`evals/teacher-agreement.py` decodes every clip that already carries Wispr's raw
+reading (`source='wispr'`, `asr_text` non-empty) through **the shipped decoder** —
+`helpers/whisper_helper.py`, language pinned to {ro, en}, `VOCABULARY` as
+`initial_prompt` — and scores the student against the teacher on the same audio.
+6.9 h, 45,690 reference words, about 100 minutes of wall clock.
+
+**This is a disagreement rate, not an error rate.** Neither side is ground truth.
+What it buys is the shape of the pile.
+
+| | |
+|---|---|
+| pooled disagreement | **23.3%** (20.8% with diacritics folded — Wispr's raw ASR sometimes writes Romanian without them) |
+| median / p90 | 15.0% / 50.0% |
+| word-for-word identical | 247 clips, **20.6%** |
+| within 15% | 601 clips, **50.2%** |
+| beyond 40% — one of them is plainly wrong | 197 clips, 16.5% |
+| **ro** | 741 clips, **26.9%** |
+| **en** | 444 clips, **10.8%** |
+
+**Romanian is the whole problem**, at two and a half times the English rate. That
+is the diagnosis the LoRA was guessed at for, now measured.
+
+**Half the corpus labels itself.** Two independent recognisers agreeing on the
+same audio is about as good as a pseudo-label gets, so the 601 clips within 15%
+need nobody to read them; the review pile is the other ~600, not all 1197.
+
+### Both of them hallucinate, and the teacher's kind is the dangerous one
+
+Counted by the canned phrases a recogniser falls into on unclear audio
+(*abonați-vă la canalul nostru*, *thanks for watching*, subtitle credits):
+
+| | |
+|---|---|
+| clips where **Wispr** wrote one | **9** of 1197 |
+| clips where the **local model** wrote one | **23** of 1197 |
+
+The student does it more often, which is the expected direction. The teacher
+doing it at all is the thing to design around — a 26.5 s clip came back from
+Wispr as `Să vă mulțumim pentru vizionare și pentru abonați-vă la canalul
+nostru!` while the local model transcribed the actual sentence. **A label like
+that is indistinguishable from a good one by length, confidence or plausibility**,
+and it would be filed as truth. The canned-phrase filter is cheap and catches
+this class; run it over `teacher_text` before anything is trained on it.
+
+### The one real reference in the corpus says the teacher is ahead
+
+`edited_text` — what Victor changed the transcript to by hand — is the only
+column neither recogniser wrote. 149 clips, 83 of which differ in their *words*.
+It is not clean (some of it is him tidying his own stutters) and it is selected
+*for* Wispr having been wrong, so the absolute numbers mean little; both
+recognisers scored against the **same** biased reference does mean something:
+
+| against Victor's own text | all 149 | the 83 he really changed |
+|---|---|---|
+| Wispr | **13.9%** | **18.9%** |
+| local | 24.1% | 26.5% |
+| clips where the student was closer | 12 | 12 |
+| tied | 68 | 24 |
+| teacher closer | 69 | 47 |
+
+**The teacher is genuinely ahead, and not by a rounding error.** Distillation has
+somewhere to go.
+
+### What the run is worth per clip
+
+Short clips are the noisiest and the cheapest to mislabel: 92 clips under 3 s
+disagree at 34.7% pooled, and 65 of the 197 worst disagreements have a teacher
+reference of **under five words** — Wispr heard almost nothing and the WER is a
+tiny denominator, not a transcript. Restricted to clips of at least 3 s with at
+least five reference words (954 clips, 6.6 h) the picture barely moves — pooled
+23.2%, ro 26.7%, en 10.3% — which says the disagreement is real and not an
+artefact of the junk.
+
+### So: go, with one filter added
+
+1. `teacher_label.py --all` over the **1082 clips that have no teacher reading at
+   all** (445 min of audio, ~8.9 h of wall clock — one night). The one-time setup
+   the section above asks for is now the *production* configuration: Wispr has
+   been pinned to `🎓 TO Wispr` since the spoken markers shipped, so there is
+   nothing to set and nothing to put back.
+2. **Filter `teacher_text` for canned hallucinations** before training. Nine in
+   1197 is 0.75%, and each one is a fluent sentence about nothing.
+3. Keep the ~600 agreeing clips as labels with no review. Read the rest, or
+   weight them lower — the disagreement set is where both the teacher's errors
+   and the student's live.
+4. `edited_text` stays the most valuable column in the store, and it is 149 rows.
+   Weight it hardest.
+
 ## The three hazards, and what is done about each
 
 **1 · Wispr pastes into whatever has focus.** A batch is an hour of Victor's own
@@ -174,5 +264,7 @@ samples harder at training time.
 2. `/usr/bin/python3 helpers/mic_corpus_ingest.py` — folds the day's WAVs into
    `corpus.db`. Cheap, idempotent, belongs beside the two-hourly harvester.
 3. `python3 helpers/wispr_probe.py` — **the go/no-go**. Do not skip it.
-4. `python3 helpers/teacher_label.py --limit 20` once, then `--all` overnight.
+4. `python3 evals/teacher-agreement.py` — **the number that decides it** (done,
+   2026-09-15: go). Then `python3 helpers/teacher_label.py --limit 20` once, and
+   `--all` overnight.
 5. Only then the LoRA, with ten times the data.
