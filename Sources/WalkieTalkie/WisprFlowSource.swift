@@ -127,7 +127,7 @@ final class WisprFlowSource: DictationSource {
     }
 
     var wrapReason: String {
-        guard wrapWispr else { return "the Wrap Wispr Flow tick is off — Wispr inserts where the focus is and the relay only draws the ring" }
+        guard wrapWispr else { return "the wrap is off (WT_WRAP_WISPR / POST /test/wrap-mode — there is no menu row since 2026-09-14) — Wispr inserts where the focus is and the relay only draws the ring" }
         if let modeOverride {
             return "forced to \(modeOverride.rawValue) by WT_WRAP_MODE / POST /test/wrap-mode"
         }

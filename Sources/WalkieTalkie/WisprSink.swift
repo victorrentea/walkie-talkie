@@ -19,7 +19,8 @@ import ApplicationServices
 ///
 /// **The scope of that wrap is already decided and is narrow**: it applies only
 /// to dictations *this app started* — the chord it posted itself, stamped
-/// `backButtonStamp` — and only while the **Wrap Wispr Flow** tick is on. A
+/// `backButtonStamp` — and only while the wrap is on (`wrapWispr`; the menu
+/// row that used to say so is gone since 2026-09-14). A
 /// dictation Victor starts with his own keyboard shortcut is Wispr's and is
 /// left alone; taking the focus off him for one of those would be the app
 /// interfering with a tool he is using directly.

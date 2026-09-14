@@ -406,35 +406,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The tap has to be told; `AppDelegate` owns that wire.
     var onToggleLogiGestures: ((Bool) -> Void)?
 
-    // ── Wrap Wispr Flow ─────────────────────────────────────────────────────
-
-    /// **Wrap Wispr Flow** — whether the relay takes Wispr's paste and delivers
-    /// the words itself (ticked, the default since 2026-09-12) or lets Wispr
-    /// insert them wherever the focus is and only draws the ring.
-    ///
-    /// It is the switch the whole *Wispr Flow everywhere* change rests on, and
-    /// it is in the menu for the reason the mode it replaces is: if a Wispr
-    /// update changes how it delivers, the failure is a dictation that lands
-    /// nowhere, and the way back has to be one click rather than a rebuild.
-    ///
-    /// **Defaults to on, and that needs saying** because `bool(forKey:)` answers
-    /// false for a key that was never written.
-    private let wrapWispr = NSMenuItem(title: "Wrap Wispr Flow", action: nil, keyEquivalent: "")
-    private var wrapWisprOn: Bool =
-        UserDefaults.standard.object(forKey: StatusItem.wrapWisprKey) as? Bool ?? true
-    private static let wrapWisprKey = "wrapWispr"
-    /// Read once at launch by `AppDelegate`, like `isReplaceWispr`.
-    var isWrapWispr: Bool { wrapWisprOn }
-    var onToggleWrapWispr: ((Bool) -> Void)?
-
-    /// Put the tick where the behaviour is — `POST /test/wrap-mode` can turn the
-    /// wrap off, and a row that goes on claiming it is on is worse than no row.
-    func setWrapWispr(_ on: Bool) {
-        guard wrapWisprOn != on else { return }
-        wrapWisprOn = on
-        UserDefaults.standard.set(on, forKey: Self.wrapWisprKey)
-        applyWrapWisprIcon()
-    }
+    // ── Wrap Wispr Flow: gone from the menu (2026-09-14) ────────────────────
+    //
+    // **"elimina *Wrap Wispr Flow* din meniu. e redundant vs submeniul introdus
+    // de curand"** (Victor). The tick asked *does the relay take Wispr's paste
+    // and deliver the words itself*, and with `Engine` under an arrow the two
+    // rows read as one question asked twice: picking **Wispr Flow** as the
+    // engine is picking the wrap, because the wrap is how this app talks to
+    // Wispr — the Scratchpad, the swallow, the row-first delivery. There is no
+    // product left in the *off* half of that tick; it is the control the loop
+    // uses (`wrap-off`), and a control belongs in `POST /test/wrap-mode` and
+    // `WT_WRAP_WISPR=0`, both of which stay.
+    //
+    // `WisprFlowSource.wrapWispr` is untouched and still defaults to **on**.
+    // What is gone is the menu row, its `wrapWispr` preference key — a stale
+    // `false` in it would now be unreachable from the UI, so it is no longer
+    // read at all — and the two accessors `AppDelegate` drove it through.
 
     // ── Close Wispr Scratchpad ──────────────────────────────────────────────
 
@@ -453,17 +440,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var onCloseScratchpad: (() -> Void)?
 
     @objc private func closeScratchpadClicked() { onCloseScratchpad?() }
-
-    @objc private func wrapWisprClicked() {
-        wrapWisprOn.toggle()
-        UserDefaults.standard.set(wrapWisprOn, forKey: Self.wrapWisprKey)
-        applyWrapWisprIcon()
-        onToggleWrapWispr?(wrapWisprOn)
-    }
-
-    private func applyWrapWisprIcon() {
-        wrapWispr.image = wrapWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
-    }
 
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
@@ -683,17 +659,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // under this separator is about the app rather than about a destination,
         // and the first thing to say about the app is which recogniser is
         // listening: it is the row that answers *what am I dictating with*, and
-        // the two rows under it — the wrap, the Scratchpad — are qualifications
-        // of the answer.
+        // the row under it — the Scratchpad — is a qualification of the answer.
+        // The wrap used to be the other one; it went in the same change that
+        // gave this row its arrow, as the same question asked twice.
         engineItem.image = Self.symbolIcon("waveform")
         engineItem.submenu = engineSubmenu
         applyEngineRow()
         menu.addItem(engineItem)
-
-        wrapWispr.action = #selector(wrapWisprClicked)
-        wrapWispr.target = self
-        applyWrapWisprIcon()
-        menu.addItem(wrapWispr)
 
         closeScratchpad.action = #selector(closeScratchpadClicked)
         closeScratchpad.target = self

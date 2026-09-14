@@ -382,7 +382,8 @@ notes so the window can be closed.
 
 ### The product path: `wrap-*`, Scratchpad mode
 
-With *Wrap Wispr Flow* on, every relay-started dictation runs in **Scratchpad
+With the wrap on — which it is unless `WT_WRAP_WISPR=0` or `POST /test/wrap-mode` says
+otherwise — every relay-started dictation runs in **Scratchpad
 mode**: the relay holds the scratchpad chord itself, so Wispr dictates into its
 own note rather than into whatever has focus; the relay then delivers the newest
 note (`delivery.via = "wispr-notes"`) and closes the Scratchpad with a 250 ms
