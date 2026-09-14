@@ -354,7 +354,14 @@ final class MicRecorder {
     ///   the two apart.
     func insert(_ buffer: AVAudioPCMBuffer) {
         lock.lock(); defer { lock.unlock() }
-        guard isRecording, file != nil, let format = outputFormat else { return }
+        // **Said out loud, both ways.** A marker that does not land leaves no
+        // trace anywhere else: the file is simply a little shorter and nobody
+        // notices until a transcript comes back without it.
+        guard isRecording, file != nil, let format = outputFormat else {
+            Log.error("mic: a marker arrived with no recording open "
+                      + "(recording \(isRecording), file \(file != nil))")
+            return
+        }
         guard buffer.format.sampleRate == format.sampleRate,
               buffer.format.channelCount == format.channelCount else {
             Log.error("mic: refused a marker in the wrong format")
@@ -362,6 +369,7 @@ final class MicRecorder {
         }
         pendingInserts.append(buffer)
         inserted += Double(buffer.frameLength) / format.sampleRate
+        Log.info("✂️ marker queued into the recording — \(buffer.frameLength) frames")
     }
 
     /// Written on the gesture's thread, read on the audio thread — the same

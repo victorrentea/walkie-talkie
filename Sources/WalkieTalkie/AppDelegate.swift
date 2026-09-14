@@ -885,6 +885,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ShotMarker.play(index: index)
                 return ["played": index, "enabled": ShotMarker.isEnabled]
             }
+            // **The splice, reachable whatever source is live.** Without it the
+            // only way to exercise `MicRecorder.insert` is to switch to the
+            // retired local model and load its weights, which is a lot of
+            // machinery between a change and the question *did the bytes land in
+            // the file*. It writes into whatever recording is open — the meter
+            // runs during a Wispr dictation too — so the file it marks is a
+            // corpus clip nobody transcribed from. A test artefact, said plainly.
+            if let index = body["splice"] as? Int {
+                guard let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) else {
+                    return ["spliced": false, "why": "no samples — is the clip loaded?"]
+                }
+                DispatchQueue.main.async { [weak self] in self?.source.meter.insert(pcm) }
+                return ["spliced": index, "frames": Int(pcm.frameLength),
+                        "seconds": Double(pcm.frameLength) / pcm.format.sampleRate]
+            }
             let text = (body["text"] as? String) ?? ""
             let available = Set((body["available"] as? [Int]) ?? [])
             let resolved = ShotMarker.resolve(text: text, available: available)
