@@ -77,6 +77,12 @@ final class HotkeyTap {
     /// that would drift away from the diagram unnoticed.
     var onGesture: ((String) -> Void)?
 
+/// **⌘⌃D, outside the machine on purpose.** With ⌘⌃B and ⌘⌃P it is the way back
+/// from a diagram that will not load: in Safe Mode there is no machine, and a
+/// keyboard that still opens and closes a dictation is what makes Safe Mode
+/// survivable rather than merely honest.
+var onDictateKey: (() -> Void)?
+
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
     ///
@@ -1809,7 +1815,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // 2s wheel hold of the day before, which never fired (see
                         // `spawnDoubleSeconds`). `ToSpawn`, its chip and the re-aim
                         // are `docs/gestures.puml`'s.
-                        fire("forward-up")
+                        fire("wheel-double")
                         return nil
                     }
 
@@ -1928,7 +1934,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // the one above carries — and what the word then does,
                         // `Idle --> ToSpawn : 🔼 forward-up / aimAtSpawn,
                         // openDictation`, lives in `docs/gestures.puml`.
-                        fire("forward-up")
+                        fire("wheel-double")
                         return nil
                     }
                     idleWheelClickAt = now
@@ -2227,9 +2233,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         //
         // Autorepeat swallowed for the same reason as above — a held key would
         // open the microphone and close it again on the next repeat.
+        // **⌘⌃D is deliberately NOT the machine's** (2026-09-14). It was, for one
+        // build, and that made a liar of the three places — CLAUDE.md, the rules
+        // doc and `wireGestureMachine`'s own comment — that call it the way back
+        // from a bad edit to the diagram: in Safe Mode the chord was swallowed and
+        // answered by nothing, so the documented escape hatch did not exist. It
+        // calls `toggleDictation` straight, as ⌘⌃B and ⌘⌃P call theirs, and the
+        // machine hears about the dictation through `@micOpened` / `@idle` like any
+        // other the world starts without asking it.
         if keyCode == VK_D && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-            fire("key-dictate")
+            DispatchQueue.main.async { [weak self] in self?.onDictateKey?() }
             return nil
         }
 
@@ -2910,7 +2924,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// `evals/test_gesture_glyphs.py` asserts `docs/gestures.puml` uses nothing
     /// outside this set, so the diagram cannot name a gesture the mouse cannot
     /// make — the one half of the Options+ drift that is closable from code.
-    static var triggerNames: [String] { gestureNames + ["forward-bind", "key-dictate"] }
+    static var triggerNames: [String] {
+        gestureNames + ["forward-bind", "key-dictate", "wheel-double"]
+    }
 
     /// **Hand the word to the machine, on the main thread.**
     ///

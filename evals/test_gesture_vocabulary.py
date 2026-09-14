@@ -387,6 +387,124 @@ class NothingStartsWhileTheWordsAreInFlight(unittest.TestCase):
                          "Settling must not borrow Listening's answer")
 
 
+class TheWorldCanOpenAndCloseOneToo(unittest.TestCase):
+    """**The machine must follow dictations no gesture started.**
+
+    Every case here was a real defect found in review on 2026-09-14, and each one
+    parked the machine somewhere reality was not. They are worth a test class of
+    their own because none of them is reachable from the mouse: they are the
+    menu, the loopback, Wispr Flow's own keyboard chord, the overlay's ✕, and a
+    `source.start()` that refused — the paths a diagram written from the gestures
+    outwards does not think about.
+    """
+
+    def test_a_dictation_the_world_started_is_followed(self) -> None:
+        """Menu *Start Dictation*, `/test/dictation/start`, Wispr's own chord, and
+        the diagram's own `🔽 → / postWisprHandsFree` all open a microphone with no
+        gesture. The machine used to sit in `Idle` through all of it — no music
+        pause — and then refuse `@delivered` when the words came back."""
+        a = simulate([{"fire": "@micOpened"}])
+        self.assertNotEqual(a["final"], "Idle",
+                            "the machine ignored a microphone the world opened")
+        self.assertIn("pauseMusic", a["actions"],
+                      "the music was not paused for a dictation the world started")
+
+    def test_and_followed_to_the_right_destination(self) -> None:
+        a = simulate([{"fire": "@micOpened"}], world={"bound": True})
+        self.assertEqual(a["final"], "ToBound")
+
+    def test_a_dictation_the_world_ended_reaches_the_settle(self) -> None:
+        """Menu *End Dictation*, or Wispr's own chord pressed a second time. With
+        no arrow on `@micConfirmedShut` the machine stayed in `Listening` while the
+        words were in flight and refused `@delivered` for ever."""
+        a = simulate([{"fire": "@micOpened"},
+                      {"fire": "@micConfirmedShut"},
+                      {"fire": "@delivered"}])
+        self.assertEqual(a["final"], "Idle")
+        self.assertEqual(a["refused"], [],
+                         "a dictation the world opened and closed was not followed")
+
+    def test_a_cancel_from_outside_gives_the_music_back(self) -> None:
+        """The overlay's ✕, the menu's *Cancel Dictation*, `POST /test/cancel` and
+        Wispr's own ⌃Escape all reach `dictationEnded(.cancelled)` and nothing
+        else. Without `@idle` the machine stayed in `Listening`, `exit /
+        resumeMusic` never ran, and his music did not come back."""
+        a = simulate([{"fire": "forward-click"},
+                      {"fire": "@micOpened"},
+                      {"fire": "@idle"}])
+        self.assertEqual(a["final"], "Idle")
+        self.assertEqual(a["actions"].count("pauseMusic"),
+                         a["actions"].count("resumeMusic"),
+                         "the music was paused and never resumed")
+
+    def test_the_music_is_paused_and_resumed_exactly_once_per_sentence(self) -> None:
+        a = simulate([{"fire": "forward-click"}, {"fire": "@micOpened"},
+                      {"fire": "forward-click"}, {"fire": "@micConfirmedShut"},
+                      {"fire": "@delivered"}])
+        self.assertEqual(a["actions"].count("pauseMusic"), 1)
+        self.assertEqual(a["actions"].count("resumeMusic"), 1)
+
+
+class TheHoldIsNotAState(unittest.TestCase):
+    """**A resting state that eats the mouse is worse than the hold it models.**
+
+    `HeldForBind` was a state for one build. It answered no gesture at all, so for
+    up to five minutes after an unbound sentence landed every mouse gesture *and*
+    the back button's Return were swallowed by the tap and refused by the diagram.
+    The five-minute hold is a property of a `Message` waiting for a bind, not of
+    the mouse, and it lives beside the machine now.
+    """
+
+    def test_an_unbound_sentence_returns_the_machine_to_idle(self) -> None:
+        a = simulate([{"fire": "forward-click"}, {"fire": "@micOpened"},
+                      {"fire": "forward-click"}, {"fire": "@held"}])
+        self.assertEqual(a["final"], "Idle")
+
+    def test_and_the_next_gesture_still_works(self) -> None:
+        a = simulate([{"fire": "forward-click"}, {"fire": "@micOpened"},
+                      {"fire": "forward-click"}, {"fire": "@held"},
+                      {"fire": "forward-click"}])
+        self.assertEqual(a["refused"], [],
+                         "a gesture after a held sentence was refused — the mouse "
+                         "is dead for the length of the hold again")
+        self.assertIn("openDictation", a["actions"])
+
+
+class DisconnectOutranksASentence(unittest.TestCase):
+    """*"stop, this is going to the wrong place"* — 🔽 ↓ existed only in `Idle`
+    until review caught it, though `.claude/rules/mouse-gestures.md` has said
+    since 2026-09-06 that it outranks a held prompt and a running dictation."""
+
+    def test_unbind_works_mid_sentence(self) -> None:
+        a = simulate([{"fire": "forward-right"}, {"fire": "@micOpened"},
+                      {"fire": "back-down"}], world={"bound": True})
+        self.assertIn("unbind", a["actions"])
+        self.assertEqual(a["refused"], [])
+
+    def test_a_bind_still_reaches_the_words_during_the_settle(self) -> None:
+        """It worked one state either side of `Settling` and not in it."""
+        a = simulate([{"fire": "forward-click"}, {"fire": "@micOpened"},
+                      {"fire": "forward-click"}, {"fire": "forward-bind"}])
+        self.assertIn("bindFrontmost", a["actions"])
+
+
+class TheWheelConvertsRatherThanEnding(unittest.TestCase):
+    """The wheel clicked twice turns the dictation into a spawn (2026-09-05).
+
+    Mapped onto `forward-up` it hit the arrow that *ends* a sentence, so the
+    second click a third of a second behind the first stopped a recording shorter
+    than `MicRecorder.minimumDuration` — dropped as a misfire, no spawn, no words.
+    """
+
+    def test_the_second_click_reaims_and_keeps_the_microphone(self) -> None:
+        a = simulate([{"fire": "key-dictate"}, {"fire": "@micOpened"},
+                      {"fire": "wheel-double"}])
+        self.assertEqual(a["final"], "ToSpawn")
+        self.assertNotIn("stopDictation", a["actions"],
+                         "the wheel's double click ended the sentence instead of "
+                         "converting it")
+
+
 def self_test() -> int:
     """**Prove the load-bearing check can fail**, by removing the refusal.
 

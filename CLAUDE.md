@@ -225,7 +225,7 @@ sits at rest there.
   ring stays up. The grammar refuses `A --> A` precisely so that rule cannot be
   written the wrong way.
 - **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds),
-  ⌘⌃D starts / ends a dictation (it reaches the diagram as `key-dictate`), ⌘⌃P pastes
+  ⌘⌃D starts / ends a dictation, ⌘⌃P pastes
   the last envelope. All swallowed, autorepeat included. ⌘⌃⌥D is Victor Addons'
   dark-mode toggle. **⌘⌃B / ⌘⌃D / ⌘⌃P stay outside the machine** and are the way back
   from a bad edit to the diagram.
@@ -241,6 +241,12 @@ sits at rest there.
   behaviour.** `leftIsHeld` asks the window server synchronously before the swallow
   verdict, which is a clock and an I/O round trip that could not live in a guard — so
   the tap decides `forward-bind` against `forward-click` and nothing more.
+- **The machine follows dictations no gesture started.** The menu, the loopback,
+  Wispr Flow's own chord and 🔽 → all open a microphone without asking it, and the
+  ✕, ⌃Escape and a recogniser that quits all end one. `@micOpened` enters
+  `Listening` from `Idle`, `@micConfirmedShut` is the arrow into the settle, and
+  `@idle` is *nothing is in flight*. Without those three the machine sat where
+  reality was not and his music stayed paused (found in review, 2026-09-14).
 - **Safe Mode.** A diagram that will not load leaves the chords swallowed and inert,
   with a sticky banner saying so; `build-app.sh` validates before it touches
   `/Applications`, and `~/.walkie-talkie/gestures.last-good.puml` is the net in

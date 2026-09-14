@@ -64,6 +64,18 @@ Idle : 🔽 back-right / postWisprHandsFree
 Idle : @bindArrived / showBinding
 Idle : @unbound / showUnbound
 
+' **A dictation this machine did not start.** The menu's *Start Dictation*, the
+' loopback's `/test/dictation/start`, Wispr Flow's own keyboard chord, and 🔽 →
+' which posts that chord raw — all open a microphone without a gesture the
+' diagram answers. Without these two arrows the machine sat in `Idle` while the
+' world was listening, missed the music pause, and then refused `@delivered`
+' when the words came back. Found in review, 2026-09-14.
+'
+' Inside `Listening` the same event is an internal confirmation (below); a
+' substate's own answer outranks the composite's, so the two cannot collide.
+Idle --> ToBound : @micOpened [bound] / aimAtBound
+Idle --> AtCaret : @micOpened / aimAtCaret
+
 ' The aim is set BEFORE the microphone is asked for, and again by whichever
 ' gesture ends the sentence. It has to be first in the list: `openDictation`
 ' reaches the source, and the local recogniser can raise `didBegin`
@@ -102,6 +114,7 @@ Idle --> AtCaret  : ⌨ key-dictate / aimAtCaret, openDictation
 ' such moment. What survives of it is `HotkeyTap.onWheelRelease`, which is a cue
 ' about *when* to take the frame and deliberately not a gesture.
 Idle --> ToSpawn  : 🔼 forward-up / aimAtSpawn, openDictation
+Idle --> ToSpawn  : 🛞 wheel-double / aimAtSpawn, openDictation
 
 ' ── The microphone is open ─────────────────────────────────────────────────
 ' Everything that is true for the whole sentence, whatever it is aimed at,
@@ -118,7 +131,10 @@ state Listening <<mic>> {
   Listening : 🔽 back-click / captureScreenshot
   Listening : 🔽 back-right / postWisprHandsFree
   Listening : @micOpened / confirmMicOpen
-  Listening : @micConfirmedShut / noteShut
+  ' **Disconnect outranks a running dictation** — it is the answer to *stop, this
+  ' is going to the wrong place*, and on master it was tested in no state at all.
+  ' It only existed in `Idle` here until review caught it.
+  Listening : 🔽 back-down / unbind
 
   ' Where a plain ending would send it. The substate IS the chip.
   state AtCaret
@@ -134,11 +150,22 @@ state Listening <<mic>> {
   ' Listening's exit does not run: music still paused, ring still up.
 
   state ToBound
+  ' `{…}` is filled by `AppDelegate.reconcile` from the live binding. A name the
+' app cannot fill is refused at boot rather than drawn with its braces showing.
   ToBound : chip "🎙️ {boundFolder}"
 
   state ToSpawn
   ToSpawn : chip "✨ {spawnFolder}"
   ToSpawn : @spawnFolderChosen / nameSpawnFolder
+
+  ' **The wheel clicked twice converts, it does not end** (2026-09-05, and a
+  ' regression review caught on 2026-09-14). It was mapped onto `forward-up`,
+  ' whose only answer from inside `Listening` is the arrow that *ends* the
+  ' sentence — so the second click a third of a second behind the first stopped
+  ' a recording shorter than `minimumDuration`, which is dropped as a misfire.
+  ' Same recording, same words; only the destination changes.
+  AtCaret --> ToSpawn : 🛞 wheel-double / aimAtSpawn
+  ToBound --> ToSpawn : 🛞 wheel-double / aimAtSpawn
 
   AtCaret --> ToBound : 🔼 forward-bind / bindFrontmost
   AtCaret --> ToBound : @bindArrived / aimAtBound
@@ -152,13 +179,16 @@ state Listening <<mic>> {
 ' diverse locuri, în funcție de cum se termină gestul."
 '
 ' These leave the COMPOSITE, so they apply from all three destinations. A
-' substate's own transition outranks its parent's (plain UML), which is how
-' AtCaret's refusal below gets first refusal on 🔼 →.
+' substate's own transition outranks its parent's (plain UML) — and the parser
+' checks that ordering *per state*, not per arrow, so an unguarded line written
+' on a substate cannot silently shadow a guarded one on its parent.
 Listening --> Settling : 🔼 forward-click / aimAtCaret, stopDictation
 Listening --> Settling : 🔼 forward-right [bound] / aimAtBound, stopDictation
-' Mid-sentence, 🔼 ↑ **converts the dictation to a spawn**: same recording, same
-' words — only the destination changes. The terminal it opens in does not exist
-' yet, so the folder menu is offered exactly as it is at a fresh spawn press.
+' Mid-sentence, 🔼 ↑ **ends the sentence into the folder menu**: the terminal it
+' opens in does not exist yet, so the menu is offered exactly as at a fresh spawn
+' press and the words go to whatever he picks. Victor: *"dacă la finalul
+' conversației fac forward cu up, gestul acesta deschide meniul de foldere."*
+' The wheel's double click is the one that converts WITHOUT ending — 🛞 above.
 Listening --> Settling : 🔼 forward-up / aimAtSpawn, stopDictation
 Listening --> Settling : ⌨ key-dictate / aimWhereAimed, stopDictation
 ' ⬅️ — the forward button held and the mouse flicked left (and the wheel held,
@@ -168,6 +198,22 @@ Listening --> Settling : ⌨ key-dictate / aimWhereAimed, stopDictation
 ' hearing it.
 Listening --> Idle     : 🔼 forward-left / cancelDictation
 Listening --> Idle     : @sourceGaveUp / warnSourceSilent
+' **And the world can end one without a gesture.** The overlay's ✕, the menu's
+' *Cancel Dictation*, `POST /test/cancel`, Wispr's own ⌃Escape dismiss, a
+' `source.start()` that refused, a recogniser that quit — `AppDelegate` fires
+' `@idle` whenever it becomes true that nothing is in flight. Without it the
+' machine stayed in `Listening` with `resumeMusic` unrun, and his music never
+' came back. Found in review, 2026-09-14.
+Listening --> Idle     : @idle
+
+' **The microphone closing is the arrow into the settle.** For a gesture the
+' machine is already in `Settling` by the time this arrives — `stopDictation` put
+' it there — and the internal line on `Settling` below just notes it. For a
+' dictation the *world* ended (the menu's *End Dictation*, Wispr's own chord
+' pressed again, the loopback's stop) there was no gesture, and without this arrow
+' the machine sat in `Listening` while the words were in flight and then refused
+' `@delivered` for ever. Found in review, 2026-09-14.
+Listening --> Settling : @micConfirmedShut
 
 ' 🔼 → with NOTHING bound does not end the sentence. Written HERE, after the
 ' guarded arrow above, because reading order is evaluation order: the guarded
@@ -198,7 +244,13 @@ Settling : 🔼 forward-click / sayInFlight
 Settling : 🔼 forward-right / sayInFlight
 Settling : 🔼 forward-up / sayInFlight
 Settling : 🔽 back-click / captureScreenshot
+Settling : @micConfirmedShut / noteShut
 Settling : @bindArrived / reaim
+' A bind made while the words are in flight still reaches them — the recipient is
+' latched when the microphone closes, and `showBound`'s take-back re-aims it. It
+' worked one state either side of this one and not here, which was an omission.
+Settling : 🔼 forward-bind / bindFrontmost
+Settling : 🔽 back-down / unbind
 
 ' **The machine does not deliver.** Where a sentence goes once the words are
 ' back is `AppDelegate.deliver` → `commit`, a four-way fork over a dead tty, a
@@ -207,23 +259,18 @@ Settling : @bindArrived / reaim
 ' which way it went and the machine follows. Firing `deliver` from here as well
 ' would send the sentence twice.
 Settling --> Idle        : @delivered
-Settling --> HeldForBind : @held
+' **The five-minute hold is not a state** (`holdsForBind`, 2026-09-11). It is a
+' property of a *sentence* — one `Message` waiting for a bind — and not of the
+' mouse, so the machine goes back to `Idle` and the hold lives on beside it.
+'
+' It was a state for one build, and that was a mistake review caught: it
+' answered no gesture at all, so for up to five minutes after an unbound
+' sentence landed, every mouse gesture and the back button's Return were
+' swallowed and refused. A resting state that eats the mouse is worse than the
+' hold it was modelling.
+Settling --> Idle        : @held / sayHeld
 Settling --> Idle        : @settleGaveUp / sayNoWords
+Settling --> Idle        : @idle
 Settling --> Idle        : 🔼 forward-left / cancelDictation
-
-' ── Nothing was bound when the words landed ────────────────────────────────
-' The five-minute hold (holdsForBind, 2026-09-11). Reachable only through
-' @held — never through a gesture, because 🔼 → refuses above rather than
-' ending a sentence with nowhere to go.
-state HeldForBind <<waiting>>
-HeldForBind : chip "⏳ bind to send — ⌘⌃B"
-HeldForBind : 🔼 forward-bind / bindFrontmost
-
-' `releaseAwaitingBind` is reached from `showBound`, which every route into a
-' binding passes through — so the bind delivers the held sentence and says so,
-' the same way `commit` does above.
-HeldForBind --> Idle : @delivered
-HeldForBind --> Idle : @holdExpired / warnHoldExpired
-HeldForBind --> Idle : 🔼 forward-left / dropHeld
 
 @enduml

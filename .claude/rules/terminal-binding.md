@@ -78,7 +78,7 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 | key | call | note |
 |---|---|---|
 | **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
-| **⌘⌃D** | `fire("key-dictate")` → `docs/gestures.puml` | new — the wheel's click, from the keyboard |
+| **⌘⌃D** | `onDictateKey` → `toggleDictation` | outside the machine on purpose — with ⌘⌃B and ⌘⌃P it is the way back from a diagram that will not load |
 
 - **⌘⌃B on the already-bound target unbinds; compare by handle, not by app.** Two Terminal tabs are two ttys, so a press in another tab re-points. It calls the same `unbindTerminal` as `POST /unbind` and the menu's **Disconnect**. → journal: *⌘⌃B again on the same target lets go of it — the chord does not*
 - **It unbinds, it does not quit** (since 2026-08-28) — quitting undid a binding **plus a login item**. → journal: *⌘⌃B again on the same target lets go of it — the chord does not*

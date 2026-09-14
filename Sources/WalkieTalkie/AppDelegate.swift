@@ -1488,6 +1488,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // underneath. `HotkeyTap.fire` already hopped to main — `GestureMachine` is
         // main-only, like every `DictationSource` callback, because what it drives
         // is AppKit.
+        // ⌘⌃D, outside the machine — see `HotkeyTap.onDictateKey`.
+        hotkeys.onDictateKey = { [weak self] in self?.toggleDictation() }
         hotkeys.onGesture = { [weak self] name in self?.machine?.fire(name) }
         guard let loaded = GestureDiagramFile.loadDiagram() else {
             Log.error("🖱️ gestures.puml was not found in the bundle, beside the executable or in the last-known-good copy — Safe Mode: the chords are swallowed and do nothing")
@@ -1864,6 +1866,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setListening(false)
         }
         syncBorrowedGestures()
+        // **The machine is told that nothing is in flight, whatever ended it.**
+        //
+        // `@sourceGaveUp` above answers one specific ending — a chord the
+        // recogniser ignored — and `@delivered` answers the ordinary one from
+        // `commit`. Everything else reaches here and nowhere else: the overlay's
+        // ✕, the menu's *Cancel Dictation*, `POST /test/cancel`, Wispr's own
+        // ⌃Escape dismiss, a recogniser that quit mid-sentence, a `.silent` that
+        // really did have a microphone open.
+        //
+        // Until review found it (2026-09-14) none of those fired anything, so the
+        // machine stayed in `Listening` with `Listening`'s `exit / resumeMusic`
+        // unrun — his music never came back — and the next click was answered
+        // with `⏳ Transcribing...` for ever. `@idle` is refused harmlessly when
+        // the machine is already `Idle`, which is the common case and costs one
+        // log line.
+        machine?.fire("@idle")
     }
 
     // MARK: - The settle
@@ -5480,10 +5498,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.overlay.flash("⏳ held dictation expired — ⌘⌃P to paste it", duration: 4)
             // `HeldForBind --> Idle : @holdExpired / warnHoldExpired`. The flash
             // above is the same sentence the diagram's own action would say, and
-            // it is said here rather than left to the machine because it must
-            // happen in Safe Mode too — a held sentence that expires silently is
-            // one he goes on believing is on its way.
-            self.machine?.fire("@holdExpired")
+            // **Not the machine's news any more.** The hold stopped being a
+            // state on 2026-09-14: it is a property of a sentence waiting for a
+            // bind, not of the mouse, and a resting state that answered no
+            // gesture left the mouse dead for five minutes. The flash above is
+            // the whole of what he needs to be told.
         }
         awaitingBindExpiry = expiry
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
@@ -5735,6 +5754,21 @@ extension AppDelegate: GestureWorld {
 
     func openDictation() {
         startDictation(spawn: pendingAim == .spawn, paste: pendingAim == .caret)
+        // **A start that refused must not leave the machine listening.**
+        // `startDictation` returns early on half a dozen paths — a sentence
+        // already in flight, a source that is not ready, Wispr Flow not running,
+        // `source.start()` answering with a reason — and the machine has already
+        // entered `Listening` and paused the music by the time any of them is
+        // taken. Asked on the next turn of the main queue, because the Wispr path
+        // raises `didBegin` synchronously inside the call above and `listening`
+        // is only true afterwards.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.listening, !self.speculative, !self.source.isRecording,
+                  !self.settling, !self.recordWhenSourceReady else { return }
+            Log.info("🖱️ the dictation never opened — the machine goes back to idle")
+            self.machine?.fire("@idle")
+        }
     }
 
     func stopDictation() { endDictation() }
@@ -5808,13 +5842,6 @@ extension AppDelegate: GestureWorld {
 
     // MARK: Delivery — only the giving-up
 
-    func dropHeld() {
-        guard awaitingBind != nil else { return }
-        awaitingBind = nil
-        awaitingBindExpiry?.cancel()
-        awaitingBindExpiry = nil
-        overlay.flash("🗑️ the held sentence was dropped", duration: 2)
-    }
 
     // MARK: The one genuine edge among the side effects
 
@@ -5839,7 +5866,27 @@ extension AppDelegate: GestureWorld {
         // flight. Outside one it belongs to the bind, which has its own title.
         guard machine?.isIn("Listening") == true || state == "HeldForBind" else { return }
         guard let row = chip.first else { return overlay.setSpawnDestination(nil) }
-        overlay.setSpawnDestination(row, mark: row.hasPrefix("✨") ? "✨" : nil)
+        overlay.setSpawnDestination(fill(row), mark: row.hasPrefix("✨") ? "✨" : nil)
+    }
+}
+
+extension AppDelegate {
+    /// **Fill the diagram's chip template from the live world.**
+    ///
+    /// `ToBound : chip "🎙️ {boundFolder}"` is a row the diagram owns and the app
+    /// completes; without this it went to the overlay with its braces showing,
+    /// which review caught. The names are closed and an unknown one is left
+    /// alone rather than blanked — a row reading `{whatever}` on screen is how a
+    /// reader finds out the vocabulary grew.
+    func fill(_ row: String) -> String {
+        var out = row
+        out = out.replacingOccurrences(
+            of: "{boundFolder}",
+            with: terminal.target?.folder ?? terminal.target?.label ?? "the bound terminal")
+        out = out.replacingOccurrences(
+            of: "{spawnFolder}",
+            with: spawnFolder.map { ($0 as NSString).lastPathComponent } ?? Self.spawnFolderName)
+        return out
     }
 }
 

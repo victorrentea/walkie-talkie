@@ -67,7 +67,7 @@ HOTKEY_SWIFT = ROOT / "Sources" / "WalkieTalkie" / "HotkeyTap.swift"
 #: What each family of gesture is drawn as. The 🔼 / 🔽 are the two side buttons
 #: as Victor speaks about them ("🔼 click", "🔽 →"); ⌨ is the keyboard, which has
 #: no button to draw.
-GLYPH_FOR_FAMILY = {"forward": "🔼", "back": "🔽", "key": "⌨"}
+GLYPH_FOR_FAMILY = {"forward": "🔼", "back": "🔽", "key": "⌨", "wheel": "🛞"}
 
 IGNORED = ("@startuml", "@enduml", "skinparam", "hide", "show", "title", "legend",
            "scale", "left to right", "top to bottom", "!", "caption", "header",
@@ -82,7 +82,7 @@ VOCABULARY_ROW = re.compile(r'\(\s*"([a-z][a-z0-9-]*)"\s*,\s*((?:\w+\.)?VK_\w+)\
 #: tap coins itself. `forward-bind` is F7 with the left button genuinely held,
 #: `key-dictate` is ⌘⌃D; neither is a row, both are gestures the diagram may use.
 TRIGGER_NAMES_EXTRAS = re.compile(
-    r'static var triggerNames[^\n]*?gestureNames\s*\+\s*\[([^\]]*)\]')
+    r'static var triggerNames.*?gestureNames\s*\+\s*\[([^\]]*)\]', re.S)
 
 #: A gesture name the tap **builds** inside `handle` — `gesture = "forward-bind"`
 #: after `leftIsHeld`. Read from the tap's source for the same reason the rows

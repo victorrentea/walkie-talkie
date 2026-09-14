@@ -85,9 +85,10 @@ protocol GestureWorld: AnyObject {
     /// a transition as well would send the sentence twice. The machine is told
     /// `@delivered` / `@held` afterwards and follows.
     ///
-    /// The one thing a gesture still drives here is giving up on a held
-    /// sentence, because that is him deciding, not the delivery answering.
-    func dropHeld()
+    /// The five-minute hold is not a state for the same reason: it is a property
+    /// of a *sentence* waiting for a bind, not of the mouse. It was a state for
+    /// one build and answered no gesture at all, which left the mouse dead for
+    /// five minutes after an unbound sentence landed.
 
     // MARK: The one side effect that is a genuine edge
 
@@ -141,8 +142,6 @@ enum GestureActions {
             "postReturn":        { $0.postReturn() },
             "postWisprHandsFree": { $0.postHandsFreeChord() },
 
-            // Delivery — only the giving-up, see the protocol's note
-            "dropHeld":          { $0.dropHeld() },
 
             // The music is the one genuine edge among the side effects — see the
             // comment beside Listening's entry in the diagram.
@@ -152,13 +151,13 @@ enum GestureActions {
             // Warnings. Every string English — the overlay goes on a projector.
             "warnNothingBound":  { $0.warn("⚠️ nothing is bound — ⌘⌃B, or 🔼 ↓ on a terminal") },
             "warnSourceSilent":  { $0.warn("⚠️ the recogniser never opened a microphone") },
-            "warnHoldExpired":   { $0.warn("⏳ held dictation expired — ⌘⌃P to paste it") },
 
             // Log-only notes. These exist so a gesture that deliberately does
             // nothing says so, which is the answer to *why did nothing happen*.
             // The source already flashed its own reason through `DictationEnd
             // .silent(why)`; a second banner over it would say less, not more.
             "sayNoWords":        { $0.note("✍️ the settle gave up with no words") },
+            "sayHeld":           { $0.note("⏳ nothing bound — the sentence is held for the bind that follows") },
             "sayInFlight":       { $0.note("🔼 a gesture while the words are in flight — nothing to start, nothing to stop") },
             "confirmMicOpen":    { $0.note("⚡ the microphone confirms the gesture") },
             "noteShut":          { $0.note("⚡ the microphone is shut") },

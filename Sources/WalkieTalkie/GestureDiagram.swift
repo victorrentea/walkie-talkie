@@ -73,7 +73,12 @@ enum GestureDiagram {
         let parent: String?
         let stereotype: String?
         /// The tooltip beside the pointer, in file order. **This is the chip** —
-        /// the strings are not duplicated in `RelayWindow`.
+        /// the destination row's strings live here and not in `RelayWindow`.
+        /// `{boundFolder}` / `{spawnFolder}` are filled by `AppDelegate.fill`.
+        ///
+        /// Only the rows the machine owns: `Transcribing...` and the recording
+        /// row are still `RelayWindow`'s, drawn from `setTranscribing` /
+        /// `setListening`, and `reconcile` deliberately does not touch them.
         var chip: [String] = []
         var entry: [String] = []
         var exit: [String] = []
@@ -133,6 +138,41 @@ enum GestureDiagram {
         "header", "footer", "note ", "end note",
     ]
 
+    /// **A decoration keyword matches only as a whole token**, and that is the
+    /// whole of this function.
+    ///
+    /// It was a plain `lower.hasPrefix(prefix)` on the trimmed line until a
+    /// renamed state was measured against it. Eight of the keywords above —
+    /// `hide`, `show`, `title`, `legend`, `scale`, `caption`, `header`,
+    /// `footer` — are also perfectly ordinary state names, and a state called
+    /// `Showing` (or `Title`, or `Legend`) had **every** one of its
+    /// `Showing : …` and `Showing --> …` lines swallowed as decoration. The
+    /// diagram still loaded, `ok: true`, with the arrows out of that state
+    /// simply not in it: the machine reached `Showing`, refused `@delivered`
+    /// for ever and parked there, and nothing anywhere said why. It is the same
+    /// silent failure the reserved-word check (`entry` / `exit` / `chip` / …)
+    /// was added for, one layer up — a line that means something being read as
+    /// a line that means nothing, which is the failure this grammar can least
+    /// afford.
+    ///
+    /// So a keyword matches only when the line **is** the keyword, or the
+    /// character after it is whitespace or `{`. `!` is the deliberate
+    /// exception: it is punctuation, not a word (`!include`, `!define`), so
+    /// there is no separator after it and never could be.
+    private static func isDecoration(_ lower: String) -> Bool {
+        for prefix in ignoredPrefixes where lower.hasPrefix(prefix) {
+            if prefix == "!" { return true }
+            // `note ` and `end note` carry their own separator already.
+            if prefix.hasSuffix(" ") { return true }
+            guard let after = lower.index(lower.startIndex, offsetBy: prefix.count,
+                                          limitedBy: lower.endIndex) else { continue }
+            if after == lower.endIndex { return true }
+            let c = lower[after]
+            if c == "{" || c.isWhitespace { return true }
+        }
+        return false
+    }
+
     static func parse(_ text: String) throws -> Parsed {
         var states: [String: State] = [:]
         var order: [String] = []
@@ -156,7 +196,7 @@ enum GestureDiagram {
                 continue
             }
             let lower = s.lowercased()
-            if ignoredPrefixes.contains(where: { lower.hasPrefix($0) }) {
+            if isDecoration(lower) {
                 if s.hasSuffix("{") { decorationDepth = 1 }
                 continue
             }
@@ -370,15 +410,43 @@ enum GestureDiagram {
         // At most one unguarded transition per (state, trigger), and it must come
         // last — otherwise a guarded one written after it could never be reached,
         // and reading order would stop being evaluation order.
-        var seenUnguarded: [String: Int] = [:]
-        for t in d.transitions {
-            let key = "\(t.from)\u{1}\(t.trigger)"
-            if let at = seenUnguarded[key] {
-                throw ParseError(line: t.line, message:
-                    "`\(t.trigger)` on `\(t.from)` is unreachable — line \(at) already answers it "
-                    + "with no guard. The unguarded one must be written last.")
+        //
+        // **The key is the state the machine is IN, not the state the arrow is
+        // written on.** Resolution walks the ancestor chain innermost-first
+        // (`candidates(in:state:trigger:)`), so an unguarded line on a SUBSTATE
+        // shadows a guarded one on its composite parent — for that substate
+        // only, which is exactly the shape nobody notices. Keyed on
+        // `(from, trigger)` this check missed it entirely:
+        // `AtCaret : 🔼 forward-right / warnNothingBound` written inside the
+        // `state Listening { … }` block passed, and silently refused every
+        // delivery made from `AtCaret`. That is the first-draft bug this rule
+        // was written for — the unguarded `forward-right` above the guarded
+        // one — one indentation to the left.
+        //
+        // So the walk is done once per state, over the same list `candidates`
+        // would build, and it subsumes the same-state case it replaces.
+        for state in d.order {
+            var ordered: [Transition] = []
+            for name in d.chain(of: state).reversed() {
+                ordered.append(contentsOf: d.transitions.filter { $0.from == name })
             }
-            if t.guardName == nil { seenUnguarded[key] = t.line }
+            var seenUnguarded: [String: Transition] = [:]
+            for t in ordered {
+                if let first = seenUnguarded[t.trigger] {
+                    guard first.from != t.from else {
+                        throw ParseError(line: t.line, message:
+                            "`\(t.trigger)` on `\(t.from)` is unreachable — line \(first.line) "
+                            + "already answers it with no guard. "
+                            + "The unguarded one must be written last.")
+                    }
+                    throw ParseError(line: t.line, message:
+                        "`\(t.trigger)` on `\(t.from)` (line \(t.line)) can never be reached from "
+                        + "`\(state)` — line \(first.line) answers it on `\(first.from)` with no guard, "
+                        + "and a substate outranks its parent. The unguarded one must be written last: "
+                        + "move it out of `\(first.from)`, or give it a guard.")
+                }
+                if t.guardName == nil { seenUnguarded[t.trigger] = t }
+            }
         }
         // A composite may not be entered directly: entering it would have to pick
         // a substate, and picking one silently is how a diagram starts lying.

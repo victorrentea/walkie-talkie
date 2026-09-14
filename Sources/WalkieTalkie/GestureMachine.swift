@@ -244,35 +244,78 @@ enum GestureDiagramFile {
     /// at four in the afternoon should cost a warning, not the afternoon.
     static var lastGood: URL { Outbox.home.appendingPathComponent("gestures.last-good.puml") }
 
-    static func candidates() -> [URL] {
-        var out: [URL] = []
+    /// **Which leg of the search answered**, not merely which path. The two are
+    /// not the same question: `origin` is a string for a person reading
+    /// `GET /test/state`, while *may this text become the last-known-good* is a
+    /// decision, and deciding it by pattern-matching a path is how it went wrong.
+    enum Source {
+        /// `WT_GESTURES_PUML` — a diagram somebody is holding up on purpose.
+        case override(URL)
+        /// The installed `.app`'s own copy. The only one the app really runs on.
+        case bundle(URL)
+        /// Walked up from the executable: a checkout, i.e. a developer run.
+        case repo(URL)
+        /// The safety net itself.
+        case lastGood
+
+        /// What `GET /test/state.gestureMachine.diagram.origin` says.
+        var origin: String {
+            switch self {
+            case .override(let u), .bundle(let u), .repo(let u): return u.path
+            case .lastGood: return "last-good"
+            }
+        }
+
+        /// Only the installed bundle's own diagram is the app's own diagram.
+        var isInstalledBundle: Bool {
+            if case .bundle = self { return true }
+            return false
+        }
+
+        var isLastGood: Bool {
+            if case .lastGood = self { return true }
+            return false
+        }
+
+        var url: URL {
+            switch self {
+            case .override(let u), .bundle(let u), .repo(let u): return u
+            case .lastGood: return GestureDiagramFile.lastGood
+            }
+        }
+    }
+
+    /// The search, in order. Unchanged: the override first, then the installed
+    /// bundle, then up to four directories up from the executable.
+    static func candidates() -> [Source] {
+        var out: [Source] = []
         if let override = ProcessInfo.processInfo.environment["WT_GESTURES_PUML"] {
-            out.append(URL(fileURLWithPath: override))
+            out.append(.override(URL(fileURLWithPath: override)))
         }
         if let res = Bundle.main.resourcePath {
-            out.append(URL(fileURLWithPath: res).appendingPathComponent("gestures.puml"))
+            out.append(.bundle(URL(fileURLWithPath: res).appendingPathComponent("gestures.puml")))
         }
         let exe = URL(fileURLWithPath: CommandLine.arguments[0],
                       relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             .standardizedFileURL.resolvingSymlinksInPath()
         var dir = exe.deletingLastPathComponent()
         for _ in 0..<4 {
-            out.append(dir.appendingPathComponent("docs/gestures.puml"))
+            out.append(.repo(dir.appendingPathComponent("docs/gestures.puml")))
             dir = dir.deletingLastPathComponent()
         }
         return out
     }
 
-    /// The text, and where it came from. `nil` when there is nothing anywhere —
+    /// The text, and which leg found it. `nil` when there is nothing anywhere —
     /// which is Safe Mode, and is said out loud by the caller.
-    static func read() -> (text: String, origin: String)? {
-        for url in candidates() {
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                return (text, url.path)
+    static func read() -> (text: String, source: Source)? {
+        for source in candidates() {
+            if let text = try? String(contentsOf: source.url, encoding: .utf8) {
+                return (text, source)
             }
         }
         if let text = try? String(contentsOf: lastGood, encoding: .utf8) {
-            return (text, "last-good")
+            return (text, .lastGood)
         }
         return nil
     }
@@ -287,15 +330,26 @@ enum GestureDiagramFile {
     /// last-known-good, and a file that does not is refused entirely rather than
     /// merged with anything.
     static func loadDiagram() -> (diagram: GestureDiagram.Parsed, origin: String, problem: String?)? {
-        guard let (text, origin) = read() else { return nil }
+        guard let (text, source) = read() else { return nil }
         do {
             let parsed = try GestureDiagram.parse(text)
-            if origin != "last-good" { rememberGood(text) }
-            return (parsed, origin, nil)
+            // **Only the installed bundle writes the safety net.** It existed
+            // for the app Victor has running all day, and a developer run has no
+            // business editing it: `--simulate-gestures` and the evals resolve
+            // the diagram by walking up from `.build/debug/WalkieTalkie`, so
+            // every run from every clone used to overwrite
+            // `~/.walkie-talkie/gestures.last-good.puml` with whatever that
+            // branch was experimenting with — and the *installed* app then fell
+            // back to a stranger's half-finished vocabulary the next time a typo
+            // refused its own file. `WT_GESTURES_PUML` is the same argument,
+            // more so: it is a diagram somebody is deliberately holding up for
+            // one run, which is the last thing that should outlive it.
+            if source.isInstalledBundle { rememberGood(text) }
+            return (parsed, source.origin, nil)
         } catch {
             let why = "\(error)"
             Log.error("🖱️ \(why)")
-            guard origin != "last-good",
+            guard !source.isLastGood,
                   let fallback = try? String(contentsOf: lastGood, encoding: .utf8),
                   let parsed = try? GestureDiagram.parse(fallback) else { return nil }
             return (parsed, "last-good", why)

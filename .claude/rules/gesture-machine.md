@@ -122,6 +122,20 @@ Three layers, and the middle one is the one to understand:
 - **`refused`** answers *why did nothing happen*, which before this machine had no
   answer anywhere in the app.
 
+## Two behaviour changes worth knowing
+
+- **🔽 click during the settle takes a picture, it does not post Return.** On
+  master `dictating` was false once the microphone shut, so F6 typed Return. Here
+  `Settling` answers it with `captureScreenshot`, which is right — `dictationInFlight`
+  is cleared in `send`, so a frame taken after the microphone closes still attaches
+  to the sentence. It does mean the key he submits with is a shutter for the length
+  of a settle; if that grates, the fix is one line on `Settling`.
+- **⌘⌃D is outside the machine** (with ⌘⌃B and ⌘⌃P) and reaches `toggleDictation`
+  directly. It was inside for one build, which made a liar of every place that
+  calls it the way back from a bad diagram — in Safe Mode the chord was swallowed
+  and answered by nothing. The machine hears about a dictation it starts through
+  `@micOpened` / `@idle`, like any other the world opens without asking it.
+
 ## Do not
 
 - **Do not add a `switch` over gesture names anywhere in `Sources/`.**
