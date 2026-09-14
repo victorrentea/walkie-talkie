@@ -14,9 +14,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 ## Replace Wispr: the relay as a way to type
 
-One menu tick (since 2026-09-02) turns the relay into a dictation tool for the machine: the
+A mode (since 2026-09-02) that turns the relay into a dictation tool for the machine: the
 **forward side button** opens and closes the microphone and the words are **pasted at the caret** —
 no outbox line, no terminal, no prompt panel, no countdown.
+
+**It has no menu row since 2026-09-14.** `Replace WisprFlow` was replaced in the menu by the
+`Engine` picker, on Victor's reading that a checkbox named after another app says *that app: yes or
+no* rather than *which recogniser*. Nothing about the mode changed: the flag, the preference key
+and the forward button are where they were, the flag simply moved from `StatusItem` to
+`AppDelegate.replaceWisprKey`. What it costs is that the mode can now only be turned over through
+`POST /test/replace-wispr`, and that the chip's `⌨️ at the caret` is the only place it can be read.
+The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engine row*
 
 | | bound dictation | Replace Wispr |
 |---|---|---|

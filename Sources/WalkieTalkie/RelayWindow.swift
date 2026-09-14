@@ -789,7 +789,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and a setting that is restated in the corner of the screen all day is
     /// paying rent at every moment in order to be read twice a month. The whole
     /// id also stretched the panel to the width of its longest possible value.
-    /// `StatusItem.applyWhisperTitle` says it, beside the RAM the model is
+    /// `StatusItem.engineTitle` says it, beside the RAM the model is
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening else { return nil }

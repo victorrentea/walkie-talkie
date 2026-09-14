@@ -11,10 +11,11 @@ import Foundation
 ///
 /// ## It is retired, not deleted (2026-09-12)
 ///
-/// No gesture and no menu row starts this any more — Victor's decision is that
-/// Wispr Flow is the microphone for everything, and the weights are no longer
-/// loaded at launch. It stays selectable (`WT_SOURCE=whisper`, and the menu's
-/// *Dictation source* row) for three reasons that are all the same reason:
+/// No gesture starts this any more — Victor's decision is that Wispr Flow is
+/// the microphone for everything, and the weights are no longer loaded at
+/// launch. It stays selectable — `WT_SOURCE=whisper`, and since 2026-09-14 the
+/// menu's **Engine** row, which brings the weights up as it picks — for three
+/// reasons that are all the same reason:
 ///
 /// - **A Wispr update can change how it delivers.** The wrap rests on
 ///   intercepting a ⌘V from another process. The day that stops being a ⌘V is a

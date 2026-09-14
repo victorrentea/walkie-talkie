@@ -9535,12 +9535,20 @@ still survives a launch. What the mode lost is its tick, and with it its mouse-5
 legend — the menu is the only place a gesture is written down in this app, so
 that is a real cost, taken deliberately on his instruction.
 
-**It pops up, it is not a submenu.** The same trap `Rebind to…` paid for on
+**It is a submenu, with the arrow — after one build where it was not.** The
+first cut popped the list up at the pointer, on the trap `Rebind to…` paid for on
 2026-09-10: one disclosure arrow makes AppKit reserve the gutter on every row of
-the menu and the gesture column runs away with it (*"a fugit toată coloana de
-meniuri din cauza >"*). The list is built on the click and `popUp`'d at the
-pointer, dispatched — a menu put up inside the closing of the menu it came from
-lands underneath it and takes no clicks.
+the menu and the gesture column shifts with it (*"a fugit toată coloana de
+meniuri din cauza >"*). That argument was carried over rather than re-tested, and
+Victor looked at the result: *"nu e bine. tre submeniu obișnuit cu >, nu un
+modal"*. A list of two that appears detached from the row it came from reads as a
+modal rather than as a branch of the menu, and the gutter is the cheaper of the
+two costs at that size. `Rebind to…` keeps its pop-up, because its list is long,
+live and searched — the reason was never the arrow alone.
+
+The two rows are rebuilt in `applyEngineRow`, which `menuWillOpen` already calls
+for the row above; the submenu needs no delegate of its own, because the only
+thing that changes in it is the model's footprint.
 
 **The switch is five assignments and a re-wire.** `AppDelegate.setEngine` nils the
 old source's five callbacks, assigns `source`, writes the preference and re-runs

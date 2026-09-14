@@ -16,7 +16,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 - **Every string in `StatusItem` is English.** The menu is where every gesture is written down —
   `Connect Terminal` / `Disconnect` / `Start dictation to new claude` and their chords, the three
-  dictation rows, `Replace WisprFlow`, the legends, `Autosend`, `About`, `Quit`, the model readout.
+  dictation rows, `Engine: …`, the legends, `Autosend`, `About`, `Quit`, the model name.
   → journal: *UI language: English only*
 - **The header `Bound to: folder@branch` is written from `AppDelegate.showBound` only** — the
   single place the chip's line and the menu's header are set, so they cannot disagree. Only the
@@ -60,7 +60,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
-| `Replace WisprFlow` | a `checkmark` when on, **nothing** when off | the forward side button (see *Replace Wispr*) |
+| `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
@@ -69,7 +69,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **The shortcut column above is the wheel vocabulary — live only with *Use Logi Gestures*
   unticked.** Each `gestureRows` entry carries two legends, `(item, label, logi, wheel)`, and
   `restyleGestures` picks one; the Logi set (default since 2026-09-09) is `◀️ + 🔼` bind, `🔽 ↓`
-  disconnect, `🔼 →` start/end, `🔼 ↑` new claude, `🔼 ←` cancel, `🔼` Replace WisprFlow, `🔽`
+  disconnect, `🔼 →` start/end, `🔼 ↑` new claude, `🔼 ←` cancel, `🔽`
   screenshot, `🛞 drag` area, `⌘⇧◀️` pick. Vocabulary: an emoji for the button (`◀️`/`▶️` left
   and right, `🔼`/`🔽` the stacked forward and back side buttons, `🛞` the wheel), a thin text arrow
   for the movement, `+` only to join a held button to the wheel — no `+` in `⌘⇧◀️`, since hold-and-
@@ -110,7 +110,36 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   legends). The arrows in this menu are already mouse buttons.
   → journal: *Every row has an icon, and two alphabets share the column*
 
-## Switches: Autosend, Replace WisprFlow, Use Logi Gestures
+## The Engine row: which recogniser is listening (2026-09-14)
+
+- **It replaced `Replace WisprFlow`, and that row is gone from the menu.** A checkbox named after
+  another app reads as *that app: yes or no* (*"nu mai trebuie să fie un checkbox «Wispr» sau nu,
+  ci un submeniu din care să aleg modelul de utilizat"*). A tick can only name one of the two
+  engines; the unnamed one is exactly what he is asked about in a room — *"așa se vede și numele
+  modelului, dacă mă întreabă cineva ce folosesc"*. The caret-paste mode itself is untouched and
+  still lives on the forward side button; what it has lost is its row, its tick and its legend.
+  → journal: *The engine is a choice with two names on it (2026-09-14)*
+- **The row is a readout of `AppDelegate.source` first and a control second.** Its title is
+  `Engine: Wispr Flow` or `Engine: <model> — 1.6 GB RAM`, so the answer is readable without opening
+  anything. No `…` on it — the arrow already says there is more.
+- **It is an ordinary submenu with the arrow** — *"tre submeniu obișnuit cu >, nu un modal"*
+  (Victor, 2026-09-14, after seeing the alternative). It was a dispatched `popUp` for one build, on
+  `Rebind to…`'s gutter argument carried over rather than re-tested; a detached list of two reads
+  as a modal instead of as a branch of the menu. `Rebind to…` keeps its pop-up — its list is long,
+  live and searched. **The submenu's rows are rebuilt in `applyEngineRow`**, which `menuWillOpen`
+  already calls, not by a delegate of the submenu's own.
+- **The tick in the list is drawn from what is running, never from the click.** `StatusItem` holds
+  `engineId` only as a mirror; `AppDelegate.setEngine` is what decides and calls `setEngine` back —
+  including when it **refuses**, which it does with a sentence in flight (`listening`, `settling`,
+  `speculative`, `source.isRecording`). A source swapped between `didStopListening` and
+  `didTranscribe` leaves the old one holding a transcript with nobody wired to receive it.
+- **Picking the local model brings the weights up on the spot.** `LocalWhisperSource.prepare()` is
+  deliberately a no-op, but a deliberate pick *is* the gesture that asks for it — a first dictation
+  answered with `the local model is still loading` reads as the switch having failed.
+- **`GET /engine` answers `engine` (`wispr` / `whisper`) beside `source`**, so a test asserts the
+  pick without matching a display name.
+
+## Switches: Autosend, Use Logi Gestures
 
 - **Switch state lives in the icon column — a `checkmark` when on, a blank image of the column's
   exact width when off — never `NSMenuItem.state`.** A ticked row makes AppKit reserve the state
@@ -119,7 +148,8 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   are the menu's only switches, so the one fact to carry is on or off (*"autosend să aibă bifă în
   față, nu ⏩ când e activ"*, 2026-09-07).
   → journal: *Autosend*
-- **Autosend and Replace WisprFlow persist across launches** (both since 2026-09-07). Ticked,
+- **Autosend persists across launches** (since 2026-09-07; so does the caret-paste mode, whose
+  preference moved to `AppDelegate.replaceWisprKey` when its row went). Ticked,
   the pre-send panel still opens for `AppDelegate.autosendHold` = 1 s — the receipt, without
   which a delivery cannot be told from a drop — **with no Send and no Cancel and no buttons' row**:
   two buttons up for one second are two buttons nobody can reach. State lives on the item and is
@@ -156,8 +186,9 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `<model> — loading…` in the menu. `AppDelegate.setEngineLoading` is a one-liner into
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
-- **The engine row reads `<model> — 1.6 GB RAM` (bare model name, org prefix stripped), disabled,
-  read when the menu opens.** A readout, not a switch. The number is `ri_phys_footprint` from
+- **The local model's name reads `<model> — 1.6 GB RAM` (bare model name, org prefix stripped),
+  read when the menu opens.** It was a disabled row of its own at the bottom of the menu until
+  2026-09-14; it is now the Engine row's own title, and the second line of its picker. The number is `ri_phys_footprint` from
   `proc_pid_rusage` — Activity Monitor's "Memory", not `ps`'s RSS, because MLX puts weights in
   unified memory and the two disagree. It doubles as liveness: a dead helper has no footprint and
   the row goes back to its bare name.
@@ -226,6 +257,9 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 - Do not hide a row the app cannot act on right now — grey it.
 - Do not put `Rebind to…` back as a submenu, and do not put its panel up inline from the click.
+- Do not turn the `Engine` submenu back into a pop-up, and do not let it tick a row the app has
+  not switched to.
+- Do not put `Replace WisprFlow` back as a row without asking — it was removed deliberately.
 - Do not set `NSMenuItem.state` on any row, and do not read a label back off an item that has an
   `attributedTitle`.
 - Do not give `Quit` a ⌘Q key equivalent in the status menu.

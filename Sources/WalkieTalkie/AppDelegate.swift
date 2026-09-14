@@ -103,13 +103,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is the whole point: the Wispr path spent a month with no transcript in it
     /// precisely because it was a second branch nobody exercised.
     ///
-    /// `WT_SOURCE=whisper` (or the menu's *Dictation source* row) picks the
-    /// local model instead.
+    /// `WT_SOURCE=whisper` for one run; the menu's **Engine** row for good —
+    /// see `setEngine`, which is the only thing that writes `engineKey`.
     private lazy var source: DictationSource = {
         let wanted = ProcessInfo.processInfo.environment["WT_SOURCE"]?.lowercased()
-            ?? UserDefaults.standard.string(forKey: "dictationSource")
+            ?? UserDefaults.standard.string(forKey: AppDelegate.engineKey)
         return wanted == "whisper" || wanted == "local" ? whisperSource : wisprSource
     }()
+
+    /// **The preference the Engine row writes** — `wispr` or `whisper`. It is a
+    /// preference rather than data, so it lives in `UserDefaults` beside
+    /// `autosend` and not in `~/.walkie-talkie`, and `--home` has no business
+    /// moving it.
+    private static let engineKey = "dictationSource"
+
+    /// Which of the two `source` currently is, in the menu's vocabulary. Derived
+    /// rather than stored: the source is the fact, and a second copy of it is a
+    /// second thing that can be wrong.
+    private var engineId: String { source === whisperSource ? "whisper" : "wispr" }
+
+    /// **Swap the recogniser under a running relay** (2026-09-14).
+    ///
+    /// It is a re-wire and nothing else — the callbacks come off the old source
+    /// and go on to the new one — which is the whole reason `DictationSource` is
+    /// a protocol: nothing downstream is told, because nothing downstream ever
+    /// knew which one it was serving.
+    ///
+    /// **Refused mid-sentence.** A source swapped between `didStopListening` and
+    /// `didTranscribe` takes the words with it: the old one is left holding a
+    /// transcript with nobody wired to receive it, and the settle then runs out
+    /// over a sentence that was already spoken. The menu is told what is
+    /// actually running afterwards either way, so a refused pick cannot leave a
+    /// tick beside an engine that is not listening.
+    private func setEngine(_ id: String) {
+        let next: DictationSource = id == "whisper" ? whisperSource : wisprSource
+        guard next !== source else { return }
+        guard !listening, !settling, !speculative, !source.isRecording else {
+            overlay.flash("⏳ finish the sentence first — the engine stays \(source.name)",
+                          duration: 3)
+            status.setEngine(engineId)
+            return
+        }
+        source.didMaybeBegin = nil
+        source.didBegin = nil
+        source.didStopListening = nil
+        source.didTranscribe = nil
+        source.didEnd = nil
+        source = next
+        UserDefaults.standard.set(id, forKey: Self.engineKey)
+        wireDictationSource()
+        status.setEngine(engineId)
+        // **The weights come up on the pick, not on the first gesture.**
+        // `LocalWhisperSource.prepare()` is deliberately a no-op — it is a
+        // fallback and nothing should pay ten seconds for it at launch — but
+        // choosing it from the menu *is* the gesture that asks for it, and a
+        // first dictation answered with "the local model is still loading" reads
+        // as the switch having failed.
+        (source as? LocalWhisperSource)?.bringUpModel()
+        Log.info("🎙️ dictation engine switched to \(source.name)")
+        overlay.flash("🎙️ \(source.name)", duration: 2.5)
+    }
 
     /// **The dictation is over but the words have not landed yet.**
     ///
@@ -384,18 +437,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// — pointed at agents only.
     ///
     /// **Restored from the last launch** (Victor, 2026-09-07), the same call
-    /// `autosend` makes and for the same reason — see the note on
-    /// `StatusItem.replaceWisprOn` for what the argument against it was and what
-    /// overruled it. The menu row is where the answer is, and it is one click
-    /// away.
-    private var replaceWispr = false
+    /// `autosend` makes: the mode is not a setting he drifts into, it is how he
+    /// dictates for a whole stretch of work, and re-ticking it every launch is a
+    /// tax charged on the one gesture that exists to save typing.
+    ///
+    /// **The preference lives here since 2026-09-14**, because the row that used
+    /// to hold it is gone: `Replace WisprFlow` was replaced in the menu by the
+    /// **Engine** picker, on the grounds that a checkbox named after another app
+    /// reads as *that app: yes or no*. The mode itself is untouched — the
+    /// forward button still opens a caret dictation — but the only way to turn
+    /// it over now is `POST /test/replace-wispr`, and the chip saying `⌨️ at the
+    /// caret` on every sentence is the only place it can be read.
+    private var replaceWispr = UserDefaults.standard.bool(forKey: AppDelegate.replaceWisprKey)
+    /// The preference behind it — see the note above.
+    private static let replaceWisprKey = "replaceWispr"
 
-    /// The one place the mode is written, so the tick in the menu, the flag the
-    /// tap reads and the flash on screen cannot say three different things.
-    private func setReplaceWispr(_ on: Bool, fromMenu: Bool = true) {
+    /// The one place the mode is written, so the flag the tap reads, the
+    /// preference and the flash on screen cannot say three different things.
+    private func setReplaceWispr(_ on: Bool) {
         replaceWispr = on
         hotkeys.replaceWispr = on
-        if !fromMenu { status.setReplaceWispr(on) }
+        UserDefaults.standard.set(on, forKey: Self.replaceWisprKey)
         Log.info("Replace Wispr \(on ? "on — the forward button dictates at the caret" : "off")")
         overlay.flash(on ? "Replace Wispr on — forward button dictates at the caret"
                          : "Replace Wispr off", duration: 2.5)
@@ -611,10 +673,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         status = StatusItem()
         status.onExit = { [weak self] in self?.endSession(reason: "menu bar Quit") }
-        // **Replace Wispr.** One flag, pushed to the tap in the same breath, so
-        // the mode and the button that performs it cannot disagree — and flashed,
-        // because it is the one setting that changes where every sentence lands.
-        status.onToggleReplaceWispr = { [weak self] on in self?.setReplaceWispr(on) }
+        // **The engine.** The row is a readout of `source` and a way to change
+        // it; `setEngine` is what decides, and it tells the row back what is
+        // actually running — see its note on the sentence in flight.
+        status.onPickEngine = { [weak self] id in self?.setEngine(id) }
         // **Use Logi Gestures** — pushed into the tap, which is the only thing
         // that acts on it. No flash and no overlay: it is a wiring switch, not
         // something that happens to a dictation.
@@ -634,11 +696,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // disagree the first time one of them changed key or meaning.
         autosend = status.isAutosend
         if autosend { Log.info("autosend restored on from the last launch") }
-        // Seeded from the menu for `autosend`'s reason — the row is the one
-        // source of truth — but pushed **through the flag and the tap by hand**
-        // rather than through `setReplaceWispr`: that call flashes the overlay,
-        // and a mode restored from the last launch is not an event to announce.
-        // The tick is already drawn, so nothing has to be pushed back to the row.
+        // Pushed **through the flag and the tap by hand** rather than through
+        // `setReplaceWispr`: that call flashes the overlay, and a mode restored
+        // from the last launch is not an event to announce.
         // **The wrap, restored from the last launch** — see
         // `StatusItem.isWrapWispr`. `WT_WRAP_WISPR=0` overrides it for one run,
         // which is what the harness uses to watch Wispr paste for itself.
@@ -650,13 +710,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         whisperSource.onLoadingChanged = { [weak self] loading in
             self?.status.setEngineLoading(loading)
         }
-        replaceWispr = status.isReplaceWispr
         hotkeys.replaceWispr = replaceWispr
-        // Seeded the same way, and for the same reason: the row is the one
-        // source of truth, and the tick is already drawn.
+        // Seeded from the menu — the row is the one source of truth, and the
+        // tick is already drawn.
         hotkeys.useLogiGestures = status.isLogiGestures
         if !status.isLogiGestures { Log.info("🖱️ Logi gestures off from the last launch — the wheel is the relay's") }
         if replaceWispr { Log.info("Replace Wispr restored on from the last launch") }
+        // **The engine row starts out saying what is actually running**, which
+        // may be `WT_SOURCE` rather than the preference — the row is the only
+        // place the answer is written down, so it may never be the one guessing.
+        status.setEngine(engineId)
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.
@@ -1197,7 +1260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         picker.onTestReplaceWispr = { [weak self] on in
-            DispatchQueue.main.async { self?.setReplaceWispr(on, fromMenu: false) }
+            DispatchQueue.main.async { self?.setReplaceWispr(on) }
         }
         // In the middle of the screen the pointer happens to be on, rather than
         // at the pointer: nothing at a desk moves the mouse, and a panel drawn
@@ -1298,6 +1361,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.describeEngine = { [weak self] in
             guard let self else { return [:] }
             var out: [String: Any] = ["source": self.source.name,
+                                      // The menu's own word for the same fact,
+                                      // so a test can assert the pick landed
+                                      // without matching a display name.
+                                      "engine": self.engineId,
                                       "ready": self.source.isReady,
                                       "wrapWispr": self.wisprSource.wrapWispr,
                                       // **And how**, not only whether — a wrap

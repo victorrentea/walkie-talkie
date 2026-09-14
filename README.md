@@ -320,6 +320,7 @@ once, each taking one):
 | click | On a prompt: send it now. Otherwise: nothing — the chip is a label, not a switch |
 | hover | Reveals the ✕ that ends the session — **panel only**, never on the chip beside the pointer |
 | menu bar **Autosend** | Off at every launch. Ticked, the pre-send panel opens for one second with no Send and no Cancel on it, and the message goes |
+| menu bar **Engine** | Which recogniser is listening — Wispr Flow, or the local MLX model by name. Clicking the row opens the two, ticked; picking the local one loads its weights |
 | menu bar 🤖 | Always there while the app runs — shows which session it is, and **every action with the gesture that performs it**. Rows grey out when they cannot act right now; they never disappear |
 
 **The chip itself teaches nothing.** It carries state — the pulse, what is being
@@ -361,8 +362,9 @@ It needs `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`, which
 
 The weights are ~1.5 GB resident, so the helper is **not** started at login: it
 comes up when a bind or a wheel click says a dictation is coming, and it is
-released when the session ends. The menu bar's `Local Whisper` row says whether
-it is loading, and what it is holding while it is up.
+released when the session ends. The menu bar's **Engine** row says whether it is
+loading, and what it is holding while it is up — and picking it there is what
+brings it up.
 
 The interpreter is **found by probing, not taken from PATH**: an app launched from
 Finder or a LaunchAgent inherits launchd's bare `PATH=/usr/bin:/bin:/usr/sbin:/sbin`,

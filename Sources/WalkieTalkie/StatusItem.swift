@@ -29,10 +29,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Picked from **Autosend** — the checkbox that takes the pre-send panel out
     /// of the way. See the row's construction for what it actually changes.
     var onToggleAutosend: ((Bool) -> Void)?
-    /// **Replace Wispr** — see `AppDelegate.replaceWispr`. A mode, not a command:
-    /// the forward side button becomes the microphone and every dictation is
-    /// pasted at the caret instead of being typed at an agent.
-    var onToggleReplaceWispr: ((Bool) -> Void)?
     /// What the local model is holding right now, in bytes — nil while it is not
     /// up. Asked when the menu opens, like the header, because that is the only
     /// moment the answer has to be right.
@@ -273,9 +269,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// emoji — sideways the moment this one row is switched on. The layout
     /// shifting under him is a worse readout than the tick was a good one, so
     /// the state is drawn where the other rows draw their identity — and since
-    /// 2026-09-07 that drawing is a **`checkmark`**, the same mark
-    /// `Replace WisprFlow` carries one row up (Victor: *"autosend să aibă bifă
-    /// în față, nu ⏩ când e activ"*).
+    /// 2026-09-07 that drawing is a **`checkmark`**, the same mark `Wrap Wispr
+    /// Flow` carries (Victor: *"autosend să aibă bifă în față, nu ⏩ când e
+    /// activ"*).
     ///
     /// It was `⏩` for an afternoon, on the argument that the icon column is
     /// where a row draws *what it is* — and that is right for a row like
@@ -306,10 +302,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// restarts to overrule that — the reading it was protecting against is one
     /// he makes deliberately, and re-making the same choice every launch is a
     /// worse tax than the risk it was buying off.
-    ///
-    /// **`Replace WisprFlow` persists too**, since 2026-09-07 — the note on
-    /// `replaceWisprOn` says what it cost to give up the argument that kept it
-    /// from doing so.
     private var autosendOn = UserDefaults.standard.bool(forKey: StatusItem.autosendKey)
     /// One of the two keys this app keeps in `UserDefaults`. They are
     /// *preferences* rather than data, so they do not belong in
@@ -321,46 +313,69 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// so the restored tick and the behaviour behind it start out agreeing.
     /// Every later change arrives through `onToggleAutosend`.
     var isAutosend: Bool { autosendOn }
-    /// **The mode row.** It sits beside `Autosend` because the two are the only
-    /// switches in this menu — everything above them is something that happens
-    /// once, when clicked.
+    // ── Dictation engine ────────────────────────────────────────────────────
+
+    /// **Which recogniser is listening — a choice, not a tick** (2026-09-14).
     ///
-    /// The title names both halves of what changes, because both are surprising:
-    /// a button that did nothing for this app starts recording, and the words
-    /// stop going to the terminal the header above still names.
+    /// The row this replaces was `Replace WisprFlow`: one checkbox that read, to
+    /// the hand on the mouse, as *Wispr Flow — yes or no*. Victor asked for the
+    /// distinction a boolean cannot draw — *"nu mai trebuie să fie un checkbox
+    /// «Wispr» sau nu, ci un submeniu din care să aleg modelul de utilizat …
+    /// așa se vede și numele modelului, dacă mă întreabă cineva ce folosesc"*.
+    /// A tick names one of the two engines and leaves the other one unnamed,
+    /// and the unnamed one is exactly what he is asked about in a room.
     ///
-    /// **The icon column is the tick** (Victor, 2026-09-07): nothing at all when
-    /// the mode is off, a `checkmark` in front of the words when it is on. It
-    /// carried `⌨️` in that column and its state in `NSMenuItem.state`, which is
-    /// the arrangement `Autosend` had already given up one row below and for the
-    /// same reason — a ticked row makes AppKit reserve the state column for the
-    /// **whole** menu, so switching this one mode on shoved every other row
-    /// sideways. The `⌨️` is what pays for the tick, and it is the cheaper half:
-    /// it said *the destination is wherever the caret is*, which is what the
-    /// title says in words, while the tick is the only place the mode can be
-    /// read at all.
+    /// So the row **says which engine is running**, and opens the list of both:
     ///
-    /// **Off is blank, not an ✕.** Asked for as either — *"un X când e dezactivat
-    /// … sau mai bine chiar … nimic"* — and blank is the one that leaves the row
-    /// looking like the commands above it when the mode is doing nothing. It is
-    /// still an image, transparent and exactly the size of the others, so the
-    /// title does not step left the moment the tick goes.
-    private let replaceWispr = NSMenuItem(title: "Replace WisprFlow", action: nil, keyEquivalent: "")
-    /// Mirrors what the `replaceWispr` row means, since the row no longer carries
-    /// a `state` to read it back from — the same shape `autosendOn` has.
+    /// ```
+    ///   Engine: Wispr Flow…
+    ///        ✓ Wispr Flow
+    ///          whisper-large-v3-turbo — 1.6 GB RAM
+    /// ```
     ///
-    /// **It survives a restart** (Victor, 2026-09-07), and it is the second of
-    /// the two switches to give that argument up. The argument was the stronger
-    /// one of the pair: autosend changes *how long* the panel waits, while this
-    /// changes **where the words go**, so a tick that came back on its own would
-    /// put a dictation meant for a bound agent into whatever field held the
-    /// caret, weeks after he had forgotten it was set. What overrules it is that
-    /// the mode is not a setting he drifts into — it is how he dictates for a
-    /// whole stretch of work, and re-ticking it every launch is a tax charged on
-    /// the one gesture that exists to save typing. The tick is still one click
-    /// away and the chip still says `⌨️ at the caret` on every sentence it
-    /// takes, so a mode left on is visible before a word is spoken.
-    private var replaceWisprOn = UserDefaults.standard.bool(forKey: StatusItem.replaceWisprKey)
+    /// **It is an ordinary submenu, with the arrow** — *"tre submeniu obișnuit
+    /// cu >, nu un modal"* (Victor, 2026-09-14, having looked at the other one).
+    ///
+    /// It was a dispatched `popUp` for one build, on `Rebind to…`'s reasoning:
+    /// one disclosure arrow makes AppKit reserve the gutter on *every* row and
+    /// the gesture column `layOutGestures` lines up shifts with it (2026-09-10:
+    /// *"a fugit toată coloana de meniuri din cauza >"*). That argument was
+    /// carried over rather than re-tested, and what it bought here is a list
+    /// that appears detached from the row it came from — which reads as a modal,
+    /// not as a branch of the menu. The gutter is the cheaper of the two costs
+    /// when the list is **two rows he picks between**, and `Rebind to…` keeps
+    /// its pop-up because its list is long, live and searched.
+    ///
+    /// **The caret-paste mode went with the row it replaced.** It is still the
+    /// forward button's meaning and still `AppDelegate.replaceWispr`, read from
+    /// the same preference key — what it has not got any more is a place in this
+    /// menu to be ticked, which is Victor's call of 2026-09-14.
+    private let engineItem = NSMenuItem(title: "Engine", action: nil, keyEquivalent: "")
+
+    /// **The two rows under the arrow**, rebuilt by `applyEngineRow` rather than
+    /// by a delegate of its own: the names change only with the model's
+    /// footprint, which `menuWillOpen` already re-reads for the row above.
+    private let engineSubmenu = NSMenu()
+
+    /// Which engine is live, as `AppDelegate` last reported it — `wispr` or
+    /// `whisper`.
+    ///
+    /// **The tick is drawn from the app's answer, never from the click.** A
+    /// switch asked for mid-sentence is refused, and a row that had ticked
+    /// itself optimistically would be the only thing in the app claiming an
+    /// engine that is not listening.
+    private var engineId = "wispr"
+
+    /// Victor picked one. `AppDelegate` swaps the source and calls `setEngine`
+    /// back with whatever is actually running afterwards.
+    var onPickEngine: ((String) -> Void)?
+
+    /// Push the live engine in — at launch, from `WT_SOURCE`, or after a switch
+    /// that was refused and left the old one in place.
+    func setEngine(_ id: String) {
+        engineId = id
+        applyEngineRow()
+    }
 
     /// **Use Logi Gestures** — which mouse the app thinks it is holding.
     ///
@@ -449,13 +464,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private func applyWrapWisprIcon() {
         wrapWispr.image = wrapWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
     }
-    /// The other preference key — see the note on `autosendKey`.
-    private static let replaceWisprKey = "replaceWispr"
 
-    /// What the row is set to right now — read once at launch by `AppDelegate`,
-    /// so the restored tick and the behaviour behind it start out agreeing, the
-    /// same shape `isAutosend` has.
-    var isReplaceWispr: Bool { replaceWisprOn }
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
     /// browser — see `MessageLog`.
@@ -471,8 +480,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// nothing but the file on disk, and a hop through the delegate would exist
     /// only to be consistent with rows that had a reason.
     private let messageLog = NSMenuItem(title: "Prompt Log", action: nil, keyEquivalent: "")
-    /// The one recogniser row — a readout, not a switch. See `applyWhisperTitle`.
-    private let whisperItem = NSMenuItem(title: "Local Whisper", action: nil, keyEquivalent: "")
+
     /// **The build stamp, on a disabled row of its own, one row above Quit**
     /// (2026-09-13). It was the clickable About row (`Victor's Walkie Talkie
     /// (<build>)`, opening `AboutPage`) until Victor asked for the same plain
@@ -671,10 +679,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        replaceWispr.action = #selector(replaceWisprClicked)
-        replaceWispr.target = self
-        applyReplaceWisprIcon()
-        menu.addItem(replaceWispr)
+        // **First of the block, where the mode row used to be.** Everything
+        // under this separator is about the app rather than about a destination,
+        // and the first thing to say about the app is which recogniser is
+        // listening: it is the row that answers *what am I dictating with*, and
+        // the two rows under it — the wrap, the Scratchpad — are qualifications
+        // of the answer.
+        engineItem.image = Self.symbolIcon("waveform")
+        engineItem.submenu = engineSubmenu
+        applyEngineRow()
+        menu.addItem(engineItem)
 
         wrapWispr.action = #selector(wrapWisprClicked)
         wrapWispr.target = self
@@ -696,24 +710,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyAutosendIcon()
         menu.addItem(autosend)
 
-        // **One row, and it is a readout rather than a switch.** There used to be
-        // two — Wispr Flow and Local Whisper, ticked — from the months the relay
-        // read another app's database. It records for itself now, so there is
-        // nothing to choose between; what is left is the one question the row was
-        // really being read for, which is whether the model is up and what it is
-        // holding.
-        //
-        // Kept in the menu rather than deleted: it is the only place that says
-        // the weights are resident, and the only place `— loading…` is visible
-        // when the chip is not on screen.
         messageLog.image = Self.emojiIcon("📜")
         messageLog.action = #selector(messageLogClicked)
         messageLog.target = self
         menu.addItem(messageLog)
-
-        whisperItem.isEnabled = false
-        menu.addItem(whisperItem)
-        applyWhisperTitle()
 
         menu.addItem(.separator())
 
@@ -787,12 +787,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // that open and abandon a sentence are one hand movement, reversed.
             // The wheel had no mirror to offer and used a 2s hold instead.
             (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s"),
-            // **The caret dictation finally has a legend.** It never had one: it
-            // lived on mouse 5, which the menu had no glyph for, so the only
-            // place the gesture was written down was a doc comment. It is a plain
-            // click of the forward button, and it only means anything while this
-            // row is ticked.
-            (replaceWispr, replaceWispr.title, "🔼", "🖱️5"),
             (pasteLast, pasteLast.title, "⌘⌃P", "⌘⌃P"),
             (shot, shot.title, "🔽", "🔽"),
             // **The wheel is back in this column, in one row.** Everything else
@@ -890,49 +884,65 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the *next* sentence will have a recogniser to reach.
     func setEngineLoading(_ loading: Bool) {
         engineLoading = loading
-        applyWhisperTitle()
+        applyEngineRow()
         refreshGlyph()
     }
 
-    /// `Local Whisper (mlx-community/whisper-large-v3-turbo) — 1.6 GB RAM` while
-    /// the model is up.
+    /// `Engine: whisper-large-v3-turbo — 1.6 GB RAM` while the local model is
+    /// the one listening; `Engine: Wispr Flow…` while the other one is.
+    private func applyEngineRow() {
+        // **No `…` on the title** — the arrow says there is more, and a row
+        // carrying both says it twice.
+        engineItem.title = "Engine: \(engineTitle(engineId))"
+        engineSubmenu.removeAllItems()
+        for id in ["wispr", "whisper"] {
+            let row = NSMenuItem(title: engineTitle(id),
+                                 action: #selector(enginePicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = id
+            // The tick where every other switch in this menu draws it — never
+            // `NSMenuItem.state`, which would reserve a second column.
+            row.image = id == engineId ? Self.symbolIcon("checkmark") : Self.blankIcon
+            engineSubmenu.addItem(row)
+        }
+    }
+
+    /// **What one engine is called** — in the list, and in the row above it when
+    /// it is the one running.
     ///
     /// **The cost is shown, because the weights are the whole argument** for
     /// starting the helper only when a dictation is coming and letting it go
-    /// afterwards; until this row existed that cost was a number in a comment,
-    /// which is exactly where a fact nobody can check belongs. It doubles as
-    /// proof the helper is actually alive, since a dead one has no footprint and
-    /// the row goes back to its bare name.
+    /// afterwards; until this number was in the menu that cost was a figure in a
+    /// comment, which is exactly where a fact nobody can check belongs. It
+    /// doubles as proof the helper is actually alive, since a dead one has no
+    /// footprint and the name goes back to being bare.
     ///
     /// **`RAM` is spelled out after the number** because a size in a menu is
     /// read as a download by default — the one thing this number is not. It is
-    /// what the helper is holding *right now*, and the row is the switch that
-    /// gives it back.
+    /// what the helper is holding *right now*.
     ///
     /// `phys_footprint`, i.e. Activity Monitor's "Memory" — see
     /// `LocalWhisper.footprintBytes` for why not RSS.
-    private func applyWhisperTitle() {
-        // **The id in parentheses, in full.** `Local Whisper` names a category and
-        // the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
-        // the model, and the id is what a comparison between recognisers is
-        // written down against. It is parenthetical rather than a second dashed
-        // clause so that the row still reads as `<engine> — <cost>`.
-        // **The bare model name, and nothing else.** `Local Whisper` named a
-        // category back when there were two recognisers to choose between; with
-        // one left, the category is the half that says nothing and the id is the
-        // half a comparison is written down against. The org prefix goes with it
-        // — `mlx-community/` is where the weights were downloaded from, not what
-        // is doing the listening.
+    ///
+    /// **The bare model id, and nothing else.** `Local Whisper` names a category
+    /// and the category is not the interesting half: `RELAY_WHISPER_MODEL` swaps
+    /// the model, and the id is what a comparison between recognisers is written
+    /// down against. The org prefix goes with the category — `mlx-community/` is
+    /// where the weights were downloaded from, not what is doing the listening.
+    private func engineTitle(_ id: String) -> String {
+        guard id == "whisper" else { return "Wispr Flow" }
         let name = whisperModel?().map { $0.split(separator: "/").last.map(String.init) ?? $0 }
             ?? "Local Whisper"
-        if engineLoading {
-            whisperItem.title = "\(name) — loading…"
-        } else if let bytes = whisperFootprint?() {
-            whisperItem.title = String(format: "%@ — %.1f GB RAM", name,
-                                       Double(bytes) / 1_073_741_824)
-        } else {
-            whisperItem.title = name
+        if engineLoading { return "\(name) — loading…" }
+        if let bytes = whisperFootprint?() {
+            return String(format: "%@ — %.1f GB RAM", name, Double(bytes) / 1_073_741_824)
         }
+        return name
+    }
+
+    @objc private func enginePicked(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, id != engineId else { return }
+        onPickEngine?(id)
     }
 
     /// Live only while the microphone is open.
@@ -1163,7 +1173,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         guard menu === item.menu else { return }
         SessionLabel.refresh()
         applyHeader()
-        applyWhisperTitle()
+        applyEngineRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         restyleGestures()
@@ -1191,28 +1201,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         onExit?()
     }
 
-    /// **The state lives here, not in `AppDelegate`.** It is a property of the
-    /// checkbox — nothing else in the app has any use for it except the one call
-    /// that reads it back — and keeping it on the row is what makes the tick and
-    /// the behaviour impossible to disagree about.
-    /// Push the mode in from outside — the loopback test route. The tick is the
-    /// only place Victor can read the answer, so anything that changes the mode
-    /// has to come through here.
-    func setReplaceWispr(_ on: Bool) {
-        replaceWisprOn = on
-        UserDefaults.standard.set(on, forKey: Self.replaceWisprKey)
-        applyReplaceWisprIcon()
-    }
 
-    @objc private func replaceWisprClicked() {
-        setReplaceWispr(!replaceWisprOn)
-        onToggleReplaceWispr?(replaceWisprOn)
-    }
 
-    /// The tick, or the space where one would be. See the note on the row.
-    private func applyReplaceWisprIcon() {
-        replaceWispr.image = replaceWisprOn ? Self.symbolIcon("checkmark") : Self.blankIcon
-    }
 
     /// Push the mode in from outside, the shape `setReplaceWispr` has.
     func setLogiGestures(_ on: Bool) {
