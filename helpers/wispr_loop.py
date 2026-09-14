@@ -464,6 +464,8 @@ class Result:
     dry: bool = False
     #: Which repetition this is, when `--repeat` asked for more than one.
     run_index: int = 1
+    #: What distinguishes this row from its siblings in a sweep (e.g. "200 ms").
+    run_label: str = ""
     #: For a scenario that exists to answer an open question rather than to
     #: guard a known-good behaviour: the hypothesis this run supports. It is the
     #: payload of such a run — the ✓/✗ rows only say the harness worked.
@@ -3322,6 +3324,131 @@ def scenario_wispr_alone(ctx) -> Result:
     return result
 
 
+def _in_settle_run(ctx, second: str) -> Result:
+    """**A second gesture while the sentence is still settling.**
+
+    The adversary's find, and the shape of it is worth stating plainly: a
+    `forward-left` about 200 ms after the stop — squarely inside the settle, in
+    Scratchpad mode — lets Wispr's *pending* ⌘V through into whatever is in
+    front, and leaves ⌘ held afterwards. So the cancel that is supposed to throw
+    a sentence away instead delivers it somewhere nobody asked for, and poisons
+    every keystroke after it.
+
+    `second` is `cancel` (🔼 ←) or `click` (🔼 again). They are different
+    questions with the same timing: the cancel must leave *nothing* anywhere,
+    and the click must not start a second dictation or produce a second
+    delivery.
+
+    The delay is a parameter because the window is what is being measured, not
+    a single point in it — `--settle-delay-ms=100,200,500,1000` sweeps it in one
+    command, and each value is reported as its own run.
+    """
+    relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
+    delay_ms = int(ctx.options.get("settle_delay_ms") or 200)
+    result.run_label = "%d ms" % delay_ms
+    victim = None
+    was_mode = None
+    focus = FocusWatch()
+    try:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
+        was_mode = wrap_mode(relay)
+        set_wrap_mode(relay, "scratchpad")
+        result.check(relay.dry_run or wrap_mode(relay) == "scratchpad",
+                     "the relay is in Scratchpad wrap mode", wrap_mode(relay) or "—")
+
+        victim = _open_witness(ctx)
+        if not victim:
+            return result
+        notes_before = wispr_notes()
+        if not relay.dry_run:
+            focus.start()
+
+        relay.gesture("forward-click")
+        _await_listening(relay, result)
+        _await_microphone(ctx)
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.gesture("forward-click")                 # the stop
+        stopped_at = time.monotonic()
+
+        # **Exactly `delay_ms` after the stop**, measured rather than slept at:
+        # the gesture POST itself costs tens of milliseconds, and a window this
+        # narrow is not worth guessing about.
+        if not relay.dry_run:
+            remaining = (delay_ms / 1000.0) - (time.monotonic() - stopped_at)
+            if remaining > 0:
+                time.sleep(remaining)
+        gesture = "forward-left" if second == "cancel" else "forward-click"
+        relay.gesture(gesture)
+        result.note("%s posted %.0f ms after the stop"
+                    % (gesture, (time.monotonic() - stopped_at) * 1000))
+
+        settled, waited = _await_settled(relay, mark, timeout=seconds + 60)
+        result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
+        closed, closed_after = (True, 0.0) if relay.dry_run else _await_scratchpad_closed()
+        result.check(closed, "the Scratchpad closed again within 3 s",
+                     "after %.1f s — windows %s"
+                     % (closed_after, [] if relay.dry_run else wispr_windows()))
+        seen = [] if relay.dry_run else focus.stop()
+        result.note("frontmost during the run: %s" % (" → ".join(seen) or "—"))
+
+        t = read_timings(mark.lines())
+        result.timings = t
+        victim_text = _witness_text(ctx, victim)
+        rows = outbox.fresh()
+        changes = notes_diff(notes_before, wispr_notes())
+        want = ctx.fixture.get("transcript", "")
+        state = relay.state() or {}
+
+        result.check(_count_occurrences(victim_text, want) == 0 or relay.dry_run,
+                     "the sentence is not in the victim",
+                     "%d occurrence(s) — %r" % (_count_occurrences(victim_text, want),
+                                                victim_text[:60]))
+        # **Wispr's ⌘V must have been swallowed, or never have come.** A
+        # `passed` on key 9 from Wispr is the leak itself, in the tap's own words.
+        leaked = [line.text for line in mark.lines()
+                  if "key 9" in line.text and "Wispr" in line.text and "passed" in line.text]
+        result.check(not leaked, "Wispr's ⌘V did not reach the window in front",
+                     leaked[0] if leaked else "swallowed or never posted")
+
+        if second == "cancel":
+            result.check(not rows, "no delivery was written", "%d outbox line(s)" % len(rows))
+            delivered = added_portion(changes)
+            result.check(not delivered.strip() or relay.dry_run,
+                         "no note text was delivered", "%r" % delivered[:60])
+            result.answer = "cancel %d ms into the settle: nothing anywhere" % delay_ms
+        else:
+            result.check(len(rows) <= 1, "exactly one delivery at most",
+                         "%d outbox line(s)" % len(rows))
+            result.check(not state.get("listening"), "no second dictation was started",
+                         "listening=%s" % state.get("listening"))
+            result.answer = ("click %d ms into the settle: %d delivery, victim %s"
+                             % (delay_ms, len(rows),
+                                "clean" if not victim_text.strip() else "%d chars" % len(victim_text)))
+
+        flags = state.get("sessionFlags")
+        result.check(not flags, "the app reports no session flags held",
+                     "sessionFlags=%s" % (flags if flags is not None else "not reported"))
+    finally:
+        focus.stop()
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
+        stand_down(relay)
+        if was_mode and was_mode != "scratchpad":
+            set_wrap_mode(relay, was_mode)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+    return result
+
+
+def scenario_wrap_cancel_in_settle(ctx) -> Result:
+    return _in_settle_run(ctx, "cancel")
+
+
+def scenario_wrap_gesture_in_settle(ctx) -> Result:
+    return _in_settle_run(ctx, "click")
+
+
 SCENARIOS = {
     # Green since 2026-09-13: ring down 1053 ms after Wispr finished. It waits
     # for the microphone before playing, so it measures the caret path without
@@ -3363,6 +3490,12 @@ SCENARIOS = {
                    "Scratchpad mode, 🔼 → — the words are typed into the bound tty", False),
     "wrap-spawn": (scenario_wrap_spawn,
                    "Scratchpad mode, 🔼 ↑ — the words go to a session that did not exist", False),
+    "wrap-cancel-in-settle": (scenario_wrap_cancel_in_settle,
+                              "🔼 ← a few hundred ms after the stop — the adversary's leak: "
+                              "Wispr's pending ⌘V reaching the window in front", False),
+    "wrap-gesture-in-settle": (scenario_wrap_gesture_in_settle,
+                               "🔼 click a few hundred ms after the stop — no second dictation, "
+                               "one delivery, nothing leaked", False),
     "wrap-cancel": (scenario_wrap_cancel,
                     "Scratchpad mode, 🔼 ← mid-dictation — no note, no delivery, nothing anywhere", False),
     "wrap-off": (scenario_wrap_off,
@@ -3462,7 +3595,11 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
 # ══ rendering ════════════════════════════════════════════════════════════════
 def render(result: Result, verbose: bool = False) -> str:
     """One line per assertion, then the timing table, then the verdict."""
-    title = result.scenario + ("  (run %d)" % result.run_index if result.run_index > 1 else "")
+    title = result.scenario
+    if result.run_label:
+        title += "  [%s]" % result.run_label
+    if result.run_index > 1:
+        title += "  (run %d)" % result.run_index
     out = ["", "── %s ─────────────────────────────────────────" % title]
     out += [c.render() for c in result.checks]
     if not result.dry:
@@ -3489,7 +3626,9 @@ def render(result: Result, verbose: bool = False) -> str:
 
 
 def summary(results: list[Result]) -> str:
-    labels = ["%s%s" % (r.scenario, "#%d" % r.run_index if r.run_index > 1 else "") for r in results]
+    labels = ["%s%s%s" % (r.scenario,
+                          " [%s]" % r.run_label if r.run_label else "",
+                          "#%d" % r.run_index if r.run_index > 1 else "") for r in results]
     width = max(len(x) for x in labels)
     rows = ["", "── summary ─────────────────────────────────────────"]
     dry = any(r.dry for r in results)
@@ -3691,6 +3830,11 @@ def main(argv):
     ap.add_argument("--scratch", default="/tmp", help="where the bound scenario's sink file goes")
     ap.add_argument("--json", action="store_true", help="the same result, machine-readable")
     ap.add_argument("--verbose", action="store_true", help="every relay.log line the run produced")
+    ap.add_argument("--settle-delay-ms", default="", metavar="MS[,MS…]",
+                    help="wrap-*-in-settle: how long after the stop gesture to post the second "
+                         "gesture. A comma list sweeps it — `--settle-delay-ms=100,200,500,1000` "
+                         "is one command and four rows, because the window is what is being "
+                         "measured, not a point in it")
     ap.add_argument("--leave-unbound", action="store_true",
                     help="do not put the original binding back at the end. There is no flag for "
                          "the opposite — skipping the *unbind* is never offered")
@@ -3758,15 +3902,24 @@ def main(argv):
             print("✗ could not unbind (still %r) — refusing to run." % still, file=sys.stderr)
             return 2
 
+    delays = [int(x) for x in args.settle_delay_ms.split(",") if x.strip()] or [None]
+
     results = []
     for index in range(1, max(1, args.repeat) + 1):
         for name in names:
-            results.append(run_scenario(
-                name, port, args.device, args.wav, args.transcript, args.scratch,
-                args.dry_run, args.verbose, run_index=index,
-                options={"dismiss_delay_ms": args.dismiss_delay, "no_dismiss": args.no_dismiss,
-                         "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
-                                           if x.strip()]}))
+            # Only the in-settle scenarios vary with the delay; everything else
+            # would just run N identical times and say so N times.
+            for delay in (delays if "in-settle" in name else [None]):
+                results.append(run_scenario(
+                    name, port, args.device, args.wav, args.transcript, args.scratch,
+                    args.dry_run, args.verbose, run_index=index,
+                    options={"dismiss_delay_ms": args.dismiss_delay,
+                             "no_dismiss": args.no_dismiss,
+                             "settle_delay_ms": delay,
+                             "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
+                                               if x.strip()]}))
+                if results[-1].contaminated:
+                    break
             if results[-1].contaminated:
                 break
 

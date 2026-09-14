@@ -548,6 +548,33 @@ class Chords(unittest.TestCase):
                             sorted(wispr_loopback.HANDSFREE_KEYS))
 
 
+class InSettle(unittest.TestCase):
+    """The two scenarios that measure *when*, so the delay has to be exact."""
+
+    def test_the_sweep_is_one_row_per_delay(self):
+        """`--settle-delay-ms=100,200,500,1000` is four runs, not one averaged
+        one — the window is what is being measured, not a point in it."""
+        delays = [int(x) for x in "100,200,500,1000".split(",") if x.strip()]
+        self.assertEqual(delays, [100, 200, 500, 1000])
+        self.assertEqual(len(set(delays)), 4)
+
+    def test_an_empty_sweep_means_the_scenario_s_own_default(self):
+        self.assertEqual([int(x) for x in "".split(",") if x.strip()] or [None], [None])
+
+    def test_both_scenarios_are_registered_and_carry_no_expected_red(self):
+        for name in ("wrap-cancel-in-settle", "wrap-gesture-in-settle"):
+            self.assertIn(name, wl.SCENARIOS)
+            _func, blurb, expected_red = wl.SCENARIOS[name]
+            self.assertFalse(expected_red, "%s should not be born red" % name)
+            self.assertTrue(blurb)
+
+    def test_only_the_in_settle_scenarios_sweep(self):
+        """Sweeping `caret-long` would run it four identical times and say so
+        four times; the name is the switch."""
+        self.assertIn("in-settle", "wrap-cancel-in-settle")
+        self.assertNotIn("in-settle", "caret-long")
+
+
 class Pasteboard(unittest.TestCase):
     """`--no-sink`'s witness. **Read-only here** — nothing in this file writes.
 
