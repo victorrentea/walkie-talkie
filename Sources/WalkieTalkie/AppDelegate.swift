@@ -1763,7 +1763,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The chip says the words are coming**, now that the ring no longer
         // does. `Transcribing...` beside the cursor is the same claim the ring
         // used to make by standing, minus the lie that a microphone is open.
-        overlay.setTranscribing(true)
+        //
+        // **With how long he spoke for, which is the whole of the progress bar**
+        // (2026-09-14). `setTranscribing(_:audio:)` turns that into a decode
+        // estimate through `DecodeRate` and fills the word left to right as it
+        // runs; called with the default `audio: 0` it takes the early exit, sets
+        // no deadline and starts no ticker, so the row simply sat there grey.
+        // Victor: *"mi-a dispărut Progres Bar-ul … ca să mă prind când e gata,
+        // cam cât mai am de așteptat și dacă transcrierea merge"* — the last of
+        // those is the one that matters, because a row that cannot move cannot
+        // distinguish a slow decode from a dead one.
+        //
+        // The wall clock of the sentence, not the recorder's file: it is what
+        // `DecodeRate` has always been fitted against, and it is known here
+        // whatever the source is.
+        stateLock.lock()
+        let spokenFor = dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        stateLock.unlock()
+        overlay.setTranscribing(true, audio: max(0, spokenFor))
     }
 
     /// Where this sentence is going, decided at the close and read when the words

@@ -409,8 +409,31 @@ enum ShotMarker {
         // with the same problem and were never even motivated by a measurement.
         //
         // What the miss costs is one highlight falling back to the list under
-        // the words; what the false positive costs is his sentence. The trade is
-        // not close. Digits and real number words only.
+        // the words; what the false positive costs is his sentence.
+        //
+        // They are back, **behind a discriminator**, because the miss turned out
+        // to be the common case: measured on his own dictation of 22:35, all four
+        // highlights had a marker spliced into the audio and only the two the
+        // shutter took were resolved — the two the watcher took came back as
+        // `selected text to` and fell to the list. See `homophones`.
+    ]
+
+    /// **What a recogniser hears instead of a number, accepted only when the
+    /// marker stands as its own clause** (2026-09-14, second attempt).
+    ///
+    /// The first attempt put these in `spoken` and cost him sentences: *attach
+    /// the screenshot **to** the PR* became a marker. The discriminator is the
+    /// thing that separates the two cases, and it is in the text itself — a
+    /// spliced marker is surrounded by silence, so every recogniser renders it
+    /// as a sentence of its own and **punctuates it**: `Selected text to.` His
+    /// own words do not: `screenshot to the PR` runs straight on.
+    ///
+    /// So a homophone counts only when the match ends on punctuation or ends the
+    /// text. A real number word needs no such proof — `screenshot two` is not a
+    /// phrase his sentences produce by accident.
+    private static let homophones: [String: Int] = [
+        "to": 2, "too": 2, "tu": 2, "won": 1, "wan": 1,
+        "for": 4, "fore": 4, "ate": 8, "nain": 9,
     ]
 
     /// **The whitespace around the marker is eaten with it.** Wispr promotes the
@@ -427,7 +450,7 @@ enum ShotMarker {
     /// Group 1 says it was a shot, group 2 a selection, group 3 is the number in
     /// whichever form it came back as.
     private static let pattern = try? NSRegularExpression(
-        pattern: #"\s*\b(?:(screen[ -]?shots?)|(selected\s+texts?)|(picked\s+elements?))\s+(\w+)\s*[.,!;:]*\s*"#,
+        pattern: #"\s*\b(?:(screen[ -]?shots?)|(selected\s+texts?)|(picked\s+elements?))\s+(\w+)\s*([.,!;:]*)\s*"#,
         options: [.caseInsensitive])
 
     /// **Rewrite the spoken markers — a shot into a reference an agent can
@@ -489,7 +512,11 @@ enum ShotMarker {
             else if match.range(at: 2).location != NSNotFound { kind = .selection }
             else { kind = .element }
             let token = text[word].lowercased()
-            let index = spoken[token] ?? Int(token)
+            // The homophone's proof: punctuation after it, or the end of the
+            // text. `range(at: 5)` is the trailing `[.,!;:]*` group.
+            let punctuated = match.range(at: 5).length > 0
+                || match.range.location + match.range.length >= full.length
+            let index = spoken[token] ?? Int(token) ?? (punctuated ? homophones[token] : nil)
             // Not a marker at all — `screenshots and notes`, `screenshot folder`,
             // `selected text below`. Left exactly as it was, whitespace
             // included: only a match this app could have spoken is a match.
