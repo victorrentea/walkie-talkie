@@ -79,6 +79,43 @@ VOCABULARY = os.environ.get("RELAY_WHISPER_VOCABULARY", (
     "Walkie Talkie, Wispr Flow, petclinic, agentic."
 ))
 
+# **The prompt is chosen by the language, because the two languages fail
+# differently.** Mining the substitutions of 129 clips decoded with no prompt at
+# all, the top English errors are the terms above (`claude` -> `cloud`, `md` ->
+# `cloudmd`); the top *Romanian* errors are not vocabulary at all, they are
+# **diacritics** — `să` -> `sa` (10), `în` -> `in` (6), `și` -> `si` (4),
+# `compară` -> `compara` — the model writing Victor's language flat. A glossary
+# of English product names buys nothing against that, and the measurement says
+# so: on Romanian clips the list above moves WER 23.8% -> 24.1%, i.e. nowhere.
+#
+# What does move it is decoder context that is *itself* written in diacritics.
+# Measured on 548 held-out clips (never searched on), routing Romanian to the
+# list below and leaving English on the list above:
+#
+#     overall   15.9% -> 15.2%   (bootstrap 2000x: -0.69, 95% CI [-1.27, -0.19],
+#                                 better in 100% of resamples)
+#     Romanian  22.6% -> 21.2%
+#     English    8.7% ->  8.7%   (unchanged by construction)
+#     repetition loops  7 -> 5
+#
+# **Routing is what makes it safe.** The same Romanian prompt applied to *every*
+# clip is a disaster — 18 loops in 129 against 2, because Romanian context over
+# English audio decodes into Romanian-shaped noise and runs away (`Chau coă coă
+# coă…`). Nearly all of those loops are on non-Romanian clips, which routing
+# never shows it. The LID pass already knows the answer before decoding starts;
+# this only stops throwing it away.
+#
+# **The gain is small and the dev set lied about it.** On the 129 clips the
+# search ran over it read -1.9 points; on the two held-out sets, -2.7 and -0.5.
+# The honest figure is the pooled -0.7. Kept because it is consistent in every
+# split, never worse on English, and costs fewer loops, not more.
+VOCABULARY_RO = os.environ.get("RELAY_WHISPER_VOCABULARY_RO", (
+    "să, și, în, întâi, îți, îmi, această, când, făcut, ștergem, trebuie, "
+    "aș, două, când, până, mâine, așa, început, terminăm, încearcă, "
+    "schimbă, vezi, adaugă, românește, subagent, subagenți, commit, push, "
+    "prompt, skill, sesiune, dictare, agent."
+))
+
 
 def emit(obj):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
@@ -140,11 +177,12 @@ def transcribe(path):
         # needs the samples anyway, and passing the path twice would shell out to
         # ffmpeg twice for the same file.
         samples = A.load_audio(path)
+        lang = pick_language(samples)
         return mlx_whisper.transcribe(
             samples,
             path_or_hf_repo=MODEL,
-            language=pick_language(samples),
-            initial_prompt=VOCABULARY,
+            language=lang,
+            initial_prompt=VOCABULARY_RO if lang == "ro" else VOCABULARY,
             verbose=False,
             condition_on_previous_text=False,
         )
