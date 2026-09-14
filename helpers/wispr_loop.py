@@ -3994,6 +3994,18 @@ def main(argv):
         print("   somebody else's. Nothing below %r was run." % spoiled[0].scenario, file=sys.stderr)
         print("═" * 72 + "\n", file=sys.stderr)
 
+    # **A binding the *run* created is not Victor's and must not be left behind.**
+    # `wrap-spawn` opens a session and the relay binds to it, so a suite that
+    # ended on a spawn left the relay pointed at a scratch Terminal — which is
+    # the isolation hazard this file exists to prevent, arriving by the back
+    # door. Anything bound at the end that is not what we found is undone.
+    if not args.dry_run:
+        ended_bound = current_binding(port)
+        if ended_bound and ended_bound != victors_binding:
+            pf.post(port, "/unbind", {})
+            print("🔓 unbound from %r — a session this run created, not Victor's"
+                  % ended_bound, file=sys.stderr)
+
     if victors_binding and args.leave_unbound:
         # Asked for explicitly, and safe in the one direction that matters: it
         # leaves the relay *less* pointed at anything, never more. The binding is
