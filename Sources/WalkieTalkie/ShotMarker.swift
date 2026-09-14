@@ -196,7 +196,45 @@ enum ShotMarker {
 
     /// One `say` per clip, ever. AIFF because `AVAudioFile` reads it directly and
     /// a conversion step is one more thing to be wrong about.
+    /// **His own recordings, and they are not in Caches** (2026-09-15).
+    ///
+    /// `~/.walkie-talkie/markers/<slug>-<n>.wav`, beside the corpus, because
+    /// unlike the synthesised clips these **cannot be regenerated** — macOS may
+    /// purge Caches under disk pressure and a purged marker is a marker Victor
+    /// has to record again.
+    static var recordedDir: URL { Outbox.home.appendingPathComponent("markers") }
+
+    /// **A marker in his own voice is transcribed twice as often, and that is
+    /// measured** (2026-09-15). Same base recordings, same decoder, same
+    /// positions, spliced by the same code:
+    ///
+    /// | | synthesised | his voice |
+    /// |---|---|---|
+    /// | `screenshot one` | 4/6 | **6/6** |
+    /// | `selected text one` | 3/6 | **4/6** |
+    /// | `picked element one` | **0/6** | **6/6** |
+    /// | total | 7/18 — 39% | **16/18 — 89%** |
+    ///
+    /// It is the explanation every other experiment was missing. A synthesised
+    /// clip is an acoustic intrusion — another speaker, another room, another
+    /// microphone — and a recogniser segments it away as noise; his own voice is
+    /// the same person going on talking. Length, repetition, phonetic
+    /// distinctness, the position in the sentence and the vocabulary prompt were
+    /// each measured and each moved nothing, because all five are about the
+    /// *words* and the problem was the *source*.
+    ///
+    /// Victor recorded the thirty of them in four dictations through the relay
+    /// itself; they were cut on the pauses and each one verified by transcribing
+    /// it alone. → `evals/marker-phrases.py`
+    private static func recorded(_ clip: Clip) -> URL? {
+        let url = recordedDir.appendingPathComponent("\(clip.kind.slug)-\(clip.index).wav")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private static func synthesise(_ clip: Clip) -> URL? {
+        // His voice first, always. `say` is the fallback for an index he has not
+        // recorded — a marker nobody hears is worse than one heard half the time.
+        if let mine = recorded(clip) { return mine }
         let url = cacheDir.appendingPathComponent("\(clip.kind.slug)-\(clip.index).aiff")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         let task = Process()
