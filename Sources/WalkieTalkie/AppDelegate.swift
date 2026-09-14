@@ -333,6 +333,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// also get a row underneath it. → `picksClause`
     private var elementMarkersInlined: Set<Int> = []
 
+    /// The frozen highlight went in front of the words, so it is not also listed
+    /// under them — `resolvingMarkers`. Not a `Set`: there is only one of it.
+    private var frozenSelectionInlined = false
+
     /// **How this source places a marker, or nil when it cannot place one.**
     ///
     /// Published by `wireDictationSource` and read by `reserveMarker`, both under
@@ -1788,8 +1792,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the same reason: a selection can be an entire file, and this one is
         // going into the middle of a sentence he has to be able to read back.
         var selections: [Int: String] = [:]
-        if let selection = pendingSelection, let marker = pendingSelectionMarker {
-            selections[marker] = Self.clampForTerminal(selection)
+        // **The highlight he was already holding goes in front of the words**
+        // (2026-09-14). Victor: *"why did you put 'text selected during
+        // dictation' AFTER the prompt text. it should be INLINE"* — and he is
+        // right, but this one could not be, for a reason worth writing down: it
+        // is the **frozen** selection, made *before* he started talking, so no
+        // marker was ever spoken for it and there is no word inside the sentence
+        // it belongs beside.
+        //
+        // There is still an honest position for it, and it is the first: it was
+        // already on screen when the sentence began, which is what *the subject
+        // he is talking about* means. The old bracketed clause said that by
+        // standing first; this says it in his own line.
+        //
+        // Only when nothing spoke for it: a frozen highlight that *did* get a
+        // marker — he re-made it mid-sentence — belongs at the marker like any
+        // other. And never for the corpus copy (`inline` false), which must say
+        // what the audio says.
+        var frozenHead: String?
+        if let selection = pendingSelection {
+            if let marker = pendingSelectionMarker {
+                selections[marker] = Self.clampForTerminal(selection)
+            } else if inline {
+                frozenHead = "(selected text: \"\(Self.clampForTerminal(selection))\")"
+            }
         }
         for extra in pendingExtraSelections {
             guard let marker = extra.marker else { continue }
@@ -1823,8 +1849,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("📣 \(resolved.elements.count) element(s) placed in the words at the marker: "
                      + resolved.elements.map(String.init).joined(separator: ", "))
         }
+        if frozenHead != nil { frozenSelectionInlined = true }
         stateLock.unlock()
-        return resolved.text
+        guard let head = frozenHead else { return resolved.text }
+        return resolved.text.isEmpty ? head : head + " " + resolved.text
     }
 
     private func deliver(_ result: DictationResult) {
@@ -2378,6 +2406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markersSpoken = [:]
         selectionMarkersInlined = []
         elementMarkersInlined = []
+        frozenSelectionInlined = false
         dictationStartedAt = nil
         pendingScreen = nil
         dictationInFlight = false
@@ -2741,6 +2770,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markersSpoken = [:]
         selectionMarkersInlined = []
         elementMarkersInlined = []
+        frozenSelectionInlined = false
         dictationInFlight = false
         contextShotPending = false
         stateLock.unlock()
@@ -3996,7 +4026,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingShotOffsets = []
         let sources = shotSources
         shotSources = [:]
-        let markerNumbers = shotMarkerNumbers
+        // (the numbers live in the file names now — `ScreenCapture.stem`)
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         // Read before it is cleared: `deliver` has already rewritten the words
@@ -4004,8 +4034,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // of rows the clause below must therefore not repeat.
         let inlined = selectionMarkersInlined
         let inlinedElements = elementMarkersInlined
+        // The frozen highlight, when it went in front of the words instead.
+        let frozenInlined = frozenSelectionInlined
         selectionMarkersInlined = []
         elementMarkersInlined = []
+        frozenSelectionInlined = false
         // **No context frame rides this envelope, and it is cleared rather than
         // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
         // in every real path through here — but `shotsClause` is called with
@@ -4022,7 +4055,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Taken, not left behind.** They are cleared here for the reason every
         // other field on this envelope is: what is not consumed by the sentence
         // that gathered it rides the next one.
-        let selection = pendingSelection
+        // Inline *or* listed, never both — when the frozen highlight has gone
+        // in front of the words, the clause below must not repeat it.
+        let selection = frozenInlined ? nil : pendingSelection
         let selectionAt = pendingSelectionAt
         let selectionIn = pendingSelectionIn
         let selectionMarker = pendingSelectionMarker
@@ -5509,7 +5544,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         stateLock.lock()
-        let selection = pendingSelection
+        let selectionSubject = pendingSelection
         let selectionAt = pendingSelectionAt
         let selectionIn = pendingSelectionIn
         let selectionMarker = pendingSelectionMarker
@@ -5518,8 +5553,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // words have already been rewritten by the time we get here (`deliver`).
         let inlined = selectionMarkersInlined
         let inlinedElements = elementMarkersInlined
+        // The frozen highlight, when it went in front of the words instead.
+        let frozenInlined = frozenSelectionInlined
+        // Inline *or* listed, never both — the highlight's own rule.
+        let selection = frozenInlined ? nil : selectionSubject
         selectionMarkersInlined = []
         elementMarkersInlined = []
+        frozenSelectionInlined = false
         pendingSelection = nil
         pendingSelectionAt = nil
         pendingSelectionIn = nil
@@ -5533,6 +5573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markersSpoken = [:]
         selectionMarkersInlined = []
         elementMarkersInlined = []
+        frozenSelectionInlined = false
         var attached = paths
         var screen: String?
         // The context shot is the first picture and it was taken at 0:00 — he took
