@@ -344,8 +344,22 @@ enum WisprScratchpad {
     /// anything, and the log says which attempt worked.
     static func closeWindow(_ done: @escaping (Bool) -> Void) {
         guard windowIsOpen() else { return DispatchQueue.main.async { done(true) } }
-        attempt(1, done)
+        // **One close at a time, and this is the other half of the rule**
+        // (2026-09-14). `armCloseOnSight` has guarded itself on `closeASAP`
+        // since the night it was written; this path had no such guard, so the
+        // orphan sweep and a `closeWhenItAppears` already running could tap the
+        // toggle twice — which closes the window and opens it straight back up.
+        guard !closingNow else {
+            Log.info("\u{1F5D2}\u{FE0F} a close is already running — not asking again (it is a toggle)")
+            return DispatchQueue.main.async { done(true) }
+        }
+        closingNow = true
+        attempt(1) { gone in
+            closingNow = false
+            done(gone)
+        }
     }
+    private static var closingNow = false
 
     private static func attempt(_ n: Int, _ done: @escaping (Bool) -> Void) {
         let parked = isWhereItWasParked()
@@ -694,6 +708,7 @@ enum WisprScratchpad {
     /// floating on top of his work, is happening while he is still talking. It
     /// is parked on first sight, and closed later.
     static func beginDictation() {
+        endOrphanSweep()
         toldAboutTheft = false
         closeASAP = false
         closeRequested = false
@@ -715,7 +730,7 @@ enum WisprScratchpad {
     /// window and opens it straight back up, which is what left `wrap-cancel`
     /// with `['Status', 'Scratchpad']` behind. `armCloseOnSight` guards itself;
     /// this is the same guard for the callers that go in through `closeWindow`.
-    static var closeIsInFlight: Bool { closeASAP }
+    static var closeIsInFlight: Bool { closeASAP || closingNow }
 
     static func armCloseOnSight() {
         guard !closeASAP else { return }
@@ -747,6 +762,57 @@ enum WisprScratchpad {
         watch?.invalidate()
         watch = nil
     }
+
+    // MARK: - The orphan
+
+    /// **A Scratchpad window with no dictation behind it** (2026-09-14).
+    ///
+    /// Every close in this file belongs to a dictation, and the adversarial
+    /// round found the case that has none: a chord that went out *after*
+    /// everything ended re-opened the window, and it stood for **57 s** with the
+    /// keyboard guard already disarmed, taking his keystrokes into Wispr's note.
+    /// The 25 ms watcher cannot catch that — it is off by then, because the
+    /// sentence it was watching is over.
+    ///
+    /// So the relay sweeps for a little while after it goes idle. Half a second
+    /// is fast enough (the failure is measured in tens of seconds) and twelve is
+    /// long enough to cover a chord that has been waiting for a bare wire; the
+    /// sweep is a **no-op** unless the window is up and `isIdle` agrees that
+    /// nothing is being dictated, and it never asks for a close while one is
+    /// already in flight, because the close is a toggle.
+    static func armOrphanSweep(isIdle: @escaping () -> Bool) {
+        orphanIsIdle = isIdle
+        orphanUntil = Date().addingTimeInterval(orphanSweepFor)
+        guard orphanSweep == nil else { return }
+        let t = Timer(timeInterval: 0.5, repeats: true) { _ in orphanTick() }
+        orphanSweep = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    static func endOrphanSweep() {
+        orphanSweep?.invalidate()
+        orphanSweep = nil
+        orphanUntil = nil
+    }
+
+    private static func orphanTick() {
+        guard let until = orphanUntil, Date() < until else { return endOrphanSweep() }
+        // A dictation is running: the window is its own and not an orphan.
+        guard orphanIsIdle?() == true else { return }
+        // Somebody is already asking, and a second ask re-opens what the first shut.
+        guard !closeIsInFlight else { return }
+        guard windowIsOpen() else { return }
+        Log.error("🗒️ orphan Scratchpad closed — the window was open with no dictation in flight")
+        endOrphanSweep()
+        closeWindow { gone in
+            if !gone { Log.error("🗒️ the orphan Scratchpad would not close — the next dictation would be written nowhere") }
+        }
+    }
+
+    private static var orphanSweep: Timer?
+    private static var orphanUntil: Date?
+    private static var orphanIsIdle: (() -> Bool)?
+    private static let orphanSweepFor: TimeInterval = 12
 
     private static func tick() {
         guard let window = windowElement() else {

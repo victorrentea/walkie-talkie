@@ -35,6 +35,12 @@ enum WisprHistory {
         let rowid: Int64
         /// `""` while Wispr is still working on it.
         let status: String
+        /// **What the recogniser heard, before any formatting pass** — the
+        /// column that tells *Wispr is still thinking* from *Wispr heard
+        /// nothing*. Two seconds of digital silence left row 12814 in
+        /// `raw_transcript` for ever with every text column empty, and the relay
+        /// waited out its whole 30 s capture on it (adversarial round 2).
+        let asrText: String
         /// **What Wispr actually inserted** — empty when it inserted nothing.
         let pastedText: String
         /// **What Wispr made of the audio, whether or not it ever inserted it**
@@ -94,7 +100,8 @@ enum WisprHistory {
         let sql = """
             select rowid, coalesce(status, ''), coalesce(pastedText, ''), coalesce(formattedText, ''),
                    coalesce(e2eLatency, 0), coalesce(app, ''), coalesce(micDevice, ''),
-                   coalesce(language, ''), coalesce(strftime('%s', timestamp), '0')
+                   coalesce(language, ''), coalesce(strftime('%s', timestamp), '0'),
+                   coalesce(asrText, '')
             \(tail)
             """
         var stmt: OpaquePointer?
@@ -108,7 +115,8 @@ enum WisprHistory {
         func text(_ i: Int32) -> String {
             sqlite3_column_text(stmt, i).map { String(cString: $0) } ?? ""
         }
-        return Entry(rowid: sqlite3_column_int64(stmt, 0), status: text(1), pastedText: text(2),
+        return Entry(rowid: sqlite3_column_int64(stmt, 0), status: text(1), asrText: text(9),
+                     pastedText: text(2),
                      formattedText: text(3), e2eLatency: sqlite3_column_double(stmt, 4),
                      app: text(5), micDevice: text(6), language: text(7),
                      startedAt: Double(text(8)) ?? 0)

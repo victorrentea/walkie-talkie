@@ -355,7 +355,13 @@ final class ElementPicker {
     /// **Only useful from the installed build.** A `.build/debug` binary has no
     /// Accessibility grant of its own, so `CGEventPost` does nothing and does it
     /// silently — see `tools/wispr-test.sh`, which checks before it runs.
-    var onTestWisprHandsFree: (() -> Void)?
+    ///
+    /// - Parameter hand: `{"hand": true}` — post it **as though Victor had
+    ///   pressed it**: ring only, nothing swallowed, nothing delivered. Without
+    ///   it the route stays the transcribe primitive, which the relay does
+    ///   intercept; the two were one call until the adversarial round found the
+    ///   relay re-delivering a sentence it had promised only to watch.
+    var onTestWisprHandsFree: ((Bool) -> Void)?
 
     /// `POST /test/input {"name": "…"}` — point the **system's** default input at
     /// a device, and say what it was before.
@@ -687,8 +693,10 @@ final class ElementPicker {
 
         // The real chord, for the end-to-end harness — see `onTestWisprHandsFree`.
         case ("POST", "/test/wispr-handsfree"):
-            onTestWisprHandsFree?()
-            respond(conn, 200, ["ok": true, "posted": "fn ctrl space"])
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let hand = body?["hand"] as? Bool ?? false
+            onTestWisprHandsFree?(hand)
+            respond(conn, 200, ["ok": true, "posted": "fn ctrl space", "hand": hand])
 
         // The ✕'s cancel, from a desk — see `onTestCancelDictation`.
         case ("POST", "/test/cancel"):

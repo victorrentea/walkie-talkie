@@ -863,10 +863,25 @@ final class WisprFlowSource: DictationSource {
     /// branch of `HotkeyTap`) — otherwise every chord this route posts would come
     /// back through the tap as though Victor had pressed it. The toggle's two
     /// presses are the dictation's two ends, so the second call stops.
-    func postStartChord() {
+    ///
+    /// - Parameter byHand: post it **as though Victor had pressed it** — `relay:
+    ///   false`, so the dictation is Wispr's from the chord: ring only, nothing
+    ///   swallowed, nothing delivered, `intercepting` and `relayStarted` both
+    ///   false. Without it the route keeps its old behaviour, which is the
+    ///   transcribe primitive the harness is written against.
+    ///
+    ///   The adversarial round found the two being conflated (Finding 3): the
+    ///   route promised a hand-started dictation and `gestureSeen(relay: true)`
+    ///   made the relay swallow Wispr's ⌘V and re-deliver the sentence itself —
+    ///   `lastDelivery={via:wispr-cmdv,kind:route,to:caret}` on a run whose whole
+    ///   point was that the relay would only watch. They are two different
+    ///   questions and they get two different calls.
+    func postStartChord(byHand: Bool = false) {
         HotkeyTap.postWisprHandsFree()
         if isRecording || speculative {
             closeListening("POST /test/wispr-handsfree — the toggle's second press")
+        } else if byHand {
+            gestureSeen("POST /test/wispr-handsfree {hand}", confident: true, relay: false, mode: .off)
         } else {
             // **`mode: .off`, and the wrap still on.** This route posts Wispr's
             // *hands-free* chord, so there is no held key for `stop()` to release
@@ -925,6 +940,12 @@ final class WisprFlowSource: DictationSource {
         }
         guard !isRecording, !speculative else { return }
         speculative = true
+        // **A chord still waiting for a bare wire belongs to the sentence that
+        // asked for it, and that sentence is over.** The epoch moves here and at
+        // every `closeListening`; `HotkeyTap.emitScratchpad` drops a hold whose
+        // epoch has moved on rather than pressing a key for a dictation nobody
+        // is having.
+        HotkeyTap.retireDictationEpoch()
         // The guard's counters belong to this dictation and start at zero, armed
         // or not — see `HotkeyTap.resetKeyRedirect`.
         hotkeys.resetKeyRedirect()
@@ -1047,6 +1068,14 @@ final class WisprFlowSource: DictationSource {
         // that already does — Victor's own hands-free chord, read as a stop for
         // a dictation the relay opened by holding a different key.
         if HotkeyTap.scratchpadIsHeld { HotkeyTap.postWisprScratchpad(down: false) }
+        // …and after the release, because the release is the one chord that must
+        // still go out: any hold still queued for this sentence is now for a
+        // sentence that is over, and pressing it would open Wispr's window
+        // behind everything — the 57 s orphan of the adversarial round.
+        HotkeyTap.retireDictationEpoch()
+        // **When the relay itself stopped the last dictation**, which is what a
+        // late CoreAudio *open* edge has to be told from a new one.
+        lastStopAt = CFAbsoluteTimeGetCurrent()
         isRecording = false
         speculativeDrop?.cancel()
         speculativeDrop = nil
@@ -1149,6 +1178,13 @@ final class WisprFlowSource: DictationSource {
     /// its own authority while the relay's own stop, the 100 ms poll and Wispr's
     /// row all have something to say first.
     private func edge(_ on: Bool, measured: Bool) {
+        // **Asked before the machine is told**, because `WisprState.notify(true)`
+        // takes an `idle` machine into `listening`, and a late open edge would
+        // therefore put the phase back into a sentence that is over.
+        if on, !speculative, !isRecording, let why = lateOpenEdge() {
+            Log.info("⚡ \(why) — a late confirmation of the sentence that is over, not a new dictation")
+            return
+        }
         state.notify(on)
         if on {
             // **The edge confirms; it never re-opens.** A guess that is standing
@@ -1201,6 +1237,55 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **Is this open edge the last sentence's, arriving late?**
+    ///
+    /// Two credentials, and it needs both — the second is what keeps a dictation
+    /// Victor really did start by hand from being ignored:
+    ///
+    /// 1. **The relay stopped the last dictation itself and nothing has been
+    ///    asked for since** (`lastStopAt >= gestureAt`). A microphone that opens
+    ///    after the relay closed the sentence it opened for is describing that
+    ///    sentence.
+    /// 2. **Wispr has created no newer row.** Wispr writes the `History` row at
+    ///    the gesture, 357 ms measured, so a dictation that has really started
+    ///    has a row of its own; a late notification about the old one does not.
+    ///
+    /// Bounded by `lateOpenGrace` — the notification has measured 0–6 s late and
+    /// nothing has ever been later, so beyond twice that an open edge is a new
+    /// dictation whatever the rows say. The cost of being wrong in that
+    /// direction is a missing ring over a dictation the relay would not have
+    /// touched anyway (*a dictation Victor starts himself is Wispr's*); the cost
+    /// of being wrong the other way is the phantom cycle this exists to remove.
+    private func lateOpenEdge() -> String? {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard lastStopAt > 0, lastStopAt >= gestureAt, now - lastStopAt < Self.lateOpenGrace
+        else { return nil }
+        let since = (now - lastStopAt) * 1000
+        // **The plainest case, and the one both attacks actually took**: the
+        // capture for the sentence the relay has just stopped is still open, so
+        // the words are still in flight and this edge is about them. It arrived
+        // *before* the delivery in Attack 7, which is why a test written only on
+        // the finished row would have missed it.
+        if capturing {
+            return String(format: "the mic edge opened %.0f ms after the relay's own stop, with that sentence's capture still open", since)
+        }
+        guard let last = historyRow ?? lastRow else { return nil }
+        guard let newest = WisprHistory.newest() else {
+            return String(format: "the mic edge opened %.0f ms after the relay had already stopped, and Wispr has no row at all", since)
+        }
+        guard newest.rowid <= last else { return nil }
+        return String(format: "the mic edge opened %.0f ms after the relay had already stopped, and row %d is still Wispr's newest",
+                      since, newest.rowid)
+    }
+
+    /// When the relay's own stop closed the last dictation's listening.
+    private var lastStopAt: CFAbsoluteTime = 0
+    /// The `History` row the last capture belonged to, kept past `endCapture` —
+    /// which clears `historyRow` — because *has Wispr started anything since* is
+    /// a question asked after the capture is over.
+    private var lastRow: Int64?
+    private static let lateOpenGrace: TimeInterval = 12
+
     // MARK: - The meter, which is also the corpus's recording
 
     private func startMeter() {
@@ -1245,6 +1330,7 @@ final class WisprFlowSource: DictationSource {
         // done — but nothing is swallowed, nothing is read off the pasteboard
         // and nothing is delivered.
         let takes = intercepting
+        sawWisprGone = 0
         armedAt = CFAbsoluteTimeGetCurrent()
         captureFrom = armedAt
         askedForCopy = false
@@ -1518,6 +1604,19 @@ final class WisprFlowSource: DictationSource {
     /// lets the router decide whether that was the destination.
     private func pollHistory() {
         guard capturing else { return }
+        // **The recogniser has quit and nothing is coming** (2026-09-14,
+        // adversarial round 2, Finding 5). Wispr killed mid-settle left the
+        // relay holding `Transcribing...` for the full 30 s of `captureTimeout`
+        // before it said `No words came back` — thirty seconds of a chip
+        // promising words from a process that no longer exists. Two consecutive
+        // ticks, because `runningApplications` is KVO-updated and a single blank
+        // reading during Wispr's own relaunch is not a death.
+        if !Self.wisprMainIsRunning {
+            sawWisprGone += 1
+            if sawWisprGone >= 2 { return abandonForDeadWispr() }
+        } else {
+            sawWisprGone = 0
+        }
         let wasDiscarding = discardOnArrival
         // **The note is never the delivered text in Scratchpad mode, and that is
         // now a rule rather than a default** (2026-09-14). Two runs delivered
@@ -1573,6 +1672,21 @@ final class WisprFlowSource: DictationSource {
         // so a settle sat out its whole timeout on a sentence that was arriving.
         // Bounded by `captureTimeout` and by nothing else.
         case let s where WisprState.intermediateStatuses.contains(s):
+            // **…and one of them is not progress at all.** Two seconds of
+            // digital silence left row 12814 in `raw_transcript` with `asrText`,
+            // `formattedText` and `pastedText` all empty, **for ever** — Wispr
+            // never made it terminal — and the relay sat out its whole 30 s
+            // capture before saying `No words came back` (adversarial round 2,
+            // Attack 12). A row with nothing in it after `silenceCeiling` is
+            // Wispr having heard nothing, which is a different sentence to show
+            // him and a much earlier one.
+            guard !isRecording, s == "raw_transcript",
+                  e.asrText.isEmpty, e.formattedText.isEmpty, e.pastedText.isEmpty,
+                  took >= Self.silenceCeiling * 1000 else { return }
+            Log.info(String(format: "wispr history: %@ with nothing in it %.0f s after the microphone closed — Wispr heard no speech",
+                            s, took / 1000))
+            endCapture(quiet: true)
+            if !wasDiscarding { didEnd?(.silent("No speech was heard")) }
             return
 
         case "formatted", "extension_paste", "extension_other":
@@ -1654,6 +1768,44 @@ final class WisprFlowSource: DictationSource {
             endCapture(quiet: true)
             didEnd?(.silent("Wispr Flow reported \(e.status)"))
         }
+    }
+
+    /// **How long a row with nothing in it may be called progress**, counted
+    /// from the microphone's close. Eight seconds is Wispr's own p99 and the
+    /// same number the settle gives up on, so nothing that was going to arrive
+    /// is cut off by it.
+    private static let silenceCeiling: TimeInterval = 8
+
+    /// **Wispr Flow's own process, matched on the anchored executable path.**
+    ///
+    /// Not the bundle identifier and not the name: LaunchServices resolves both
+    /// to the nested Accessibility helper at
+    /// `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app` as well, so a
+    /// check written on either reports Wispr running when only the helper is —
+    /// the same trap `open -a "Wispr Flow"` is in *Never reintroduce* for.
+    private static var wisprMainIsRunning: Bool {
+        NSWorkspace.shared.runningApplications.contains {
+            $0.executableURL?.path == mainExecutable
+        }
+    }
+    private static let mainExecutable = "/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"
+    private var sawWisprGone = 0
+
+    /// **Wispr is gone and the sentence went with it.** Everything this capture
+    /// holds is handed back on the way out: `closeListening` releases the chord
+    /// and asks the Scratchpad close, `endCapture` disarms the keyboard guard
+    /// and takes the window down for good.
+    private func abandonForDeadWispr() {
+        sawWisprGone = 0
+        Log.error("⚠️ Wispr Flow quit — the sentence is lost")
+        if isRecording || speculative { closeListening("Wispr Flow quit") }
+        // After the close, or `stopChord` would transition out of the `done`
+        // this puts the machine in and the phase would say the sentence ended
+        // normally.
+        state.timedOut("Wispr Flow quit")
+        let wasDiscarding = discardOnArrival
+        endCapture(quiet: true)
+        if !wasDiscarding { didEnd?(.silent("Wispr Flow quit — the sentence is lost")) }
     }
 
     /// **`WT_SCRATCHPAD_DELIVER=note`** — wait for the note rather than taking
@@ -2013,6 +2165,9 @@ final class WisprFlowSource: DictationSource {
         clipboardMoved = nil
         historyPoll?.invalidate()
         historyPoll = nil
+        // **Kept past the capture**, because *has Wispr started anything since*
+        // is asked after it — see `lateOpenEdge`.
+        if let row = historyRow { lastRow = row }
         historyRow = nil
         priorRow = nil
         priorRowWasOpen = false
@@ -2061,6 +2216,15 @@ final class WisprFlowSource: DictationSource {
             } else if !scratchpadWindowHandled || WisprScratchpad.windowIsUp {
                 scratchpadWindowHandled = true
                 closeScratchpadAfterwards()
+            }
+            // **And then watch for a window nobody owns.** Every close above
+            // belongs to a dictation; this is the one that belongs to none — a
+            // chord that went out late, a window Wispr re-opened after the last
+            // reader had gone home. It is a no-op unless one really is standing
+            // there with nothing being dictated.
+            WisprScratchpad.armOrphanSweep { [weak self] in
+                guard let self else { return true }
+                return !self.isRecording && !self.speculative && !self.capturing
             }
         }
         captureDeadline?.cancel()

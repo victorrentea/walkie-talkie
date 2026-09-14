@@ -2554,11 +2554,42 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         scratchpadLock.unlock()
         if down {
             guard !alreadyHeld else { return Log.info("🗒️ scratchpad chord is already held — nothing posted") }
-            postScratchpad(down: true)
+            postScratchpad(down: true, forDictation: true)
         } else {
             guard alreadyHeld else { return }
-            postScratchpad(down: false)
+            postScratchpad(down: false, forDictation: true)
         }
+    }
+
+    /// **Which dictation a queued chord belongs to** (2026-09-14).
+    ///
+    /// The chord does not go out where it is asked for: `postScratchpad` moves
+    /// the bookkeeping now and hands the keys to `scratchpadQueue`, which waits
+    /// `settleForOptionsPlus` and then for a bare wire. The adversarial round
+    /// found what that costs when a dictation is 18 ms long: the hold posted by
+    /// `holdScratchpad` landed **after** the cancel had ended everything, Wispr
+    /// read the down/up pair as a *tap*, opened its Scratchpad window, and the
+    /// window then stood open for 57 s with the keyboard guard already disarmed
+    /// — an orphan nobody owned. A queued hold is therefore stamped with the
+    /// dictation it belongs to and dropped at post time if that dictation is
+    /// over.
+    ///
+    /// A **release** is never dropped for this reason — a key stuck down is the
+    /// worse failure by a wide margin — but it is dropped when the hold it
+    /// releases never went out, because then nothing is down to release.
+    private static var dictationEpochValue: UInt64 = 0
+
+    static var dictationEpoch: UInt64 {
+        scratchpadLock.lock(); defer { scratchpadLock.unlock() }
+        return dictationEpochValue
+    }
+
+    /// The dictation a queued chord belonged to is over: anything still waiting
+    /// for a bare wire on its behalf is no longer wanted.
+    static func retireDictationEpoch() {
+        scratchpadLock.lock()
+        dictationEpochValue &+= 1
+        scratchpadLock.unlock()
     }
 
     /// Press and release in one breath — the *tap*, which per Wispr's docs opens
@@ -2649,7 +2680,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private static let scratchpadQueue =
         DispatchQueue(label: "ro.victorrentea.wispr-relay.wispr-scratchpad")
 
-    private static func postScratchpad(down: Bool) {
+    /// - Parameter forDictation: whether this press belongs to a **dictation's
+    ///   hold**, which a dictation that has since ended may cancel. The close's
+    ///   own `tapWisprScratchpad` does not: it belongs to the window, not to a
+    ///   sentence, and dropping it would leave the thing it was closing open.
+    private static func postScratchpad(down: Bool, forDictation: Bool = false) {
         let codes = down ? scratchpadChord() : (scratchpadDownCodes.isEmpty ? scratchpadChord() : scratchpadDownCodes)
         // **The flag moves now, the keys move on the queue.** `stop()` reads
         // `scratchpadIsHeld` a few milliseconds after `start()` returns, and a
@@ -2671,11 +2706,28 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             scratchpadDeadMan?.cancel()
             scratchpadDeadMan = nil
         }
-        scratchpadQueue.async { emitScratchpad(codes, down: down) }
+        let epoch = (down && forDictation) ? dictationEpoch : nil
+        scratchpadQueue.async { emitScratchpad(codes, down: down, epoch: epoch) }
     }
 
+    /// **Was the last hold actually put on the wire.** Touched only on
+    /// `scratchpadQueue`, which is serial, so it needs no lock: it is the answer
+    /// to *is there anything down for this release to let go of*.
+    private static var scratchpadDownEmitted = false
+
     /// The keys themselves, on the serial queue, after the wire is clear.
-    private static func emitScratchpad(_ codes: [CGKeyCode], down: Bool) {
+    private static func emitScratchpad(_ codes: [CGKeyCode], down: Bool, epoch: UInt64? = nil) {
+        // **Checked here, at post time, and not at the call** — the whole point
+        // is that this runs later than the code that asked for it.
+        if down, let epoch, epoch != dictationEpoch {
+            scratchpadDownEmitted = false
+            Log.info("🗒️ scratchpad chord DOWN dropped — the dictation it belonged to ended while it waited for a bare wire")
+            return
+        }
+        if !down, !scratchpadDownEmitted {
+            Log.info("🗒️ scratchpad chord UP dropped — the hold it releases never went out, so nothing is down")
+            return
+        }
         usleep(settleForOptionsPlus)
         let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
         var waited = 0
@@ -2719,6 +2771,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 e.flags = state
                 e.post(tap: .cghidEventTap)
             }
+            scratchpadDownEmitted = true
             Log.info("🗒️ scratchpad chord DOWN — \(chord) held (wire clear after \(waited * 5) ms)")
         } else {
             var held = modifiers
@@ -2732,6 +2785,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 held.removeAll { $0 == m }
                 modifier(m, leaving: flags(of: held))
             }
+            scratchpadDownEmitted = false
             Log.info("🗒️ scratchpad chord UP — \(chord) released (wire clear after \(waited * 5) ms)")
         }
     }

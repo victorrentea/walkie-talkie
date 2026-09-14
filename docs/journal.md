@@ -229,6 +229,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The night the wrap found its shape (2026-09-13/14)](#the-night-the-wrap-found-its-shape-2026-09-1314)
 - [The fifth stale ⌘, and the guard that finally works (2026-09-14, 02:48)](#the-fifth-stale--and-the-guard-that-finally-works-2026-09-14-0248)
 - [What the cancel cost the sentence after it (2026-09-14, 03:30)](#what-the-cancel-cost-the-sentence-after-it-2026-09-14-0330)
+- [The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)](#the-adversarys-second-round-four-things-that-outlived-their-dictation-2026-09-14-0430)
 
 ---
 
@@ -9437,3 +9438,56 @@ modifier he really is holding survives the clearing of one he is not. The rule o
 `area-crop.md` has now been paid for seven times and this is the first payment
 that is a *reader* rather than a poster: every previous occurrence was this app
 leaving a flag behind, and this one is this app finding one.
+
+
+## The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)
+
+Nineteen attacks, no leaked text, five findings — and four of them are the same
+shape as each other: *something belonging to a sentence that is over arrived
+afterwards and was taken for something belonging to the next one.*
+
+**A chord that went out late (Finding 1).** The one the round was worth running
+for. `postScratchpad` moves its bookkeeping now and hands the keys to a serial
+queue that waits for a bare wire, so on an 18 ms dictation — a cancel landing
+right behind the gesture — the hold arrived **after** everything had ended.
+Wispr read the down/up as a *tap*, opened its Scratchpad, and the window stood
+for **57 s** with the keyboard guard already disarmed. The harness had sampled
+`['Status']` and exited 0 thirteen seconds too early, which is the other lesson:
+the check that found it was the one made after the harness said it was finished.
+A queued hold now carries the epoch of the dictation that asked for it and is
+dropped at post time when that epoch has moved on; a release is only ever dropped
+when the hold it releases never went out, because a key stuck down is worse than
+anything this is protecting against. And because there will be other ways for a
+window to end up standing there, `endCapture` arms a 12-second sweep that closes a
+Scratchpad nobody is dictating into — `orphan Scratchpad closed`.
+
+**An edge that arrived late (Finding 2).** `notifyMs = 4109`: the CoreAudio
+notification's *open* came in after the relay's own stop and, in one run, before
+the delivery. The relay read it as a dictation Victor had started by hand,
+announced `dictation abandoned (a new dictation started)`, put the ring back up,
+restarted the halo and the recorder, and took it down again 500 ms later. The
+close-edge rule for this was written on 2026-09-13 — *a witness that never saw the
+microphone open may not report it closing* — and its mirror was simply missing.
+It is now asked before the state machine is told, because `notify(true)` takes an
+idle machine into `listening` and would put the phase back into a finished
+sentence.
+
+**A test route that was two routes (Finding 3).** `/test/wispr-handsfree`
+promised a hand-started dictation and called `gestureSeen(relay: true)`, so the
+relay swallowed Wispr's ⌘V and re-delivered the sentence itself — `via:
+wispr-cmdv` on a run whose whole point was that it would only watch. The
+observation-only control the contract needs is now `{"hand": true}`; the old
+behaviour stays because it is the transcribe primitive everything else is built
+on. Two questions, two calls.
+
+**And two ways to wait thirty seconds for nothing (Finding 5, Attack 12).** Wispr
+killed mid-settle, and two seconds of digital silence that left a row in
+`raw_transcript` with every text column empty for ever. Both ended in `No words
+came back` at `captureTimeout`, half a minute of a chip promising words. The
+first is answered by asking whether Wispr's **main** process is still there —
+anchored on the executable path, because the bundle id and the name both match
+the nested helper — and the second by giving an empty row eight seconds before
+calling it what it is: *No speech was heard*.
+
+Finding 4 is the runner's: a spawn scenario left its binding and its Terminal
+window behind.

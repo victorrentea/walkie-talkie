@@ -289,6 +289,73 @@ measurement of this is worth anything without it.
   is unchanged and now has a reader: `WisprScratchpad.closeIsInFlight` exposes
   `closeASAP`, `armCloseOnSight` guards on it as it always did, and `endCapture`
   consults it before starting a second close of its own.
+- **A chord that goes out after its dictation is over opens a window nobody owns**
+  (adversarial round 2, Finding 1). `postScratchpad` moves the bookkeeping now and
+  hands the keys to `scratchpadQueue`, which waits `settleForOptionsPlus` and then
+  for a bare wire — so on an 18 ms dictation the hold `holdScratchpad` asked for
+  landed **after** the cancel had ended everything. Wispr read the down/up pair as
+  a *tap*, opened its Scratchpad, and the window stood for **57 s** with the
+  keyboard guard already disarmed (`scratchpadWindowOpen:true`,
+  `keyRedirect.armed:false`, AX `['Status', 'Scratchpad']`, reproduced at 100, 200
+  and 500 ms). A queued **hold** is therefore stamped with
+  `HotkeyTap.dictationEpoch` and dropped at post time when that epoch has moved
+  on — the epoch is retired in `gestureSeen` and in `closeListening`, *after* the
+  release, because the release is the one chord that must still go out. A
+  **release** is never dropped for a stale epoch (a key stuck down is the worse
+  failure by a wide margin) but is dropped when the hold it releases never went
+  out, so the pair leaves the wire untouched. `tapWisprScratchpad` carries no
+  epoch: it belongs to the window, not to a sentence.
+- **And the window with no dictation behind it is swept up.**
+  `WisprScratchpad.armOrphanSweep`, armed by `endCapture` on every Scratchpad
+  capture: 0.5 s ticks for 12 s, a no-op unless the window is open **and** the
+  source says nothing is in flight **and** no close is already running, and then
+  `🗒️ orphan Scratchpad closed`. The toggle rule holds across it —
+  `closeIsInFlight` now covers `closeWindow`'s own path (`closingNow`) as well as
+  `armCloseOnSight`'s `closeASAP`, because the sweep and a `closeWhenItAppears`
+  already running would otherwise tap twice and re-open what the first shut.
+- **A late *open* edge is the last sentence's, not the next one's** (Finding 2,
+  `notifyMs = 4109`). The notification's OPEN arrived after the relay's own stop —
+  in Attack 7 *before* the delivery, in Attack 10 with no Scratchpad involved at
+  all — and was read as a dictation Victor had started by hand: `dictation
+  abandoned (a new dictation started)`, the ring back up, the halo, the selection
+  watcher and the recorder all restarted, the ring down again 500 ms later. This
+  is the symmetric half of the close-edge rule, and it is asked **before**
+  `state.notify`, because `notify(true)` takes an `idle` machine into `listening`
+  and would put the phase back into a sentence that is over. `lateOpenEdge()`
+  needs the relay's own stop to be the last thing that happened
+  (`lastStopAt >= gestureAt`, within **12 s**) and then either the stopped
+  sentence's capture still open, or **no newer `History` row** — Wispr writes the
+  row at the gesture (357 ms), so a dictation that has really started has one of
+  its own and a late notification about the old one does not.
+- **`POST /test/wispr-handsfree` intercepts, and `{"hand": true}` does not**
+  (Finding 3). The route called `gestureSeen(relay: true)`, so `intercepting` was
+  true: the relay swallowed Wispr's ⌘V and re-delivered the sentence itself —
+  `lastDelivery={via:wispr-cmdv,kind:route,to:caret}` on a run whose whole point
+  was that it would only watch. The old behaviour is kept (it is the transcribe
+  primitive the harness is built on) and the promise it was breaking gets its own
+  flag: `{"hand": true}` posts the same chord with `relay: false`, which is ring
+  only — nothing swallowed, nothing delivered, `relayStarted` and `intercepting`
+  both false.
+- **A recogniser that has quit is not a recogniser that is slow** (Finding 5).
+  Wispr killed mid-settle left the relay holding `Transcribing...` for the whole
+  **30 s** of `captureTimeout` before `No words came back`. `pollHistory` now asks
+  whether Wispr's **main** process is there — `NSWorkspace` filtered on the
+  anchored executable path `/Applications/Wispr Flow.app/Contents/MacOS/Wispr
+  Flow`, never the bundle id or the name, both of which match the nested
+  Accessibility helper — and two consecutive absences (300 ms;
+  `runningApplications` is KVO-updated and one blank reading during Wispr's own
+  relaunch is not a death) end it with `⚠️ Wispr Flow quit — the sentence is
+  lost`. `closeListening` releases the chord and asks the Scratchpad close,
+  `endCapture` disarms the guard and takes the window down.
+- **A row with nothing in it stops being progress after 8 s** (Attack 12). Two
+  seconds of digital silence left row 12814 in `raw_transcript` with `asrText`,
+  `formattedText` and `pastedText` all empty **for ever** — Wispr never made it
+  terminal — and the relay sat out its full 30 s. `silenceCeiling` is 8 s from the
+  microphone's close, the same number the settle gives up on and Wispr's own p99,
+  so nothing that was going to arrive is cut off; the answer is **"No speech was
+  heard"**, which is a different sentence to show him than *no words came back*.
+  `WisprHistory.Entry.asrText` was added for it: `status` alone cannot tell
+  *still thinking* from *heard nothing*.
 - **A gesture during the settle that is not a cancel was already safe** — the same
   run's `forward-click` 100 ms after the stop is a no-op (`nothing to start,
   nothing to stop`), the ⌘V is swallowed and the sentence delivers normally.

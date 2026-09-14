@@ -818,10 +818,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return ["input": now, "was": was, "changed": true]
         }
-        picker.onTestWisprHandsFree = { [weak self] in
+        picker.onTestWisprHandsFree = { [weak self] hand in
             DispatchQueue.main.async {
-                Log.info("POST /test/wispr-handsfree — posting fn ⌃ Space")
-                self?.wisprSource.postStartChord()
+                Log.info("POST /test/wispr-handsfree — posting fn ⌃ Space"
+                         + (hand ? " as though he had pressed it (ring only)" : ""))
+                self?.wisprSource.postStartChord(byHand: hand)
             }
         }
         picker.onTestCancelDictation = { [weak self] in
