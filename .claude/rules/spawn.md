@@ -46,7 +46,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   The price stands whichever modifier it is: the chord belongs to this app whenever it is running —
   the deliberate reading of *"cât timp e pornit walkie"*.
   → journal: *⌘ + the wheel: the destination that does not exist yet*
-- **The mouse chords for a spawn are live only with *Use Logi Gestures* unticked.** ⌘ + the wheel
+- **The mouse chords for a spawn are live only with *Mouse Gestures: Wheel*.** ⌘ + the wheel
   and the wheel double-click are the wheel's own vocabulary; with the tick on (the default since
   2026-09-09) the row reads `🔼 ↑` in the menu. Whatever chord opens it, the behaviour below is
   the same.

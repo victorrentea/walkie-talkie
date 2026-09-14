@@ -204,10 +204,11 @@ sits at rest there.
 - **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds), ⌘⌃D starts /
   ends a dictation, ⌘⌃P pastes the last envelope. All swallowed, autorepeat included. ⌘⌃⌥D is
   Victor Addons' dark-mode toggle.
-- **Mouse:** *Use Logi Gestures* is ticked by default (2026-09-09) — the side buttons arrive
+- **Mouse:** *Mouse Gestures: Logi* is the default (2026-09-09; a submenu of two rows since
+  2026-09-14, `Logi` / `Wheel`, the shape `Engine` has) — the side buttons arrive
   from Options+ as ⌃⌥⌘F3…F12 and every mouse button is passed through; the wheel is untouched
   except a **drag** while dictating, which crops a screen area (2026-09-10). The chords are
-  duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. Unticked, the
+  duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. On *Wheel*, the
   wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
 - **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,
   whatever is bound; 🔼 → = dictate at the **bound** terminal; 🔼 ← = cancel either; 🔼 ↑ = a new
@@ -311,8 +312,11 @@ sits at rest there.
 - **A dictation Victor starts himself is Wispr's** — his own keyboard chord, or 🔽→ which posts
   Wispr's chord raw. Ring only: never intercepted, never routed, no swallow and no Scratchpad.
   `relayStarted` in `/test/state` is that distinction; it ends on Wispr's row with `.silent("")`.
-- **The menu's *Close Wispr Scratchpad*** does the 250 ms press by hand. Whether the relay should
-  close Wispr's window for him beyond the wrap's own cycle is Victor's to decide.
+- **The window is closed by the app, not from the menu** — `closeScratchpadAfterwards` at the end
+  of every wrapped dictation and `startIdleSweep` between them. The *Close Wispr Scratchpad* row
+  that did the 250 ms press by hand went on **2026-09-14** (Victor: *"sterge!"*): with the
+  automatic close working it was a button for a job already done, and clicking it at a window
+  that had gone in the meantime opens one, because the chord is a toggle.
 - **The dictation opens on the gesture, not on the microphone.** Measured 2026-09-12: 324–674 ms
   from the chord to Wispr's microphone when warm, **5–6 s** cold. The ring, the chip, the context
   shot and the music pause all fire on `didBegin`, which the hands-free chord raises directly; the

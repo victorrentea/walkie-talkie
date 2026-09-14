@@ -377,9 +377,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyEngineRow()
     }
 
-    /// **Use Logi Gestures** — which mouse the app thinks it is holding.
+    /// **Mouse Gestures: Logi / Wheel** — which mouse the app thinks it is
+    /// holding, said as a choice rather than as a tick (2026-09-14).
     ///
-    /// Ticked (the default): the side buttons arrive as ⌃⌥⌘F3…F12 from Logi
+    /// It was the checkbox `Use Logi Gestures`, and it had `Engine`'s old
+    /// problem: a tick names one of the two wirings and leaves the other one
+    /// unnamed, so *off* was a state with no word for it — the row could not say
+    /// that the alternative is the wheel carrying the dictation, only that Logi
+    /// is not doing it. Victor asked for the shape the engine row already has
+    /// (*"cu submeniu din care aleg cele 2 variante (ca la Engine)"*), and the
+    /// two rows under the arrow are where each wiring gets its name.
+    ///
+    /// Logi (the default): the side buttons arrive as ⌃⌥⌘F3…F12 from Logi
     /// Options+ custom gestures, and every mouse button is passed straight
     /// through — the wheel included, which is what gives middle-click back to
     /// Chrome and VS Code. Unticked: the pre-2026-09-09 wiring, where the wheel
@@ -390,12 +399,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// and the case it is kept for is a real one: the Logi gestures live in an
     /// Options+ profile, and a Mac without that profile — a fresh install, a
     /// machine in a training room — has no side buttons at all until it is
-    /// rebuilt. The tick is the way back in the meantime.
+    /// rebuilt. The second row is the way back in the meantime.
     ///
-    /// **Defaults to on, and that needs saying** because `bool(forKey:)` answers
-    /// false for a key that was never written, which would have shipped the old
-    /// gestures to a Mac already configured for the new ones.
-    private let logiGestures = NSMenuItem(title: "Use Logi Gestures", action: nil, keyEquivalent: "")
+    /// **Defaults to Logi, and that needs saying** because `bool(forKey:)`
+    /// answers false for a key that was never written, which would have shipped
+    /// the old gestures to a Mac already configured for the new ones.
+    private let logiGestures = NSMenuItem(title: "Mouse Gestures", action: nil, keyEquivalent: "")
+
+    /// **The two wirings under the arrow**, rebuilt by `applyLogiGesturesRow`
+    /// for `applyEngineRow`'s reason: there are two of them, they are short, and
+    /// keeping the tick honest is one loop rather than a delegate.
+    private let gesturesSubmenu = NSMenu()
     private var logiGesturesOn: Bool =
         UserDefaults.standard.object(forKey: StatusItem.logiGesturesKey) as? Bool ?? true
     private static let logiGesturesKey = "useLogiGestures"
@@ -423,23 +437,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
     // `false` in it would now be unreachable from the UI, so it is no longer
     // read at all — and the two accessors `AppDelegate` drove it through.
 
-    // ── Close Wispr Scratchpad ──────────────────────────────────────────────
-
-    /// **The one thing the Scratchpad wrap leaves on screen.**
-    ///
-    /// In Scratchpad mode Wispr opens its own note window in the background on
-    /// the first dictation of the session and never takes it down. Victor has not
-    /// decided whether the relay should close it for him — it is *his* window in
-    /// *his* tool, and an app that keeps shutting another app's window is one he
-    /// would have to fight — so for now it is a row he clicks.
-    ///
-    /// A row rather than a gesture, and disabled-looking never: the gestures are
-    /// full, and this is housekeeping rather than something done mid-sentence.
-    private let closeScratchpad =
-        NSMenuItem(title: "Close Wispr Scratchpad", action: nil, keyEquivalent: "")
-    var onCloseScratchpad: (() -> Void)?
-
-    @objc private func closeScratchpadClicked() { onCloseScratchpad?() }
+    // ── Close Wispr Scratchpad: gone from the menu (2026-09-14) ─────────────
+    //
+    // **"Close wisprflow scratchpad menu < sterge!"** (Victor). It was a row he
+    // clicked because the relay had not been given leave to close another app's
+    // window on its own — and by now it closes it on its own anyway, at the end
+    // of every wrapped dictation (`closeScratchpadAfterwards`) and through the
+    // idle sweep. What was left in the menu was a button for a job already done,
+    // whose only remaining use was clicking it after the automatic close had
+    // failed — and a failed close reopens the window on the next click, because
+    // the chord is a toggle.
+    //
+    // `WisprScratchpad.ensureClosed` is untouched; what is gone is the row, its
+    // callback, and `AppDelegate`'s wire into it.
 
     /// **The outbox, read back as a page.** Renders the last two days of
     /// `outbox.jsonl` into one self-contained HTML file and opens it in the
@@ -667,14 +677,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyEngineRow()
         menu.addItem(engineItem)
 
-        closeScratchpad.action = #selector(closeScratchpadClicked)
-        closeScratchpad.target = self
-        closeScratchpad.image = Self.symbolIcon("note.text")
-        menu.addItem(closeScratchpad)
-
-        logiGestures.action = #selector(logiGesturesClicked)
-        logiGestures.target = self
-        applyLogiGesturesIcon()
+        logiGestures.image = Self.symbolIcon("computermouse")
+        logiGestures.submenu = gesturesSubmenu
+        applyLogiGesturesRow()
         menu.addItem(logiGestures)
 
         autosend.action = #selector(autosendClicked)
@@ -860,12 +865,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
         refreshGlyph()
     }
 
-    /// `Engine: whisper-large-v3-turbo — 1.6 GB RAM` while the local model is
-    /// the one listening; `Engine: Wispr Flow…` while the other one is.
+    /// `Engine: Local (2.6 GB)` while the local model is the one listening;
+    /// `Engine: Wispr Flow` while the other one is.
+    ///
+    /// **The row is short and the submenu is long** (Victor, 2026-09-14): the
+    /// top-level row is read out of the corner of the eye while the menu bar is
+    /// open over his work, and `mlx-community/whisper-large-v3-turbo — 2.6 GB
+    /// RAM` there stretched the whole menu to the width of a model id nobody
+    /// reads at that moment. The full id is still one hover away, in the list
+    /// under the arrow — which is where the question *what exactly are you
+    /// running* is actually asked.
     private func applyEngineRow() {
         // **No `…` on the title** — the arrow says there is more, and a row
         // carrying both says it twice.
-        engineItem.title = "Engine: \(engineTitle(engineId))"
+        engineItem.title = "Engine: \(engineShortTitle(engineId))"
         engineSubmenu.removeAllItems()
         for id in ["wispr", "whisper"] {
             let row = NSMenuItem(title: engineTitle(id),
@@ -916,6 +929,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
             return String(format: "%@ — %.1f GB RAM", name, Double(bytes) / 1_073_741_824)
         }
         return name
+    }
+
+    /// **What the top-level row calls the same engine** — `Wispr Flow`, or
+    /// `Local (2.6 GB)` with the footprint kept and the model id dropped.
+    ///
+    /// The size stays because it is the half that changes: it says the helper is
+    /// alive and what it is costing right now, which is the whole argument for
+    /// letting it go between dictations. The name goes because it does not —
+    /// it is the same string every launch, and `engineTitle` has it in the list
+    /// below for the one moment somebody asks.
+    private func engineShortTitle(_ id: String) -> String {
+        guard id == "whisper" else { return "Wispr Flow" }
+        if engineLoading { return "Local (loading…)" }
+        guard let bytes = whisperFootprint?() else { return "Local" }
+        return String(format: "Local (%.1f GB)", Double(bytes) / 1_073_741_824)
     }
 
     @objc private func enginePicked(_ sender: NSMenuItem) {
@@ -1085,7 +1113,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// an outbox in a directory, with some agent watching it.
     func setDestination(_ line: String?, icon: NSImage?) {
         destination = line
-        header.image = icon
+        destinationIcon = icon
         isBound = line != nil
         disconnect.isEnabled = isBound
         refreshGlyph()
@@ -1167,13 +1195,31 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// commands are *for*, rather than as where the words are going. The two
     /// words say which of the two it is.
     ///
-    /// Only the bound form takes the prefix. Unbound the row falls back to the
-    /// launch label, and "Bound to:" in front of that would be a plain lie: with
-    /// nothing bound the relay is inert, which is the state this row is most
-    /// often read in.
+    /// Only the bound form takes the prefix. **Unbound the row says `Unbound`,
+    /// behind the same map pin the chip wears** (Victor, 2026-09-14) — it used
+    /// to be `🤖 ` plus `SessionLabel.value`, and since the relay became a login
+    /// item that label is `/`: a robot and a slash, naming the directory
+    /// `launchd` happened to start the app in. It read as a destination, which
+    /// is the one thing it was not. The same line was taken off the chip for the
+    /// same reason (`RelayWindow`, *"no title row while nothing is bound"*); the
+    /// menu keeps a row because a header that disappears leaves the commands
+    /// under it with nothing to be about.
+    ///
+    /// **`Glyphs.mapPin`, not 📍** — the drawn teardrop marker, the same image
+    /// the chip's title row and the *bind to send* hint carry, so the two places
+    /// the binding is named wear one mark. See `Glyphs`.
     private func applyHeader() {
-        header.title = destination.map { "Bound to: \($0)" } ?? "🤖 \(SessionLabel.value)"
+        header.title = destination.map { "Bound to: \($0)" } ?? "Unbound"
+        header.image = destination == nil ? Self.unboundIcon : destinationIcon
     }
+
+    /// The pin drawn once, at the icon column's height. `Glyphs.mapPin` is a
+    /// `CGContext` trace per call and this row is re-applied on every menu open.
+    private static let unboundIcon = Glyphs.mapPin(height: 16)
+
+    /// The bound destination's app icon, kept so `applyHeader` can put it back
+    /// after an unbound spell has borrowed the slot for the pin.
+    private var destinationIcon: NSImage?
 
     @objc private func exitClicked() {
         onExit?()
@@ -1186,21 +1232,39 @@ final class StatusItem: NSObject, NSMenuDelegate {
     func setLogiGestures(_ on: Bool) {
         logiGesturesOn = on
         UserDefaults.standard.set(on, forKey: Self.logiGesturesKey)
-        applyLogiGesturesIcon()
+        applyLogiGesturesRow()
         // **The legend column is rewritten, not just the tick.** The menu is
         // where every gesture is written down, and a row saying `🔼 →` on a Mac
         // whose forward button does nothing is worse than no legend at all.
         restyleGestures()
     }
 
-    @objc private func logiGesturesClicked() {
-        setLogiGestures(!logiGesturesOn)
+    @objc private func gesturesPicked(_ sender: NSMenuItem) {
+        guard let on = sender.representedObject as? Bool, on != logiGesturesOn else { return }
+        setLogiGestures(on)
         onToggleLogiGestures?(logiGesturesOn)
     }
 
-    /// The tick, or the space where one would be. See the note on the row.
-    private func applyLogiGesturesIcon() {
-        logiGestures.image = logiGesturesOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+    /// `Mouse Gestures: Logi` or `: Wheel`, and the tick beside whichever of the
+    /// two rows is the one wired up. See the note on the row.
+    private func applyLogiGesturesRow() {
+        logiGestures.title = "Mouse Gestures: \(logiGesturesOn ? "Logi" : "Wheel")"
+        gesturesSubmenu.removeAllItems()
+        // **Named by the hardware each one needs**, not by what it does to the
+        // wheel: the question this list answers is *which mouse am I on*, and
+        // the answer is either the one with the Options+ profile behind it or
+        // any mouse at all.
+        for (on, title) in [(true, "Logi — side buttons from Options+"),
+                            (false, "Wheel — the wheel carries the dictation")] {
+            let row = NSMenuItem(title: title,
+                                 action: #selector(gesturesPicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = on
+            // The tick where every other choice in this menu draws it — never
+            // `NSMenuItem.state`, which would reserve a second column.
+            row.image = on == logiGesturesOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+            gesturesSubmenu.addItem(row)
+        }
     }
 
     @objc private func autosendClicked() {
