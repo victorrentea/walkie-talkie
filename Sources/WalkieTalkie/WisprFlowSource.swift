@@ -271,20 +271,41 @@ final class WisprFlowSource: DictationSource {
     /// pass into `formattedText`. See `ShotMarker`.
     var acceptsAudioMarkers: Bool { true }
 
-    /// **Played into `🎓 TO Wispr`, and therefore summed with his voice** — which
-    /// is why it waits for a gap first. Measured 2026-09-14: a marker over
-    /// continuous speech leaves no trace at all, and it is not a level that can
-    /// be raised (it is already the louder signal). The only way to stop summing
-    /// is for the relay to own the audio path into Wispr, which it does not.
-    /// → `ShotMarker.maskCeiling`
+    /// **Two mechanisms, and which one is in force is whether this app owns the
+    /// path into Wispr.**
+    ///
+    /// With the bridge up the marker is written into the stream Wispr is being
+    /// fed (`MicRecorder.insert`), so it arrives **between** two of his words —
+    /// deterministic, nothing to mask it, no gap to wait for. Without it, the
+    /// marker can only be *played into* the Loopback device and is therefore
+    /// summed with his voice, which measured 2026-09-14 means it vanishes over
+    /// continuous speech — and it is not a level that can be raised, since it is
+    /// already the louder of the two. So that path waits for a gap and accepts
+    /// the ceiling. → `AudioBridge`, `ShotMarker.maskCeiling`
     func markShot(_ index: Int) {
+        if bridge.isRunning, let pcm = ShotMarker.pcm(index: index, in: MicRecorder.fileFormat) {
+            meter.insert(pcm)
+            return
+        }
         ShotMarker.play(index: index,
                         whenQuiet: { [weak self] in
                             (self?.meter.quietSeconds ?? 0) >= ShotMarker.gapNeeded
                         })
     }
 
+    /// **How long Wispr still has to listen for audio this app has not handed
+    /// over yet**, capped. The stop chord waits this out, or Wispr ends the
+    /// sentence on a tail still sitting in the player's queue. Zero with the
+    /// bridge down, which is every run that has not opted in.
+    var bridgeDrainSeconds: TimeInterval { min(bridge.queuedSeconds, 3) }
+
     let meter = MicRecorder()
+
+    /// **His voice, carried to Wispr by this app** — off unless `WT_BRIDGE=1`,
+    /// and see `AudioBridge` for the one-time Loopback change it needs. While it
+    /// is up, a shot marker is *spliced* into the stream instead of played over
+    /// it, which is the whole point of owning the path.
+    private let bridge = AudioBridge()
 
     private let watch = WisprWatch()
     private let hotkeys: HotkeyTap
@@ -916,6 +937,29 @@ final class WisprFlowSource: DictationSource {
     /// The relay knows what it asked for. The edge now confirms and logs.
     func stop() {
         guard isRecording || speculative else { return }
+        // **The last second of his sentence may still be in this app** (2026-09-14).
+        // With the bridge up, what Wispr has heard lags what he said by whatever
+        // is queued in the player — and a stop chord posted now ends the
+        // dictation on a tail Wispr never received. So the chord waits for the
+        // queue, bounded: a stuck player must not leave the microphone open.
+        // Zero, and therefore a straight-through call, on every run with the
+        // bridge down. → `AudioBridge.queuedSeconds`
+        //
+        // **The feed is cut first, and that is not an optimisation.** The meter
+        // goes on capturing until `stopMeter`, which runs *after* this — so a
+        // drain measured with the sink still attached is a queue being refilled
+        // as fast as it empties, and the chord would never go out while he was
+        // still making a sound. Detaching here also draws the line in the right
+        // place: Wispr hears everything up to the stop gesture and nothing after
+        // it. Idempotent, so the re-entry below costs nothing.
+        meter.onBuffer = nil
+        let drain = bridgeDrainSeconds
+        guard drain <= 0.02 else {
+            Log.info(String(format: "🔀 holding the stop for %.0f ms of his voice still in the bridge",
+                            drain * 1000))
+            DispatchQueue.main.asyncAfter(deadline: .now() + drain) { [weak self] in self?.stop() }
+            return
+        }
         switch startedMode {
         case .scratchpad:
             HotkeyTap.postWisprScratchpad(down: false)
@@ -1441,6 +1485,12 @@ final class WisprFlowSource: DictationSource {
         meterQueue.async { [weak self] in
             guard let self else { return }
             guard !self.meter.isRecording else { return }
+            // **Before the recorder opens**, so no buffer is produced that the
+            // bridge has not been told about: the first syllable is the one most
+            // often worth carrying.
+            if AudioBridge.isEnabled, self.bridge.start(format: MicRecorder.fileFormat) {
+                self.meter.onBuffer = { [weak self] buffer in self?.bridge.schedule(buffer) }
+            }
             if let why = self.meter.start(to: wav) {
                 // The ring is already up — at rest, not breathing. Said out loud
                 // because a ring that does not move looks exactly like a broken
@@ -1457,7 +1507,21 @@ final class WisprFlowSource: DictationSource {
     private func stopMeter(keep: Bool) {
         meterQueue.async { [weak self] in
             guard let self else { return }
+            self.meter.onBuffer = nil
             let taken = self.meter.stop()
+            // **After the recorder, and after whatever it had left.** Tearing the
+            // bridge down with audio still queued throws away the end of his
+            // sentence — the part Wispr has not heard yet. `bridgeDrainSeconds`
+            // is what the stop chord waits on for the same reason; this is the
+            // same wait on the way out, bounded so a stuck player cannot hold
+            // the meter's queue.
+            if self.bridge.isRunning {
+                let until = Date().addingTimeInterval(3)
+                while self.bridge.queuedSeconds > 0.02, Date() < until {
+                    Thread.sleep(forTimeInterval: 0.02)
+                }
+                self.bridge.stop()
+            }
             if keep { self.recording = taken }
             else if let taken { try? FileManager.default.removeItem(at: taken.url) }
         }

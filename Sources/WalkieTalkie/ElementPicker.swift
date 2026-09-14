@@ -304,6 +304,11 @@ final class ElementPicker {
     /// nothing in the running relay. → `ShotMarker`
     var onTestShotMarker: (([String: Any]) -> [String: Any])?
 
+    /// `POST /test/bridge` `{"on": …}` — `AudioBridge.isEnabled`, flipped without
+    /// a restart because an installed app does not inherit a shell's environment
+    /// and this is a switch to try beside him with Loopback's window open.
+    var onTestBridge: ((Bool) -> [String: Any])?
+
     /// `POST /test/wispr-scratchpad` `{"down"|"up"|"tap": true}` — Wispr's
     /// *Open Scratchpad* chord, and the one chord this app has to be able to
     /// **hold**. See `HotkeyTap.postWisprScratchpad`.
@@ -804,6 +809,20 @@ final class ElementPicker {
             respond(conn, 200, ["ok": true].merging(posted) { _, new in new })
 
         // The state machine, run on a script — see `onTestWisprStateSimulate`.
+        // `POST /test/bridge {"on": true｜false}` — carry his microphone to Wispr
+        // through this app, or stop. See `AudioBridge`: it needs the physical
+        // microphone removed as a direct source of the Loopback device first, or
+        // his voice arrives twice. Takes effect at the next dictation.
+        case ("POST", "/test/bridge"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let on = body?["on"] as? Bool else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"on\": true｜false}"])
+            }
+            guard let result = onTestBridge?(on) else {
+                return respond(conn, 503, ["ok": false, "error": "no handler"])
+            }
+            respond(conn, 200, ["ok": true].merging(result) { _, new in new })
+
         case ("POST", "/test/shot-marker"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             guard let body = body,

@@ -880,6 +880,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The marker's unit test — see `ElementPicker.onTestShotMarker`. Pure:
         // `available` comes from the request, not from this dictation, so the
         // rewrite can be asserted with nothing attached and nobody talking.
+        picker.onTestBridge = { on in
+            AudioBridge.isEnabled = on
+            Log.info("🔀 audio bridge \(on ? "armed" : "disarmed") — takes effect at the next dictation")
+            return ["bridge": on]
+        }
         picker.onTestShotMarker = { body in
             if let index = body["play"] as? Int {
                 ShotMarker.play(index: index)

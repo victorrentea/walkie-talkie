@@ -227,7 +227,7 @@ enum ShotMarker {
         engine?.stop()
         engine = nil; player = nil
 
-        guard let device = outputDevice(matching: deviceNeedle) else {
+        guard let device = AudioDevices.output(matching: deviceNeedle) else {
             if !complained {
                 complained = true
                 Log.error("shot markers: no output device matching '\(deviceNeedle)' — "
@@ -262,59 +262,6 @@ enum ShotMarker {
         Self.engine = engine; Self.player = player
         Log.info("📣 shot markers → \(device.name)")
         return player
-    }
-
-    private struct Device { let id: AudioDeviceID; let name: String }
-
-    /// The output twin of `InputDevice.inputs()`, and deliberately a separate
-    /// reading: a Loopback device has both sides, and asking for the input one
-    /// here would aim the engine at the half Wispr is listening to rather than
-    /// the half this app has to speak into.
-    private static func outputDevice(matching needle: String) -> Device? {
-        let wanted = needle.lowercased()
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject),
-                                             &address, 0, nil, &size) == noErr, size > 0 else { return nil }
-        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
-                                         &address, 0, nil, &size, &ids) == noErr else { return nil }
-        for id in ids where outputChannels(id) > 0 {
-            guard let name = deviceName(id), name.lowercased().contains(wanted) else { continue }
-            return Device(id: id, name: name)
-        }
-        return nil
-    }
-
-    private static func deviceName(_ id: AudioDeviceID) -> String? {
-        var address = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var size = UInt32(MemoryLayout<CFString?>.size)
-        var value: CFString?
-        let status = withUnsafeMutablePointer(to: &value) {
-            AudioObjectGetPropertyData(id, &address, 0, nil, &size, $0)
-        }
-        guard status == noErr else { return nil }
-        return value as String?
-    }
-
-    /// Variable-length `AudioBufferList`, sized by the same call that fills it —
-    /// `InputDevice.inputChannels`'s reason, on the other scope.
-    private static func outputChannels(_ id: AudioDeviceID) -> Int {
-        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
-                                                 mScope: kAudioObjectPropertyScopeOutput,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size) == noErr, size > 0 else { return 0 }
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size),
-                                                   alignment: MemoryLayout<AudioBufferList>.alignment)
-        defer { raw.deallocate() }
-        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw) == noErr else { return 0 }
-        let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
-        return list.reduce(0) { $0 + Int($1.mNumberChannels) }
     }
 
     // MARK: - The same marker, as samples

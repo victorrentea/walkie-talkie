@@ -372,6 +372,22 @@ final class MicRecorder {
         Log.info("✂️ marker queued into the recording — \(buffer.frameLength) frames")
     }
 
+    /// **Where every buffer also goes, in the order it was produced** — markers
+    /// included (2026-09-14).
+    ///
+    /// It exists so the relay can carry his voice somewhere as well as file it:
+    /// `AudioBridge` hands these straight to a player node aimed at the Loopback
+    /// device Wispr listens to, which turns a marker written into this stream
+    /// into a marker Wispr hears **between** two of his words rather than over
+    /// them. Set before `start(to:)`, cleared after `stop()`; read on the audio
+    /// thread through the same lock as everything else here, and it must do as
+    /// little as `meter` does.
+    var onBuffer: ((AVAudioPCMBuffer) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return bufferSink }
+        set { lock.lock(); bufferSink = newValue; lock.unlock() }
+    }
+    private var bufferSink: ((AVAudioPCMBuffer) -> Void)?
+
     /// Written on the gesture's thread, read on the audio thread — the same
     /// bargain every other field here makes, through the same lock.
     private var pendingInserts: [AVAudioPCMBuffer] = []
@@ -434,6 +450,7 @@ final class MicRecorder {
             lock.unlock(); return
         }
         let file = self.file
+        let sink = self.bufferSink
         lock.unlock()
 
         let ratio = outFormat.sampleRate / buffer.format.sampleRate
@@ -454,11 +471,14 @@ final class MicRecorder {
             if let error = error { Log.error("mic: conversion failed — \(error.localizedDescription)") }
             return
         }
+        // **Taken once, and the order is the product.** The markers go ahead of
+        // his buffer — the moment they name is the shutter press, which has
+        // already happened — and both destinations below see the same sequence,
+        // which is what makes an insertion an insertion rather than two streams
+        // that happen to agree.
+        let spliced = takeInserts()
         if let file {
-            // **Spliced in, not mixed over** — see `insert(_:)`. Ahead of his
-            // buffer rather than behind it, because the moment the marker is
-            // meant to name is the shutter press, which has already happened.
-            for marker in takeInserts() {
+            for marker in spliced {
                 do { try file.write(from: marker) } catch {
                     Log.error("mic: could not write marker — \(error.localizedDescription)")
                 }
@@ -466,6 +486,10 @@ final class MicRecorder {
             do { try file.write(from: out) } catch {
                 Log.error("mic: could not write buffer — \(error.localizedDescription)")
             }
+        }
+        if let sink {
+            for marker in spliced { sink(marker) }
+            sink(out)
         }
         meter(out)
     }
