@@ -619,11 +619,21 @@ class Adversary(unittest.TestCase):
     def test_no_scenario_kills_wispr_by_bare_name(self):
         """`pkill -x "Wispr Flow"` also matches the nested Accessibility helper.
         Every kill and every launch must use the anchored bundle path."""
-        source = open('helpers/wispr_loop.py', encoding='utf-8').read()
-        self.assertNotIn('"-x", "Wispr Flow"', source)
-        self.assertNotIn('open -a "Wispr Flow"', source)
-        self.assertIn("^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow", source)
-        self.assertIn('"/Applications/Wispr Flow.app"', source)
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        source = open(os.path.join(here, "..", "helpers", "wispr_loop.py"),
+                      encoding="utf-8").read()
+        # **The call form, not the words.** The first version of this test
+        # matched the comment that *warns against* `open -a "Wispr Flow"` and
+        # failed on the documentation of the rule it was checking — a test that
+        # cannot tell a hazard from a warning about it teaches people to delete
+        # the warning.
+        code = "\n".join(line for line in source.split("\n")
+                          if not line.lstrip().startswith("#"))
+        self.assertNotIn('"-x", "Wispr Flow"', code)
+        self.assertNotIn('"-a", "Wispr Flow"', code)
+        self.assertIn("^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow", code)
+        self.assertIn('"/Applications/Wispr Flow.app"', code)
 
 
 class Pasteboard(unittest.TestCase):
