@@ -3327,6 +3327,9 @@ def scenario_wispr_alone(ctx) -> Result:
         if victim and not relay.dry_run:
             _close_victim(victim)
         result.note("relaunched: %s" % relaunched)
+        result.note("⌘ is expected to be set while the relay is down — Wispr's own paste leaves "
+                    "it, and nothing is watching the tap to put it back until the relay launches "
+                    "again, which is where the restore lives")
     return result
 
 
@@ -3634,9 +3637,19 @@ def run_scenario(name: str, port: int, device: str | None, wav: str | None,
         func(ctx)
     finally:
         if not dry_run:
-            stuck = stuck_modifiers()
-            result.check(not stuck, "no modifier was left held down",
-                         ("still held: %s" % " ".join(stuck)) if stuck else "none")
+            # **Give the relay its moment to put them back.** A modifier that is
+            # briefly held and then released is not the bug this guards against
+            # — the bug is one that *stays*. Since 2026-09-14 the relay restores
+            # stale modifiers at launch, and `wispr-alone` stops and relaunches
+            # it, so the check was sampling the half-second between the two and
+            # reporting a fault that had already fixed itself. Polled, not
+            # snapshotted; a genuinely stuck modifier still fails, five seconds
+            # later.
+            stuck, waited = wait_for(lambda: not stuck_modifiers(), timeout=5.0, poll=0.25)
+            left = stuck_modifiers()
+            result.check(not left, "no modifier was left held down",
+                         "none%s" % (" (cleared after %.1f s)" % waited if waited > 0.3 else "")
+                         if not left else "still held: %s" % " ".join(left))
         if stand_down(relay):
             result.note("a dictation was still open at the end of the scenario and was cancelled")
         if not dry_run:
