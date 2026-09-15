@@ -151,10 +151,22 @@ final class DropArrow {
     /// A `recall` fade is in flight. Without it every 20 Hz tick through a
     /// silence-that-ended would start another one, and the completion handler of
     /// a fade that has since been overruled would order out a visible panel.
-    private var fading = false
+    private(set) var fading = false
     /// The heads are up for the words in flight rather than for the silence —
     /// see `hold`. Cleared only by `hide`, which is the delivery.
-    private var holding = false
+    private(set) var holding = false
+
+    /// **What the window is actually doing**, beside what the flags claim — read
+    /// by `CaretHalo`'s idle sweep and answered in `GET /test/state.halo`.
+    /// `isVisible` is AppKit's own reading and it goes false the instant
+    /// `orderOut` is called, so a yes here with nothing in flight is a window
+    /// standing on his screen and nothing else.
+    var isVisible: Bool { panel?.isVisible ?? false }
+    var alpha: CGFloat { panel?.alphaValue ?? 0 }
+    var report: [String: Any] {
+        ["visible": isVisible, "alpha": Double(alpha),
+         "armed": armed, "holding": holding, "fading": fading]
+    }
 
     /// Moved by `CaretHalo.follow`, with the ring and in the same call — see the
     /// type comment for why this is not its own monitor.

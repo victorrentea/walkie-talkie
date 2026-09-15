@@ -435,6 +435,24 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **Pointer-avoidance and one-panel-per-display are deliberately gone.** A mark centred on the
   cursor cannot be in its way and is on the pointer's screen by construction. → journal: *The beacon is gone — the halo took its job (2026-09-11)*
 
+## The idle sweep (2026-09-15)
+
+- **Nothing of the halo's may stand at the pointer with no dictation in flight, and once it did.**
+  Victor: *"the mouse was having a caret, although there was no dictation currently open"* — after a
+  sentence that began at the caret, was redirected to the bound terminal a second later and took a
+  highlight, a shot, an area crop and a picked element on the way. The log said `◯ caret halo off`,
+  every flag in `/test/state` read clean, four desk replays of that shape left the window list empty,
+  and an `orderOut` landing mid-fade in a standalone panel was clean too. **Not reproduced.**
+- **So `CaretHalo.startIdleSweep` runs from launch**: every 0.5 s, while `live`, `closing` and
+  `delivering` are all false, both panels are asked `isVisible`; two consecutive yeses take the window
+  down (`orderOut`, `arrow.hide`, monitors released) and log `◯ a halo window stood at the pointer
+  with no dictation in flight — …` with the panel named and every flag it claimed. That line is the
+  evidence the next look at this starts from; `GET /test/state.halo` is the same reading from a desk.
+- **`isVisible` is the gate, not the window server's list.** AppKit answers false the instant
+  `orderOut` is called; `CGWindowListCopyWindowInfo` still lists the window for a frame or two
+  afterwards (measured), which is why the sweep wants two ticks and the harness's window list is the
+  slower witness.
+
 ## Do not
 
 - **Do not re-key the September reference image.** Keyed off its flat `(246,246,246)` white it is

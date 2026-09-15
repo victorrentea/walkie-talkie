@@ -1583,6 +1583,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The ring's panel is built here rather than on the first dictation —
         // see `CaretHalo.prewarm`.
         caretHalo.prewarm()
+        // …and from here on nothing of its may stand at the pointer between
+        // sentences — see `CaretHalo.startIdleSweep` (2026-09-15).
+        caretHalo.startIdleSweep()
 
         // Nothing is bound yet, and a marker left by a relay that was killed
         // rather than quit would claim otherwise until the first bind.
@@ -3455,6 +3458,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // pointer can be screenshot, so this flag is the only way an
             // assertion can ask whether they are up.
             "arrowsUp": caretHalo.delivering,
+            // The two windows as they are, beside the flags as they claim to be
+            // (2026-09-15) — the reading the idle sweep acts on.
+            "halo": caretHalo.windowsReport(),
             "chip": overlay.renderedRows,
             // The destination, in the three flags that decide it plus the one
             // latched at the microphone's close.

@@ -768,6 +768,67 @@ final class CaretHalo {
         monitors = []
     }
 
+    // MARK: - The idle sweep (2026-09-15)
+
+    /// **Nothing here may stand at the pointer with no dictation in flight, and
+    /// on 2026-09-15 something did.** Victor: *"the mouse was having a caret,
+    /// although there was no dictation currently open."* The sentence before it
+    /// had begun at the caret, been redirected to the bound terminal a second
+    /// later, and taken a highlight, a shot, an area crop and a picked element
+    /// on the way; the log had `◯ caret halo off` for it and every flag in
+    /// `/test/state` read clean afterwards. Four desk replays of that shape —
+    /// cancelled, redirected, settled with the heads up, redirected with the
+    /// heads up — each left the window list empty, and an `orderOut` landing
+    /// mid-fade in a standalone panel was also clean. Whatever stood was on
+    /// screen while every flag said it was not, and that is a state nothing in
+    /// the file could see.
+    ///
+    /// So, as `WisprScratchpad.startIdleSweep` does for the window that stood in
+    /// his keystrokes: every half second, while `live`, `closing` and
+    /// `delivering` are all false, both panels are asked whether they are
+    /// visible. **Two consecutive yeses** — a second, so an `orderOut` the window
+    /// server has not yet honoured is not mistaken for a stray — take the window
+    /// down and write one line naming the panel and what its flags claimed,
+    /// which is the evidence the next look at this starts from.
+    private var sweepTimer: Timer?
+    private var sweepStrikes = 0
+    private static let sweepTick: TimeInterval = 0.5
+
+    func startIdleSweep() {
+        guard sweepTimer == nil else { return }
+        let t = Timer(timeInterval: Self.sweepTick, repeats: true) { [weak self] _ in self?.sweep() }
+        RunLoop.main.add(t, forMode: .common)
+        sweepTimer = t
+    }
+
+    private func sweep() {
+        guard !live, !closing, !delivering else { sweepStrikes = 0; return }
+        let ringUp = panel?.isVisible ?? false
+        let headsUp = arrow.isVisible
+        guard ringUp || headsUp else { sweepStrikes = 0; return }
+        sweepStrikes += 1
+        guard sweepStrikes >= 2 else { return }
+        sweepStrikes = 0
+        Log.error(String(format: "◯ a halo window stood at the pointer with no dictation in flight — ring visible=%@ alpha=%.2f small=%@, heads visible=%@ alpha=%.2f armed=%@ holding=%@ fading=%@, atCaret=%@ monitors=%d — taken down",
+                         "\(ringUp)", Double(panel?.alphaValue ?? 0), "\(small)",
+                         "\(headsUp)", Double(arrow.alpha), "\(arrow.armed)", "\(arrow.holding)", "\(arrow.fading)",
+                         "\(atCaret)", monitors.count))
+        panel?.orderOut(nil)
+        arrow.hide()
+        releaseMonitorsIfIdle()
+    }
+
+    /// The windows as they are, beside the flags as they claim to be — the
+    /// `halo` field of `GET /test/state`, so the next time a ring or the heads
+    /// stand with nothing in flight the question *which panel, and what did it
+    /// believe* is answerable from a desk.
+    func windowsReport() -> [String: Any] {
+        ["ring": ["visible": panel?.isVisible ?? false, "alpha": Double(panel?.alphaValue ?? 0),
+                  "live": live, "closing": closing, "small": small, "monitors": monitors.count],
+         "heads": arrow.report,
+         "delivering": delivering, "atCaret": atCaret]
+    }
+
     /// Centred on the pointer, every time the pointer reports. Off the events
     /// rather than off a timer for `RelayWindow.startFollowingMouse`'s measured
     /// reason: a 60 Hz poll trails a fast pointer by a whole tick plus a
