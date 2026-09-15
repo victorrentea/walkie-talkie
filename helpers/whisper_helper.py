@@ -109,11 +109,29 @@ VOCABULARY = os.environ.get("RELAY_WHISPER_VOCABULARY", (
 # search ran over it read -1.9 points; on the two held-out sets, -2.7 and -0.5.
 # The honest figure is the pooled -0.7. Kept because it is consistent in every
 # split, never worse on English, and costs fewer loops, not more.
+# **It carries the English terms too, and that is not redundancy.** The first
+# version of this list was Romanian only, and WER liked it — but term recall
+# caught what WER could not see: he speaks Romanian *with English terms in it*,
+# and a Romanian-only prompt stops priming them. On the same held-out clips,
+# `backend` fell 0.88 -> 0.50 and `claude` 0.88 -> 0.75 while the diacritics rose.
+# Adding the technical terms back costs nothing (45 of the 224 tokens were used)
+# and buys them back above where they started:
+#
+#     term        today   ro-only   this list
+#     să           0.88     0.94      0.93
+#     în           0.78     0.86      0.85
+#     claude       0.88     0.75      0.92
+#     backend      0.88     0.50      1.00
+#
+# `commit` sits at 0.41 under every prompt tried — it is heard as `me`, and no
+# amount of decoder context has moved it. Left documented rather than solved.
 VOCABULARY_RO = os.environ.get("RELAY_WHISPER_VOCABULARY_RO", (
     "să, și, în, întâi, îți, îmi, această, când, făcut, ștergem, trebuie, "
     "aș, două, când, până, mâine, așa, început, terminăm, încearcă, "
-    "schimbă, vezi, adaugă, românește, subagent, subagenți, commit, push, "
-    "prompt, skill, sesiune, dictare, agent."
+    "schimbă, vezi, adaugă, românește, Claude Code, CLAUDE.md, Copilot, MCP, "
+    "subagent, subagenți, skill, hook, prompt, commit, push, backend, "
+    "frontend, IntelliJ, petclinic, Walkie Talkie, Wispr Flow, agentic, "
+    "sesiune, dictare, agent."
 ))
 
 
