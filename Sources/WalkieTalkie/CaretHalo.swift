@@ -276,7 +276,15 @@ final class CaretHalo {
     /// number is unchanged, because what that number was calibrated for is *how
     /// much of this ring a screen can carry while he works under it*, which the
     /// reason for lighting it does not change.
-    private static let loud: CGFloat = 0.225
+    ///
+    /// **+20% on 2026-09-16** (Victor: *"mărește cu 20% opacitatea fulgerelor
+    /// când detectează vocea mea … opacitatea maximă pe care o atinge cercul
+    /// acela de fulgere"*) — 0.225 → 0.27. Only the bright end moves: `rest` is
+    /// unchanged, so what gets louder is the *difference* a syllable makes,
+    /// which is the thing the ring is on screen to show. Still well under the
+    /// 0.6 rail in `opacity(_:for:)`, so the gain a sparse artwork asks for is
+    /// not clipped by it.
+    private static let loud: CGFloat = 0.27
     /// How long a silence has to last before it reads as a stop rather than as
     /// him thinking mid-sentence. The ring no longer acts on it — `DropArrow`
     /// does — but the threshold is the ring's own, kept here because it is the
