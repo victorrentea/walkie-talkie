@@ -47,6 +47,44 @@ sys.exit(0 if idle else 1)'
   return 1
 }
 
+# The same reading from the other side: does the relay say, out loud, that a
+# sentence is in flight? A **positive** answer only — an unreachable relay is
+# not a busy one here, because a restart of an app that is not answering has no
+# sentence to protect and the caller would otherwise wait for ever.
+relay_state_says_busy() {
+  local port state
+  for port in 8917 8918 8919; do
+    state=$(curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null) || continue
+    [ -n "$state" ] || continue
+    printf '%s' "$state" | /usr/bin/python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+busy = (d.get("listening") or d.get("isRecording") or d.get("settling")
+        or d.get("speculative") or d.get("phase") != "idle")
+sys.exit(0 if busy else 1)'
+    return $?
+  done
+  return 1
+}
+
+# **Is a sentence in flight right now?** Two readings, and either one is a yes.
+#
+# **The file stopped being enough on 2026-09-16.** `listening` in `bound-tty`
+# now means *the words are coming to this tty*, not *a microphone is open*: a
+# spawn or a caret dictation deliberately leaves the badge **yellow** on the
+# terminal that is still bound (`AppDelegate.publishBinding`), which is the
+# honest thing for the status line to say and would have made this script
+# restart the app in the middle of one. So the file is kept as the cheap *yes* —
+# it is a `read` against an HTTP round trip on every tick — and the relay's own
+# state answers everything it no longer covers.
+relay_is_dictating() {
+  if grep -q listening "$RELAY_BOUND_FILE" 2>/dev/null; then return 0; fi
+  relay_state_says_busy
+}
+
 # Block while a dictation is running. Not a timeout to be got past: a sentence
 # ends when Victor ends it, and the decode plus the held panel is a handful of
 # seconds after that.
@@ -62,7 +100,7 @@ sys.exit(0 if idle else 1)'
 # the file says.
 relay_wait_idle() {
   local waited=0
-  while grep -q listening "$RELAY_BOUND_FILE" 2>/dev/null; do
+  while relay_is_dictating; do
     if [ "$waited" -ge 5 ] && relay_source_is_idle; then
       echo "⚠️  the relay still says listening but its recogniser is idle —"
       echo "    a dictation flag left standing, not a sentence. Going ahead."

@@ -46,6 +46,11 @@ enum Outbox {
     /// which is the same split the chip draws with a folder name against a
     /// pulsing 🔴, said in the one place that is always on screen.
     ///
+    /// **`listening` means *these words are coming to this tty***, not *a
+    /// microphone is open* (2026-09-16). A spawn or a caret sentence leaves the
+    /// badge yellow on the terminal that is still bound but is not the
+    /// destination — see `AppDelegate.publishBinding`.
+    ///
     /// A second word rather than a second file: the reader is a shell loop doing
     /// one builtin `read`, and two files would be two of them plus a state that
     /// can be half-written.
