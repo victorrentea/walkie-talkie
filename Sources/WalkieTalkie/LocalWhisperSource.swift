@@ -200,7 +200,8 @@ final class LocalWhisperSource: DictationSource {
                                 r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count))
                 // Filed on the success path only: a decode that returned nothing
                 // says nothing about how long a decode takes.
-                DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt))
+                DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt),
+                                  chars: r.text.count, compression: r.compressionRatio)
                 self.didTranscribe?(DictationResult(
                     text: r.text, language: r.language, audio: wav, duration: duration,
                     engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,

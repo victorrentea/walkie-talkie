@@ -2555,7 +2555,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { self.overlay.flash("No words detected", duration: 8) }
                 return
             }
-            DecodeRate.record(audio: kept.duration, decode: Date().timeIntervalSince(decodeStartedAt))
+            DecodeRate.record(audio: kept.duration, decode: Date().timeIntervalSince(decodeStartedAt),
+                              chars: r.text.count)
             Log.info("↩️ recovered \(r.text.count) chars")
             // It is a real sample of his voice with a transcript beside it, which
             // is the only thing the corpus is for — and it was never filed,

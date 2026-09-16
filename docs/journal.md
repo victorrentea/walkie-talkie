@@ -235,6 +235,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [What the cancel cost the sentence after it (2026-09-14, 03:30)](#what-the-cancel-cost-the-sentence-after-it-2026-09-14-0330)
 - [The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)](#the-adversarys-second-round-four-things-that-outlived-their-dictation-2026-09-14-0430)
 - [The heads stay up while the words travel to the caret (2026-09-15)](#the-heads-stay-up-while-the-words-travel-to-the-caret-2026-09-15)
+- [The estimate stops guessing the middle (2026-09-16)](#the-estimate-stops-guessing-the-middle-2026-09-16)
 
 ---
 
@@ -9876,3 +9877,87 @@ Three things had to give, and each of them is a thing that used to belong to the
 
 Nothing that rides the pointer can be screenshot, so `GET /test/state.arrowsUp` is the only way an
 assertion can ask whether they are up.
+
+
+## The estimate stops guessing the middle (2026-09-16)
+
+Victor, the mirror image of the 2026-09-07 complaint: *"estimările de timp cât durează
+transcrierea sunt subestimate, parcă. Revizuiește-ți algoritmul care calculează cât timp
+transcrie modelul local text în funcție de lungime și încărcarea mașinii."*
+
+The first thing the replay said is that the old line was not *wrong*. Over the 640 decodes
+already in `~/.walkie-talkie/decode-rate.jsonl`, `intercept + slope × audio` fitted by least
+squares to the last fifty had a median estimate/actual of **1.10** — it was, if anything,
+slightly long on the typical sentence. It was nevertheless short of the truth on **40%** of
+dictations, because what it fitted was the *middle* of a distribution whose spread is a factor
+of 1.8 either way, and the countdown is not a symmetric instrument. The bar fills to the end and
+stays there; past that point the app is claiming the words have landed. Being right on average
+buys nothing, because the half of the time it is short is the half he notices.
+
+### Two changes, both measured on the file
+
+**The line is a median of slopes.** Theil–Sen — the median of the slopes of every pair at least
+a second apart in audio, with the intercept the median of the residuals. A Whisper repetition
+loop or a decode that hit a thermal wall lands in the window as one point ten times the size of
+the others, and least squares hands that point the fit for the next fifty dictations.
+
+**The answer is `line × headroom`**, where `headroom` is the 0.80 quantile of that same line's
+own residual ratios over the same window, clamped to 1.0…3.0. The fit stops answering *how long
+will this take* and answers *how long will this take at worst, ordinarily*.
+
+Replayed over the same 640 decodes, sample by sample, each prediction made from only the
+decodes before it:
+
+```
+                           covered   short clips   bar full early   bar unfinished   median est/actual
+least squares, mean          60%         52%           0.65s            0.45s              1.10
+Theil–Sen × q0.80            74%         65%           0.55s            0.63s              1.27
+```
+
+*Covered* is the fraction of dictations whose words arrived before the bar filled. Fourteen
+points of it for 0.2s of average unfinished bar, and the median estimate moves 1.10 → 1.27 —
+nowhere near the 4× that produced *"14 secunde și s-a terminat în 3"*. The quantile is where the
+two complaints are balanced against each other: 0.70 leaves the bar filling early on a third of
+dictations, 0.90 buys six more points of coverage for twice the unfinished bar, and the
+asymmetric loss between them is flat, so the choice is which complaint to answer.
+
+### The load was asked again, with numbers this time
+
+`DecodeRate` has recorded the 1-minute run queue since 2026-09-07 and has never modelled it, on
+the argument that the recent decodes already *are* the machine's current load. That is an
+argument, and Victor's ask named the load explicitly, so it was re-asked as a measurement.
+
+The effect is real: the median ratio runs **0.034×** with the run queue under 2 and **0.085×**
+over 35, a factor of 2.5. And it is already inside the window, because the last fifty decodes
+are the same machine in the same hours. Against the fitted line's residuals the correlation is
+**0.13** with the load relative to the window's median and **0.02** with the load itself. Every
+form it was tried in — a `1 + c·ln(1+load)` term on the slope at c = 0.1…0.5, a second regressor
+fitted from the window, the whole fit in log space, the twenty samples nearest in load — bought
+1–3 points of coverage and paid for them one for one in unfinished bar. The rule stands, and now
+it stands on numbers.
+
+### What is left is a Whisper talking to itself, and it is not predictable
+
+Pairing `decode-rate.jsonl` against the `local whisper: ro (-0.17, cr 1.48) — 584 chars` lines
+in `relay.log` gives 577 decodes with the recogniser's own reading beside them. The strongest
+signal in the data is not the audio (log-log correlation **0.42**) and certainly not the load
+(**0.03**) — it is the transcript's **compression ratio**, **0.49** against the decode time and
+**0.52** against the line's residual. The worst under-predictions are all one animal:
+
+```
+ 29.8s audio → 20.40s   cr 56.8    186 chars
+ 10.2s audio →  9.40s   cr 51.5    669 chars
+  4.1s audio →  9.60s   cr 37.1    445 chars
+```
+
+against `cr 1.3…1.5` for an ordinary sentence. Whisper caught in a repetition loop, generating
+hundreds of tokens nobody said. None of it is knowable when the row opens, so **~4% of decodes
+will overrun any estimate this file can make by more than five seconds**, and raising the
+quantile does not touch them: at 0.95 it is still 3%, bought with an average of two seconds of
+unfinished bar on every other sentence.
+
+So `chars` and `compression` are filed beside the seconds now — optional on `Sample`, because
+six hundred lines were written before there was anywhere to put them — for the same reason the
+load is: so the next person to ask has numbers rather than an argument. What they answer is *was
+that a slow machine or a Whisper talking to itself*, after the fact, which is the only moment
+anyone can answer it.

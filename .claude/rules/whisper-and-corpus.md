@@ -63,6 +63,33 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   is a fixed round trip (JSON out, ffmpeg, the answer back) *plus* a cost per second of audio, and
   one ratio can fit one of those or the other. It drives the filling `Transcribing...` word (no
   seconds readout since 2026-09-08); rounding is up, deliberately. → journal: *The recogniser*
+- **The line is a median of slopes, and it carries measured headroom** (2026-09-16, *"estimările de
+  timp cât durează transcrierea sunt subestimate"*). Theil–Sen — median of every pair's slope,
+  intercept the median of the residuals — because one repetition loop in the window hands least
+  squares the fit for the next fifty dictations. And the answer is `line × headroom`, where
+  `headroom` is the **0.80 quantile of that line's own residual ratios**: the old fit was unbiased
+  (median estimate/actual **1.10**) and still short on **40%** of dictations, and a bar that fills
+  and sits there is the app claiming the words have landed. Replayed over the 640 decodes in the
+  file: covered 60% → **74%** (short clips 52% → **65%**), bar-full-early 0.65 s → 0.55 s,
+  unfinished bar 0.45 s → 0.63 s, median estimate/actual 1.10 → **1.27** — nowhere near the 4×
+  that produced the 09-07 complaint below.
+- **The machine load is recorded and still not modelled**, and that was re-asked with numbers on
+  2026-09-16 rather than argued. The effect is real (median ratio **0.034×** under run queue 2,
+  **0.085×** over 35) and it is already inside the window, because the last fifty decodes are the
+  same machine in the same hours: against the fitted line's residuals the correlation is **0.13**
+  with the load relative to the window's and **0.02** with the load itself. A `1 + c·ln(1+load)`
+  term, a second regressor, the whole fit in log space and the twenty nearest samples in load each
+  bought 1–3 points of coverage and paid for them one for one in unfinished bar.
+- **Most of what is left is a Whisper repetition loop, and it cannot be predicted.** Pairing the
+  file against `relay.log`'s `local whisper: … (cr N)` lines (577 decodes), the strongest signal is
+  the transcript's **compression ratio** — 0.49 against the decode time, 0.52 against the line's
+  residual — not the audio (0.42) and certainly not the load (0.03). The worst under-predictions
+  are all one animal: 29.8 s decoded in 20.4 s at `cr 56.8`, 10.2 s in 9.4 s at `cr 51.5`, 4.1 s in
+  9.6 s at `cr 37.1`, against `cr 1.3…1.5` for an ordinary sentence. It is known a second too late
+  to predict anything, so **~4% of decodes will overrun any estimate this file can make by more
+  than five seconds**; `chars` and `compression` are filed beside the seconds so the next person to
+  ask can tell a slow machine from a Whisper talking to itself. Both are **optional** — six hundred
+  lines were written before there was anywhere to put them.
 - **Never put a narrow ratio filter back.** Until 2026-09-07 it was a mean ratio behind a
   `0.04…0.60` filter and `relay.log` shows it discarding the truth: `ignoring 0.033× (45.5s audio,
   1.5s decode) — outside 0.04…0.60` — nineteen such pairs, 22 s to 207 s of audio, every one warm,
@@ -70,7 +97,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   clips and cold decodes, the mean sat near 0.15, and a two-minute dictation was promised twenty
   seconds for four seconds of work (*"14 secunde și s-a terminat în 3"*). Least squares over those
   pairs is `0.0355 × audio − 0.10`, worst residual 0.39 s. → journal: *The recogniser*
-- **`~/.walkie-talkie/decode-rate.jsonl` is appended forever**, one `{at, audio, decode, load, cold}`
+- **`~/.walkie-talkie/decode-rate.jsonl` is appended forever**, one `{at, audio, decode, load, cold, chars?, compression?}`
   per decode; the estimate reads only the tail. It supersedes `decode-rate.json`, which held bare
   ratios with no audio beside them — the reason the fault above could only be diagnosed from the
   *dropped*-sample lines of `relay.log`. → journal: *The recogniser*
