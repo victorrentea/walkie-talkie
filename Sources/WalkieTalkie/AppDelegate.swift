@@ -1789,6 +1789,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RingDown.note("the microphone closed — the words are in flight")
         Log.info("⚡ ring down: the microphone closed — the words are in flight")
         latchedAtCaret = pasteMode || (!isBound && !spawnPending)
+        // **And where he was looking when he stopped talking** — the screen a
+        // spawned window opens on (`SpawnTerminal.board(preferring:)`). Latched
+        // here with the destination and for the same reason: the window is
+        // opened seconds later, after the round trip, and by then the pointer
+        // has moved on to whatever he did next. The close is the last instant
+        // that is still about this sentence.
+        latchedMouse = NSEvent.mouseLocation
         // **The ring waits for the words** (2026-09-12), on every source: the
         // microphone closing is not the end of the dictation, the words landing
         // is. A **bound** sentence is settled too now that the relay inserts it
@@ -1823,6 +1830,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Where this sentence is going, decided at the close and read when the words
     /// arrive seconds later.
     private var latchedAtCaret = false
+
+    /// The pointer at the close, in Cocoa screen coordinates — which display a
+    /// spawn prefers. Nil until a microphone has closed, and the spawn reads the
+    /// live pointer then, so `POST /test/dictation` (which never opens one)
+    /// still gets the honest answer rather than a stale one.
+    private var latchedMouse: CGPoint?
 
     /// **The words — put them where the close said they were going.**
     ///
@@ -3576,9 +3589,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let line = Self.terminalLine(m)
         guard !line.isEmpty else { return clearSpawn() }
 
+        // Read on the main thread, before the hop: `NSEvent.mouseLocation` is
+        // the fallback for a sentence that never closed a microphone, and
+        // `latchedMouse` is cleared by `clearSpawn` a moment from now.
+        let near = latchedMouse ?? NSEvent.mouseLocation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory)
+            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory, near: near)
             DispatchQueue.main.async {
                 self.clearSpawn()
                 switch outcome {
@@ -3618,12 +3635,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gesture that appears to have done nothing.
     private func resumeSession(_ session: String, in directory: String) {
         let folder = (directory as NSString).lastPathComponent
+        // The live pointer, not a latched one: there is no dictation behind this
+        // — he has just pressed ⏎ on a row — so *now* is the moment he means.
+        let near = NSEvent.mouseLocation
         DispatchQueue.main.async { [weak self] in
             self?.overlay.flash("✨ reopening \(folder)…", duration: 4)
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            switch SpawnTerminal.resumeClaude(session: session, directory: directory) {
+            switch SpawnTerminal.resumeClaude(session: session, directory: directory, near: near) {
             case .opened(let tty):
                 DispatchQueue.main.async { self.adoptSpawnedWindow(tty: tty) }
             case .failed(let why):
@@ -3886,6 +3906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func clearSpawn() {
         spawnPending = false
         spawnFolder = nil
+        latchedMouse = nil
         // It is normally long gone — three seconds against a sentence — but a
         // dictation cancelled inside those three seconds must not leave a menu
         // on screen offering a folder to a session nobody is going to open.

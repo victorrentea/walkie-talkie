@@ -47,8 +47,14 @@ enum SpawnTerminal {
     /// Open the window, and say which tty it landed on so the relay can point
     /// itself at the session it just created.
     ///
+    /// `near` is the pointer, in Cocoa screen coordinates — see
+    /// `board(preferring:)` for what it buys. The caller latches it at the
+    /// microphone's close, because that is the moment Victor means by *the
+    /// screen I am on*; by the time this runs, seconds later, his hand has
+    /// moved on.
+    ///
     /// Runs subprocesses — call it off the main thread.
-    static func launchClaude(prompt: String, directory: String) -> Outcome {
+    static func launchClaude(prompt: String, directory: String, near: CGPoint? = nil) -> Outcome {
         let stamp = Self.stamp()
         let promptFile = dir.appendingPathComponent("prompt-\(stamp).txt")
         do {
@@ -58,7 +64,7 @@ enum SpawnTerminal {
             return .failed("could not stage the new session — \(error.localizedDescription)")
         }
         return open(script(prompt: promptFile.path, directory: directory),
-                    stamp: stamp, directory: directory, what: "new Claude Code")
+                    stamp: stamp, directory: directory, near: near, what: "new Claude Code")
     }
 
     /// **A session that already exists, opened again in a window of its own** —
@@ -77,9 +83,9 @@ enum SpawnTerminal {
     /// first; resumed from anywhere else the id is simply not found.
     ///
     /// Runs subprocesses — call it off the main thread.
-    static func resumeClaude(session: String, directory: String) -> Outcome {
+    static func resumeClaude(session: String, directory: String, near: CGPoint? = nil) -> Outcome {
         open(resumeScript(session: session, directory: directory),
-             stamp: Self.stamp(), directory: directory,
+             stamp: Self.stamp(), directory: directory, near: near,
              what: "resumed session \(session.prefix(8))")
     }
 
@@ -95,7 +101,7 @@ enum SpawnTerminal {
     /// whole of the rest, which is where every trap in this file lives, is shared
     /// rather than copied.
     private static func open(_ body: String, stamp: String,
-                             directory: String, what: String) -> Outcome {
+                             directory: String, near: CGPoint?, what: String) -> Outcome {
         let launcher = dir.appendingPathComponent("start-\(stamp).sh")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -106,9 +112,10 @@ enum SpawnTerminal {
         }
 
         // **Where it opens is not where Terminal would have put it.** See
-        // `board()` and `slot(for:on:avoiding:)`: tiled across the displays
-        // around the Retina one, and otherwise opened behind.
-        let screens = board()
+        // `board(preferring:)` and `slot(for:on:avoiding:)`: tiled across the
+        // displays around the Retina one, the one the pointer is on first, and
+        // otherwise opened behind.
+        let screens = board(preferring: near)
         // Taken **before** anything is asked of Terminal, and in every branch:
         // see the restore below for why the spawn is not allowed to keep the
         // front it may take on the way.
@@ -253,9 +260,27 @@ enum SpawnTerminal {
     /// beside, not above, which is why this is a share of the width and not a
     /// test for any overlap at all.
     ///
+    /// **The screen the pointer is on leads the list, since 2026-09-16** —
+    /// Victor's ask: *"această fereastră să apară pe ecranul pe care am mouse-ul
+    /// la momentul când închid dictarea… dacă sunt pe retina, îl pui pe un ecran
+    /// extern, lateral"*. `slot(for:on:avoiding:)` reads left to right and takes
+    /// the first empty cell it finds, so *first in this list* is *where the
+    /// window lands* whenever that display has room — and when it has not, the
+    /// scoring behind it falls through to the others exactly as before.
+    ///
+    /// It is a **preference, not a rule**, and that is the whole of the Retina
+    /// clause: a pointer on the built-in display (or on a stacked one) matches
+    /// nothing here, because neither is in the list at all, so the order is left
+    /// to right as it has been since 2026-09-09 and the window still opens off
+    /// the screen he is reading. There is no branch for it — the filter above is
+    /// the branch.
+    ///
+    /// `frame`, not `visibleFrame`, for the containment test only: a pointer
+    /// parked in a menu bar is still on that display.
+    ///
     /// `visibleFrame`, not `frame`, so a menu bar or a Dock on a display is not
     /// tiled over.
-    private static func board() -> [Box] {
+    private static func board(preferring pointer: CGPoint?) -> [Box] {
         var found: [Box] = []
         let read = {
             let screens = NSScreen.screens
@@ -271,8 +296,17 @@ enum SpawnTerminal {
                            - max(screen.frame.minX, primary.frame.minX)
                 return shared > screen.frame.width / 2
             }
-            found = screens
-                .filter { $0.backingScaleFactor < 2 && !stacked($0) }
+            let lateral = screens.filter { $0.backingScaleFactor < 2 && !stacked($0) }
+            let under = pointer.flatMap { p in lateral.first { $0.frame.contains(p) } }
+            found = lateral
+                // The pointer's screen is the minimum and everything else keeps
+                // its left-to-right order behind it — one comparator rather than
+                // a partition, so a nil pointer costs nothing and reads as the
+                // same sort it always was.
+                .sorted { a, b in
+                    if (a === under) != (b === under) { return a === under }
+                    return a.frame.minX < b.frame.minX
+                }
                 .map { screen -> Box in
                     let f = screen.visibleFrame
                     return Box(x: Int(f.minX.rounded()),
@@ -280,7 +314,6 @@ enum SpawnTerminal {
                                w: Int(f.width.rounded()),
                                h: Int(f.height.rounded()))
                 }
-                .sorted { $0.x < $1.x }
         }
         // `launchClaude` runs off the main thread by contract, and `NSScreen` is
         // main-thread state. The hop is a hop, not a deadlock, precisely because
