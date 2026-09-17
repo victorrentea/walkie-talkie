@@ -12,12 +12,19 @@ Protocol, one JSON object per line each way:
 
     →  {"wav": "/path/to/file.wav"}
     ←  {"ok": true, "text": "…", "language": "ro", "avg_logprob": -0.21,
-        "compression_ratio": 1.4, "no_speech_prob": 0.0}
+        "compression_ratio": 1.4, "no_speech_prob": 0.0,
+        "memory": {"active_mb": 1543.3, "cache_mb": 512.2, "peak_mb": 2365.8,
+                   "cache_limit_mb": 512}}
     ←  {"ok": false, "error": "…"}
 
 and once, unprompted, at start-up:
 
-    ←  {"ready": true, "model": "…"}   (or {"ready": false, "error": "…"})
+    ←  {"ready": true, "model": "…", "memory": {…}}
+       (or {"ready": false, "error": "…"})
+
+`memory` is MLX's own accounting and is the only place that separates the
+weights from the Metal buffer pool — see `memory_stats` and the cache-limit
+note below it. Consumers may ignore it; nothing in the protocol depends on it.
 
 stdout carries **only** protocol lines. mlx and huggingface both write progress
 bars and warnings to stdout, so every model call is wrapped in a redirect —
@@ -160,6 +167,52 @@ except Exception as e:  # noqa: BLE001 — any import failure is the same answer
     sys.exit(1)
 
 
+# **MLX keeps every buffer it frees, and by default it never stops.**
+#
+# `set_cache_limit` defaults to the *memory* limit, which on a 64 GB machine is
+# effectively unbounded — so the pool of freed Metal buffers grows for as long
+# as the daemon lives and is never returned to the system. Measured on 2026-09-17
+# over 40 corpus clips: weights held a flat 1543 MB while the cache climbed
+# 1159 -> 1396 -> 1541 -> 1711 MB and was still rising when the run ended. After
+# three hours of real use this process and its sibling in victor-macos-addons
+# were holding 5.7 GB and 3.5 GB, ~95% of it this pool, 3.5 GB of it pushed out
+# to swap.
+#
+# The cache holds *no state* — only buffers already freed, kept for reuse — so
+# capping it cannot change a transcription, and the same 40 clips were decoded
+# to prove it rather than to assume it. 39 came back byte-identical. The 40th
+# differed, and the control run says why: two runs with *no* cap differed on
+# that same clip and no other (" pewns pewns…" vs " bolts" vs " you"). It is
+# 1.6s of silence whose reference text is empty, so temperature fallback
+# resamples it differently every time. Whisper's nondeterminism, not the cap's.
+#
+# 512 MB rather than 0: disabling the cache entirely would make every allocation
+# round-trip to the Metal driver. This keeps reuse for the common buffer shapes
+# and only cuts the unbounded tail. The measured cost was +4.9% median latency —
+# smaller than the 6% spread between two *identical* runs, so at n=40 it is not
+# distinguishable from noise.
+_CACHE_LIMIT = int(os.environ.get("RELAY_WHISPER_CACHE_LIMIT_MB", "512")) * 1024 * 1024
+if _CACHE_LIMIT > 0:
+    mx.set_cache_limit(_CACHE_LIMIT)
+
+
+def memory_stats():
+    """MLX's own accounting, in MB — the only honest view of this process.
+
+    `ps` and Activity Monitor report the Metal buffer pool as ordinary resident
+    memory, so they show a number that looks like a leak and cannot be split
+    into weights and cache. These three can: `active` is what is actually held
+    (weights, ~1543 MB), `cache` is the reusable pool the limit above governs,
+    and `peak` is the high-water mark since the process started.
+    """
+    return {
+        "active_mb": round(mx.get_active_memory() / 2**20, 1),
+        "cache_mb": round(mx.get_cache_memory() / 2**20, 1),
+        "peak_mb": round(mx.get_peak_memory() / 2**20, 1),
+        "cache_limit_mb": _CACHE_LIMIT // 2**20,
+    }
+
+
 def pick_language(samples):
     """The model's own language ID, argmax'd over `LANGUAGES` alone.
 
@@ -219,7 +272,7 @@ try:
             w.setframerate(16000)
             w.writeframes(b"\x00" * 32000)
     transcribe(warm)
-    emit({"ready": True, "model": MODEL})
+    emit({"ready": True, "model": MODEL, "memory": memory_stats()})
 except Exception as e:  # noqa: BLE001
     emit({"ready": False, "error": f"warm-up failed: {e}"})
     sys.exit(1)
@@ -250,6 +303,11 @@ for line in sys.stdin:
             "avg_logprob": min((s.get("avg_logprob", 0.0) for s in segs), default=0.0),
             "compression_ratio": max((s.get("compression_ratio", 0.0) for s in segs), default=0.0),
             "no_speech_prob": max((s.get("no_speech_prob", 0.0) for s in segs), default=0.0),
+            # Rides along on every answer rather than needing its own request:
+            # the interesting question about this pool is how it moves across a
+            # day of dictations, and a number nobody has to ask for is the only
+            # kind that gets looked at.
+            "memory": memory_stats(),
         })
     except Exception as e:  # noqa: BLE001 — one bad request must not kill the daemon
         emit({"ok": False, "error": str(e)})
