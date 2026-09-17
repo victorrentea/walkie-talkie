@@ -313,6 +313,7 @@ once, each taking one):
 | **hold left, hold the wheel 1s** | The same bind, **and** it starts the dictation at it — one gesture instead of the chord followed by a second click |
 | **hold right, click the wheel** | Lets the binding go — the same call as the menu's **Disconnect**. Outranks every other meaning the wheel has, so it works mid-dictation too |
 | **back mouse button** | One more screenshot — but only while dictating; otherwise the button is untouched |
+| **back button + move right** | Wispr Flow's own hands-free toggle, raw. For the length of that dictation the back **click** is its stop, so ending it does not mean making the whole flick a second time; when the microphone closes the button goes back to what it was |
 | **F3** | The same shot, from the keyboard |
 | **hold ⌘⇧ in Chrome** | Outlines and names the element under the cursor |
 | **⌘⇧-click in Chrome** | Adds that element's selector, page URL and text to the message; the page never sees the click |

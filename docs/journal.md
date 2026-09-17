@@ -236,6 +236,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The adversary's second round: four things that outlived their dictation (2026-09-14, 04:30)](#the-adversarys-second-round-four-things-that-outlived-their-dictation-2026-09-14-0430)
 - [The heads stay up while the words travel to the caret (2026-09-15)](#the-heads-stay-up-while-the-words-travel-to-the-caret-2026-09-15)
 - [The estimate stops guessing the middle (2026-09-16)](#the-estimate-stops-guessing-the-middle-2026-09-16)
+- [The back button becomes the stop of the dictation it started (2026-09-17)](#the-back-button-becomes-the-stop-of-the-dictation-it-started-2026-09-17)
 
 ---
 
@@ -9954,3 +9955,95 @@ six hundred lines were written before there was anywhere to put them — for the
 load is: so the next person to ask has numbers rather than an argument. What they answer is *was
 that a slow machine or a Whisper talking to itself*, after the fact, which is the only moment
 anyone can answer it.
+
+
+## The back button becomes the stop of the dictation it started (2026-09-17)
+
+Victor: *"Atunci când dictez cu Wispr Flow, cu butonul de Back și gestul în dreapta, butonul de
+Back trebuie să se transforme în a opri Wispr Flow din dictare. Să nu mai fie necesar să fac,
+încă o dată, gestul de Back cu dreapta. Să fie mai confortabil. Și după ce Wispr Flow nu mai
+dictează, revine butonul de back la tasta obișnuită de Enter."*
+
+🔽 → is the one gesture that hands a sentence to Wispr Flow **raw** — `postWisprHandsFree`, the
+chord and nothing else, no swallow, no Scratchpad, no routing. It is a toggle, so ending that
+dictation meant making the whole flick a second time: back button down, mouse right, back button
+up, with the hand already back on the keyboard. The gesture is *made with the back button held*,
+which is the whole observation — the thumb is already resting on the one button that could end
+the sentence on its own.
+
+So for the length of that one sentence the back **click** is its stop. F5 arms `wisprGestureAt`,
+F6 consumes it in `claimWisprStop` and posts **the same `postWisprHandsFree` chord the second
+flick would have posted** — one stop, two buttons, nothing that can drift apart.
+
+### What the arm is measured against, and why it is not `listening`
+
+The obvious flag was the relay's own. It is the wrong one: **with the Engine on the local model
+the relay is blind to a 🔽 → dictation entirely.** That gesture posts Wispr's chord raw, and with
+`LocalWhisperSource` wired up nothing in this app is watching Wispr — no `WisprWatch`, no history
+poll, no capture. `listening` stays false for the whole sentence. And that is not an exotic
+configuration: it is the one he dictates into *other applications* from, which is what 🔽 → is
+for.
+
+So the question is asked of Wispr's microphone directly. `AppDelegate.wisprMic` is a second
+`WisprWatch` with **no `onChange` at all**, started at launch whichever engine is up and sampled
+from the tap thread — `sampleIsRunningInput`, three CoreAudio reads over a cached list of object
+ids, safe from any thread and cheap enough to ask inside a keystroke's callback.
+
+**`wisprSource`'s own watch could not be borrowed.** Its `onChange` drives
+`edge(_:measured:)`, which sets `isRecording`, opens a capture and starts a meter — on a source
+that may not be the one wired up. A sampler must answer and do nothing else.
+
+### The two edges
+
+- **Before the microphone opens** there is a gap: 324–674 ms warm and **5–6 s cold**, measured
+  2026-09-12, the same numbers `speculativeGrace` is built on. The arm covers it with a 12 s
+  grace from the chord, because the button has to work in that gap too — and a chord Wispr
+  ignored altogether must not leave the back button a stop for the rest of the day.
+- **After it closes** there is nothing to be told. The sample simply answers *no*, and the button
+  is Return again — which is the half of the ask that would otherwise have needed an edge, a
+  flag and something to keep them honest.
+
+### And it is retired, not merely read
+
+A reading is not an ending. The first shape had the arm going up on F5 and coming down only when
+something asked about it — which is fine for the sentence he stops himself, and wrong for every
+other way one ends: Wispr's own silence timeout, a ⌃Escape, the window closed. The arm would be
+left standing, and the next time Wispr's microphone opened for some **other** reason the back
+button would read that as its own sentence still running and stop it, with the grace long expired
+and the open microphone making the check say yes regardless.
+
+So `AppDelegate.watchBackStop` polls the sampler every 250 ms **for the length of the arm and no
+longer**, and `HotkeyTap.retireWisprStop` takes it down on the first close after an open — or when
+the grace expires with no open at all, which is the chord Wispr ignored. A poll rather than the
+sampler's `onChange` for the reason the source's own 100 ms poll exists: the CoreAudio
+notification is 0–6 s late and produced no edge at all in five of five successful runs
+(2026-09-13).
+
+### Measured on the installed build the day it shipped
+
+Engine on the **local model** throughout, which is the case the microphone witness exists for —
+`listening` read `false` for every second of every one of these, and the button worked anyway.
+
+| | |
+|---|---|
+| `backStopsWispr` before any gesture | `false` |
+| after `POST /test/gesture {"name":"back-right"}` | `true` |
+| the back click that followed | `🎙️ ⬅️ back button — stopping the dictation 🔽 → started` |
+| a **second** 🔽 → instead | logged `(the stop)` — the microphone was open, so the flick was read as the end, and the arm went down with it |
+| the microphone closed by Wispr's own chord, not by a gesture | `⌨️ the back button is Return again — Wispr Flow's microphone closed` |
+| the poll against the CoreAudio notification, on that run | **16:46:06 against 16:46:09** — the poll retired the arm three seconds before the notification arrived at all |
+
+That last row is the whole argument for the poll in one line.
+
+### Two things it deliberately does not do
+
+- **It does not take the shutter from any other dictation.** A 🔽 → sentence is Wispr's own: the
+  relay rings for it and routes nothing, so a picture taken during one has no message to attach
+  to. Every relay-started dictation keeps the back button as its shutter.
+- **It does not wait for the microphone's close to release the claim.** That close is a poll
+  away, and a second back click inside it would post the toggle again and *open* a dictation —
+  which is worse than a missing Return. `claimWisprStop` consumes the arm at the click.
+
+`GET /test/state.backStopsWispr` says which of its two meanings the button carries right now:
+the gesture is a keystroke a script can post, but what it did to the button is otherwise
+invisible from outside the process.

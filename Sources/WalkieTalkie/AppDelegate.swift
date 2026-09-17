@@ -93,6 +93,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// rests on seeing the ⌘V Wispr posts before the front app does.
     private lazy var wisprSource = WisprFlowSource(hotkeys: hotkeys)
 
+    /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
+    /// ever answers and never reports (2026-09-17).
+    ///
+    /// The back button's stop (`HotkeyTap.backStopsWispr`) has to know this
+    /// **in both engines**: 🔽 → posts Wispr's chord raw, so with the Engine on
+    /// the local model nothing else in this app is watching Wispr at all, and
+    /// that is precisely the configuration he dictates into other applications
+    /// from. A second instance rather than `wisprSource`'s own, deliberately —
+    /// that one's `onChange` drives `edge(_:measured:)`, which opens captures
+    /// and meters on a source that may not be the one wired up; this one has no
+    /// `onChange` at all and exists to be sampled.
+    private lazy var wisprMic = WisprWatch()
+
+    /// The poll that runs for the length of a 🔽 → dictation and no longer —
+    /// see `watchBackStop`.
+    private var backStopPoll: Timer?
+    /// Whether Wispr's microphone has been seen open since this arm went up. A
+    /// close only means *the sentence is over* once there was one.
+    private var backStopSawMic = false
+
     /// **Where the words come from, and the only thing below this line that
     /// knows there is more than one answer.**
     ///
@@ -1583,6 +1603,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // WAV the corpus is built from. See `WisprFlowSource`.
         wireDictationSource()
 
+        // **And Wispr's microphone is watched whichever engine is wired up**,
+        // for the back button's stop — see `wisprMic`. Read from the tap
+        // thread, where the sample is the only thing cheap enough to ask.
+        wisprMic.start()
+        hotkeys.wisprMicIsOpen = { [weak self] in self?.wisprMic.sampleIsRunningInput() ?? false }
+        // …and watched for the length of one, so the arm cannot be left
+        // standing over a sentence that ended some other way.
+        hotkeys.onWisprRawGesture = { [weak self] armed in
+            DispatchQueue.main.async { self?.watchBackStop(armed) }
+        }
+
         // The ring's panel is built here rather than on the first dictation —
         // see `CaretHalo.prewarm`.
         caretHalo.prewarm()
@@ -2916,6 +2947,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// One switch for both, so the recording row can never be on screen advertising
     /// a gesture that is no longer live, or off while one still is. Main thread only.
+    /// **Watch Wispr's microphone for the length of the dictation 🔽 → started**
+    /// (2026-09-17), and tell `HotkeyTap` when it is over.
+    ///
+    /// For that one sentence the back button is its stop rather than Return, and
+    /// the arm that says so has to come down at the end *however* the end
+    /// arrives — Wispr's own silence timeout, a ⌃Escape, the relay's stop, or
+    /// Victor's keyboard chord. A flag that only ever goes up would survive into
+    /// the next Wispr dictation he started some other way and take that one's
+    /// back button too.
+    ///
+    /// **A poll and not the notification.** `WisprWatch`'s CoreAudio
+    /// notification is 0–6 s late and produced no edge at all in five of five
+    /// successful runs (2026-09-13); the 100 ms sample is the witness the source
+    /// itself trusts. A quarter of a second is fast enough here — the cost of
+    /// being late is that the back button is still a stop for one more tick —
+    /// and it runs only while the arm is up, which is only during a 🔽 →
+    /// dictation.
+    private func watchBackStop(_ armed: Bool) {
+        backStopPoll?.invalidate()
+        backStopPoll = nil
+        guard armed else { return }
+        backStopSawMic = false
+        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.tickBackStop() }
+        backStopPoll = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    private func tickBackStop() {
+        if wisprMic.sampleIsRunningInput() {
+            backStopSawMic = true
+            return
+        }
+        // A microphone that has not opened **yet** is the cold start, and the
+        // arm's own grace is what decides how long that is worth waiting for —
+        // asked of `HotkeyTap` rather than duplicated here.
+        guard backStopSawMic || !hotkeys.backStopsWispr else { return }
+        hotkeys.retireWisprStop(backStopSawMic
+            ? "Wispr Flow's microphone closed"
+            : "Wispr Flow never opened the microphone for that chord")
+    }
+
     private func syncBorrowedGestures() {
         let live = hasDestination && listening
         // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
@@ -3505,6 +3577,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Whether *this* dictation is the relay's to take — a dictation
             // Victor started with his own chord is Wispr's and is only drawn.
             "relayStarted": wisprSource.relayStarted,
+            // **Is the back button this dictation's stop?** (2026-09-17) Armed
+            // by 🔽 → and nothing else, and the only way an assertion can see
+            // which of its two meanings the button carries right now — the
+            // gesture itself is a keystroke a script can post, but what it did
+            // to the button is otherwise invisible from outside the process.
+            "backStopsWispr": hotkeys.backStopsWispr,
             "startedMode": wisprSource.startedMode.rawValue,
             // *Does the relay deliver these words* — not the same question as
             // `startedMode`, which says how the chord was posted.
