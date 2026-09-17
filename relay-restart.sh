@@ -14,11 +14,11 @@
 # invisible from inside the very session that ordered the restart — which is the
 # session this app types into.
 #
-# Both facts are read from `~/.walkie-talkie/bound-tty`, which the app publishes
-# for the status line: absent when nothing is bound, `ttysNNN` when it is, and
-# `ttysNNN listening` while the microphone is open. It is one `cat` rather than
-# an HTTP round trip, and it is written from the two switches that own those
-# facts, so it cannot disagree with the chip.
+# The binding is read from `~/.walkie-talkie/bound-tty`, which the app publishes
+# for the status line: absent when nothing is bound, `ttysNNN` when it is. It is
+# one `cat` rather than an HTTP round trip, and it is written from the one switch
+# that owns it, so it cannot disagree with the chip. Whether a sentence is in
+# flight is a different question and is asked of the relay itself.
 #
 # Sourced by docs/shoot-overlay-states.sh; run directly to restart by hand.
 set -euo pipefail
@@ -28,6 +28,11 @@ RELAY_BOUND_FILE="${WALKIE_HOME:-$HOME/.walkie-talkie}/bound-tty"
 # Does the **source** have a sentence in flight? Asked of the running relay, not
 # of the file. Answers false (idle) only on a clear no; an unreachable relay is
 # not an idle one, so a port that does not answer keeps the caller waiting.
+#
+# **`done` is as idle as `idle` is** — `DictationPhase` sits at `done(<status>)`
+# from the moment a sentence lands until the next chord, so a predicate that
+# wants `phase == "idle"` is false for ever after the first dictation of the
+# session. Only `warming`, `listening` and `transcribing` are a sentence.
 relay_source_is_idle() {
   local port state
   for port in 8917 8918 8919; do
@@ -40,18 +45,19 @@ try:
 except Exception:
     sys.exit(1)
 idle = (not d.get("isRecording") and not d.get("settling")
-        and not d.get("speculative") and d.get("phase") == "idle")
+        and not d.get("speculative") and d.get("phase") in ("idle", "done"))
 sys.exit(0 if idle else 1)'
     return $?
   done
   return 1
 }
 
-# The same reading from the other side: does the relay say, out loud, that a
-# sentence is in flight? A **positive** answer only — an unreachable relay is
-# not a busy one here, because a restart of an app that is not answering has no
-# sentence to protect and the caller would otherwise wait for ever.
-relay_state_says_busy() {
+# **Is a sentence in flight right now?** Asked of the relay, which is the only
+# thing that knows. A **positive** answer only — an unreachable relay is not a
+# busy one here, because a restart of an app that is not answering has no
+# sentence to protect and the caller would otherwise wait for ever. `done` is a
+# finished sentence and is not one of the phases that count — see above.
+relay_is_dictating() {
   local port state
   for port in 8917 8918 8919; do
     state=$(curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null) || continue
@@ -63,26 +69,12 @@ try:
 except Exception:
     sys.exit(1)
 busy = (d.get("listening") or d.get("isRecording") or d.get("settling")
-        or d.get("speculative") or d.get("phase") != "idle")
+        or d.get("speculative")
+        or d.get("phase") in ("warming", "listening", "transcribing"))
 sys.exit(0 if busy else 1)'
     return $?
   done
   return 1
-}
-
-# **Is a sentence in flight right now?** Two readings, and either one is a yes.
-#
-# **The file stopped being enough on 2026-09-16.** `listening` in `bound-tty`
-# now means *the words are coming to this tty*, not *a microphone is open*: a
-# spawn or a caret dictation deliberately leaves the badge **yellow** on the
-# terminal that is still bound (`AppDelegate.publishBinding`), which is the
-# honest thing for the status line to say and would have made this script
-# restart the app in the middle of one. So the file is kept as the cheap *yes* —
-# it is a `read` against an HTTP round trip on every tick — and the relay's own
-# state answers everything it no longer covers.
-relay_is_dictating() {
-  if grep -q listening "$RELAY_BOUND_FILE" 2>/dev/null; then return 0; fi
-  relay_state_says_busy
 }
 
 # Block while a dictation is running. Not a timeout to be got past: a sentence
@@ -90,14 +82,14 @@ relay_is_dictating() {
 # seconds after that.
 #
 # **A stuck flag is not a sentence, and telling them apart is a reading rather
-# than a timeout** (2026-09-14). `bound-tty` says `listening` for as long as the
-# relay believes a dictation is open — and it can believe that with no microphone
+# than a timeout** (2026-09-14). The relay says `listening` for as long as it
+# believes a dictation is open — and it can believe that with no microphone
 # behind it at all: `/test/dictation/start` opens exactly such a dictation, and so
 # does a recogniser that dies between the chord and the words. This script then
 # waited for a sentence nobody was speaking, for ever, which is how it was found.
-# So the file is the fast check and the relay's own state is the arbiter: a source
-# that is not recording, not settling and `idle` has no sentence in flight, whatever
-# the file says.
+# So the flag is the fast check and the **source** is the arbiter: one that is not
+# recording, not settling and `idle` has no sentence in flight, whatever the flag
+# says.
 relay_wait_idle() {
   local waited=0
   while relay_is_dictating; do
@@ -110,9 +102,9 @@ relay_wait_idle() {
     sleep 1
     waited=$((waited + 1))
   done
-  # The line goes non-`listening` when the microphone closes, which is a few
-  # seconds before the transcript has been delivered. Let the decode and the
-  # held panel finish rather than pulling the app out from under them.
+  # The relay goes idle when the microphone closes, which is a few seconds
+  # before the transcript has been delivered. Let the decode and the held panel
+  # finish rather than pulling the app out from under them.
   [ "$waited" = 0 ] || sleep 6
 }
 
@@ -120,7 +112,7 @@ relay_wait_idle() {
 # the file is cleared at launch and at quit.
 relay_bound_tty() {
   [ -f "$RELAY_BOUND_FILE" ] || return 0
-  cut -d' ' -f1 "$RELAY_BOUND_FILE"
+  cat "$RELAY_BOUND_FILE"
 }
 
 # Put the binding back on the app that has just come up. The frontmost window is

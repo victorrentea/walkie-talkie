@@ -1137,15 +1137,15 @@ spoken is gone, and the binding is dropped under him with nothing on screen
 saying why. It cost one on 2026-09-09, when the shoot script restarted the app
 while he was bound.
 
-- **Both facts come from `~/.walkie-talkie/bound-tty`**, the marker the status
-  line already reads: absent unbound, `ttysNNN` bound, `ttysNNN listening`
-  while the microphone is open. One `cat` rather than an HTTP round trip, and
-  it is written from the two switches that own those facts, so it cannot
-  disagree with the chip. It is read **before** anything stands the app down —
-  launch clears it.
-- **Six seconds after the row stops saying `listening`.** The microphone
-  closing is not the end of the sentence: the decode and the held panel come
-  after it, and those are what deliver the words.
+- **The binding comes from `~/.walkie-talkie/bound-tty`**, the marker the status
+  line already reads: absent unbound, `ttysNNN` bound. One `cat` rather than an
+  HTTP round trip, and it is written from the one switch that owns it, so it
+  cannot disagree with the chip. It is read **before** anything stands the app
+  down — launch clears it. Whether a sentence is in flight is a different
+  question and is asked of `GET /test/state`.
+- **Six seconds after the relay goes idle.** The microphone closing is not the
+  end of the sentence: the decode and the held panel come after it, and those
+  are what deliver the words.
 - **The restore addresses a tty, not the front window**, which is why the route
   had to exist: at the end of a build the frontmost window is whatever the build
   was watched in — precisely not the session that was bound. It is never a
@@ -5978,17 +5978,10 @@ already there.
 `~/.walkie-talkie/bound-tty` holds the tty of the bound session while there is
 one, and does not exist otherwise (`Outbox.publishBound`). Victor's status line
 reads it and puts a 🎙️ badge in front of the model name when it matches its own
-tty — **yellow bound, red while the microphone is open**.
+tty — **yellow while it is bound**.
 
-The line carries both facts: `ttys006`, or `ttys006 listening`. A second word
-rather than a second file, because the reader is a shell loop doing one builtin
-`read` and two files would be two of them plus a state that can be half-written.
-It is written from **both** switches that own the two facts — `showBound` for the
-binding, `syncBorrowedGestures` for the microphone — since neither can answer the
-other's question.
-
-Yellow is the state that lasts hours and red the one that lasts a minute, which
-is the same split the chip draws with a folder name against a pulsing 🔴.
+The line carries one fact: `ttys006`. It is written from `showBound`, the one
+switch that owns it.
 
 **Same problem the caret halo solves, at the other end of the sentence.** The
 halo answers *is it hearing me?* (the corner beacon did until 2026-09-11); this
@@ -9770,7 +9763,7 @@ out and a flash of a frontmost relay is exactly the refocus he asked to be rid o
 **It is `relay-restart.sh` from the inside, and it keeps both of that script's promises.**
 
 - **A dictation in flight is a stop, not a thing to be got past.** The script waits on
-  `bound-tty` saying `listening` and then sleeps six seconds blind, because from outside the
+  `GET /test/state` and then sleeps six seconds blind, because from outside the
   process that is the whole of what can be known. Inside it, the same question is exact:
   `listening || settling || phase.isWaitingForWords || overlay.isHoldingPrompt` — the microphone,
   the recogniser still answering, and the panel with a Send button under it. The click says

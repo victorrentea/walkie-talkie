@@ -47,8 +47,8 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   writes the plist, `touch`es the bundle, resets the Dock icon cache only when the `.icns`
   checksum changed. Never commit an `.icns`.
 - **Restart the installed app:** `./relay-restart.sh`. It reads `~/.walkie-talkie/bound-tty`
-  first, waits for a dictation in flight to finish *and deliver* (six seconds after the row stops
-  saying `listening`), stands the app down through `SingleInstance`, relaunches, and re-binds the
+  first, waits for a dictation in flight to finish *and deliver* (`GET /test/state`, plus six
+  seconds after it goes idle), stands the app down through `SingleInstance`, relaunches, and re-binds the
   same tty through `POST /bind {"tty": …}` (no toggle, no flight, no flash). **Never restart
   while a dictation is running** — *"niciodată să nu mai dai restart la Walkie Talkie … în
   dictare — oprești și aștepți să se termine dictarea, să se livreze, abia apoi faci restart"*.
@@ -94,7 +94,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 - **`~/.walkie-talkie/`** — `outbox.jsonl` (the log of everything dictated; a line is written at
   *delivery*, never before), `voice-corpus/<day>/` + `corpus.jsonl` (every recording beside its
   transcript, forever — never compress lossily, nothing prunes it), `decode-rate.jsonl`,
-  `bound-tty` (`ttysNNN` or `ttysNNN listening`; absent when unbound; cleared at launch and quit),
+  `bound-tty` (`ttysNNN`; absent when unbound; cleared at launch and quit),
   `rebind-history.json`, `pinned-projects.json`, `ide/` (the VS Code / IntelliJ extensions'
   loopback listeners), `relay.log`. `--home` moves the outbox and the corpus.
 - **`~/Library/Caches/ro.victorrentea.wispr-relay/`** — `shots/<session-stamp>/` (a staging

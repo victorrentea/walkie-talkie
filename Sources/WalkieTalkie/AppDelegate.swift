@@ -2990,9 +2990,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.setActive(listening || speculative,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
-        // The status line goes yellow → red on the same edge, and reads the same
-        // `listening` the ring does rather than a flag of its own.
-        publishBinding(terminal.target)
         // **The music pauses for every dictation, and so reads `listening`, not
         // `live`.** It hung off `live` until 2026-09-03, on the argument that an
         // unbound dictation is Victor talking into some other app and none of the
@@ -3412,27 +3409,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Write the marker the status line reads — see `Outbox.publishBound`.
     ///
-    /// Called from the two switches that own the two facts in it: `showBound`,
-    /// which every route into and out of a binding passes through, and
-    /// `syncBorrowedGestures`, which every edge of a dictation does. Neither can
-    /// answer the other's question, which is why the file is written from both
-    /// rather than from whichever one happened to fire last.
-    ///
-    /// **Red is *the words are coming here*, not *a microphone is open
-    /// somewhere*** (2026-09-16). A spawn and a caret dictation both run with a
-    /// terminal still bound, and both used to turn that terminal's badge red for
-    /// their whole length — Victor: *"nu mai vrea să înroșești terminalul care
-    /// are microfonul conectat … mă induce în eroare, am impresia că există un
-    /// terminal, când de fapt va ateriza într-o sesiune nouă"*. The badge stays
-    /// **yellow** for them, which is the honest claim: this is still the
-    /// binding, it is just not this sentence's destination. It is the same
-    /// predicate `latchedAtCaret` is latched from at the microphone's close, and
-    /// it comes back red the instant he redirects the sentence at the terminal —
-    /// the two branches above take `spawnPending` and `pasteMode` back before
-    /// this call, so one `showBound` does both halves.
+    /// Called from `showBound`, which every route into and out of a binding
+    /// passes through, and which is therefore the only switch that owns the one
+    /// fact in the file.
     private func publishBinding(_ target: TerminalBinding.Target?) {
-        Outbox.publishBound(tty: target?.handle.tty,
-                            listening: listening && !spawnPending && !pasteMode)
+        Outbox.publishBound(tty: target?.handle.tty)
     }
 
     /// The destination app's icon, drawn down to the row height it has to sit in.
