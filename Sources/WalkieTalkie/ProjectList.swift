@@ -196,11 +196,12 @@ enum PinnedProjects {
 
     /// **What the menu held before the star existed**, and what a fresh install
     /// starts with. Seeding rather than starting empty is the continuity call:
-    /// this list is the six folders the menu has named for days, and the first
+    /// this list is the folders the menu has named for days, and the first
     /// spawn after an update should show him the menu he knows, with a star
     /// beside each row explaining how it got that way.
     private static let seed = ["victor-macos-addons", "training-assistant",
-                              "walkie-talkie", "victor-vsc", "petclinic", "human-review"]
+                              "walkie-talkie", "victor-vsc", "petclinic", "human-review",
+                              "victor-effects"]
 
     private static var cached: [String]?
 

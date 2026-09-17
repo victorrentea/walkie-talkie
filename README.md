@@ -63,9 +63,10 @@ text selected during dictation:
 - 00:19 in 'Google Chrome — Stripe docs': "amount is in the smallest currency unit"
 ```
 
-`00:00` is the thing you were already holding when you started talking — the
-subject. The rest are what you reached for while you were speaking, in the order
-you reached for them, so *"the one I mentioned after the tax bit"* resolves to a
+The first one is the subject — whatever you select *during* the dictation, not
+whatever happened to be highlighted before you started talking, which is rarely
+what you meant. The rest are what you reached for after it, in the order you
+reached for them, so *"the one I mentioned after the tax bit"* resolves to a
 string instead of to a guess.
 
 `Listening...` is itself a gauge: it fills a character at a time as *speech*

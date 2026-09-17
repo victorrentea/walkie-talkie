@@ -1170,6 +1170,20 @@ final class HotkeyTap {
     private var wheelLeftChord = false
     private var wheelHold: DispatchWorkItem?
 
+    /// **When ⌃⌥⌘F10 (🔼 →) last fired for real** (2026-09-16). Victor: *"fac
+    /// gestul de forward-dreapta și cumva cred că-l fac de două ori, pentru că
+    /// se și pornește și se și închide dictarea instant"* — one flick toggling
+    /// the microphone open and immediately shut. The autorepeat guard above
+    /// only catches the OS's own key-repeat flag, and a synthetic Options+ tap
+    /// never carries one; a gesture engine re-triggering on the tail of the
+    /// same continued motion looks exactly like a second, deliberate flick.
+    /// So a second F10 arriving inside `gestureRetriggerSeconds` of the first
+    /// is dropped rather than toggling the microphone straight back — no
+    /// physical second gesture lands that fast, and one that legitimately does
+    /// only costs a third of a second's delay.
+    private var lastF10At: CFTimeInterval = 0
+    private static let gestureRetriggerSeconds: CFTimeInterval = 0.35
+
     // MARK: - The wheel drag that selects a region
 
     /// Where the wheel went down, while it is still an open question whether
@@ -2375,6 +2389,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // **Autorepeat is swallowed on every one.** Options+ sends a single tap
         // per gesture, so a repeat can only be the key stuck down; acting on it
         // would bind twice, or open and close the microphone in a loop.
+        //
+        // **F10 turned out to be the exception** (2026-09-16): a re-triggered
+        // tap with no autorepeat flag at all, on a fast flick — see
+        // `lastF10At`.
         if useLogiGestures && ctrl && opt && cmd {
             switch keyCode {
             // ➡️ — the mouse moved right with the forward button held: start the
@@ -2384,6 +2402,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // bound terminal takes it, and Replace Wispr sends it to the caret.
             case VK_F10:
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                let f10Now = CACurrentMediaTime()
+                guard f10Now - lastF10At >= Self.gestureRetriggerSeconds else {
+                    Log.info("🎯 ➡️ F10 re-triggered \(String(format: "%.0f", (f10Now - lastF10At) * 1000))ms after the last one — dropped, not toggling back")
+                    return nil
+                }
+                lastF10At = f10Now
                 // Our own bookkeeping can go stale — `VK_F7`'s reason, and the
                 // same cost if it does: every plain flick right would read as a
                 // bind. Asked of the window server rather than remembered.
