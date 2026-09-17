@@ -333,6 +333,43 @@ enum MessageLog {
     /// Lines older than that have no `line`, so the parts are re-assembled here
     /// in the shapes that line uses — close, but not the same string: the clamps
     /// and the hint are the reconstruction's own.
+    /// The same envelope, for the menu's *Prompt History* rows — the page's Copy
+    /// button and that row hand over one string, because they are answering one
+    /// question with one file behind it.
+    static func envelope(_ entry: Entry) -> String { payload(entry) }
+
+    /// **The first words of a sentence, and an ellipsis if there were more.**
+    ///
+    /// Written for a menu row, which is why it is words and not characters: a
+    /// clamp at 42 characters cuts mid-word about half the time, and a row
+    /// ending in `the configura…` reads as a rendering fault rather than as a
+    /// deliberate summary. Newlines and runs of spaces collapse first — a
+    /// dictated prompt carries the shots' clause and the window line under it,
+    /// and a menu row draws all of that as one long grey smear.
+    static func snippet(_ text: String, limit: Int = 42) -> String {
+        let flat = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        var out = ""
+        var truncated = false
+        for word in flat {
+            if out.isEmpty {
+                out = String(word)
+            } else if out.count + 1 + word.count <= limit {
+                out += " " + word
+            } else {
+                truncated = true
+                break
+            }
+        }
+        if out.isEmpty { return "…" }
+        // A single word longer than the whole row is cut where it has to be —
+        // the one case the word rule cannot serve.
+        if out.count > limit {
+            out = String(out.prefix(limit))
+            truncated = true
+        }
+        return truncated ? out + "…" : out
+    }
+
     private static func payload(_ entry: Entry) -> String {
         if let line = entry.line { return line }
         var parts: [String] = []

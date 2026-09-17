@@ -465,7 +465,23 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `AppDelegate` because it needs state only the delegate has; this one needs
     /// nothing but the file on disk, and a hop through the delegate would exist
     /// only to be consistent with rows that had a reason.
-    private let messageLog = NSMenuItem(title: "Prompt Log", action: nil, keyEquivalent: "")
+    ///
+    /// **`Prompt History`, with the page one row inside it** (Victor,
+    /// 2026-09-17). The row used to be `Prompt Log` and its only act was to open
+    /// the HTML page — a click that leaves the menu, opens a browser and lands
+    /// on a file, for the question that is usually *what did I just say?*. Under
+    /// the arrow the last sentences are their own rows, first words and an
+    /// ellipsis, and the page is the row above the line: the whole log is still
+    /// exactly one click away, and reading back the last dozen prompts no longer
+    /// costs a browser.
+    private let messageLog = NSMenuItem(title: "Prompt History", action: nil, keyEquivalent: "")
+
+    /// **The page, a line, and the last sentences** — rebuilt on
+    /// `menuNeedsUpdate` rather than kept in step, for `applyEngineRow`'s reason
+    /// twice over: the list is short, and its source is a file another process
+    /// appends to all day, so the only reading that can be trusted is the one
+    /// taken at the moment the arrow is hovered.
+    private let promptHistorySubmenu = NSMenu()
 
     /// **The build stamp, on a disabled row of its own, one row above Quit**
     /// (2026-09-13). It was the clickable About row (`Victor's Walkie Talkie
@@ -688,8 +704,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(autosend)
 
         messageLog.image = Self.emojiIcon("📜")
-        messageLog.action = #selector(messageLogClicked)
-        messageLog.target = self
+        // **The row itself does nothing** — AppKit gives a parent row's click to
+        // its submenu, so `Full Log` inside is the one way to the page. The
+        // submenu is filled on hover; see `menuNeedsUpdate`.
+        messageLog.submenu = promptHistorySubmenu
+        promptHistorySubmenu.delegate = self
+        applyPromptHistoryRow()
         menu.addItem(messageLog)
 
         menu.addItem(.separator())
@@ -907,6 +927,74 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.image = id == engineId ? Self.symbolIcon("checkmark") : Self.blankIcon
             engineSubmenu.addItem(row)
         }
+    }
+
+    /// **`Full Log`, a line, then the last sentences he dictated.**
+    ///
+    /// The order is Victor's (2026-09-17): the page above the line, the snippets
+    /// below it. The line is what makes the two halves readable as two things —
+    /// one row that leaves the app, and a list that is the app's own memory of
+    /// what was said. Newest first, the same way the page is ordered and for the
+    /// same reason: the sentence being looked for is almost always the last one.
+    ///
+    /// **A row is the first words and an ellipsis**, never the whole prompt: a
+    /// dictated paragraph is three hundred characters and a menu that wide is
+    /// unreadable and covers the work. The full text is on the row's tooltip and
+    /// on the clipboard once it is clicked.
+    ///
+    /// **Clicking copies; it does not send.** Everything else in this menu that
+    /// touches text puts it somewhere — the destination, the caret — and a row
+    /// that fired an old sentence at whatever is focused would be the one
+    /// irreversible click in the menu. The clipboard is where the page's own
+    /// Copy button puts it, and `⌘V` is his to press.
+    private func applyPromptHistoryRow() {
+        promptHistorySubmenu.removeAllItems()
+
+        let full = NSMenuItem(title: "Full Log", action: #selector(messageLogClicked),
+                              keyEquivalent: "")
+        full.image = Self.emojiIcon("📜")
+        full.target = self
+        promptHistorySubmenu.addItem(full)
+        promptHistorySubmenu.addItem(.separator())
+
+        // Words only. A line with nothing but a screenshot on it has no snippet
+        // to show, and a row reading `…` is noise in a list read at a glance;
+        // the page still has every one of them.
+        let spoken = MessageLog.recent().filter { !$0.text.isEmpty }.prefix(Self.promptHistoryRows)
+        guard !spoken.isEmpty else {
+            let empty = NSMenuItem(title: "Nothing dictated in the last two days",
+                                   action: nil, keyEquivalent: "")
+            empty.image = Self.blankIcon
+            empty.isEnabled = false
+            promptHistorySubmenu.addItem(empty)
+            return
+        }
+
+        for entry in spoken {
+            let row = NSMenuItem(title: MessageLog.snippet(entry.text),
+                                 action: #selector(promptPicked(_:)), keyEquivalent: "")
+            row.image = Self.blankIcon
+            row.target = self
+            row.toolTip = entry.text
+            row.representedObject = MessageLog.envelope(entry)
+            promptHistorySubmenu.addItem(row)
+        }
+    }
+
+    /// **Twelve.** Two days of dictation is a hundred sentences and a menu is not
+    /// a scrollable list; twelve covers the session he is in, which is the span
+    /// the row is opened for. Everything older is one click up, in the page.
+    private static let promptHistoryRows = 12
+
+    /// The envelope of the sentence he picked, on the clipboard — exactly the
+    /// string the page's Copy button hands over, and the one `⌘⌃P` pastes for
+    /// the newest sentence.
+    @objc private func promptPicked(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String, !text.isEmpty else { return }
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(text, forType: .string)
+        Log.info("📋 a prompt from the history is on the clipboard (\(text.count) chars)")
     }
 
     /// **What one engine is called** — in the list, and in the row above it when
@@ -1187,6 +1275,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The label is read when the menu opens rather than pushed on a timer: it
     /// changes with the branch, and the only moment it has to be right is the
     /// moment he is looking at it.
+    /// **The history is read when its arrow is hovered, not when the menu
+    /// opens.** `MessageLog.recent` reads and parses the whole outbox; doing
+    /// that on every menu open would put a file read on the path of every glance
+    /// at the destination, for a list most of those glances never unfold.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === promptHistorySubmenu else { return }
+        applyPromptHistoryRow()
+    }
+
     func menuWillOpen(_ menu: NSMenu) {
         // **Only the menu itself.** AppKit sends this to any menu this object is
         // the delegate of, and every line below is about the top-level rows — a
