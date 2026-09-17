@@ -57,6 +57,51 @@ enum Relaunch {
         return tty
     }
 
+    // MARK: - The back button's stop
+
+    /// Where the back button's arm waits between the two processes, beside the
+    /// binding and under `--home` with it.
+    private static var backStopURL: URL { Outbox.home.appendingPathComponent(".back-stop") }
+
+    /// **Park the fact that the back button is a 🔽 → dictation's stop**, written
+    /// whenever the arm moves rather than at the restart — because the ways this
+    /// process dies are not all restarts it knows about: `relay-restart.sh` kills
+    /// it from outside, `build-app.sh` replaces it, and a crash tells nobody.
+    ///
+    /// The cost is one small write on a gesture Victor makes by hand a few times
+    /// an hour, and what it buys is the sentence he is *in the middle of* keeping
+    /// its stop across the restart. Without it the button silently goes back to
+    /// being Return in the middle of a dictation, which is the one failure that
+    /// reads as *the feature does not work* — measured 2026-09-17 19:29, a 🔽 →
+    /// dictation at 19:29:06 and a relaunch eight seconds into it.
+    static func stashBackStop(armed: Bool) {
+        guard armed else {
+            try? FileManager.default.removeItem(at: backStopURL)
+            return
+        }
+        try? FileManager.default.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
+        try? Data().write(to: backStopURL)
+    }
+
+    /// How long the arm was up before the restart, or nil if there is nothing to
+    /// put back. Taken exactly once, and time-boxed like `takePendingBinding` for
+    /// its reason — a marker left behind by a crash must not reach across the
+    /// afternoon and hand tomorrow's back button to a dictation Victor started
+    /// with his keyboard. Three minutes is longer than the longest sentence
+    /// measured (81 s) and far shorter than a working day.
+    ///
+    /// It is deliberately only half the test: the caller asks Wispr's microphone
+    /// as well, and puts the arm back only if it is open **now**.
+    static func takePendingBackStop() -> TimeInterval? {
+        let path = backStopURL.path
+        defer { try? FileManager.default.removeItem(at: backStopURL) }
+        guard let modified = try? FileManager.default
+                .attributesOfItem(atPath: path)[.modificationDate] as? Date else { return nil }
+        let age = Date().timeIntervalSince(modified)
+        guard age >= 0, age < 180 else { return nil }
+        return age
+    }
+
     /// Start the replacement and let it do the killing.
     ///
     /// **`open -n`, not a `pkill` and a launch** — the same call `main.swift`

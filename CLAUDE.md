@@ -234,7 +234,11 @@ sits at rest there.
   relay is blind to a 🔽 → dictation altogether — plus a 12 s grace for Wispr's cold start. The
   microphone closing makes the button Return again with no edge to be told about:
   *"după ce Wispr Flow nu mai dictează, revine butonul de back la tasta obișnuită de Enter."*
-  `GET /test/state.backStopsWispr`.
+  **The arm is parked on disk and put back after a restart** (2026-09-17, evening — a relaunch
+  eight seconds into a 🔽 → dictation is how it was lost the day it shipped), on two conditions:
+  a marker younger than three minutes and Wispr's microphone open at launch. A back click that
+  gives Return over an **open** Wispr microphone says so in the log, because that was the one
+  silent outcome this button had. `GET /test/state.backStopsWispr`.
 - **Unbound, the app does everything it does bound** (2026-09-11, `holdsForBind`): the sentence
   is held five minutes for the bind that follows; the chip says `⏳ bind to send — ⌘⌃B`.
 - **The recipient is whoever the relay is pointed at when the microphone closes.** A deliberate

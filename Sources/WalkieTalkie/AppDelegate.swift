@@ -1611,8 +1611,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // …and watched for the length of one, so the arm cannot be left
         // standing over a sentence that ended some other way.
         hotkeys.onWisprRawGesture = { [weak self] armed in
+            // …and parked on disk with it, so a restart in the middle of that
+            // sentence does not take the stop out from under his thumb — see
+            // `Relaunch.stashBackStop`.
+            Relaunch.stashBackStop(armed: armed)
             DispatchQueue.main.async { self?.watchBackStop(armed) }
         }
+        restoreBackStopAfterRestart()
 
         // The ring's panel is built here rather than on the first dictation —
         // see `CaretHalo.prewarm`.
@@ -2972,6 +2977,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.tickBackStop() }
         backStopPoll = t
         RunLoop.main.add(t, forMode: .common)
+    }
+
+    /// **A restart that landed inside a 🔽 → dictation gives the back button its
+    /// stop back** (2026-09-17).
+    ///
+    /// Measured that evening: a 🔽 → dictation at 19:29:06 and a relaunch eight
+    /// seconds into it, after which the click typed a Return into his terminal
+    /// and the sentence could only be ended by making the whole flick again.
+    ///
+    /// Two conditions, because the marker alone is not enough: `Relaunch` left
+    /// one *and* Wispr's microphone is open now. The second is what makes this
+    /// safe — a marker from a crashed instance whose sentence is long over finds
+    /// a closed microphone and is simply thrown away. Asked a moment after
+    /// launch rather than at it, because `WisprWatch` enumerates the audio
+    /// process list on its own queue and answers *closed* until it has.
+    private func restoreBackStopAfterRestart() {
+        guard let age = Relaunch.takePendingBackStop() else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self else { return }
+            guard self.wisprMic.sampleIsRunningInput() else {
+                Log.info("⌨️ a 🔽 → arm survived the restart but Wispr Flow's microphone is shut — dropped")
+                return
+            }
+            self.hotkeys.restoreWisprStop(armedSecondsAgo: age)
+        }
     }
 
     private func tickBackStop() {

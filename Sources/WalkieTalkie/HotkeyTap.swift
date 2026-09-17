@@ -1001,6 +1001,22 @@ final class HotkeyTap {
         setWisprArm(0)
     }
 
+    /// **Put the arm back after a restart**, carrying the age it already had.
+    ///
+    /// A relaunch in the middle of a 🔽 → sentence — a Dock click, `build-app.sh`,
+    /// `relay-restart.sh` — used to take the stop away from under his thumb
+    /// silently: the button went back to Return mid-dictation and the only way
+    /// out was making the whole flick again. `AppDelegate` restores it at launch
+    /// when `Relaunch` left a marker **and** Wispr's microphone is open now, and
+    /// the age travels with it so the cold-start grace is not handed out a
+    /// second time — past it, the arm stands on the microphone alone, which is
+    /// the honest test for *that sentence is still running*.
+    func restoreWisprStop(armedSecondsAgo: TimeInterval) {
+        let at = max(1, CACurrentMediaTime() - max(0, armedSecondsAgo))
+        Log.info("⌨️ the back button is the stop again — a restart landed inside a 🔽 → dictation (\(Int(armedSecondsAgo * 1000)) ms in)")
+        setWisprArm(at)
+    }
+
     /// The one place the arm moves, so *it went up* and *it went down* are
     /// always announced and never announced twice.
     private func setWisprArm(_ at: CFTimeInterval) {
@@ -2544,6 +2560,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                 } else {
+                    // **A Return typed over an open microphone is worth a line**
+                    // (2026-09-17). Every other outcome of this button says so in
+                    // the log and this one said nothing, so *the back click did
+                    // not stop my dictation* had no evidence behind it at all —
+                    // and the answer is one of two very different things: the arm
+                    // was never up (this sentence is not a 🔽 → one), or it was
+                    // taken down under him. Asked only here, on a click, so it
+                    // costs the three CoreAudio reads nothing else pays for.
+                    if wisprMicIsOpen?() == true {
+                        Log.info("⌨️ ⬅️ back button — Return, though Wispr Flow's microphone is open: this dictation was not started by 🔽 →")
+                    }
                     Self.postReturn()
                 }
                 return nil

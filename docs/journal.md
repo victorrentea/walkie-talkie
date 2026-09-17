@@ -10047,3 +10047,47 @@ That last row is the whole argument for the poll in one line.
 `GET /test/state.backStopsWispr` says which of its two meanings the button carries right now:
 the gesture is a keystroke a script can post, but what it did to the button is otherwise
 invisible from outside the process.
+
+### …and it survives a restart, because that is how it was lost (2026-09-17, evening)
+
+Victor, hours after it shipped, asking for the feature again: *"când pornesc dictarea de Wispr
+Flow cu butonul de Back și gestul în dreapta și Wispr Flow mă transcrie, trebuie să pot opri
+Wispr Flow cu un click simplu pe butonul de Back."* Which is what the morning built, and the
+first thing the log says is that it works — `🎙️ ⬅️ back button — stopping the dictation 🔽 →
+started` at 19:25:56 and again at 19:34:41, both on the installed build, both while the Engine
+was the local model. Re-running it from the desk that evening passed too: arm, click, Wispr's
+row 12957 created at the chord and the microphone shut by the click.
+
+The log also says where it went. **19:29:06 a 🔽 → dictation; 19:29:14 the app relaunched** —
+eight seconds in — and the next thing in the file is a second flick at 19:30:57, a minute and a
+half later. The arm lives in `HotkeyTap`'s memory, so the restart simply took it: mid-sentence,
+with no sign of anything happening, the button went back to typing Return into his terminal and
+the only way out was making the whole flick again. That is not a rare accident in this repo — the
+Dock tile restarts the app, `build-app.sh` replaces it, `relay-restart.sh` kills it from outside,
+and none of the three knows a 🔽 → dictation is running: with the Engine on the local model the
+relay is blind to one, which is the same blindness `wisprMic` exists for.
+
+So the arm is parked on disk, beside the binding and under `--home` with it —
+`Relaunch.stashBackStop`, written **whenever the arm moves** rather than at the restart, because
+a crash and an outside `kill` announce nothing. At launch `restoreBackStopAfterRestart` puts it
+back on **two** conditions: the marker is there and younger than three minutes, *and* Wispr's
+microphone is open right now. The second is what makes it safe — a marker left by an instance
+whose sentence is long over finds a shut microphone and is thrown away, so the back button is
+never handed to a dictation Victor started with his own keyboard. The age travels with the
+marker, so the 12 s cold-start grace is not handed out a second time; past it the arm stands on
+the microphone alone, which is the honest test for *that sentence is still running*. The question
+is asked 1.2 s after launch, because `WisprWatch` enumerates the audio process list on its own
+queue and answers *closed* until it has.
+
+Measured on the installed build: arm at 19:41:07, `./relay-restart.sh` straight through the
+dictation, `⌨️ the back button is the stop again — a restart landed inside a 🔽 → dictation
+(3183 ms in)` at 19:41:11, the back click stopping it at 19:41:14, and Wispr's row 12958
+`formatted`.
+
+**And the silent branch got a line.** Every other outcome of that button says something in the
+log; a Return typed over an open Wispr microphone said nothing at all, so *the back click did not
+stop my dictation* had no evidence behind it and cost an evening of reading timestamps. It now
+says `⌨️ ⬅️ back button — Return, though Wispr Flow's microphone is open: this dictation was not
+started by 🔽 →`, which separates the two very different causes — the arm was never up, or it was
+taken down under him — before anyone has to guess. Asked only on a click, so it costs the three
+CoreAudio reads nothing else pays for.
