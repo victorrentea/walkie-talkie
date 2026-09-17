@@ -384,9 +384,11 @@ sits at rest there.
   the device and the rewrite are one mechanism. Victor: *"textul selectat trebuie inserat …
   în locul markerului"*.
 - **A highlight that got inlined is left out of `text selected during dictation:`; one whose
-  marker was lost keeps its line there.** That absence is the fallback, and it is all of it. The
-  highlight he was already holding when he started talking never gets a marker — it is the
-  subject, and it leads the list.
+  marker was lost keeps its line there.** That absence is the fallback, and it is all of it.
+- **Nothing is captured just because it was already selected when he started talking**
+  (reverted 2026-09-16, the same day it shipped the other way — see `.claude/rules/dictation-source.md`,
+  *Shot markers*). The subject is now always the first highlight the watcher or the shutter catches
+  *during* the sentence, and it gets a marker like any other.
 - **The corpus gets the words with the markers taken out and nothing put in their place** — the
   relay's own recording heard neither the marker nor the paragraph he had highlighted.
 

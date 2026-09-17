@@ -139,13 +139,16 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
   whatever the last event's flags said, so the session believed **⌘ was held** until Victor's next
   real key. It is the stale-⌘ bug of `area-crop.md` a fourth time, and it matters more here than it
   did in `TerminalBinding.tap`: the window server **merges live modifier state back into a posted
-  key**, so a letter arriving afterwards is delivered as **⌘ + that letter**. The probe runs
-  **only for a bound or spawned dictation** (`captureContext` → `stashSelection` →
-  `SelectionCapture.read`, and only when Accessibility returned nothing) and **never for a caret
+  key**, so a letter arriving afterwards is delivered as **⌘ + that letter**. At the time this was
+  found the probe ran **only for a bound or spawned dictation** (`captureContext` → `stashSelection`
+  → `SelectionCapture.read`, and only when Accessibility returned nothing) and **never for a caret
   one**, which is exactly the axis along which the loop's probe letters survive or vanish — and
   `q z j k w y v` against TextEdit are *quit*, *close the document*, *undo* and four edits.
   The trailing `flagsChanged` is now posted; the leading one deliberately is not, because asserting
-  ⌘-down is the window being closed.
+  ⌘-down is the window being closed. **`stashSelection` and the whole start-of-gesture probe are
+  gone since 2026-09-16** (see `screenshots-and-selection.md`, *The selection: frozen*) — the fix
+  lives in `SelectionCapture.read()` itself, so it still protects every caller left: the drag-release
+  probe and the shutter's fallback, neither gated on caret vs. bound.
 - **The probe is stamped.** `keyboardEventSource: nil` gave it pid 0 and no `userData`, so this
   app's own ⌘C reached its own tap looking exactly like a key Victor had pressed.
 - **`WT_KEY_TRACE=1` / `POST /test/key-trace {"on": true}`** logs every keyboard event the tap sees
@@ -579,10 +582,12 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   (`reserveMarkerLocked`, called from inside `fileSelection`'s critical section) and **spoken after
   the lock is released** — `mark` waits for a gap in his speech on `ShotMarker`'s own queue, and
   holding `stateLock` across a silence that is his to break would stall the chip.
-- **The highlight he was already holding gets no marker.** `stashSelection` runs at 0:00, before
-  there is a sentence for a marker to be *inside* of; it is the subject, it leads the list, and that
-  is where it reads best. A highlight that fills the empty frozen slot mid-sentence
-  (`fillsTheBlank`) goes through `fileSelection` and does get one.
+- **There is no more "highlight he was already holding," and so no more no-marker case for it.**
+  `stashSelection` — the probe that grabbed whatever was already selected at the gesture and wrote
+  it straight into `pendingSelection`, bypassing `fileSelection` and the marker entirely — is gone
+  since 2026-09-16 (see `screenshots-and-selection.md`, *The selection: frozen*). Every highlight
+  that fills the empty frozen slot now arrives the same way the mid-sentence case always did
+  (`fillsTheBlank`, through `fileSelection`) and gets a marker like any other novel selection.
 - **The corpus gets neither the marker nor the paragraph** (`resolve(inlineSelections: false)`).
   Wispr's recording heard the marker and the relay's did not; *neither* heard the text he had
   highlighted. So the pair filed beside the audio is the sentence with the selection markers taken

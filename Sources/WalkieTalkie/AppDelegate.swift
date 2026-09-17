@@ -220,10 +220,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// reads it.
     private let terminal = TerminalBinding()
 
-    /// Text that happened to be selected when the dictation opened. There is
-    /// no shortcut for this any more and none is needed: if something was
-    /// selected, it is simply picked up — Victor dictates *about* what he has
-    /// highlighted, so the selection is the subject of the sentence.
+    /// The first highlight that belongs to *this* dictation — the subject he
+    /// selects and talks about. **Never whatever was already selected at the
+    /// gesture** (reverted 2026-09-16, the same day it briefly worked the other
+    /// way): Victor found it kept attaching a leftover highlight that had
+    /// nothing to do with what he was saying. Filled only by `fileSelection`'s
+    /// `fillsTheBlank` rule, from a selection the watcher sees *change* during
+    /// the sentence or one he deliberately takes with the shutter.
     private var pendingSelection: String?
 
     /// **Where in the dictation the frozen selection was read, and in which
@@ -1746,8 +1749,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictation with a terminal bound, and `isBound` alone would have taken
         // the picture and posted the ⌘C into the field he is about to dictate
         // into.
+        //
+        // **No automatic selection probe at the gesture — reverted the same
+        // day it shipped** (2026-09-16). It briefly stashed whatever was
+        // already highlighted as "the subject", on every destination. Victor:
+        // *"să nu mai preia automat selecția la începutul dictării, pentru că
+        // deseori rămâne selectat textul care nu are treabă cu ce am spus. Să
+        // preia doar textul selectat în timpul dictării."* A highlight left
+        // over from whatever he was doing a minute ago is not what he is
+        // dictating about just because it happens to still be on screen. The
+        // selection watcher (`syncSelectionWatch`, started below from
+        // `syncBorrowedGestures`) is the only door left standing: it seeds
+        // itself with whatever is already highlighted the moment it arms, so
+        // that same stale selection is never filed either — only a highlight
+        // that *changes* during the sentence, or one he deliberately takes
+        // with the shutter, becomes part of the message.
         if !pasteMode, isBound || spawnPending {
-            if contextAtWheelRelease { bookDictation() } else { captureContext() }
+            if contextAtWheelRelease {
+                bookDictation()
+            } else {
+                captureContext()
+            }
         } else {
             bookDictation()
         }
@@ -2774,8 +2796,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // tap or the main queue, that is the flash frozen mid-fade.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            self.stashSelection()
-
             guard !alreadyOpen else { return }
             // Named by its offset — 0:00 for a capture at the press, the hold's
             // length when the wheel path deferred it to the release.
@@ -2853,9 +2873,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gathered, now, instead of waiting out the two-minute orphan timer.
     ///
     /// **This is what kept quoting him at himself.** The selection is read once
-    /// per dictation and frozen — `stashSelection` returns early when the slot is
-    /// already full, and `captureContext` only empties it when `dictationInFlight`
-    /// says a *new* dictation is opening. So a dictation that gathered a selection
+    /// per dictation and frozen — `fileSelection`'s `fillsTheBlank` rule only
+    /// writes the slot while it is still empty, and `captureContext` only empties
+    /// it when `dictationInFlight` says a *new* dictation is opening. So a
+    /// dictation that gathered a selection
     /// and then never produced a transcript left both behind: the flag stayed up,
     /// the next press was therefore not a new dictation as far as the reset was
     /// concerned, no fresh read was taken, and the old highlight went out attached
@@ -4479,67 +4500,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return flat.count <= limit ? flat : String(flat.prefix(limit)) + "…"
     }
 
-    /// What was selected when he started talking IS the subject, for the whole
-    /// dictation — so the first non-empty read wins and nothing later overwrites
-    /// it. He talks for a minute, another window jumps in front, he switches
-    /// apps to look something up: none of that changes what he is talking about.
-    /// Later probes exist only to fill a blank the first one left.
-    private func stashSelection() {
-        stateLock.lock()
-        let alreadyHave = pendingSelection != nil
-        // Which dictation this probe belongs to. `dictationStartedAt` is set the
-        // instant one opens and nil'd the instant one ends, by every route there
-        // is, so it doubles as the identity of the sentence in flight.
-        let opened = dictationStartedAt
-        stateLock.unlock()
-        guard !alreadyHave else { return }
-
-        let text = SelectionCapture.read()
-        Log.info("selection front=\(SelectionCapture.frontmostAppName() ?? "?") → \(text.map { "\($0.count) chars" } ?? "nothing")")
-        guard let text = text, !text.isEmpty else { return }
-        // Read here and not at delivery: the envelope is built seconds later,
-        // after the panel has held the prompt, and by then the title names
-        // whatever he ended up in front of. Same rule the shot's own window
-        // reading follows.
-        let source = WindowContext.describe()
-
-        stateLock.lock()
-        // **The dictation can end while this probe is still running**, and often
-        // does: the ⌘C fallback polls the pasteboard for up to 400ms, and the
-        // wheel held down through those 400ms is a cancel. Everything the cancel
-        // cleared would then be written straight back — a `pendingSelection` that
-        // rides the *next* sentence, and a row on the chip with no dictation
-        // behind it. Anchored on the moment it opened, so a sentence that ended
-        // (nil) or a different one that has since begun both read as stale.
-        let stale = opened == nil || dictationStartedAt != opened
-        let lost = pendingSelection != nil      // the other probe got there first
-        if !stale && !lost {
-            pendingSelection = text
-            // **Measured, not assumed to be zero.** This probe runs at the
-            // gesture in the ordinary case and the answer is `00:00`, which is
-            // what it always was — but it also runs from the routes that fill a
-            // blank the first read left, and there the difference between "he
-            // was already holding it" and "he reached for it eleven seconds in"
-            // is the whole point of printing an offset at all.
-            pendingSelectionAt = opened.map { Date().timeIntervalSince($0) } ?? 0
-            pendingSelectionIn = source
-            // **No spoken marker for this one**, and the nil is written rather
-            // than assumed: this is the highlight he was *already holding* when
-            // he started talking, so there is no moment inside the sentence for
-            // a marker to name. It is the subject, it leads the list under the
-            // words, and that is where it reads best. The mid-sentence case goes
-            // through `fileSelection`, which does reserve one.
-            pendingSelectionMarker = nil
-        }
-        stateLock.unlock()
-        guard !stale else {
-            Log.info("selection dropped — the dictation it was read for is over")
-            return
-        }
-        guard !lost else { return }
-        DispatchQueue.main.async { [weak self] in self?.overlay.setSelection(text) }
-    }
-
     /// The shutter's other half: whatever is highlighted **at this moment**,
     /// filed under where in the sentence he is.
     ///
@@ -4660,9 +4620,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Log.info("👁 selection watcher on — reading the highlight every "
                  + String(format: "%.1fs", Self.selectionPollSeconds))
+        // **Seeded with whatever is already highlighted, not an empty set**
+        // (2026-09-16). Without this the watcher itself re-introduced the bug
+        // the removal of the start-of-dictation probe was meant to fix: a
+        // stale highlight left over from before he started talking, untouched
+        // for `selectionSettleReads` polls, reads as "settled" and gets filed
+        // as the subject exactly as if it had been grabbed at the gesture.
+        // Seeding it into `polledSeen` up front makes it "already seen" from
+        // the first tick, so only a highlight that *changes* during the
+        // sentence — a genuinely new selection — is ever filed. Quiet: no
+        // synthetic ⌘C at the gesture, for the same reason the poll itself
+        // stays quiet. Read on `selectionQueue`, off the caller's thread —
+        // this runs from `dictationBegan` on main, and every other AX read in
+        // this file is kept off it.
         selectionQueue.async { [weak self] in
             self?.polledSettling = nil
-            self?.polledSeen = []
+            self?.polledSeen = SelectionCapture.readQuiet().map { [$0] } ?? []
         }
         let timer = DispatchSource.makeTimerSource(queue: selectionQueue)
         timer.schedule(deadline: .now() + Self.selectionPollSeconds,
@@ -4809,8 +4782,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // for a highlight that turns out to be a repeat is one AX call.
         let source = WindowContext.describe()
         stateLock.lock()
-        // The probe outliving its dictation, exactly as in `stashSelection` and
-        // for the same 400ms — a highlight filed against a sentence that is over
+        // The probe outliving its dictation — the same guard the shutter's ⌘C
+        // fallback needs for its own 400ms — a highlight filed against a sentence that is over
         // would be attached to the next one and shown on a chip at rest.
         guard opened != nil, dictationStartedAt == opened else {
             stateLock.unlock()
