@@ -19,8 +19,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `terminal-binding.md` | `TerminalBinding`, `IDEBridge`, `BindFlight`, `RebindHistory`, `RebindPanel`, `SessionSearch`, `helpers/session_search.py`, `UnbindPop`, `relay-restart.sh` |
   | `destinations-and-outbox.md` | `AppDelegate`, `Outbox`, `SessionLabel` |
   | `overlay-chip.md` | `RelayWindow`, `OverlayStates`, `Glyphs`, `docs/states/`, the shoot script |
-  | `chip-wipe.md` | `ChipWipe` |
-  | `mouse-gestures.md` | `HotkeyTap` |
+    | `mouse-gestures.md` | `HotkeyTap` |
   | `area-crop.md` | `HotkeyTap`, `ScreenCapture`, `Package.swift` |
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
@@ -121,7 +120,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   stands the installed app down and puts it back.
 - Nothing that rides the pointer can be screenshot (`sharingType = .none`; `RELAY_CAPTURABLE=1`
   no longer works on macOS 15). Review with: the states page; `kill -USR1 <pid>` →
-  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_WIPE`, `WT_SHOOT_HALO` (+ `…-arrow.png`),
+  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HALO` (+ `…-arrow.png`),
   all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run);
   `CGWindowListCopyWindowInfo` for geometry. `RELAY_SHOOT` runs skip every transition.
 

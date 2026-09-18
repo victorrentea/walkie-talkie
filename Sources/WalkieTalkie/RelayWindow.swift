@@ -1580,7 +1580,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         // cleared. Any relayout means newer state has arrived, and newer state
         // wins the chip — see `releaseSpawnPanel`.
         endSpawnHold()
-        rememberChip()
         // Hug the content of the *current* state, not the widest state there is:
         // standing by is what the overlay does for hours, and it should take no
         // more room than "🤖 ai@master" needs. Changing state resizes it, which is
@@ -3581,15 +3580,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// rather than a notice, and has now been kept. Without this the promise
     /// outlives the thing it promised by however long its timer had left.
     ///
-    /// `animated: false` is for `OverlayStates`, which photographs one state per
-    /// beat and cannot afford a transition still running under the shutter, and
-    /// for the one caller that is not going back to the chip at all — see
-    /// `showSentPrompt`.
+    /// `animated:` survives as a no-op parameter with two call sites
+    /// (`OverlayStates`, `showSentPrompt`) rather than a rename through them: it
+    /// asked for a transition, and since 2026-09-18 there is no transition to
+    /// ask for — a flash is taken down in one frame however it ends.
     func clearFlash(animated: Bool = true) {
-        // Through the same sweep as a flash that ran its course: a promise being
-        // kept early is still a message leaving, and it leaves the same way.
         guard let message = flashMessage else { return }
-        endFlash(message, wiped: animated)
+        endFlash(message)
     }
 
     /// A dictation started / stopped.
@@ -3866,11 +3863,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         // flashing, and nothing else knew it had inherited the job. The panel
         // opening is the one moment that is true of every path into it.
         //
-        // **Without the sweep**, unlike every other way a flash ends. `ChipWipe`
-        // exchanges one chip for another *in place*; here the next thing on
-        // screen is the panel, which is a different shape parked in a different
-        // corner and unfolds with an animation of its own. A wipe would be
-        // playing over a window that is growing out from under it.
         clearFlash(animated: false)
 
         sentPrompt = trimmed
@@ -4178,105 +4170,32 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
         reposition()             // still beside the pointer — a flash is not a reason to move
         refreshOpacity()
-        wipe()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.endFlash(message)
         }
     }
 
-    /// **The message is wiped away; it does not fade and it does not vanish.**
+    /// **A message is replaced in one frame** — no fade, no dissolve, no sweep.
     ///
-    /// A flash used to be cut at the end of its timer — the row simply gone in
-    /// the next frame, beside the pointer, while Victor was looking somewhere
-    /// else. That was replaced by a half-second alpha dissolve, which fixed the
-    /// abruptness and left the asymmetry: the message *arrived* in one frame and
-    /// *left* over half a second, so the two halves of one swap looked like two
-    /// unrelated things happening.
+    /// Three things have ended a flash. It was cut at the end of its timer (the
+    /// row simply gone in the next frame); then a half-second alpha dissolve,
+    /// which fixed the abruptness and left an asymmetry — the message *arrived*
+    /// in one frame and *left* over half a second; then the oblique wipe, which
+    /// made both ends the same event at the same speed and is what Victor
+    /// finally rejected on 2026-09-18: *"there is a weird animation, like some
+    /// sort of a cropping of the text … remove that animation and make it not
+    /// flicker any kind of"*. See the journal, *The chip swaps in one frame*.
     ///
-    /// Both ends now go through `ChipWipe`, in the same direction and at the same
-    /// speed — see the note on that type, and on `wipe()` below.
-    private func endFlash(_ message: String, wiped: Bool = true) {
+    /// So the instant swap is back, and this time it is the decision rather than
+    /// the thing nobody had got round to improving: at an inch from what he is
+    /// reading, dozens of times a day, the only transition that never costs him
+    /// a glance is the one that is over before the next frame.
+    private func endFlash(_ message: String) {
         guard flashMessage == message else { return }
         flashMessage = nil
         layoutContent()
         reposition()
         refreshOpacity()
-        if wiped { wipe() } else { ChipWipe.cancel() }
-    }
-
-    /// The chip as it was **last drawn**, kept for one turn of the run loop so a
-    /// sweep can start from it.
-    ///
-    /// **Why it cannot simply be read at the flash.** Cancelling a dictation is
-    /// four calls in one call stack — `setListening(false)`, `clearSelection()`,
-    /// then `flash("🗑️ Cancelled")` — and each of the first two relayouts
-    /// the chip. Nothing is *rendered* in between (Core Animation commits once,
-    /// at the end of the turn), so what Victor sees go away is `🔴 Listening…`;
-    /// but a `cacheDisplay` taken at the flash draws the views as they are by
-    /// then, which is the collapsed `🎙️` nobody ever saw. The sweep would have
-    /// started from a picture that was never on screen, and the row it is
-    /// replacing would have vanished in a jump one frame earlier.
-    ///
-    /// So the picture is taken at the top of the **first** `layoutContent` of a
-    /// turn, when the views still hold what the last frame showed, and released
-    /// on the next hop through the main queue — which drains after this call
-    /// stack unwinds and before the frame is committed, i.e. exactly at the
-    /// boundary that matters.
-    private var chipBefore: ChipWipe.Frame?
-
-    private func rememberChip() {
-        guard chipBefore == nil, anchored, panel.isVisible, !ChipWipe.isRunning else { return }
-        guard let frame = ChipWipe.capture(root) else { return }
-        chipBefore = frame
-        DispatchQueue.main.async { [weak self] in self?.chipBefore = nil }
-    }
-
-    /// Sweep the remembered picture away, now that the new rows are laid out.
-    ///
-    /// **Only the chip.** The panel is parked in a corner and read whole — a
-    /// transcript, a quotation, a strip of frames and two buttons — and a line
-    /// travelling across all of that is a page being turned, which is a much
-    /// bigger claim than the one row changing that this effect exists to
-    /// narrate. `anchored` is the test, the same one `refreshChrome` asks, and it
-    /// is asked *here* rather than at the capture: `showSentPrompt` clears a
-    /// flash a breath before it turns the chip into a panel, so a state that was
-    /// a chip when it was photographed may not be one by the time it is swept.
-    ///
-    /// Nothing to sweep is the ordinary answer for a chip that was not on screen
-    /// — an unbound relay raising a flash has nothing to wipe *from*, and a
-    /// stripe of light over blank desktop announces nothing.
-    ///
-    /// The picture is **consumed**, so two messages in one turn cannot both claim
-    /// it.
-    private func wipe() {
-        defer { chipBefore = nil }
-        guard let source = chipBefore, anchored, panel.isVisible else { return ChipWipe.cancel() }
-        ChipWipe.play(over: root, from: source)
-    }
-
-    /// **Draw the cancel sweep as a strip of frames and quit** —
-    /// `WT_SHOOT_WIPE=/tmp/wipe.png`. See `ChipWipe.shoot` for why.
-    ///
-    /// The state it photographs is the one Victor reported: a dictation running
-    /// at a bound terminal, replaced by `🗑️ Cancelled`. It drives the
-    /// two layouts by hand rather than through `flash(_:)`, because `flash`
-    /// hands the sweep to `rememberChip`/`wipe`, which plays it on screen over a
-    /// third of a second — the very thing that cannot be photographed.
-    func shootWipe(to path: String, label: String, icon: NSImage?) {
-        setBound(label: label, folder: label, icon: icon)
-        setListening(true)
-        pinListenWarmth(1)
-        layoutContent()
-        guard let before = ChipWipe.capture(root) else { return }
-        setListening(false)
-        // Straight into the flash's own state, without `flash(_:)`: this is the
-        // one caller that wants the two layouts and *not* the animation between
-        // them. `chipBefore` is cleared so the sweep `layoutContent` remembers
-        // cannot also be played on the next hop through the main queue.
-        flashMessage = "🗑️ Cancelled"
-        layoutContent()
-        chipBefore = nil
-        ChipWipe.shoot(over: root, from: before, to: path)
     }
 
     /// Internal for the same reason `beginPromptEdit` is: the ✕ is a state, and
@@ -4390,10 +4309,6 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// land on transparency. The chip has no blur at all, so it comes out exactly
     /// as Victor sees it — over whatever you composite it onto.
     func snapshot(to path: String) {
-        // A sweep in flight has the real rows muted (`ChipWipe.play`), so a
-        // photograph taken over one would come out empty. Debugging tools do not
-        // get to see a transition; they get the state.
-        ChipWipe.cancel()
         // **Always 2×, never the display's own scale.** `bitmapImageRepForCachingDisplay`
         // answers at the backing scale of whatever screen the window happens to be
         // on, so the catalogue came out 1× when the shooter ran with the external

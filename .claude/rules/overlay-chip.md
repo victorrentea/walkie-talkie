@@ -25,7 +25,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   real views drawing themselves through `RelayWindow.snapshot`; `build-overlay-states.py` only
   lays them out. The script stands the installed app down (`SingleInstance`) and puts it back.
   → journal: *The overlay's states are photographed, and the page is part of the change*
-- **`RELAY_SHOOT` photographs states, not transitions.** The `HQ` pop, the oblique wipe and every
+- **`RELAY_SHOOT` photographs states, not transitions.** The `HQ` pop and every
   other animation are skipped under it — a transition is by definition not a state, so none of
   them needs a `Shot`. → journal: *A tag pops out when it fills (2026-09-08; it said `HQ` from 2026-09-09)*
 - **`snapshot` always renders at 2×** (2026-09-09). `bitmapImageRepForCachingDisplay` answers at
@@ -59,7 +59,7 @@ yields to `--label`).
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
-| the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swept in and swept out again by the oblique line (*The oblique wipe*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
+| the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swapped in and out **in one frame**; the oblique wipe that used to carry it both ways was removed on 2026-09-18 (*The chip swaps in one frame*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | the drawn map pin + `at caret` — the same slot a spawn takes, and for the same reason |
 
 - **Dictating has no title of its own.** The top line stays `🤖 folder@branch` through the whole

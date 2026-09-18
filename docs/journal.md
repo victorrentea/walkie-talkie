@@ -18,6 +18,7 @@ The journal contradicts itself over time, because it was written as things chang
 
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
+- *The oblique wipe: a message replaces a message*, *What the cancel actually looked like…*, *`WT_SHOOT_WIPE` — because this is the least reviewable thing in the app* — **retired 2026-09-18**: `ChipWipe.swift`, its rule file and the `WT_SHOOT_WIPE` harness are deleted; a chip message is swapped in one frame (*The chip swaps in one frame*)
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -240,6 +241,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The estimate stops guessing the middle (2026-09-16)](#the-estimate-stops-guessing-the-middle-2026-09-16)
 - [The back button becomes the stop of the dictation it started (2026-09-17)](#the-back-button-becomes-the-stop-of-the-dictation-it-started-2026-09-17)
 - [One slow flick right is one gesture, and it cannot close what it just opened (2026-09-18)](#one-slow-flick-right-is-one-gesture-and-it-cannot-close-what-it-just-opened-2026-09-18)
+- [The chip swaps in one frame (2026-09-18)](#the-chip-swaps-in-one-frame-2026-09-18)
 
 ---
 
@@ -10520,3 +10522,39 @@ is touched at all: a key pressed twice inside a second is a hand meaning it, and
 throws a sentence away must never be the one that waits. The price is accepted and is small — a
 deliberate one-word dictation cannot be closed with the same flick for two seconds, and ⌘⌃D closes
 it at once.
+
+## The chip swaps in one frame (2026-09-18)
+
+Victor, on the cancel: *"when, for example, it says cancelled, there is a weird animation, like some
+sort of a cropping of the text just after. I think it's due to the attempt to do an animation of a
+lightning or something back in the days. Stop, remove that animation and make it not flicker any
+kind of. I wish I could be able to test it, but it's very fast."*
+
+The lightning is `ChipWipe` — the 60° line with a 13 pt band of light stencilled by the text's own
+pixels, which carried every chip message in and out from 2026-09-08. The cropping is its other
+half: a chip that shrinks between the two messages (`🔴 Listening…` over `petclinic@main` is 23 pt
+taller than `🗑️ Cancelled`) leaves the outgoing picture taller than the window it is drawn in, and
+the `fadeHeight` ramp added on 2026-09-09 softened that cut without removing it. Both of those had
+already been fixed once each, and the effect was still the thing he notices about cancelling a
+dictation.
+
+**So it is gone, not tuned again.** `ChipWipe.swift` (614 lines), `rememberChip`, `chipBefore`,
+`wipe()`, `shootWipe`, the `WT_SHOOT_WIPE` harness in `main.swift` and `.claude/rules/chip-wipe.md`
+are all deleted; `endFlash` lost its `wiped:` parameter and `snapshot` lost the `ChipWipe.cancel()`
+it had to make before photographing anything. `clearFlash(animated:)` keeps its parameter as a
+no-op rather than being renamed through its two call sites — it asked for a transition, and there
+is no longer a transition to ask for.
+
+**The argument the wipe was built on is not wrong; it was outranked.** A fade says *this is
+ending*, a wipe says *this became that* — true, and worth 0.32 s somewhere a page is being turned.
+The chip is not that place: it is an inch from what he is reading, it changes dozens of times a
+day, and every one of those changes was spending a third of a second drawing attention to itself.
+The one transition that never costs him a glance is the one that is over before the next frame.
+
+**What it cost to learn**, kept here because the mechanics are re-derivable and the conclusion is
+not: three iterations (instant → half-second dissolve → oblique wipe), two rounds of tuning inside
+the wipe itself (the band from 26 pt at 0.90 down to 13 at 0.55; the `fadeHeight` ramp for the
+clipped row), a purpose-built contact-sheet harness because the effect could not be photographed
+any other way, and a rule file of twenty-odd paid-for traps. The end state is the one the app
+started with. *"I wish I could be able to test it, but it's very fast"* is the whole verdict: an
+effect that has to be photographed frame by frame to be judged is one nobody asked for.
