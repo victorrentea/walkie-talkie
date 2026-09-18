@@ -606,8 +606,12 @@ sits at rest there.
   marker was lost keeps its line there.** That absence is the fallback, and it is all of it.
 - **Nothing is captured just because it was already selected when he started talking**
   (reverted 2026-09-16, the same day it shipped the other way — see `.claude/rules/dictation-source.md`,
-  *Shot markers*). The subject is now always the first highlight the watcher or the shutter catches
-  *during* the sentence, and it gets a marker like any other.
+  *Shot markers*) — **unless he selected it in the last five seconds** (2026-09-18,
+  `probeRecentSelection`). The gate is *when the selection gesture happened*, stamped by the
+  event tap on a drag release, a double-click or a ⇧-arrow / ⌘A, never *what is on screen*: a
+  stale highlight leaves no stamp and stays invisible. Otherwise the subject is the first
+  highlight the watcher or the shutter catches *during* the sentence, and either way it goes
+  through `fileSelection` and gets a marker like any other.
 - **The corpus gets the words with the markers taken out and nothing put in their place** — the
   relay's own recording heard neither the marker nor the paragraph he had highlighted.
 

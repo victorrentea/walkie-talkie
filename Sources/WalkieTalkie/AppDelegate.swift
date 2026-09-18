@@ -1975,20 +1975,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the picture and posted the ⌘C into the field he is about to dictate
         // into.
         //
-        // **No automatic selection probe at the gesture — reverted the same
-        // day it shipped** (2026-09-16). It briefly stashed whatever was
-        // already highlighted as "the subject", on every destination. Victor:
-        // *"să nu mai preia automat selecția la începutul dictării, pentru că
-        // deseori rămâne selectat textul care nu are treabă cu ce am spus. Să
-        // preia doar textul selectat în timpul dictării."* A highlight left
-        // over from whatever he was doing a minute ago is not what he is
-        // dictating about just because it happens to still be on screen. The
-        // selection watcher (`syncSelectionWatch`, started below from
-        // `syncBorrowedGestures`) is the only door left standing: it seeds
-        // itself with whatever is already highlighted the moment it arms, so
-        // that same stale selection is never filed either — only a highlight
-        // that *changes* during the sentence, or one he deliberately takes
-        // with the shutter, becomes part of the message.
+        // **No *unconditional* selection probe at the gesture** (2026-09-16),
+        // and since 2026-09-18 a conditional one. The 2026-09-16 probe stashed
+        // whatever was already highlighted as "the subject", on every dictation.
+        // Victor: *"să nu mai preia automat selecția la începutul dictării,
+        // pentru că deseori rămâne selectat textul care nu are treabă cu ce am
+        // spus. Să preia doar textul selectat în timpul dictării."* A highlight
+        // left over from whatever he was doing a minute ago is not what he is
+        // dictating about just because it happens to still be on screen.
+        //
+        // What came back is gated on **when he selected it**, not on what is on
+        // screen: `probeRecentSelection` reads the highlight only if `HotkeyTap`
+        // saw a selection gesture — a drag, a double-click, a ⇧-arrow, a ⌘A —
+        // inside the last five seconds. A stale selection leaves no such stamp
+        // and is as invisible as it has been since 2026-09-16.
+        //
+        // The selection watcher (`syncSelectionWatch`, started below from
+        // `syncBorrowedGestures`) is the other door: it seeds itself with
+        // whatever is already highlighted the moment it arms, so a stale
+        // selection is never filed there either — only a highlight that
+        // *changes* during the sentence, or one he deliberately takes with the
+        // shutter, becomes part of the message.
         if !pasteMode, isBound || spawnPending {
             if contextAtWheelRelease {
                 bookDictation()
@@ -1998,6 +2005,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             bookDictation()
         }
+
+        // **After the booking, before the watcher arms.** It needs
+        // `dictationStartedAt`, which both branches above have just set, and it
+        // has to reach `selectionQueue` ahead of `syncSelectionWatch`'s seed or
+        // the highlight it files would be read back as one already seen.
+        probeRecentSelection()
 
         listening = true
         syncBorrowedGestures()
@@ -5163,6 +5176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// spent making sure are the watcher's problem, not the transcript's.
     private var polledSettling: (text: String, since: Date, reads: Int)?
     private var polledSeen: Set<String> = []
+    /// Which dictation `polledSeen` belongs to — see `resetPolledForDictation`.
+    private var polledSeenFor: Date?
     private var selectionWatch: DispatchSourceTimer?
     private let selectionQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.selection")
 
@@ -5193,8 +5208,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // this runs from `dictationBegan` on main, and every other AX read in
         // this file is kept off it.
         selectionQueue.async { [weak self] in
-            self?.polledSettling = nil
-            self?.polledSeen = SelectionCapture.readQuiet().map { [$0] } ?? []
+            guard let self = self else { return }
+            self.stateLock.lock()
+            let opened = self.dictationStartedAt
+            self.stateLock.unlock()
+            // **Insert, never assign** (2026-09-18). The gesture probe runs on
+            // this same serial queue a moment earlier and may already have filed
+            // the highlight he made just before he started talking; assigning
+            // here would take it back out of `polledSeen` and the watcher would
+            // file the same text a second time. The reset that used to be this
+            // line is `resetPolledForDictation`, which is keyed to the sentence
+            // so whichever of the two runs first does it.
+            self.resetPolledForDictation(opened)
+            if let already = SelectionCapture.readQuiet() { self.polledSeen.insert(already) }
         }
         let timer = DispatchSource.makeTimerSource(queue: selectionQueue)
         timer.schedule(deadline: .now() + Self.selectionPollSeconds,
@@ -5291,16 +5317,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// shutter's probe there: the objection was always to the *automatic* probe
     /// fired with no subject behind it, and a drag he made with his own hand is
     /// as deliberate as a shutter press.
-    private func probeSelectionAfterDrag() {
+    private func probeSelectionAfterDrag(how: String = "dragged") {
         stateLock.lock()
         let opened = dictationStartedAt
         stateLock.unlock()
         guard let opened = opened else { return }
+        // Whichever of this and the watcher's seed reaches the queue first does
+        // the per-dictation reset; the other one adds to what it found.
+        resetPolledForDictation(opened)
         guard let text = SelectionCapture.read(), !text.isEmpty else { return }
         // `polledSeen` is the watcher's, and it is the right set: a highlight the
         // poll already filed must not arrive twice because he let the button go.
         guard !polledSeen.contains(text) else { return }
-        take(text, firstSeen: Date(), opened: opened, how: "dragged")
+        take(text, firstSeen: Date(), opened: opened, how: how)
+    }
+
+    /// How long a selection gesture goes on counting as *this* sentence's
+    /// subject. Victor asked for five seconds over ten: *"if it's an old
+    /// selection, more than let's say ten seconds ago or five seconds ago,
+    /// five, then not to pick selection when the dictation starts."*
+    private static let recentSelectionSeconds: TimeInterval = 5
+
+    /// **A highlight he made seconds ago is the subject; one left over from
+    /// something else is not** (2026-09-18).
+    ///
+    /// This is a **narrowed** return of the start-of-gesture probe deleted on
+    /// 2026-09-16, and the narrowing is the whole of it. That one took whatever
+    /// happened to be highlighted, on every dictation, which is why it lasted a
+    /// day: *"deseori rămâne selectat textul care nu are treabă cu ce am spus"*.
+    /// This one runs only when `HotkeyTap` saw him **select something** inside
+    /// the last `recentSelectionSeconds` — a drag, a double-click, a ⇧-arrow or
+    /// a ⌘A — so a highlight sitting on screen from a minute ago is still
+    /// invisible to the relay, exactly as he asked.
+    ///
+    /// **The loud read, not the quiet one.** `SelectionCapture.read()` falls to
+    /// a synthetic ⌘C where Accessibility answers nothing, which is IntelliJ's
+    /// editor, WhatsApp and any Chrome *page* — the 2026-09-14 complaint. The
+    /// stamp has already proved he made a selection gesture with his own hand,
+    /// which is the same deliberateness the shutter and the drag-release probe
+    /// pay that ⌘C under. It costs up to 400 ms of pasteboard wait, on
+    /// `selectionQueue` and off the main thread, and nothing waits on it: the
+    /// selection is not read again until the envelope is built, seconds later.
+    ///
+    /// **Every destination, including the caret.** The 2026-09-09 precedent is
+    /// the drag probe's: the objection was always to an *automatic* probe with
+    /// no subject behind it, never to one behind a gesture he made himself.
+    private func probeRecentSelection() {
+        let ago = hotkeys.secondsSinceSelectionGesture
+        guard ago <= Self.recentSelectionSeconds else {
+            // Silent when it has never happened; the interesting case is a
+            // highlight he can see on screen that the relay deliberately did
+            // not take, and *"why was my selection not picked up"* has to be
+            // answerable from the log.
+            if ago.isFinite {
+                Log.info("👁 the last selection gesture was "
+                         + String(format: "%.0fs", ago) + " ago — too old to be the subject")
+            }
+            return
+        }
+        Log.info("👁 he selected something " + String(format: "%.1fs", ago)
+                 + " ago — reading it as this sentence's subject")
+        selectionQueue.async { [weak self] in
+            self?.probeSelectionAfterDrag(how: "selected just before")
+        }
+    }
+
+    /// Clear the watcher's per-dictation memory **when the sentence changes and
+    /// never otherwise**, so it does not matter which of the gesture probe and
+    /// the watcher's seed gets to `selectionQueue` first. On `selectionQueue`.
+    ///
+    /// Until 2026-09-18 the reset *was* `syncSelectionWatch`'s seeding
+    /// assignment, and that stopped working the moment something else on this
+    /// queue filed a highlight before the watcher armed: the assignment would
+    /// drop what the probe had just taken back out of `polledSeen`, and the
+    /// watcher would file the same text again three ticks later — with a second
+    /// marker, a second line in the envelope and a second chip receipt.
+    private func resetPolledForDictation(_ opened: Date?) {
+        guard polledSeenFor != opened else { return }
+        polledSeenFor = opened
+        polledSettling = nil
+        polledSeen = []
     }
 
     private func take(_ text: String, firstSeen: Date, opened: Date, how: String) {

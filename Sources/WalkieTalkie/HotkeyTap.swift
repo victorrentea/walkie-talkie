@@ -1198,6 +1198,51 @@ final class HotkeyTap {
     /// click. Four points: a hand resting on a mouse moves one or two.
     private static let selectionDragSlop: CGFloat = 4
 
+    /// **When he last did something that selects text**, on the tap's own clock.
+    ///
+    /// The point of it is what it is *not*: a poll. Every gesture that selects
+    /// text is a mouse or keyboard event, and this tap already sees every one of
+    /// them — a drag's release is already measured a few lines down for
+    /// `onSelectionDragEnded`, and every `keyDown` already passes through
+    /// `handle`. So the recency of a highlight costs one `CACurrentMediaTime()`
+    /// in code that runs anyway: no timer, no thread, no Accessibility call, and
+    /// nothing at all while he is not dictating.
+    ///
+    /// **Why not `AXObserver` / `kAXSelectedTextChangedNotification`**, which is
+    /// the textbook push answer: it needs an observer created per pid and
+    /// re-registered on every app switch, it fires on plain **caret moves** in
+    /// most text views (a callback per keystroke, all day), and its blind spot
+    /// is *exactly* `readQuiet`'s — IntelliJ's editor, WhatsApp and Chrome page
+    /// content do not answer `AXSelectedText`, so they do not post the
+    /// notification either. It costs more than this and sees less.
+    ///
+    /// Written from the tap thread, read from main at the dictation gesture, so
+    /// unlike `leftDownAt` and `leftDownPoint` beside it this one takes the lock.
+    private var lastSelectionGestureAt: CFTimeInterval = 0
+
+    /// Three gestures stamp it, and the two silent ones are the *better*
+    /// witnesses: a drag can be a window being moved, but a double-click and a
+    /// ⇧-arrow are selections and nothing else.
+    func noteSelectionGesture() {
+        stateLock.lock(); lastSelectionGestureAt = CACurrentMediaTime(); stateLock.unlock()
+    }
+
+    /// How long ago that was — `.infinity` when it has never happened, so a
+    /// caller can compare against its window without a special case.
+    var secondsSinceSelectionGesture: TimeInterval {
+        stateLock.lock(); let at = lastSelectionGestureAt; stateLock.unlock()
+        guard at > 0 else { return .infinity }
+        return CACurrentMediaTime() - at
+    }
+
+    /// The keys that extend a selection, all of which need ⇧ to do it. ⌘A is
+    /// handled beside them and is the one that does not.
+    private static let selectionExtendKeys: Set<CGKeyCode> = [
+        123, 124, 125, 126,   // ← → ↓ ↑
+        115, 119, 116, 121,   // Home, End, Page Up, Page Down
+    ]
+    private static let VK_A: CGKeyCode = 0
+
     /// **The left button was released after a drag, during a dictation** — which
     /// is what selecting text with a mouse looks like from here (2026-09-14).
     ///
@@ -1221,14 +1266,21 @@ final class HotkeyTap {
     /// nothing blocks**: the callback is handed to a global queue, because this
     /// runs inside the event tap and a probe that reaches for the pasteboard on
     /// the tap's own thread would stall every click on the Mac.
-    private func noteLeftRelease(at point: CGPoint) {
+    private func noteLeftRelease(at point: CGPoint, clicks: Int64 = 1) {
         let wasDown = leftDownAt > 0
         let from = leftDownPoint
         leftDownAt = 0
         leftDownPoint = .zero
-        guard wasDown, dictating else { return }
+        guard wasDown else { return }
         let moved = hypot(point.x - from.x, point.y - from.y)
-        guard moved > Self.selectionDragSlop else { return }
+        let dragged = moved > Self.selectionDragSlop
+        // **Stamped above the `dictating` gate**, because the question this
+        // answers is asked when no dictation has started yet: *did he select
+        // something in the last few seconds*. A double- or triple-click selects
+        // a word or a line without moving, so it fails the slop test and is a
+        // better witness than the drag that passes it.
+        if dragged || clicks >= 2 { noteSelectionGesture() }
+        guard dictating, dragged else { return }
         DispatchQueue.global().async { [weak self] in self?.onSelectionDragEnded?() }
     }
 
@@ -1654,7 +1706,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 leftDownPoint = event.location
                 return Unmanaged.passUnretained(event)
             case .leftMouseUp:
-                noteLeftRelease(at: event.location)
+                noteLeftRelease(at: event.location,
+                                clicks: event.getIntegerValueField(.mouseEventClickState))
                 return Unmanaged.passUnretained(event)
             case .rightMouseDown, .rightMouseUp:
                 return Unmanaged.passUnretained(event)
@@ -1684,7 +1737,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return Unmanaged.passUnretained(event)
             }
             if type == .leftMouseUp {
-                noteLeftRelease(at: event.location)
+                noteLeftRelease(at: event.location,
+                                clicks: event.getIntegerValueField(.mouseEventClickState))
                 return Unmanaged.passUnretained(event)
             }
 
@@ -2378,6 +2432,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let ctrl = flags.contains(.maskControl)
         let opt = flags.contains(.maskAlternate)
         let cmd = flags.contains(.maskCommand)
+
+        // **The keyboard half of the selection stamp** (2026-09-18), first
+        // because it decides nothing: the event goes on to every branch below
+        // exactly as it did. ⇧ with an arrow, Home, End or a page key extends a
+        // selection and does nothing else; ⌘A selects all. Neither can be a
+        // window being dragged, which is the drag stamp's one false positive, so
+        // these two are the witnesses worth having. Nothing of this app's own
+        // chords is in here — ⌘⌃B, ⌘⌃D and ⌘⌃P are letters.
+        if (flags.contains(.maskShift) && Self.selectionExtendKeys.contains(keyCode))
+            || (cmd && !ctrl && !opt && keyCode == Self.VK_A) {
+            noteSelectionGesture()
+        }
 
         // ⏎ sends the prompt that is on screen. Bare only: ⌘⏎ and ⇧⏎ are other
         // people's shortcuts, and this window is short enough that a modified

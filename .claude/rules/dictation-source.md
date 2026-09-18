@@ -627,7 +627,11 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   it straight into `pendingSelection`, bypassing `fileSelection` and the marker entirely — is gone
   since 2026-09-16 (see `screenshots-and-selection.md`, *The selection: frozen*). Every highlight
   that fills the empty frozen slot now arrives the same way the mid-sentence case always did
-  (`fillsTheBlank`, through `fileSelection`) and gets a marker like any other novel selection.
+  (`fillsTheBlank`, through `fileSelection`) and gets a marker like any other novel selection —
+  **including the one he made in the five seconds before he started talking** (2026-09-18,
+  `probeRecentSelection`), which is a highlight held at the gesture and is nonetheless filed
+  through `fileSelection` at offset `00:00`. That is the point of the rule above: the return of
+  a start-of-gesture probe cost nothing here, because nothing bypasses `fileSelection` any more.
 - **The corpus gets neither the marker nor the paragraph** (`resolve(inlineSelections: false)`).
   Wispr's recording heard the marker and the relay's did not; *neither* heard the text he had
   highlighted. So the pair filed beside the audio is the sentence with the selection markers taken
