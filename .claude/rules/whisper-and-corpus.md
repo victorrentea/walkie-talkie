@@ -215,8 +215,21 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   fallback.** The menu greys those rows, but a receiver can be unplugged *after* it was picked, and
   a dictation that records nothing because a setting outlived a cable is the exact failure this
   file exists to prevent. → journal: same
-- **`auto` is the default and keeps the old rule** — the DJI whenever it is there, the system input
-  otherwise. Everything below about the receiver is what *automatic* still means. → journal: same
+- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in** (Victor,
+  2026-09-19: *"the preference of mic to use is: XLR>DJI>BOSE>MAC … order them like this in menu and
+  impl autoselection"*). **This supersedes *the DJI receiver is the microphone whenever it is
+  plugged in*** — what that rule could not express is a desk with both the XLR and the receiver on
+  it, which is his ordinary desk. The ranking is quality, not convenience: a condenser through a
+  preamp, then a lavalier on his collar, then a headset, then a microphone two feet away across a
+  desk with a projector fan in the room. → journal: same
+- **`InputDevice.known` is that order, once.** It is the menu's rows top to bottom *and* the ladder
+  `resolve()` walks — a menu whose order disagreed with the automatic pick would teach the wrong
+  thing every time he opened it. The `Automatic` row spells it out (`Automatic — 🎙️ ▸ 🎤 ▸ 🎧 ▸ 💻`)
+  rather than asking him to remember it. → journal: same
+- **The system default is the last line of defence, not a rung.** It is consulted only when none of
+  the four is present, because macOS points it at whatever last claimed it — including the eleven
+  virtual devices on this Mac. Everything below about the receiver is what *automatic* meant until
+  2026-09-19 and why following the system default is not an option. → journal: same
 - **Matched on name AND manufacturer, both lowercased into one haystack.** The Elgato is the mirror
   of the DJI's case: `Wave XLR` is the product and `Elgato Systems` the maker, while `Wave Link
   MicrophoneFX` / `Wave Link Stream` are the virtual devices its driver installs, made by `Corsair
@@ -225,7 +238,7 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   matching table: the thing that resolves a pick into a device is the only thing that can say
   whether the pick is still possible. → journal: same
 
-## The DJI receiver, which is what *automatic* means (`InputDevice.swift`)
+## The DJI receiver, second rung of *automatic* (`InputDevice.swift`)
 
 - **Match on name AND manufacturer.** The receiver's USB product name is `Wireless Mic Rx`; the
   brand is only in the manufacturer string `DJI Technology Co., Ltd.`. Matching both is what keeps

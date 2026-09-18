@@ -146,7 +146,8 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 Victor: *"Listening(E)... turns to Listening(🎙️⇒E)... (XLR) or Listening(💻⇒E)... (Mac's
 microphone) or Listening(🎤⇒E)... (for the RX portable bt mic) or Listening(🎧⇒E)... (for BOSE mic),
-and source should be selectable via menu too. those unavailable disabled"*.
+and source should be selectable via menu too. those unavailable disabled"* — and, the same evening,
+*"instead of `⇒`, use `/`"*, so the mark ships as `Listening(🎙️/E)...`.
 
 - **Directly under `Engine`, because it is the same question one level down.** That row answers
   *what is listening to me*, this one *through what*; together they are the two halves of the mark
@@ -156,9 +157,11 @@ and source should be selectable via menu too. those unavailable disabled"*.
   inputs, eleven of them virtual (Loopback ×3, Wave Link ×2, Zoom, Teams, Webex, Iriun…). A menu
   offering all of them would be a device chooser, which System Settings already is; what it would
   not be is readable at a glance while he is teaching. → journal: same
-- **`Automatic` is first, ticked by default, and never disabled** — the DJI whenever it is plugged
-  in, the system input when it is not, which is the rule `InputDevice` has kept since the receiver
-  arrived. A picker without it would have retired that rule silently. → journal: same
+- **`Automatic` is first, ticked by default, and never disabled** — and it says what it does:
+  `Automatic — 🎙️ ▸ 🎤 ▸ 🎧 ▸ 💻`, the first of the four that is plugged in. **The rows below are
+  in that same order**, because `InputDevice.known` is the one list that is both the menu and the
+  ladder; a menu ordered differently from the automatic pick would teach the wrong preference every
+  time he opened it. → journal: same
 - **An absent device is disabled *and says why*** — `🎤 DJI Wireless Mic Rx — not connected`. A
   grey row with no explanation is indistinguishable from a broken one, and the explanation is the
   only thing he can act on: it is a cable. → journal: same

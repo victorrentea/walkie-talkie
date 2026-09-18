@@ -33,7 +33,7 @@ enum InputDevice {
 
     /// **The four microphones Victor names by their picture** (2026-09-19).
     ///
-    /// He asked for the chip to say which one is open — `Listening(🎙️⇒E)...` —
+    /// He asked for the chip to say which one is open — `Listening(🎙️/E)...` —
     /// and for the menu to let him pick between them, with the ones that are not
     /// plugged in greyed out. That is two features and one list: a picture, a
     /// name and the strings CoreAudio answers with, in one place, because a
@@ -50,8 +50,19 @@ enum InputDevice {
     /// installs and are made by `Corsair Memory, Inc.`, so neither needle
     /// reaches them.
     ///
-    /// **Order is the order of the list he reads**, and it is the order he named
-    /// them in.
+    /// **The order is the preference, and it is the same order in both places
+    /// the list is used** (Victor, 2026-09-19: *"the preference of mic to use is:
+    /// XLR>DJI>BOSE>MAC … order them like this in menu and impl
+    /// autoselection"*). One array is the menu's rows top to bottom **and** the
+    /// ladder `resolve()` walks for *automatic*: a menu whose order disagreed
+    /// with the automatic pick would be teaching the wrong thing every time he
+    /// opened it.
+    ///
+    /// It is a quality ranking, not a convenience one — the XLR on his desk is a
+    /// condenser through a preamp, the DJI is a lavalier on his collar, the Bose
+    /// is a headset, and the built-in is two feet away across a desk with a
+    /// projector fan in the room. So the built-in is last: it is what is left
+    /// when nothing he brought is plugged in.
     /// **Two names each, and that is `Engine`'s rule applied here**: the
     /// top-level menu row is read out of the corner of the eye while the menu is
     /// open over his work, so it gets `short`; the list under the arrow is where
@@ -69,13 +80,17 @@ enum InputDevice {
     static let known: [Known] = [
         Known(id: "xlr",  glyph: "🎙️", short: "XLR", label: "Elgato Wave XLR",
               needles: ["wave xlr", "elgato"]),
-        Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
-              needles: ["macbook pro microphone", "built-in microph"]),
         Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
               needles: ["dji", "wireless mic rx"]),
         Known(id: "bose", glyph: "🎧", short: "Bose", label: "Bose",
               needles: ["bose"]),
+        Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
+              needles: ["macbook pro microphone", "built-in microph"]),
     ]
+
+    /// The ladder, spelled with the glyphs, for the `Automatic` row — the menu
+    /// says what automatic *does* rather than asking him to remember it.
+    static var ladder: String { known.map(\.glyph).joined(separator: " ▸ ") }
 
     // MARK: - Which one he picked
 
@@ -119,12 +134,19 @@ enum InputDevice {
            let device = devices.first(where: { matches($0, want) }) {
             return (want, device)
         }
-        // Automatic, and the fallback for a pick that is not here: the receiver
-        // whenever it is plugged in, otherwise whatever the system is on.
-        if let rx = known.first(where: { $0.id == "rx" }),
-           let device = devices.first(where: { matches($0, rx) }) {
-            return (rx, device)
+        // **Automatic, and the fallback for a pick that is not plugged in: the
+        // first of the four that is here, in `known`'s order.** It was *the DJI
+        // whenever it is there, otherwise the system default* until 2026-09-19;
+        // what that rule could not express is a desk with both the XLR and the
+        // receiver on it, which is his ordinary desk.
+        for k in known {
+            if let device = devices.first(where: { matches($0, k) }) { return (k, device) }
         }
+        // **None of his four — only then the system's own choice**, which is the
+        // last line of defence and deliberately not a rung on the ladder: macOS
+        // points the default input at whatever last claimed it, including the
+        // eleven virtual devices on this Mac, and that is the failure this file
+        // was written to stop being the normal case.
         guard let device = systemDefault() else { return (nil, nil) }
         return (known.first { matches(device, $0) }, device)
     }

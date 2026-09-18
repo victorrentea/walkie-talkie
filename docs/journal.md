@@ -19,6 +19,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *The oblique wipe: a message replaces a message*, *What the cancel actually looked like…*, *`WT_SHOOT_WIPE` — because this is the least reviewable thing in the app* — **retired 2026-09-18**: `ChipWipe.swift`, its rule file and the `WT_SHOOT_WIPE` harness are deleted; a chip message is swapped in one frame (*The chip swaps in one frame*)
+- *The DJI receiver is the microphone whenever it is plugged in* (2026-09-01) — superseded 2026-09-19: *automatic* is a ladder, 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in, and the receiver is its second rung (*The chip says which microphone, and the menu picks it*)
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -10570,9 +10571,12 @@ One list serves both halves — `InputDevice.known`, four entries of picture, na
 CoreAudio answers with. The alternative was a glyph table beside the chip and a device table beside
 the menu, which is two places to disagree about what he is talking into.
 
-**The arrow is the sentence.** `(🎙️⇒E)` reads *this device feeds that engine*, which is the one
-pair of facts he cannot recover by looking at anything else mid-sentence; the menu answers both,
-two clicks away and behind whatever is in front of him.
+**The separator is the sentence, and it ended up a slash.** `(🎙️/E)` reads *this device feeds that
+engine*, which is the one pair of facts he cannot recover by looking at anything else mid-sentence;
+the menu answers both, two clicks away and behind whatever is in front of him. He asked for `⇒` and
+changed it to `/` within the hour, which is the right call: `Listening` is also a progress bar that
+lights a character at a time (`RelayWindow.applyEngineText`), and a wide arrow in the middle of it
+made a four-character mark read as a diagram. The slash says the same thing in one narrow glyph.
 
 **The glyph is what `resolve()` would open, not what the menu is ticking.** They come apart the
 moment a cable does: a pick whose device is gone falls back to *automatic* rather than to silence,
@@ -10588,10 +10592,26 @@ Wave Link's two, Zoom's, Teams', Webex's, Iriun's. A menu offering all of them w
 chooser, which System Settings already is and does better; what it would not be is readable at a
 glance while he is teaching.
 
-**`Automatic` had to stay, and to be the default.** *Automatic* is the rule that has made the
-receiver work since it arrived — it wins whenever it is plugged in — and in a workshop the only
-thing he does is plug it in. A picker with four rows and no automatic would have retired that rule
-without anybody deciding to.
+**`Automatic` had to stay, and to be the default** — in a workshop the only thing he does is plug
+something in, and a picker with four rows and no automatic would have retired that rule without
+anybody deciding to. What it *means* changed the same evening: *"the preference of mic to use is:
+XLR>DJI>BOSE>MAC … order them like this in menu and impl autoselection"*. So automatic is now a
+**ladder** — 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in, the first one that is here — and it
+supersedes *The DJI receiver is the microphone whenever it is plugged in* (2026-09-01). That rule
+was written on a desk with one microphone on it; it cannot say anything about a desk with the XLR
+*and* the receiver, which is his ordinary desk. The ranking is quality and not convenience: a
+condenser through a preamp, a lavalier on his collar, a headset, and then a microphone two feet
+away across a desk with a projector fan in the room.
+
+**One array is the order in both places.** `InputDevice.known` is the menu's rows top to bottom and
+the ladder `resolve()` walks, and the `Automatic` row spells the ladder out with the same four
+glyphs. A menu ordered differently from the automatic pick would teach the wrong preference every
+time he opened it — and the `Automatic` row would be the one place in the app where *what it does*
+was a thing to remember rather than to read.
+
+**The system default is the last line of defence and deliberately not a rung.** It is consulted
+only when none of the four is on the desk: macOS points it at whatever last claimed it, including
+the eleven virtual devices here, which is the failure `InputDevice` exists to stop being normal.
 
 **Matching is on name *and* manufacturer**, which the DJI taught (product `Wireless Mic Rx`, brand
 only in the manufacturer string) and the Elgato confirms from the other side: `Wave XLR` is the
@@ -10610,10 +10630,12 @@ the voice corpus — while the words come from Wispr's own microphone, chosen in
 to a Loopback device on this Mac. The four pictures are true for the four engines that record for
 themselves.
 
-**The states page pins the mark**, `(🎤⇒W)`, for the reason it already pinned `(W)`: `resolve()`
+**The states page pins the mark**, `(🎤/W)`, for the reason it already pinned `(W)`: `resolve()`
 answers with whatever is plugged into this Mac when the shooter runs, and an unpinned page would
 change its `Listening…` pictures every time a cable moved.
 
-Verified against the real device list on his desk — `xlr` → `🎙️ Elgato Wave XLR`, `rx` and `bose`
-(neither plugged in) → the built-in with 💻, `auto` → the built-in — through `POST /test/mic`,
-which is the same call the menu row makes, and on the chip itself by snapshot.
+Verified against the real device list on his desk, through `POST /test/mic` (the same call the menu
+row makes) and by reading the rows back out of AppKit (`GET /engine.mic.rows`, which exists because
+a menu is the one surface here that cannot be photographed from a shell): `xlr` → `🎙️ Elgato Wave
+XLR`; `rx` and `bose`, neither plugged in, fall back and come back `disabled` in the menu; `auto`
+→ the XLR, because it is the first rung that is present. The chip itself by snapshot.

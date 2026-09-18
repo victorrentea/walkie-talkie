@@ -239,9 +239,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// **The whole mark: which microphone, then which recogniser** — Victor,
-    /// 2026-09-19: `Listening(🎙️⇒E)...`, `(💻⇒E)`, `(🎤⇒E)`, `(🎧⇒E)`.
+    /// 2026-09-19: `Listening(🎙️/E)...`, `(💻/E)`, `(🎤/E)`, `(🎧/E)`.
     ///
-    /// The arrow is the sentence: *this device feeds that engine*. It is the one
+    /// **The separator is a slash.** He asked for it as `⇒` and changed it to
+    /// `/` the same evening, which is the right call and worth writing down
+    /// rather than silently obeying: the arrow is a wide glyph in the middle of
+    /// a word that is also a progress bar (`RelayWindow.applyEngineText` lights
+    /// it a character at a time), and it made a four-character mark read as a
+    /// diagram. The slash says the same *this over that* in one narrow glyph,
+    /// which is what a mark read mid-sentence beside the cursor can afford. It is the one
     /// pair of facts he cannot recover by looking at anything else while he is
     /// talking — the menu answers both, two clicks away and behind whatever is
     /// in front.
@@ -262,7 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func mark(engine id: String) -> String {
         let glyph = InputDevice.currentGlyph()
         guard !glyph.isEmpty else { return engineMark(id) }
-        return "(\(glyph)⇒\(engineMark(id).dropFirst().dropLast()))"
+        return "(\(glyph)/\(engineMark(id).dropFirst().dropLast()))"
     }
 
     /// **Victor picked a microphone from the menu** (2026-09-19).
@@ -1799,7 +1805,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       "scratchpadChord": HotkeyTap.scratchpadChord()
                                           .map(String.init).joined(separator: "+")]
             // **Which microphone, for the same reason `engine` is here**: the
-            // chip's `Listening(🎙️⇒E)...` and the menu's tick are both read off
+            // chip's `Listening(🎙️/E)...` and the menu's tick are both read off
             // `InputDevice.resolve()`, and a harness that could not ask the
             // question would have to photograph a menu to answer it.
             out["mic"] = ["chosen": InputDevice.chosenId,

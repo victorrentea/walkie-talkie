@@ -397,7 +397,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// **Directly under `Engine`, and that is the whole of the placement
     /// argument.** The row above answers *what is listening to me*; this one
     /// answers *through what*. They are the same question one level apart, they
-    /// are the two halves of the mark the chip now wears (`Listening(🎙️⇒E)...`),
+    /// are the two halves of the mark the chip now wears (`Listening(🎙️/E)...`),
     /// and a man who has just read one of them off the chip and come to the menu
     /// to change it should not have to hunt for the second.
     ///
@@ -443,11 +443,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         micSubmenu.removeAllItems()
         let available = micAvailable?() ?? []
 
-        // **Automatic first**, because it is the default and because it is the
-        // rule the app has kept since the receiver arrived: the DJI whenever it
-        // is plugged in, the system's input when it is not. Never disabled —
-        // it is the one row that is true whatever is on the desk.
-        let auto = NSMenuItem(title: "Automatic — 🎤 when plugged in",
+        // **Automatic first, and it spells the ladder out**: `Automatic — 🎙️ ▸
+        // 🎤 ▸ 🎧 ▸ 💻` is the same order as the four rows under it, which is
+        // the point — the list he reads *is* the preference (`InputDevice.known`).
+        // Never disabled: it is the one row that is true whatever is on the desk.
+        let auto = NSMenuItem(title: "Automatic — \(InputDevice.ladder)",
                               action: #selector(micPicked(_:)), keyEquivalent: "")
         auto.target = self
         auto.representedObject = "auto"
