@@ -55,9 +55,13 @@ final class VoiceCorpus {
     ///
     /// The bytes are read on the caller's thread on purpose: the staged WAV is
     /// deleted as soon as this returns, and a copy queued for later would race it.
-    /// - Parameter engine: which recogniser read this sample — `whisper-local`
-    ///   or `wispr-flow` since 2026-09-12, when Wispr Flow became the source for
-    ///   every dictation and with it the only labeller the corpus still has.
+    /// - Parameter engine: which recogniser read this sample — `whisper-local`,
+    ///   `wispr-flow` since 2026-09-12, when Wispr Flow became the source for
+    ///   every dictation and with it the only labeller the corpus still has, and
+    ///   `elevenlabs` since 2026-09-18. **An `elevenlabs` label has been through
+    ///   a formatting pass too** — Scribe punctuates and capitalises — so it sits
+    ///   with `wispr-flow` and not with the raw side when a later evaluation
+    ///   picks its reference.
     ///   **A `wispr-flow` label has been through Wispr's formatting pass** —
     ///   punctuation, capitalisation, its custom dictionary — where a
     ///   `whisper-local` one is raw recogniser output. That is a difference a
@@ -87,7 +91,22 @@ final class VoiceCorpus {
         // listing answers the same question the manifest does. `local` for the
         // local model, unchanged, so every sample filed before 2026-09-12 keeps
         // the name it has.
-        let tag = engine == "whisper-local" ? "local" : "wispr"
+        //
+        // **A table, since there are three** (2026-09-18). It was
+        // `engine == "whisper-local" ? "local" : "wispr"`, which is a default
+        // that silently absorbs anything new: an ElevenLabs sample would have
+        // been filed under a name saying Wispr read it, and the corpus is the one
+        // thing in `~/.walkie-talkie` that cannot be regenerated — a wrong label
+        // in it is not a bug that gets fixed later, it is a sample that is worth
+        // nothing to every evaluation from now on. An unknown engine now keeps
+        // its own id rather than borrowing somebody else's.
+        let tag: String
+        switch engine {
+        case "whisper-local": tag = "local"
+        case "wispr-flow": tag = "wispr"
+        case "elevenlabs": tag = "11l"
+        default: tag = engine
+        }
         let stem = "\(Self.timeFormatter.string(from: when))-\(tag)\(Int(when.timeIntervalSince1970 * 1000) % 1000)"
         let wav = dir.appendingPathComponent(stem + ".wav")
         let txt = dir.appendingPathComponent(stem + ".txt")

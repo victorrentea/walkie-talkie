@@ -96,6 +96,27 @@ final class ElevenLabsSource: DictationSource {
     /// `AppDelegate.settleTimeout` gives up without ever saying why.
     private static let requestTimeout: TimeInterval = 45
 
+    /// **What this engine costs per hour of audio, per model.**
+    ///
+    /// It is in the menu because the price is half the trade the row exists to
+    /// state, and it is a **function of the model** because the two do not cost
+    /// the same and the cheaper one is the newer one: `scribe_v2` is $0.22/h
+    /// against `scribe_v1`'s $0.40. A hardcoded `$0.40/h` was in this row for
+    /// one build and it would have started lying the moment
+    /// `WT_ELEVEN_MODEL=scribe_v2` was set — which is exactly the switch the
+    /// rest of this file invites him to flip.
+    ///
+    /// Published rates, not measured ones, and the only numbers in this repo
+    /// that can change without anything here changing. **If the row and the
+    /// invoice disagree, the invoice is right.**
+    static var rate: String {
+        switch model {
+        case "scribe_v1": return "$0.40/h"
+        case "scribe_v2": return "$0.22/h"
+        default: return "billed per hour"
+        }
+    }
+
     /// **What the menu row and the envelope call it.** The model id rather than
     /// the brand, for `LocalWhisperSource.modelLabel`'s reason: the row's job is
     /// to say what is about to be believed, and two Scribe versions that
@@ -116,9 +137,9 @@ final class ElevenLabsSource: DictationSource {
     /// quietly bill his account.
     static var configURL: URL { Outbox.home.appendingPathComponent("elevenlabs.env") }
 
-    /// Parsed on every `prepare()` — the file is three lines and this is not a
-    /// hot path, and re-reading is what lets him paste the key in without
-    /// restarting the app.
+    /// Parsed on every `reloadKey()` — the file is three lines and neither the
+    /// menu opening nor an engine pick is a hot path, and re-reading is what
+    /// lets him paste the key in without restarting the app.
     private static var config: [String: String] = [:]
 
     private static func loadConfig() {
@@ -144,16 +165,31 @@ final class ElevenLabsSource: DictationSource {
     /// one the menu's ⏳ and the first gesture of the day both rest on. A
     /// recogniser that will refuse should refuse before he has said anything.
     func prepare() {
+        if reloadKey() {
+            Log.info("ElevenLabs ready — \(Self.model)"
+                     + (Self.language.map { ", language pinned to \($0)" } ?? ", language auto"))
+        } else {
+            Log.error("ElevenLabs: no API key — put ELEVENLABS_API_KEY=… in \(Self.configURL.path)")
+        }
+    }
+
+    /// **Re-read the file and answer whether there is a key** — silently,
+    /// because this also runs every time the menu bar is opened (`isReady`
+    /// through `StatusItem.elevenReady`) and a log line per menu open is a log
+    /// nobody can read on the day it matters. `prepare()` is the one that says
+    /// it out loud, and it is called when the engine is chosen.
+    ///
+    /// Re-reading rather than caching from launch is the whole point: the key is
+    /// a file Victor creates while the app is running, and a menu that went on
+    /// saying *no API key* after he had put one there would send him looking for
+    /// a bug in the wrong place.
+    @discardableResult
+    func reloadKey() -> Bool {
         Self.loadConfig()
         let key = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"]
             ?? Self.config["ELEVENLABS_API_KEY"]
         apiKey = (key?.isEmpty ?? true) ? nil : key
-        if apiKey == nil {
-            Log.error("ElevenLabs: no API key — put ELEVENLABS_API_KEY=… in \(Self.configURL.path)")
-        } else {
-            Log.info("ElevenLabs ready — \(Self.model)"
-                     + (Self.language.map { ", language pinned to \($0)" } ?? ", language auto"))
-        }
+        return apiKey != nil
     }
 
     /// **Yes, by the mechanism that cannot collide** — the file this records is

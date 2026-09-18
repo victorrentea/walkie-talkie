@@ -954,6 +954,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // footprint: asked when the menu opens, because that is the one moment
         // its answer has to be right.
         status.whisperModel = { [weak self] in self?.whisperSource.displayModelName }
+        // **And the cloud engine's equivalent of *are the weights up*, which is
+        // *is there a key*.** It re-reads the file rather than answering from
+        // launch, so pasting the key in and opening the menu is the whole of
+        // setting it up — see `ElevenLabsSource.reloadKey`.
+        status.elevenReady = { [weak self] in self?.elevenSource.reloadKey() ?? false }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.

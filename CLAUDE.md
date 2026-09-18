@@ -1,7 +1,8 @@
 # Walkie Talkie — rules
 
 A macOS overlay that relays Victor's dictation — **Wispr Flow's microphone since 2026-09-12**,
-a local Whisper behind it — into a bound terminal, a Claude Code session it spawns, or the caret.
+a local Whisper and, since 2026-09-18, ElevenLabs Scribe behind it — into a bound terminal, a
+Claude Code session it spawns, or the caret.
 `README.md` says what it is and how it works.
 
 This file holds only what every session needs. Everything else moved on 2026-09-11:
@@ -23,7 +24,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `DecodeRate`, `InputDevice`, `VoiceCorpus`, `helpers/`, `evals/` |
-  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ShotMarker`, `tools/wispr-test.sh` |
+  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`, `ShotMarker`, `tools/wispr-test.sh`, `tools/eleven-test.sh` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, the halo asset |
   | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ProjectList`, `helpers/recent_projects.py` |
   | `menu-bar.md` | `StatusItem`, `MenuBarMirror`, `MessageLog`, `AboutPage` |
@@ -246,19 +247,64 @@ sits at rest there.
 
 ## The dictation source (2026-09-12)
 
-- **One interface, two recognisers.** `DictationSource` — `start` / `stop` / `cancel`,
-  `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` / `didEnd`, plus a `meter`
-  the halo breathes on. `WisprFlowSource` and `LocalWhisperSource` implement it and
-  **nothing downstream may name either of them**: the chip, the halo, the settle, the corpus and
-  the destination routing read the protocol only. The Wispr path spent a month with no transcript
-  in it precisely because it was a second branch nobody exercised.
+- **One interface, three recognisers** (a third since 2026-09-18). `DictationSource` — `start` /
+  `stop` / `cancel`, `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` / `didEnd`,
+  plus a `meter` the halo breathes on. `WisprFlowSource`, `LocalWhisperSource` and
+  `ElevenLabsSource` implement it and **nothing downstream may name any of them**: the chip, the
+  halo, the settle, the corpus and the destination routing read the protocol only. The Wispr path
+  spent a month with no transcript in it precisely because it was a second branch nobody exercised.
+  The third one cost **one new file and about forty lines** everywhere else, which is the interest
+  that rule has been paying.
 - **The session row says the terminal's title** (2026-09-12): `✳ walkie-talkie — Fix the tax
   rounding` over `walkie-talkie@main` whenever the target has one (`Target.title`, refreshed on the
   10 s poll); the folder row stands where there is no terminal to ask.
 - **Wispr Flow is the default and every gesture goes through it** — ⌘⌃D, the wheel, the side
   buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
   picks the local model, which is **retired, not deleted**: no gesture starts it and the weights
-  are no longer loaded at launch.
+  are no longer loaded at launch. `WT_SOURCE=eleven` picks the cloud one.
+
+## ElevenLabs Scribe, the third engine (2026-09-18)
+
+- **The relay's own microphone, transcribed over HTTPS.** `ElevenLabsSource` is
+  `LocalWhisperSource`'s shape with the daemon swapped for a `POST` to `api.elevenlabs.io`: this
+  app opens the microphone, writes one 16 kHz mono WAV and hands that file over. Markers are
+  **spliced** (`acceptsAudioMarkers = true`), the audio the corpus files is the audio that was
+  transcribed, and there is no wrap — no window to park, no ⌘V to swallow, no focus to give back.
+- **Why a third at all:** Wispr is the best transcript here and cannot be called, which is what the
+  whole Scratchpad mechanism is the price of; the local model can be called and is a bigger step
+  down on Romanian than on English. Scribe is the middle term, and the one hosted recogniser with a
+  **published Romanian number** — 3.0% WER on FLEURS. What it costs is the network and **$0.40/h**
+  (`scribe_v1`; `scribe_v2` is $0.22/h — the newer model is also the cheaper one), which is why it
+  is a pick and never a default. The price lives in `ElevenLabsSource.rate`, keyed by model, because
+  a hardcoded one in the menu starts lying the moment `WT_ELEVEN_MODEL` is set.
+- **It is never the default and never picked by a typo.** `AppDelegate.engine(named:)` is one table
+  read by both the launch pick and the menu pick, and **anything unrecognised is Wispr** — the one
+  engine that uploads his voice must not be reachable by a misspelled preference.
+- **The key is `~/.walkie-talkie/elevenlabs.env`** (`ELEVENLABS_API_KEY=…`), environment first, and
+  it **follows `--home`** so a test relay cannot bill the real account. A file rather than a shell
+  variable because launchd starts this app and it inherits no shell; a file rather than the Keychain
+  because a Keychain item prompts, and the moment this key is read is the moment a sentence is
+  waiting on it. It is **re-read every time the menu opens**, so pasting the key in is the whole of
+  the setup — no restart.
+- **The language is not pinned, on purpose.** He dictates Romanian with English technical words
+  inside it, and `language_code: "ro"` tells the recogniser those words are Romanian too.
+  `WT_ELEVEN_LANG=ro` forces it back for a comparison run.
+- **A failed upload is `DictationEnd.failed`, which is neither of the other two.** `.silent` throws
+  the audio away — right for *nothing was heard*, wrong for *the network was down*, where the WAV
+  is the only copy of a sentence he has already said. `.cancelled` keeps the audio and says nothing,
+  because he asked for it. `.failed` does both: a 12 s banner, and the WAV staged where *Recover
+  Cancelled Dictation* re-reads it — through whichever engine is live by then, which after a
+  network failure is very likely the local one.
+- **The corpus tag is a table now, not a default.** `VoiceCorpus` filed anything that was not
+  `whisper-local` as `wispr`; an ElevenLabs sample would have carried a stem saying Wispr read it,
+  forever, in the one directory that cannot be regenerated. `local` · `wispr` · `11l`, and an
+  unknown engine keeps its own id rather than borrowing somebody else's.
+- **`tools/eleven-test.sh`** answers *is the key right and what does Scribe do with his Romanian*
+  with no app running: one WAV, or `--corpus [n]` to print Scribe's reading **beside the transcript
+  already on disk** for the n newest samples. That is the A/B, on his own voice.
+- **Not measured yet:** `languageFloor = 0.5` (the low-confidence note) is a starting point, not a
+  number off the corpus, and `scribe_v1` is the default only because it is the version the 3.0%
+  was published against — `WT_ELEVEN_MODEL=scribe_v2` is how the two get compared.
 - **The wrap** (`wrapWispr`, always **on** unless a switch below says otherwise — the *Wrap Wispr
   Flow* menu tick went on 2026-09-14 as redundant beside `Engine`) picks between three
   *relationships with another app*, and `/engine` and `/test/state` say which is in force and why
@@ -274,6 +320,10 @@ sits at rest there.
   | variable | what it does |
   |---|---|
   | `WT_SOURCE=whisper` | the local model instead of Wispr Flow (also the `dictationSource` default) |
+  | `WT_SOURCE=eleven` | ElevenLabs Scribe — the relay's own microphone, transcribed in the cloud |
+  | `ELEVENLABS_API_KEY` | the key, environment first, else `~/.walkie-talkie/elevenlabs.env` |
+  | `WT_ELEVEN_MODEL=scribe_v2` | the newer Scribe; default `scribe_v1`, the one the Romanian WER was published against |
+  | `WT_ELEVEN_LANG=ro` | pin the language — **off by default**, because his Romanian carries English technical words |
   | `WT_WRAP_WISPR=0` | the wrap off for one run (there is no menu row for it) |
   | `WT_WRAP_MODE=scratchpad｜sink｜off` | force the mode for one run (`POST /test/wrap-mode` at runtime, `auto` to hand it back) |
   | `WT_SCRATCHPAD_DELIVER=note` | wait for the Scratchpad note instead of delivering from the row — 2.8 s slower, kept for the day the two disagree |

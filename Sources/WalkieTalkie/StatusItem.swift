@@ -45,6 +45,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// engine's row, so the id lands beside the RAM it is costing.
     var whisperModel: (() -> String?)?
 
+    /// **Whether the cloud engine could transcribe a sentence this instant** —
+    /// which, for a recogniser with nothing to load, is only ever *is there an
+    /// API key*. Asked when the menu opens, like the two above and for their
+    /// reason: the key is a file Victor can create while the app is running, and
+    /// a row that answered from launch would go on saying *no API key* after he
+    /// had put one there.
+    var elevenReady: (() -> Bool)?
+
     /// Whether the relay's own microphone is open right now. Asked when the menu
     /// opens, for the same reason the footprint is: it is a fact that changes
     /// with every dictation, and the one moment it has to be right is the moment
@@ -917,7 +925,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // carrying both says it twice.
         engineItem.title = "Engine: \(engineShortTitle(engineId))"
         engineSubmenu.removeAllItems()
-        for id in ["wispr", "whisper"] {
+        // **Wispr, local, cloud — in that order, and it is the order of trust**
+        // (2026-09-18). The default first, the offline fallback second, and the
+        // one that leaves the Mac last: a list he scans while the menu is open
+        // over his work should not put the billed, networked engine where his
+        // eye lands first.
+        for id in ["wispr", "whisper", "eleven"] {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
@@ -1027,6 +1040,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// i.e. most of the time this row is read. `LocalWhisperSource` now answers
     /// the configured id instead; see its note.
     private func engineTitle(_ id: String) -> String {
+        // **The cloud engine's cost is its key, the way the local one's is its
+        // weights** — and the row says which is missing for the same reason the
+        // footprint is shown above: a number nobody can check belongs in a
+        // comment, and *this engine cannot run right now* belongs in the list he
+        // picks from. `$0.40/h` is there because it is the half of the trade a
+        // menu can state and a comment cannot make him feel.
+        if id == "eleven" {
+            let model = ElevenLabsSource.model
+            return elevenReady?() == true
+                ? "ElevenLabs \(model) — \(ElevenLabsSource.rate), audio leaves this Mac"
+                : "ElevenLabs \(model) — no API key"
+        }
         guard id == "whisper" else { return "Wispr Flow" }
         let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
@@ -1045,6 +1070,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// it is the same string every launch, and `engineTitle` has it in the list
     /// below for the one moment somebody asks.
     private func engineShortTitle(_ id: String) -> String {
+        // ⚠️ rather than the price, because the top-level row is read out of the
+        // corner of the eye: what he needs from it there is *the cloud one is
+        // live and it cannot work*, and the reason is one hover away.
+        if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
         guard id == "whisper" else { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }

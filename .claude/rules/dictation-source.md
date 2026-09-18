@@ -1,15 +1,24 @@
 # The dictation source
 
-Rules for `DictationSource`, `WisprFlowSource`, `LocalWhisperSource` and `tools/wispr-test.sh`.
+Rules for `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`,
+`tools/wispr-test.sh` and `tools/eleven-test.sh`.
 Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-09-12)*.
 
 ## One interface, and nothing downstream may look behind it
 
 - **`AppDelegate` holds a `DictationSource` and never names an implementation.** The chip, the
   halo, the settle, the corpus and the destination routing read the protocol only. The one place
-  either concrete class appears is `wireDictationSource()` and the `/test/wispr*` routes, which are
-  named after Wispr on purpose. → journal: *One interface, because a second branch is how the first
-  one rots*
+  a concrete class appears is `wireDictationSource()`, `engine(named:)` and the `/test/wispr*`
+  routes, which are named after Wispr on purpose. → journal: *One interface, because a second branch
+  is how the first one rots*
+- **The interest that rule pays, measured** (2026-09-18): adding `ElevenLabsSource` as a third
+  recogniser cost **one new file** plus a case in `engine(named:)`, a row in the Engine submenu, a
+  line in `/engine` and a tag in `VoiceCorpus`. Nothing in the chip, the halo, the settle, the
+  routing, the envelope or the outbox was touched, because none of them can tell.
+- **Three engines mean a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both the
+  launch pick and the menu pick — two chains that had to agree on the same spellings is a third
+  engine's worth of ways to be wrong. **Anything unrecognised is Wispr**: a typo in a preference
+  must not leave him dictating through the one engine that uploads.
 - **Every callback lands on the main queue.** The two sources produce their edges on three
   different threads between them (CoreAudio's listener queue, a transcription callback, the event
   tap), and what the callbacks drive is AppKit. One rule at the boundary, not a hop per call site.
@@ -37,6 +46,16 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   deliberately **not** a sixth `DictationSource` event: a dictation Victor starts himself stays
   Wispr's — no screenshot, no ⌘C probe, no route — and this claims only *a microphone is open*.
   → journal: *The music also pauses for a dictation the relay did not start*
+- **A push-to-talk sentence ends when the pair goes back up, and the keyboard is the only witness
+  that says so on time** (2026-09-18). `HotkeyTap.onWisprPushToTalkReleased` →
+  `WisprFlowSource.pushToTalkReleased` → the ordinary `closeListening`. Gated twice:
+  `startedByHeldPair` (a ⌘⌥ pressed for something else mid-sentence is ordinary and must not end
+  it) and `isRecording` (a tap too short for a row leaves it `speculative`, and *that was not a
+  dictation* belongs to `speculativeGrace`). No hold-time floor — `ptt` is `54+61` and the
+  hands-free toggle is `49+59+63`, so this release is never a toggle in disguise.
+  → journal: *The release of ⌘⌥ is the end of the sentence*
+- **`onWisprMaybeStarting` carries a `WisprStart`, not a `why` string and a `confident` bool.**
+  Both were derivable from the gesture, and the release has to be paired with *its own* press.
 
 ## The wrap, end to end (2026-09-14)
 
@@ -800,6 +819,42 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   running when only the helper is. `open "/Applications/Wispr Flow.app"`, and match the anchored
   executable path.
 
+## ElevenLabs Scribe, the engine that leaves the Mac (2026-09-18)
+
+- **It is `LocalWhisperSource`'s shape with the daemon swapped for an HTTPS `POST`.** The relay
+  opens its own microphone and writes one 16 kHz mono WAV; the recogniser is
+  `api.elevenlabs.io/v1/speech-to-text`, multipart, `xi-api-key`. Everything that follows from *the
+  file is ours* follows here too: markers are **spliced** rather than played
+  (`acceptsAudioMarkers = true`), the audio the corpus files is the audio that was transcribed, and
+  there is no wrap at all — no window to park, no ⌘V to swallow, no focus to hand back.
+- **It is never the default.** `engine(named:)` falls back to Wispr for anything it does not
+  recognise, and the preference has to say `eleven` for this one to be picked.
+- **The key: `~/.walkie-talkie/elevenlabs.env`, `ELEVENLABS_API_KEY=…`**, environment first,
+  **following `--home`** so a test relay cannot bill the real account. A file and not a shell
+  variable because launchd starts the app and it inherits no shell — the same reason `WT_KEY_TRACE`
+  grew a `POST /test/key-trace` twin. A file and not the Keychain because a Keychain item prompts,
+  and the one moment this key is read is the moment a sentence is waiting on it. **Re-read on every
+  menu open** (`reloadKey`, silent; `prepare()` is the one that logs), so pasting the key in is the
+  whole of the setup.
+- **The language is not pinned.** `language_code: "ro"` would tell the recogniser that `git rebase`
+  and `Spring Boot` are Romanian words. `WT_ELEVEN_LANG=ro` forces it for a comparison run.
+- **`DictationEnd.failed` exists because of this engine and is not about it.** A networked
+  recogniser that could not be reached is neither `.silent` (which throws the audio away — right
+  for *nothing was heard*, wrong when the WAV is the only copy of a sentence he has already said)
+  nor `.cancelled` (which keeps it and passes in silence, because he asked for it). `.failed`
+  carries both: a 12 s banner, and the WAV into the same five-minute staging area, where *Recover
+  Cancelled Dictation* re-reads it through whichever engine is live by then.
+- **One retry, and only for what a retry fixes** — a transport error, a 429, a 5xx. A 401 is a
+  wrong key and a 400 a bad request; repeating either costs a second of his settle to arrive at the
+  same answer. 45 s ceiling on the request, for the hotel Wi-Fi that accepts the connection and then
+  stops.
+- **`tools/eleven-test.sh`** is the control surface, on `wispr-test.sh`'s reasoning: a recogniser
+  you can only reach through a dictation is one you cannot debug. One WAV, or `--corpus [n]` to
+  print Scribe's reading beside the transcript already on disk — the A/B on his own voice, at
+  $0.40 an hour of audio.
+- **Not measured yet, and the notes say so:** `languageFloor = 0.5` and the choice of `scribe_v1`
+  over `scribe_v2` are both starting points rather than numbers off the corpus. → `evals/`
+
 ## Do not — the standing ones
 
 - **Do not read Wispr Flow's database as a recogniser or a transcript fallback.** The 2026-08-29
@@ -818,4 +873,13 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   corpus against.
 - **Do not let the corpus stop growing.** The halo's meter writes its WAV so a Wispr dictation has
   audio to file; `engine` distinguishes `wispr-flow` (through Wispr's formatting pass) from
-  `whisper-local` (raw).
+  `whisper-local` (raw) and `elevenlabs` (formatted too — Scribe punctuates and capitalises).
+- **Do not give the corpus tag a default branch.** It was
+  `engine == "whisper-local" ? "local" : "wispr"`, and a third engine walked straight into it: an
+  ElevenLabs sample would have been filed under a stem saying Wispr read it, in the one directory
+  that cannot be regenerated. A wrong label there is not a bug that gets fixed later, it is a
+  sample worth nothing to every evaluation from now on. It is a `switch` with `default: tag =
+  engine` — an unknown recogniser keeps its own id rather than borrowing somebody else's.
+- **Do not pin `language_code` for the cloud engine**, and do not "fix" auto-detection to `ro`.
+  His Romanian carries English technical words and pinning the language is what makes them come
+  back spelled as Romanian.
