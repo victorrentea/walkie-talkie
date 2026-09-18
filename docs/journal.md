@@ -10142,3 +10142,47 @@ and it logs as an error, because reaching it is a bug and not a timeout.
 Measured on the installed build, Engine on the local model: `wispr state: idle → listening` →
 `⏸️ dictation open — pausing audible Chrome tabs`, then `listening → transcribing` →
 `▶️ dictation over — resuming them`.
+
+### The release of ⌘⌥ is the end of the sentence (2026-09-18)
+
+*"nu se prinde când Wispr se oprește când apas cmd-opt și dau release la taste."*
+
+The pause landed; the resume did not. The start of a push-to-talk dictation has been read off
+the keyboard since 2026-09-12 — `⚡ right ⌘⌥ — Wispr push-to-talk` — but its **end** never was,
+and every other witness the relay has for *the microphone shut* turned out to be unavailable in
+exactly this configuration:
+
+- the CoreAudio notification is 0–6 s late and gave no edge at all in five of five runs (09-13);
+- the 100 ms poll samples `WisprWatch.sampleObjects`, which only `start()` fills — and with the
+  Engine on the local model `wisprSource.prepare()` is never called, so the list is empty;
+- Wispr's `History` row is the one that does fire, but `sawRow` only leaves `listening` on a
+  **terminal** status. Measured at 09:00:22 that morning: row 12978 adopted at 165 ms, then
+  `raw_transcript` — intermediate — and the phase sat in `listening` from 09:00 to 09:04 with
+  his music off the whole time. The 08:50 sentence had only appeared to work because its poll
+  happened to catch the row already `formatted`.
+
+The keyboard says it at the instant it happens, for nothing. `HotkeyTap` was already tracking
+`wisprPTTDown` and computing the falling edge — it simply threw it away. It now reports it
+(`onWisprPushToTalkReleased`), and `WisprFlowSource.pushToTalkReleased` turns it into the
+ordinary `closeListening`, which is the one door every other stop already goes through: the
+machine moves to `transcribing`, the capture deadline is armed, `hearingChanged` falls and the
+music comes back.
+
+**Two gates, and they are not the same gate.** `startedByHeldPair` — only a sentence this pair
+*started* may be ended by it, because a ⌘⌥ pressed for something unrelated in the middle of a
+hands-free sentence is ordinary. And `isRecording` — a tap too short for Wispr to have made a row
+leaves the guess `speculative`, and *that was not a dictation* is a different claim from *the
+sentence is over*; `speculativeGrace` owns that one and has its own words for it. No hold-time
+floor is needed: Victor's `config.json` keeps `ptt` on `54+61` and the hands-free toggle on
+`49+59+63`, so a release of this pair is never a toggle in disguise.
+
+**`onWisprMaybeStarting` now carries a `WisprStart` value** (`.handsFree` / `.pushToTalk`) instead
+of a `why` string and a `confident` bool. Both were derivable from the gesture, and the release
+has to be paired with *its own* press — a distinction a string could only have been matched on.
+
+Measured on the installed build, Engine on the local model, with the pair synthesised and a
+⌃Escape behind it so nothing was pasted: press at 09:07:07, `listening` at 188 ms,
+`⏸️ dictation open — pausing audible Chrome tabs`; release at 09:07:09,
+`wispr state: listening → transcribing — right ⌘⌥ released — his push-to-talk is over (2012 ms
+after the chord)`, `▶️ dictation over — resuming them`. The pause lasted exactly as long as the
+hold.

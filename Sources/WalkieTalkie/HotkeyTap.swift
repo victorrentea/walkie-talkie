@@ -108,13 +108,62 @@ final class HotkeyTap {
     /// **Watched, never taken**: both go straight back out. This is a guess and
     /// is labelled one — `AppDelegate` drops the ring again if no microphone
     /// opens within `wisprSpeculativeGrace`.
-    /// - Parameter confident: whether this gesture is unambiguous. `fn ⌃ Space`
-    ///   is — nothing else on this Mac claims it, and this app posts exactly it.
-    ///   The push-to-talk pair is not: it is two modifiers held and nothing else,
-    ///   so it also fires on a ⌘⌥ Victor pressed for something entirely
-    ///   different. The source spends a whole dictation's opening on the first
-    ///   and only a beacon on the second.
-    var onWisprMaybeStarting: ((String, Bool) -> Void)?
+    ///
+    /// **Which gesture it was travels with it** (`WisprStart`, 2026-09-18) rather
+    /// than a `why` string and a `confident` flag. The two are not two spellings
+    /// of one thing — one is a toggle and the other a hold — and the source has
+    /// to be able to tell them apart later, when the pair comes back up.
+    var onWisprMaybeStarting: ((WisprStart) -> Void)?
+
+    /// **Which of Wispr Flow's two start gestures was seen**, and the whole of
+    /// what the difference between them costs.
+    ///
+    /// They are not two spellings of one thing: `popo` is a **toggle** and `ptt`
+    /// is a **hold**, which is why only the second has an end the keyboard can
+    /// report (`onWisprPushToTalkReleased`). Carried as a value rather than as a
+    /// string and a bool, because the release has to be paired with *its own*
+    /// press — a ⌘⌥ pressed for something else in the middle of a hands-free
+    /// sentence must not end it.
+    enum WisprStart {
+        /// `49+59+63` — fn ⌃ Space, Wispr's hands-free toggle. `postWisprHandsFree`
+        /// posts exactly this.
+        case handsFree
+        /// `54+61` — right ⌘ + right ⌥, held. Victor's commonest dictation.
+        case pushToTalk
+
+        var why: String {
+            switch self {
+            case .handsFree: return "fn ⌃ Space — Wispr hands-free"
+            case .pushToTalk: return "right ⌘⌥ — Wispr push-to-talk"
+            }
+        }
+
+        /// Whether the gesture is unambiguous. `fn ⌃ Space` is — nothing else on
+        /// this Mac claims it, and this app posts exactly it. The push-to-talk
+        /// pair is not: it is two modifiers and nothing else, so it also fires on
+        /// a ⌘⌥ Victor pressed for something entirely different. The source
+        /// spends a whole dictation's opening on the first and only a beacon on
+        /// the second.
+        var isConfident: Bool { self == .handsFree }
+    }
+
+    /// **The push-to-talk pair went back up — that sentence is over.**
+    ///
+    /// The one end of a Wispr dictation that is *free* to observe, and the one
+    /// the relay was missing: Victor holds right ⌘⌥, talks, lets go, and until
+    /// 2026-09-18 nothing told the relay so. Everything else it has is late or
+    /// conditional — the CoreAudio notification is 0–6 s behind and sometimes
+    /// absent, the 100 ms poll needs a started `WisprWatch`, and Wispr's own
+    /// `History` row only says *listening is over* once it turns terminal, which
+    /// is after the formatting pass. The keyboard says it at the instant it
+    /// happens, for nothing.
+    ///
+    /// Fired on the falling edge whatever is or is not running: *whose* sentence
+    /// this ends — if any — is the source's question, not the tap's.
+    /// `54+61` is Wispr's dedicated `ptt` action and its hands-free toggle lives
+    /// on a different chord entirely (`49+59+63`), so a release here is never a
+    /// toggle in disguise.
+    var onWisprPushToTalkReleased: (() -> Void)?
 
     /// **Wispr Flow's dismiss chord, typed by Victor** — `53+59`, ⌃Escape —
     /// seen on the wire (2026-09-12). A dictation he throws away from Wispr's
@@ -2112,10 +2161,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             let ptt = (raw & Self.deviceRightCommand) != 0 && (raw & Self.deviceRightOption) != 0
             if ptt != wisprPTTDown {
                 wisprPTTDown = ptt
-                if ptt {
-                    DispatchQueue.main.async { [weak self] in
-                        self?.onWisprMaybeStarting?("right ⌘⌥ — Wispr push-to-talk", false)
-                    }
+                DispatchQueue.main.async { [weak self] in
+                    if ptt { self?.onWisprMaybeStarting?(.pushToTalk) }
+                    // **And the release, which is the end of the sentence.** See
+                    // `onWisprPushToTalkReleased`.
+                    else { self?.onWisprPushToTalkReleased?() }
                 }
             }
         }
@@ -2132,7 +2182,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
            event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
             DispatchQueue.main.async { [weak self] in
-                self?.onWisprMaybeStarting?("fn ⌃ Space — Wispr hands-free", true)
+                self?.onWisprMaybeStarting?(.handsFree)
             }
         }
         if type == .keyDown,

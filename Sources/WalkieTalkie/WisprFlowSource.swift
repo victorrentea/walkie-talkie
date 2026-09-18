@@ -228,6 +228,15 @@ final class WisprFlowSource: DictationSource {
     /// into one flag broke that route the first time it was tried.
     private var intercepting = false
 
+    /// **This dictation was opened by holding right ⌘⌥**, so the moment that pair
+    /// comes back up is the moment it ends — see `pushToTalkReleased`.
+    ///
+    /// The gate, and the reason the release is not simply *a stop*: a ⌘⌥ Victor
+    /// presses for something else in the middle of a hands-free sentence, or of
+    /// one the relay opened, must not end it. Only a sentence this pair started
+    /// is a sentence this pair can finish.
+    private var startedByHeldPair = false
+
     // MARK: - Events
 
     var didMaybeBegin: ((String) -> Void)?
@@ -600,9 +609,15 @@ final class WisprFlowSource: DictationSource {
             }
         }
         watch.onChange = { [weak self] on in self?.edge(on, measured: true) }
-        hotkeys.onWisprMaybeStarting = { [weak self] why, confident in
+        hotkeys.onWisprMaybeStarting = { [weak self] start in
             // His keyboard, not the relay's — `relay: false`.
-            DispatchQueue.main.async { self?.gestureSeen(why, confident: confident, relay: false) }
+            DispatchQueue.main.async {
+                self?.gestureSeen(start.why, confident: start.isConfident, relay: false,
+                                  heldPair: start == .pushToTalk)
+            }
+        }
+        hotkeys.onWisprPushToTalkReleased = { [weak self] in
+            DispatchQueue.main.async { self?.pushToTalkReleased() }
         }
         hotkeys.onWisprMaybeCancelling = { [weak self] in
             DispatchQueue.main.async { self?.dismissSeen() }
@@ -1164,7 +1179,12 @@ final class WisprFlowSource: DictationSource {
     ///   will have to undo. Nil means *the mode in force* — every gesture except
     ///   the loopback's hands-free routes, which post Wispr's own chord and so
     ///   have no key held and no sink to take.
-    private func gestureSeen(_ why: String, confident: Bool, relay: Bool, mode: WrapMode? = nil) {
+    /// - Parameter heldPair: whether this is the **held** right ⌘⌥ pair, whose
+    ///   release ends the sentence (`pushToTalkReleased`). Only the tap's
+    ///   `.pushToTalk` branch passes it; every other route here is a toggle or
+    ///   the relay's own, and is closed by something else.
+    private func gestureSeen(_ why: String, confident: Bool, relay: Bool, mode: WrapMode? = nil,
+                             heldPair: Bool = false) {
         // **The chord is a toggle and the second press is the stop** (2026-09-13).
         // Only for a confident gesture: `fn ⌃ Space` is unambiguous and this
         // app's own posts no longer come back through the tap, so a hands-free
@@ -1196,6 +1216,7 @@ final class WisprFlowSource: DictationSource {
         focusPid = frontPid != 0 ? frontPid
             : (Self.frontWindowOwner() ?? (lastFrontPid != 0 ? lastFrontPid : nil))
         relayStarted = relay
+        startedByHeldPair = heldPair
         startedMode = relay ? (mode ?? wrapMode) : .off
         intercepting = relay && wrapWispr
         gestureAt = CFAbsoluteTimeGetCurrent()
@@ -1300,6 +1321,7 @@ final class WisprFlowSource: DictationSource {
         // kind of disagreement between two records of the same fact this file
         // exists to remove.
         state.stopChord(why)
+        startedByHeldPair = false
         // **Belt on the hold.** Every ordinary path releases the chord before it
         // gets here; this is for the ones that do not exist yet and for the one
         // that already does — Victor's own hands-free chord, read as a stop for
@@ -1381,6 +1403,36 @@ final class WisprFlowSource: DictationSource {
             // at up to six seconds.
             closeListening("the 100 ms poll saw the microphone close")
         }
+    }
+
+    /// **He let go of right ⌘⌥ — the push-to-talk sentence is over.**
+    ///
+    /// The whole of what was missing on 2026-09-18: *"nu se prinde când Wispr se
+    /// oprește când apas cmd-opt și dau release la taste"*. The start of that
+    /// dictation has been read off the keyboard since 2026-09-12; its end never
+    /// was, and every other witness the relay has is late or conditional. The
+    /// CoreAudio notification is 0–6 s behind and was absent in five of five
+    /// runs; the 100 ms poll needs a `WisprWatch` that `prepare()` never started
+    /// when the Engine is the local model; and Wispr's `History` row only leaves
+    /// `listening` once it turns **terminal**, which is after the formatting
+    /// pass — measured that morning, the row sat at `raw_transcript` and the
+    /// phase stayed `listening` indefinitely, with the music off the whole time.
+    /// The key going up is the same fact, free and exact.
+    ///
+    /// **Only for a sentence this pair started** (`startedByHeldPair`). Wispr
+    /// keeps push-to-talk on its own `ptt` action (`54+61`) and its hands-free
+    /// toggle on another chord entirely, so a release here is never a toggle in
+    /// disguise — but a ⌘⌥ pressed for something unrelated in the middle of a
+    /// hands-free sentence, or of one the relay opened, is ordinary and must not
+    /// end it.
+    ///
+    /// **And only once the guess is confirmed.** A tap too short for Wispr to
+    /// have made a row leaves this `speculative`, and *that was not a dictation*
+    /// is a different claim from *the sentence is over* — `speculativeGrace`
+    /// owns it and says so in its own words.
+    private func pushToTalkReleased() {
+        guard startedByHeldPair, isRecording else { return }
+        closeListening("right ⌘⌥ released — his push-to-talk is over")
     }
 
     /// **Victor pressed Wispr's own dismiss (⌃Escape).** The sentence is over
