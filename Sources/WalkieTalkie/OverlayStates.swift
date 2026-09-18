@@ -76,12 +76,14 @@ enum OverlayStates {
 
             Shot(slug: "listening-filming", group: "Dictating", title: "Recording the screen",
                  when: "🔽 ↑ while a dictation is open — bound, unbound, or headed for a folder that does not exist yet.",
-                 note: "**A row of its own, under the shots.** It is the same kind of fact as `📸 ×3` — what this sentence is carrying — and the icon column is read downwards. The difference is the clock: a recording is the one thing here he is *spending* while he watches something happen, and the number is how he knows when to stop. It disappears the moment he stops it: the frames then join what the sentence carries, and a row that stayed up would be the second place the same count is written. The recording also stops itself at 30 s, and ends with the sentence if he never presses the gesture again.",
+                 note: "**A row of its own, under the shots**, and it carries two numbers because they answer different questions. `0:04` is what he is *spending* — the thing that says when to stop. `21` is what he has *got*, and it is not derivable from the seconds: the encoder drops a frame when it falls behind, so a recording that quietly caught half of what he thinks it did is exactly what this makes impossible. The row **stays after he stops**, with the finished pair on it — the sentence is carrying the film by then, and `📸 ×3` does not vanish when the shutter stops either. It goes when the sentence does. The recording stops itself at 30 s, and ends with the sentence if he never presses the gesture again.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
                 o.pinListenWarmth(1)
                 o.setShotCount(3)
+                o.filmFrames = { 10 }
+                o.addFilmCarried(seconds: 6.1, frames: 31)
                 o.setFilming(true)
             },
 
@@ -521,6 +523,8 @@ enum OverlayStates {
         o.setBound(label: nil)
         o.setWisprHearing(false)
         o.setFilming(false)
+        o.clearFilmsCarried()
+        o.filmFrames = nil
         // **Pinned to Wispr's letter, so the page cannot change with a menu
         // setting** (2026-09-18). `AppDelegate` pushes the live engine's mark
         // into the overlay at launch, which would otherwise make every

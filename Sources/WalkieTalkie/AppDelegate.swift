@@ -108,7 +108,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// What the finished recording left behind, waiting for the sentence it
     /// belongs to. Cleared with the rest of the pending state, so a film never
     /// rides a dictation it was not made during.
-    private var pendingFilm: ScreenFilm.Result?
+    /// **Every recording made during this sentence**, oldest first — Victor
+    /// asked for the row to read `6.1s (31📸), 2.1s (10📸)`, which is a sentence
+    /// carrying two. One film per sentence was the first shape and it was mine,
+    /// not his: the argument was that a second recording would have to replace
+    /// the first or teach the envelope a new shape. The envelope learned the
+    /// shape; replacing what he deliberately captured was never acceptable.
+    private var pendingFilms: [ScreenFilm.Result] = []
 
     /// **The relay's own microphone, transcribed *while he speaks*** (2026-09-18)
     /// — see `SpeechmaticsSource`. Costs the same nothing as the one above until
@@ -845,7 +851,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// frames, and how long and how many. Carried on the message for
         /// `sources`' reason: the panel holds a prompt for seconds and the next
         /// dictation may already have started a recording of its own.
-        var film: ScreenFilm.Result?
+        var films: [ScreenFilm.Result] = []
         /// Path → what was in front when that frame was taken. Covers both
         /// `paths` and `screen`, which is the reason it is keyed rather than
         /// ordered.
@@ -1735,6 +1741,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // overlay pulls the number when it wants it and never learns what a
         // recorder is.
         overlay.voicedSeconds = { [weak self] in self?.source.meter.voicedSeconds ?? 0 }
+        // The same seam, one row down: how many frames the recording has written
+        // so far. Asked when the row is about to be drawn — see
+        // `ScreenFilm.frameCount` for why it counts what is on disk rather than
+        // what was captured.
+        overlay.filmFrames = { [weak self] in self?.film?.frameCount ?? 0 }
 
         picker.start()
         music.start()
@@ -2735,10 +2746,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         film?.discard()
         film = nil
         overlay.setFilming(false)
-        if let stale = pendingFilm {
-            try? FileManager.default.removeItem(at: stale.dir)
-            pendingFilm = nil
-        }
+        overlay.clearFilmsCarried()
+        for stale in pendingFilms { try? FileManager.default.removeItem(at: stale.dir) }
+        pendingFilms = []
 
         stateLock.lock()
         pendingPicks = []
@@ -3170,9 +3180,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.flash("⚠️ the recording caught no frames", duration: 5)
                 return
             }
-            pendingFilm = result
+            pendingFilms.append(result)
+            // **The row stays, with the finished pair on it** (2026-09-18). The
+            // sentence is carrying the film now, and the icon column read
+            // downwards is exactly *what this message is carrying* — `📸 ×3` does
+            // not vanish when the shutter stops either.
+            overlay.addFilmCarried(seconds: result.duration, frames: result.frames.count)
             publishShotCount()
-            overlay.flash(String(format: "🎬 %.1fs, %d frames", result.duration, result.frames.count),
+            overlay.flash(String(format: "🎥 %.1fs, %d frames", result.duration, result.frames.count),
                           duration: 2)
             return
         }
@@ -3181,14 +3196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // indistinguishable from one Options+ has lost the mapping for, and
             // that is a thing he would go and debug in the wrong place.
             overlay.flash("🎬 start dictating first — a recording rides a sentence", duration: 4)
-            return
-        }
-        // **One film per sentence.** A second recording would have to either
-        // replace the first — losing what he deliberately captured — or make the
-        // envelope carry two, which is a shape the clause and the agent would
-        // both have to learn for a case he has never asked for.
-        guard pendingFilm == nil else {
-            overlay.flash("🎬 this sentence already carries a recording", duration: 4)
             return
         }
         guard let started = ScreenFilm.start() else {
@@ -3209,15 +3216,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Main thread — `film` and `pendingFilm` are main's, and this is called from
     /// the same place the rest of the pending state is drained.
-    private func takeFilm() -> ScreenFilm.Result? {
+    private func takeFilms() -> [ScreenFilm.Result] {
         if let running = film {
             film = nil
             overlay.setFilming(false)
             Log.info("🎬 the sentence ended while recording — stopping and attaching it")
-            pendingFilm = running.stop()
+            if let result = running.stop() { pendingFilms.append(result) }
         }
-        defer { pendingFilm = nil }
-        return pendingFilm
+        // The sentence is on its way out, so what it was carrying stops being
+        // news — the row goes with the rest of the pending state.
+        overlay.clearFilmsCarried()
+        defer { pendingFilms = [] }
+        return pendingFilms
     }
 
     private func abandonDictation(_ reason: String) {
@@ -3967,9 +3977,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // everything at once, and a feature whose only witness is a row on a
             // chip no screen capture can contain has no test behind it at all.
             "filming": film != nil,
-            "filmPending": pendingFilm != nil,
-            "filmFrames": pendingFilm?.frames.count ?? 0,
-            "filmSheet": pendingFilm?.sheet?.path ?? "",
+            "filmPending": !pendingFilms.isEmpty,
+            "filmCount": pendingFilms.count,
+            "filmFrames": pendingFilms.reduce(0) { $0 + $1.frames.count },
+            "filmSheet": pendingFilms.last?.sheet?.path ?? "",
             // The swallow window: armed from `didStopListening`, and the flag
             // whose absence let Wispr paste straight into Word.
             "capturing": wisprSource.capturing,
@@ -4754,7 +4765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
-        if let clause = filmClause(m.film) { parts.append(clause) }
+        if let clause = filmClause(m.films) { parts.append(clause) }
         if let clause = picksClause(m.elements, since: m.startedAt,
                                     inlined: m.inlinedElements) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
@@ -4833,33 +4844,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "$WALKIE_SHOTS" + dir.dropFirst(root.count)
     }
 
-    /// **The screen recording, named so the agent knows which file answers
+    /// **The screen recordings, named so the agent knows which file answers
     /// which question** (2026-09-18).
     ///
-    /// Two paths and a sentence saying what each is for, because the split is
-    /// the whole design: an agent cannot watch a film, so the **sheet** is the
-    /// film as far as it is concerned — one image, every cell labelled — and the
-    /// **frames** are where it goes when the sheet shows it something it needs to
-    /// read. Saying that here rather than leaving it to be inferred is what stops
-    /// a recipient either ignoring the folder or opening fifty JPEGs.
+    /// Two paths per recording and a sentence saying what each is for, because
+    /// the split is the whole design: an agent cannot watch a film, so the
+    /// **sheet** is the film as far as it is concerned — one image, every cell
+    /// labelled — and the **frames** are where it goes when the sheet shows it
+    /// something it needs to read. Saying that here rather than leaving it to be
+    /// inferred is what stops a recipient either ignoring the folder or opening
+    /// fifty JPEGs.
     ///
     /// The frame rate is stated because the agent reasons about *time* from the
     /// cell labels, and the dropped count is stated for the same reason: a gap
     /// between two cells means *nothing happened* only if nothing was missed.
-    private static func filmClause(_ film: ScreenFilm.Result?) -> String? {
-        guard let film, let sheet = film.sheet else { return nil }
-        let name = (sheet.path as NSString).lastPathComponent
-        let dir = shotsRootAbbreviated(film.dir.path)
-        var line = String(format: "[Screen recording: %.1fs at %.0f fps, %d frames. "
-                          + "Look at %@/%@ — every frame, thumbnailed and labelled `#n  m:ss.t`. "
-                          + "The full-resolution frames are %@/frame-NNNN.jpg, numbered as on the sheet: "
-                          + "open one when the sheet shows something worth reading.]",
-                          film.duration, ScreenFilm.fps, film.frames.count, dir, name, dir)
-        if film.dropped > 0 {
-            line += "\n[\(film.dropped) frame(s) were missed while recording — a gap between two "
-                  + "cells is not proof that nothing happened there.]"
+    ///
+    /// **Numbered when there is more than one**, because a sentence may carry
+    /// several — *"first I recorded the bug, then the fix"* — and `the recording`
+    /// stops being a referring expression the moment there are two.
+    private static func filmClause(_ films: [ScreenFilm.Result]) -> String? {
+        let usable = films.filter { $0.sheet != nil }
+        guard !usable.isEmpty else { return nil }
+        var lines: [String] = []
+        for (i, film) in usable.enumerated() {
+            let sheet = film.sheet!
+            let name = (sheet.path as NSString).lastPathComponent
+            let dir = shotsRootAbbreviated(film.dir.path)
+            let label = usable.count > 1 ? "Screen recording \(i + 1) of \(usable.count)"
+                                         : "Screen recording"
+            var line = String(format: "[%@: %.1fs at %.0f fps, %d frames. "
+                              + "Look at %@/%@ — every frame, thumbnailed and labelled `#n  m:ss.t`. "
+                              + "The full-resolution frames are %@/frame-NNNN.jpg, numbered as on the "
+                              + "sheet: open one when the sheet shows something worth reading.]",
+                              label, film.duration, ScreenFilm.fps, film.frames.count, dir, name, dir)
+            if film.dropped > 0 {
+                line += "\n[\(film.dropped) frame(s) were missed while recording — a gap between "
+                      + "two cells is not proof that nothing happened there.]"
+            }
+            lines.append(line)
         }
-        return line
+        return lines.joined(separator: "\n")
     }
 
     private static func shotsClause(paths: [String], screen: String?,
@@ -6248,7 +6272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               extraSelections: extraSelections,
                               inlinedSelections: inlined,
                               inlinedElements: inlinedElements,
-                              paths: attached, screen: screen, film: takeFilm(), sources: sources,
+                              paths: attached, screen: screen, films: takeFilms(), sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, engine: engine,

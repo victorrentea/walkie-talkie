@@ -93,6 +93,19 @@ final class ScreenFilm {
     /// a sheet that silently mixes two geometries is worse than a short film.
     private var geometry: (w: Int, h: Int)?
 
+    /// **How many frames are on disk right now**, for the chip's row.
+    ///
+    /// Pulled rather than pushed, the way `MicRecorder.voicedSeconds` is: the
+    /// overlay asks when it wants to draw and never learns what a recorder is,
+    /// and this way a row that is redrawn once a second does not cost a
+    /// callback per frame. Counted under the same lock the encoder appends
+    /// through, so it is the number actually written, not the number captured —
+    /// a frame still in the encoder is not yet a frame he has.
+    var frameCount: Int {
+        framesLock.lock(); defer { framesLock.unlock() }
+        return frames.count
+    }
+
     private init(displayID: CGDirectDisplayID, dir: URL) {
         self.displayID = displayID
         self.dir = dir

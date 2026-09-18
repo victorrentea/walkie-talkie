@@ -1842,8 +1842,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // the frames are part of what the sentence carries and the shots row's
         // argument applies — but there is nothing left to *watch*, and a row that
         // stayed up would be the second place the same count is written.
-        if filming {
-            filmInfo.stringValue = filmText
+        if filming || !filmsCarried.isEmpty {
+            filmInfo.attributedStringValue = filmAttributed()
             filmInfo.sizeToFit()
             layoutGlyphRow(filmRow, glyph: filmGlyph, label: filmInfo, width: innerWidth)
             filmRow.isHidden = false
@@ -3640,28 +3640,96 @@ private let frontLabel = NSTextField(labelWithString: "")
     private var filmStartedAt: Date?
     private var filmTick: Timer?
 
-    /// `Recording 0:04` — the clock is the point. A recording is the one thing
-    /// the chip carries that he is *spending* while he watches something happen,
-    /// and the number is how he knows when to stop; `📸 ×3` counts what is
-    /// already caught and needs no clock.
-    private var filmText: String {
-        let s = Int(Date().timeIntervalSince(filmStartedAt ?? Date()))
-        return String(format: "Recording %d:%02d", s / 60, s % 60)
+    /// **Every recording this sentence carries, on one row** (2026-09-18) —
+    /// `6.1s (31📸), 2.1s (10📸)`, Victor's own format.
+    ///
+    /// **Both numbers, because they answer different questions.** The seconds are
+    /// what he *spent*; the frames are what he *got*, and the second is not
+    /// derivable from the first — the encoder drops a frame when it falls behind,
+    /// so six seconds is *about* thirty frames. A recording that quietly caught
+    /// half of what he thinks it did is the failure this row exists to make
+    /// impossible.
+    ///
+    /// **One row for all of them**, not a row each: they are one kind of thing,
+    /// the icon column is read downwards, and a chip that grew a row per
+    /// recording would push the rows he actually reads out of his attention. The
+    /// live one is last, still counting.
+    ///
+    /// **The camera goes in as a picture, never as a character** — this label
+    /// carries a halo (`refreshChrome`), and a raw emoji in an attributed string
+    /// on a haloed label draws the emoji and turns *every other glyph fully
+    /// transparent*. That trap has cost this app a whole row twice, which is why
+    /// `inline(Glyphs.emoji(…))` exists.
+    private func filmAttributed() -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: filmFont,
+            .foregroundColor: filmInfo.textColor ?? NSColor.white,
+        ]
+        func piece(_ seconds: TimeInterval, _ frames: Int) {
+            if out.length > 0 { out.append(NSAttributedString(string: ", ", attributes: attrs)) }
+            out.append(NSAttributedString(string: String(format: "%.1fs (%d", seconds, frames),
+                                          attributes: attrs))
+            out.append(Self.inline(Self.shotMarkGlyph, font: filmFont))
+            out.append(NSAttributedString(string: ")", attributes: attrs))
+        }
+        for done in filmsCarried { piece(done.seconds, done.frames) }
+        if filming { piece(Date().timeIntervalSince(filmStartedAt ?? Date()), filmFrames?() ?? 0) }
+        return out
     }
 
-    /// **Only the seconds are rewritten** — this is the once-a-second tick and it
-    /// must never reach `layoutContent`, which re-measures every row of a chip
-    /// that is following the cursor. Safe because the string's length is fixed
-    /// for the whole of a recording (`maxSeconds` is 30, so it never reaches
-    /// `10:00`) and the digits are tabular, so the row set up by the relayout
-    /// that showed it stays the right width to the end.
+    private var filmFont: NSFont {
+        NSFont.monospacedDigitSystemFont(ofSize: hintFont.pointSize, weight: .regular)
+    }
+
+    /// The 📸 that rides inside the row's text, at the text's own size and not
+    /// the icon column's — here it is punctuation, not a row's subject.
+    private static let shotMarkGlyph = Glyphs.emoji("📸", ink: 13)
+
+    /// **The frame count, pulled not pushed** — `MicRecorder.voicedSeconds`'
+    /// arrangement, and its reason: the overlay asks when it is about to draw
+    /// and never learns what a recorder is.
+    var filmFrames: (() -> Int)?
+
+    /// The finished recordings this sentence is carrying, oldest first.
+    private var filmsCarried: [(seconds: TimeInterval, frames: Int)] = []
+
+    /// **What the sentence ends up carrying, after a recording stops.**
+    ///
+    /// The row was hidden the moment he stopped, on the argument that there was
+    /// nothing left to *watch*. That was wrong by the chip's own rule: the icon
+    /// column is *what this message is carrying*, and `📸 ×3` does not disappear
+    /// when the shutter stops either.
+    func addFilmCarried(seconds: TimeInterval, frames: Int) {
+        filmsCarried.append((seconds, frames))
+        layoutContent()
+    }
+
+    func clearFilmsCarried() {
+        guard !filmsCarried.isEmpty else { return }
+        filmsCarried = []
+        layoutContent()
+    }
+
+    /// **The once-a-second tick, and it relayouts only when the row got wider.**
+    ///
+    /// A per-tick timer must never re-measure every row of a chip that is
+    /// following the cursor. The seconds alone would have been free — tabular
+    /// digits — but the frame count crosses `9 → 10` and `99 → 100`, and a row
+    /// left at its old width clips the last digit. So the width is asked of the
+    /// string's length, which changes two or three times in a whole recording,
+    /// and `layoutContent` is reached on exactly those ticks.
     private func applyFilmText() {
         guard filming else { return }
-        filmInfo.stringValue = filmText
+        let next = filmAttributed()
+        let grew = next.string.count != filmInfo.attributedStringValue.string.count
+        filmInfo.attributedStringValue = next
+        if grew { layoutContent() }
     }
 
+
     /// 🎬 at the size of the rest of the icon column.
-    private static let filmGlyphImage = Glyphs.emoji("🎬", ink: iconInk)
+    private static let filmGlyphImage = Glyphs.emoji("🎥", ink: iconInk)
 
     func setListening(_ value: Bool) {
         guard listening != value else { return }
