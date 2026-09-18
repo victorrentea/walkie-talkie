@@ -46,6 +46,7 @@ The journal contradicts itself over time, because it was written as things chang
   - *The wrap is Wispr's own Scratchpad*, *Five runs…* — “the window opens when the note is written, ~2 s after the words” — it opens at the **start of the hold** and lives for the whole sentence
   - *The row is the delivery; the note is the second opinion* — “the delivery waits for the window to be gone” — the paste is **addressed** (`postToPid`) since 2026-09-14 and waits for nothing
   - *Five runs…* — “the swallow must be off in Scratchpad mode” — it is **on in every mode**; letting it through put every sentence in his document twice
+- *The ring covers Wispr Flow's dictations too* (2026-09-11) — the ring's half was **silently lost on 09-12** when Wispr became the source, and is restored 2026-09-18 on a different witness (`wisprHearing`, not `WisprWatch`); the section's `atCaret` half is **reversed** — a microphone that is not ours raises the ring and nothing else (*The ring comes back for the dictations he starts himself*)
 - *The folder menu*, *Autosend* — “the app is `.accessory`” — `.regular` with a Dock tile since 2026-09-07 (*The Dock tile is the escape hatch*)
 - *Scope: dictation helper only* — “`canBecomeKey` is false” — the panel becomes key only while the transcript is edited (*⏎ sends it, and clicking the words edits them*)
 
@@ -10186,3 +10187,296 @@ Measured on the installed build, Engine on the local model, with the pair synthe
 `wispr state: listening → transcribing — right ⌘⌥ released — his push-to-talk is over (2012 ms
 after the chord)`, `▶️ dictation over — resuming them`. The pause lasted exactly as long as the
 hold.
+
+## The ring comes back for the dictations he starts himself (2026-09-18)
+
+Victor, on a morning where he had been dictating with the Engine on something other than Wispr:
+*"când pornesc Wispr Flow cu gestul de mouse back sau când activez eu Wispr Flow cu tastele, de
+exemplu Command Option ținute apăsate, să apară același cerc cu fulger în jurul cursorului. Fără
+tooltip neapărat, dar fulgerul să arate că cineva ascultă."*
+
+It reads as a feature request and it is a **regression report**. *The ring covers Wispr Flow's
+dictations too* (2026-09-11) put `wisprDictating` in the halo's gate precisely for this — Replace
+Wispr is down most days, so Wispr Flow is what he dictates into everywhere and a beacon dark for
+the commonest dictation of the day is worth nothing on the rare one. On 2026-09-12 Wispr became
+the **source**, and the gate was narrowed to `listening || speculative` on the reading that
+`listening` now covered every Wispr dictation.
+
+It does not. `listening` is *the relay has a sentence in flight*, which is a claim about **this
+app**, not about a microphone. Three ways to be dictating are outside it, and they are not corner
+cases:
+
+- 🔽 → posts Wispr's hands-free chord **raw, in every engine** — that flick never sets `listening`;
+- his own keyboard chords — fn ⌃ Space, or right ⌘⌥ held — reach the relay through
+  `onWisprMaybeStarting`, which is wired into `WisprFlowSource`, so with the Engine on the local
+  model or on ElevenLabs **nothing arrives at all**: the source is not wired, none of the five
+  `DictationSource` events fire, and not even `speculative` goes up;
+- a dictation started from Wispr's own window, which the relay never hears about by any route.
+
+So for six days the microphone was open with nothing round the pointer to say so, in exactly the
+configuration the 09-11 section was written for.
+
+**The witness is `hearingChanged`, which already existed** — added the same morning for the music
+(*The music also pauses for a dictation the relay did not start*), and it is the right one for the
+same reason: it is every edge of `WisprState.listening`, wired **at launch** rather than in
+`wireDictationSource`, so it survives the Engine being something else. Going back to `WisprWatch`,
+which is what the 09-11 rule names, would not work — measured 0–6 s late on 09-13 with no edge at
+all in five of five runs, and with the Engine elsewhere its `sampleObjects` list is never even
+filled. `WisprState` joins it with Wispr's `History` row, written at the gesture: 182 ms.
+
+The halo's gate is now `listening || speculative || wisprHearing`, and the edge goes through
+`syncBorrowedGestures` — the one switch every edge of a dictation already passes through, which is
+why adding a fifth reason for the ring to be up costs one term and a hop.
+
+**And that was still not enough for 🔽 →, for a reason worth writing down.** The keyboard branch
+that reports Wispr's own chords *deliberately ignores this app's own posts* — `backButtonStamp`,
+2026-09-13, or `postWisprHandsFree` would hand the source its own start back as a stop a
+millisecond later. So the one gesture that posts Wispr's chord raw reached `WisprState` through
+**no witness at all**: no chord, therefore no row poll, therefore never `listening`, therefore no
+`hearingChanged`. The stamp was protecting against the chord coming back round *through the tap*,
+and the fix is to say it directly instead — `HotkeyTap.onWisprRawChord` →
+`WisprFlowSource.noteRawChord(closing:)`, `relay: false` (the sentence is still Wispr's own) and
+`confident: true` (this app posted the chord; there is no gesture to have misread). Measured on the
+installed build with the Engine on the local model: `POST /test/gesture {"name": "back-right"}` →
+`wisprHearing: true`, `ringUp: true` on the first read after the flick, `relayStarted: false`,
+`backStopsWispr: true`; the back click behind it → `wispr state: listening → transcribing — Victor's
+own 🔽 → (the stop)`, `◯ caret halo off`, `▶️ dictation over`, arm retired, phase `idle`.
+
+**What is deliberately not restored is the arrow.** The 09-11 section also made `atCaret` true for
+a Wispr dictation (*"Da, ca la at-caret"*), on the sound argument that Wispr pastes at the caret.
+Two things have changed under it. The heads say *the words are landing here, do not move the
+mouse* — a promise about a delivery, and for a foreign sentence this app is not making one; and
+their schedule is silence, read off `source.meter`, which for a dictation the relay is not running
+is a recorder that is not running, so what they would be reading is a **stale** number rather than
+a quiet one. `foreignMic` (`wisprHearing && !listening && !speculative`) forces `atCaret` false.
+Victor asked for the lightning and for nothing else — *"fără tooltip neapărat"*.
+
+For the same reason the ring will not **breathe** for one: it pulses on `source.meter.level` and
+nothing opens the relay's microphone alongside Wispr's here. It sits at rest alpha, which is
+honest — *a microphone is open* is the whole of what is known about a sentence that belongs to
+another app.
+
+Two smaller things came out of it. The 600 s ceiling that lets the music back on when Wispr's
+machine never leaves `listening` now calls `wisprIsHearing(false)` instead of undoing the flag and
+the music by hand: it was two things to undo, it is four now, and a ceiling that forgets one leaves
+a ring standing at the pointer for ever — which is the 09-15 failure the idle sweep exists for. And
+`GET /test/state` answers `wisprHearing`, because nothing that rides the pointer can be
+screenshot and a ring with `listening`, `speculative` and `settling` all false is otherwise
+unexplainable from a desk.
+
+## Speechmatics, and the first transcript that is written while he is still speaking (2026-09-18)
+
+Victor sent the Speechmatics voice-agents page and asked three things in one breath: is there an
+API, can the dictation be **streamed** to it live, and is the price really better than what we are
+already paying. Yes, yes, and it depends on which of their products the number came off — the page
+he was reading advertises **Agent STT** (their `linden-1` model, `/v2/agent`, 350 ms end-of-speech,
+$0.30/h down to $0.15 at volume, launched the day before), while the ordinary real-time endpoint is
+the one this app actually wants and the portal prices the Pro tier at $0.129/h. Both are under
+`ElevenLabsSource`'s $0.40 (`scribe_v1`) and around or under its $0.22 (`scribe_v2`), and neither
+number is worth defending to the second decimal: `WT_SM_RATE` exists so the menu row can be
+corrected without a build, and **if the row and the invoice disagree the invoice is right.**
+
+The turn-detection half of Agent STT — start of speech, end of turn, silence — is worth nothing
+here and is the reason the plain endpoint won. This app already knows when the sentence is over: he
+lets go of the key. What it did not know was anything at all until he did.
+
+**What is actually new is where the work happens.** Every engine in this app so far is a round trip
+*after the fact*: `ElevenLabsSource` uploads a WAV at the release, `LocalWhisperSource` hands a file
+to a daemon at the release, `WisprFlowSource` waits for another application's pipeline to run at the
+release. The wait he watches at the end of a dictation is that whole reading, and it grows with the
+length of what he said. Speechmatics is fed as he speaks, so what is left when he lets go is the
+tail — the last words, plus whatever the recogniser was holding back to see how the sentence ended.
+That is a different shape of latency, not a faster server, and it is the only thing worth adding a
+fourth engine for.
+
+**It cost one new file again**, which is the third time that interest has been paid: a case in
+`engine(named:)`, a row in the Engine submenu, a `speechmaticsReady` closure, a line in
+`VoiceCorpus`'s tag table, and `describe()` in `/engine`. The `if` in `setEngine` that named
+ElevenLabs when a picked engine had no key became a table on the way past — with two keyless engines
+an `if` naming one of them is a silent failure at the next gesture.
+
+**The plumbing was already there and that is not luck.** `MicRecorder.onBuffer` was written on
+09-14 so `AudioBridge` could carry his voice to the Loopback device Wispr listens to; what it hands
+out is the converted buffer — 16 kHz mono int16, markers spliced in sequence — which is precisely
+what `StartRecognition` is told to expect (`pcm_s16le`, `sample_rate: 16000`). So the stream needs
+no conversion, and the marker mechanism works unchanged: what is in the file is what the recogniser
+heard.
+
+**It records as well as streams, and the WAV is load-bearing twice.** `VoiceCorpus` files the audio
+of every sample and a stream is not audio anybody kept; and a socket that dies mid-sentence leaves
+that file as the only copy of words already said. So `die()` does **not** interrupt the recording
+while the microphone is open — it records the reason and the failure is reported once, at the
+release, through `DictationEnd.failed` with the audio attached, which is the case ElevenLabs
+introduced this morning and the second engine has now justified.
+
+**The one thing it gives up: the language is pinned.** Speechmatics detects a language in batch
+only, so a real-time session must be told before the first word — the exact opposite of
+`ElevenLabsSource`, which deliberately pins nothing because his Romanian carries English technical
+words and `language_code: "ro"` would tell the recogniser that `git rebase` is Romanian. Default
+`ro`, `WT_SM_LANG` overrides, and **the menu row prints the language**, both in the submenu and in
+the short title: an engine that can spend all day listening for the wrong language has to say which
+one it is listening for, in the place the pick is made.
+
+**Measured against the live endpoint before the key existed** (junk key, `tools/speechmatics-test.sh
+--corpus 1`): a rejected key **does not fail the handshake**. The WebSocket opens, `StartRecognition`
+goes out, and the server closes with `4001 not_authorised`. What URLSession reports for that is
+*Socket is not connected* — a banner that sends whoever reads it to debug the network. So the close
+frame's reason is read and preferred over the transport error. That run also confirmed the framing,
+the endpoint and that a corpus WAV is already in the format the API wants.
+
+Two things are **guesses and say so in the code**: `confidenceFloor = 0.6` on the mean word
+confidence (the failure it is aimed at is the wrong pinned language, which comes back fluent and
+wrong, the same way a short Romanian clip read as Italian does on Scribe), and `max_delay = 1.0`
+against a floor of 0.7 — a little more context punctuates better, and the flush at `EndOfStream`
+means that choice does not lengthen the wait he sees. Both belong in `evals/`.
+
+`tools/speechmatics-test.sh` streams **at the speed the audio was spoken**, which is the part worth
+writing down: a WAV blasted down the socket measures the server's throughput, not his wait. It
+prints partials as they arrive, then *first words N s in* and *tail N s after the release* — the
+number this engine exists for — and `--corpus [n]` puts its reading beside the transcript already
+on disk.
+
+**And the thing it makes possible that nothing else here can:** partials are on, the newest one is
+in `GET /engine`, and the chip still says `Transcribing…` like it does for every other engine.
+Putting his words on screen as they are recognised is a change to the overlay, not to a recogniser,
+and it is now one field away.
+
+### "Poți să setezi și română, și engleză ca limbi de output așteptate?" — no, and what replaces it (2026-09-18)
+
+Asked straight after the engine landed, and the answer is a flat no with three doors checked and
+shut, so nobody re-derives it in a month:
+
+- **One `language` per real-time session.** Not a list, not a fallback chain.
+- **The bilingual packs are a fixed set of seven** — `ar_en`, `cmn_en`, `en_ms`, `en_ta`,
+  `cmn_en_ms_ta`, `tl`, and `es` with `domain: bilingual-en` — and Romanian is in none of them.
+  These are real code-switching packs ("speakers who switch between the languages in that pack"),
+  which is exactly what he wanted; it just does not exist for his pair.
+- **`melia-1`, the model that switches by itself**, does not list Romanian among its transcription
+  languages and is not offered on the real-time endpoint anyway.
+- **`linden-1`** (Agent STT, the model on the page he sent) supports *the same languages as
+  real-time* — one at a time. Their own wording is that full multilingual is "coming soon", which is
+  a roadmap, not a feature. `WT_SM_MODEL=linden-1` is wired anyway, and moves the endpoint to
+  `/v2/agent` on its own, so the day it ships it is one variable.
+
+**What actually answers the question is `additional_vocab`.** The session stays Romanian, and the
+English words inside his Romanian — the part a Romanian pack is worst at, and the entire reason he
+asked — are declared up front. It works in real time, Speechmatics caches it after the first session
+so it does not cost start-up time, and the ceiling is 20,000 entries against their own advice of
+under 1000.
+
+**The list is built from his corpus, not from imagination.** 2,804 transcripts, 112k words, counted:
+`screenshot` 191, `push` 179, `commit` 160, `skill` 158, `git` 116, `prompt` 77, `github` 72,
+`java` 71, `markdown` 62, `copilot` 57, `token` 56, `tooltip` 55, `repo` 50, `dictation` 38,
+`subagent` 37, `branch` 35, `pr` 31. Those are the English words that really occur inside his
+Romanian, and they are the list. One measured confusion went in as a `sounds_like`: **`whisper flow`
+appears 35 times against `wispr flow`'s 45** — the recognisers already write the wrong one of those
+two about two times in five.
+
+**And one candidate was thrown out after looking at it, which is the part worth keeping.**
+`worship` occurs **225** times in the corpus — four times more often than `wispr` — and it reads like
+a perfect mishearing to teach. It is not: the context is `worship worship worship worship …` for a
+whole paragraph. That is the **local model's repetition loop**, a failure of a different engine on
+one clip, and teaching a new recogniser to expect it would have been inventing a problem out of
+another engine's bug. A frequency table is evidence of what was *written*, not of what was *said*.
+
+The file lives at `~/.walkie-talkie/speechmatics-vocab.txt` and is **re-read at every dictation** —
+the whole point is that a word which came back wrong is fixed by editing a line, and a list that
+needs a restart between noticing and fixing is a list that stops being maintained.
+`tools/speechmatics-vocab.txt` is the checked-in starter, `tools/speechmatics-test.sh` sends **his**
+copy so an A/B measures what the app actually sends, and `GET /engine` answers the entry count,
+because *did my edit take* is the only question a health check can settle.
+
+## Gemini, the fifth engine — and the live-text chip that will not be built (2026-09-18)
+
+Two things came out of the same message, and the first is a decision not to build something.
+
+**The live transcript stays off the screen.** Speechmatics streams, so the obvious next move was
+partials on the chip — words appearing as he speaks. Victor's answer: *"nu mi se pare un câștig
+prea mare, din moment ce eu vreau să mă concentrez pe ce îi cer, nu să citesc ce am scris … mă va
+face să mă opresc și să tot corectez ce am scris"*. That is not a scheduling objection, it is the
+feature being wrong: the dictation is aimed at an agent, and a man reading his own sentence as it
+lands is a man editing instead of thinking. `enable_partials` stays on because it costs nothing and
+`GET /engine` is how a live session is debugged; nothing draws it, and nothing should propose it
+again unasked.
+
+**And then the actual ask:** *"un model de voice-to-text care să suporte în română și engleză bine,
+cu un preț bun, rulat în cloud, care merge cu latență mică, mai ieftin decât celălalt pe care l-am
+implementat deja"*. Three constraints, and each of the two cloud engines already here fails one —
+Scribe detects the language and costs $0.22/h; Speechmatics is cheaper and is pinned to one
+language.
+
+### What the market actually costs, per hour of audio
+
+| | $/h | ro + en | the catch |
+|---|---|---|---|
+| Groq `whisper-large-v3-turbo` | 0.04 | — | **it is the model already in `LocalWhisperSource`**, the one he found weak on Romanian |
+| Gemini 3.5 Flash-Lite | ~0.035 | yes | quality on his voice unknown |
+| **Gemini 3.8 Flash** | **~0.09** | yes | audio bills at the input rate, 32 tok/s |
+| Groq `whisper-large-v3` | 0.111 | — | still Whisper |
+| Speechmatics | ~0.13 | one language | already here |
+| `gemini-3.5-transcribe` | 0.18 | yes | purpose-built STT, least likely to take an instruction |
+| OpenAI `gpt-4o-mini-transcribe` | 0.18 | yes | |
+| ElevenLabs Scribe v2 | 0.22 | yes, and the best published Romanian WER (3.1% FLEURS) | already here |
+| ElevenLabs **Scribe v2 Realtime** | 0.39 | yes, auto-switching, 150 ms | the only one that is both streaming and bilingual — and the dearest |
+
+### The measurement that decided it, and it was run on his own corpus
+
+He has an `OPENAI_API_KEY` in his shell, so rather than quoting benchmarks the nearest equivalent
+was run on four corpus samples that mix Romanian with English technical words — about **two cents**
+of his account. What it showed, on one sample, is the whole argument for this engine:
+
+```
+pe disc        : …preluat automat de Cloud Code și de Copilot…
+4o-mini        : …preluat automat de CloudCode și de Copilot…
+4o-mini+vocab  : …preluat automat de Claude Code și de Copilot…   1,09 s
+```
+
+One field — the terms from `vocab.txt` in the prompt — and *Cloud Code* becomes *Claude Code*. That
+is the thing Speechmatics has no mechanism for, because there is no Romanian-English pack to ask
+for. So `GeminiSource` sends a Romanian instruction with the shared vocabulary appended, and
+`DictationVocabulary` was lifted out of `SpeechmaticsSource` on the way: the list is a fact about
+Victor, and two copies of it under two vendors' names is one copy that goes stale. Speechmatics
+still gets it structured with `sounds_like`; Gemini gets the **terms only** — pronunciations handed
+to a language model are two misspellings taught to it.
+
+### The failure mode that came with it, and the gate that finally uses the VAD
+
+The same run caught the thing to be afraid of. `gpt-4o-transcribe` — the larger model — was handed
+**24.8 s** of Romanian and returned **one and a half sentences**. Not garbled, not hallucinated:
+*shortened*, fluently, with nothing anywhere marking the loss. An acoustic model that cannot hear a
+word writes the wrong word and he sees it; a language model that cannot follow a passage writes a
+tidier version of it. Nothing else in this app can catch that — there is no confidence to fall, no
+language probability to slip, and the text reads perfectly.
+
+The obvious guard is *characters per second of audio*, and **it does not work**. Over the 2,039
+corpus samples longer than six seconds: median **9.9** characters per wall-clock second, p10 5.7,
+p5 **4.3**. The truncation sits at **3.1** — inside his own ordinary tail, because a man pausing to
+think produces the same number. A floor that catches it fires on **3.9%** of good dictations, and a
+warning that cries wolf one time in twenty-five is a warning he stops reading.
+
+What works is dividing the pauses out. `MicRecorder.voicedSeconds` has existed since 2026-09-07 and
+`whisper-and-corpus.md` has said *"the next move is a VAD gate … nothing gates on it yet"* ever
+since. This is the first thing that does. Replayed through `evals/voiced-seconds.py`: **25.9**
+characters per voiced second at the median, p1 12.4, and not one sample of 440 under 6. The same
+truncation scores **12.7** — 5.8 s of actual voice, 74 characters, against the 222 the engine that
+recorded it produced from the same audio.
+
+So the floor is **13**: above the one failure measured, firing on **1.1%** of his real dictations
+(5 of 440). It is one observed failure and not a distribution of them, and the number moves when
+there are more — but it is 3.5× sharper than the obvious version, and the obvious version is what
+would have shipped without the replay.
+
+### Three smaller things, each of which would have cost a dictation
+
+- **Thinking is `LOW`, and there is no off.** Gemini 3 Flash defaults to `MEDIUM` and **rejects**
+  `MINIMAL` with a 400. On a transcription every thinking token is latency in front of a man
+  standing with his finger off the key. Not sent at all to a `*-transcribe` model.
+- **A 400 is retried once with everything optional stripped out** — so a model this file has never
+  seen still transcribes, one round trip later, instead of failing on a field name. **Except a 400
+  about the key**: Google answers an invalid key with a 400 too, and re-uploading the whole
+  recording to be told the same thing is a second upload and a second second of his settle.
+- **The key goes in `x-goog-api-key`, never `?key=`.** Both are accepted; one of them puts the key
+  in every proxy log between here and Google.
+
+Verified against the live endpoint with a junk key before any key existed: the model path resolves,
+the body parses, 78 vocabulary terms load into the prompt, and the only thing missing is the key.

@@ -203,6 +203,48 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
   arrow belongs there too (*"Da, ca la at-caret"*); the relay's own live dictation outranks it on
   that half only, because the chip is naming a destination. → journal: *The ring covers Wispr Flow's dictations too (2026-09-11)*
 
+## The ring covers them again, in every engine (2026-09-18)
+
+The half of the 09-11 rule above **was lost on 09-12** and nobody noticed for six days: when Wispr
+Flow became the *source*, `wisprDictating` came out of the halo's gate on the reading that
+`listening` now covered every Wispr dictation. It does not. `listening` is **the relay's own
+sentence**, so the ring went dark for exactly the dictations the 09-11 section exists for — the
+ones he starts himself. Victor, 2026-09-18: *"când pornesc Wispr Flow cu gestul de mouse back sau
+când activez eu Wispr Flow cu tastele … să apară același cerc cu fulger în jurul cursorului …
+fulgerul să arate că cineva ascultă"*.
+
+- **Halo active is `listening || speculative || wisprHearing`.** The third is
+  `AppDelegate.wisprHearing`, fed by `WisprFlowSource.hearingChanged` — every edge of
+  `WisprState.listening`, wired **at launch** beside the music pause rather than in
+  `wireDictationSource`. That is what makes it work in every engine: with the Engine on the local
+  model or on ElevenLabs the Wispr source is not wired at all, so none of the five
+  `DictationSource` events fire, and 🔽 → posts Wispr's chord raw in **all** of them.
+- **Not `WisprWatch`, though it is the witness the 09-11 rule names.** Measured 2026-09-13 it is
+  0–6 s late and produced **no edge at all** in five of five runs, and with the Engine elsewhere
+  this source's `watch` is never started. `WisprState` joins it with Wispr's `History` row, written
+  at the gesture — 182 ms, measured 2026-09-18. Same reason `hearingChanged` and not a second
+  CoreAudio reader.
+- **The ring, and nothing else, for a microphone that is not ours** — `foreignMic`, i.e.
+  `wisprHearing && !listening && !speculative`, forces `atCaret` to false. This **reverses** the
+  09-11 line two sections up (*"`atCaret` is `pasteMode || (wisprDictating && !listening)`"*), for
+  two reasons: the heads promise *the words are landing here, do not move the mouse* about a
+  delivery this app is not making, and their schedule is silence read off `source.meter`, which for
+  a foreign dictation is a recorder that is not running — a **stale** reading, not a quiet one.
+  Victor asked for the lightning and explicitly for nothing else: *"fără tooltip neapărat"*.
+- **It will not breathe, and that is honest.** The ring pulses on `source.meter.level`; nothing
+  opens the relay's microphone for a sentence it is not running. It sits at rest alpha, which is
+  the whole of what is known — *a microphone is open*.
+- **The edge goes through `syncBorrowedGestures`, not `syncMusic`.** The halo hangs off that one
+  switch and the music is synced from inside it; everything else it recomputes is unchanged by a
+  foreign microphone, so the rest is a no-op by construction.
+- **The 600 s ceiling takes the ring down with the music.** `wisprHearingCap` calls
+  `wisprIsHearing(false)` rather than undoing the flag by hand — a ceiling that undoes two of three
+  things leaves a ring at the pointer for ever, which is the 09-15 failure the idle sweep exists
+  for.
+- **`GET /test/state.wisprHearing`** is why the ring is up when `listening`, `speculative` and
+  `settling` are all false. Nothing that rides the pointer can be screenshot, so without it that
+  ring is unexplainable from a desk.
+
 ## `DropArrow` — six heads closing in (2026-09-12)
 
 - **Armed on `pasteMode`, re-read on every `setActive`**, so a ⌘⌃B mid-sentence gives the words a

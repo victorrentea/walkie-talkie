@@ -72,6 +72,49 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_WIPE"] {
     exit(0)
 }
 
+// Compose a contact sheet out of JPEGs already on disk and quit —
+// `WT_SHOOT_SHEET=/tmp/sheet.png WT_SHEET_FRAMES=/path/to/dir`. The sheet is
+// what the agent sees of a screen recording, so it has to be reviewable without
+// making a recording first: this takes any folder of frames, in name order, and
+// lays them out exactly as `FilmSheet.write` will. See `FilmSheet`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_SHEET"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let dir = ProcessInfo.processInfo.environment["WT_SHEET_FRAMES"] ?? "."
+    let urls = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [])
+        .filter { $0.hasSuffix(".jpg") || $0.hasSuffix(".jpeg") || $0.hasSuffix(".png") }
+        .sorted()
+        .map { URL(fileURLWithPath: dir).appendingPathComponent($0) }
+    let fps = Double(ProcessInfo.processInfo.environment["WT_SHEET_FPS"] ?? "") ?? 5
+    let frames = urls.enumerated().map {
+        FilmSheet.Frame(url: $1, at: Double($0) / fps, index: $0 + 1)
+    }
+    if FilmSheet.write(frames: frames, to: URL(fileURLWithPath: out)) == nil {
+        FileHandle.standardError.write(Data("no sheet written — no readable frames in \(dir)\n".utf8))
+        exit(1)
+    }
+    exit(0)
+}
+
+// Record the screen for N seconds and print what came out —
+// `WT_SHOOT_FILM=3`. The capture path is the half of the recording feature that
+// no gesture can exercise safely (a gesture needs a dictation, a dictation needs
+// a microphone), and it is the half with the measurements in it: this is where
+// the frame rate it actually achieves, the drop count and the sheet are checked.
+// See `ScreenFilm`.
+if let spec = ProcessInfo.processInfo.environment["WT_SHOOT_FILM"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let seconds = Double(spec) ?? 3
+    guard let film = ScreenFilm.start() else { exit(1) }
+    Thread.sleep(forTimeInterval: seconds)
+    guard let out = film.stop() else { exit(1) }
+    let achieved = Double(out.frames.count) / max(out.duration, 0.001)
+    print(String(format: "%d frames over %.2fs = %.1f fps (asked %.0f), %d dropped",
+                 out.frames.count, out.duration, achieved, ScreenFilm.fps, out.dropped))
+    print("frames: \(out.dir.path)")
+    print("sheet:  \(out.sheet?.path ?? "none")")
+    exit(0)
+}
+
 // Draw the caret halo on a dark ground and a light one, at both its opacities,
 // and quit — the only way to judge a falloff on a panel no screen capture can
 // contain. See `CaretHalo.shoot`.

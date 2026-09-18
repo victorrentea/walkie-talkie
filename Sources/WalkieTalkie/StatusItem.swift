@@ -53,6 +53,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// had put one there.
     var elevenReady: (() -> Bool)?
 
+    /// The same question for the streaming engine — *is there a key* — asked the
+    /// same way, at the same moment, for `elevenReady`'s reasons.
+    var speechmaticsReady: (() -> Bool)?
+
+    /// And the same for the language model. Three engines now answer *is there a
+    /// key*; the closure is per engine rather than a dictionary because the menu
+    /// asks each one at the moment its row is drawn.
+    var geminiReady: (() -> Bool)?
+
     /// Whether the relay's own microphone is open right now. Asked when the menu
     /// opens, for the same reason the footprint is: it is a fact that changes
     /// with every dictation, and the one moment it has to be right is the moment
@@ -925,12 +934,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // carrying both says it twice.
         engineItem.title = "Engine: \(engineShortTitle(engineId))"
         engineSubmenu.removeAllItems()
-        // **Wispr, local, cloud — in that order, and it is the order of trust**
-        // (2026-09-18). The default first, the offline fallback second, and the
-        // one that leaves the Mac last: a list he scans while the menu is open
-        // over his work should not put the billed, networked engine where his
-        // eye lands first.
-        for id in ["wispr", "whisper", "eleven"] {
+        // **Wispr, local, then the two that upload — and it is the order of
+        // trust** (2026-09-18). The default first, the offline fallback second,
+        // and the ones that leave the Mac last: a list he scans while the menu
+        // is open over his work should not put a billed, networked engine where
+        // his eye lands first. Between the two cloud rows the order is the same
+        // rule one level down — the one that uploads a file after the fact
+        // before the one that streams while he speaks.
+        for id in ["wispr", "whisper", "eleven", "sm", "gemini"] {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
@@ -1052,6 +1063,28 @@ final class StatusItem: NSObject, NSMenuDelegate {
                 ? "ElevenLabs \(model) — \(ElevenLabsSource.rate), audio leaves this Mac"
                 : "ElevenLabs \(model) — no API key"
         }
+        // **And the streaming one says its language out loud**, which no other
+        // row here has to. The other three detect what they are hearing; this
+        // one is *told*, once, before the first word — so the pinned language is
+        // the single thing most able to ruin a sentence on it, and the pick must
+        // not be made without seeing it. → `SpeechmaticsSource`
+        if id == "sm" {
+            let what = "Speechmatics \(SpeechmaticsSource.operatingPoint) "
+                + "(\(SpeechmaticsSource.language))"
+            return speechmaticsReady?() == true
+                ? "\(what) — \(SpeechmaticsSource.rate), live, audio leaves this Mac"
+                : "\(what) — no API key"
+        }
+        // **The model id, because it is the whole of what is configurable here**
+        // — `gemini-3.8-flash` against `gemini-3.5-flash-lite` is a threefold
+        // difference in price and an unknown one in quality, and the row is
+        // where that choice is visible.
+        if id == "gemini" {
+            let model = GeminiSource.model
+            return geminiReady?() == true
+                ? "\(model) — \(GeminiSource.rate), audio leaves this Mac"
+                : "\(model) — no API key"
+        }
         guard id == "whisper" else { return "Wispr Flow" }
         let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
@@ -1074,6 +1107,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
         if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
+        // The language rides along even in the short title: it is two characters
+        // and it is the one fact about this engine he can be wrong about all day.
+        if id == "sm" {
+            let short = "Speechmatics (\(SpeechmaticsSource.language))"
+            return speechmaticsReady?() == true ? short : "\(short) ⚠️"
+        }
+        if id == "gemini" { return geminiReady?() == true ? "Gemini" : "Gemini ⚠️" }
         guard id == "whisper" else { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }

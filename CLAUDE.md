@@ -1,8 +1,9 @@
 # Walkie Talkie — rules
 
 A macOS overlay that relays Victor's dictation — **Wispr Flow's microphone since 2026-09-12**,
-a local Whisper and, since 2026-09-18, ElevenLabs Scribe behind it — into a bound terminal, a
-Claude Code session it spawns, or the caret.
+a local Whisper and, since 2026-09-18, three cloud recognisers behind it (ElevenLabs Scribe,
+Speechmatics streamed live, and Gemini) — into a bound terminal, a Claude Code session it spawns,
+or the caret.
 `README.md` says what it is and how it works.
 
 This file holds only what every session needs. Everything else moved on 2026-09-11:
@@ -24,7 +25,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `screenshots-and-selection.md` | `ScreenCapture`, `CaptureFlash`, `CursorMarker`, `WindowContext`, `SelectionCapture`, `evals/` |
   | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `DecodeRate`, `InputDevice`, `VoiceCorpus`, `helpers/`, `evals/` |
-  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`, `ShotMarker`, `tools/wispr-test.sh`, `tools/eleven-test.sh` |
+  | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`, `SpeechmaticsSource`, `GeminiSource`, `DictationVocabulary`, `ShotMarker`, `tools/wispr-test.sh`, `tools/eleven-test.sh`, `tools/speechmatics-test.sh`, `tools/gemini-test.sh`, `tools/vocab.txt` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, the halo asset |
   | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ProjectList`, `helpers/recent_projects.py` |
   | `menu-bar.md` | `StatusItem`, `MenuBarMirror`, `MessageLog`, `AboutPage` |
@@ -225,7 +226,12 @@ sits at rest there.
   at the start. **Mid-sentence, 🔼 → aims a caret dictation at the bound terminal** rather than
   ending it (2026-09-14). The relay starts every one of them (`startDictation`); no gesture posts Wispr's chord
   raw except 🔽 →.
-- **The back button is the stop of the dictation 🔽 → started** (2026-09-17). That flick is made
+- **The back button is the stop of any Wispr dictation** (2026-09-17, widened 2026-09-18 — *"back
+  button alone still doesn't stop ongoing wisprflow dictation"*: a back click over an open Wispr
+  microphone now posts the stop chord and swallows the Return, whether or not 🔽 → armed it, unless
+  the relay owns the sentence — `ownDictation` — in which case the button stays the shutter). Its
+  original arm, kept for the case the microphone reads closed: it is the stop of the dictation 🔽 →
+  started. That flick is made
   with the back button held, so the thumb is already on the button that can end the sentence:
   the back **click** posts the same `postWisprHandsFree` chord a second flick would, instead of
   its usual Return. Armed by 🔽 → and nothing else, so every relay-started dictation keeps the
@@ -247,10 +253,10 @@ sits at rest there.
 
 ## The dictation source (2026-09-12)
 
-- **One interface, three recognisers** (a third since 2026-09-18). `DictationSource` — `start` /
-  `stop` / `cancel`, `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` / `didEnd`,
-  plus a `meter` the halo breathes on. `WisprFlowSource`, `LocalWhisperSource` and
-  `ElevenLabsSource` implement it and **nothing downstream may name any of them**: the chip, the
+- **One interface, five recognisers** (three of them added on 2026-09-18). `DictationSource` —
+  `start` / `stop` / `cancel`, `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` /
+  `didEnd`, plus a `meter` the halo breathes on. `WisprFlowSource`, `LocalWhisperSource`,
+  `ElevenLabsSource`, `SpeechmaticsSource` and `GeminiSource` implement it and **nothing downstream may name any of them**: the chip, the
   halo, the settle, the corpus and the destination routing read the protocol only. The Wispr path
   spent a month with no transcript in it precisely because it was a second branch nobody exercised.
   The third one cost **one new file and about forty lines** everywhere else, which is the interest
@@ -261,7 +267,7 @@ sits at rest there.
 - **Wispr Flow is the default and every gesture goes through it** — ⌘⌃D, the wheel, the side
   buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
   picks the local model, which is **retired, not deleted**: no gesture starts it and the weights
-  are no longer loaded at launch. `WT_SOURCE=eleven` picks the cloud one.
+  are no longer loaded at launch. `WT_SOURCE=eleven` and `WT_SOURCE=sm` pick the two cloud ones.
 
 ## ElevenLabs Scribe, the third engine (2026-09-18)
 
@@ -320,7 +326,20 @@ sits at rest there.
   | variable | what it does |
   |---|---|
   | `WT_SOURCE=whisper` | the local model instead of Wispr Flow (also the `dictationSource` default) |
-  | `WT_SOURCE=eleven` | ElevenLabs Scribe — the relay's own microphone, transcribed in the cloud |
+  | `WT_SOURCE=eleven` | ElevenLabs Scribe — the relay's own microphone, uploaded at the release |
+  | `WT_SOURCE=sm` | Speechmatics — the same microphone, **streamed while he speaks** |
+  | `SPEECHMATICS_API_KEY` | the key, environment first, else `~/.walkie-talkie/speechmatics.env` |
+  | `WT_SM_LANG=en` | the pinned language; **`ro` by default and never auto** — real time has no detector, and **two languages at once is not on offer for Romanian** |
+  | `WT_SM_MODEL=linden-1` | their Agent STT model, which moves the endpoint to `/v2/agent` — parked here for the multilingual support they say is coming to it |
+  | `WT_SM_OPERATING_POINT=standard` | the cheaper acoustic model; default `enhanced` |
+  | `WT_SM_MAX_DELAY=0.7` | how long a word may be held for context, 0.7–4 s; default 1.0 |
+  | `WT_SM_URL=…` | another region, or a self-hosted container; default `wss://eu.rt.speechmatics.com/v2` |
+  | `WT_SM_RATE=…` | what the menu row says it costs, when the published price moves |
+  | `WT_SOURCE=gemini` | Gemini — the same microphone, read by a **language model** |
+  | `GEMINI_API_KEY` | the key (`GOOGLE_API_KEY` too), else `~/.walkie-talkie/gemini.env` |
+  | `WT_GEMINI_MODEL=gemini-3.5-flash-lite` | ~$0.035/h; default `gemini-3.8-flash`, ~$0.09/h; `gemini-3.5-transcribe` is the purpose-built one at $0.18/h |
+  | `WT_GEMINI_THINKING=MEDIUM` | thinking level; **`LOW` by default** — `MEDIUM` is Google's default and is pure latency on a transcription |
+  | `WT_GEMINI_PROMPT=…` | replace the transcription instruction wholesale, for an experiment |
   | `ELEVENLABS_API_KEY` | the key, environment first, else `~/.walkie-talkie/elevenlabs.env` |
   | `WT_ELEVEN_MODEL=scribe_v2` | the newer Scribe; default `scribe_v1`, the one the Romanian WER was published against |
   | `WT_ELEVEN_LANG=ro` | pin the language — **off by default**, because his Romanian carries English technical words |
@@ -333,7 +352,7 @@ sits at rest there.
   | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
   | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — **on by default**, on a serial queue off the tap thread, 200 ms a character. `POST /test/ax-insert` / `POST /test/key-guard` flip both at runtime |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
-  | `WT_SHOT_MARKERS=0` | stop speaking a marker into Wispr's ear when he presses the shutter — on by default, see *Shot markers* |
+  | `WT_SHOT_MARKERS=1` | speak a marker into the recogniser's ear at the shutter — **off since 2026-09-18**, see *Spoken markers* |
   | `WT_MARKER_DEVICE=<name>` | the output device the marker is played into; substring, default `TO Wispr` |
   | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
 - **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord
@@ -387,6 +406,12 @@ sits at rest there.
 - **A dictation Victor starts himself is Wispr's** — his own keyboard chord, or 🔽→ which posts
   Wispr's chord raw. Ring only: never intercepted, never routed, no swallow and no Scratchpad.
   `relayStarted` in `/test/state` is that distinction; it ends on Wispr's row with `.silent("")`.
+  **And *ring* means the ⚡ ring really is up for it, in every engine** (restored 2026-09-18 after
+  six days dark — *"să apară același cerc cu fulger în jurul cursorului … fulgerul să arate că
+  cineva ascultă"*): the halo is `listening || speculative || wisprHearing`, the third fed by
+  `WisprFlowSource.hearingChanged`, the one witness wired whichever source is live. **The ring and
+  nothing else** — no drop arrows, and it does not breathe, because the relay's microphone is not
+  open to breathe on. `GET /test/state.wisprHearing` is why a ring is up with everything else false.
 - **The window is closed by the app, not from the menu** — `closeScratchpadAfterwards` at the end
   of every wrapped dictation and `startIdleSweep` between them. The *Close Wispr Scratchpad* row
   that did the 250 ms press by hand went on **2026-09-14** (Victor: *"sterge!"*): with the
@@ -420,7 +445,136 @@ sits at rest there.
   and the ⚡ timings. It needs **Wispr → Settings → Microphone → Auto-detect** (Wispr's own device
   id is a salted Chromium hash and is not scriptable); it says so rather than failing silently.
 
-## Spoken markers (2026-09-14)
+## Speechmatics, the fourth engine — and the first live one (2026-09-18)
+
+- **The microphone is streamed, not uploaded.** `SpeechmaticsSource` opens a WebSocket to
+  `wss://eu.rt.speechmatics.com/v2` at the gesture and feeds it `MicRecorder`'s own buffers as they
+  are produced — already 16 kHz mono int16, which is exactly what `StartRecognition` is told to
+  expect, so there is no second conversion anywhere. Every other engine in this app starts *reading*
+  at the release; this one starts at the first syllable, and what is left to wait for when he lets
+  go is the tail.
+- **It records as well, and the WAV is not a leftover.** `VoiceCorpus` files the audio of every
+  sample, and a stream is not audio anybody kept; and when the socket dies mid-sentence the WAV is
+  the **only** copy of words already said — which is what `DictationEnd.failed` carries here, the
+  case `ElevenLabsSource` introduced. A broken connection costs a retry, never a paragraph.
+- **The markers work by the same splice**, and for free: `MicRecorder.onBuffer` delivers inserted
+  markers in sequence, so what is in the file is what the recogniser heard (`acceptsAudioMarkers`,
+  `markersInAudio`). → *Spoken markers*
+- **The language is pinned and that is the whole of what it gives up.** Speechmatics detects a
+  language in **batch only**; a real-time session must be told, once, before the first word. So this
+  engine is `ro` by default (`WT_SM_LANG`), against `ElevenLabsSource`, which deliberately pins
+  nothing because his Romanian carries English technical words. **The menu row prints the language**
+  for exactly this reason — it is the one fact about this engine he can be wrong about all day, and
+  the row is where the pick is made.
+- **Two languages at once is not available for Romanian, and it is not a setting anyone missed**
+  (Victor asked on 2026-09-18). A real-time session takes exactly one `language`; the seven
+  bilingual packs that do exist — `ar_en`, `cmn_en`, `en_ms`, `en_ta`, `cmn_en_ms_ta`, `tl`, and
+  `es` with `domain: bilingual-en` — have **no Romanian**; and `melia-1`, the model that switches
+  languages by itself, does not list Romanian either and is not offered on the realtime endpoint.
+  `linden-1` (Agent STT) supports the same languages as realtime, one at a time, with full
+  multilingual *announced* and not shipped — which is why `WT_SM_MODEL` exists and why it is not
+  the default.
+- **The answer to that question is the custom dictionary**, and it is a real one rather than a
+  consolation: `additional_vocab` works in real time, is cached vendor-side after the first session,
+  and is where the English inside his Romanian gets declared.
+  `~/.walkie-talkie/speechmatics-vocab.txt`, one `term` or `term: sounds like, …` per line, **re-read
+  at every dictation** so a word that came back wrong can be fixed without a restart. The starter
+  list (`tools/speechmatics-vocab.txt`, ~78 entries) was built from the words that actually occur in
+  his 2,804 corpus transcripts — `screenshot` 191, `push` 179, `commit` 160, `skill` 158 — not from
+  a guess. `GET /engine` answers the **count**, which is what says an edit took.
+- **The key is `~/.walkie-talkie/speechmatics.env`** (`SPEECHMATICS_API_KEY=…`), environment first,
+  following `--home`, re-read whenever the menu opens — `ElevenLabsSource`'s arrangement, for its
+  reasons, and now a **table** in `setEngine` rather than an `if` naming one engine.
+- **A rejected key does not fail the handshake** (measured against the live endpoint, 2026-09-18).
+  The socket opens, `StartRecognition` goes out, and the server closes with **`4001
+  not_authorised`**; what URLSession reports for that is *Socket is not connected*, which sends
+  whoever reads the banner looking at the network instead of at the key. The close frame's reason is
+  read and preferred over the transport error.
+- **A tail that never comes is not the same as a sentence that never came.** `EndOfStream` is sent
+  on the same queue the audio went on, so it cannot overtake the last buffers; then six seconds for
+  `EndOfTranscript` — under `settleTimeout`'s eight, so the settle is never the one to give up
+  first. **With finals already in hand a timeout still delivers**, with a note saying the end may be
+  missing: the sentence minus its last clause beats a banner, because he can see which one he got.
+- **`tools/speechmatics-test.sh`** is the desk version: one WAV or `--corpus [n]`, streamed **at the
+  speed it was spoken** (a blast down the socket measures the server's throughput, not his wait),
+  printing partials as they arrive and, at the end, *first words N s in* and *tail N s after the
+  release*. That is the number this engine was picked for, on his own voice.
+- **Not measured yet, and both are guesses in the code that say so:** `confidenceFloor = 0.6` (the
+  mean word confidence under which the transcript gets a note — the failure mode it is aimed at is
+  the **wrong pinned language**, which comes back fluent and wrong), and `max_delay = 1.0` against a
+  floor of 0.7, on the argument that a little more context punctuates better. → `evals/`
+- **Partials arrive and nothing draws them.** `enable_partials` is on, the newest partial is in
+  `GET /engine`, and the chip still says `Transcribing…` like it does for every engine. Making it
+  say his words as they land is a change to the overlay, not to a recogniser — and it is the one
+  thing this engine makes possible that no other one here can.
+
+
+## Gemini, the fifth engine — the one you can talk to (2026-09-18)
+
+- **Why a fifth**, in his words: *"un model de voice-to-text care să suporte în română și engleză
+  bine, cu un preț bun, rulat în cloud, care merge cu latență mică, mai ieftin decât celălalt pe
+  care l-am implementat deja"*. Scribe detects the language and costs $0.22/h; Speechmatics is
+  cheaper and pins one language. Gemini is **~$0.09/h**, bilingual without being told, and takes an
+  instruction.
+- **The prompt is the feature, and it is measured.** `GeminiSource` sends a Romanian instruction —
+  *transcribe word for word, leave the English terms in English, do not summarise* — with the terms
+  from `vocab.txt` appended. Checked on four corpus samples through the nearest equivalent
+  (`gpt-4o-mini-transcribe`, same kind of prompt, his key): *"preluat automat de **Cloud Code**"*
+  without the terms, *"… de **Claude Code**"* with them, same audio, 1.1 s. That is the thing
+  Speechmatics has no field for.
+- **The vocabulary is shared now** — `DictationVocabulary`, `~/.walkie-talkie/vocab.txt` (the old
+  `speechmatics-vocab.txt` is still read if that is what exists). Speechmatics gets it as
+  `additional_vocab` with the pronunciations; Gemini gets the **terms only**, inside the prompt —
+  handing a language model `comit, camit` would teach it two misspellings it did not have.
+- **The failure mode is new and it is not Whisper's.** In the same measurement
+  `gpt-4o-transcribe` was handed 24.8 s of Romanian and returned one and a half sentences — not
+  garbled, **shortened**, fluent, with nothing marking the loss. An acoustic model that mishears
+  writes a wrong word he can see; a language model that cannot follow writes a tidier version.
+- **So this engine is the first thing in the repo to gate on `MicRecorder.voicedSeconds`** — the
+  VAD the corpus rules have been pointing at since 2026-09-07. Against **wall-clock** seconds the
+  signal is useless: over 2,039 corpus samples characters-per-second runs median 9.9, p5 4.3, and
+  the measured truncation sits at **3.1**, inside his own tail — catching it costs **3.9%** false
+  positives. Against **voiced** seconds it separates: median **25.9**, p1 12.4, the truncation
+  **12.7**. The floor is **13**, which fires on **1.1%** of real dictations (5 of 440). One observed
+  failure, not a distribution — the number moves when there are more.
+- **Thinking is `LOW`, not off, because off does not exist.** Gemini 3 Flash defaults to `MEDIUM`
+  and rejects `MINIMAL` with a 400; `LOW` is the floor. It is not sent at all to a `*-transcribe`
+  model, and **a 400 is retried once with nothing optional in the body** — unless the 400 is about
+  the key, which a retry cannot fix and which costs a second upload to re-learn.
+- **The key rides in `x-goog-api-key`, not in `?key=`.** Both work; a key in a query string is a
+  key in every proxy log between here and Google.
+- **`tools/gemini-test.sh`**, and its `--compare` is the one that earned it: each sample twice, with
+  and without the vocabulary, side by side. `--corpus [n]` puts both beside the transcript on disk.
+- **Nothing streams here and the live text stays unbuilt** (Victor, 2026-09-18): *"nu mi se pare un
+  câștig prea mare … mă va face să mă opresc și să tot corectez ce am scris"*. Speechmatics' partials
+  stay on the wire and off the screen.
+
+## Spoken markers (2026-09-14) — RETIRED 2026-09-18
+
+> **Off by default since 2026-09-18** (`ShotMarker.isEnabled`; `WT_SHOT_MARKERS=1` brings it
+> back). Everything below still describes the mechanism accurately and none of it is deleted —
+> what changed is that nothing switches it on.
+>
+> **Why.** The whole idea rests on the recogniser writing the injected phrase back *exactly*, and
+> no recogniser promises that. The day ElevenLabs became the engine, Scribe heard **`Pict`
+> element one** where `resolve` looks for `Pick`; nothing matched, and the marker stayed in the
+> middle of the sentence as words the agent reads as his:
+>
+> ```
+> Beige-ul ăsta n-are aceeași mărime cu- Pict element one. […] Pict element two.
+> ```
+>
+> Victor: *"hai să renunțăm pentru moment la ideea de a insera în textul dictării … pentru că nu
+> mai funcționează. Le lăsăm doar listate după transcriere."*
+>
+> **The failure mode is worse than the feature was good**, which is what decides it: working, it
+> saves the agent from matching a picture to a moment; failing, it corrupts the sentence. And it
+> fails per engine, per language and per accent — a fuzzier match moves the threshold, it does
+> not remove the class.
+>
+> **Nothing is lost from the envelope.** Every frame, highlight and pick is still enumerated
+> under the words, each stamped `mm:ss` from the start of the dictation. That listing is what the
+> markers were an optimisation over, and it never stopped being written.
 
 - **A shutter press during a dictation says `screenshot one` into Wispr's ear**, so the
   transcript carries `[shot 1]` at the word he pressed at rather than a second he has to

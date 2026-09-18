@@ -322,7 +322,7 @@ once, each taking one):
 | click | On a prompt: send it now. Otherwise: nothing — the chip is a label, not a switch |
 | hover | Reveals the ✕ that ends the session — **panel only**, never on the chip beside the pointer |
 | menu bar **Autosend** | Off at every launch. Ticked, the pre-send panel opens for one second with no Send and no Cancel on it, and the message goes |
-| menu bar **Engine** | Which recogniser is listening — Wispr Flow, or the local MLX model by name. Clicking the row opens the two, ticked; picking the local one loads its weights |
+| menu bar **Engine** | Which recogniser is listening — Wispr Flow, the local MLX model by name, ElevenLabs Scribe, or Speechmatics streamed live. Clicking the row opens the four, ticked; picking the local one loads its weights, and the two cloud rows say what they cost and whether their key is there |
 | menu bar 🤖 | Always there while the app runs — shows which session it is, and **every action with the gesture that performs it**. Rows grey out when they cannot act right now; they never disappear |
 
 **The chip itself teaches nothing.** It carries state — the pulse, what is being
@@ -385,6 +385,71 @@ semantically broken, and they are overwhelmingly clips under five seconds, where
 Whisper hallucinates fluent nonsense. A gate on decoder confidence catches most
 of those; the message an agent receives says the text came through a recogniser
 that can invent a sentence.
+
+### Three cloud recognisers, and each gives up something different
+
+Both are picks, never defaults, and both are off until a key is put in a file:
+
+| | ElevenLabs Scribe | Speechmatics | Gemini |
+|---|---|---|---|
+| key file | `elevenlabs.env` | `speechmatics.env` | `gemini.env` |
+| variable | `ELEVENLABS_API_KEY` | `SPEECHMATICS_API_KEY` | `GEMINI_API_KEY` |
+| $/hour of audio | 0.22 | ~0.13 | **~0.09** |
+| the audio goes out | in one upload | **as it is spoken** | in one upload |
+| language | detected | **pinned** (`WT_SM_LANG`) | detected |
+| can be given instructions | no | a word list | **yes, in a sentence** |
+
+(all three live in `~/.walkie-talkie/`)
+
+Speechmatics is a WebSocket the microphone is streamed into, so most of the
+sentence is transcribed before the key comes up; what is left at the release is
+the last words and whatever the recogniser was holding for context. It still
+writes the same WAV as every other engine — the corpus needs it, and if the
+connection dies mid-sentence that file is the only copy of what was said, so it
+is kept and offered back through *Recover Cancelled Dictation* rather than
+thrown away.
+
+Real-time transcription there has no language detection, so the session has to
+be told what it is about to hear. That is the one thing it gives up against the
+others, and it is why the menu row prints the language it is listening for.
+
+Nor can it be told two languages: one `language` per session, and the bilingual
+packs Speechmatics does offer (Arabic, Mandarin, Malay, Tamil, Tagalog and
+Spanish, each paired with English) do not include Romanian. What it *can* be
+told is the vocabulary — `~/.walkie-talkie/speechmatics-vocab.txt`, one term per
+line with optional pronunciations:
+
+```
+pull request
+Wispr Flow: whisper flow, uispăr flou
+commit: comit, camit
+```
+
+It is sent with every dictation and re-read each time, so a word that came back
+wrong is fixed by editing a line — no restart. `tools/speechmatics-vocab.txt` is
+the starter list, built from the English words that actually turn up in the voice
+corpus.
+
+`tools/speechmatics-test.sh <file.wav>` (or `--corpus 5`) streams a recording at
+the speed it was spoken and prints the partials as they arrive, then how long the
+first words took and how long the tail took after the audio stopped.
+
+Gemini is the cheapest of the three and the only one that can be *told* what
+it is about to hear. It gets a Romanian instruction — transcribe word for word,
+leave the English technical terms in English, do not summarise — with the terms
+from `vocab.txt` appended to it.
+
+That last clause is not decoration. A language model asked to transcribe
+something it cannot quite follow will sometimes return a shorter, tidier version
+of it: fluent, plausible, and missing half of what was said. So this engine
+measures what came back against the **voiced** seconds of the recording, and
+hangs a warning on anything under 13 characters per voiced second — a threshold
+picked off the corpus, where real dictation averages 26 and only one sample in a
+hundred falls below the line.
+
+`tools/gemini-test.sh --corpus 10 --compare` runs each of the last ten samples
+twice, with and without the vocabulary, and prints the two readings one above the
+other.
 
 ### The voice corpus
 

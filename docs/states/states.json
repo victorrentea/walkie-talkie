@@ -22,6 +22,30 @@
   },
   {
     "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 117,
+    "image" : "listening-filming.png",
+    "note" : "**A row of its own, under the shots.** It is the same kind of fact as `📸 ×3` — what this sentence is carrying — and the icon column is read downwards. The difference is the clock: a recording is the one thing here he is *spending* while he watches something happen, and the number is how he knows when to stop. It disappears the moment he stops it: the frames then join what the sentence carries, and a row that stayed up would be the second place the same count is written. The recording also stops itself at 30 s, and ends with the sentence if he never presses the gesture again.",
+    "shape" : "chip",
+    "slug" : "listening-filming",
+    "title" : "Recording the screen",
+    "when" : "🔽 ↑ while a dictation is open — bound, unbound, or headed for a folder that does not exist yet.",
+    "width" : 308
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 45,
+    "image" : "bound-wispr-hearing.png",
+    "note" : "**A yellow ring where our own sentence wears an orange one.** Since the engines became mutually exclusive there is a third thing this glyph has to be able to say, and it is not *recording* — nothing he says now will be routed, booked or filed here. Same disc, same geometry, one colour changed, so the two read as the same object in two states rather than as two icons. The device is drawn onto a filled circle rather than the orange artwork being tinted, which would yellow the screen and the button with it.",
+    "shape" : "chip",
+    "slug" : "bound-wispr-hearing",
+    "title" : "Wispr Flow is listening — not us",
+    "when" : "Bound, with a microphone open that this app is not running: he started Wispr with its own chord, or with 🔽 →, while the Engine is the local model or ElevenLabs.",
+    "width" : 48
+  },
+  {
+    "alpha" : 0.80000000000000004,
     "group" : "At rest",
     "height" : 45,
     "image" : "bound-blind.png",
@@ -42,7 +66,7 @@
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
     "when" : "🔼 ↑ — the forward button held, mouse moved up (🛞🛞 with Logi gestures off): the dictation goes to a terminal that does not exist yet.",
-    "width" : 190
+    "width" : 218
   },
   {
     "alpha" : 0.80000000000000004,
@@ -54,7 +78,7 @@
     "slug" : "spawn-folder",
     "title" : "…and he picked which folder",
     "when" : "After clicking a row in the folder menu, for the rest of that dictation.",
-    "width" : 190
+    "width" : 218
   },
   {
     "alpha" : 0.80000000000000004,
@@ -66,7 +90,7 @@
     "slug" : "bind-to-send",
     "title" : "Nothing is bound, and he is talking anyway",
     "when" : "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
-    "width" : 162
+    "width" : 190
   },
   {
     "alpha" : 0.80000000000000004,
@@ -78,7 +102,7 @@
     "slug" : "replace-wispr",
     "title" : "Replace Wispr — this one goes to the caret",
     "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-    "width" : 162
+    "width" : 190
   },
   {
     "alpha" : 0.80000000000000004,

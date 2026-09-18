@@ -1,0 +1,129 @@
+# The custom dictionary handed to Speechmatics with every dictation.
+#
+# **Why this file exists.** Speechmatics real-time takes exactly ONE language per
+# session — there is no `["ro", "en"]`, no auto-detection outside batch, and the
+# seven bilingual packs it does have (ar_en, cmn_en, en_ms, en_ta, es+bilingual-en,
+# cmn_en_ms_ta, tl) do not include Romanian. So the session is Romanian, and the
+# English words inside Victor's Romanian are what the Romanian pack is least
+# likely to get right. This list is how it is told about them.
+#
+# Copy it to  ~/.walkie-talkie/speechmatics-vocab.txt  and edit there; the app
+# reads that copy, not this one, and re-reads it at every dictation. Empty file,
+# or no file, means no dictionary is sent at all.
+#
+# ## Format
+#
+#   term                       one entry, spelled the way you want it written
+#   term: sounds like, …       plus how it is said, in ROMANIAN spelling
+#
+# `sounds_like` must be written in the script of the session's language — these
+# are Romanian renderings of English words on purpose. `#` comments and blank
+# lines are ignored. Speechmatics rejects a job over 20,000 entries and
+# recommends staying under 1000; this file is ~70, and a short list aimed at real
+# mistakes beats a long one aimed at imagined ones.
+#
+# ## Where the entries came from
+#
+# The 2,804 transcripts in ~/.walkie-talkie/voice-corpus (112k words), counted:
+# these are the English words that actually occur inside his Romanian, ranked by
+# how often. `screenshot` 191, `push` 179, `commit` 160, `skill` 158, `git` 116,
+# `prompt` 77, `github` 72, `java` 71, `markdown` 62, `copilot` 57, `token` 56,
+# `tooltip` 55, `repo` 50, `dictation` 38, `subagent` 37, `branch` 35, `pr` 31.
+#
+# The one **measured** confusion is in there too: `whisper flow` appears 35 times
+# against `wispr flow`'s 45 — the recognisers already write the wrong one of the
+# two about two times in five, and it is the same word every time.
+#
+# (`worship`, 225 occurrences, is NOT a mishearing of Wispr and is not in this
+# list: it is the local model's repetition loop — one clip where the word repeats
+# for a whole paragraph. Do not add entries for a failure another engine had.)
+
+# ── the names that are ours, and get mangled the most ──
+Wispr Flow: whisper flow, uispăr flou, wisper flow
+Walkie Talkie: walki tochi, uoki toki
+Claude Code: clod cod, cloud code
+CLAUDE.md: claude md, clod punct em de
+AGENTS.md: agents md, agenț em de
+Victor Rentea
+victorrentea.ro
+
+# ── git, the whole vocabulary of a working day ──
+git
+commit: comit, camit
+commits: comiț, comits
+push: puș, puci
+pull request: pul rikuest, pulrecvest
+branch: brench, branci, brenci
+rebase: ribeis
+merge: merj
+diff
+repo: repou
+GitHub: githab, gid hab, ghithab
+PR: pi ar, peer
+code review: cod riviu
+human review: hiumăn riviu
+test PR: test pi ar
+main
+staging
+worktree: uorctri
+
+# ── the agents and the harness ──
+Claude
+Anthropic: antropic
+Opus
+Sonnet: sonet
+Haiku
+Codex: coudecs
+Copilot: copailot
+agent: agiănt
+subagent: sabagiănt
+skill: schil
+skills: schils
+prompt
+harness: harnăs
+token: tochen
+tokens: tochens
+context
+hook: huc
+hooks: hucs
+MCP: em si pi
+slash command
+
+# ── the app and what he does to it ──
+screenshot: scrinșot, scrinshot
+screenshots: scrinșots
+overlay: ăuverlei
+chip
+tooltip: tultip
+hotkey: hotchi
+relay: rilei
+dictation: dicteișăn
+transcript: transcript
+endpoint: endpoint
+status line: stejtus lain
+training assistant
+human-review
+voice corpus: vois corpus
+
+# ── the stack he teaches from ──
+Java: geava
+Spring Boot: spring but
+Docker: docăr
+Kafka
+Angular: anghiular
+Swift: suift
+Python: paiton
+JSON: geison
+Markdown: marcdaun
+CSS: si es es
+Chrome: croum
+localhost: locălhost
+
+# ── the verbs that arrive in English inside a Romanian sentence ──
+deploy: diploi
+build: bild
+refactoring: refactoring
+debug: dibag
+release: rilis
+feature: ficiăr
+fix

@@ -100,6 +100,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// on a wire has to be chosen by hand.
     private let elevenSource = ElevenLabsSource()
 
+    /// **The screen recording in progress, if there is one** (2026-09-18) — see
+    /// `ScreenFilm`. Main-thread only, like every other piece of the dictation's
+    /// own state; the gesture hops here before it touches this.
+    private var film: ScreenFilm?
+
+    /// What the finished recording left behind, waiting for the sentence it
+    /// belongs to. Cleared with the rest of the pending state, so a film never
+    /// rides a dictation it was not made during.
+    private var pendingFilm: ScreenFilm.Result?
+
+    /// **The relay's own microphone, transcribed *while he speaks*** (2026-09-18)
+    /// — see `SpeechmaticsSource`. Costs the same nothing as the one above until
+    /// it is picked: a `MicRecorder` at rest, and no socket until a gesture opens
+    /// one. It is never the default for `elevenSource`'s reason — it uploads.
+    private let speechmaticsSource = SpeechmaticsSource()
+
+    /// **The relay's own microphone, read by a language model** (2026-09-18) —
+    /// see `GeminiSource`. The fifth, and the cheapest of the three that upload;
+    /// like the other two it is never the default, and like them it costs
+    /// nothing until it is picked.
+    private let geminiSource = GeminiSource()
+
     /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
     /// ever answers and never reports (2026-09-17).
     ///
@@ -177,16 +199,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
+        case "sm", "speechmatics": return speechmaticsSource
+        case "gemini", "google": return geminiSource
         default: return wisprSource
         }
     }
 
-    /// Which of the three `source` currently is, in the menu's vocabulary.
+    /// **The letter the chip wears while that engine is listening** —
+    /// `Listening(W)...` for Wispr Flow, `(E)` ElevenLabs, `(L)` the local
+    /// model, `(S)` Speechmatics, `(G)` Gemini.
+    ///
+    /// **`L` and not `W` for Whisper**, which is the only real choice in the
+    /// table: the two recognisers whose names start with the same letter are
+    /// exactly the two he most needs to tell apart, and one of them puts his
+    /// voice on a wire. So the local one is named by *where it runs* rather than
+    /// by what it is — which is also the fact that matters at the moment this is
+    /// read.
+    ///
+    /// Beside `engineId` rather than on the sources, because it is a fact about
+    /// this app's vocabulary — the menu's `Engine` row and this letter have to
+    /// agree — and a source may not know it is one of five. **A new engine adds
+    /// a row here**; the default is Wispr's letter for the same reason
+    /// `engine(named:)` falls back to Wispr, and an unknown id reaching this is
+    /// already a bug somewhere above.
+    private static func engineMark(_ id: String) -> String {
+        switch id {
+        case "whisper": return "(L)"
+        case "eleven": return "(E)"
+        case "sm": return "(S)"
+        case "gemini": return "(G)"
+        default: return "(W)"
+        }
+    }
+
+    /// Which of the five `source` currently is, in the menu's vocabulary.
     /// Derived rather than stored: the source is the fact, and a second copy of
     /// it is a second thing that can be wrong.
     private var engineId: String {
         if source === whisperSource { return "whisper" }
         if source === elevenSource { return "eleven" }
+        if source === speechmaticsSource { return "sm" }
+        if source === geminiSource { return "gemini" }
         return "wispr"
     }
 
@@ -235,9 +288,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence. The engine is still switched: the refusal is his to fix, and
         // a pick that silently bounced back would be the menu lying about what
         // is running.
-        if !source.isReady, source === elevenSource {
-            overlay.flash("⚠️ \(source.name) has no API key — put ELEVENLABS_API_KEY in "
-                            + "\(ElevenLabsSource.configURL.path)", duration: 12)
+        //
+        // **A table since there are two that can be keyless** (2026-09-18): the
+        // variable and the file it belongs in are the whole of the fix, and an
+        // `if` chain that named only one of them would leave the newer engine
+        // failing silently at the gesture — which is the exact failure this
+        // paragraph exists to prevent.
+        let keyless: (variable: String, file: String)?
+        switch source {
+        case let s where s === elevenSource:
+            keyless = ("ELEVENLABS_API_KEY", ElevenLabsSource.configURL.path)
+        case let s where s === speechmaticsSource:
+            keyless = ("SPEECHMATICS_API_KEY", SpeechmaticsSource.configURL.path)
+        case let s where s === geminiSource:
+            keyless = ("GEMINI_API_KEY", GeminiSource.configURL.path)
+        default:
+            keyless = nil
+        }
+        if !source.isReady, let keyless {
+            overlay.flash("⚠️ \(source.name) has no API key — put \(keyless.variable) in "
+                            + "\(keyless.file)", duration: 12)
         } else {
             overlay.flash("🎙️ \(source.name)", duration: 2.5)
         }
@@ -770,6 +840,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var inlinedElements: Set<Int> = []
         let paths: [String]
         let screen: String?
+        /// **The screen recording this sentence carries, if he made one**
+        /// (2026-09-18) — the contact sheet, the folder of full-resolution
+        /// frames, and how long and how many. Carried on the message for
+        /// `sources`' reason: the panel holds a prompt for seconds and the next
+        /// dictation may already have started a recording of its own.
+        var film: ScreenFilm.Result?
         /// Path → what was in front when that frame was taken. Covers both
         /// `paths` and `screen`, which is the reason it is keyed rather than
         /// ordered.
@@ -847,6 +923,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it; `setEngine` is what decides, and it tells the row back what is
         // actually running — see its note on the sentence in flight.
         status.onPickEngine = { [weak self] id in self?.setEngine(id) }
+        // 🔽 ↑ — the screen recording. Hops to main because everything it
+        // touches (the film, the overlay, the pending state) is main's.
+        hotkeys.onGestureFilm = { [weak self] in
+            DispatchQueue.main.async { self?.toggleFilm() }
+        }
         // **Use Logi Gestures** — pushed into the tap, which is the only thing
         // that acts on it. No flash and no overlay: it is a wiring switch, not
         // something that happens to a dictation.
@@ -959,6 +1040,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // launch, so pasting the key in and opening the menu is the whole of
         // setting it up — see `ElevenLabsSource.reloadKey`.
         status.elevenReady = { [weak self] in self?.elevenSource.reloadKey() ?? false }
+        status.speechmaticsReady = { [weak self] in self?.speechmaticsSource.reloadKey() ?? false }
+        status.geminiReady = { [weak self] in self?.geminiSource.reloadKey() ?? false }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
@@ -1632,6 +1715,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           .map(String.init).joined(separator: "+")]
             out["whisper"] = self.whisperSource.describe()
             out["elevenlabs"] = self.elevenSource.describe()
+            out["speechmatics"] = self.speechmaticsSource.describe()
+            out["gemini"] = self.geminiSource.describe()
             return out
         }
 
@@ -1680,6 +1765,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // thread, where the sample is the only thing cheap enough to ask.
         wisprMic.start()
         hotkeys.wisprMicIsOpen = { [weak self] in self?.wisprMic.sampleIsRunningInput() ?? false }
+        // **A refused gesture has to say so**, or it is indistinguishable from a
+        // gesture the mouse dropped — and the one thing he would then do is make
+        // it again, harder. Raised on the tap thread; the hop is here because
+        // the tap may not touch AppKit.
+        hotkeys.onEngineBusy = { [weak self] why in
+            DispatchQueue.main.async { self?.overlay.flash("⚠️ \(why)", duration: 5) }
+        }
+        // **A chord this app posts for a gesture has to announce itself**
+        // (2026-09-18) — the tap filters its own posts out of the keyboard
+        // branch, so without this a 🔽 → dictation reaches `WisprState` through
+        // no witness at all and the ⚡ ring never goes up for it. See
+        // `HotkeyTap.onWisprRawChord`. Wired to `wisprSource` and not to
+        // `source`: the flick posts Wispr's chord whichever engine is live.
+        hotkeys.onWisprRawChord = { [weak self] closing in
+            DispatchQueue.main.async { self?.wisprSource.noteRawChord(closing: closing) }
+        }
         // …and watched for the length of one, so the arm cannot be left
         // standing over a sentence that ended some other way.
         hotkeys.onWisprRawGesture = { [weak self] armed in
@@ -1782,6 +1883,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
         source.prepare()
+        // **One letter on the chip, saying which recogniser is listening**
+        // (2026-09-18) — `Listening(W)...`. Pushed from here because here is the
+        // one place in the app that is allowed to know there are three of them;
+        // the overlay renders the string and cannot ask what it means.
+        overlay.setEngineMark(Self.engineMark(engineId))
         // **The shutter runs on `DispatchQueue.global()`, not the main thread**
         // (`HotkeyTap.onScreenshot`), so `reserveMarker` may not read `source` —
         // `setEngine` reassigns it from the main thread and that is a race on a
@@ -2400,6 +2506,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // window with it. Every caller here is a gesture that means *start*, and
         // none of them means *start another one over the last*.
         guard !listening, !source.isRecording, !speculative, !settling else { return }
+        // **And not over a Wispr sentence this app is not running** (2026-09-18).
+        //
+        // The guard above is the relay asking itself; this one asks the other
+        // application. They are different questions exactly when the Engine is
+        // **not** Wispr: 🔽 → posts Wispr's chord raw in every engine, and a
+        // dictation Victor starts with Wispr's own keyboard chord is invisible
+        // here too — so with the local model or ElevenLabs wired up, nothing
+        // above knows Wispr is already listening, and ⌘⌃D would open a second
+        // microphone on the same voice. Victor, 2026-09-18: *"E absurd să
+        // pornesc două motoare de transcriere simultan. Trebuie exclusiv, ba
+        // unu, ba altu."*
+        //
+        // **Asked only when the live source is not the Wispr one.** With Wispr
+        // as the Engine its own `isRecording` is the better answer — it is the
+        // state machine with four witnesses behind it — and three CoreAudio
+        // reads on the way into every dictation buy nothing there.
+        if source !== wisprSource, wisprMic.sampleIsRunningInput() {
+            Log.error("dictate gesture refused — Wispr Flow's microphone is already open")
+            overlay.flash("⚠️ Wispr Flow is listening — one engine at a time", duration: 5)
+            return
+        }
         // Set before the gate below and before anything reads `hasDestination`:
         // it *is* the answer for a spawn.
         spawnPending = spawn
@@ -2601,6 +2728,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
+
+        // **A recording still running is thrown away with the sentence** — it was
+        // made *of* something he cancelled, and the frames are a hundred
+        // megabytes of a moment he asked to forget.
+        film?.discard()
+        film = nil
+        overlay.setFilming(false)
+        if let stale = pendingFilm {
+            try? FileManager.default.removeItem(at: stale.dir)
+            pendingFilm = nil
+        }
 
         stateLock.lock()
         pendingPicks = []
@@ -3011,6 +3149,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Routed through `flushOrphaned` so deliberate shots are still released
     /// rather than dropped; only the timer is different, and it is cancelled here.
+    /// **🔽 ↑ — start the recording, or stop the one running** (2026-09-18).
+    ///
+    /// **The gate is *a dictation is open*, and nothing more.** Victor,
+    /// 2026-09-18: *"poți să faci video oricând dictarea e pornită. Da, legată,
+    /// nelegată, cu folder nou, nu contează."* So it is deliberately **not**
+    /// `hasDestination`: an unbound sentence is held for five minutes and
+    /// delivered when a bind lands (`holdsForBind`), and a film made during it
+    /// has to travel with it exactly as its screenshots do. The only thing a
+    /// recording needs is a sentence to belong to.
+    ///
+    /// The settle is excluded on purpose — between the microphone closing and
+    /// the words landing the sentence is over, and a film started there would
+    /// attach to whatever came next.
+    private func toggleFilm() {
+        if let running = film {
+            film = nil
+            overlay.setFilming(false)
+            guard let result = running.stop() else {
+                overlay.flash("⚠️ the recording caught no frames", duration: 5)
+                return
+            }
+            pendingFilm = result
+            publishShotCount()
+            overlay.flash(String(format: "🎬 %.1fs, %d frames", result.duration, result.frames.count),
+                          duration: 2)
+            return
+        }
+        guard listening || source.isRecording || speculative else {
+            // Said rather than ignored: a free side button that does nothing is
+            // indistinguishable from one Options+ has lost the mapping for, and
+            // that is a thing he would go and debug in the wrong place.
+            overlay.flash("🎬 start dictating first — a recording rides a sentence", duration: 4)
+            return
+        }
+        // **One film per sentence.** A second recording would have to either
+        // replace the first — losing what he deliberately captured — or make the
+        // envelope carry two, which is a shape the clause and the agent would
+        // both have to learn for a case he has never asked for.
+        guard pendingFilm == nil else {
+            overlay.flash("🎬 this sentence already carries a recording", duration: 4)
+            return
+        }
+        guard let started = ScreenFilm.start() else {
+            overlay.flash("⚠️ could not start the recording", duration: 5)
+            return
+        }
+        film = started
+        overlay.setFilming(true)
+    }
+
+    /// **Hand the finished recording to the message being built, and let go of
+    /// it** — and stop one still running first.
+    ///
+    /// A film is a fact about a sentence, so the sentence takes it whole: a
+    /// recording still going when he finishes talking is **stopped and
+    /// attached** rather than abandoned, because the alternative is a folder of
+    /// frames on disk belonging to a message that has already gone.
+    ///
+    /// Main thread — `film` and `pendingFilm` are main's, and this is called from
+    /// the same place the rest of the pending state is drained.
+    private func takeFilm() -> ScreenFilm.Result? {
+        if let running = film {
+            film = nil
+            overlay.setFilming(false)
+            Log.info("🎬 the sentence ended while recording — stopping and attaching it")
+            pendingFilm = running.stop()
+        }
+        defer { pendingFilm = nil }
+        return pendingFilm
+    }
+
     private func abandonDictation(_ reason: String) {
         stateLock.lock()
         let carrying = dictationInFlight || pendingSelection != nil
@@ -3136,14 +3345,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if on {
             let cap = DispatchWorkItem { [weak self] in
                 guard let self, self.wisprHearing else { return }
-                Log.error("🎵 Wispr Flow has been listening for \(Int(Self.wisprHearingCeiling)) s — letting the music back on; its state machine never left `listening`")
-                self.wisprHearing = false
-                self.syncMusic()
+                Log.error("🎵 Wispr Flow has been listening for \(Int(Self.wisprHearingCeiling)) s — letting the music back on and taking the ring down; its state machine never left `listening`")
+                // **Back through the front door**, rather than undoing by hand
+                // the things the rising edge did. It was two — the flag and the
+                // music — and since 2026-09-18 it is four; a ceiling that
+                // forgets one leaves it standing for ever, which for a ring at
+                // the pointer is the 09-15 failure exactly.
+                self.wisprIsHearing(false)
             }
             wisprHearingCap = cap
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.wisprHearingCeiling, execute: cap)
         }
-        syncMusic()
+        // **And the chip says so in colour** (2026-09-18) — a yellow ring where
+        // the relay's own sentence wears an orange one. The music pause and this
+        // are the same fact read twice; see `RelayWindow.walkieWisprGlyph`.
+        overlay.setWisprHearing(on)
+        // **…and the ⚡ ring goes up round the pointer, which is the third
+        // reading of the same fact** (2026-09-18) — `syncBorrowedGestures`
+        // rather than `syncMusic`, because the halo hangs off that one switch
+        // and the music is synced from inside it. Nothing else it recomputes has
+        // moved, so the rest is a no-op by construction; that is the whole
+        // reason every edge of a dictation is made to pass through there.
+        syncBorrowedGestures()
     }
 
     private func syncBorrowedGestures() {
@@ -3166,6 +3389,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The window is the same narrow one — `listening`, not the mode — so
         // outside it LinearMouse and Victor Addons go on typing Return with it.
         hotkeys.dictating = live
+        // **The wider question, for the engine exclusion** — see
+        // `HotkeyTap.ownDictation`. `live` is `hasDestination && listening` and
+        // answers *is mouse 4 ours*; this one answers *would a second recogniser
+        // now be listening alongside the first*, so it covers the speculative
+        // ring and the settle and does not care where the words are going.
+        hotkeys.ownDictation = listening || source.isRecording || speculative || settling
         picker.dictating = live
         // The halves as well as the verdict, so a refused ⌘⇧ can name the one
         // that was missing rather than saying an undivided no — see
@@ -3222,10 +3451,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // no way to tell which he was looking at. The ring goes down on the
         // relay's own stop gesture — `WisprFlowSource.closeListening` — rather
         // than on a CoreAudio edge measured at 0–6 s late and sometimes absent.
-        let atCaret = pasteMode
+        //
+        // **A fifth way, and it is somebody else's microphone** (2026-09-18).
+        // `wisprHearing` is Wispr Flow listening to a sentence this app is not
+        // running — he held ⌘⌥, or flicked 🔽 →, or started it from Wispr's own
+        // window. Victor: *"când pornesc Wispr Flow cu gestul de mouse back sau
+        // cu tastele … să apară același cerc cu fulger în jurul cursorului …
+        // fulgerul să arate că cineva ascultă"*.
+        //
+        // It is a **restoration**, not a new claim: the ring was `listening ||
+        // wisprDictating` from 2026-09-11 and lost the second half on 09-12,
+        // when Wispr became the *source* and `listening` looked as though it
+        // covered everything. It does not: `listening` is the relay's own
+        // sentence, so with the Engine on the local model or on ElevenLabs — and
+        // on any dictation Victor opens himself — the microphone was open with
+        // nothing round the pointer to say so. `wisprHearing` is the witness
+        // that works in every engine (`WisprState.listening`, wired at launch
+        // beside the music pause), which is why it is the one read here and
+        // `WisprWatch` is not.
+        let foreignMic = wisprHearing && !listening && !speculative
+        // **The ring, and nothing else, for a sentence that is not ours.** The
+        // heads say *the words are landing here, do not move the mouse* — a
+        // promise about a delivery this app is not making; and their schedule is
+        // silence, read off `source.meter`, which for a foreign dictation is a
+        // recorder that is not running and therefore a stale reading. Same
+        // reason the ring will not breathe for one: it sits at rest alpha, which
+        // is honest — *a microphone is open* is the whole of what is known.
+        let atCaret = !foreignMic && (pasteMode
             || (speculative && !listening)
             || (listening && !isBound && !spawnPending)
-            || (settling && settlingAtCaret)
+            || (settling && settlingAtCaret))
         // **The heads stay up through the settle of a caret sentence**
         // (2026-09-15) — *"rămân săgețile care curg până când efectiv se inseră
         // textul la caret … să nu plec cu cursorul de acolo"*. The ring is still
@@ -3238,7 +3493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Before `setActive`**, because the collapse it triggers is what reads
         // the flag to decide whether the arrow goes with the ring.
         caretHalo.setDelivering(settling && settlingAtCaret)
-        caretHalo.setActive(listening || speculative,
+        caretHalo.setActive(listening || speculative || wisprHearing,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **The music pauses for every dictation, and so reads `listening`, not
@@ -3707,12 +3962,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "listening": listening,
             "settling": settling,
             "speculative": speculative,
+            // **The recording, because a test has to be able to assert on it**
+            // (2026-09-18). `GET /test/state` is this app's one read that answers
+            // everything at once, and a feature whose only witness is a row on a
+            // chip no screen capture can contain has no test behind it at all.
+            "filming": film != nil,
+            "filmPending": pendingFilm != nil,
+            "filmFrames": pendingFilm?.frames.count ?? 0,
+            "filmSheet": pendingFilm?.sheet?.path ?? "",
             // The swallow window: armed from `didStopListening`, and the flag
             // whose absence let Wispr paste straight into Word.
             "capturing": wisprSource.capturing,
             // The source's: is a microphone actually open.
             "isRecording": source.isRecording,
             "ringUp": caretHalo.live,
+            // **Why it is up when nothing else here says it should be**
+            // (2026-09-18): Wispr Flow is holding a microphone on a sentence
+            // this app is not running, and the ring covers that too. Nothing
+            // that rides the pointer can be screenshot, so a ring with no
+            // `listening` behind it is otherwise unexplainable from a desk.
+            "wisprHearing": wisprHearing,
             // The six heads, held past the ring for a caret sentence still in
             // flight — see `CaretHalo.setDelivering`. Nothing that rides the
             // pointer can be screenshot, so this flag is the only way an
@@ -4485,6 +4754,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
+        if let clause = filmClause(m.film) { parts.append(clause) }
         if let clause = picksClause(m.elements, since: m.startedAt,
                                     inlined: m.inlinedElements) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
@@ -4561,6 +4831,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = Outbox.cacheRoot.path
         guard dir == root || dir.hasPrefix(root + "/") else { return dir }
         return "$WALKIE_SHOTS" + dir.dropFirst(root.count)
+    }
+
+    /// **The screen recording, named so the agent knows which file answers
+    /// which question** (2026-09-18).
+    ///
+    /// Two paths and a sentence saying what each is for, because the split is
+    /// the whole design: an agent cannot watch a film, so the **sheet** is the
+    /// film as far as it is concerned — one image, every cell labelled — and the
+    /// **frames** are where it goes when the sheet shows it something it needs to
+    /// read. Saying that here rather than leaving it to be inferred is what stops
+    /// a recipient either ignoring the folder or opening fifty JPEGs.
+    ///
+    /// The frame rate is stated because the agent reasons about *time* from the
+    /// cell labels, and the dropped count is stated for the same reason: a gap
+    /// between two cells means *nothing happened* only if nothing was missed.
+    private static func filmClause(_ film: ScreenFilm.Result?) -> String? {
+        guard let film, let sheet = film.sheet else { return nil }
+        let name = (sheet.path as NSString).lastPathComponent
+        let dir = shotsRootAbbreviated(film.dir.path)
+        var line = String(format: "[Screen recording: %.1fs at %.0f fps, %d frames. "
+                          + "Look at %@/%@ — every frame, thumbnailed and labelled `#n  m:ss.t`. "
+                          + "The full-resolution frames are %@/frame-NNNN.jpg, numbered as on the sheet: "
+                          + "open one when the sheet shows something worth reading.]",
+                          film.duration, ScreenFilm.fps, film.frames.count, dir, name, dir)
+        if film.dropped > 0 {
+            line += "\n[\(film.dropped) frame(s) were missed while recording — a gap between two "
+                  + "cells is not proof that nothing happened there.]"
+        }
+        return line
     }
 
     private static func shotsClause(paths: [String], screen: String?,
@@ -5949,7 +6248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               extraSelections: extraSelections,
                               inlinedSelections: inlined,
                               inlinedElements: inlinedElements,
-                              paths: attached, screen: screen, sources: sources,
+                              paths: attached, screen: screen, film: takeFilm(), sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, engine: engine,

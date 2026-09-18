@@ -139,12 +139,37 @@ enum ShotMarker {
         ProcessInfo.processInfo.environment["WT_MARKER_DEVICE"] ?? "TO Wispr"
     }
 
-    /// **On by default, and it fails safe in every direction.** With no device it
-    /// says nothing; with Wispr on another microphone the sound reaches a device
-    /// nobody records; with a source that does not accept markers it is never
-    /// asked. `WT_SHOT_MARKERS=0` turns it off for one run.
+    /// **OFF by default since 2026-09-18 — retired, not deleted.**
+    /// `WT_SHOT_MARKERS=1` brings it back for a run.
+    ///
+    /// The idea was that a spoken index survives into the transcript and can be
+    /// swapped for the thing it names, so `[shot 1]` lands at the word he pressed
+    /// the shutter at. It works only if the recogniser writes the injected phrase
+    /// back **exactly**, and that is a promise no recogniser makes. Victor's
+    /// evidence, the day ElevenLabs became the engine:
+    ///
+    /// > Beige-ul ăsta n-are aceeași mărime cu- **Pict element one**. […]
+    /// > **Pict element two**. Și aliniază-le frumos.
+    ///
+    /// Scribe heard *Pict*, `resolve` looks for *Pick*, nothing matched — and the
+    /// marker stayed in the sentence as noise, in the middle of the prompt, where
+    /// the agent reads it as words he said. His call: *"hai să renunțăm pentru
+    /// moment la ideea de a insera în textul dictării […] pentru că nu mai
+    /// funcționează. Le lăsăm doar listate după transcriere."*
+    ///
+    /// **The failure is worse than the feature was good**, which is what decides
+    /// it. When it works it saves the agent from matching a picture to a moment;
+    /// when it fails it corrupts the sentence itself. And it fails per engine, per
+    /// language and per accent, so a fuzzier match would only move the threshold,
+    /// not remove the class.
+    ///
+    /// **Nothing is lost from the envelope.** Every frame, highlight and pick is
+    /// still enumerated under the words by `shotsClause`, `selectionsClause` and
+    /// `picksClause`, each stamped with `mm:ss` from the start of the dictation —
+    /// which is the addressing this was an optimisation over, not a replacement
+    /// for.
     static var isEnabled: Bool {
-        ProcessInfo.processInfo.environment["WT_SHOT_MARKERS"] != "0"
+        ProcessInfo.processInfo.environment["WT_SHOT_MARKERS"] == "1"
     }
 
     /// Serial, and everything below happens on it: `AVAudioEngine` setup is not

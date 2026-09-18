@@ -1144,6 +1144,30 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **A chord this app posted for a gesture — 🔽 →, or the back click that
+    /// stops it** (2026-09-18).
+    ///
+    /// The tap's keyboard branch cannot report these: it filters this app's own
+    /// posts out by design (`backButtonStamp`), so a 🔽 → sentence reached
+    /// `WisprState` through **no** witness at all — no chord, therefore no row
+    /// poll, therefore never `listening`, therefore no `hearingChanged` and no
+    /// ⚡ ring. With the Engine on the local model or ElevenLabs there is no
+    /// second witness either: this source's `watch` is only started by
+    /// `prepare()`, which is never called for a source that is not wired.
+    ///
+    /// **`relay: false`, always.** The sentence is Wispr's own — the relay rings
+    /// for it and routes nothing, which is the 09-12 contract for this flick and
+    /// is what `relayStarted` carries. `confident: true`, because this app
+    /// posted the chord itself: there is no gesture to have misread. The
+    /// toggle's two halves are told apart by `gestureSeen` from its own state,
+    /// exactly as they are for his keyboard, so `closing` is a *description* of
+    /// what the tap believed rather than an instruction.
+    func noteRawChord(closing: Bool) {
+        gestureSeen(closing ? "🔽 → (the stop) — Wispr's chord, posted raw"
+                            : "🔽 → — Wispr's chord, posted raw",
+                    confident: true, relay: false, mode: .off)
+    }
+
     /// `POST /test/wispr {"hotkey": true}` — the speculative ring, one step
     /// earlier than the microphone.
     func simulateHotkey() {

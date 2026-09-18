@@ -445,6 +445,7 @@ enum ScreenCapture {
             }
         }
         defer { dropEmptySessions() }
+        pruneFilms(in: sessions)
         guard jpgs.count > keepNewest else { return }
         let sorted = jpgs.sorted { lhs, rhs in
             let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
@@ -456,6 +457,46 @@ enum ScreenCapture {
             let small = stale.deletingLastPathComponent().appendingPathComponent(
                 stale.deletingPathExtension().lastPathComponent + "-small.jpg")
             try? FileManager.default.removeItem(at: small)
+        }
+    }
+
+    /// **Screen recordings are counted as recordings, not as frames**
+    /// (2026-09-18).
+    ///
+    /// `prune` above walks one level into each session and collects JPEGs, so a
+    /// `film-<stamp>/` **sub**folder is invisible to it in both directions: its
+    /// frames are never counted against `keepNewest`, which is right — one
+    /// four-second recording is twenty frames and would evict twenty real
+    /// screenshots — and they are never deleted either, which is not. At ~800 KB
+    /// a frame and 5 fps, a day of recordings is gigabytes nothing ever removes.
+    ///
+    /// So they are pruned by their own unit: the newest `keepFilms` recordings
+    /// survive whole, the rest go whole. A recording is only meaningful entire —
+    /// half a film is a sheet whose cells point at files that are no longer
+    /// there — so there is nothing to do at frame granularity.
+    private static let keepFilms = 6
+
+    private static func pruneFilms(in sessions: [URL]) {
+        let fm = FileManager.default
+        var films: [URL] = []
+        for session in sessions {
+            let entries = (try? fm.contentsOfDirectory(
+                at: session, includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles])) ?? []
+            films += entries.filter {
+                $0.lastPathComponent.hasPrefix("film-")
+                    && (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            }
+        }
+        guard films.count > keepFilms else { return }
+        let sorted = films.sorted { lhs, rhs in
+            let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return l > r
+        }
+        for stale in sorted.dropFirst(keepFilms) {
+            try? fm.removeItem(at: stale)
+            Log.info("🎬 pruned an old recording — \(stale.lastPathComponent)")
         }
     }
 

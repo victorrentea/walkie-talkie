@@ -74,6 +74,25 @@ enum OverlayStates {
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
             },
 
+            Shot(slug: "listening-filming", group: "Dictating", title: "Recording the screen",
+                 when: "🔽 ↑ while a dictation is open — bound, unbound, or headed for a folder that does not exist yet.",
+                 note: "**A row of its own, under the shots.** It is the same kind of fact as `📸 ×3` — what this sentence is carrying — and the icon column is read downwards. The difference is the clock: a recording is the one thing here he is *spending* while he watches something happen, and the number is how he knows when to stop. It disappears the moment he stops it: the frames then join what the sentence carries, and a row that stayed up would be the second place the same count is written. The recording also stops itself at 30 s, and ends with the sentence if he never presses the gesture again.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(1)
+                o.setShotCount(3)
+                o.setFilming(true)
+            },
+
+            Shot(slug: "bound-wispr-hearing", group: "At rest", title: "Wispr Flow is listening — not us",
+                 when: "Bound, with a microphone open that this app is not running: he started Wispr with its own chord, or with 🔽 →, while the Engine is the local model or ElevenLabs.",
+                 note: "**A yellow ring where our own sentence wears an orange one.** Since the engines became mutually exclusive there is a third thing this glyph has to be able to say, and it is not *recording* — nothing he says now will be routed, booked or filed here. Same disc, same geometry, one colour changed, so the two read as the same object in two states rather than as two icons. The device is drawn onto a filled circle rather than the orange artwork being tinted, which would yellow the screen and the button with it.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setWisprHearing(true)
+            },
+
             Shot(slug: "bound-blind", group: "At rest", title: "Bound to an app with no directory",
                  when: "Bound to VS Code or IntelliJ — a target the relay pastes into blind.",
                  note: "Standing by this is the same 🎙️ as every other bound chip — the destination is not what the resting state is about. What differs is what appears once he starts talking: no tty to read a folder from, so the app's own name takes the line rather than a folder being invented, behind its own icon.",
@@ -500,6 +519,16 @@ enum OverlayStates {
         o.setChromeFront(false)
         o.setSpawnDestination(nil)
         o.setBound(label: nil)
+        o.setWisprHearing(false)
+        o.setFilming(false)
+        // **Pinned to Wispr's letter, so the page cannot change with a menu
+        // setting** (2026-09-18). `AppDelegate` pushes the live engine's mark
+        // into the overlay at launch, which would otherwise make every
+        // `Listening…` picture on this page depend on which recogniser happened
+        // to be selected the day it was shot — the same class of nondeterminism
+        // as the 1× / 2× snapshots, and just as hard to explain in a diff. Wispr
+        // is the default engine, so `(W)` is the honest default picture.
+        o.setEngineMark("(W)")
         // **Settled, unless a shot says otherwise.** `Listening…` ramps from dark
         // grey to full over six seconds (`RelayWindow.listenWarmth`), so without
         // a chosen frame every dictating state on this page would be a picture of

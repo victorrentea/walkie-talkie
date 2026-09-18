@@ -199,6 +199,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let recordRow = NSView()
     private let shotGlyph = NSImageView()
     private let recordInfo = NSTextField(labelWithString: "")
+    /// **The screen recording, while it runs** — directly under the shots row,
+    /// because it is the same kind of fact (*what this sentence is carrying*)
+    /// and the icon column is read downwards.
+    private let filmRow = NSView()
+    private let filmGlyph = NSImageView()
+    private let filmInfo = NSTextField(labelWithString: "")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
@@ -793,7 +799,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening else { return nil }
-        return spawnMarked ? "\(spawnMark ?? "") \(Self.listeningWord)" : Self.listeningWord
+        return spawnMarked ? "\(spawnMark ?? "") \(listeningWord)" : listeningWord
     }
 
     /// **Three full stops, not `…`.** The word is a progress bar now
@@ -802,7 +808,38 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// step, taking a quarter of the bar with it. Identical on screen, and the
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
-    private static let listeningWord = "Listening..."
+    private var listeningWord: String { "Listening\(engineMark)..." }
+
+    /// **Which recogniser is listening, as one letter** (2026-09-18) —
+    /// `Listening(W)...`, `(E)`, `(L)`.
+    ///
+    /// Victor asked for it once there were three engines to tell apart: the
+    /// menu's `Engine` row answers *what is configured*, and it is two clicks
+    /// away and behind whatever is frontmost. This answers *what is listening
+    /// to me right now*, in the one place he is already looking while he talks —
+    /// and it matters more than it used to, because the three engines now differ
+    /// in where his voice goes, not only in how well it is heard.
+    ///
+    /// **It is a string handed in, never a question asked.** The chip may not
+    /// know there is more than one recogniser — that is `DictationSource`'s whole
+    /// rule, and the reason the Wispr path could rot unnoticed for a month. So
+    /// `AppDelegate` pushes a letter and this renders it; nothing here can branch
+    /// on which engine it means, because nothing here knows.
+    ///
+    /// Empty renders `Listening...` exactly as before, which is what every state
+    /// photographed before today shows.
+    private(set) var engineMark = ""
+
+    /// The bar's step count is `listeningWord.count`, so the mark lengthens the
+    /// ramp rather than sitting outside it — twelve steps become fifteen and the
+    /// fill still ends on the third full stop. A relayout because the row's width
+    /// changes with it; safe here because an engine switch is refused
+    /// mid-sentence, so this can never fire inside the ramp's own loop.
+    func setEngineMark(_ mark: String) {
+        guard engineMark != mark else { return }
+        engineMark = mark
+        if listening { layoutContent() }
+    }
 
     /// **A tag that says `HQ`, where a gold star used to sit** — Victor's ask,
     /// 2026-09-09: *"la steluța care apare după listening, desenez un tag micuț
@@ -1135,7 +1172,11 @@ private let frontLabel = NSTextField(labelWithString: "")
         // An image of the emoji rather than the emoji as text — see
         // `Glyphs.emoji`. It is the only way this one ends up the same size as
         // Chrome's icon two rows down, and starting at the same x.
-        recordDot.image = Self.pulseGlyph
+        // **The device in its ring, breathing — not a red dot** (2026-09-18).
+        // The pulse below is an opacity animation on this view's layer, so it
+        // does not care what the image is; what changes is that the thing
+        // fading in and out beside his cursor is now recognisably this app.
+        recordDot.image = Self.walkieLiveGlyph ?? Self.pulseGlyph
         recordDot.imageScaling = .scaleProportionallyUpOrDown
         recordDot.wantsLayer = true
         engineInfo.font = hintFont
@@ -1164,6 +1205,23 @@ private let frontLabel = NSTextField(labelWithString: "")
         recordRow.addSubview(recordInfo)
         recordRow.isHidden = true
         root.addSubview(recordRow)
+
+        filmGlyph.image = Self.filmGlyphImage
+        filmGlyph.imageScaling = .scaleProportionallyUpOrDown
+        // **The system face at the chip's one size, with tabular digits.** Still
+        // `hintFont`'s family, size and weight — *One face, one size, one weight*
+        // is intact — but the seconds are rewritten once a second without a
+        // relayout, and proportional figures make the row twitch under the
+        // pointer as the digits change width. The string's *length* never
+        // changes (`maxSeconds` is 30, so it is `Recording m:ss` throughout),
+        // which is what makes rewriting without re-measuring safe at all.
+        filmInfo.font = NSFont.monospacedDigitSystemFont(ofSize: hintFont.pointSize,
+                                                         weight: .regular)
+        filmInfo.textColor = .secondaryLabelColor
+        filmRow.addSubview(filmGlyph)
+        filmRow.addSubview(filmInfo)
+        filmRow.isHidden = true
+        root.addSubview(filmRow)
 
         // Same face as every other row (see `titleFont`): it carries a CSS
         // selector, which was the argument for monospace here, and that argument
@@ -1452,12 +1510,39 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// with the state change rather than waiting on the next pointer event.
     private func reposition() {
         guard let screen = Self.screenUnderMouse() ?? NSScreen.main else { return }
+        // **The catalogue is shot off-screen** (2026-09-18). Victor: *"când faci
+        // pozele de tooltip + dialog, trebuie neapărat să le randezi pe ecran?
+        // îmi distragi atenția când o faci."*
+        //
+        // No, and it never did. `snapshot` is `root.cacheDisplay(in:to:)` — the
+        // view drawing itself into a bitmap — which needs the view **in a
+        // window**, not a window anybody can see. What put 43 states in front of
+        // him, a third of a second each, was only this: the chip positions itself
+        // beside the cursor, and the shoot happens on the Mac he is working on.
+        //
+        // So under `RELAY_SHOOT` it parks far off every display instead. The
+        // window is still ordered in, still laid out, still asked to draw; the
+        // pictures are byte-for-byte what they were. `moveToTopLeft` is left
+        // alone deliberately — the panel states are shot from the same frame
+        // maths that puts a real panel on a real screen, and that geometry is
+        // part of what the page is a record of.
+        if Self.shooting {
+            panel.setFrameOrigin(NSPoint(x: screen.frame.minX - panel.frame.width - 4000,
+                                         y: screen.frame.minY))
+            homeScreen = screen
+            return
+        }
         if anchored {
             moveNextTo(NSEvent.mouseLocation, on: screen)
         } else {
             moveToTopLeft(of: screen)
         }
     }
+
+    /// Whether this process is photographing the catalogue rather than serving a
+    /// dictation — `docs/shoot-overlay-states.sh`. Read in `reposition`, and the
+    /// one place the overlay is allowed to behave differently for the shooter.
+    static let shooting = ProcessInfo.processInfo.environment["RELAY_SHOOT"] != nil
 
     /// The title is `folder@branch`, and he switches branches mid-session — a
     /// overlay still claiming `@master` would be quietly wrong about which branch
@@ -1751,6 +1836,20 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((recordRow, recordRowHeight))
         } else {
             recordRow.isHidden = true
+        }
+
+        // **And the recording, under it.** Only while it runs: once it is stopped
+        // the frames are part of what the sentence carries and the shots row's
+        // argument applies — but there is nothing left to *watch*, and a row that
+        // stayed up would be the second place the same count is written.
+        if filming {
+            filmInfo.stringValue = filmText
+            filmInfo.sizeToFit()
+            layoutGlyphRow(filmRow, glyph: filmGlyph, label: filmInfo, width: innerWidth)
+            filmRow.isHidden = false
+            rows.append((filmRow, recordRowHeight))
+        } else {
+            filmRow.isHidden = true
         }
 
         // **The quotation, and then Chrome under it.** They were the other way
@@ -2091,6 +2190,119 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// again.
     private static let micGlyph = Glyphs.emoji("🎙️", ink: iconInk)
 
+    /// **The device itself, where the two emoji used to stand** (2026-09-18).
+    ///
+    /// Victor's ask: the chip beside the pointer carries the walkie talkie — the
+    /// app's own object — rather than 🎙️ at rest and a 🔴 while he talks. The
+    /// files are the ones the Dock icon and the menu bar are already built from,
+    /// so the three places this app draws itself now draw the same thing.
+    ///
+    /// **Which of the two is the state, and the ring is the signal.**
+    /// `walkie-idle` is the bare device and means *armed and quiet*;
+    /// `walkie-bound` is the same device inside its orange ring, and that is the
+    /// one that breathes while the microphone is open. It replaces a red dot
+    /// that said *recording* about nothing in particular with the app's own
+    /// silhouette lighting up — and the ring is exactly the mark he already
+    /// reads as "this one is live" on the Dock tile.
+    ///
+    /// **Optional, with the emoji behind them.** The artwork is found on disk
+    /// rather than compiled in, and a chip with no glyph at all is worse than a
+    /// chip with the old one — so a failed load falls back rather than leaving a
+    /// hole. That is not theoretical: the shoot script runs the **debug** binary,
+    /// which has no `Resources/`, which is what `walkieURL` walks up to `assets/`
+    /// for.
+    private static let walkieIdleGlyph = loadWalkie("walkie-idle")
+    private static let walkieLiveGlyph = loadWalkie("walkie-bound")
+
+    /// **A fifth bigger than everything else in the column** (2026-09-18,
+    /// Victor: *"iconița fă-o 20% mai mare"*).
+    ///
+    /// It breaks `iconInk`'s rule that every bitmap in this column matches the
+    /// emoji beside it, and it breaks it on purpose: the others are *subjects* —
+    /// which terminal, which browser, how many frames — and this one is the
+    /// **state**, the only glyph on the chip that answers *is this thing
+    /// listening to me right now*. It is read in peripheral vision, which is
+    /// what the extra fifth buys. Still inside `glyphBox` (20), so no row
+    /// changes height.
+    private static let walkieInk: CGFloat = (iconInk * 1.2).rounded()
+
+    /// **Wispr Flow is the one listening, and this app is not running that
+    /// sentence** (2026-09-18, Victor: *"dacă pornesc Wispr Flow ca dictare să
+    /// se îngălbenească […] de lângă mouse"*).
+    ///
+    /// Since the engines became mutually exclusive there is a third thing the
+    /// chip has to be able to say. Orange ring: **the relay** is recording, and
+    /// the words are coming here. No ring: armed and quiet. Yellow ring: a
+    /// microphone is open and **it is not ours** — he started Wispr himself, or
+    /// with 🔽 →, and nothing he says is going to be routed, booked or filed.
+    /// That is worth its own colour rather than its own row: it is the same
+    /// question in the same place, with a different answer.
+    ///
+    /// **Drawn rather than tinted.** `walkie-bound.png` is a grey device, a cyan
+    /// screen and a red button inside an orange disc; a colour applied over it
+    /// yellows all four. So the disc is filled here and the **bare** device is
+    /// laid on it at the share the orange artwork gives it — same geometry, one
+    /// colour changed, and the two rings stay the same size on screen.
+    private static let walkieWisprGlyph = makeWisprGlyph()
+
+    /// How much of the orange artwork's disc the device occupies — measured off
+    /// `walkie-bound.png`, and the one number that keeps the yellow ring and the
+    /// orange one looking like the same object.
+    private static let walkieDeviceShare: CGFloat = 0.60
+
+    private static func makeWisprGlyph() -> NSImage? {
+        guard let url = walkieURL("walkie-idle"), let device = NSImage(contentsOf: url),
+              device.size.height > 0 else { return nil }
+        let side = walkieInk
+        let image = NSImage(size: NSSize(width: side, height: side))
+        image.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        NSColor.systemYellow.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: side, height: side)).fill()
+        let h = (side * walkieDeviceShare).rounded()
+        let w = (device.size.width / device.size.height * h).rounded()
+        device.draw(in: NSRect(x: ((side - w) / 2).rounded(), y: ((side - h) / 2).rounded(),
+                               width: w, height: h))
+        image.unlockFocus()
+        return image
+    }
+
+    /// `Bundle.main` when installed, `assets/` walking up from the binary when
+    /// run out of `.build` — `CaretHalo.artworkFile`'s arrangement, and it is
+    /// here for the same reason: the contact sheet and the states page are both
+    /// shot from the debug build.
+    private static func walkieURL(_ name: String) -> URL? {
+        var candidates: [URL] = []
+        if let res = Bundle.main.resourcePath {
+            candidates.append(URL(fileURLWithPath: res).appendingPathComponent("\(name).png"))
+        }
+        let exe = URL(fileURLWithPath: CommandLine.arguments[0],
+                      relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            .standardizedFileURL.resolvingSymlinksInPath()
+        var dir = exe.deletingLastPathComponent()
+        for _ in 0..<4 {
+            candidates.append(dir.appendingPathComponent("assets/\(name).png"))
+            dir = dir.deletingLastPathComponent()
+        }
+        return candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    private static func loadWalkie(_ name: String) -> NSImage? {
+        guard let url = walkieURL(name),
+              let image = NSImage(contentsOf: url), image.size.height > 0 else { return nil }
+        // Scaled to `walkieInk` — the one glyph in this column that is not
+        // `iconInk`, and its note says why. Aspect preserved: both files are
+        // square today and neither is promised to stay that way.
+        let h = walkieInk
+        let size = NSSize(width: (image.size.width / image.size.height * h).rounded(), height: h)
+        let scaled = NSImage(size: size)
+        scaled.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(origin: .zero, size: size))
+        scaled.unlockFocus()
+        return scaled
+    }
+
     /// **The mouse is drawn, not typed** — `Glyphs.mouse`, one image per gesture
     /// the card names, with the buttons that gesture presses filled in red.
     ///
@@ -2250,7 +2462,17 @@ private let frontLabel = NSTextField(labelWithString: "")
         // which changes several times per dictation and never passes through
         // `setBound` at all. This method runs on every layout, which is every
         // state change there is.
-        titleGlyph.image = collapsed ? Self.micGlyph : (spawnIcon ?? boundIcon ?? Self.pinGlyph)
+        // **The bare device at rest** (2026-09-18) — no ring, because the ring is
+        // what the recording row lights up with, and a chip that wore it while
+        // nothing was being recorded would spend the signal before there was
+        // anything to signal.
+        // **Yellow when the open microphone is somebody else's** — see
+        // `walkieWisprGlyph`. Only while collapsed, which is exactly when this
+        // app has no sentence of its own: the moment the relay is recording, the
+        // rows below take over and the orange ring is on the one that pulses.
+        let restGlyph = (wisprHearing ? Self.walkieWisprGlyph : nil)
+            ?? Self.walkieIdleGlyph ?? Self.micGlyph
+        titleGlyph.image = collapsed ? restGlyph : (spawnIcon ?? boundIcon ?? Self.pinGlyph)
         titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
         let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
@@ -2440,6 +2662,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // halo on its own account — it used to inherit it as a run inside the
         // text label.
         selectionGlyph.wantsLayer = true
+        filmInfo.wantsLayer = true
+        filmGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
         // it, `labelColor` is the same invisible dark grey the selection row was.
         hintLabel.wantsLayer = true
@@ -2450,6 +2674,15 @@ private let frontLabel = NSTextField(labelWithString: "")
             // whole life on the chip, over his editor rather than over the blur.
             recordInfo.shadow = Self.halo()
             recordInfo.textColor = .white
+            // **The recording row, added the moment it existed** (2026-09-18) —
+            // and it was invisible on its first photograph for exactly the reason
+            // the two notes below this block describe, which is the third time
+            // this list has cost a row. `Recording 0:04` was drawn in
+            // `secondaryLabelColor` on a bare chip: the 🎬 showed and the words
+            // did not, so the state looked like a feature that had half worked.
+            filmInfo.shadow = Self.halo()
+            filmInfo.textColor = .white
+            filmGlyph.shadow = Self.halo()
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
             elapsedLabel.shadow = Self.halo()
@@ -2596,7 +2829,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // that had one assigned behind its back. The lit ink is read *off* the
         // label, so this stays correct in both of the row's homes without
         // knowing which one it is in.
-        let word = Array(Self.listeningWord)
+        let word = Array(listeningWord)
         let steps = Int((CGFloat(word.count) * warmth).rounded())
         for (i, ch) in word.enumerated() {
             out.append(NSAttributedString(string: String(ch),
@@ -3038,7 +3271,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // overwhelming majority of these are a no-op, and rebuilding an
             // attributed string to redraw the same twelve characters is the one
             // cost this loop could have had.
-            let steps = Int((CGFloat(Self.listeningWord.count) * CGFloat(warmth)).rounded())
+            let steps = Int((CGFloat(self.listeningWord.count) * CGFloat(warmth)).rounded())
             // **The one tick in a sentence that is allowed a relayout.** The
             // rule this loop is written under is that it must never re-measure
             // every row on the chip — and that is about the *ramp*, which
@@ -3360,6 +3593,76 @@ private let frontLabel = NSTextField(labelWithString: "")
     }
 
     /// A dictation started / stopped.
+    /// **Wispr Flow's microphone is open on a sentence this app is not
+    /// running** (2026-09-18) — the chip's one job here is to say so in colour.
+    ///
+    /// Fed from `AppDelegate.wisprIsHearing`, which is the same edge the music
+    /// pause rides and the only witness that works in every engine. A relayout
+    /// rather than a redraw because the glyph is chosen in `layoutContent`, and
+    /// this changes at most twice a sentence.
+    private(set) var wisprHearing = false
+
+    func setWisprHearing(_ on: Bool) {
+        guard wisprHearing != on else { return }
+        wisprHearing = on
+        layoutContent()
+    }
+
+    /// **A screen recording is running** (2026-09-18).
+    ///
+    /// It needs a row of its own and not a badge on an existing one, for the
+    /// reason the shots row has one: this is a thing the sentence is *carrying*,
+    /// and the icon column read downwards is where the chip says what it is
+    /// carrying. It is also the one state here that keeps costing something
+    /// while he is not looking — a hundred megabytes and a timer — so it must be
+    /// impossible to leave running without noticing.
+    private(set) var filming = false
+
+    func setFilming(_ on: Bool) {
+        guard filming != on else { return }
+        filming = on
+        filmStartedAt = on ? Date() : nil
+        if on {
+            // One tick a second, and the row is a fixed string plus a clock, so
+            // only the seconds label is touched — this must never reach
+            // `layoutContent`, which re-measures every row while the chip is
+            // following the cursor.
+            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.applyFilmText() }
+            RunLoop.main.add(t, forMode: .common)
+            filmTick = t
+        } else {
+            filmTick?.invalidate()
+            filmTick = nil
+        }
+        layoutContent()
+    }
+
+    private var filmStartedAt: Date?
+    private var filmTick: Timer?
+
+    /// `Recording 0:04` — the clock is the point. A recording is the one thing
+    /// the chip carries that he is *spending* while he watches something happen,
+    /// and the number is how he knows when to stop; `📸 ×3` counts what is
+    /// already caught and needs no clock.
+    private var filmText: String {
+        let s = Int(Date().timeIntervalSince(filmStartedAt ?? Date()))
+        return String(format: "Recording %d:%02d", s / 60, s % 60)
+    }
+
+    /// **Only the seconds are rewritten** — this is the once-a-second tick and it
+    /// must never reach `layoutContent`, which re-measures every row of a chip
+    /// that is following the cursor. Safe because the string's length is fixed
+    /// for the whole of a recording (`maxSeconds` is 30, so it never reaches
+    /// `10:00`) and the digits are tabular, so the row set up by the relayout
+    /// that showed it stays the right width to the end.
+    private func applyFilmText() {
+        guard filming else { return }
+        filmInfo.stringValue = filmText
+    }
+
+    /// 🎬 at the size of the rest of the icon column.
+    private static let filmGlyphImage = Glyphs.emoji("🎬", ink: iconInk)
+
     func setListening(_ value: Bool) {
         guard listening != value else { return }
         listening = value
