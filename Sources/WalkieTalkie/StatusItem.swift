@@ -76,7 +76,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// Absent, it falls back to `isRecording`, which is what it used to be.
     var isDictationCancellable: (() -> Bool)?
 
-    /// ⌘⌃P from the menu, and whether there is anything to paste. Asked when the
+    /// ⌘⇧P from the menu, and whether there is anything to paste. Asked when the
     /// menu opens, like the two above: it becomes true with the first dictation
     /// of the session and never goes back, but the moment it has to be right is
     /// the moment the row is on screen.
@@ -756,7 +756,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // the same right edge drawn by hand. It sat *beside* AppKit's own ⌘⌃
         // column for a day — two columns, and rows with an entry in neither
         // straddling the gap — until (2026-09-06) the key equivalents went and
-        // ⌘⌃P moved in here with the wheel. What is drawn is the whole legend.
+        // ⌘⇧P moved in here with the wheel. What is drawn is the whole legend.
         // **The vocabulary: an emoji for the button, a plain arrow for the
         // movement.** The emoji ones name a button by where it sits on the mouse
         // — `⬅️` and `➡️` are the left and right buttons, and since the two side
@@ -801,7 +801,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // that open and abandon a sentence are one hand movement, reversed.
             // The wheel had no mirror to offer and used a 2s hold instead.
             (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s"),
-            (pasteLast, pasteLast.title, "⌘⌃P", "⌘⌃P"),
+            (pasteLast, pasteLast.title, "⌘⇧P", "⌘⇧P"),
             (shot, shot.title, "🔽", "🔽"),
             // **The wheel is back in this column, in one row.** Everything else
             // it used to say is gone from Logi mode — but a *drag* is not a
@@ -1011,7 +1011,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private static let promptHistoryRows = 12
 
     /// The envelope of the sentence he picked, on the clipboard — exactly the
-    /// string the page's Copy button hands over, and the one `⌘⌃P` pastes for
+    /// string the page's Copy button hands over, and the one `⌘⇧P` pastes for
     /// the newest sentence.
     @objc private func promptPicked(_ sender: NSMenuItem) {
         guard let text = sender.representedObject as? String, !text.isEmpty else { return }

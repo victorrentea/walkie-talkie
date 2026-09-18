@@ -56,7 +56,7 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
 - **Persisted across launches since 2026-09-07.** `AppDelegate` seeds the flag and the tap from
   `StatusItem.isReplaceWispr` **without** going through `setReplaceWispr`: that call flashes the
   overlay, and a restored mode is not an event to announce. → journal: *Replace Wispr: the relay as a way to type*
-- **The transcript goes on the clipboard as well** (`pasteText`, shared with ⌘⌃P) and sets
+- **The transcript goes on the clipboard as well** (`pasteText`, shared with ⌘⇧P) and sets
   `lastDictation`, so a paste that landed somewhere unhelpful is one ⌘V away. → journal: *Replace Wispr: the relay as a way to type*
 - **The menu row's icon is its state** — `checkmark` on, an empty box of the same size off — never
   `NSMenuItem.state`: a ticked row makes AppKit reserve the state column for the whole menu and

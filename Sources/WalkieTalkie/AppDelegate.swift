@@ -4800,7 +4800,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is the app's, not the recogniser's.
         //
         // Why it is worth it: this envelope is read by Victor as often as by an
-        // agent — `⌘⌃P` pastes exactly this, and the Prompt Log shows it — and
+        // agent — `⌘⇧P` pastes exactly this, and the Prompt Log shows it — and
         // five bracketed clauses run together on one line is the shape he has to
         // parse a sentence out of. The shell guard is unaffected: it looks at
         // what is *running* on the target, not at what is being sent.
@@ -6450,7 +6450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `session_end` is the exception: it is addressed to a watcher, and there
     /// is nothing for a terminal to do with "the user closed the relay".
-    /// What ⌘⌃P pastes: the last dictation that actually went out — **the whole
+    /// What ⌘⇧P pastes: the last dictation that actually went out — **the whole
     /// line the terminal got**, not just the words.
     ///
     /// It was the words alone until 2026-09-04, on the argument that the
@@ -6540,7 +6540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // point the branch below is taken and the outbox line is the delivered
         // one. That ordering is the whole of what survives from the 2026-08-27
         // decision — see `holdsForBind`: the words wait, the log does not fill
-        // up with them. ⌘⌃P still has them, because `lastDictation` is set
+        // up with them. ⌘⇧P still has them, because `lastDictation` is set
         // above: he said it, so he can paste it, bound or not.
         if m.kind == "dictation", !m.spawn, !isBound {
             // **Recorded even though nothing is written** — that is the point of
@@ -6601,7 +6601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// second cancel replaces the cancelled recording that is being kept: the
     /// chip says *the* sentence being held, and a relay that had to ask which of
     /// three to deliver would be asking a question nobody has. The one it
-    /// replaces is not lost to him — ⌘⌃P still pastes it.
+    /// replaces is not lost to him — ⌘⇧P still pastes it.
     ///
     /// **Five minutes**, the same net `Recover Cancelled Dictation` is kept
     /// under and for the same reason: long enough to cross the room and open a
@@ -6626,8 +6626,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.awaitingBind = nil
             Log.info("⏳ held dictation expired — never bound")
             // Said out loud, because the alternative is a sentence he believes
-            // is still going to arrive somewhere. ⌘⌃P is the way back to it.
-            self.overlay.flash("⏳ held dictation expired — ⌘⌃P to paste it", duration: 4)
+            // is still going to arrive somewhere. ⌘⇧P is the way back to it.
+            self.overlay.flash("⏳ held dictation expired — ⌘⇧P to paste it", duration: 4)
         }
         awaitingBindExpiry = expiry
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
@@ -6657,7 +6657,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.flash("🎙️ sent — the sentence you were holding", duration: 3)
     }
 
-    /// **⌘⌃P — the last dictation, again, wherever the caret is.**
+    /// **⌘⇧P — the last dictation, again, wherever the caret is.**
     ///
     /// Dictating is how Victor writes, and the agent is not the only place his
     /// words belong: the same sentence is often wanted in a commit message, a
@@ -6705,7 +6705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   focus in the meantime. Nil is *whatever has the caret*, which is what
     ///   every caller but one means.
     private func pasteText(_ text: String, after delay: TimeInterval = 0, to pid: pid_t? = nil) {
-        // So ⌘⌃P can say it again — a Replace Wispr dictation is a dictation that
+        // So ⌘⇧P can say it again — a Replace Wispr dictation is a dictation that
         // went out, and it is exactly the kind he wants twice: the same sentence
         // into a second field.
         lastDictation = text

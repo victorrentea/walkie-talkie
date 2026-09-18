@@ -954,11 +954,18 @@ final class HotkeyTap {
     /// bind. Now that the relay starts at login there is nothing to launch, and
     /// the key belongs to the app it acts on.
     var onBindHotkey: (() -> Void)?
-    /// ⌘⌃P — the last dictation, again: onto the clipboard and pasted at the
-    /// caret. It sits beside ⌘⌃B because it is the same kind of key — a global
-    /// one this app owns outright — and on P because the neighbouring ⌃⌥P is
-    /// already the shutter, so the two things Victor reaches for after a
-    /// sentence share a letter and differ by which modifier the hand is holding.
+    /// ⌘⇧P — the last dictation, again: onto the clipboard and pasted at the
+    /// caret. It is the same kind of key as ⌘⌃B and ⌘⌃D — a global one this app
+    /// owns outright — and it stays on P because the neighbouring ⌃⌥P is already
+    /// the shutter, so the two things Victor reaches for after a sentence share
+    /// a letter and differ by which modifier the hand is holding.
+    ///
+    /// **It was ⌘⌃P until 2026-09-19**, when Victor moved it to ⌘⇧P. The
+    /// difference from its two neighbours is now more than a spelling: ⌘⌃ is a
+    /// pair nothing on a Mac ships, while ⌘⇧P is the Command Palette in VS Code
+    /// and Cursor, the command menu in Chrome's DevTools, and a run action on
+    /// some IntelliJ keymaps. This tap swallows it unconditionally, so while the
+    /// relay is up the chord is the relay's in those applications too.
     var onPasteLast: (() -> Void)?
 
     /// ⏎ while the overlay is holding a prompt: send it now instead of waiting
@@ -2498,7 +2505,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // selection and does nothing else; ⌘A selects all. Neither can be a
         // window being dragged, which is the drag stamp's one false positive, so
         // these two are the witnesses worth having. Nothing of this app's own
-        // chords is in here — ⌘⌃B, ⌘⌃D and ⌘⌃P are letters.
+        // chords is in here — ⌘⌃B, ⌘⌃D and ⌘⇧P are letters.
         if (flags.contains(.maskShift) && Self.selectionExtendKeys.contains(keyCode))
             || (cmd && !ctrl && !opt && keyCode == Self.VK_A) {
             noteSelectionGesture()
@@ -2615,8 +2622,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // Autorepeat swallowed for the same reason ⌘⌃B swallows it: a key held a
         // moment too long would paste the sentence four times into whatever he
         // is typing in, and unlike a bind that is not undone by pressing it
-        // again. The event is eaten either way — it shadows nothing standard.
-        if keyCode == VK_P && cmd && ctrl && !opt {
+        // again.
+        //
+        // **⌘⇧P since 2026-09-19**, at Victor's word and unlike its two
+        // neighbours: ⌘⌃B and ⌘⌃D are on ⌘⌃ because nothing on a Mac ships that
+        // pair, and this one is now on a chord that **several applications do
+        // ship** — VS Code's and Cursor's Command Palette, Chrome's DevTools
+        // command menu, IntelliJ on some keymaps. It is swallowed
+        // unconditionally like the other two, so while this app is running that
+        // is what the chord does, everywhere. That is the trade he asked for;
+        // the `ctrl` half of the guard is now `shift` and nothing else moved.
+        if keyCode == VK_P && cmd && flags.contains(.maskShift) && !ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
             DispatchQueue.global().async { [weak self] in self?.onPasteLast?() }
             return nil

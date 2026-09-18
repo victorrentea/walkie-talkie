@@ -336,8 +336,8 @@ enum OverlayStates {
             },
 
             Shot(slug: "flash-nothing-to-paste", group: "Flashes", title: "Flash — nothing to paste yet",
-                 when: "⌘⌃P, or the menu row, before anything has been dictated this session.",
-                 note: "The only thing ⌘⌃P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
+                 when: "⌘⇧P, or the menu row, before anything has been dictated this session.",
+                 note: "The only thing ⌘⇧P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.flash("⚠️ nothing dictated yet", duration: 60)

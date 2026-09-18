@@ -209,8 +209,10 @@ sits at rest there.
 ## Gestures, current
 
 - **Keys:** ⌘⌃B binds the terminal in front (again on the same target: unbinds), ⌘⌃D starts /
-  ends a dictation, ⌘⌃P pastes the last envelope. All swallowed, autorepeat included. ⌘⌃⌥D is
-  Victor Addons' dark-mode toggle.
+  ends a dictation, ⌘⇧P pastes the last envelope (**⌘⌃P until 2026-09-19**; unlike the ⌘⌃ pair,
+  this one **does** shadow other applications' shortcuts — VS Code's and Cursor's Command
+  Palette, Chrome DevTools' command menu — and is swallowed anyway, because Victor asked for the
+  chord). All swallowed, autorepeat included. ⌘⌃⌥D is Victor Addons' dark-mode toggle.
 - **Mouse:** *Mouse Gestures: Logi* is the default (2026-09-09; a submenu of two rows since
   2026-09-14, `Logi` / `Wheel`, the shape `Engine` has) — the side buttons arrive
   from Options+ as ⌃⌥⌘F3…F12 and every mouse button is passed through; the wheel is untouched

@@ -143,7 +143,7 @@ shortcut, and when the Scratchpad window will not close — both said out loud i
   straight into that application's event queue, bypassing the session and therefore whoever holds
   the key focus. Who holds it is a **log line, not a gate**.
 - **Nil for every other delivery**, which means *whatever has the caret*: the fabricated
-  `/test/dictation`, the five-minute recovery of a cancelled sentence, ⌘⌃P. Bound-terminal and
+  `/test/dictation`, the five-minute recovery of a cancelled sentence, ⌘⇧P. Bound-terminal and
   spawn deliveries never went through the focus at all.
 - **No modifier cleanup on the addressed paste.** The stale-⌘ bug `tap(key:command:)` is written
   around is about `CGEventSource.flagsState`, which is *session* state; events posted to a pid

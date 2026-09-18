@@ -304,7 +304,7 @@ enum Outbox {
                      /// The assembled envelope exactly as it was delivered to the
                      /// terminal — `AppDelegate.terminalLine`. Carried since
                      /// 2026-09-04 so the Message Log's Copy button can put *the
-                     /// same string* ⌘⌃P would paste on the clipboard, byte for
+                     /// same string* ⌘⇧P would paste on the clipboard, byte for
                      /// byte, rather than re-assembling it from the parts.
                      line: String? = nil,
                      /// **How these words got here and where they went** —

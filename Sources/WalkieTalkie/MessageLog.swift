@@ -322,7 +322,7 @@ enum MessageLog {
         return out
     }
 
-    /// **What Copy puts on the clipboard: the exact prompt ⌘⌃P would paste.**
+    /// **What Copy puts on the clipboard: the exact prompt ⌘⇧P would paste.**
     ///
     /// Since 2026-09-04 the outbox carries the delivered envelope itself (`line`),
     /// written by `commit` from the same `terminalLine` call the delivery made —

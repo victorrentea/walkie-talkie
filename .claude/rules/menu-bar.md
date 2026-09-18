@@ -52,7 +52,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 |---|---|---|
 | `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` |
-| `Paste last prompt` | 📋 | `⌘⌃P` |
+| `Paste last prompt` | 📋 | `⌘⇧P` |
 | — separator — | | |
 | `Start Dictation` | `mic` | `🛞` |
 | `Start dictation to new claude` | ✨ | `🛞🛞` |
@@ -82,7 +82,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **Rebind to… sits with the destination rows** (2026-09-10) — its rules are below.
   → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **One shortcut column, not two** (2026-09-06). Chords are drawn via a **right tab stop in an
-  attributed title**; ⌘⌃B and ⌘⌃D have no `keyEquivalent` and ⌘⌃P lives in the drawn column. None
+  attributed title**; ⌘⌃B and ⌘⌃D have no `keyEquivalent` and ⌘⇧P lives in the drawn column. None
   of them ever fired *as* a menu key equivalent — this app is never the key app — the chords belong
   to `HotkeyTap`. `StatusItem.layOutGestures` measures **one** tab position for the whole menu (the
   widest of the longest plain row and label + 28 + chord).
@@ -246,7 +246,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   the one bend in "no script": a dozen lines, delegated from `document`, and with JS off the page
   still shows every message minus a button.
   → journal: *Prompt Log: the outbox read back as a page*
-- **Copy copies the exact `line` from the outbox — byte for byte what ⌘⌃P would paste.** `commit`
+- **Copy copies the exact `line` from the outbox — byte for byte what ⌘⇧P would paste.** `commit`
   writes `line` (the `terminalLine` the delivery used) into the JSON; older lines have none and
   `MessageLog.payload` re-assembles them — close, not identical. The payload rides in a **hidden
   `<pre>`**, not a `data-` attribute (a dictation is arbitrary text). `document.execCommand` is the
