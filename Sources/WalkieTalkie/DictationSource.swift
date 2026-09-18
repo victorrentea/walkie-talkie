@@ -244,6 +244,27 @@ enum DictationEnd {
     /// cancelled dictation is held for five minutes so *Recover Cancelled
     /// Dictation* has something to re-read.
     case cancelled(audio: URL?, duration: TimeInterval)
+    /// **The sentence was said, was recorded, and the recogniser could not be
+    /// reached** (2026-09-18, with `ElevenLabsSource`).
+    ///
+    /// It is neither of the two above and must not be filed as either. `.silent`
+    /// throws the audio away, which is right for *nothing was heard* and wrong
+    /// for *the network was down* — the words exist and the WAV is the only copy
+    /// of them. `.cancelled` keeps the audio but says he asked for this, so it
+    /// passes in silence; a failure he is not told about is a paragraph that
+    /// simply never arrives, which is the one outcome he cannot notice and
+    /// correct.
+    ///
+    /// So: both halves. The `why` is shown, and the audio goes into the same
+    /// five-minute staging area a cancelled one does, so *Recover Cancelled
+    /// Dictation* re-reads it through whichever engine is live by then — which
+    /// after a network failure is very likely the local one.
+    ///
+    /// No source but a networked one can raise this today, and the case is
+    /// written for *the recogniser could not be reached* rather than for
+    /// ElevenLabs: it is a property of transcribing off this Mac, not of a
+    /// vendor.
+    case failed(why: String, audio: URL?, duration: TimeInterval)
 }
 
 extension DictationSource {

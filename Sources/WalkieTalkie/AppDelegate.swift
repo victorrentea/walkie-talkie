@@ -93,6 +93,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// rests on seeing the ⌘V Wispr posts before the front app does.
     private lazy var wisprSource = WisprFlowSource(hotkeys: hotkeys)
 
+    /// **The relay's own microphone, transcribed in the cloud** (2026-09-18) —
+    /// see `ElevenLabsSource`. Not lazy and costing nothing until it is picked:
+    /// it holds a `MicRecorder` at rest and a string, and `prepare()` is a file
+    /// read. It is never the default — the only engine that puts Victor's voice
+    /// on a wire has to be chosen by hand.
+    private let elevenSource = ElevenLabsSource()
+
     /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
     /// ever answers and never reports (2026-09-17).
     ///
@@ -105,6 +112,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and meters on a source that may not be the one wired up; this one has no
     /// `onChange` at all and exists to be sampled.
     private lazy var wisprMic = WisprWatch()
+
+    /// **Wispr Flow is hearing him right now, and the relay did not start it** —
+    /// `WisprFlowSource.hearingChanged`, mirrored here for `syncMusic`.
+    ///
+    /// Separate from `listening` because it is a different claim. `listening` is
+    /// *the relay has a sentence in flight*; this is *a microphone is open in
+    /// another app*, which is true of every ⌘⌥ push-to-talk Victor makes with
+    /// the Engine on the local model — the commonest dictation of the day, and
+    /// the one the music went on playing over until 2026-09-18.
+    private var wisprHearing = false
+
+    /// **The music is never left paused.** The only thing that lowers
+    /// `wisprHearing` is the state machine leaving `listening`, and that is a
+    /// phase driven by Wispr's own `History` rows — so a Wispr that dies
+    /// mid-sentence, or a row that never turns terminal, would otherwise leave
+    /// his tabs muted with nothing on screen saying why. Ten minutes is far past
+    /// any dictation ever measured (the longest in the corpus is 197 s) and is a
+    /// backstop, not a timeout: reaching it is a bug, and it says so in the log.
+    private var wisprHearingCap: DispatchWorkItem?
+    private static let wisprHearingCeiling: TimeInterval = 600
 
     /// The poll that runs for the length of a 🔽 → dictation and no longer —
     /// see `watchBackStop`.
@@ -128,19 +155,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var source: DictationSource = {
         let wanted = ProcessInfo.processInfo.environment["WT_SOURCE"]?.lowercased()
             ?? UserDefaults.standard.string(forKey: AppDelegate.engineKey)
-        return wanted == "whisper" || wanted == "local" ? whisperSource : wisprSource
+        return self.engine(named: wanted)
     }()
 
-    /// **The preference the Engine row writes** — `wispr` or `whisper`. It is a
-    /// preference rather than data, so it lives in `UserDefaults` beside
-    /// `autosend` and not in `~/.walkie-talkie`, and `--home` has no business
-    /// moving it.
+    /// **The preference the Engine row writes** — `wispr`, `whisper` or
+    /// `eleven`. It is a preference rather than data, so it lives in
+    /// `UserDefaults` beside `autosend` and not in `~/.walkie-talkie`, and
+    /// `--home` has no business moving it.
     private static let engineKey = "dictationSource"
 
-    /// Which of the two `source` currently is, in the menu's vocabulary. Derived
-    /// rather than stored: the source is the fact, and a second copy of it is a
-    /// second thing that can be wrong.
-    private var engineId: String { source === whisperSource ? "whisper" : "wispr" }
+    /// **One table, read by the launch pick and by the menu's pick alike**
+    /// (2026-09-18, when there were three of them). Two `?:` chains that had to
+    /// agree on the same spellings is a third engine's worth of ways to be
+    /// wrong; `WT_SOURCE=local` is kept because it was already in the journal.
+    ///
+    /// **Anything unrecognised is Wispr**, which is the default in the only
+    /// sense that matters: a typo in a preference must not leave him dictating
+    /// through something he did not choose — least of all the one engine that
+    /// uploads.
+    private func engine(named id: String?) -> DictationSource {
+        switch id {
+        case "whisper", "local": return whisperSource
+        case "eleven", "elevenlabs": return elevenSource
+        default: return wisprSource
+        }
+    }
+
+    /// Which of the three `source` currently is, in the menu's vocabulary.
+    /// Derived rather than stored: the source is the fact, and a second copy of
+    /// it is a second thing that can be wrong.
+    private var engineId: String {
+        if source === whisperSource { return "whisper" }
+        if source === elevenSource { return "eleven" }
+        return "wispr"
+    }
 
     /// **Swap the recogniser under a running relay** (2026-09-14).
     ///
@@ -156,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// actually running afterwards either way, so a refused pick cannot leave a
     /// tick beside an engine that is not listening.
     private func setEngine(_ id: String) {
-        let next: DictationSource = id == "whisper" ? whisperSource : wisprSource
+        let next = engine(named: id)
         guard next !== source else { return }
         guard !listening, !settling, !speculative, !source.isRecording else {
             overlay.flash("⏳ finish the sentence first — the engine stays \(source.name)",
@@ -179,7 +227,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // meant the switch loaded the model twice (harmless, `bringUpModel` is
         // guarded) and left this comment describing the opposite of the truth.
         Log.info("🎙️ dictation engine switched to \(source.name)")
-        overlay.flash("🎙️ \(source.name)", duration: 2.5)
+        // **A pick that cannot listen says so at the pick, not at the gesture**
+        // (2026-09-18). `prepare()` has just run, so `isReady` is the real
+        // answer — and for the cloud engine it means *is there a key*, which is
+        // a file he has to create. Finding that out from a refused ⌘⌃D, three
+        // minutes later and mid-thought, is the version of this that wastes a
+        // sentence. The engine is still switched: the refusal is his to fix, and
+        // a pick that silently bounced back would be the menu lying about what
+        // is running.
+        if !source.isReady, source === elevenSource {
+            overlay.flash("⚠️ \(source.name) has no API key — put ELEVENLABS_API_KEY in "
+                            + "\(ElevenLabsSource.configURL.path)", duration: 12)
+        } else {
+            overlay.flash("🎙️ \(source.name)", duration: 2.5)
+        }
     }
 
     /// **The dictation is over but the words have not landed yet.**
@@ -817,6 +878,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // /test/wrap-mode` still moves it at runtime.
         let wrapOverride = ProcessInfo.processInfo.environment["WT_WRAP_WISPR"]
         wisprSource.wrapWispr = wrapOverride.map { $0 != "0" } ?? true
+        // **Here and not in `wireDictationSource`**, because it is not the wired
+        // source's event: it has to arrive with the Engine on the local model
+        // too, which is the configuration the ⌘⌥ dictations happen in. See
+        // `WisprFlowSource.hearingChanged`.
+        wisprSource.hearingChanged = { [weak self] on in self?.wisprIsHearing(on) }
         // The ⏳ in the menu bar belongs to whichever source is slow to come up,
         // and only one of them ever is.
         whisperSource.onLoadingChanged = { [weak self] loading in
@@ -1560,6 +1626,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       "scratchpadChord": HotkeyTap.scratchpadChord()
                                           .map(String.init).joined(separator: "+")]
             out["whisper"] = self.whisperSource.describe()
+            out["elevenlabs"] = self.elevenSource.describe()
             return out
         }
 
@@ -2109,6 +2176,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endSettling(reason: "cancelled", quiet: true)
             if let audio { keepCancelled(wav: audio, duration: duration) }
             else { Log.info("🗑️ dictation cancelled — nothing had been recorded yet") }
+            clearCancelledDictationState()
+        case .failed(let why, let audio, let duration):
+            // **Both halves of `DictationEnd.failed`.** The banner is long
+            // because the recovery is a menu row he has to go and click, and the
+            // staging area holds the WAV for five minutes: a networked
+            // recogniser that could not be reached has left the only copy of a
+            // sentence he has already said.
+            endSettling(reason: why)
+            overlay.flash("⚠️ \(why) — recover it from the menu", duration: 12)
+            overlay.setTranscribing(false)
+            if let audio { keepCancelled(wav: audio, duration: duration) }
+            clearSpawn()
+            abandonDictation("the recogniser could not be reached")
             clearCancelledDictationState()
         }
         if listening {
@@ -3018,6 +3098,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : "Wispr Flow never opened the microphone for that chord")
     }
 
+    /// **Pause the music for every open microphone, whosever it is.**
+    ///
+    /// Two claims, OR'd, and they are two because they come from two places.
+    /// `listening` is the relay's own sentence — it covers the wheel, the forward
+    /// button, Replace Wispr and a Wispr dictation the relay asked for, and it
+    /// has paused the music since 2026-09-03. `wisprHearing` is the other half
+    /// Victor found missing on 2026-09-18: with the Engine on the local model he
+    /// still dictates everywhere by holding ⌘⌥, Wispr's own push-to-talk, and
+    /// none of the five `DictationSource` events are wired to this source then —
+    /// so the relay saw the chord, named it in the log, and let the music play
+    /// straight through the sentence. *"când Wispr e detectat că ascultă … trebuie
+    /// să se pauzeze muzica și apoi să se rezume când încetează transcrierea"*.
+    ///
+    /// **It resumes at the same edge his own dictations do** — the microphone
+    /// closing, not the words landing. `MusicBridge` resumes exactly the tabs it
+    /// stopped, so a repeat of the current state costs nothing and the OR can be
+    /// recomputed from either side at any time.
+    private func syncMusic() {
+        music.setActive(listening || wisprHearing)
+    }
+
+    /// `WisprFlowSource.hearingChanged` — Wispr's microphone opened or closed on
+    /// a dictation that is none of the relay's business except for this.
+    ///
+    /// Main thread: `WisprState` is main-only and so is everything it calls.
+    private func wisprIsHearing(_ on: Bool) {
+        guard wisprHearing != on else { return }
+        wisprHearing = on
+        wisprHearingCap?.cancel()
+        wisprHearingCap = nil
+        if on {
+            let cap = DispatchWorkItem { [weak self] in
+                guard let self, self.wisprHearing else { return }
+                Log.error("🎵 Wispr Flow has been listening for \(Int(Self.wisprHearingCeiling)) s — letting the music back on; its state machine never left `listening`")
+                self.wisprHearing = false
+                self.syncMusic()
+            }
+            wisprHearingCap = cap
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.wisprHearingCeiling, execute: cap)
+        }
+        syncMusic()
+    }
+
     private func syncBorrowedGestures() {
         let live = hasDestination && listening
         // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
@@ -3122,7 +3245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictation: in all of them he is speaking into this app's microphone
         // with a track playing over it, which is the one thing the pause exists
         // to stop. Same switch as the ring, and for the same reason.
-        music.setActive(listening)
+        syncMusic()
         // **The watcher runs in Replace Wispr too, since 2026-09-09.** It was
         // `live && !pasteMode`, on the argument that `caretLine` carried no
         // highlight at all so a watcher there would gather text nothing would

@@ -29,6 +29,14 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
 - **`isRecording` is the source's; `listening` is the relay's.** The first answers *is a microphone
   open*, the second *does this app have a sentence in flight*. They are not the same instant and
   every gate in `AppDelegate` means the second.
+- **`hearingChanged` is the one event that arrives whether or not this source is the engine**
+  (2026-09-18) — `WisprFlowSource` only, wired once at launch beside `wrapWispr`, never in
+  `wireDictationSource`. The five above reach the app only for the *wired* source, so with the
+  Engine on the local model a ⌘⌥ push-to-talk dictation happens with the relay silent about it;
+  this publishes the edges of `WisprState.listening` so the music can pause for it. It is
+  deliberately **not** a sixth `DictationSource` event: a dictation Victor starts himself stays
+  Wispr's — no screenshot, no ⌘C probe, no route — and this claims only *a microphone is open*.
+  → journal: *The music also pauses for a dictation the relay did not start*
 
 ## The wrap, end to end (2026-09-14)
 

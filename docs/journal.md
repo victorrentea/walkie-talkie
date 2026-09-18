@@ -10091,3 +10091,54 @@ says `⌨️ ⬅️ back button — Return, though Wispr Flow's microphone is op
 started by 🔽 →`, which separates the two very different causes — the arm was never up, or it was
 taken down under him — before anyone has to guess. Asked only on a click, so it costs the three
 CoreAudio reads nothing else pays for.
+
+## The music also pauses for a dictation the relay did not start (2026-09-18)
+
+*"atunci când Wispr e detectat că ascultă, de exemplu, acum țin Command și Option apăsat, trebuie
+să se pauzeze muzica și apoi să se rezume când încetează transcrierea, adică atunci când Wispr
+oprește transcrierea. Așa cum se întâmplă pe modelele locale."*
+
+The pause has ridden `listening` since 2026-09-03 — *the relay has a sentence in flight* — and
+that covers every gesture this app owns. What it does not cover is the commonest dictation of the
+day: with the Engine on the local model, Victor holds right ⌘⌥ (Wispr's own push-to-talk) to
+dictate into whatever is in front of him, and none of `DictationSource`'s five events are wired to
+`wisprSource` then — `wireDictationSource` only ever wires whichever source *is* the engine, and
+`setEngine` nils the outgoing one's callbacks out. So the relay saw the chord, named it in the log
+(`⚡ right ⌘⌥ — Wispr push-to-talk — Victor's own dictation; the ring is all the relay does with
+it`), and let the track play straight through the sentence.
+
+**The signal is `WisprState.listening`, and the choice matters.** The obvious candidate is
+`wisprMic`, the always-on `WisprWatch` — one CoreAudio boolean, no state machine. It is the wrong
+one for exactly the reason the machine was written on 2026-09-13: the notification is 0–6 s late
+and produced **no edge at all** in five of five successful runs, and in this configuration
+`wisprSource.prepare()` is never called either, so its own `watch` is not started and the 100 ms
+poll has an empty process list to sample. What actually fires is Wispr's `History` row, which is
+written at the gesture — measured **182 ms** on the 08:50 dictation of that morning, against a
+poll and a notification that both read `never`. The phase is the join of all three, so it is right
+whichever of them happens to be alive.
+
+`WisprFlowSource.hearingChanged` publishes every edge of that phase, and it is deliberately
+**not** a sixth `DictationSource` event: a dictation Victor starts himself stays Wispr's — no
+screenshot, no ⌘C probe, no route — and this says only *a microphone is open right now*, which is
+the whole of what the music has ever needed. It is wired once at launch beside `wrapWispr`, not in
+`wireDictationSource`, because it does not belong to whichever source is wired up. `AppDelegate`
+mirrors it into `wisprHearing` and `syncMusic` is the OR: `music.setActive(listening ||
+wisprHearing)`. `MusicBridge` resumes exactly the tabs it stopped and drops a repeat of the
+current state, so the two halves can be recomputed from either side in any order — and they have
+to be, because when the Engine *is* Wispr both are true for the same sentence and they go down in
+the same call stack.
+
+**It resumes where his own dictations resume** — at the end of the `listening` phase, not when
+the words land. With mic edges alive that is the microphone closing; in the ⌘⌥ case, where
+nothing can see the microphone, it is the row turning terminal, which is Wispr stopping
+transcribing — which is how he phrased it.
+
+**And a ceiling, because the failure mode is silence.** The only thing that lowers `wisprHearing`
+is the machine leaving `listening`, and that phase is driven by rows Wispr writes; a Wispr that
+dies mid-sentence (it did, 03:53 that same night) would otherwise leave his tabs muted with
+nothing on screen saying why. Ten minutes — far past the longest dictation in the corpus, 197 s —
+and it logs as an error, because reaching it is a bug and not a timeout.
+
+Measured on the installed build, Engine on the local model: `wispr state: idle → listening` →
+`⏸️ dictation open — pausing audible Chrome tabs`, then `listening → transcribing` →
+`▶️ dictation over — resuming them`.

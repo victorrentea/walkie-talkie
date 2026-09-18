@@ -236,6 +236,32 @@ final class WisprFlowSource: DictationSource {
     var didTranscribe: ((DictationResult) -> Void)?
     var didEnd: ((DictationEnd) -> Void)?
 
+    /// **Wispr's microphone is open — and this is the one event that is reported
+    /// whether or not this source is the engine.**
+    ///
+    /// The five events above are `DictationSource`'s, and they only reach the app
+    /// when this object *is* `source`: with the Engine on the local model nobody
+    /// wires them, and a dictation Victor starts himself with ⌘⌥ then happens
+    /// with the relay silent about it — which is what he found on 2026-09-18,
+    /// music playing over a push-to-talk sentence that the log had already named
+    /// (`⚡ right ⌘⌥ — Wispr push-to-talk`).
+    ///
+    /// It is deliberately narrower than `didBegin`: a dictation the relay did not
+    /// ask for is still Wispr's — no screenshot, no ⌘C probe, no route — and this
+    /// says only *he is talking to a microphone right now*, which is the whole of
+    /// what the music has ever needed (`MusicBridge`). Set once at launch, not in
+    /// `wireDictationSource`, because it does not belong to whichever source is
+    /// wired up.
+    ///
+    /// **`WisprState.listening` and not `WisprWatch`**, for the reason the machine
+    /// exists: the CoreAudio edge is 0–6 s late and produced no edge at all in
+    /// five of five runs on 2026-09-13, and with the Engine on the local model
+    /// this source's own `watch` is never even started (`prepare()` is not
+    /// called), so the poll sees nothing either. The phase joins those two with
+    /// Wispr's `History` row, which is written at the gesture and is the signal
+    /// that actually fires — measured 182 ms on 2026-09-18.
+    var hearingChanged: ((Bool) -> Void)?
+
     // MARK: - State
 
     private(set) var isRecording = false
@@ -565,7 +591,14 @@ final class WisprFlowSource: DictationSource {
     init(hotkeys: HotkeyTap) {
         self.hotkeys = hotkeys
         // The machine decides when the poll is worth running; nothing else may.
-        state.onTransition = { [weak self] _, _, _ in self?.syncInputPoll() }
+        // **And every edge of `listening` is published** — see `hearingChanged`.
+        state.onTransition = { [weak self] previous, next, _ in
+            guard let self else { return }
+            self.syncInputPoll()
+            if previous.isListening != next.isListening {
+                self.hearingChanged?(next.isListening)
+            }
+        }
         watch.onChange = { [weak self] on in self?.edge(on, measured: true) }
         hotkeys.onWisprMaybeStarting = { [weak self] why, confident in
             // His keyboard, not the relay's — `relay: false`.
