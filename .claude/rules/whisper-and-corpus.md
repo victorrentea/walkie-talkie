@@ -203,7 +203,29 @@ a disagreement rate, not an error rate. → journal: *What the local model is ac
   against 50 / 28 / 19 / 2 / 0 % by wall clock. The pin removed that failure; the bar still stands
   for everything else that is worse with less to hear. → journal: *It counts voiced seconds, not elapsed ones*
 
-## The DJI receiver (`InputDevice.swift`)
+## The microphone (`InputDevice.swift`)
+
+Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave XLR, 💻 the built-in,
+🎤 the DJI receiver, 🎧 Bose — one table (`InputDevice.known`), and one resolver every reader shares.
+
+- **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
+  the menu's top row. Three readers computing "which microphone" separately is three ways for the
+  glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*
+- **A pick whose device is not plugged in falls back to automatic, and the glyph follows the
+  fallback.** The menu greys those rows, but a receiver can be unplugged *after* it was picked, and
+  a dictation that records nothing because a setting outlived a cable is the exact failure this
+  file exists to prevent. → journal: same
+- **`auto` is the default and keeps the old rule** — the DJI whenever it is there, the system input
+  otherwise. Everything below about the receiver is what *automatic* still means. → journal: same
+- **Matched on name AND manufacturer, both lowercased into one haystack.** The Elgato is the mirror
+  of the DJI's case: `Wave XLR` is the product and `Elgato Systems` the maker, while `Wave Link
+  MicrophoneFX` / `Wave Link Stream` are the virtual devices its driver installs, made by `Corsair
+  Memory, Inc.` — so neither needle reaches them. → journal: same
+- **The preference is `micDevice` in `UserDefaults`, and it lives in `InputDevice`** beside the
+  matching table: the thing that resolves a pick into a device is the only thing that can say
+  whether the pick is still possible. → journal: same
+
+## The DJI receiver, which is what *automatic* means (`InputDevice.swift`)
 
 - **Match on name AND manufacturer.** The receiver's USB product name is `Wireless Mic Rx`; the
   brand is only in the manufacturer string `DJI Technology Co., Ltd.`. Matching both is what keeps

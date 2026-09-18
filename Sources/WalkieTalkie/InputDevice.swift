@@ -31,11 +31,129 @@ import CoreAudio
 /// microphone rather than to an error.
 enum InputDevice {
 
-    /// What the DJI receiver calls itself. It does *not* say "DJI" — the USB
-    /// product name is `Wireless Mic Rx` — so the manufacturer string is the
-    /// half that identifies the brand, and it is the one that stays put across
-    /// the Mic 2 / Mic Mini / Mic 3 line.
-    private static let djiNeedles = ["dji", "wireless mic rx"]
+    /// **The four microphones Victor names by their picture** (2026-09-19).
+    ///
+    /// He asked for the chip to say which one is open — `Listening(🎙️⇒E)...` —
+    /// and for the menu to let him pick between them, with the ones that are not
+    /// plugged in greyed out. That is two features and one list: a picture, a
+    /// name and the strings CoreAudio answers with, in one place, because a
+    /// glyph on the chip that disagreed with the tick in the menu would be worse
+    /// than neither.
+    ///
+    /// **Matched on name *and* manufacturer**, joined into one haystack. The DJI
+    /// receiver is the reason and is still the hardest case: its USB product
+    /// name is `Wireless Mic Rx` and the only place the brand appears is the
+    /// manufacturer string, which is what keeps it matching across the
+    /// Mic 2 / Mic Mini / Mic 3 line. The Elgato is the mirror case — `Wave XLR`
+    /// is the product and `Elgato Systems` the maker, while `Wave Link
+    /// MicrophoneFX` and `Wave Link Stream` are the *virtual* devices its driver
+    /// installs and are made by `Corsair Memory, Inc.`, so neither needle
+    /// reaches them.
+    ///
+    /// **Order is the order of the list he reads**, and it is the order he named
+    /// them in.
+    /// **Two names each, and that is `Engine`'s rule applied here**: the
+    /// top-level menu row is read out of the corner of the eye while the menu is
+    /// open over his work, so it gets `short`; the list under the arrow is where
+    /// the question *which device exactly* is actually asked, so it gets
+    /// `label`. `Engine` learnt this the expensive way, by stretching the whole
+    /// menu to the width of `mlx-community/whisper-large-v3-turbo`.
+    struct Known {
+        let id: String
+        let glyph: String
+        let short: String
+        let label: String
+        let needles: [String]
+    }
+
+    static let known: [Known] = [
+        Known(id: "xlr",  glyph: "🎙️", short: "XLR", label: "Elgato Wave XLR",
+              needles: ["wave xlr", "elgato"]),
+        Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
+              needles: ["macbook pro microphone", "built-in microph"]),
+        Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
+              needles: ["dji", "wireless mic rx"]),
+        Known(id: "bose", glyph: "🎧", short: "Bose", label: "Bose",
+              needles: ["bose"]),
+    ]
+
+    // MARK: - Which one he picked
+
+    /// **`auto`, or one of `known`'s ids** — stored beside `dictationSource`,
+    /// and for its reason: a microphone is a setting of the room he is in, and a
+    /// room outlives a launch.
+    ///
+    /// **`auto` is the default and stays the documented behaviour** (the DJI if
+    /// it is there, otherwise the system's input). A picker with no *automatic*
+    /// would have quietly retired the rule that makes the receiver work without
+    /// anybody touching a menu — the whole point of which is that in a workshop
+    /// the only thing he does is plug it in.
+    static let preferenceKey = "micDevice"
+
+    static var chosenId: String {
+        get { UserDefaults.standard.string(forKey: preferenceKey) ?? "auto" }
+        set { UserDefaults.standard.set(newValue, forKey: preferenceKey) }
+    }
+
+    /// Which of the four this Mac can see right now. Asked at every menu open,
+    /// never cached: a receiver is plugged in *while* the menu is up at least as
+    /// often as before it.
+    static func availableIds() -> Set<String> {
+        let devices = inputs()
+        return Set(known.filter { k in devices.contains { matches($0, k) } }.map(\.id))
+    }
+
+    /// **The device this recording will actually use, and which of the four it
+    /// is** — the one answer the chip, the menu and `select` all read, so they
+    /// cannot disagree.
+    ///
+    /// A pick that is not plugged in **falls back to automatic** rather than to
+    /// silence: the menu greys those rows, but a receiver can be unplugged after
+    /// it was picked, and a dictation that records nothing because a setting
+    /// outlived a cable is the failure this whole file exists to prevent. The
+    /// glyph follows the fallback, so the chip says what he is actually being
+    /// heard through and not what he once asked for.
+    static func resolve() -> (known: Known?, device: Device?) {
+        let devices = inputs()
+        if chosenId != "auto", let want = known.first(where: { $0.id == chosenId }),
+           let device = devices.first(where: { matches($0, want) }) {
+            return (want, device)
+        }
+        // Automatic, and the fallback for a pick that is not here: the receiver
+        // whenever it is plugged in, otherwise whatever the system is on.
+        if let rx = known.first(where: { $0.id == "rx" }),
+           let device = devices.first(where: { matches($0, rx) }) {
+            return (rx, device)
+        }
+        guard let device = systemDefault() else { return (nil, nil) }
+        return (known.first { matches(device, $0) }, device)
+    }
+
+    /// **The glyph the chip wears, or empty** — empty for a device that is none
+    /// of the four, which is the honest answer for the day he records through
+    /// Loopback or a headset nobody has named yet.
+    static func currentGlyph() -> String { resolve().known?.glyph ?? "" }
+
+    /// What the menu's **top row** says: the glyph and the short name of the
+    /// device that would record right now. A device that is none of the four
+    /// gets CoreAudio's own name, which is the only name it has.
+    static func currentShortLabel() -> String {
+        let r = resolve()
+        if let k = r.known { return "\(k.glyph) \(k.short)" }
+        return r.device?.name ?? "the system input"
+    }
+
+    /// The same device said in full, for a log line and for the harness.
+    static func currentLabel() -> String {
+        let r = resolve()
+        if let k = r.known { return "\(k.glyph) \(k.label)" }
+        return r.device?.name ?? "the system input"
+    }
+
+    private static func matches(_ device: Device, _ k: Known) -> Bool {
+        let haystack = "\(device.name) \(device.manufacturer)".lowercased()
+        return k.needles.contains { haystack.contains($0) }
+    }
 
     /// Point `input` at the microphone this recording should use and return a
     /// human name for the log.
@@ -45,11 +163,7 @@ enum InputDevice {
     /// after the receiver was unplugged would otherwise still be aimed at a
     /// device that is gone.
     static func select(on input: AVAudioInputNode) -> String {
-        let dji = inputs().first { device in
-            let haystack = "\(device.name) \(device.manufacturer)".lowercased()
-            return djiNeedles.contains { haystack.contains($0) }
-        }
-        guard let chosen = dji ?? systemDefault() else { return "the system input" }
+        guard let chosen = resolve().device else { return "the system input" }
 
         guard let unit = input.audioUnit else { return chosen.name }
         var id = chosen.id
@@ -69,7 +183,7 @@ enum InputDevice {
 
     // MARK: - CoreAudio
 
-    private struct Device {
+    struct Device {
         let id: AudioDeviceID
         let name: String
         let manufacturer: String

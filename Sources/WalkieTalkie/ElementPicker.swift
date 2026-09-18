@@ -415,6 +415,10 @@ final class ElementPicker {
     /// what lets a test play a WAV into a virtual device and have Wispr hear it.
     var onTestInputDevice: ((String) -> [String: Any])?
 
+    /// **Pick the microphone the way the menu does** — `POST /test/mic`. An
+    /// empty id reports without changing anything.
+    var onTestMic: ((String) -> [String: Any])?
+
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -725,6 +729,16 @@ final class ElementPicker {
             let on = body?["on"] as? Bool ?? true
             onTestWispr?(on)
             respond(conn, 200, ["ok": true, "wispr": on])
+
+        // **The microphone picker, from a shell** (2026-09-19) — the same call
+        // the menu row makes, so the pick, the fallback and the chip's mark can
+        // be asserted without photographing a menu. `{"id": "auto"|"xlr"|"mac"|
+        // "rx"|"bose"}`; with no id it only reports. Reporting is `GET /engine`'s
+        // `mic` block, which this answers with.
+        case ("POST", "/test/mic"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let id = (body?["id"] as? String) ?? ""
+            respond(conn, 200, ["ok": true].merging(onTestMic?(id) ?? [:]) { _, new in new })
 
         // The system's default input, for the end-to-end harness — see
         // `onTestInputDevice`. With no name it only reports.

@@ -532,7 +532,15 @@ enum OverlayStates {
         // to be selected the day it was shot — the same class of nondeterminism
         // as the 1× / 2× snapshots, and just as hard to explain in a diff. Wispr
         // is the default engine, so `(W)` is the honest default picture.
-        o.setEngineMark("(W)")
+        //
+        // **And pinned to a microphone too, since 2026-09-19**, when the mark
+        // grew its first half (`Listening(🎤⇒W)...`). Same argument one level
+        // down: `InputDevice.resolve()` answers with whatever is plugged into
+        // this Mac at the moment the shooter runs, so an unpinned page would
+        // change its `Listening…` pictures when a cable moved. The receiver is
+        // the picture to pin for the same reason `(W)` is: it is what he teaches
+        // through, and *automatic* means it wins whenever it is there.
+        o.setEngineMark("(🎤⇒W)")
         // **Settled, unless a shot says otherwise.** `Listening…` ramps from dark
         // grey to full over six seconds (`RelayWindow.listenWarmth`), so without
         // a chosen frame every dictating state on this page would be a picture of

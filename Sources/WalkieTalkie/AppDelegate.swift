@@ -238,6 +238,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// **The whole mark: which microphone, then which recogniser** — Victor,
+    /// 2026-09-19: `Listening(🎙️⇒E)...`, `(💻⇒E)`, `(🎤⇒E)`, `(🎧⇒E)`.
+    ///
+    /// The arrow is the sentence: *this device feeds that engine*. It is the one
+    /// pair of facts he cannot recover by looking at anything else while he is
+    /// talking — the menu answers both, two clicks away and behind whatever is
+    /// in front.
+    ///
+    /// **The glyph is the device `InputDevice.resolve()` would actually open**,
+    /// not the one the menu is ticking: a receiver unplugged after it was picked
+    /// falls back to automatic, and the chip has to say what he is being heard
+    /// through. A device that is none of the four leaves the glyph out entirely
+    /// and the mark is the plain `(E)` every state before today was photographed
+    /// with.
+    ///
+    /// **One honest caveat, written here because there is nowhere else it would
+    /// be read:** with the Engine on Wispr Flow this names the device the
+    /// *relay's* recorder is on — the one feeding the level meter and the voice
+    /// corpus — while the words come from Wispr's own microphone, which is
+    /// chosen inside Wispr and is a Loopback device on this Mac. The four
+    /// pictures are true for the four engines that record for themselves.
+    private static func mark(engine id: String) -> String {
+        let glyph = InputDevice.currentGlyph()
+        guard !glyph.isEmpty else { return engineMark(id) }
+        return "(\(glyph)⇒\(engineMark(id).dropFirst().dropLast()))"
+    }
+
+    /// **Victor picked a microphone from the menu** (2026-09-19).
+    ///
+    /// Unlike `setEngine` this is never refused mid-sentence, and the difference
+    /// is real rather than an oversight: switching engines rewires five
+    /// callbacks under a dictation in flight, while `InputDevice.select` is read
+    /// once, at `MicRecorder.start`. A pick made while he is talking therefore
+    /// takes effect on the *next* sentence and cannot disturb this one — which
+    /// is also the honest behaviour, because the words already spoken really did
+    /// come through the old device.
+    ///
+    /// The chip is re-marked immediately even so: the glyph is a statement about
+    /// what the next dictation will use, and leaving it stale until the next
+    /// gesture would make the menu and the chip disagree for as long as he is
+    /// not talking.
+    private func setMicrophone(_ id: String) {
+        InputDevice.chosenId = id
+        status.setMic(id)
+        overlay.setEngineMark(Self.mark(engine: engineId))
+        let resolved = InputDevice.currentLabel()
+        Log.info("🎚️ microphone → \(id == "auto" ? "automatic" : id) — recording through \(resolved)")
+        if listening {
+            overlay.flash("🎚️ \(resolved) — from the next sentence", duration: 2.5)
+        } else {
+            overlay.flash("🎚️ \(resolved)", duration: 2)
+        }
+    }
+
     /// Which of the five `source` currently is, in the menu's vocabulary.
     /// Derived rather than stored: the source is the fact, and a second copy of
     /// it is a second thing that can be wrong.
@@ -1190,6 +1244,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `tools/wispr-test.sh`. Only useful from the installed build: a
         // `.build/debug` binary has no Accessibility grant, so `CGEventPost`
         // does nothing and does it silently.
+        picker.onTestMic = { [weak self] id in
+            guard let self else { return [:] }
+            let ids = ["auto"] + InputDevice.known.map(\.id)
+            if !id.isEmpty {
+                guard ids.contains(id) else {
+                    return ["changed": false, "why": "unknown id", "ids": ids]
+                }
+                // **The preference is written here, the UI hops.** A
+                // `main.sync` from the picker's own network thread is a
+                // deadlock waiting for the one moment the main thread is
+                // blocked on the picker, and this route is read by the harness
+                // in exactly the states where that is likeliest. `chosenId` is
+                // `UserDefaults`, safe from any thread, and it is what the
+                // answer below is built from — so the reply is true when it is
+                // sent and the menu catches up a run loop later.
+                InputDevice.chosenId = id
+                DispatchQueue.main.async { self.setMicrophone(id) }
+            }
+            return ["chosen": InputDevice.chosenId,
+                    "resolved": InputDevice.resolve().known?.id ?? "",
+                    "device": InputDevice.currentLabel(),
+                    "available": InputDevice.availableIds().sorted(),
+                    "mark": Self.mark(engine: self.engineId),
+                    "changed": !id.isEmpty]
+        }
         picker.onTestInputDevice = { name in
             let was = InputDevice.systemDefaultName() ?? ""
             guard !name.isEmpty else { return ["input": was, "inputs": InputDevice.inputNames()] }
@@ -1719,6 +1798,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       "wrapWhy": self.wisprSource.wrapReason,
                                       "scratchpadChord": HotkeyTap.scratchpadChord()
                                           .map(String.init).joined(separator: "+")]
+            // **Which microphone, for the same reason `engine` is here**: the
+            // chip's `Listening(🎙️⇒E)...` and the menu's tick are both read off
+            // `InputDevice.resolve()`, and a harness that could not ask the
+            // question would have to photograph a menu to answer it.
+            out["mic"] = ["chosen": InputDevice.chosenId,
+                          "resolved": InputDevice.resolve().known?.id ?? "",
+                          "device": InputDevice.currentLabel(),
+                          "glyph": InputDevice.currentGlyph(),
+                          "available": InputDevice.availableIds().sorted(),
+                          "mark": Self.mark(engine: self.engineId),
+                          // The menu's own rows, read back off AppKit — see
+                          // `StatusItem.micRowsForTest`.
+                          "rows": self.status.micRowsForTest()]
             out["whisper"] = self.whisperSource.describe()
             out["elevenlabs"] = self.elevenSource.describe()
             out["speechmatics"] = self.speechmaticsSource.describe()
@@ -1898,7 +1990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (2026-09-18) — `Listening(W)...`. Pushed from here because here is the
         // one place in the app that is allowed to know there are three of them;
         // the overlay renders the string and cannot ask what it means.
-        overlay.setEngineMark(Self.engineMark(engineId))
+        overlay.setEngineMark(Self.mark(engine: engineId))
         // **The shutter runs on `DispatchQueue.global()`, not the main thread**
         // (`HotkeyTap.onScreenshot`), so `reserveMarker` may not read `source` —
         // `setEngine` reassigns it from the main thread and that is a race on a
@@ -1944,6 +2036,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !listening else { return }
         speculative = false
         endSettling(reason: "a new dictation started", quiet: true)
+
+        // **The microphone half of the mark is re-read here** (2026-09-19), not
+        // only when the engine is wired: a receiver is plugged in and unplugged
+        // between sentences, and the glyph that matters is the one true for
+        // *this* sentence. `InputDevice.resolve()` is two CoreAudio reads and
+        // the chip relayouts only when the string actually changes.
+        overlay.setEngineMark(Self.mark(engine: engineId))
 
         // **The chip says where these words are going.** A spawn names its
         // folder (armed at the gesture), a caret sentence says so and outranks

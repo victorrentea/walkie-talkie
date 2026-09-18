@@ -387,6 +387,112 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// back with whatever is actually running afterwards.
     var onPickEngine: ((String) -> Void)?
 
+    // MARK: - Microphone (2026-09-19)
+
+    /// **`Microphone: 🎙️ Elgato Wave XLR`, with the four devices under the
+    /// arrow** — Victor's ask of 2026-09-19, the half of it that is not the
+    /// chip: *"and source should be selectable via menu too. those unavailable
+    /// disabled"*.
+    ///
+    /// **Directly under `Engine`, and that is the whole of the placement
+    /// argument.** The row above answers *what is listening to me*; this one
+    /// answers *through what*. They are the same question one level apart, they
+    /// are the two halves of the mark the chip now wears (`Listening(🎙️⇒E)...`),
+    /// and a man who has just read one of them off the chip and come to the menu
+    /// to change it should not have to hunt for the second.
+    ///
+    /// **The list is the four he named, never the whole of CoreAudio.** This Mac
+    /// answers with fifteen inputs, eleven of them virtual — Loopback's three,
+    /// Wave Link's two, Zoom's, Teams', Webex's, Iriun's — and a menu that
+    /// offered all of them would be a device chooser, which System Settings
+    /// already is and does better. What it would not be is *readable at a
+    /// glance while he is teaching*, which is the one thing this menu is for.
+    private let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+
+    private let micSubmenu = NSMenu()
+
+    /// What he picked — `auto` or one of `InputDevice.known`'s ids. Pushed in by
+    /// `AppDelegate`, never set from the click, for the tick's reason under
+    /// `engineId`.
+    private var micChosen = "auto"
+
+    /// Which of the four are plugged in **right now**, and what the top row
+    /// should say. Both asked when the menu opens rather than remembered: a
+    /// receiver goes into the port between two openings of this menu, and a list
+    /// that greys a device he is holding in his hand is worse than no list.
+    var micAvailable: (() -> Set<String>)?
+    var micCurrentLabel: (() -> String)?
+
+    /// Victor picked one. `AppDelegate` stores it and calls `setMic` back.
+    var onPickMic: ((String) -> Void)?
+
+    func setMic(_ id: String) {
+        micChosen = id
+        applyMicRow()
+    }
+
+    /// `Microphone: 🎙️ Elgato Wave XLR` — **the device that would record right
+    /// now**, which is not always the one ticked: a pick whose device has been
+    /// unplugged falls back to automatic (`InputDevice.resolve`), and the row
+    /// has to say what would actually happen rather than what was once asked
+    /// for. The tick below stays on his choice, so the two together read as
+    /// *you asked for the receiver, you are on the built-in* — which is the
+    /// sentence he needs when a cable has come out.
+    private func applyMicRow() {
+        micItem.title = "Microphone: \(micCurrentLabel?() ?? "—")"
+        micSubmenu.removeAllItems()
+        let available = micAvailable?() ?? []
+
+        // **Automatic first**, because it is the default and because it is the
+        // rule the app has kept since the receiver arrived: the DJI whenever it
+        // is plugged in, the system's input when it is not. Never disabled —
+        // it is the one row that is true whatever is on the desk.
+        let auto = NSMenuItem(title: "Automatic — 🎤 when plugged in",
+                              action: #selector(micPicked(_:)), keyEquivalent: "")
+        auto.target = self
+        auto.representedObject = "auto"
+        auto.image = micChosen == "auto" ? Self.symbolIcon("checkmark") : Self.blankIcon
+        micSubmenu.addItem(auto)
+        micSubmenu.addItem(.separator())
+
+        for device in InputDevice.known {
+            let here = available.contains(device.id)
+            // **The absent ones say why they are grey.** A disabled row with no
+            // explanation is indistinguishable from a broken one, and the
+            // explanation is the only thing he can act on — it is a cable.
+            let row = NSMenuItem(title: here ? "\(device.glyph) \(device.label)"
+                                             : "\(device.glyph) \(device.label) — not connected",
+                                 action: #selector(micPicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = device.id
+            row.isEnabled = here
+            row.image = device.id == micChosen ? Self.symbolIcon("checkmark") : Self.blankIcon
+            micSubmenu.addItem(row)
+        }
+    }
+
+    /// **The rows as AppKit actually holds them**, for `GET /engine.mic.rows`.
+    ///
+    /// It exists because *unavailable devices are greyed* is a claim about a
+    /// menu, and a menu is the one surface in this app that cannot be
+    /// photographed from a shell — `NSMenu` draws in the window server, on a
+    /// click, over whatever is in front. The flag AppKit is holding is the whole
+    /// of the fact, and reading it back is the difference between having set
+    /// `isEnabled` and having a disabled row (`autoenablesItems`, above, is
+    /// exactly the gap between those two).
+    func micRowsForTest() -> [[String: Any]] {
+        micSubmenu.items.filter { !$0.isSeparatorItem }.map {
+            ["title": $0.title,
+             "enabled": $0.isEnabled,
+             "ticked": ($0.representedObject as? String) == micChosen]
+        }
+    }
+
+    @objc private func micPicked(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, id != micChosen else { return }
+        onPickMic?(id)
+    }
+
     /// Push the live engine in — at launch, from `WT_SOURCE`, or after a switch
     /// that was refused and left the old one in place.
     func setEngine(_ id: String) {
@@ -709,6 +815,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
         engineItem.submenu = engineSubmenu
         applyEngineRow()
         menu.addItem(engineItem)
+
+        micItem.image = Self.symbolIcon("mic")
+        // **A submenu auto-enables on its own**, and this is the one list in the
+        // app whose whole point is that some rows are dead. The trap is the one
+        // written twenty lines above for the top-level menu — AppKit re-enables
+        // any item with a valid target and action unless the *menu* says
+        // otherwise — and it bites per `NSMenu`, so turning it off up there buys
+        // this list nothing. Without this the `— not connected` rows are fully
+        // clickable and the greying is a decoration.
+        micSubmenu.autoenablesItems = false
+        micItem.submenu = micSubmenu
+        applyMicRow()
+        menu.addItem(micItem)
 
         logiGestures.image = Self.symbolIcon("computermouse")
         logiGestures.submenu = gesturesSubmenu
@@ -1363,6 +1482,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         SessionLabel.refresh()
         applyHeader()
         applyEngineRow()
+        // Devices come and go while the app runs, and the only moment this list
+        // has to be right is the moment he is looking at it.
+        applyMicRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`

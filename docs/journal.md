@@ -242,6 +242,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The back button becomes the stop of the dictation it started (2026-09-17)](#the-back-button-becomes-the-stop-of-the-dictation-it-started-2026-09-17)
 - [One slow flick right is one gesture, and it cannot close what it just opened (2026-09-18)](#one-slow-flick-right-is-one-gesture-and-it-cannot-close-what-it-just-opened-2026-09-18)
 - [The chip swaps in one frame (2026-09-18)](#the-chip-swaps-in-one-frame-2026-09-18)
+- [The chip says which microphone, and the menu picks it (2026-09-19)](#the-chip-says-which-microphone-and-the-menu-picks-it-2026-09-19)
 
 ---
 
@@ -10558,3 +10559,61 @@ clipped row), a purpose-built contact-sheet harness because the effect could not
 any other way, and a rule file of twenty-odd paid-for traps. The end state is the one the app
 started with. *"I wish I could be able to test it, but it's very fast"* is the whole verdict: an
 effect that has to be photographed frame by frame to be judged is one nobody asked for.
+
+## The chip says which microphone, and the menu picks it (2026-09-19)
+
+Victor: *"Listening(E)... turns to Listening(🎙️⇒E)... (XLR) or Listening(💻⇒E)... (Mac's
+microphone) or Listening(🎤⇒E)... (for the RX portable bt mic) or Listening(🎧⇒E)... (for BOSE mic),
+and source should be selectable via menu too. those unavailable disabled."*
+
+One list serves both halves — `InputDevice.known`, four entries of picture, name and the strings
+CoreAudio answers with. The alternative was a glyph table beside the chip and a device table beside
+the menu, which is two places to disagree about what he is talking into.
+
+**The arrow is the sentence.** `(🎙️⇒E)` reads *this device feeds that engine*, which is the one
+pair of facts he cannot recover by looking at anything else mid-sentence; the menu answers both,
+two clicks away and behind whatever is in front of him.
+
+**The glyph is what `resolve()` would open, not what the menu is ticking.** They come apart the
+moment a cable does: a pick whose device is gone falls back to *automatic* rather than to silence,
+because a dictation that records nothing on account of a setting outliving a receiver is precisely
+the failure `InputDevice` was written to prevent. So the menu's top row says *what would record*
+and the tick stays on *what he asked for*, and the two together say **you asked for the receiver,
+you are on the built-in** — the sentence he needs when a cable has come out. The mark is re-read at
+every `dictationBegan` for the same reason.
+
+**The list is the four he named, and that is a decision.** This Mac answers `kAudioHardwarePropertyDevices`
+with fifteen inputs, eleven of them virtual — Loopback's `🎙️TO Zoom`, `🎓 TO Wispr`, `🔊FROM Zoom`,
+Wave Link's two, Zoom's, Teams', Webex's, Iriun's. A menu offering all of them would be a device
+chooser, which System Settings already is and does better; what it would not be is readable at a
+glance while he is teaching.
+
+**`Automatic` had to stay, and to be the default.** *Automatic* is the rule that has made the
+receiver work since it arrived — it wins whenever it is plugged in — and in a workshop the only
+thing he does is plug it in. A picker with four rows and no automatic would have retired that rule
+without anybody deciding to.
+
+**Matching is on name *and* manufacturer**, which the DJI taught (product `Wireless Mic Rx`, brand
+only in the manufacturer string) and the Elgato confirms from the other side: `Wave XLR` is the
+product, `Elgato Systems` the maker, and the `Wave Link MicrophoneFX` / `Wave Link Stream` virtual
+devices its driver installs are made by `Corsair Memory, Inc.` — so neither needle reaches them.
+
+**A pick is never refused mid-sentence**, unlike the engine. Switching recognisers rewires five
+callbacks under a sentence in flight; `InputDevice.select` is read once, at `MicRecorder.start`. So
+the pick lands on the next sentence and cannot disturb this one — which is also the honest
+behaviour, because the words already spoken really did come through the old device. The flash says
+so: `🎚️ 🎙️ Elgato Wave XLR — from the next sentence`.
+
+**The honest caveat, which is written in the code and not only here:** with the Engine on Wispr
+Flow the glyph names the device the *relay's* recorder is on — the one feeding the level meter and
+the voice corpus — while the words come from Wispr's own microphone, chosen inside Wispr and pinned
+to a Loopback device on this Mac. The four pictures are true for the four engines that record for
+themselves.
+
+**The states page pins the mark**, `(🎤⇒W)`, for the reason it already pinned `(W)`: `resolve()`
+answers with whatever is plugged into this Mac when the shooter runs, and an unpinned page would
+change its `Listening…` pictures every time a cable moved.
+
+Verified against the real device list on his desk — `xlr` → `🎙️ Elgato Wave XLR`, `rx` and `bose`
+(neither plugged in) → the built-in with 💻, `auto` → the built-in — through `POST /test/mic`,
+which is the same call the menu row makes, and on the chip itself by snapshot.

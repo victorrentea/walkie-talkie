@@ -62,7 +62,8 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
-| `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
+| `Engine: <what is listening>` | `waveform` | `>` — a five-row submenu |
+| `Microphone: <glyph> <device>` | `mic` | `>` — automatic + the four devices |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
@@ -140,6 +141,49 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   answered with `the local model is still loading` reads as the switch having failed.
 - **`GET /engine` answers `engine` (`wispr` / `whisper`) beside `source`**, so a test asserts the
   pick without matching a display name.
+
+## The Microphone row (2026-09-19)
+
+Victor: *"Listening(E)... turns to Listening(🎙️⇒E)... (XLR) or Listening(💻⇒E)... (Mac's
+microphone) or Listening(🎤⇒E)... (for the RX portable bt mic) or Listening(🎧⇒E)... (for BOSE mic),
+and source should be selectable via menu too. those unavailable disabled"*.
+
+- **Directly under `Engine`, because it is the same question one level down.** That row answers
+  *what is listening to me*, this one *through what*; together they are the two halves of the mark
+  the chip wears, and a man who read one off the chip should not hunt for the other.
+  → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*
+- **The list is the four he named, never the whole of CoreAudio.** This Mac answers with fifteen
+  inputs, eleven of them virtual (Loopback ×3, Wave Link ×2, Zoom, Teams, Webex, Iriun…). A menu
+  offering all of them would be a device chooser, which System Settings already is; what it would
+  not be is readable at a glance while he is teaching. → journal: same
+- **`Automatic` is first, ticked by default, and never disabled** — the DJI whenever it is plugged
+  in, the system input when it is not, which is the rule `InputDevice` has kept since the receiver
+  arrived. A picker without it would have retired that rule silently. → journal: same
+- **An absent device is disabled *and says why*** — `🎤 DJI Wireless Mic Rx — not connected`. A
+  grey row with no explanation is indistinguishable from a broken one, and the explanation is the
+  only thing he can act on: it is a cable. → journal: same
+- **Two names per device, `Engine`'s rule applied here** — the top row gets `short`
+  (`Microphone: 🎙️ XLR`), the list under the arrow gets `label` (`🎙️ Elgato Wave XLR`). The row
+  above it learnt this by stretching the whole menu to the width of a model id.
+- **`micSubmenu.autoenablesItems = false`, and it is load-bearing.** AppKit re-enables any item
+  with a valid target and action unless the *menu* says otherwise, and that flag is per `NSMenu` —
+  the one set on the top-level menu buys this list nothing. Without it the `— not connected` rows
+  are fully clickable and the greying is decoration. It is the same trap that made `Disconnect`
+  clickable with nothing bound.
+- **The top row says what would record; the tick says what he asked for.** They differ exactly when
+  a picked device has been unplugged (`InputDevice.resolve` falls back to automatic), and that
+  difference is the sentence he needs — *you asked for the receiver, you are on the built-in*.
+  → journal: same
+- **Rebuilt in `applyMicRow` from `menuWillOpen`**, like `applyEngineRow`, and for a sharper reason:
+  a receiver is plugged in *while* the menu is up at least as often as before it, so the list is
+  asked of CoreAudio at every open and never cached.
+- **A pick is never refused mid-sentence, unlike `Engine`.** Switching engines rewires five
+  callbacks under a dictation in flight; `InputDevice.select` is read once, at `MicRecorder.start`,
+  so a pick takes effect on the next sentence and cannot disturb this one — which is also the
+  honest behaviour, because the words already spoken did come through the old device. The chip is
+  re-marked at once even so, and the flash says `— from the next sentence` while he is talking.
+- **`GET /engine` answers a `mic` block and `POST /test/mic {"id": …}` makes the pick**, so the
+  fallback and the chip's mark are assertable without photographing a menu.
 
 ## Autosend, and the Mouse Gestures row
 
