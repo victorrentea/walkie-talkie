@@ -594,6 +594,21 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// than the text floats. The offset is derived rather than tuned — centre the
     /// image on the middle of the capital letters beside it — because the two
     /// sizes in use differ by 14pt and a constant that suits one wrecks the other.
+    /// **The glyphs that ride inside `Listening…`, rendered once each.**
+    ///
+    /// `Glyphs.emoji` scans a 72pt render pixel by pixel for its alpha box, and
+    /// this is read by the ramp tick — fifteen times a second, for the length of
+    /// every sentence. Four microphones is the whole domain, so a dictionary is
+    /// the whole cache.
+    private static var wordGlyphs: [Character: NSImage] = [:]
+
+    private static func wordGlyph(_ ch: Character) -> NSImage {
+        if let cached = wordGlyphs[ch] { return cached }
+        let image = Glyphs.emoji(String(ch), ink: iconInk)
+        wordGlyphs[ch] = image
+        return image
+    }
+
     private static func inline(_ image: NSImage, font: NSFont) -> NSAttributedString {
         let attachment = NSTextAttachment()
         attachment.image = image
@@ -1615,7 +1630,23 @@ private let frontLabel = NSTextField(labelWithString: "")
         // The star is measured in rather than allowed to hang off the end: the
         // chip hugs its current state (*Size: minimal, per state*), and a glyph
         // drawn past the row's own width would be clipped by the panel.
-        let engineWidth = engineText.map { rowWidth($0) + listenExtrasWidth } ?? 0
+        // **Asked of the label, not of the font** (2026-09-19) — the same rule
+        // as the ⌘-pick row three lines below, and it took the microphone glyph
+        // to notice this row had never followed it. `measure` knows one font;
+        // this row is an attributed string that carries pictures (the ✨ spawn
+        // mark, and since today the microphone), and every one of them is a run
+        // whose width the font cannot answer for. Measured on the real chip:
+        // `Listening(🎙️/E)...` asked for **158** through `rowWidth` and needed
+        // **161.5** drawn, so the label came up 3.5pt short — and a short label
+        // does not clip 3.5 points off the end, it drops the whole tail: Victor
+        // saw `Listening(🎙️/` with the engine and the dots simply gone.
+        var engineWidth: CGFloat = 0
+        if engineText != nil {
+            applyEngineText()
+            engineInfo.sizeToFit()
+            engineWidth = glyphColumn + recordDotGap + ceil(engineInfo.frame.width)
+                        + listenExtrasWidth
+        }
         // Asked of the label rather than of the font: this row is an attributed
         // string with a smaller, lowered glyph in it, and `measure` knows only
         // one font. Same reason the ⌘-pick row has always measured this way.
@@ -2333,9 +2364,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// The title row's own height, kept in step with the text in it.
     private let titleRowHeight: CGFloat = 21
 
-    private func rowWidth(_ text: String) -> CGFloat {
-        glyphColumn + recordDotGap + ceil(measure(text, font: hintFont))
-    }
+    /// **Gone since 2026-09-19** — it measured a row of plain text with one font,
+    /// and its last caller was the engine row, which has carried pictures inside
+    /// its string since the ✨ and now the microphone glyph. Both rows that ask
+    /// this question now ask the label (`sizeToFit`), which is the only thing
+    /// that knows what is actually in the string.
 
     /// **Both halves are centred on the row, so they are centred on each other.**
     ///
@@ -2831,6 +2864,25 @@ private let frontLabel = NSTextField(labelWithString: "")
         let word = Array(listeningWord)
         let steps = Int((CGFloat(word.count) * warmth).rounded())
         for (i, ch) in word.enumerated() {
+            // **A glyph in the word goes in as a picture** — the rule the ✨
+            // above is written under, applied to the microphone the mark has
+            // carried since 2026-09-19. A colour emoji as a *character* in this
+            // string is the failure this file has been warning about since
+            // `applyTitleText`, and it showed up here as a row cut off after the
+            // glyph. It is also unmeasurable: `Glyphs.emoji` trims to the ink
+            // and returns a square of exactly `iconInk`, so the width the layout
+            // asks for and the width that draws are the same number.
+            //
+            // **Always lit, never dimmed.** The bar is a count of letters that
+            // have filled; a picture has no unlit state that reads as *not yet*,
+            // and dimming it by alpha is the halo problem again (`dim` is an
+            // opaque grey for exactly that reason). The device stays readable
+            // through the whole ramp, which is the one thing on this row that is
+            // a fact rather than a forecast.
+            guard ch.isASCII else {
+                out.append(Self.inline(Self.wordGlyph(ch), font: hintFont))
+                continue
+            }
             out.append(NSAttributedString(string: String(ch),
                                           attributes: [.font: hintFont,
                                                        .foregroundColor: i < steps ? lit : dim]))

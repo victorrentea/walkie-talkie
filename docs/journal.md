@@ -10634,6 +10634,25 @@ themselves.
 answers with whatever is plugged into this Mac when the shooter runs, and an unpinned page would
 change its `Listening…` pictures every time a cable moved.
 
+**And it shipped cut in half, which is the part worth writing down.** Victor, an hour later:
+*"the tooltip next to mouse only shows now Listening(🎙️/"* — the state route answered with the
+whole string while the chip drew `Listening(🎙️/` and stopped. Two old traps in this file, both
+about the same thing, neither of which this row had been made to follow:
+
+- **The row is measured with `measure(_:font:)`**, which knows one font and cannot answer for a run
+  that is a picture. On the real chip: **158** asked for, **161.5** drawn. A label 3.5 pt short does
+  not clip 3.5 points off the end — it drops the whole tail, engine letter, brackets and dots.
+- **A colour emoji went in as a *character***, where the ✨ ten lines above it in the same function
+  goes in as an image precisely because a raw emoji in a haloed label is the failure that once cost
+  the spawn row its entire word.
+
+So the glyph is now `Glyphs.emoji` → `inline`, cached per character (`wordGlyphs` — the ramp reads
+it fifteen times a second and that function scans a 72 pt render pixel by pixel), and both rows that
+ask *how wide is this* now ask the label. `rowWidth` is deleted: its last caller was this row, and a
+helper that measures plain text with one font has no business near a string that carries pictures.
+The glyph stays **fully lit** through the ramp — a picture has no unlit state that reads as *not
+yet*, and dimming it by alpha is the halo problem the opaque grey `dim` exists to avoid.
+
 Verified against the real device list on his desk, through `POST /test/mic` (the same call the menu
 row makes) and by reading the rows back out of AppKit (`GET /engine.mic.rows`, which exists because
 a menu is the one surface here that cannot be photographed from a shell): `xlr` → `🎙️ Elgato Wave
