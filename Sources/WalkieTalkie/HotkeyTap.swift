@@ -1007,9 +1007,36 @@ final class HotkeyTap {
     /// `dictating`'s arrangement, for `dictating`'s reason.
     var ownDictation: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return ownDictationFlag }
-        set { stateLock.lock(); ownDictationFlag = newValue; stateLock.unlock() }
+        set {
+            stateLock.lock()
+            // **Both edges are stamped**, because the age of an open sentence is
+            // what `gestureStopDwellSeconds` is measured against — see
+            // `openSentenceAge`. Written from the main thread on every
+            // `syncBorrowedGestures`, most of which change nothing, so the clock
+            // only moves on a real transition.
+            if newValue != ownDictationFlag {
+                ownDictationSince = newValue ? CACurrentMediaTime() : 0
+            }
+            ownDictationFlag = newValue
+            stateLock.unlock()
+        }
     }
     private var ownDictationFlag = false
+    private var ownDictationSince: CFTimeInterval = 0
+
+    /// **How long the relay's own sentence has been open**, or nil when none is
+    /// — read from the tap thread, hence the lock.
+    ///
+    /// `ownDictation` rather than `dictating` on purpose: this answers *is there
+    /// a sentence to undo*, which is true through the speculative ring and the
+    /// settle as well, and is true whether the words are going to a terminal or
+    /// to the caret. A guard that only counted a destination would let the flick
+    /// close a caret dictation it had just opened.
+    private var openSentenceAge: CFTimeInterval? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard ownDictationFlag, ownDictationSince > 0 else { return nil }
+        return CACurrentMediaTime() - ownDictationSince
+    }
 
     /// **A gesture was refused because the other engine is already listening.**
     /// The banner is the overlay's and the tap may not reach for it; this is the
@@ -1351,9 +1378,41 @@ final class HotkeyTap {
     /// So a second F10 arriving inside `gestureRetriggerSeconds` of the first
     /// is dropped rather than toggling the microphone straight back — no
     /// physical second gesture lands that fast, and one that legitimately does
-    /// only costs a third of a second's delay.
+    /// only costs a fraction of a second's delay.
+    ///
+    /// **It came back on 2026-09-18**, with the flick made slowly: *"if I hold
+    /// down the forward button and move the mouse to the right, if I keep moving
+    /// it to the right, that gesture both starts and then immediately ends the
+    /// transcription"*. Two things were wrong with the third of a second above.
+    /// It was measured against the last F10 **this tap acted on**, so a train of
+    /// re-fires at, say, 300 ms let every second one through — dropped, acted
+    /// on, dropped, acted on. And it was too short for a hand that goes on
+    /// moving: Options+ re-fires for as long as the motion lasts, not once per
+    /// flick. So the window **slides** — a dropped tap stamps `lastF10At` too,
+    /// which makes the guard last as long as the motion rather than as long as
+    /// one interval — and it is `0.6` s, which is longer than any gap inside one
+    /// continued movement and shorter than letting go of the button, moving back
+    /// and pressing again.
     private var lastF10At: CFTimeInterval = 0
-    private static let gestureRetriggerSeconds: CFTimeInterval = 0.35
+    private static let gestureRetriggerSeconds: CFTimeInterval = 0.6
+
+    /// **A sentence younger than this cannot be ended by 🔼 →** (2026-09-18) —
+    /// Victor's own fallback for the same report: *"or at least just put a two
+    /// seconds minimum threshold between stopping after starting"*.
+    ///
+    /// It is the belt to `gestureRetriggerSeconds`' braces, and it is worth
+    /// having both: the sliding window is a guess about how a gesture engine
+    /// re-fires, while this one is a statement about the gesture's meaning —
+    /// within two seconds of opening the microphone, ➡️ can only be the flick
+    /// that opened it arriving twice. **Only the stop is guarded**; a flick that
+    /// would *start* a dictation, bind, or redirect a caret sentence at the
+    /// bound terminal is never delayed by it, and ⌘⌃D and the ⬅️ cancel are not
+    /// touched at all — a key pressed twice in a second is a hand meaning it,
+    /// and throwing a sentence away must never be the gesture that waits.
+    ///
+    /// The price is real and accepted: a deliberate one-word dictation cannot be
+    /// closed with the same flick for two seconds. ⌘⌃D closes it immediately.
+    private static let gestureStopDwellSeconds: CFTimeInterval = 2.0
 
     // MARK: - The wheel drag that selects a region
 
@@ -2589,8 +2648,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             case VK_F10:
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 let f10Now = CACurrentMediaTime()
-                guard f10Now - lastF10At >= Self.gestureRetriggerSeconds else {
-                    Log.info("🎯 ➡️ F10 re-triggered \(String(format: "%.0f", (f10Now - lastF10At) * 1000))ms after the last one — dropped, not toggling back")
+                // **The window slides** (2026-09-18): a dropped re-fire counts
+                // as the last one too, so a whole train of them lasts as long as
+                // the motion does rather than letting every second tap through.
+                // See `lastF10At`.
+                let sinceLastF10 = f10Now - lastF10At
+                guard sinceLastF10 >= Self.gestureRetriggerSeconds else {
+                    lastF10At = f10Now
+                    Log.info("🎯 ➡️ F10 re-triggered \(String(format: "%.0f", sinceLastF10 * 1000))ms after the last one — still the same motion, dropped")
                     return nil
                 }
                 lastF10At = f10Now
@@ -2601,6 +2666,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if leftIsHeld {
                     Log.info("🎯 ⬅️ held + forward button flicked right — bind, then dictate at it")
                     DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
+                    return nil
+                }
+                // **A sentence this young cannot be ended by the gesture that
+                // opened it** — `gestureStopDwellSeconds`. The second half of
+                // the same fix: a re-fire slow enough to clear the window above
+                // is still the flick that started the dictation, and the only
+                // thing it could do here is undo it.
+                if let age = openSentenceAge, age < Self.gestureStopDwellSeconds {
+                    Log.info("🎯 ➡️ F10 \(String(format: "%.0f", sinceLastF10 * 1000))ms on, but the sentence is only \(String(format: "%.0f", age * 1000))ms old — not stopping it")
                     return nil
                 }
                 DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }

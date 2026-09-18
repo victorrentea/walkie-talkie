@@ -17,6 +17,7 @@ The journal contradicts itself over time, because it was written as things chang
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
+- *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -238,6 +239,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The heads stay up while the words travel to the caret (2026-09-15)](#the-heads-stay-up-while-the-words-travel-to-the-caret-2026-09-15)
 - [The estimate stops guessing the middle (2026-09-16)](#the-estimate-stops-guessing-the-middle-2026-09-16)
 - [The back button becomes the stop of the dictation it started (2026-09-17)](#the-back-button-becomes-the-stop-of-the-dictation-it-started-2026-09-17)
+- [One slow flick right is one gesture, and it cannot close what it just opened (2026-09-18)](#one-slow-flick-right-is-one-gesture-and-it-cannot-close-what-it-just-opened-2026-09-18)
 
 ---
 
@@ -10480,3 +10482,41 @@ would have shipped without the replay.
 
 Verified against the live endpoint with a junk key before any key existed: the model path resolves,
 the body parses, 78 vocabulary terms load into the prompt, and the only thing missing is the key.
+
+## One slow flick right is one gesture, and it cannot close what it just opened (2026-09-18)
+
+Victor, the evening after the F10 guard shipped: *"if I hold down the forward button on the mouse
+and move the mouse to the right, that gesture, if I keep moving it to the right, both starts and
+then immediately ends the transcription. Can we somehow prevent this? So until I stop the right
+movement. Or at least just put a two seconds minimum threshold between stopping after starting."*
+
+The same failure as *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16), which
+was supposed to have fixed it — and the log said why it had not: `F10 re-triggered` had never once
+been printed. The 0.35 s window was wrong in two independent ways.
+
+**It was measured against the last F10 the tap acted on, not the last one it saw.** A dropped
+re-fire left `lastF10At` where it was, so a train arriving every ~300 ms went *dropped, acted on,
+dropped, acted on* — the guard halved the re-fires instead of swallowing them. The window now
+slides: every tap stamps `lastF10At`, dropped ones included, so the guard lasts as long as the
+motion does rather than as long as one interval.
+
+**And a third of a second was the wrong size for a flick made slowly.** The 2026-09-16 reading was
+that Options+ "re-fires on the tail" of one motion — one extra tap. What Victor is describing is a
+gesture engine that goes on firing for as long as the hand keeps moving, which no single-interval
+guard can size correctly. 0.6 s is longer than any gap inside one continued movement and far
+shorter than letting go of the button, moving back and pressing again.
+
+**The second half is his own fallback, and it is worth having even with the window fixed.** The
+sliding window is a guess about how somebody else's gesture engine behaves; `gestureStopDwellSeconds`
+(2 s) is a statement about what the gesture *means* — inside two seconds of the microphone opening,
+➡️ can only be the flick that opened it, arriving again. It reads `openSentenceAge`, the clock now
+kept on `ownDictation` rather than on `dictating`, so it covers the speculative ring, the settle and
+a caret dictation with nothing bound; a guard that counted only sentences with a destination would
+still let the flick close a caret one it had just opened.
+
+**Only the stop is guarded.** A flick that would start a dictation, the left-held bind chord, and
+the mid-sentence redirect to the bound terminal are never delayed, and neither ⌘⌃D nor the ⬅️ cancel
+is touched at all: a key pressed twice inside a second is a hand meaning it, and the gesture that
+throws a sentence away must never be the one that waits. The price is accepted and is small — a
+deliberate one-word dictation cannot be closed with the same flick for two seconds, and ⌘⌃D closes
+it at once.
