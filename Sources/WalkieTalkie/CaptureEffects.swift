@@ -610,13 +610,29 @@ enum CaptureEffect: String, CaseIterable {
 
     /// A single solid yellow disc, the same "tap indicator" Android Studio's
     /// emulator draws over a touch point: fades in already centered on the
-    /// point at 100pt diameter, grows out to 250pt while fading out, and is
-    /// gone. No convergence — this is the opposite metaphor from the other
-    /// six (it marks the point rather than gathering the screen toward it),
-    /// added on request purely to compare against them.
+    /// point, grows out while fading out, and is gone. No convergence — this
+    /// is the opposite metaphor from the other six (it marks the point rather
+    /// than gathering the screen toward it), added on request purely to
+    /// compare against them.
+    ///
+    /// **It stops where the lightning ring starts** (2026-09-19, Victor's
+    /// ask): the disc used to bloom 100pt → 250pt, and `CaretHalo`'s ink
+    /// begins 35.7pt out from the same point — so for most of its life the
+    /// bubble was sitting under, and then out past, the very filaments it
+    /// hands the pointer over to. Two yellow shapes at the same centre
+    /// overlapping is one smear, and neither reads. Now the disc's widest
+    /// frame lands exactly on `CaretHalo.innerRadius`, measured at the ring's
+    /// smallest (`swellScale` only grows it), so the bubble fills the hole in
+    /// the middle of the ring and never touches the ring itself — *"strict
+    /// până la marginea interioară a inelului de fulgere în forma lor cea mai
+    /// mică"*.
+    ///
+    /// The 2.5× bloom is untouched: shrinking both ends by the same factor
+    /// keeps the gesture — a disc arriving small and spreading — and only
+    /// changes the room it does it in.
     private static func playTapRipple(into root: CALayer, target: CGPoint) {
-        let startDiameter: CGFloat = 100
-        let endDiameter: CGFloat = 250
+        let endDiameter = CaretHalo.innerRadius * 2
+        let startDiameter = endDiameter / 2.5
         let duration: CFTimeInterval = 0.55
 
         let dot = CAShapeLayer()

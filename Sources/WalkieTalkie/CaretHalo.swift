@@ -229,6 +229,20 @@ final class CaretHalo {
         (1 + spread,     0),
     ]
 
+    /// **Where the ring's ink begins**, in points from the pointer — the first
+    /// stop of `profile`, which is the radius inside which nothing is drawn.
+    /// At rest, i.e. the smallest the ring ever is: `swellScale` only ever
+    /// makes it bigger, so a shape that clears this clears every frame of it.
+    ///
+    /// Public because the yellow capture receipt has to stop exactly here
+    /// (`CaptureEffect.playTapRipple`). The two are drawn at the same point,
+    /// one handing off to the other — the bubble marks the spot, the ring comes
+    /// out of it (`grow()`) — and Victor's rule for the pair is that they never
+    /// share a pixel: *"bula galbenă nu trebuie niciodată să se suprapună pe
+    /// sub sau peste cercul de fulgere"*. Derived rather than copied, so the
+    /// disc follows any future change to `core` or `spread` on its own.
+    static var innerRadius: CGFloat { core * (1 - spread) }
+
     /// **One yellow, and nothing else.** `NSColor.systemYellow` is deliberately
     /// not used: it is a dynamic colour that shifts with the appearance, and
     /// this is drawn over whatever is on screen rather than over the app's own
