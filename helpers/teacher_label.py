@@ -102,6 +102,21 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
                 + sum(LONG_PAUSE_SEC) / 2 / (sum(LONG_PAUSE_EVERY) / 2))
 
 
+#: What to do about a run of failures, in order. Wispr answered `raw_transcript`
+#: with zero words for five clips in a row after 357 dictations in 95 minutes, and
+#: was transcribing again two minutes later — so the first thing to try is *waiting*.
+#: Giving up is still in here, at the end: a Wispr that has quit or a channel that
+#: is really dead does not get better by pressing its key another four hundred times.
+BACKOFF_SEC = (300, 900, 1800)
+
+
+def backoff_for(recoveries) -> float | None:
+    """How long to pause after this many recoveries already spent, or None to stop."""
+    if recoveries >= len(BACKOFF_SEC):
+        return None
+    return BACKOFF_SEC[recoveries]
+
+
 def out_of_time(started, budget_hours) -> bool:
     """Whether the wall-clock budget is spent. No budget is never spent.
 
@@ -348,7 +363,7 @@ def main(argv):
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
 
-    done = failed = streak = 0
+    done = failed = streak = recoveries = 0
     gap = gaps()
     started = time.monotonic()
     with locks:
@@ -368,11 +383,19 @@ def main(argv):
                 log(f"  {i}/{len(todo)} ✗ no transcript ({s['seconds']:.1f}s) "
                     f"[{streak} in a row]")
                 if streak >= GIVE_UP_AFTER:
-                    log(f"giving up after {streak} consecutive failures — "
-                        "check that Wispr is running and on the right microphone")
-                    break
+                    pause = backoff_for(recoveries)
+                    if pause is None:
+                        log(f"giving up after {streak} failures and {recoveries} "
+                            "pauses — check that Wispr is running and on the right "
+                            "microphone")
+                        break
+                    recoveries += 1
+                    log(f"{streak} failures in a row — pausing {pause/60:.0f} min "
+                        f"and carrying on ({recoveries}/{len(BACKOFF_SEC)})")
+                    time.sleep(pause)
+                    streak = 0
             else:
-                streak = 0
+                streak = recoveries = 0
                 done += 1
                 # Committed per sample, not per batch: the run is hours long and
                 # a crash at 3 a.m. must cost one sample, not the night.

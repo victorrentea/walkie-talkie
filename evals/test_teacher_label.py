@@ -83,5 +83,28 @@ class WallClockBudget(unittest.TestCase):
                                         budget_hours=7))
 
 
+class Backoff(unittest.TestCase):
+    """Five failures in a row is not proof of a dead rig. On 2026-09-20 it was Wispr
+    answering `raw_transcript` with zero words after 357 dictations in 95 minutes —
+    transcribing again two minutes later. The old rule threw away the five hours that
+    were left; the ladder waits instead, and still stops for a rig that is really down."""
+
+    def test_the_first_answer_to_a_streak_is_a_pause(self):
+        self.assertEqual(tl.backoff_for(0), tl.BACKOFF_SEC[0])
+
+    def test_the_pauses_get_longer(self):
+        pauses = [tl.backoff_for(i) for i in range(len(tl.BACKOFF_SEC))]
+        self.assertEqual(pauses, sorted(pauses))
+        self.assertEqual(len(set(pauses)), len(pauses))
+
+    def test_it_still_gives_up_in_the_end(self):
+        self.assertIsNone(tl.backoff_for(len(tl.BACKOFF_SEC)))
+        self.assertIsNone(tl.backoff_for(99))
+
+    def test_the_ladder_is_shorter_than_a_night(self):
+        """A night is seven hours; a ladder that outlasts it never reaches its own end."""
+        self.assertLess(sum(tl.BACKOFF_SEC), 2 * 3600)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
