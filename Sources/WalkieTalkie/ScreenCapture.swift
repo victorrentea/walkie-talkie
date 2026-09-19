@@ -27,15 +27,33 @@ enum ScreenCapture {
     /// capture, which he took by starting to talk. nil for a shot with no
     /// dictation around it (bare F3), where there is no clock for it to be an
     /// offset into and the name falls back to a timestamp.
+    /// **What a capture answers with** (2026-09-19). The pointer and the dragged
+    /// rectangle used to be written into the file's name; they are now tokens
+    /// *inside the sentence* (`[📸1🖱️@1000:800]`), so the capture has to hand
+    /// them back rather than spell them. The size comes with them because the
+    /// footer says what `-original.jpg` is, and the only thing that honestly
+    /// knows is the JPEG this call just produced.
+    struct Frame {
+        /// The full-resolution file — `…-original.jpg`. `handover(for:)` gives
+        /// the 800 px copy, `zoom(for:)` the unscaled cut-out of an area.
+        let path: String
+        /// Where the pointer was, in the pixels of **this** frame, top-left
+        /// origin. Nil when the screen could not be resolved.
+        let mouse: CGPoint?
+        /// The rectangle he dragged, in the same pixels. Area captures only.
+        let area: CGRect?
+        /// The frame's own pixel size, for the footer's `at 3456x2234px`.
+        let size: CGSize?
+    }
+
     static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil,
-                     index: Int? = nil) -> String? {
+                     index: Int? = nil) -> Frame? {
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
         let spot = cursorFraction(mouse: mouse, screen: screen)
-        // Provisional: the pixel reading in the final name is measured against the
-        // frame `screencapture` actually produces, which does not exist yet.
-        let file = Outbox.shotsDir.appendingPathComponent("shot\(stem(offset, index)).jpg")
+        let file = Outbox.shotsDir
+            .appendingPathComponent(uniqueBase(stem(offset, index)) + "-original.jpg")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -61,10 +79,19 @@ enum ScreenCapture {
         //
         // It also drops a second JPEG pass over a frame `screencapture` already
         // encoded: ~100ms and a file that came back *larger* at quality 1.0.
-        let final = tagCursor(spot, on: file, offset: offset, index: index)
-        writeHandoverCopy(of: final)
+        let size = pixelSize(of: file)
+        writeHandoverCopy(of: file)
         prune()
-        return final.path
+        return Frame(path: file.path, mouse: pixels(spot, in: size), area: nil, size: size)
+    }
+
+    /// The pointer as whole pixels of a frame of this size — the reading that
+    /// used to be baked into the name, measured the same way: off the JPEG,
+    /// never multiplied out of the screen's backing scale.
+    private static func pixels(_ spot: CGPoint?, in size: CGSize?) -> CGPoint? {
+        guard let spot = spot, let size = size else { return nil }
+        return CGPoint(x: (spot.x * size.width).rounded(),
+                       y: (spot.y * size.height).rounded())
     }
 
     /// **A region he dragged out, rather than the display he was looking at.**
@@ -103,8 +130,9 @@ enum ScreenCapture {
     /// where the cursor's position already travels, and for the same reason
     /// (nothing is drawn into the picture; see `grab`).
     static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?,
-                         index: Int? = nil) -> String? {
-        let file = Outbox.shotsDir.appendingPathComponent("shot\(stem(offset, index)).jpg")
+                         index: Int? = nil) -> Frame? {
+        let file = Outbox.shotsDir
+            .appendingPathComponent(uniqueBase(stem(offset, index)) + "-original.jpg")
         let display = activeDisplayNumber(of: screen)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -120,8 +148,8 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
-        let tagged = tagArea(rect, on: screen, of: file, offset: offset, index: index)
-        writeHandoverCopy(of: tagged.file)
+        let px = areaPixels(rect, on: screen, of: file)
+        writeHandoverCopy(of: file)
         // **And the region itself, cut out, unscaled** (2026-09-19, Victor:
         // *"trimite atât ecranul original + 800px ca până acum, dar și selecția
         // originală decupată (nescalată)"*). The frame answers *where*, this one
@@ -130,42 +158,28 @@ enum ScreenCapture {
         // 21/28, the screen with a cut-out beside it 15/16. The two are one picture
         // in every count that matters (the chip, `prune`, `paths`); this file is a
         // sibling found by name, exactly like `-small`.
-        if let px = tagged.px { writeRegionCopy(of: tagged.file, px: px) }
+        if let px = px { writeRegionCopy(of: file, px: px) }
         prune()
-        return tagged.file.path
+        return Frame(path: file.path, mouse: nil, area: px, size: pixelSize(of: file))
     }
 
-    /// `shot#01(area-317x210-to-1204x880px).jpg` — the dragged rectangle **in the
-    /// pixels of this image**, top-left origin like the image itself.
+    /// The dragged rectangle **in the pixels of this image**, top-left origin
+    /// like the image itself.
     ///
     /// Measured off the JPEG rather than multiplied out of the screen's backing
-    /// scale, for `tagCursor`'s reason: the two displays here have different
-    /// scales and the file is the only thing that knows which one it came from.
-    ///
-    /// Answers the rectangle it wrote into the name as well as the file, because
-    /// `grabArea` needs the same four numbers to cut the region out and reading
-    /// them back off the string it has just formatted is a parser nobody needs.
-    /// Nil when the frame could not be measured — then there is no rectangle in
-    /// the name either, and nothing to cut to.
-    private static func tagArea(_ rect: NSRect, on screen: NSScreen, of file: URL,
-                                offset: TimeInterval?, index: Int?) -> (file: URL, px: CGRect?) {
+    /// scale: the two displays here have different scales and the file is the
+    /// only thing that knows which one it came from. It used to write the four
+    /// numbers into the name; they ride the envelope's own token now
+    /// (`[📸3✂️x1,y1→x2,y2]`), so this only measures.
+    private static func areaPixels(_ rect: NSRect, on screen: NSScreen, of file: URL) -> CGRect? {
         guard let size = pixelSize(of: file),
               let a = cursorFraction(mouse: NSPoint(x: rect.minX, y: rect.maxY), screen: screen),
               let b = cursorFraction(mouse: NSPoint(x: rect.maxX, y: rect.minY), screen: screen)
-        else { return (file, nil) }
-        let x1 = Int((a.x * size.width).rounded()), y1 = Int((a.y * size.height).rounded())
-        let x2 = Int((b.x * size.width).rounded()), y2 = Int((b.y * size.height).rounded())
-        let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("shot\(stem(offset, index))(area-\(x1)x\(y1)-to-\(x2)x\(y2)px).jpg"))
-        let px = CGRect(x: CGFloat(min(x1, x2)), y: CGFloat(min(y1, y2)),
-                        width: CGFloat(abs(x2 - x1)), height: CGFloat(abs(y2 - y1)))
-        do {
-            try FileManager.default.moveItem(at: file, to: tagged)
-            return (tagged, px)
-        } catch {
-            Log.error("could not name \(tagged.lastPathComponent): \(error)")
-            return (file, nil)
-        }
+        else { return nil }
+        let x1 = (a.x * size.width).rounded(), y1 = (a.y * size.height).rounded()
+        let x2 = (b.x * size.width).rounded(), y2 = (b.y * size.height).rounded()
+        return CGRect(x: min(x1, x2), y: min(y1, y2),
+                      width: abs(x2 - x1), height: abs(y2 - y1))
     }
 
     /// Write `<name>-zoom.jpg` beside an area frame: **the rectangle he dragged,
@@ -187,8 +201,7 @@ enum ScreenCapture {
     @discardableResult
     private static func writeRegionCopy(of file: URL, px: CGRect) -> URL? {
         guard px.width >= 2, px.height >= 2 else { return nil }
-        let dst = file.deletingLastPathComponent().appendingPathComponent(
-            file.deletingPathExtension().lastPathComponent + "-zoom.jpg")
+        let dst = URL(fileURLWithPath: sibling(of: file.path, ""))
         guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
               let full = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             Log.error("could not read \(file.lastPathComponent) to cut the region out")
@@ -210,24 +223,30 @@ enum ScreenCapture {
         return dst
     }
 
-    /// The unscaled cut-out beside an area frame, if one was written. Nil for
-    /// every other picture, which is what makes it safe to ask of all of them.
+    /// The unscaled cut-out beside an area frame, if one was written —
+    /// `screenshot-3.jpg` beside `screenshot-3-original.jpg`. Nil for every
+    /// other picture, which is what makes it safe to ask of all of them and is
+    /// what `isArea` reads.
     static func zoom(for path: String) -> String? {
-        let url = URL(fileURLWithPath: path)
-        let zoom = url.deletingLastPathComponent().appendingPathComponent(
-            url.deletingPathExtension().lastPathComponent + "-zoom.jpg")
-        return FileManager.default.fileExists(atPath: zoom.path) ? zoom.path : nil
+        let cut = sibling(of: path, "")
+        guard cut != path, FileManager.default.fileExists(atPath: cut) else { return nil }
+        return cut
     }
 
-    /// True for a frame `grabArea` wrote. Read off the name because the name is
-    /// also what says it to the agent — a second flag beside the path would be a
-    /// second thing to keep in step with it.
-    static func isArea(_ path: String) -> Bool {
-        // **The token, not the prefix** (2026-09-14). These frames are whole
-        // screens now — the name starts `shot` like every other one — and what
-        // makes them different is the rectangle inside the parentheses.
-        (path as NSString).lastPathComponent.contains("(area-")
+    /// The picture's number in this dictation, off its own name — `📸3` and
+    /// `screenshot-3-original.jpg` are the same digit, and the name is what says
+    /// so to the agent.
+    static func number(of path: String) -> Int? {
+        let stem = (path as NSString).lastPathComponent
+        guard let m = stem.range(of: #"^screenshot-(\d+)[-.]"#, options: .regularExpression)
+        else { return nil }
+        return Int(stem[m].dropFirst("screenshot-".count).dropLast())
     }
+
+    /// True for a frame `grabArea` wrote — asked of the **files**, not of the
+    /// name: an area frame is the one with a cut-out beside it (2026-09-19,
+    /// when the name became `screenshot-3` and stopped saying anything).
+    static func isArea(_ path: String) -> Bool { zoom(for: path) != nil }
 
     /// The width of the copy the **agent** is given. Victor still gets the retina
     /// frame; this is the one that travels.
@@ -298,8 +317,7 @@ enum ScreenCapture {
     /// of exactly that kind of second pass.
     @discardableResult
     private static func writeHandoverCopy(of file: URL) -> URL? {
-        let dst = file.deletingLastPathComponent().appendingPathComponent(
-            file.deletingPathExtension().lastPathComponent + "-small.jpg")
+        let dst = URL(fileURLWithPath: sibling(of: file.path, "-800px"))
         guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -317,16 +335,24 @@ enum ScreenCapture {
         return dst
     }
 
-    /// The small copy for a frame, if one was written. Callers hand this to an
-    /// agent and the original to Victor.
+    /// The 800 px copy for a frame — `…-800px.jpg` beside `…-original.jpg`.
     ///
     /// Falls back to the frame itself rather than to nothing: a downscale that
     /// failed must cost tokens, never a picture.
     static func handover(for path: String) -> String {
+        let small = sibling(of: path, "-800px")
+        return FileManager.default.fileExists(atPath: small) ? small : path
+    }
+
+    /// `…-original.jpg` → `…<suffix>.jpg`, and `…<suffix>` alone when the suffix
+    /// is empty — the cut-out is `screenshot-3.jpg` beside
+    /// `screenshot-3-original.jpg`, which is Victor's naming and not a style.
+    private static func sibling(of path: String, _ suffix: String) -> String {
         let url = URL(fileURLWithPath: path)
-        let small = url.deletingLastPathComponent().appendingPathComponent(
-            url.deletingPathExtension().lastPathComponent + "-small.jpg")
-        return FileManager.default.fileExists(atPath: small.path) ? small.path : path
+        var stem = url.deletingPathExtension().lastPathComponent
+        if stem.hasSuffix("-original") { stem.removeLast("-original".count) }
+        return url.deletingLastPathComponent()
+            .appendingPathComponent(stem + suffix + ".jpg").path
     }
 
     /// **`00:00`, `01:23` — where in the sentence.** A dictation's shots are read
@@ -356,66 +382,21 @@ enum ScreenCapture {
     /// `#01` reads as an index, `-00:08` as a time, and `shot-#01` reads as
     /// neither.
     private static func stem(_ offset: TimeInterval?, _ index: Int? = nil) -> String {
-        // **`#01` and no offset** (2026-09-14, Victor's own mock of the envelope:
-        // `shot#01(mouse-at-1077x424px)-small.jpg`). The offset was how a frame
-        // was located in the sentence, and it is not needed for that any more —
-        // the marker puts `(screenshot: shot#01)` at the word he pressed at, so
-        // the name only has to be the thing that reference names. Two digits so
-        // ten frames sort the way they were taken.
-        if let index = index { return String(format: "#%02d", index) }
-        guard let offset = offset else {
-            let stamp = DateFormatter()
-            stamp.locale = Locale(identifier: "en_US_POSIX")
-            stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-            return "-" + stamp.string(from: Date())
-        }
-        let seconds = max(0, Int(offset.rounded()))
-        return String(format: "-%02d:%02d", seconds / 60, seconds % 60)
+        // **`screenshot-3`, and the number is the only thing in it** (2026-09-19,
+        // Victor's template). Everything the name used to carry — the offset, the
+        // pointer, the dragged rectangle — is a token inside the sentence now
+        // (`[📸3✂️900,345→2594,574]`), said once where he said it instead of twice
+        // in two notations. What is left is the digit the token names, so the
+        // reference and the file are the same string with no parsing in between.
+        if let index = index { return "screenshot-\(index)" }
+        // No dictation around it: no number to be the third picture *of*, so the
+        // clock stands in. Same reasoning the offset had.
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        return "screenshot-" + stamp.string(from: Date())
     }
 
-    /// Rename the shot to its final form:
-    /// `shot-01:23(mouse-at-1034x1466px).jpg` — taken 1m23s into the dictation,
-    /// with the pointer at x=1034, y=1466 **in the pixels of this image**,
-    /// top-left origin like the image itself.
-    ///
-    /// It rides in the name and not in the outbox JSON because the name is what
-    /// the agent already has in front of it: the path is in `paths`, so both the
-    /// moment and the pointer arrive with the picture, and nothing downstream
-    /// has to learn a new field to benefit from them. He points at things while
-    /// he talks ("this button", "that line") and the sentence alone cannot say
-    /// which.
-    ///
-    /// **Pixels.** The reading was a percentage pair (`-cursor-34.2x71.8pct`)
-    /// because the agent reads these through a tool that downsamples them, so a
-    /// pixel stops pointing at the right thing once the picture is resized. It
-    /// then briefly carried its own denominator (`-of-3024x1890`) to answer
-    /// that. Victor dropped the denominator: the name is read by him as often as
-    /// by an agent, and a pair of raw pixels is the form he can check against a
-    /// screen. The consequence is real and accepted — a downsampled frame needs
-    /// its own dimensions read back before these numbers mean anything, which
-    /// anything looking at the image already has.
-    ///
-    /// Measured against the frame `screencapture` really produced rather than
-    /// computed from the screen's backing scale: mirrored displays, HiDPI modes
-    /// and a sleeping external monitor all make that multiplication a guess.
-    /// Renaming rather than naming up front is what buys that — the file has to
-    /// exist before it can be measured. On failure the provisional name stands:
-    /// a shot with no pointer in its name is still a shot.
-    private static func tagCursor(_ spot: CGPoint?, on file: URL,
-                                  offset: TimeInterval?, index: Int?) -> URL {
-        guard let spot = spot, let size = pixelSize(of: file) else { return file }
-        let x = Int((spot.x * size.width).rounded())
-        let y = Int((spot.y * size.height).rounded())
-        let tagged = unique(file.deletingLastPathComponent()
-            .appendingPathComponent("shot\(stem(offset, index))(mouse-at-\(x)x\(y)px).jpg"))
-        do {
-            try FileManager.default.moveItem(at: file, to: tagged)
-            return tagged
-        } catch {
-            Log.error("could not name \(tagged.lastPathComponent): \(error)")
-            return file
-        }
-    }
 
     /// A `-2`, `-3`… before the extension if that name is taken. Both names go
     /// through it — two crops of the same size at the same offset collide the
@@ -436,6 +417,25 @@ enum ScreenCapture {
             if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
         }
         return url
+    }
+
+    /// **The disambiguating `-2` goes before `-original`, never after**
+    /// (2026-09-19). Every dictation in a session folder produces a
+    /// `screenshot-0`, so collisions are the rule rather than the exception —
+    /// and a frame called `screenshot-0-original-2.jpg` would take its siblings
+    /// with it into `screenshot-0-original-2-800px.jpg`, which is neither the
+    /// name the footer promises nor one `sibling(of:)` can compute. So the
+    /// **base** is made unique and the suffixes are composed after it:
+    /// `screenshot-0-2-original.jpg`, `screenshot-0-2-800px.jpg`.
+    private static func uniqueBase(_ base: String) -> String {
+        let dir = Outbox.shotsDir
+        func taken(_ candidate: String) -> Bool {
+            FileManager.default.fileExists(
+                atPath: dir.appendingPathComponent(candidate + "-original.jpg").path)
+        }
+        guard taken(base) else { return base }
+        for n in 2...99 where !taken("\(base)-\(n)") { return "\(base)-\(n)" }
+        return base
     }
 
     /// A session folder with nothing left in it says a session happened and
@@ -509,10 +509,13 @@ enum ScreenCapture {
             // Counting the siblings would silently divide a cap expressed in
             // pictures; they are dropped together with the frame they belong to,
             // below.
+            // **Frames are the `-original` files.** A shot is two of them (the
+            // frame and its 800 px copy) and an area shot is three, with the
+            // unscaled cut-out; counting the siblings would divide a cap
+            // expressed in pictures. They are dropped together, below.
             jpgs += files.filter {
-                let stem = $0.deletingPathExtension().lastPathComponent
-                return $0.pathExtension.lowercased() == "jpg"
-                    && !stem.hasSuffix("-small") && !stem.hasSuffix("-zoom")
+                $0.pathExtension.lowercased() == "jpg"
+                    && $0.deletingPathExtension().lastPathComponent.hasSuffix("-original")
             }
         }
         defer { dropEmptySessions() }
@@ -525,10 +528,9 @@ enum ScreenCapture {
         }
         for stale in sorted.dropFirst(keepNewest) {
             try? FileManager.default.removeItem(at: stale)
-            for suffix in ["-small.jpg", "-zoom.jpg"] {
-                let sibling = stale.deletingLastPathComponent().appendingPathComponent(
-                    stale.deletingPathExtension().lastPathComponent + suffix)
-                try? FileManager.default.removeItem(at: sibling)
+            for suffix in ["-800px", ""] {
+                try? FileManager.default.removeItem(
+                    at: URL(fileURLWithPath: sibling(of: stale.path, suffix)))
             }
         }
     }

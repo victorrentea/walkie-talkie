@@ -601,7 +601,7 @@ enum ShotMarker {
     /// - Returns: the rewritten text and, per kind, the indices it resolved in
     ///   the order they were spoken.
     static func resolve(text: String,
-                        shots: Set<Int> = [],
+                        shots: [Int: String] = [:],
                         selections: [Int: String] = [:],
                         elements: [Int: String] = [:],
                         inline: Bool = true)
@@ -686,7 +686,7 @@ enum ShotMarker {
             // that merely *looked* like a marker, which is a thing his sentences
             // will do — `screenshot folder`, `selected text below`.
             Log.info("markers: \(dropped) phrase(s) looked like a marker with nothing "
-                     + "attached — have shots \(shots.sorted()), selections "
+                     + "attached — have shots \(shots.keys.sorted()), selections "
                      + "\(selections.keys.sorted()). Left in the words untouched.")
         }
         // The ends are his text's, so trimming them is a seam like any other.
@@ -707,35 +707,80 @@ enum ShotMarker {
     /// number can be reserved for a capture that then fails, and a reference to
     /// a picture that does not exist is worse than no reference at all.
     private static func render(_ kind: Kind, _ index: Int,
-                               shots: Set<Int>,
+                               shots: [Int: String],
                                selections: [Int: String],
                                elements: [Int: String]) -> String? {
+        // **One lookup, three kinds** (2026-09-19). The tokens themselves are
+        // built by `Token` below, at the gesture's call site, where the pointer,
+        // the rectangle and the application are known; this only decides
+        // *whether* there is something behind the number. Nil is the safety net
+        // every caller has a fallback for: a number can be reserved for a
+        // capture that then failed, and a reference to a picture that does not
+        // exist is worse than no reference at all.
         switch kind {
-        case .shot:
-            // **`(screenshot: shot#01)`** — Victor's own mock of the envelope,
-            // 2026-09-14. A parenthesis rather than a bracket because this is an
-            // aside inside his sentence and brackets are what the envelope's
-            // *clauses* use; and the frame's real file name rather than an
-            // index, so the reference and the row in the list below are the same
-            // string.
-            guard shots.contains(index) else { return nil }
-            return String(format: "(screenshot: shot#%02d)", index)
-        case .selection:
-            // **Bracketed as well as quoted** (2026-09-14). Bare double quotes
-            // are the ones he might have dictated himself — *"it seemed to be
-            // inserted in dictation, but without clear double quotes. Clearly
-            // delimitate them"* — and they break outright on a highlight that
-            // contains a quote of its own, which a line of code very often does.
-            guard let selected = selections[index] else { return nil }
-            return "(selected text: \"\(selected)\")"
-        case .element:
-            // **The whole description, not a reference.** A picked element is
-            // three short facts — the selector, what it said, the page — and a
-            // reader who has them needs nothing looked up; a `#01` here would
-            // send him to a list to reassemble a sentence he is already reading.
-            guard let described = elements[index] else { return nil }
-            return "(\(described))"
+        case .shot: return shots[index]
+        case .selection: return selections[index]
+        case .element: return elements[index]
         }
+    }
+
+    /// **The envelope's vocabulary, in one place** (2026-09-19, Victor's own
+    /// template). Every attachment is a bracket where he made it, and the
+    /// bracket says which kind, which number and the one fact that cannot be
+    /// derived from the file:
+    ///
+    /// ```
+    /// [📸0🖱️@1000:800]  [📸3✂️900,345→2594,574]  [selected: "…" from app Chrome]
+    /// [chrome-selection-1: Place order]  [🎦1⏺️]  [🎦1⏹️5s]
+    /// ```
+    ///
+    /// They are `[…]` and not `(…)` deliberately, which is a reversal of the
+    /// 2026-09-14 reasoning (*a parenthesis, because this is an aside inside his
+    /// sentence*): with every kind now carrying numbers and coordinates, what
+    /// matters more is that a reader can tell the app's insertions from his own
+    /// words at a glance, and brackets are what the rest of the envelope uses.
+    /// Measured before shipping — `evals/envelope-symbols/`, 18 runs: Sonnet and
+    /// Opus each answered 11/11 questions about what these mean, against 30/33
+    /// and 32/33 for the shape they replaced, in half the characters.
+    enum Token {
+        static func shot(_ index: Int, mouse: CGPoint?) -> String {
+            guard let mouse = mouse else { return "[📸\(index)]" }
+            return "[📸\(index)🖱️@\(Int(mouse.x)):\(Int(mouse.y))]"
+        }
+
+        /// `✂️` is *I dragged a box round this*, and the four numbers are its
+        /// corners in the pixels of that frame — the same pair of readings the
+        /// file name used to carry.
+        static func area(_ index: Int, _ box: CGRect) -> String {
+            "[📸\(index)✂️\(Int(box.minX)),\(Int(box.minY))→\(Int(box.maxX)),\(Int(box.maxY))]"
+        }
+
+        /// The highlight **is** text, so it goes in whole rather than as a
+        /// reference; the application is the half a quoted string cannot carry.
+        static func selection(_ text: String, app: String?) -> String {
+            guard let app = app, !app.isEmpty else { return "[selected: \"\(text)\"]" }
+            return "[selected: \"\(text)\" from app \(app)]"
+        }
+
+        /// The element's *text* inline; its selector and page are the footer's,
+        /// because they are long and nobody reads them mid-sentence.
+        static func element(_ index: Int, text: String) -> String {
+            "[chrome-selection-\(index): \(text)]"
+        }
+
+        static func filmStart(_ index: Int) -> String { "[🎦\(index)⏺️]" }
+
+        static func filmStop(_ index: Int, seconds: TimeInterval) -> String {
+            "[🎦\(index)⏹️\(Int(seconds.rounded()))s]"
+        }
+
+        /// What the footer's legend rows are keyed by, so a row and the token it
+        /// explains cannot drift: `📸0`, `📸3✂️`, `chrome-selection-1`, `🎦1`.
+        static func key(shot index: Int, area: Bool) -> String {
+            "📸\(index)" + (area ? "✂️" : "")
+        }
+        static func key(element index: Int) -> String { "chrome-selection-\(index)" }
+        static func key(film index: Int) -> String { "🎦\(index)" }
     }
 
     // MARK: - The marker that is a second rather than a sound
@@ -802,7 +847,7 @@ enum ShotMarker {
     /// - Returns: the same shape `resolve` returns, so the caller cannot tell
     ///   which locator ran.
     static func place(words: [TimedWord], cues: [Cue],
-                      shots: Set<Int> = [],
+                      shots: [Int: String] = [:],
                       selections: [Int: String] = [:],
                       elements: [Int: String] = [:],
                       inline: Bool = true)
@@ -888,7 +933,7 @@ enum ShotMarker {
         let out = pieces.map { $0.verbatim ? $0.text : tidy($0.text) }.joined()
         if dropped > 0 {
             Log.info("markers: \(dropped) cue(s) had nothing behind them — have shots "
-                     + "\(shots.sorted()), selections \(selections.keys.sorted()), "
+                     + "\(shots.keys.sorted()), selections \(selections.keys.sorted()), "
                      + "elements \(elements.keys.sorted()). Left out of the words.")
         }
         return (out.trimmingCharacters(in: .whitespacesAndNewlines),

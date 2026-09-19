@@ -38,6 +38,19 @@ Rules for where a dictation goes and when it is written: the held prompt, the ou
 - **`syncLocalCapture`'s cost is outside this app.** With **Mouse Gestures: Wheel** the wheel is the relay's for as long as the relay runs — middle-click stops opening links in Chrome and closing tabs in VS Code (*"folosesc middle click sa inchid de ex taburi chrome/vsc"*). In the default mode it costs nothing. The line to put back to `isBound` is one, named in `syncLocalCapture`'s own comment. The unbound double-click branch at the bottom of `HotkeyTap`'s middle-button chain is unreachable now and is left standing for the flip back. → journal: *The one gate whose price is outside this app*
 - **Pause never comes back, and `holdsForBind` must never become a menu tick** — a tick for it would be pause under another name. *"nu mai vreau să am conceptul de pauză"* (2026-09-01). Disconnect is the "hand the mouse back" gesture: reachable from the right-held chord and the menu, and it says *which* terminal it let go of. A click on the chip at rest does nothing. → journal: *Pause still does not come back*, *Pause is gone*
 
+## The envelope: tokens where he made them, a legend under the words (2026-09-19)
+
+Victor's own template, and the shape that ships. Full reasoning: journal, *The envelope becomes
+tokens where he made them (2026-09-19)*.
+
+- **Every attachment is a bracket in the sentence**, built by `ShotMarker.Token` and nowhere else: `[📸1🖱️@1000:800]`, `[📸3✂️900,345→2594,574]`, `[selected: "…" from app Chrome]`, `[chrome-selection-1: <its text>]`. `ShotMarker.render` is a lookup into prepared tokens — it decides *where* they go and never what they say.
+- **The footer is a legend keyed by those tokens** (`AppDelegate.artifactsClause`): `[=<folder>]` once and only when something is in it, then one `[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]` per artifact. `📁` stands for the folder.
+- **A token the words could not carry keeps its row and gains `at m:ss`.** Placement needs word timings, so with Wispr Flow — the default engine — *nothing* is inline and the footer is the whole envelope. That is not a degradation; it is the addressing the tokens are an optimisation over.
+- **The context frame leads the words and has no cue.** He took it by starting to talk. At the caret there is none at all — that mode takes no context shot, and Victor confirmed it stays that way (2026-09-19).
+- **`[Focused window: …]` and `picksClause` are gone**; the application survives only inside a highlight's token, where it says which app the text came *from*. The hint is `[Dictated in RO or EN]`.
+- **Measured before shipping** — `evals/envelope-symbols/`, 18 runs, 11 comprehension questions: **Sonnet 33/33 and Opus 33/33** on Victor's template against 30/33 and 32/33 on the envelope it replaces, at **925 characters against 1810**. A variant that collapses the derivable rows into one convention line is 763 and costs Sonnet the one question that is inferred rather than stated (*which frame was automatic*) — which is also the one thing both models flagged as a guess in every run.
+- **Number the pictures consecutively as they attach.** Every run of the eval remarked on the gap in the sketch's `📸1 … 📸3`; a hole reads as a picture that was lost.
+
 ## What the envelope enumerates (2026-09-13)
 
 - **Three lists, one shape, one clock.** The frames (`shotsClause`), the highlights (`selectionsClause`) and the picked elements (`picksClause`) are each a heading followed by `- ` lines, and every line starts with `mm:ss` from the moment the dictation opened — the same reading a frame already carries in its name. Victor's reason is one sentence: the agent should know *when* in the dictation each thing happened, relative to what he was saying. → journal: *Every selection and every pick says when, and a pick says what it said (2026-09-13)*

@@ -91,7 +91,7 @@ class Seams(unittest.TestCase):
         self.assertEqual(
             marker(words=WORDS, available=[1],
                    cues=[{"kind": "shot", "index": 1, "at": 0.75}]),
-            "pune asta (screenshot: shot#01) sub un strat")
+            "pune asta [📸1] sub un strat")
 
     def test_a_press_inside_a_word_still_lands_between_two(self):
         """0.72 is inside `asta`'s own gap, not on a boundary — and the
@@ -100,7 +100,7 @@ class Seams(unittest.TestCase):
         self.assertEqual(
             marker(words=WORDS, available=[1],
                    cues=[{"kind": "shot", "index": 1, "at": 0.72}]),
-            "pune asta (screenshot: shot#01) sub un strat")
+            "pune asta [📸1] sub un strat")
 
     def test_before_the_first_word_and_after_the_last(self):
         """A press before he started talking belongs at the front; one after he
@@ -108,11 +108,11 @@ class Seams(unittest.TestCase):
         self.assertEqual(
             marker(words=WORDS, available=[1],
                    cues=[{"kind": "shot", "index": 1, "at": 0.0}]),
-            "(screenshot: shot#01) pune asta sub un strat")
+            "[📸1] pune asta sub un strat")
         self.assertEqual(
             marker(words=WORDS, available=[1],
                    cues=[{"kind": "shot", "index": 1, "at": 99.0}]),
-            "pune asta sub un strat (screenshot: shot#01)")
+            "pune asta sub un strat [📸1]")
 
     def test_two_presses_on_one_word_are_one_space_apart(self):
         """Two pictures a third of a second apart: both references, no double
@@ -122,7 +122,7 @@ class Seams(unittest.TestCase):
             marker(words=WORDS, available=[1, 2],
                    cues=[{"kind": "shot", "index": 1, "at": 0.75},
                          {"kind": "shot", "index": 2, "at": 0.76}]),
-            "pune asta (screenshot: shot#01) (screenshot: shot#02) sub un strat")
+            "pune asta [📸1] [📸2] sub un strat")
 
     def test_cues_are_placed_in_time_order_not_arrival_order(self):
         """They arrive in whatever order the gestures finished filing in."""
@@ -130,7 +130,7 @@ class Seams(unittest.TestCase):
             marker(words=WORDS, available=[1, 2],
                    cues=[{"kind": "shot", "index": 2, "at": 1.15},
                          {"kind": "shot", "index": 1, "at": 0.35}]),
-            "pune (screenshot: shot#01) asta sub (screenshot: shot#02) un strat")
+            "pune [📸1] asta sub [📸2] un strat")
 
     def test_a_cue_with_nothing_behind_it_costs_nothing(self):
         """A capture that failed leaves a number with no picture. The sentence
@@ -146,13 +146,13 @@ class Seams(unittest.TestCase):
         self.assertEqual(
             marker(words=WORDS, selections={"1": "if (a) {\n    b();\n}"},
                    cues=[{"kind": "selection", "index": 1, "at": 0.75}]),
-            'pune asta (selected text: "if (a) {\n    b();\n}") sub un strat')
+            'pune asta [selected: "if (a) {\n    b();\n}"] sub un strat')
 
     def test_a_picked_element_is_described_in_full(self):
         self.assertEqual(
             marker(words=WORDS, elements={"1": "button#save 'Save'"},
                    cues=[{"kind": "element", "index": 1, "at": 0.75}]),
-            "pune asta (button#save 'Save') sub un strat")
+            "pune asta [chrome-selection-1: button#save 'Save'] sub un strat")
 
     def test_the_corpus_copy_is_his_words(self):
         """`inline: false` is what is filed beside the audio. Nothing was put
@@ -166,7 +166,7 @@ class Seams(unittest.TestCase):
         """Retired, not deleted — `WT_SHOT_MARKERS=1` must remain a way back."""
         self.assertEqual(
             marker(text="pune asta screenshot one sub un strat", available=[1]),
-            "pune asta (screenshot: shot#01) sub un strat")
+            "pune asta [📸1] sub un strat")
 
 
 if __name__ == "__main__":

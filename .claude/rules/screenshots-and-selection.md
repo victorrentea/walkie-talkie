@@ -14,7 +14,14 @@ paths:
 
 Covers the shutter: what a shot is named, what travels to the agent, the on-screen confirmation, where files live, and how the highlighted text is read (shutter and watcher). Full history and reasoning: docs/journal.md — see the sections named after each rule below.
 
-## The shot's name
+## The shot's name (2026-09-19 — it says the number, and nothing else)
+
+- **`screenshot-3-original.jpg`, `screenshot-3-800px.jpg`, and for a drag `screenshot-3.jpg`** (the region, unscaled). The digit is the picture's place in this dictation — 0 is the automatic context frame — and it is the same digit the sentence's token says (`📸3`). `ScreenCapture.stem` writes it, `ScreenCapture.number(of:)` reads it back, `sibling(of:)` computes the other two names from it. → journal: *The envelope becomes tokens where he made them (2026-09-19)*
+- **Everything the name used to carry is a token in the words now** — the offset, the pointer (`[📸1🖱️@1000:800]`) and the dragged rectangle (`[📸3✂️900,345→2594,574]`). Said once, where he said it, instead of twice in two notations. The bullets below describe the *old* name and are kept for the reasoning; the later date wins on the shape.
+- **The number is reserved at the gesture and is unconditional** (`AppDelegate.reservePicture`): two presses a third of a second apart can finish in the other order, and the name needs a number whether or not a marker can be placed. The cue is the optional half (`cueLocked`).
+- **The disambiguating `-2` goes on the base, before the suffix** (`uniqueBase`): every dictation in a session folder produces a `screenshot-0`, and a `screenshot-0-original-2.jpg` would take its siblings into names nothing can compute.
+
+## The shot's name (before 2026-09-19)
 
 - **Name a shot by offset and pointer, in image pixels.** `shot-01:23(mouse-at-1034x1466px).jpg` — 1m23s into the dictation, pointer at x=1034, y=1466 in *the pixels of that image*, top-left origin (`ScreenCapture.stem` + `tagCursor`). Both facts ride in the name because the path already travels in `paths`; nothing downstream learns a new key. → journal: *The shot's name is *when in the sentence* and *where the mouse was**
 - **`00:00` is the automatic context shot, by definition.** A shot with no dictation around it keeps a timestamp instead: "elapsed since the start" of nothing is not a fact. → journal: *The shot's name is *when in the sentence* and *where the mouse was**

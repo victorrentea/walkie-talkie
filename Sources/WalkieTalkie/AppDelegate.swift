@@ -528,6 +528,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `sources` and printed by `shotsClause`.
     private var shotMarkerNumbers: [String: Int] = [:]
 
+    /// **The three facts a picture used to spell in its own name** (2026-09-19),
+    /// keyed by path like `shotSources`: where the pointer was, which rectangle
+    /// he dragged, and how big the frame is — all in the pixels of that frame.
+    /// They are tokens inside the sentence now (`[📸1🖱️@1000:800]`,
+    /// `[📸3✂️900,345→2594,574]`) and a line in the footer (`at 3456x2234px`), so
+    /// they have to survive from the gesture to the envelope, which the file
+    /// name used to do for them. Reset wherever `shotSources` is.
+    private var shotMice: [String: CGPoint] = [:]
+    private var shotAreas: [String: CGRect] = [:]
+    private var shotSizes: [String: CGSize] = [:]
+
+    /// **How many pictures this dictation has taken**, 0 being the automatic
+    /// context frame — it is the digit in `📸3` *and* in `screenshot-3.jpg`, so
+    /// it is reserved at the gesture (two presses a third of a second apart can
+    /// finish in the other order) and it is unconditional: the name needs it
+    /// whether or not a marker can be placed.
+    private var picturesTaken = 0
+
     /// How many markers of each kind this dictation has spoken; the next one is
     /// this plus one. Reset wherever `shotSources` is, because it has exactly
     /// that lifecycle — every dictation ends through `send`, `flushOrphaned`,
@@ -557,6 +575,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// would hand the agent the same paragraph twice. The ones that are not here
     /// are the fallback Victor asked for — *"în cazul în care markerul nu este
     /// detectat în textul transcris, pui transcripția ca acum, la final"*.
+    /// **Which pictures' tokens the words carry** (2026-09-19). Their footer
+    /// rows drop the `at m:ss`, because the sentence already says when: the
+    /// token is standing at the word he pressed on. Filled by
+    /// `resolvingMarkers`, drained where its two neighbours are.
+    private var shotMarkersInlined: Set<Int> = []
+
     private var selectionMarkersInlined: Set<Int> = []
 
     /// The same, for picked elements: one that went into the sentence does not
@@ -921,6 +945,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// the highlight itself. Those rows are **left out** of the list under
         /// the sentence: the paragraph is already in it, where he said it.
         /// → `ShotMarker.resolve`, `selectionsClause`
+        var inlinedShots: Set<Int> = []
         var inlinedSelections: Set<Int> = []
         /// The same for picked elements — see `picksClause`.
         var inlinedElements: Set<Int> = []
@@ -932,6 +957,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// `sources`' reason: the panel holds a prompt for seconds and the next
         /// dictation may already have started a recording of its own.
         var films: [ScreenFilm.Result] = []
+        /// Where the pointer was, which rectangle he dragged and how big each
+        /// frame is — in that frame's own pixels, keyed by path. The envelope's
+        /// tokens (`[📸1🖱️@1000:800]`, `[📸3✂️…]`) and the footer's
+        /// `at 3456x2234px` are built from these; the file name no longer says
+        /// any of it (2026-09-19).
+        /// Aligned with `[screen] + paths`, the same construction `send` makes
+        /// — what puts `at 0:08` on a row whose token the words could not carry.
+        var shotOffsets: [TimeInterval] = []
+        var mice: [String: CGPoint] = [:]
+        var areas: [String: CGRect] = [:]
+        var sizes: [String: CGSize] = [:]
         /// Path → what was in front when that frame was taken. Covers both
         /// `paths` and `screen`, which is the reason it is keyed rather than
         /// ordered.
@@ -1242,7 +1278,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "seconds": Double(pcm.frameLength) / pcm.format.sampleRate]
             }
             let text = (body["text"] as? String) ?? ""
-            let available = Set((body["available"] as? [Int]) ?? [])
+            // The pictures that really exist, as the tokens they would carry —
+            // `{"available": [1, 2]}` stands in for two plain frames, and a
+            // `{"areas": {"3": [900, 345, 2594, 574]}}` entry for a dragged one.
+            let areas = (body["areas"] as? [String: [Double]]) ?? [:]
+            var available: [Int: String] = [:]
+            for n in (body["available"] as? [Int]) ?? [] {
+                available[n] = ShotMarker.Token.shot(n, mouse: nil)
+            }
+            for (key, box) in areas {
+                guard let n = Int(key), box.count == 4 else { continue }
+                available[n] = ShotMarker.Token.area(n, CGRect(x: box[0], y: box[1],
+                                                               width: box[2] - box[0],
+                                                               height: box[3] - box[1]))
+            }
             // `{"selections": {"1": "the highlighted paragraph"}}` — the other
             // half of the same rewrite, and the only way to exercise it without
             // talking: the map stands in for the highlights really filed, the
@@ -1278,11 +1327,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return TimedWord(text: text, start: start, end: end,
                                  isSpacing: ($0["type"] as? String) == "spacing")
             }
+            let selectionTokens = selections.mapValues { ShotMarker.Token.selection($0, app: nil) }
+            let elementTokens = elements.mapValues { text in
+                ShotMarker.Token.element(elements.first { $0.value == text }?.key ?? 1, text: text)
+            }
             let resolved = cues.isEmpty
                 ? ShotMarker.resolve(text: text, shots: available,
-                                     selections: selections, elements: elements, inline: inline)
+                                     selections: selectionTokens, elements: elementTokens,
+                                     inline: inline)
                 : ShotMarker.place(words: words, cues: cues, shots: available,
-                                   selections: selections, elements: elements, inline: inline)
+                                   selections: selectionTokens, elements: elementTokens,
+                                   inline: inline)
             return ["text": resolved.text, "found": resolved.shots,
                     "selections": resolved.selections, "elements": resolved.elements]
         }
@@ -2312,7 +2367,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resolvingMarkers(_ text: String, words: [TimedWord]? = nil,
                                   inline: Bool = true) -> String {
         stateLock.lock()
-        let marked = Set(shotMarkerNumbers.values)
+        // **The tokens, built here because here is where the facts are** — the
+        // pointer, the dragged rectangle and the number the file is named by.
+        // `ShotMarker` decides where they go and never what they say.
+        var marked: [Int: String] = [:]
+        for path in ([pendingScreen].compactMap { $0 } + pendingShots) {
+            guard let n = ScreenCapture.number(of: path) else { continue }
+            if let box = shotAreas[path] {
+                marked[n] = ShotMarker.Token.area(n, box)
+            } else {
+                marked[n] = ShotMarker.Token.shot(n, mouse: shotMice[path] ?? nil)
+            }
+        }
         let cues = markerCues
         // **The highlight as it was at that moment, not as it is now.** Both
         // slots are still pending here — `send` and `caretLine` drain them a
@@ -2340,20 +2406,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // what the audio says.
         var frozenHead: String?
         if let selection = pendingSelection {
+            let app = Self.appName(of: pendingSelectionIn)
             if let marker = pendingSelectionMarker {
-                selections[marker] = Self.clampForTerminal(selection)
+                selections[marker] = ShotMarker.Token.selection(
+                    Self.clampForTerminal(selection), app: app)
             } else if inline {
-                frozenHead = "(selected text: \"\(Self.clampForTerminal(selection))\")"
+                frozenHead = ShotMarker.Token.selection(
+                    Self.clampForTerminal(selection), app: app)
             }
         }
         for extra in pendingExtraSelections {
             guard let marker = extra.marker else { continue }
-            selections[marker] = Self.clampForTerminal(extra.text)
+            selections[marker] = ShotMarker.Token.selection(
+                Self.clampForTerminal(extra.text), app: Self.appName(of: extra.source))
         }
         var elements: [Int: String] = [:]
         for pick in pendingPicks {
             guard let marker = pick.marker else { continue }
-            elements[marker] = pick.inlineDescription
+            elements[marker] = ShotMarker.Token.element(
+                marker, text: pick.text?.isEmpty == false ? pick.text! : pick.path)
         }
         stateLock.unlock()
 
@@ -2403,6 +2474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // absence that says so.** Anything not in here keeps its line under the
         // sentence; anything in here has already been said inline.
         stateLock.lock()
+        shotMarkersInlined.formUnion(resolved.shots)
         selectionMarkersInlined.formUnion(resolved.selections)
         elementMarkersInlined.formUnion(resolved.elements)
         if !resolved.elements.isEmpty {
@@ -3006,9 +3078,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelectionMarker = nil
         pendingExtraSelections = []
         shotSources = [:]
+        shotMice = [:]
+        shotAreas = [:]
+        shotSizes = [:]
+        picturesTaken = 0
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         markerCues = []
+        shotMarkersInlined = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -3319,9 +3396,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // not press a shutter for it — he took it by starting to talk — so it
             // gets the number in front of the ones he did, and the list can carry
             // it as a row rather than as a separate sentence underneath.
-            let path = ScreenCapture.grab(cursor: cursor, offset: offset, index: 0)
+            let frame = ScreenCapture.grab(cursor: cursor, offset: offset, index: 0)
+            let path = frame?.path
             self.stateLock.lock()
             self.pendingScreen = path
+            if let frame = frame {
+                self.shotMice[frame.path] = frame.mouse
+                self.shotSizes[frame.path] = frame.size
+            }
             if let path = path, let source = source { self.shotSources[path] = source }
             self.contextShotPending = false
             self.stateLock.unlock()
@@ -3370,9 +3452,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelectionMarker = nil
         pendingExtraSelections = []
         shotSources = [:]
+        shotMice = [:]
+        shotAreas = [:]
+        shotSizes = [:]
+        picturesTaken = 0
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         markerCues = []
+        shotMarkersInlined = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -4860,7 +4947,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The engine is still recorded per sentence in `outbox.jsonl` and still on
     /// the chip; it simply stopped riding into the prompt. → `Message.engine`
-    private static func dictatedHint() -> String { "[Dictated in RO or EN]" }
+    private static func dictatedHint() -> String {
+        // **Four words, and the recogniser's name is not one of them**
+        // (2026-09-19, Victor's template). What this clause is *for* is telling
+        // an agent that a Romanian word in the middle of an English sentence is
+        // not a typo; which engine heard it is a fact about this app, it is in
+        // the outbox line, and it was costing a sentence of every envelope.
+        "[Dictated in RO or EN]"
+    }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
     /// what he deliberately attached** (2026-09-08).
@@ -4909,7 +5003,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingShots = []
         pendingShotOffsets = []
         let sources = shotSources
+        let mice = shotMice, areas = shotAreas, sizes = shotSizes
+        let offsets = pendingShotOffsets
         shotSources = [:]
+        shotMice = [:]
+        shotAreas = [:]
+        shotSizes = [:]
+        picturesTaken = 0
         // (the numbers live in the file names now — `ScreenCapture.stem`)
         shotMarkerNumbers = [:]
         markersSpoken = [:]
@@ -4917,10 +5017,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Read before it is cleared: `deliver` has already rewritten the words
         // with whichever highlights it found markers for, and this is the list
         // of rows the clause below must therefore not repeat.
+        let inlinedShots = shotMarkersInlined
         let inlined = selectionMarkersInlined
         let inlinedElements = elementMarkersInlined
         // The frozen highlight, when it went in front of the words instead.
         let frozenInlined = frozenSelectionInlined
+        shotMarkersInlined = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -4977,9 +5079,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                        marker: selectionMarker,
                                                        extras: extraSelections,
                                                        inlined: inlined))
-        parts.append(contentsOf: Self.shotsClause(paths: shots, screen: nil, sources: sources))
-        if let clause = Self.picksClause(picks, since: since,
-                                         inlined: inlinedElements) { parts.append(clause) }
+        // **The same footer the terminal gets, from the same function.** A caret
+        // envelope differs in exactly one thing and it is not the wording: there
+        // is no context frame, because this mode never takes one (Victor,
+        // 2026-09-19: *"if I'm dictating at caret, we still don't do an initial
+        // screenshot"*), so `screen` is nil and the numbering starts at 📸1.
+        let envelope = Message(kind: "dictation", text: words, selection: nil,
+                               paths: shots, screen: nil,
+                               shotOffsets: offsets, mice: mice, areas: areas, sizes: sizes,
+                               sources: sources, app: nil, elements: picks, startedAt: since)
+        parts.append(contentsOf: Self.artifactsClause(envelope))
         guard parts.count > 1 else { return words }
         // The words, a blank line, then one clause per line — `terminalLine`'s
         // shape, for `terminalLine`'s reason: he reads this one too, and more
@@ -4989,7 +5098,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static func terminalLine(_ m: Message) -> String {
         var parts: [String] = []
-        if let text = m.text, !text.isEmpty { parts.append(text) }
+        if let text = m.text, !text.isEmpty { parts.append(leading(m) + text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
             parts.append(dictatedHint())
         }
@@ -4998,33 +5107,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                   marker: m.selectionMarker,
                                                   extras: m.extraSelections,
                                                   inlined: m.inlinedSelections))
-        // **What was in front of him is not a caption for a picture.**
-        // It used to ride inside the context frame's clause, as
-        // `shot-00:00(…).jpg = Terminal — ✳ walkie-talkie`, which made a fact
-        // about the dictation readable only by an agent that had decided to open
-        // an image — and that clause says in the same breath that opening it is
-        // usually unnecessary. The title is the cheapest context here and the one
-        // most often enough on its own: it names the app he is talking about and
-        // the file, page or session inside it, in a dozen characters, with no
-        // megabyte attached. So it is its own block, delivered whether or not any
-        // frame is ever opened. He asked for exactly this: *"it has nothing to do
-        // with the images"*.
-        //
-        // The manual shots keep their `= title` — there it genuinely is a caption,
-        // the thing that says which picture is which in an enumeration of five.
-        if let screen = m.screen, let front = m.sources[screen],
-           !front.trimmingCharacters(in: .whitespaces).isEmpty {
-            parts.append("[Focused window: \(front)]")
-        }
+        // **`[Focused window: …]` is gone** (2026-09-19). Victor's template has
+        // no slot for it and the whole point of the template is that the footer
+        // stops repeating what the sentence already carries: the app is named in
+        // the one place it answers a question — the highlight's own token, which
+        // says which application the text came *from*. It cost 0.02 of accuracy
+        // when it was added (0.95 against 0.93) on a fixture of seven frames; if
+        // that shows up again, the place to put it back is the token, not a
+        // block of its own.
         // `look at` and `context` stay separate, exactly as `paths` and `screen`
         // do: one is what he deliberately photographed and wants opened, the
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        parts.append(contentsOf: shotsClause(paths: m.paths, screen: m.screen, sources: m.sources))
+        parts.append(contentsOf: artifactsClause(m))
         if let clause = filmClause(m.films) { parts.append(clause) }
-        if let clause = picksClause(m.elements, since: m.startedAt,
-                                    inlined: m.inlinedElements) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
         // textele ajutătoare să fie fiecare începând pe rând nou"*).
@@ -5143,131 +5240,126 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return lines.joined(separator: "\n")
     }
 
-    private static func shotsClause(paths: [String], screen: String?,
-                                    sources: [String: String] = [:]) -> [String] {
-        guard paths.first != nil || screen != nil else { return [] }
-        let dir = ((paths.first ?? screen!) as NSString).deletingLastPathComponent
-        let shown = shotsRootAbbreviated(dir)
+    /// **The footer: one row per artifact, keyed by the token that names it**
+    /// (2026-09-19, Victor's template).
+    ///
+    /// ```
+    /// [=$WALKIE_SHOTS/2026-09-19-17-32-15]
+    /// [📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+    /// [📸3✂️ = user-selected area between corners (x,y) (900,345)→(2594,574) at
+    ///  📁/screenshot-3.jpg; also available -800px and -original.jpg]
+    /// [chrome-selection-1 = div.wrap > h1 at https://…]
+    /// ```
+    ///
+    /// What changed, and why each thing went:
+    ///
+    /// - **The list is keyed by the token in the sentence**, so a reader who has
+    ///   met `📸3✂️` mid-sentence does not have to match a file name to it. The
+    ///   key and the token are built by the same `ShotMarker.Token`.
+    /// - **The folder is said once and stands in as `📁`** — and only when there
+    ///   is something in it. Victor: *"the folder path: only worth adding if
+    ///   there are any artifacts to convey"*.
+    /// - **The pointer, the rectangle and the window title are no longer here.**
+    ///   The first two are in the token where he pressed; the title went with
+    ///   `[Focused window: …]`, which his template does not have — the one place
+    ///   an application is still named is the highlight's own token, where it
+    ///   says which app the text came *from*.
+    /// - **A token that could not be placed in the words keeps its row and gains
+    ///   the clock.** That is the Wispr case and it is the common one: no word
+    ///   timings, so nothing can be put where he said it, and the row is where
+    ///   the pointer and the corners then live (`… at 0:08`).
+    ///
+    /// Measured before shipping (`evals/envelope-symbols/`, 18 runs, one scene
+    /// with six attachments): **Sonnet 11/11 and Opus 11/11** on what the
+    /// symbols mean — which file holds the framed region, where the pointer
+    /// was, how long the recording ran, which frame was automatic — against
+    /// 10/11 and 11/11 for the envelope this replaces, in **half** the
+    /// characters (925 against 1810).
+    /// **The automatic frame's token, in front of the words** — `±` in Victor's
+    /// sketch, because it is the one attachment he did not press for and the one
+    /// that is simply absent at the caret.
+    ///
+    /// It cannot be placed by a cue like the others: there is no gesture to
+    /// measure, he took it by starting to talk, so the honest position is the
+    /// first. Empty when there is no context frame (every caret dictation) and
+    /// when a cue somehow already put it in the words.
+    private static func leading(_ m: Message) -> String {
+        guard let screen = m.screen, let n = ScreenCapture.number(of: screen),
+              !m.inlinedShots.contains(n) else { return "" }
+        return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil) + " "
+    }
 
-        /// `shot-00:18(…).jpg = IntelliJ IDEA — OwnerController.java`
-        ///
-        /// **The title goes here and not into the file name**, which is where
-        /// the offset and the pointer already live. Those two are short,
-        /// machine-generated readings that survive being made into a filename.
-        /// A window title is arbitrary text — it carries `/`, quotes, colons and
-        /// eighty characters of headline — so putting it in a name means
-        /// sanitising away exactly the characters that identify the page, and
-        /// leaves Victor, who reads these names himself, with something he
-        /// cannot read. The evals settled the cost question: the addressing is a
-        /// rounding error beside the pixels, so the line has room.
-        ///
-        /// **Only the deliberate shots are described this way.** The automatic
-        /// context frame gets `handed` instead: what was in front of him then is
-        /// now its own `[Focused window: …]` block in the envelope, because it is
-        /// a fact about the dictation rather than a caption identifying one
-        /// picture among several — and burying it here hid it behind a clause
-        /// that tells you not to open the file.
-        func handed(_ original: String) -> String {
-            ((ScreenCapture.handover(for: original)) as NSString).lastPathComponent
-        }
-        func described(_ original: String) -> String {
-            guard let source = sources[original] else { return handed(original) }
-            // **`in '…'` rather than `= …`.** An equals sign says the two sides
-            // are the same thing, and they are not: the left is a file, the
-            // right is the window it was taken in front of. The quotes do the
-            // job the brackets used to — a title is arbitrary text, and this is
-            // the one pair of characters around it that says where it ends.
-            return "\(handed(original)) in '\(source)'"
-        }
+    private static func artifactsClause(_ m: Message) -> [String] {
+        let frames = ([m.screen].compactMap { $0 } + m.paths)
+        let films = m.films.filter { $0.sheet != nil }
+        guard !frames.isEmpty || !films.isEmpty || !m.elements.isEmpty else { return [] }
 
-        // **A clause each, rather than one sentence with the context tacked on.**
-        // Written as one, it came out `… = Google Chrome — Netflix. shot-00:00(…)
-        // is the screen when I started talking` — and a window title can itself
-        // end in a full stop, so the separator between the last shot and the
-        // context frame stopped being a separator. Titles are arbitrary text;
-        // what delimits them is punctuation they cannot forge — the brackets
-        // around the context clause, and the quotes `described` puts around a
-        // title inside the list.
-        var note = "Each is ≤\(ScreenCapture.handoverWidth)px wide; "
-            + "drop the -small for the full-resolution original."
-        // **The cut-out is the exception to the width, so the width has to say
-        // so** (2026-09-19). A reader told everything here is ≤800px and handed
-        // a 1700px band of text has been lied to about the one file whose whole
-        // point is that it was not shrunk.
-        if paths.contains(where: { ScreenCapture.zoom(for: $0) != nil })
-            || screen.flatMap(ScreenCapture.zoom(for:)) != nil {
-            note += " A `-zoom` is the exception: it is not scaled at all."
-        }
-        // **The one thing a frame cannot say about itself.** A picture of a
-        // region and a picture of a display are both a rectangle of pixels, and
-        // nothing inside either says whether its edges are the edges of a
-        // screen — so an agent handed a crop reads it as a whole desktop that
-        // happens to be small, and a small desktop is a display it should be
-        // looking around in. Said once, in the clause, and carried per frame by
-        // the `area-` its name starts with.
-        // **The legend is gone** (2026-09-14). It explained that `[shot N]` in
-        // his words named the frame numbered N here — and once the number moved
-        // into the file's own name (`shot-1-00:08(…)`, `ScreenCapture.stem`)
-        // there is nothing left to explain: the reference and the file say the
-        // same digit. Victor: *"you shouldn't say … it should be obvious"*.
-        if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
-            note += " A name with `area-x1xy1-to-x2xy2px` in it is a whole screen "
-                + "with a rectangle I dragged on it, in the pixels of the "
-                + "full-resolution frame, top-left origin — I am pointing at that "
-                + "region, not cropping to it. Its `-zoom` is that rectangle cut "
-                + "out at full size: the screen says where, the zoom says what."
-        }
+        let dir = ((frames.first ?? films.first?.dir.path) as NSString?)?
+            .deletingLastPathComponent
+        var rows: [String] = []
+        if let dir = dir { rows.append("[=\(shotsRootAbbreviated(dir))]") }
 
-        // Nothing but the automatic frame — 168 of the 180 dictations in the
-        // outbox look like this. One short clause and no ceremony.
-        guard !paths.isEmpty else {
-            guard let screen = screen else { return [] }
-            return ["[the screen when I started talking, open only if the words need it: "
-                    + "\(shown)/\(handed(screen)). \(note)]"]
+        func name(_ path: String) -> String {
+            "📁/" + ((path as NSString).lastPathComponent)
+        }
+        func size(_ path: String) -> String {
+            guard let size = m.sizes[path] ?? nil else { return "full resolution" }
+            return "\(Int(size.width))x\(Int(size.height))px"
+        }
+        /// `at 0:08` for a token the words could not carry, and nothing at all
+        /// for one they did. **Two sets, because the numbers are two
+        /// namespaces**: `📸1` and `chrome-selection-1` are different things
+        /// with the same digit, and one set would have an inlined picture
+        /// silencing an element's clock.
+        func when(_ index: Int, _ offset: TimeInterval?, _ inlined: Set<Int>) -> String {
+            guard !inlined.contains(index), let offset = offset else { return "" }
+            return " at \(stamp(offset))"
         }
 
-        // **The opening frame is a row of this list, not a sentence under it**
-        // (2026-09-14, Victor: *"the shot zero zero zero — consolidate that with
-        // the other two shots"*). It was its own bracketed clause because it is
-        // the one frame he did not ask for; but it is still picture **0** of the
-        // same enumeration, taken by the same camera into the same folder, and
-        // an agent reading two lists has to work out that they are one. What it
-        // keeps is the permission to skip it, said on its own row where it
-        // belongs, rather than a paragraph of its own.
-        // The permission to skip moved up into the clause's opening line, where
-        // it covers every frame, so row zero is now just row zero.
-        /// One row, plus an indented one for the unscaled cut-out when the frame
-        /// has one. Indented rather than a row of its own: it is the same
-        /// picture, and a flat list of two would read as two shots and put the
-        /// enumeration `[shot N]` refers to out by one.
-        func rows(for original: String) -> [String] {
-            var out = ["- " + described(original)]
-            if let zoom = ScreenCapture.zoom(for: original) {
-                out.append("  - " + ((zoom as NSString).lastPathComponent)
-                           + " — the region itself, cut out of that frame, unscaled")
+        for (i, path) in frames.enumerated() {
+            guard let n = ScreenCapture.number(of: path) else { continue }
+            // The context frame is picture zero and needs no clock — it is the
+            // moment he started talking. `shotOffsets` is built as
+            // `[screen] + paths`, the same list being walked here.
+            let offset = path == m.screen ? nil
+                : (i < m.shotOffsets.count ? m.shotOffsets[i] : nil)
+            let handed = name(ScreenCapture.handover(for: path))
+            if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
+                    + "user-selected area between corners (x,y) "
+                    + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
+                    + "at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
+            } else {
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: false))\(when(n, offset, m.inlinedShots)) = "
+                    + "\(handed) at \(ScreenCapture.handoverWidth)px width, "
+                    + "or -original.jpg at \(size(path))]")
             }
-            return out
         }
 
-        // **One frame per line, under a heading, instead of one long sentence.**
-        // Five shots joined with `; ` is a paragraph an agent has to parse back
-        // into a list, and Victor reads these himself — a `- ` list is where a
-        // name ends and the next begins, at a glance, with no counting of
-        // semicolons through window titles that contain their own punctuation.
-        // The note is a line of its own for the same reason it was ever a
-        // separate sentence: it is about all of them, not about the last one.
-        // **`oldest first` is gone with the legend.** The names carry their own
-        // order now — `shot-0-00:00`, `shot-1-00:08`, `shot-2-00:13` — and a list
-        // that says out loud what its own rows already show is a line of tokens
-        // spent twice.
-        let rows = ((screen.map(rows(for:)) ?? []) + paths.flatMap(rows(for:)))
-            .joined(separator: "\n")
-        // **One bracket around the whole thing**, like every other clause in the
-        // envelope — Victor's mock, 2026-09-14. The words carry the references
-        // now; this is the lookup table behind them, and a reader who does not
-        // need a picture can skip the bracket whole.
-        return ["[screenshots are in \(shown)/ open only if the words need it:\n"
-                + rows + "\n\(note)]"]
+        for (i, pick) in m.elements.enumerated() {
+            let index = pick.marker ?? (i + 1)
+            let offset = m.startedAt.map { pick.at.timeIntervalSince($0) }
+            let page = (pick.url?.isEmpty == false) ? " at \(pick.url!)" : ""
+            // **The element's text joins the row when the words did not take
+            // it.** Inline, the token already says what it said and the row is
+            // only the address; listed, the address alone would be a selector
+            // nobody can picture.
+            let said = m.inlinedElements.contains(index) || (pick.text ?? "").isEmpty
+                ? "" : ": \"\(clampForTerminal(pick.text!, 120))\""
+            rows.append("[\(ShotMarker.Token.key(element: index))"
+                        + "\(when(index, offset, m.inlinedElements))\(said) = \(pick.path)\(page)]")
+        }
+
+        for (i, film) in films.enumerated() {
+            guard let sheet = film.sheet else { continue }
+            let frames = shotsRootAbbreviated(film.dir.path)
+            rows.append(String(format: "[%@ = %@, a contact sheet of the whole %.0fs at %.0f fps; "
+                               + "its %d frames are %@/frame-NNNN.jpg, numbered as on the sheet]",
+                               ShotMarker.Token.key(film: i + 1),
+                               name(sheet.path), film.duration, ScreenFilm.fps,
+                               film.frames.count, frames))
+        }
+        return rows
     }
 
     /// **Everything he highlighted, as a list, each line saying when** (2026-09-13).
@@ -5314,6 +5406,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                          source: String?, marker: Int? = nil,
                                          extras: [SelectionRecord],
                                          inlined: Set<Int> = []) -> [String] {
+        // **The fallback, in the same vocabulary as the token that failed**
+        // (2026-09-19). A highlight whose marker landed is already in the
+        // sentence, quoted where he said it; one whose marker could not be
+        // placed — no word timings, which is every Wispr dictation — keeps a
+        // row, and the row is the *same bracket* with the clock added, rather
+        // than a second notation to learn:
+        //
+        //     [selected at 0:08: "the paragraph" from app IntelliJ IDEA]
         var rows: [SelectionRecord] = []
         if let selection = selection, !selection.isEmpty {
             rows.append((at: at ?? 0, text: selection, source: source, marker: marker))
@@ -5321,17 +5421,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rows.append(contentsOf: extras)
         rows = rows.filter { row in row.marker.map { !inlined.contains($0) } ?? true }
         guard !rows.isEmpty else { return [] }
-        let lines = rows.map { row -> String in
-            var line = "- " + envelopeStamp(row.at)
-            if let source = row.source, !source.isEmpty { line += " in '\(source)'" }
-            return line + ": \"\(clampForTerminal(row.text))\""
+        return rows.map { row in
+            let clock = " at \(stamp(row.at))"
+            let token = ShotMarker.Token.selection(clampForTerminal(row.text),
+                                                   app: appName(of: row.source))
+            // `[selected: "…"` → `[selected at 0:08: "…"`, one insertion, so the
+            // two shapes cannot drift apart.
+            return token.replacingOccurrences(of: "[selected:", with: "[selected\(clock):")
         }
-        return ["text selected during dictation:\n" + lines.joined(separator: "\n")]
     }
 
     /// The full text is in the outbox either way. What rides into the terminal
     /// is a prompt somebody has to be able to read back, and a selection can be
     /// an entire file.
+    /// **The application out of a window reading.** `WindowContext.describe()`
+    /// answers `Google Chrome — Notes on latency budgets`; Victor's token wants
+    /// only the first half (*"from app <application-name>"*), because the page
+    /// he had open is already in the words he is dictating and the app is the
+    /// part that says *where this text came from*.
+    private static func appName(of source: String?) -> String? {
+        guard let source = source, !source.isEmpty else { return nil }
+        return source.components(separatedBy: " — ").first?
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     private static func clampForTerminal(_ s: String, _ limit: Int = 400) -> String {
         let flat = s.components(separatedBy: .newlines).joined(separator: " ")
         return flat.count <= limit ? flat : String(flat.prefix(limit)) + "…"
@@ -5815,12 +5928,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// injected sound (`acceptsAudioMarkers`), or past `maximumIndex`; in every
     /// one of those the picture is still taken, attached and listed by its
     /// offset exactly as before.
-    private func reserveMarker(at moment: Date) -> Int? {
+    /// **The picture's number, and a cue for it when one can be placed**
+    /// (2026-09-19). Two things that used to be one: the number is what the file
+    /// is called (`screenshot-3.jpg`) and what the token in the sentence says
+    /// (`📸3`), so it is handed out on every press whether or not the recogniser
+    /// can tell us where that press fell; the **cue** is the optional half, and
+    /// its absence only means the token is listed in the footer instead of
+    /// standing where he said it.
+    private func reservePicture(at moment: Date) -> Int? {
         stateLock.lock()
-        let number = reserveMarkerLocked(.shot, at: moment)
+        guard dictationInFlight else { stateLock.unlock(); return nil }
+        picturesTaken += 1
+        let number = picturesTaken
+        let cued = cueLocked(.shot, index: number, at: moment)
         stateLock.unlock()
-        guard let number = number else { return nil }
-        speakMarker(.shot, number)
+        if cued { speakMarker(.shot, number) }
         return number
     }
 
@@ -5851,18 +5973,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let number = (markersSpoken[kind] ?? 0) + 1
         markersSpoken[kind] = number
         guard number <= ShotMarker.maximumIndex else { return nil }
-        if let at = at {
-            markerCues.append(ShotMarker.Cue(kind: kind, index: number, at: at))
-            // **The second is logged because it is the number that says whether
-            // this works.** Everything else about a timestamp marker is
-            // invisible until the transcript comes back: if the offset is wrong
-            // the reference simply lands a clause away, which reads like the
-            // recogniser's fault and is not. Against the `start` of the words in
-            // the same reply, this line is the whole diagnosis.
-            Log.info(String(format: "⏱️ marker cue: %@ %d at %.2fs into the recording",
-                            kind.rawValue, number, at))
-        }
+        if at != nil { _ = cueLocked(kind, index: number, at: moment) }
         return number
+    }
+
+    /// File a cue for a number already decided, and say whether one was filed.
+    /// Split out of `reserveMarkerLocked` when the picture number stopped being
+    /// the marker's to hand out (2026-09-19): the two answer different
+    /// questions — *what is this picture called* and *can this press be put
+    /// where it happened*.
+    @discardableResult
+    private func cueLocked(_ kind: ShotMarker.Kind, index: Int, at moment: Date) -> Bool {
+        let at = ShotMarker.usesTimestamps ? (markerClock?(moment) ?? nil) : nil
+        let audible = ShotMarker.isEnabled && markMarker != nil
+        guard index <= ShotMarker.maximumIndex else { return false }
+        guard let at = at else { return audible }
+        markerCues.append(ShotMarker.Cue(kind: kind, index: index, at: at))
+        // **The second is logged because it is the number that says whether
+        // this works.** Everything else about a timestamp marker is invisible
+        // until the transcript comes back: if the offset is wrong the reference
+        // simply lands a clause away, which reads like the recogniser's fault
+        // and is not. Against the `start` of the words in the same reply, this
+        // line is the whole diagnosis.
+        Log.info(String(format: "⏱️ marker cue: %@ %d at %.2fs into the recording",
+                        kind.rawValue, index, at))
+        return true
     }
 
     /// Say a reserved marker. **Never under `stateLock`** — it is read here, and
@@ -5894,7 +6029,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Beside the flash and for its reason: the confirmation — the one he
         // sees and the one Wispr hears — belongs on the keypress, not on the
         // subprocess.
-        let marker = reserveMarker(at: takenAt)
+        let marker = reservePicture(at: takenAt)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -5925,14 +6060,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // changes nothing, and the clipboard is put back.
             if let offset = offset { self.stashExtraSelection(at: offset) }
 
-            guard let path = ScreenCapture.grab(cursor: cursor, offset: offset,
-                                                index: marker) else {
+            guard let frame = ScreenCapture.grab(cursor: cursor, offset: offset,
+                                                 index: marker) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }
+            let path = frame.path
 
             self.stateLock.lock()
             let attaching = self.dictationInFlight
+            self.shotMice[path] = frame.mouse
+            self.shotSizes[path] = frame.size
             if let source = source { self.shotSources[path] = source }
             if attaching {
                 if let marker = marker { self.shotMarkerNumbers[path] = marker }
@@ -6042,21 +6180,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           takenAt: Date, source: String?) -> String? {
         // A dragged rectangle is a picture in the same list and gets the same
         // marker; the gesture it belongs to is the release, which is here.
-        let marker = reserveMarker(at: takenAt)
+        let marker = reservePicture(at: takenAt)
         stateLock.lock()
         let openNow = dictationInFlight
         let startedAt = dictationStartedAt
         stateLock.unlock()
         let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
 
-        guard let path = ScreenCapture.grabArea(rect, on: screen,
-                                                offset: offset, index: marker) else {
+        guard let frame = ScreenCapture.grabArea(rect, on: screen,
+                                                 offset: offset, index: marker) else {
             DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
             return nil
         }
 
+        let path = frame.path
         stateLock.lock()
         let attaching = dictationInFlight
+        shotAreas[path] = frame.area
+        shotSizes[path] = frame.size
         if let source = source { shotSources[path] = source }
         if attaching {
             if let marker = marker { shotMarkerNumbers[path] = marker }
@@ -6182,78 +6323,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shared by `terminalLine` and `caretLine` — the two envelopes name picks
     /// identically on purpose, and the day they stopped doing so would be the
     /// day a caret dictation quietly lost half of what it was carrying.
-    private static func picksClause(_ picks: [ElementPick], since: Date?,
-                                    inlined: Set<Int> = []) -> String? {
-        // **A pick that went into his sentence does not also get a row here**
-        // (2026-09-14) — the highlight's rule, for the highlight's reason:
-        // inline *or* listed, never both, or the envelope says the same thing
-        // twice and the reader has to work out that it is one thing.
-        let picks = picks.filter { $0.marker.map { !inlined.contains($0) } ?? true }
-        guard !picks.isEmpty else { return nil }
-        let urls = Set(picks.map { $0.url ?? "" })
-        // One page and every pick actually carrying it: an empty URL among them
-        // means one entry would silently inherit another's page.
-        let shared = urls.count == 1 ? urls.first.flatMap { $0.isEmpty ? nil : $0 } : nil
-        // The title rides with the URL and only when it is as unanimous: two
-        // picks on one address with two titles is a page that changed under him,
-        // and one of the two names would be wrong.
-        let titles = Set(picks.map { $0.title ?? "" })
-        let sharedTitle = shared != nil && titles.count == 1
-            ? titles.first.flatMap({ $0.isEmpty ? nil : $0 }) : nil
-
-        /// `https://shop.example/cart' ('Cart — Shop')` — the address, and what
-        /// the page called itself. The title was in the payload from the first
-        /// day and was never said out loud; a URL is an address and a title is
-        /// what he would recognise the tab by.
-        func page(_ url: String, _ title: String?) -> String {
-            var s = "'\(url)'"
-            if let title = title, !title.isEmpty { s += " (\(clampForTerminal(title, 80)))" }
-            return s
-        }
-
-        let lines = picks.map { pick -> String in
-            var line = "- "
-            if let stamp = envelopeStamp(pick.at, since: since) { line += stamp + " " }
-            line += pick.path
-            if shared == nil, let url = pick.url, !url.isEmpty {
-                line += " on " + page(url, pick.title)
-            }
-            // **Before the quotation, not after it.** The text can run to two
-            // thousand characters and the move is an instruction to carry out;
-            // an instruction at the far end of a paragraph of page copy is one
-            // nobody reads.
-            if let move = pick.move {
-                line += ", moved from \(move.from.x),\(move.from.y)"
-                      + " to \(move.to.x),\(move.to.y) (top-left, page coordinates)"
-            }
-            if let text = pick.text, !text.isEmpty {
-                line += ": \"\(text)"
-                // **Say how much was left behind.** A quotation that simply stops
-                // reads as the whole of what the element said, and acting on the
-                // half of an error message that fitted is worse than knowing
-                // there is more to fetch.
-                if let chars = pick.textChars {
-                    line += "… (truncated, \(chars) chars)\""
-                } else {
-                    line += "\""
-                }
-            }
-            return line
-        }
-
-        var head = picks.count == 1 ? "element picked in Chrome during dictation"
-                                    : "elements picked in Chrome during dictation"
-        if let shared = shared { head += ", on " + page(shared, sharedTitle) }
-        if picks.count > 1 { head += ", oldest first" }
-        var clause = head + ":\n" + lines.joined(separator: "\n")
-        // Only when one of them is actually negative. Said every time it would be
-        // a line of explanation in every envelope about something that did not
-        // happen in most of them.
-        if let since = since, picks.contains(where: { $0.at < since }) {
-            clause += "\nA − offset is something I picked just before I started talking."
-        }
-        return clause
-    }
 
     /// Where in the sentence something happened, as `m:ss` — or `−m:ss` when it
     /// happened before the microphone opened, which for a pick is the ordinary
@@ -6608,12 +6677,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Taken with the highlights it talks about, and cleared with them: which
         // markers landed in the words is a fact about **this** sentence, and the
         // words have already been rewritten by the time we get here (`deliver`).
+        let inlinedShots = shotMarkersInlined
         let inlined = selectionMarkersInlined
         let inlinedElements = elementMarkersInlined
         // The frozen highlight, when it went in front of the words instead.
         let frozenInlined = frozenSelectionInlined
         // Inline *or* listed, never both — the highlight's own rule.
         let selection = frozenInlined ? nil : selectionSubject
+        shotMarkersInlined = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -6624,11 +6695,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let extraSelections = pendingExtraSelections
         pendingExtraSelections = []
         let sources = shotSources
+        let mice = shotMice, areas = shotAreas, sizes = shotSizes
         shotSources = [:]
+        shotMice = [:]
+        shotAreas = [:]
+        shotSizes = [:]
+        picturesTaken = 0
         let markerNumbers = shotMarkerNumbers
         shotMarkerNumbers = [:]
         markersSpoken = [:]
         markerCues = []
+        shotMarkersInlined = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -6672,9 +6749,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               selectionAt: selectionAt, selectionSource: selectionIn,
                               selectionMarker: selectionMarker,
                               extraSelections: extraSelections,
+                              inlinedShots: inlinedShots,
                               inlinedSelections: inlined,
                               inlinedElements: inlinedElements,
-                              paths: attached, screen: screen, films: takeFilms(), sources: sources,
+                              paths: attached, screen: screen, films: takeFilms(),
+                              shotOffsets: offsets,
+                              mice: mice, areas: areas, sizes: sizes, sources: sources,
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, engine: engine,

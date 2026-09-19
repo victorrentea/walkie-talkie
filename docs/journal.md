@@ -247,6 +247,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The pictures are clean, and it is a measurement now (2026-09-19)](#the-pictures-are-clean-and-it-is-a-measurement-now-2026-09-19)
 - [A box round it, with nothing selected (2026-09-19)](#a-box-round-it-with-nothing-selected-2026-09-19)
 - [The region he framed travels at its own size (2026-09-19)](#the-region-he-framed-travels-at-its-own-size-2026-09-19)
+- [The envelope becomes tokens where he made them (2026-09-19)](#the-envelope-becomes-tokens-where-he-made-them-2026-09-19)
 
 ---
 
@@ -10823,3 +10824,106 @@ option: *"Trimite atât ecranul original + 800px ca până acum, dar și selecț
   `words[]` to place a cue against and the inline `(screenshot: shot#01)` those tests assert can
   no longer be produced by that route. Left alone here; it is the marker change's tail, not this
   one's.
+
+
+## The envelope becomes tokens where he made them (2026-09-19)
+
+Victor sent the template himself, in full, and asked two things of it: *"Is it clear what I mean?
+… evaluate to see whether even a Sonnet model can understand what the symbols in this
+transcription mean"*, and *"the end goal, as you can tell, is to reduce the amount of clutter at
+the end of the dictation and those footers"*.
+
+**What it says, in one line:** every attachment becomes a bracket standing at the word he made it
+at, and the footer stops being prose about pictures and becomes a legend keyed by those brackets.
+
+```
+[📸0🖱️@1000:800] Uite pagina asta. [📸1🖱️@2400:1180] Linia asta e problema,
+[selected: "…" from app Google Chrome] și vreau să o rescriu. [📸3✂️900,345→2594,574]
+În zona asta trebuie să apară un tabel. [chrome-selection-1: Notes on latency budgets]
+Titlul rămâne. [🎦1⏺️] Uite cum se derulează, [🎦1⏹️5s] gata.
+
+[Dictated in RO or EN]
+[=$WALKIE_SHOTS/2026-09-19-17-32-15]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸3✂️ = user-selected area between corners (x,y) (900,345)→(2594,574) at
+ 📁/screenshot-3.jpg; also available -800px and -original.jpg]
+[chrome-selection-1 = div.wrap > h1 at https://interact.victorrentea.ro/notes]
+```
+
+### The eval he asked for, before the code
+
+`evals/envelope-symbols/` — one scene with six attachments, real files on disk under the names
+each envelope uses, eleven questions a reader can only answer by understanding the markings
+(*which file shows only the region I framed; where was my pointer at 📸1; which screenshot was
+automatic; how long did the recording run; what does `-original` mean*). Three envelopes × two
+models × three repeats.
+
+| envelope | chars | Sonnet | Opus |
+|---|---|---|---|
+| what shipped before | 1810 | 30/33 | 32/33 |
+| **Victor's template** | **925** | **33/33** | **33/33** |
+| the same with the derivable rows collapsed into one convention line | 763 | 32/33 | 33/33 |
+
+**Even Sonnet reads the symbols perfectly, and it reads them better than the prose they
+replaced** — at half the characters. The three the old envelope lost are `-original`'s
+resolution, which it never stated. The shrunk variant is 18% smaller again and cost Sonnet the
+one question that is *inferred* rather than said (which frame was automatic), so **his exact
+template ships**.
+
+Both models, in every run, volunteered the same two things in the `unclear` field, and both are
+worth acting on:
+
+- ***which one is automatic* is inferred**, from 📸0 having no press behind it. It is right every
+  time and it is still a guess. Five characters fix it if he wants them: `[📸0🖱️@1000:800 auto]`.
+- **a gap in the numbering reads as a lost picture.** The sketch jumps 📸1 → 📸3 and every single
+  run remarked on it. So the implementation numbers the pictures **consecutively as they attach**:
+  0 for the context frame, then 1, 2, 3.
+
+### What the code does now
+
+- **The file names are Victor's**: `screenshot-<n>-800px.jpg` (what travels), `-original.jpg`
+  (his), and for a drag `screenshot-<n>.jpg` — the region, unscaled, from yesterday's change.
+  The pointer, the rectangle and the offset are **out** of the names; they are in the tokens.
+- **The number is the file's and the token's, one digit**, reserved at the gesture
+  (`reservePicture`) and unconditional — it names a file whether or not a marker can be placed.
+  `ScreenCapture.number(of:)` reads it back off the name.
+- **`ShotMarker.Token` is the whole vocabulary**, and `render` became a lookup: the tokens are
+  built where the facts are (the pointer, the corners, the application) and `ShotMarker` decides
+  only *where they go*.
+- **The context frame leads the words** rather than riding a cue — he took it by starting to
+  talk, so there is no gesture to measure. `±` in his sketch: absent at the caret, where this
+  mode has never taken one.
+- **`[Focused window: …]` is gone** (his template has no slot for it) and the language hint is
+  four words. The folder is said **once**, as `📁`, and only when something is in it.
+- **A token the words could not carry keeps its row and gains the clock** (`… at 0:08`). That is
+  every Wispr dictation: placement needs word timings, which only the engines that own their own
+  recording return.
+
+### Measured on the running build
+
+`POST /test/area` + the shutter + `/test/selection` + `/pick` + `/test/dictation`, read back off
+the outbox:
+
+```
+[📸0🖱️@2634:1674] [selected: "public Order placeOrder(Cart cart) {" from app Walkie Talkie] uite aici …
+
+[Dictated in RO or EN]
+[=$WALKIE_SHOTS/2026-09-19-19-06-06]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸1 at 0:01 = 📁/screenshot-1-800px.jpg …]
+[📸2✂️ at 0:03 = user-selected area between corners (x,y) (928,877)→(2528,1357) at 📁/screenshot-2.jpg; …]
+[chrome-selection-1 at 0:05: "Notes on latency budgets" = div.wrap > h1 at https://…]
+```
+
+`evals/test_envelope.py` (AreaFrame + FrameList, 10 cases) and `evals/test_marker_place.py`
+(10 cases) both green against it.
+
+### What is not done
+
+- **The screen recording keeps its own clause and its old file names.** `[🎦1 = …]` is keyed like
+  the rest, but `ScreenFilm` still writes `film-<stamp>/sheet.jpg` and `frame-NNNN.jpg`, and there
+  is no `[🎦1⏺️]` / `[🎦1⏹️5s]` in the words — the start and the stop would each need a cue, which
+  is a change to the recording gesture rather than to the envelope.
+- **`-2` is appended to the base, not the suffix** (`uniqueBase`): every dictation in a session
+  folder makes a `screenshot-0`, so `screenshot-0-2-original.jpg` / `screenshot-0-2-800px.jpg`.
+  A `-original-2` would have broken the sibling arithmetic the whole naming rests on.

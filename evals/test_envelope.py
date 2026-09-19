@@ -244,34 +244,34 @@ class FrameList(unittest.TestCase):
             pass
 
     def test_the_reference_names_the_file(self):
-        """`(screenshot: shot#01)` and `shot#01(…)` are the same string."""
-        self.assertIn("(screenshot: shot#01)", self.line)
-        self.assertIn("(screenshot: shot#02)", self.line)
-        self.assertIn("shot#01(", self.line)
-        self.assertIn("shot#02(", self.line)
-        # The shapes this replaced, both of them.
+        """`📸1` in the words or in the footer names `screenshot-1-…`."""
+        self.assertIn("📸1", self.line)
+        self.assertRegex(self.line, r"screenshot-1(-\d+)?-800px\.jpg")
+        # Every shape this replaced.
         self.assertNotIn("[shot 1]", self.line)
+        self.assertNotIn("(screenshot: shot#01)", self.line)
         self.assertNotRegex(self.line, r"shot-\d\d:\d\d\(")
 
     def test_the_opening_frame_is_a_row_of_the_same_list(self):
-        """Picture zero, in the list, with no sentence of its own."""
-        self.assertIn("- shot#00(", self.line)
+        """Picture zero leads the words, and has its own footer row."""
+        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)?\] ")
+        self.assertRegex(self.line, r"\[📸0 = 📁/screenshot-0(-\d+)?-800px\.jpg")
         self.assertNotIn("[and shot", self.line)
         self.assertNotIn("[the screen when I started talking", self.line)
-        # The permission moved up to the clause, where it covers all of them.
-        self.assertIn("open only if the words need it:", self.line)
+        self.assertNotIn("open only if the words need it:", self.line)
 
     def test_what_was_said_twice_is_no_longer_said_at_all(self):
         self.assertNotIn("oldest first", self.line)
         self.assertNotIn("in my words is where I pressed the shutter", self.line)
 
-    def test_a_picked_element_is_described_where_he_clicked_it(self):
-        """The three facts inline, and no row repeating them underneath."""
-        self.assertIn('(selected DOM element: body > table > th, with text: '
-                      '"Header1" in page "https://interact.victorrentea.ro")',
-                      self.line)
-        self.assertNotIn("picked element one", self.line)
+    def test_a_picked_element_is_one_row_keyed_by_its_token(self):
+        """`[chrome-selection-1 … = <selector> at <url>]`, and nothing else."""
+        self.assertRegex(self.line, r"\[chrome-selection-1[^]]*= body > table > th at "
+                                    r"https://interact\.victorrentea\.ro\]")
+        # (`picked element one` can still be in the *words*: it is the retired
+        # spoken marker's phrase and /test/dictation enters below the recogniser.)
         self.assertNotIn("element picked in Chrome during dictation", self.line)
+        self.assertNotIn("selected DOM element", self.line)
 
     def test_the_hint_is_four_words_and_names_no_recogniser(self):
         """`[Dictated in RO or EN]`, and the engine is not in it (2026-09-19).
@@ -433,49 +433,40 @@ class AreaFrame(unittest.TestCase):
         got = dict(line.strip().split(": ") for line in out.splitlines() if ": " in line)
         return int(got["pixelWidth"]), int(got["pixelHeight"])
 
-    def test_the_frame_is_the_whole_screen_with_the_box_in_its_name(self):
-        # Either stem: `shot#01(…)` when a marker number was reserved for it,
-        # `shot-00:01(…)` when the live source cannot place one (Wispr does not
-        # own the recording, so `audioOffset` is nil) — both ship.
-        # `-N` before the suffix is `ScreenCapture.unique` — a second drag at the
-        # same offset around the same box, which is what a re-run of this file is.
-        self.assertRegex(self.line,
-                         r"shot(#\d\d|-\d\d:\d\d)\(area-\d+x\d+-to-\d+x\d+px\)(-\d+)?-small\.jpg")
-        self.assertIn("I am pointing at that region, not cropping to it", self.line)
+    def test_the_area_is_a_token_with_its_corners(self):
+        """`📸2✂️` and the four numbers — in the words, or in the footer's key."""
+        self.assertRegex(self.line, r"📸\d+✂️")
+        self.assertRegex(self.line, r"\(?\d+,\d+\)?→\(?\d+,\d+\)?")
+        self.assertIn("user-selected area between corners", self.line)
+        # Every shape this replaced.
+        self.assertNotIn("area-928x877", self.line)
+        self.assertNotIn("I am pointing at that region, not cropping to it", self.line)
 
-    def test_the_cut_out_is_a_row_under_its_frame(self):
-        """Indented, so five drags are five pictures and not ten."""
-        rows = [r for r in self.line.splitlines() if r.lstrip().startswith("- ")]
-        zoom = [i for i, r in enumerate(rows) if "-zoom.jpg" in r]
-        self.assertEqual(len(zoom), 1, rows)
-        self.assertTrue(rows[zoom[0]].startswith("  - "), rows[zoom[0]])
-        self.assertIn("unscaled", rows[zoom[0]])
-        # …and it belongs to the frame immediately above it.
-        stem = rows[zoom[0]].split("-zoom.jpg")[0].strip("  - ")
-        self.assertIn(stem, rows[zoom[0] - 1])
-
-    def test_the_clause_says_the_zoom_is_the_exception_to_the_width(self):
-        self.assertIn("≤800px wide", self.line)
-        self.assertIn("`-zoom` is the exception: it is not scaled at all", self.line)
-        self.assertIn("the screen says where, the zoom says what", self.line)
+    def test_the_row_offers_the_cut_out_first_and_the_screen_behind_it(self):
+        row = [r for r in self.line.splitlines() if "✂️" in r][-1]
+        self.assertRegex(row, r"at 📁/screenshot-\d+(-\d+)?\.jpg;")
+        self.assertIn("also available -800px and -original.jpg", row)
 
     def test_the_cut_out_matches_the_rectangle_and_is_not_scaled(self):
         zoom = self.area["zoom"]
         self.assertTrue(os.path.exists(zoom), zoom)
-        box = re.search(r"area-(\d+)x(\d+)-to-(\d+)x(\d+)px", zoom)
+        box = re.search(r"\((\d+),(\d+)\)→\((\d+),(\d+)\)", self.line)
         x1, y1, x2, y2 = (int(g) for g in box.groups())
         self.assertEqual(self._size(zoom), (x2 - x1, y2 - y1))
-        # The 800 px copy is of the *screen*, and the cut-out is wider than it —
-        # which is the whole point of sending it.
         self.assertLessEqual(self._size(self.area["handed"])[0], 800)
         self.assertGreater(self._size(zoom)[0], 800)
 
+    def test_the_folder_is_said_once_and_the_old_clause_is_gone(self):
+        self.assertRegex(self.line, r"\[=\$WALKIE_SHOTS/[\d-]+\]")
+        self.assertNotIn("open only if the words need it", self.line)
+        self.assertNotIn("≤800px wide", self.line)
+
     def test_one_drag_is_one_picture(self):
-        """The chip counts frames; the siblings are siblings."""
+        """The chip counts frames; the 800px copy and the cut-out are siblings."""
         entry = _last_line()
-        self.assertEqual(len([p for p in entry.get("paths", []) if "(area-" in p]), 1,
-                         entry.get("paths"))
-        self.assertFalse(any("-zoom" in p for p in entry.get("paths", [])))
+        frames = [p for p in entry.get("paths", []) if p.endswith("-original.jpg")]
+        self.assertEqual(len(frames), 1, entry.get("paths"))
+        self.assertFalse(any("800px" in p for p in entry.get("paths", [])))
 
 
 if __name__ == "__main__":
