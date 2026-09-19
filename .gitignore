@@ -6,3 +6,6 @@ __pycache__/
 evals/capture-proof/out/
 evals/capture-proof/scene-*.html
 evals/capture-proof/eval/
+evals/pointing-proof/out/
+evals/pointing-proof/scene-*.html
+evals/pointing-proof/run.log

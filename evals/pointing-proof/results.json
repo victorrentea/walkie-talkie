@@ -1,0 +1,773 @@
+{
+ "model": "sonnet",
+ "answers": [
+  {
+   "run": "run-01",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Mapped the dragged rectangle's coordinates onto the screenshot assuming a 16\" MacBook Pro screen (3456\u00d72234, aspect ratio matches the image almost exactly); the resulting crop lands cleanly on this one sentence in paragraph 1, with no stray text from neighboring sentences.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-02",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Rectangle in the screenshot (scaled to the image) brackets the lower lines of the first paragraph, covering this run-on sentence",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-03",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Scaled the dragged box (900,345)-(2594,574) from the original screenshot's pixel space onto the 800x517 small image; it lands on lines 2-4 of the first paragraph, covering this sentence.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-04",
+   "scene": "1",
+   "condition": "full",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Mapped the dragged rectangle (900,345)-(2594,574) in the full screenshot to the paragraph text; it brackets lines 2-4 of the first paragraph, which form exactly this one sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-05",
+   "scene": "1",
+   "condition": "full",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Dragged rectangle (y 345-574 of the full screenshot) spans lines 2-4 of the first paragraph, bounding this sentence rather than the one before or after it",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-06",
+   "scene": "1",
+   "condition": "full",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Cropped the full-res screenshot to the exact dragged rectangle (900,345)-(2594,574); it bounds this sentence's three lines almost exactly, only clipping a sliver of the prior line's bottom edge.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-07",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-08",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only full sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-09",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only full sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-10",
+   "scene": "2",
+   "condition": "small",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "dragged box covers the second paragraph, weighted onto its last 3 of 4 lines (the 'variance...averaging' sentence) rather than the first sentence",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-11",
+   "scene": "2",
+   "condition": "small",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Scaled the dragged rectangle (932,610)-(2536,841) against the screenshot's native 3456\u00d72234 resolution \u2014 it lands exactly on paragraph 2's boundaries. That paragraph has two sentences; this one is the convoluted 'which is the reason... rather than' construction, the clear candidate for a plainer rewrite versus the plain factual first sentence.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-12",
+   "scene": "2",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Pixel-mapped the dragged box to the note: it vertically spans exactly the third paragraph's 4 lines (both sentences), horizontally cutting the first word of each line and overshooting the right margin \u2014 a loose paragraph-circle, not a single-sentence crop, so I picked the more jargon-heavy second sentence as the likely rewrite target.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-13",
+   "scene": "2",
+   "condition": "full",
+   "quote": "Every measurement below is a median of five runs taken on the same afternoon, on mains power, with the display awake and no other capture client attached. The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Cropped the screenshot to the exact drawn rectangle (932,610)-(2536,841); it tightly bounds this paragraph's four lines top-to-bottom, no more, no less.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-14",
+   "scene": "2",
+   "condition": "full",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Cropped the exact dragged rectangle (932,610)-(2536,841px); it bounds the whole second paragraph, and this is the more convoluted of its two sentences \u2014 the natural target for 'shorter and plainer'",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-15",
+   "scene": "2",
+   "condition": "full",
+   "quote": "Every measurement below is a median of five runs taken on the same afternoon, on mains power, with the display awake and no other capture client attached. The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Cropped the full-resolution screenshot to the exact dragged rectangle (932,610)-(2536,841); it aligns precisely with the second paragraph's 4 lines, top to bottom",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-16",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Only full sentence in the cropped region; the preceding line is truncated at the top edge",
+   "confidence": "high"
+  },
+  {
+   "run": "run-17",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "only sentence in the cropped screenshot region with clear subject matter to rewrite",
+   "confidence": "high"
+  },
+  {
+   "run": "run-18",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "only sentence in the cropped region complex/wordy enough to prompt a 'shorter, plainer' rewrite request; the other sentence in the crop is already plain",
+   "confidence": "low"
+  },
+  {
+   "run": "run-19",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Scaled the marked rectangle (874,989)-(2489,1164) against the 16\" MacBook Pro native resolution (3456\u00d72234, matching the screenshot's aspect ratio) and cropped that region \u2014 it tightly bounds exactly this sentence in the fourth line of the third paragraph.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-20",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Cropped the screenshot to the dragged rectangle (874,989)-(2489,1164) after scaling to the image's native resolution; the box outlines exactly this sentence's two lines.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-21",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Cropped the small screenshot at the dragged rectangle's coordinates (scaled to the image's actual pixel size) and read the text inside it.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-22",
+   "scene": "3",
+   "condition": "full",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "converted the dragged rectangle (874,989)-(2489,1164) to displayed-image coords (~506,572)-(1441,674), which tightly bounds the last two lines of paragraph 3",
+   "confidence": "high"
+  },
+  {
+   "run": "run-23",
+   "scene": "3",
+   "condition": "full",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle (y\u2248572\u2013674 of 1293 scaled-display px) to the third paragraph's last two lines in the screenshot",
+   "confidence": "high"
+  },
+  {
+   "run": "run-24",
+   "scene": "3",
+   "condition": "full",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Cropped the full-res screenshot to the dragged rectangle (874,989)-(2489,1164); it exactly bounds this sentence in the third paragraph.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-25",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "only sentence visible in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-26",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "only full sentence visible in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-27",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only full sentence visible in the cropped screenshot region.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-28",
+   "scene": "4",
+   "condition": "small",
+   "quote": "Neither replaces the other, and the encode is cheap, so both ship until somebody measures a reason to drop one.",
+   "how": "Mapped the dragged rectangle's y-range to the doc's line bands; it consistently lands on the last two lines of the final paragraph regardless of exact scale factor (no full-res original was available to pin down precisely).",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-29",
+   "scene": "4",
+   "condition": "small",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Mapped the dragged rectangle's pixel bounds (944,1195)-(2623,1360) onto the screenshot using its native 3456\u00d72234 resolution; the box tightly brackets exactly two text lines forming this sentence, with negligible overlap on the lines before/after.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-30",
+   "scene": "4",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "mapped the dragged rectangle's full-res coords (944,1195)-(2623,1360) to the small screenshot by scale (rectangle width matches the paragraph's full text width, and height matches ~2 text lines at that scale), landing on the last two lines of paragraph 3",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-31",
+   "scene": "4",
+   "condition": "full",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Cropped the exact pixel rectangle (944,1195)-(2623,1360) from the full-res screenshot; it's the only sentence fully enclosed top-to-bottom, with the sentences before/after truncated at the rectangle's edges.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-32",
+   "scene": "4",
+   "condition": "full",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Scaled the dragged rectangle (944,1195)-(2623,1360) from original screenshot pixels to the displayed image, landing on lines 2-3 of the last paragraph, centered on this sentence.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-33",
+   "scene": "4",
+   "condition": "full",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "cropped the full-res screenshot to the dragged rectangle (944,1195)-(2623,1360); this sentence is the only one fully enclosed, with neighboring sentences only partially caught at the top/bottom edges",
+   "confidence": "high"
+  },
+  {
+   "run": "run-34",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only fully complete sentence within the cropped screenshot region (others are cut off at top/bottom edges)",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-35",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only fully visible, uncut sentence in the cropped screenshot",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-36",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only fully-framed, semicolon-joined sentence in the cropped region, most likely rewrite target",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-37",
+   "scene": "1",
+   "condition": "sized",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Scaled the marked rectangle (900,345)-(2594,574) by 0.231 to small-image coords (~208,80)-(599,133), which spans lines 2-4 of the first paragraph \u2014 exactly this sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-38",
+   "scene": "1",
+   "condition": "sized",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "screenshot rectangle (900,345)-(2594,574) scaled to small image maps to y\u224880-133px, spanning lines 2-3 of paragraph 1, which contain this sentence",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-39",
+   "scene": "1",
+   "condition": "sized",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Scaled the dragged rectangle (900,345)-(2594,574) by 0.231 to small-image coords (x208-600, y80-133), then measured actual text-line pixel bands: it spans full-width lines 2-4 of paragraph 1, which contain exactly this sentence (excludes the preceding and following sentences).",
+   "confidence": "high"
+  },
+  {
+   "run": "run-40",
+   "scene": "2",
+   "condition": "sized",
+   "quote": "Every measurement below is a median of five runs taken on the same afternoon, on mains power, with the display awake and no other capture client attached.",
+   "how": "Rectangle maps to the first two lines of paragraph 2 in the small image (x 215-586, y 141-194 after scaling), which is exactly this sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-41",
+   "scene": "2",
+   "condition": "sized",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Screenshot rectangle (932,610)-(2536,841) maps to the second paragraph in 'Notes on latency budgets'; its vertical center falls on this sentence, the longest/most convoluted one in the highlighted span",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-42",
+   "scene": "2",
+   "condition": "sized",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Rectangle spans lines 3-4 of paragraph 1, which is exactly where this sentence sits",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-43",
+   "scene": "3",
+   "condition": "sized",
+   "quote": "When the pointer is the subject, the name of the file carries the position in image pixels rather than in points, because the agent reading it has the pixels and not the backing scale.",
+   "how": "Rectangle (874,989)-(2489,1164) scaled to the small image lands on the paragraph's first three lines (roughly y 228-269, x 202-575), matching this sentence in the third paragraph.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-44",
+   "scene": "3",
+   "condition": "sized",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Scaled the drawn rectangle (874,989)-(2489,1164) by 0.231 to the small image (~x202-575, y228-269), landing on the retina-factor sentence in the third paragraph.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-45",
+   "scene": "3",
+   "condition": "sized",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Scaled the dragged rectangle (874,989)-(2489,1164) by 0.231 onto the 800x517 screenshot; it brackets this sentence in the third paragraph.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-46",
+   "scene": "4",
+   "condition": "sized",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Rectangle (944,1195)-(2623,1360) maps to y\u2248277-315 in the small image, which tightly brackets lines 2\u20133 of paragraph 4 (excluding line 1's start and line 4) \u2014 exactly this sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-47",
+   "scene": "4",
+   "condition": "sized",
+   "quote": "The remaining open question is whether a contact sheet is worth its encode time when the frames travel beside it anyway.",
+   "how": "Scaled the dragged rectangle (944,1195)-(2623,1360) by 0.231 to small-image coords (~218,276)-(~606,314), which lines up with the first two lines of the last paragraph \u2014 covering exactly the first sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-48",
+   "scene": "4",
+   "condition": "sized",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "screenshot rectangle (944,1195)-(2623,1360) maps to the two lines in paragraph 3 starting with 'scale. A retina factor...' through '...crop comes back empty.'",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-49",
+   "scene": "1",
+   "condition": "small",
+   "quote": "The capture path spends its budget in three places: the window server round trip, the encoder, and the file write. A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Mapped the dragged box (900,345)-(2594,574) to the screenshot assuming a 16\" MBP retina screen (3456x2234, the aspect ratio that matches the small preview almost exactly); the box's left/top/right/bottom line up with the full first paragraph's text bounds \u2014 note it covers all 3 sentences of that paragraph, not just one",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-50",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "mapped the dragged rectangle's coordinates onto the screenshot, landing on lines 2-4 of paragraph 1 (the second sentence)",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-51",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "scaled the dragged rectangle (900,345)-(2594,574) from the screenshot's original pixel space onto the 800x517 preview using a MacBook-Pro-style 2x scale factor consistent with the image's aspect ratio; it lands on lines 2-4 of paragraph 1, which form exactly this one sentence",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-52",
+   "scene": "1",
+   "condition": "small",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Scaled the marked region (900,345)-(2594,574) by the small/original width ratio (~0.31); it lands on lines 3-4 of the first paragraph, which are the back half of this sentence.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-53",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Only full sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-54",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Only full sentence visible in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-55",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-56",
+   "scene": "1",
+   "condition": "crop",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Only complete sentence fully inside the dragged crop; the preceding line is a fragment cut off at the top edge.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-57",
+   "scene": "2",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle (932,610)-(2536,841 orig px) onto the screenshot; it brackets the third paragraph's two sentences, but this second one is the denser, more rewrite-worthy target",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-58",
+   "scene": "2",
+   "condition": "small",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Scaled the dragged box (932,610)-(2536,841) against the screenshot's actual resolution (3456x2234, matching the 800x517 thumbnail); it lands exactly on paragraph 2's 4 text lines. That paragraph has two sentences \u2014 I picked this one since it's the long, clause-nested one that actually needs shortening.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-59",
+   "scene": "2",
+   "condition": "small",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Mapped the dragged rectangle (932,610)-(2536,841px) to the on-screen text: it spans all four lines of paragraph 2, but that paragraph has two sentences and the box's vertical center sits on lines 2-4, which belong to this longer, more convoluted sentence",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-60",
+   "scene": "2",
+   "condition": "small",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Mapped the dragged rectangle onto the doc: it cuts through line 1 of the 'Every measurement...' paragraph but fully encloses lines 2\u20134, which is exactly this sentence, start to end.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-61",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Only sentence in the dragged crop dense/awkward enough to warrant a plain rewrite; the other sentence in the crop is a plain factual list",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-62",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Only sentence in the cropped screenshot region that reads as a distinct claim needing simplification (the preceding sentence is a separate methodology note)",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-63",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "only sentence in the cropped screenshot region with a rewritable claim (the preceding sentence is just a methodology note)",
+   "confidence": "high"
+  },
+  {
+   "run": "run-64",
+   "scene": "2",
+   "condition": "crop",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "only sentence in the captured region complex/convoluted enough to warrant a 'shorter and plainer' rewrite; the other sentence is already short and factual",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-65",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Scaled the dragged rectangle onto the screenshot at its native 3456\u00d72234 resolution (matches the 800\u00d7517 thumbnail's aspect ratio); the box tightly wraps exactly these two lines of the 'retina' paragraph.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-66",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle (874,989)-(2489,1164) to the small screenshot via inferred original resolution (~3456\u00d72234, matching the 800\u00d7517 small image's aspect ratio), which lands on this exact two-line sentence in paragraph 3.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-67",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle's full-res coords (this Mac's display is 3456x2234) onto the screenshot and overlaid it \u2014 it boxes exactly this sentence in paragraph 3.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-68",
+   "scene": "3",
+   "condition": "small",
+   "quote": "A `retina` factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle's pixel coordinates onto the screenshot and cropped that exact region, which lands precisely on this sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-69",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only sentence visible in the dragged screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-70",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only sentence visible in the dragged screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-71",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only full sentence visible in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-72",
+   "scene": "3",
+   "condition": "crop",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "only sentence in the cropped screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-73",
+   "scene": "4",
+   "condition": "small",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Scaled the marked rectangle (944,1195)-(2623,1360) from the 3456x2234 original onto the 800x517 screenshot and matched it to text-line bands; it brackets lines 2-3 of the last paragraph, which contain exactly this sentence.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-74",
+   "scene": "4",
+   "condition": "small",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "mapped the dragged rectangle (944,1195)-(2623,1360) onto the screenshot's actual pixel scale and drew it on the image \u2014 it brackets exactly this sentence, excluding the text before and after it on the same lines",
+   "confidence": "high"
+  },
+  {
+   "run": "run-75",
+   "scene": "4",
+   "condition": "small",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Mapped the dragged rectangle's original-image coordinates (944,1195)-(2623,1360) onto the small screenshot by scale, landing on paragraph 3's middle lines \u2014 the 'retina factor applied twice' sentence.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-76",
+   "scene": "4",
+   "condition": "small",
+   "quote": "The remaining open question is whether a contact sheet is worth its encode time when the frames travel beside it anyway.",
+   "how": "Scaled the dragged rectangle (944,1195)-(2623,1360) down to the screenshot's pixel size and cropped that band \u2014 it lands exactly on this sentence's two lines, full width.",
+   "confidence": "high"
+  },
+  {
+   "run": "run-77",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only sentence in the crop with a clear start and end (others are cut off at the top or bottom edge)",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-78",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only fully-visible, uncut sentence in the cropped screenshot \u2014 the lines above and below are cut off mid-sentence",
+   "confidence": "high"
+  },
+  {
+   "run": "run-79",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "only fully-contained, complete sentence in the cropped region",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-80",
+   "scene": "4",
+   "condition": "crop",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "Only fully complete sentence inside the dragged crop region \u2014 the line above is cut off mid-word and the line below trails off screen.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-81",
+   "scene": "1",
+   "condition": "both",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "The dragged rectangle spans lines 2-4 of the first paragraph, which is exactly this one long sentence (plus a sliver of the prior sentence's tail at the top edge).",
+   "confidence": "high"
+  },
+  {
+   "run": "run-82",
+   "scene": "1",
+   "condition": "both",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only full sentence visible in the marked screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-83",
+   "scene": "1",
+   "condition": "both",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "Only fully-contained sentence within the dragged selection rectangle in the zoomed region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-84",
+   "scene": "1",
+   "condition": "both",
+   "quote": "A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.",
+   "how": "only sentence fully visible in the highlighted screen region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-85",
+   "scene": "2",
+   "condition": "both",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "dragged rectangle covers the whole second paragraph (two sentences) in the doc; picked the longer, more convoluted one as the likely rewrite target",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-86",
+   "scene": "2",
+   "condition": "both",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "Dragged region in the screenshot covers the 'Every measurement...' paragraph, which has two sentences \u2014 I picked the second, since the first is already short and plain while the second is the convoluted one that fits a 'shorter and plainer' request.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-87",
+   "scene": "2",
+   "condition": "both",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "The dragged rectangle boxes paragraph 2 in full (both its sentences); of the two, this one is the denser, clause-heavy sentence that fits a 'shorter and plainer' rewrite request",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-88",
+   "scene": "2",
+   "condition": "both",
+   "quote": "The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.",
+   "how": "the dragged selection box in the screenshot covers this text block, and it's the one sentence with clear rewrite-worthy complexity",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-89",
+   "scene": "3",
+   "condition": "both",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only full sentence visible in the dragged screenshot region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-90",
+   "scene": "3",
+   "condition": "both",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "read the sentence inside the dragged selection rectangle in the zoomed screenshot",
+   "confidence": "high"
+  },
+  {
+   "run": "run-91",
+   "scene": "3",
+   "condition": "both",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Only sentence in the highlighted screen region",
+   "confidence": "high"
+  },
+  {
+   "run": "run-92",
+   "scene": "3",
+   "condition": "both",
+   "quote": "A retina factor applied twice is the classic failure here: the box lands at half the intended place and nobody notices until a crop comes back empty.",
+   "how": "Read the zoomed screenshot of the selected region in the Chrome window",
+   "confidence": "high"
+  },
+  {
+   "run": "run-93",
+   "scene": "4",
+   "condition": "both",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "it's the only complete sentence fully enclosed inside the dragged rectangle \u2014 the lines above/below are cut mid-sentence",
+   "confidence": "high"
+  },
+  {
+   "run": "run-94",
+   "scene": "4",
+   "condition": "both",
+   "quote": "The remaining open question is whether a contact sheet is worth its encode time when the frames travel beside it anyway.",
+   "how": "Only sentence in the dragged region complex/awkward enough to warrant a 'shorter and plainer' rewrite; the region spans the whole last paragraph but this opening sentence is the convoluted one.",
+   "confidence": "medium"
+  },
+  {
+   "run": "run-95",
+   "scene": "4",
+   "condition": "both",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "It's the only sentence fully inside the dragged rectangle in the zoomed crop \u2014 the sentences before and after are cut off mid-line",
+   "confidence": "high"
+  },
+  {
+   "run": "run-96",
+   "scene": "4",
+   "condition": "both",
+   "quote": "A sheet answers what moved and when in one look; the frames answer what the screen actually said.",
+   "how": "This is the only sentence fully enclosed by the dragged rectangle in the zoomed crop \u2014 the sentences before and after it are clipped at the top/bottom edges of the selection.",
+   "confidence": "high"
+  }
+ ]
+}

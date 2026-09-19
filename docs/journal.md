@@ -245,6 +245,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The chip swaps in one frame (2026-09-18)](#the-chip-swaps-in-one-frame-2026-09-18)
 - [The chip says which microphone, and the menu picks it (2026-09-19)](#the-chip-says-which-microphone-and-the-menu-picks-it-2026-09-19)
 - [The pictures are clean, and it is a measurement now (2026-09-19)](#the-pictures-are-clean-and-it-is-a-measurement-now-2026-09-19)
+- [A box round it, with nothing selected (2026-09-19)](#a-box-round-it-with-nothing-selected-2026-09-19)
 
 ---
 
@@ -10721,3 +10722,49 @@ is the opposite of the obvious one, which is the only reason it is worth writing
 is not a cheaper page, it is a narrower question.
 
 No frame of his screen is committed with the harness — this repo is public.
+
+
+## A box round it, with nothing selected (2026-09-19)
+
+Victor, straight after the eval above: *"Dar dacă nu selectez text, ci doar drag wheel în jurul
+unui paragraf sau propoziție, înțelege agentul ce text e vorba? Din poză adică."* Every
+condition of `capture-proof` had a **highlight** in the frame, which is a blue rectangle telling
+the reader where to look. Take it away and the only thing that says *this text* is the box the
+wheel left behind — which does not exist in the picture at all: it is four numbers in the file's
+name.
+
+`evals/pointing-proof/` is that question, 96 runs, four scenes, one target **sentence** each and
+never the first of its paragraph. The page is rendered headless at 1728×1117 @2× — 3456×2234,
+the geometry the capture eval ran on — so nothing of his desk is in the directory.
+
+| condition | runs | right sentence | right place |
+|---|---|---|---|
+| the whole screen at 800 px, rectangle in the name — **what ships** | 28 | **21/28** | 22/28 |
+| the same, with both frame sizes and the scale factor spelled out | 12 | 7/12 | 7/12 |
+| the same, with the full-resolution original beside it | 12 | 10/12 | **12/12** |
+| the screen **and** the framed region as a second 800 px file | 16 | **15/16** | 15/16 |
+| the region alone, 800 px — what the app did before 2026-09-14 | 28 | **28/28** | 28/28 |
+
+**Yes, three times in four** — and the quarter that misses mostly misses by a *paragraph*: six of
+the seven wrong answers quote another block of the page, not a neighbouring sentence. Against the
+crop's 28/28 that is p = 0.006, and p = 0.001 pooling the two conditions that hand over nothing
+but the 800 px screen.
+
+**The cause is arithmetic the reader has no pixels for.** `tagArea` measures the rectangle off
+the full-resolution JPEG (3456 wide) and the file that travels is the 800 px copy, so every
+reader rescales by 4.3× by eye, onto text whose cap height is four pixels: *"mapped the dragged
+rectangle's full-res coords to the small screenshot by scale … landing on the last two lines of
+paragraph 3"*, and paragraph 3 was not the one. **Saying the scale out loud does not fix it** —
+the `sized` row hands over both sizes and the factor and scores 7/12. It was never the
+arithmetic.
+
+**What fixes it is pixels**, and the cheap version keeps the 2026-09-14 semantics: the screen as
+it is, *plus* the framed region as its own 800 px file. 15/16, at 550 tokens, with the display
+still in the envelope so *"in zona aia să apară ceva"* is still sayable. The full-resolution
+original gets *right place* to 12/12 but costs a 3450-token read and only when the agent thinks
+to take it. Neither is built — the pointing-versus-cropping call is his.
+
+**And one limit no format reaches:** a rectangle over wrapped text selects a band of *lines*, not
+a sentence. Scene 2's box was located exactly by both runs that then missed — *"it tightly bounds
+this paragraph's four lines, no more, no less"* — and they quoted the paragraph, which is what the
+box really contains. For a sentence inside a paragraph the highlight is still the instrument.
