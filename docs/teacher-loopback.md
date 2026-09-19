@@ -239,6 +239,23 @@ It also gives up after five consecutive failures. Wispr having quit, lost its
 network or had its microphone changed all look identical from here, and none of
 them get better by pressing a key another four hundred times.
 
+## A new row is not a transcript
+
+Wispr inserts its History row when the key goes **down** and writes `asrText`
+into it when the network round-trip comes back, seconds later. A wait that
+returns as soon as the newest id changes therefore reads the placeholder and
+reports *no transcript* for a clip Wispr heard perfectly.
+
+Measured 2026-09-19 on Wispr **1.6.897**: three clips out of three came back
+empty while `flow.sqlite` held `la Claude` and `Aqui testa, hã` for the same
+audio. `wait_for_new()` now waits twice — for the id, then for the text in that
+row, inside the same per-sample budget — and `evals/test_wispr_loopback.py`
+holds the case.
+
+It is worth knowing how this fails, because it does not look like a bug: the
+batch gives up after five consecutive failures, so the night ends having
+labelled nothing and the rig looks dead.
+
 ## What gets written
 
 `teacher_text` is Wispr's **`asrText`** — the recogniser's raw reading.

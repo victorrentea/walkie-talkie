@@ -636,6 +636,13 @@ def wait_for_new(since_id, timeout=RESULT_TIMEOUT_SEC, poll=0.5) -> Heard | None
     comparison across that boundary is a bug waiting for a DST change. The
     connection is reopened each poll: Wispr holds the file in WAL mode and a
     long-lived read snapshot would never see the row it is waiting for.
+
+    **A new id is not a transcript.** Wispr inserts the row when the key goes
+    down and fills `asrText` in when the network round-trip comes back, so the
+    id appears seconds before the words do. Returning on the id alone reads the
+    placeholder and reports silence for a clip Wispr transcribed perfectly —
+    measured 2026-09-19 on Wispr 1.6.897, three clips out of three. So the id
+    only starts the second wait: for text in that same row.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -650,7 +657,32 @@ def wait_for_new(since_id, timeout=RESULT_TIMEOUT_SEC, poll=0.5) -> Heard | None
         finally:
             fresh.close()
         if row and row["id"] != since_id:
-            return Heard(
+            return _wait_for_text(row["id"], deadline, poll)
+    return None
+
+
+def _wait_for_text(row_id, deadline, poll) -> Heard | None:
+    """Wait for `asrText` to land in a row that already exists.
+
+    Shares the caller's deadline rather than starting a fresh one: the budget is
+    "how long this sample may take", and a row that never fills in has to fail
+    the sample instead of extending it. An empty transcript at the deadline is
+    still returned — an empty reading is a fact about the clip, and the caller
+    decides what an empty label means.
+    """
+    last = None
+    while True:
+        fresh = _open_wispr()
+        try:
+            row = fresh.execute(
+                "SELECT transcriptEntityId AS id, timestamp, duration, micDevice,"
+                "       asrText, formattedText"
+                "  FROM History WHERE transcriptEntityId = ?", (row_id,)
+            ).fetchone()
+        finally:
+            fresh.close()
+        if row:
+            last = Heard(
                 id=row["id"],
                 asr=(row["asrText"] or "").strip(),
                 formatted=(row["formattedText"] or "").strip(),
@@ -658,7 +690,11 @@ def wait_for_new(since_id, timeout=RESULT_TIMEOUT_SEC, poll=0.5) -> Heard | None
                 mic=row["micDevice"] or "",
                 at=datetime.now(timezone.utc),
             )
-    return None
+            if last.asr:
+                return last
+        if time.monotonic() >= deadline:
+            return last
+        time.sleep(poll)
 
 
 def dictate(wav_path, device_index, keys=None, timeout=RESULT_TIMEOUT_SEC) -> Heard | None:
