@@ -1,0 +1,28 @@
+{
+ "answers": [
+  {"run":"run-01","scene":"1","condition":"page","word":"backing","context":"rather than in points, because the agent reading it has the pixels and not the backing scale.","confidence":"high"},
+  {"run":"run-02","scene":"1","condition":"page","word":"backing","context":"rather than in points, because the agent reading it has the pixels and not the backing scale.","confidence":"high"},
+  {"run":"run-03","scene":"1","condition":"crop","word":"backing","context":"...and not the backing","confidence":"medium"},
+  {"run":"run-04","scene":"1","condition":"crop","word":"backing","context":"...and not the backing...","confidence":"medium"},
+  {"run":"run-05","scene":"1","condition":"both","word":"backing","context":"because the agent reading it has the pixels and not the backing scale.","confidence":"high"},
+  {"run":"run-06","scene":"1","condition":"both","word":"backing","context":"the name of the file carries the position in image pixels rather than in points, because the agent reading it has the pixels and not the backing scale.","confidence":"high"},
+  {"run":"run-07","scene":"2","condition":"page","word":"variance","context":"The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.","confidence":"high"},
+  {"run":"run-08","scene":"2","condition":"page","word":"variance","context":"The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.","confidence":"high"},
+  {"run":"run-09","scene":"2","condition":"crop","word":"variance","context":"...smaller than the variance between displays, whi...","confidence":"high"},
+  {"run":"run-10","scene":"2","condition":"crop","word":"variance","context":"...smaller than the variance between displays, whi...","confidence":"high"},
+  {"run":"run-11","scene":"2","condition":"both","word":"variance","context":"The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.","confidence":"high"},
+  {"run":"run-12","scene":"2","condition":"both","word":"variance","context":"The variance between runs was smaller than the variance between displays, which is the reason the table reports the display it was measured on rather than averaging the two together.","confidence":"high"},
+  {"run":"run-13","scene":"3","condition":"page","word":"subprocess","context":"so the recorder reaches for the in-process call instead and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-14","scene":"3","condition":"page","word":"subprocess","context":"...so the recorder reaches for the in-process call instead and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-15","scene":"3","condition":"crop","word":"subprocess","context":"...and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-16","scene":"3","condition":"crop","word":"subprocess","context":"and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-17","scene":"3","condition":"both","word":"subprocess","context":"A subprocess per frame costs two hundred milliseconds on this machine, which is already over the budget a five frame per second recording has, so the recorder reaches for the in-process call instead and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-18","scene":"3","condition":"both","word":"subprocess","context":"so the recorder reaches for the in-process call instead and keeps the subprocess for stills.","confidence":"high"},
+  {"run":"run-19","scene":"4","condition":"page","word":"encode","context":"A sheet answers what moved and when in one look; the frames answer what the screen actually said. Neither replaces the other, and the encode is cheap, so both ship until somebody measures a reason to drop one.","confidence":"high"},
+  {"run":"run-20","scene":"4","condition":"page","word":"encode","context":"Neither replaces the other, and the encode is cheap, so both ship until somebody measures a reason to drop one.","confidence":"high"},
+  {"run":"run-21","scene":"4","condition":"crop","word":"encode","context":"encode is cheap, so both ship...","confidence":"high"},
+  {"run":"run-22","scene":"4","condition":"crop","word":"encode","context":"encode is cheap, so both ship...","confidence":"high"},
+  {"run":"run-23","scene":"4","condition":"both","word":"encode","context":"A sheet answers what moved and when in one look; the frames answer what the screen actually said. Neither replaces the other, and the encode is cheap, so both ship until somebody measures a reason to drop one.","confidence":"high"},
+  {"run":"run-24","scene":"4","condition":"both","word":"encode","context":"Neither replaces the other, and the encode is cheap, so both ship until somebody measures a reason to drop one.","confidence":"high"}
+ ]
+}

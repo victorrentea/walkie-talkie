@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Walkie proof — reading page</title>
+<style>
+  body { font: 19px/1.65 -apple-system, "Helvetica Neue", sans-serif; color:#1b1b1b;
+         background:#fbfbf8; margin:0; padding:48px 64px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 27px; margin: 0 0 6px; }
+  .sub { color:#777; font-size:14px; margin-bottom:26px; }
+  p { margin: 0 0 18px; }
+  code { font: 15px/1.5 "SF Mono", Menlo, monospace; background:#eee; padding:1px 4px; border-radius:3px; }
+</style>
+<div class="wrap">
+<h1>Notes on latency budgets</h1>
+<div class="sub">draft — internal, 19 September</div>
+<p id="p1">The capture path spends its budget in three places: the window server round trip, the
+encoder, and the file write. A subprocess per frame costs two hundred milliseconds on this
+machine, which is already over the budget a five frame per second recording has, so the
+recorder reaches for the in-process call instead and keeps the subprocess for stills.</p>
+<p id="p2">Every measurement below is a median of five runs taken on the same afternoon, on
+mains power, with the display awake and no other capture client attached. The variance
+between runs was smaller than the variance between displays, which is the reason the table
+reports the display it was measured on rather than averaging the two together.</p>
+<p id="p3">When the pointer is the subject, the name of the file carries the position in image
+pixels rather than in points, because the agent reading it has the pixels and not the
+backing scale. A <code>retina</code> factor applied twice is the classic failure here: the
+box lands at half the intended place and nobody notices until a crop comes back empty.</p>
+<p id="p4">The remaining open question is whether a contact sheet is worth its encode time when
+the frames travel beside it anyway. A sheet answers what moved and when in one look; the
+frames answer what the screen actually said. Neither replaces the other, and the encode is
+cheap, so both ship until somebody measures a reason to drop one.</p>
+</div>
+<script>
+// Select the nth occurrence (1-based) of a word inside a given paragraph,
+// as a real browser selection — the same pixels a human drag would leave.
+function paint() {
+  const q = new URLSearchParams(location.search);
+  const para = q.get('p') || 'p1';
+  const word = q.get('w');
+  const nth  = parseInt(q.get('n') || '1', 10);
+  if (!word) return;
+  const el = document.getElementById(para);
+  // Walk the paragraph's text nodes so a word inside <code> is reachable too.
+  const nodes = [];
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let n; while ((n = walk.nextNode())) nodes.push(n);
+  let seen = 0, target = null, at = -1;
+  for (const node of nodes) {
+    let from = 0, i;
+    while ((i = node.textContent.indexOf(word, from)) >= 0) {
+      seen++;
+      if (seen === nth) { target = node; at = i; break; }
+      from = i + 1;
+    }
+    if (target) break;
+  }
+  if (!target) { document.title = 'WORD NOT FOUND'; return; }
+  const r = document.createRange();
+  r.setStart(target, at);
+  r.setEnd(target, at + word.length);
+  // Chrome paints a selection only in a focused document; a tab opened from
+  // the shell leaves the focus in the omnibox, so take it into the page first.
+  document.body.setAttribute('tabindex', '-1');
+  document.body.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+  // The title stays neutral on purpose: the harness finds the highlight by its
+  // pixels, so nothing on screen can tell a reader which word was selected.
+}
+// Chrome hands the focus to the omnibox when a tab is opened from the shell,
+// and that arrives after `load` — a selection painted once is wiped by it. So
+// paint it again on a few beats and keep it painted.
+paint();
+[300, 900, 1800, 3000].forEach(ms => setTimeout(paint, ms));
+document.addEventListener('selectionchange', () => {
+  if (window.getSelection().isCollapsed) paint();
+});
+</script>

@@ -49,6 +49,13 @@ The middle button held and dragged during a dictation selects a rectangle of the
   ```
   → journal: *`area-00:38(1200x800px).jpg`, and one sentence in the clause*
 - **The handover copy is unchanged**: 800 px on the long edge, so a smaller crop travels at its own size; the note says *at most* 800px wide. A crop counts in `📸 ×N` like any other picture — the chip is untouched. The one new string is the failure flash `⚠️ area capture failed` (the `listening-flash` state with different words). → journal: *`area-00:38(1200x800px).jpg`, and one sentence in the clause*
+- **The crop's value is *which one*, not *which word*** (measured 2026-09-19, `evals/capture-proof/`).
+  24 agent runs over four highlighted words: the word itself comes back right 24/24 from the whole
+  800 px screen alone — the downscale is not the problem anyone assumed it was. Where the page
+  fails is a word that appears twice in its own paragraph: handed the page an agent quotes the
+  sentence, which holds both occurrences (4/6 pinned); handed the crop alone it quotes the lines it
+  was given (6/6). **Handing over both was worse than the crop alone** (3/6) — the page invites the
+  wider quote back. → journal: *The pictures are clean, and it is a measurement now (2026-09-19)*
 - **The menu carries a legend row `Select Screen Area — 🛞 drag`**, permanently disabled like `Take Screenshot` and `Pick Element in Chrome` — the one row that puts `🛞` back in the Logi column, because a drag is not a click. → journal: *`area-00:38(1200x800px).jpg`, and one sentence in the clause*
 
 ## The stale-⌘ bug, and the test that guards it

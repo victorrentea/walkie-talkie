@@ -3,3 +3,6 @@
 evals/work/
 evals/*.log
 __pycache__/
+evals/capture-proof/out/
+evals/capture-proof/scene-*.html
+evals/capture-proof/eval/

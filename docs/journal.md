@@ -244,6 +244,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [One slow flick right is one gesture, and it cannot close what it just opened (2026-09-18)](#one-slow-flick-right-is-one-gesture-and-it-cannot-close-what-it-just-opened-2026-09-18)
 - [The chip swaps in one frame (2026-09-18)](#the-chip-swaps-in-one-frame-2026-09-18)
 - [The chip says which microphone, and the menu picks it (2026-09-19)](#the-chip-says-which-microphone-and-the-menu-picks-it-2026-09-19)
+- [The pictures are clean, and it is a measurement now (2026-09-19)](#the-pictures-are-clean-and-it-is-a-measurement-now-2026-09-19)
 
 ---
 
@@ -10658,3 +10659,65 @@ row makes) and by reading the rows back out of AppKit (`GET /engine.mic.rows`, w
 a menu is the one surface here that cannot be photographed from a shell): `xlr` → `🎙️ Elgato Wave
 XLR`; `rx` and `bose`, neither plugged in, fall back and come back `disabled` in the menu; `auto`
 → the XLR, because it is the first rung that is present. The chip itself by snapshot.
+
+## The pictures are clean, and it is a measurement now (2026-09-19)
+
+Victor, by mail: *"Când Walkie Talkie face film sau poză, legat sau nelegat, în poza aceea
+trebuie să nu apară nici tulipa mouse-ului, nici lanțul de fulgere, nici orice alte săgeți care
+ar mai fi fost pe ecran din partea lui Walkie. Trimite-mi o dovadă, o poză făcută care să arate
+că nu sunt artefacte de la Walkie."*
+
+The guarantee was already there and already guarded — `sharingType = .none` on every window,
+`evals/test_capture_decorations.py` counting the windows a file makes against the lines it sets.
+What was missing is the half a source scan cannot reach: **a file, measured**. And one path had
+never been measured at all. `ScreenFilm` does not shell out to `/usr/sbin/screencapture`; it
+calls `CGDisplayCreateImage` in-process, which is a *different capture client*, and nothing said
+the window server honours the flag for that one on this Mac.
+
+So `evals/capture-proof/` is a run, not an argument. Four scenes — three unbound, one bound to a
+throwaway `ttys002` — each with a page of text in Chrome, one word selected by script (a real
+browser selection: `document.body.focus()` first, or Chrome paints nothing), the pointer parked
+on that word, and a dictation opened through `POST /test/dictation/start` so the halo, the ring
+and the chip are all up. `◯ caret halo on` precedes `context screen captured` in the log every
+time. Then four frames: the app's own (`ScreenCapture.grab`, the same call the 🔽 shutter makes)
+plus its 800 px handover copy, an independent `screencapture`, a 20-frame `WT_SHOOT_FILM=4`
+recording, and a control taken seconds earlier with nothing open.
+
+**Zero ring pixels, zero chevron pixels, zero cursor-mark pixels** in a 1200 px box around the
+pointer — in all of them, bound and unbound. The halo's ring is r=105 pt = 210 px, so that box
+holds it three times over, and the same two masks over the app's own `WT_SHOOT_HALO` render
+count 179 683 and 1 537: a zero read against a number that is not zero. The reading that needs
+no colour model at all is better still — **the app's shot differs from the control in 0.0% of
+its pixels, 0 changed regions**: the frame taken with everything up is the frame taken with
+nothing up. The film frames differ in 0.03–0.07%, 8–10 regions, every one the menu-bar clock, a
+menu-bar extra or a tab favicon, none within 600 px of the pointer.
+
+**The thing that *is* in the frames belongs to Victor Addons.** hands-off draws four 🔒, an
+amber frame and a cursor badge, and sets no sharing type, so anything shot while the locks are
+up carries them — and a reader would file them under Walkie. The harness therefore takes its
+control frame five seconds after the last release, and the only input it synthesises is the
+pointer move. It is also why the shutter itself is never posted as a chord in this run: the
+`00` context shot is taken over HTTP, and it is the same `ScreenCapture.grab` the 🔽 picture is.
+
+### The second question: does an agent know which word (2026-09-19)
+
+*"dovedind cu eval ca un agent intelege reliable despre ce cuvant e vorba … Poate ar fi chiar
+util să le dăm separat poza decupată de ansamblul complet al paginii."* 24 runs, four words,
+three conditions, two repeats, answers graded on two things because three of the four words
+appear **twice** in their own paragraph with the highlight on the second.
+
+| condition | right word | occurrence pinned |
+|---|---|---|
+| the whole screen, 800 px | 8/8 | 4/6 |
+| the wheel-drag crop alone | 8/8 | 6/6 |
+| both files together | 8/8 | 3/6 |
+
+**The word is never the problem.** 24/24, even from the 800 px handover copy of a 3456 px
+screen — the text survives the downscale better than the 4 px cap-height suggests. What the crop
+buys is *which one*: handed the page an agent quotes the sentence, and the sentence holds both
+occurrences; handed the crop it quotes the lines it was given. **Handing over both was worse
+than the crop alone** — the page invites the wider quote back. Small sample, and the direction
+is the opposite of the obvious one, which is the only reason it is worth writing down: the crop
+is not a cheaper page, it is a narrower question.
+
+No frame of his screen is committed with the harness — this repo is public.

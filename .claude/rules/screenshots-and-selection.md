@@ -124,6 +124,14 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 - **`evals/test_capture_decorations.py` is the guard** — it counts the windows each file makes
   against the `sharingType` lines it sets, and `--self-test` proves it fails on a bare panel. A
   guarantee nobody can see is one that lapses silently. → journal: *Nothing this app draws is in the picture (2026-09-14)*
+- **`evals/capture-proof/` is the same claim measured on files**, including the film — `ScreenFilm`
+  takes its frames with `CGDisplayCreateImage`, a different capture client from
+  `/usr/sbin/screencapture`, and until 2026-09-19 the flag had never been checked on that path. It
+  holds: four scenes, bound and unbound, **0 ring / chevron / cursor-mark pixels** in a 1200 px box
+  around the pointer, and the app's own shot differs from a control frame taken with nothing open
+  in **0.0% of its pixels, 0 regions**. Re-run it after anything that moves a panel or the capture
+  order; it needs the installed app on 8917. → journal: *The pictures are clean, and it is a
+  measurement now (2026-09-19)*
 - **What *is* in his frames comes from the other two apps.** Victor Addons and Victor Effects set no
   sharing type anywhere, so the hands-off 🔒 corners, the amber frame, the banners and any effect
   playing from the tablet do land in these pictures. That is deliberate there — an effect nobody can
