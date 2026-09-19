@@ -248,6 +248,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [A box round it, with nothing selected (2026-09-19)](#a-box-round-it-with-nothing-selected-2026-09-19)
 - [The region he framed travels at its own size (2026-09-19)](#the-region-he-framed-travels-at-its-own-size-2026-09-19)
 - [The envelope becomes tokens where he made them (2026-09-19)](#the-envelope-becomes-tokens-where-he-made-them-2026-09-19)
+- [ElevenLabs is the engine, and the freeze that found (2026-09-19)](#elevenlabs-is-the-engine-and-the-freeze-that-found-2026-09-19)
 
 ---
 
@@ -10927,3 +10928,95 @@ the outbox:
 - **`-2` is appended to the base, not the suffix** (`uniqueBase`): every dictation in a session
   folder makes a `screenshot-0`, so `screenshot-0-2-original.jpg` / `screenshot-0-2-800px.jpg`.
   A `-original-2` would have broken the sibling arithmetic the whole naming rests on.
+
+
+## ElevenLabs is the engine, and the freeze that found (2026-09-19)
+
+Victor, on the same thread as the template: *"Wispr Flow nu mai e motorul meu de dictare default.
+Reține asta; o să trec la 11 Labs. Wispr Flow va rămâne motor de dictare atunci când vreau să
+dictez o idee, nu un prompt, cu gestul acela de back plus dreapta. … M-a mulțumit calitatea, atât
+în română, cât și în engleză, și știe și să pună timpii pe cuvinte. Lucru foarte important."*
+
+The timings are the load-bearing half: the tokens the envelope was rebuilt around
+(`[📸1🖱️@…]`, `[selected: …]`) can only stand where he pressed if the recogniser says where every
+word was, and Wispr cannot. So the default moves, `engine(named:)`'s fallback moves with it (a typo
+now picks the default rather than a third engine), and the rule that said *never the default, the
+one engine that uploads must not be reachable by a typo* is **spent rather than repealed** — he has
+chosen the wire, knowingly, for something it buys.
+
+### The first gesture froze the relay, and that is not the engine's fault
+
+It froze three times before the cause was clear, and each time it looked like a crash: no crash
+report, no `session_end`, the HTTP port accepting connections and never answering. `sample` on the
+wedged process says it in one stack:
+
+```
+AppDelegate.startDictation → ElevenLabsSource.start()
+  → MicRecorder.start(to:) → -[AVAudioEngine inputNode]
+    → AVAudioIOUnit_OSX::BindToDeviceInternal → AUHALOutputUnit setDeviceID:
+      → CoreAudio HALC_ProxyObject::HasProperty → mach_msg      (never returns)
+```
+
+**CoreAudio was wedged for input binds on this Mac that evening** — a second session was driving
+the Loopback device for a batch job — and `MicRecorder.start(to:)` is a synchronous device open. On
+the main thread. So the bind that never came back took the menu, the overlay, the routes and every
+gesture with it.
+
+- **Wispr never hit this** because it does not open the microphone to dictate; only the halo's
+  meter does, and only while a Wispr dictation is already running. The moment ElevenLabs became the
+  default, the very first gesture of the day went straight into it.
+- **`WisprFlowSource` had already solved it** — `meterQueue`, with the comment *"`MicRecorder.start(to:)`
+  is a synchronous device open and it was being run on the edge, in front of the ring"*. The three
+  sources that own their recording never got the same treatment, because none of them had ever been
+  the default.
+- **`ElevenLabsSource` now opens, stops and cancels on its own `audioQueue`**, and `start()` answers
+  immediately — which is this repo's own rule anyway (*the dictation opens on the gesture, the
+  microphone only confirms it*). Verified against the still-wedged audio stack: the gesture starts a
+  dictation, the ring goes up, the context frame is taken, and **the app stays answering**.
+- **A second path is still there and is not fixed**: `RelayWindow.startWarmth`'s timer reaches the
+  meter on the main thread, and with the audio stack wedged it froze the app the same way once the
+  first path was off it. `LocalWhisperSource`, `SpeechmaticsSource` and `GeminiSource` open inline
+  too. Same bug, three more doors.
+
+**The lesson worth keeping**: a device open is IPC to another daemon; it can hang for reasons that
+have nothing to do with this app, and it may never be on the thread the app is drawn on.
+
+### Seeing the envelope without a microphone
+
+With the audio stack down, the template's samples had to come from somewhere. Two small additions
+to the loopback surface, both permanently useful:
+
+- **`POST /test/dictation {"words": […]}`** — the transcript *and* the timings a recogniser would
+  have returned, so `ShotMarker.place` runs for real instead of being skipped.
+- **`POST /test/dictation/start {"clock": true}`** — a wall-clock marker clock for the run, since
+  with no recording open there is no ruler for a press to be an offset into and every cue is
+  dropped.
+
+`evals/envelope-live/samples.py` is what they are for: macOS's Romanian voice speaks the sentence
+into a WAV, **ElevenLabs Scribe** transcribes that WAV (real text, real `words[]`), the gestures are
+made at chosen seconds through the real routes, and the relay renders the envelope. ElevenLabs' own
+text-to-speech would have been the better voice and is not reachable — this key is scoped to
+speech-to-text (`missing_permissions: text_to_speech`).
+
+Three of them, rendered by the running build:
+
+```
+[📸0🖱️@2634:1674] Uite ce am pe ecran acum. În zona asta [📸1✂️760,714→2280,1194] vreau să apară un buton nou, la fel ca celelalte
+
+[Dictated in RO or EN]
+[=$WALKIE_SHOTS/2026-09-19-19-46-15]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸1✂️ = user-selected area between corners (x,y) (760,714)→(2280,1194) at 📁/screenshot-1.jpg; also available -800px and -original.jpg at 3456x2234px]
+```
+
+```
+[📸0🖱️@2634:1674] Butonul ăsta [chrome-selection-1: Salvează] trebuie să fie verde, nu albastru
+
+[Dictated in RO or EN]
+[=$WALKIE_SHOTS/2026-09-19-19-46-15]
+[📸0 = 📁/screenshot-0-3-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[chrome-selection-1 = div.toolbar > button.primary at https://petclinic.victorrentea.ro/orders]
+```
+
+Note what the footer does **not** say in either: no `at 0:03`. The clock appears on a row only when
+its token could not be placed in the words — which is every Wispr dictation, and no ElevenLabs one.

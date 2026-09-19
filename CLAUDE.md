@@ -136,9 +136,9 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /unbind` | let the binding go |
 | `GET /target` | the current binding; `guarded` says whether the shell guard applies |
 | `GET /engine` | which **source** is live, whether it is ready, whether the wrap is on **and in which mode** (`wrapMode` · `wrapWhy` · `scratchpadChord`), and the local model's state |
-| `POST /test/dictation` `{"text": …}` | a fabricated transcript, entering exactly where a real one does (pastes `caretLine` in Replace Wispr) |
+| `POST /test/dictation` `{"text": …}` · `{"text": …, "words": [{"text": …, "start": …, "end": …, "type": "word"｜"spacing"}]}` | a fabricated transcript, entering exactly where a real one does (pastes `caretLine` in Replace Wispr). **With `words`** the timings a recogniser would have returned come with it, so `ShotMarker.place` runs for real and the tokens stand where the presses fell — the only way to see a *whole* envelope from a desk (2026-09-19) |
 | `POST /test/selection` `{"text": …}` | file a highlight as though he had made one — it enters at `fileSelection`, so the offset, the window reading and the frozen-slot rule all run; 409 outside a dictation. The one attachment otherwise unreachable from a desk |
-| `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero (a caret one in Replace Wispr) |
+| `POST /test/dictation/start` · `{"clock": true}` | open a dictation without talking, so shot offsets have a zero (a caret one in Replace Wispr). **`clock`** also installs a wall-clock marker clock for the run: with no microphone there is no recording for a press to be an offset into, so without it every cue is dropped and every token lands in the footer (2026-09-19) |
 | `POST /test/area` `{"x": …, "y": …, "w": …, "h": …}` | **the wheel drag, without the wheel** (2026-09-19) — global Cocoa points, empty body for a box in the middle of the main screen. Enters at `fileArea`, so the naming, the unscaled cut-out, the marker, the attachment and the chip's count all run; only the crop overlay is skipped, and it is the one part of the gesture a desk cannot drive. Answers `frame` · `handed` · `zoom` |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
@@ -267,10 +267,14 @@ sits at rest there.
 - **The session row says the terminal's title** (2026-09-12): `✳ walkie-talkie — Fix the tax
   rounding` over `walkie-talkie@main` whenever the target has one (`Target.title`, refreshed on the
   10 s poll); the folder row stands where there is no terminal to ask.
-- **Wispr Flow is the default and every gesture goes through it** — ⌘⌃D, the wheel, the side
-  buttons, *Start Dictation*, the spawn. `WT_SOURCE=whisper` (or the `dictationSource` default)
-  picks the local model, which is **retired, not deleted**: no gesture starts it and the weights
-  are no longer loaded at launch. `WT_SOURCE=eleven` and `WT_SOURCE=sm` pick the two cloud ones.
+- **ElevenLabs Scribe is the default since 2026-09-19** (Victor: *"Wispr Flow nu mai e motorul meu
+  de dictare default … o să trec la ElevenLabs … știe și să pună timpii pe cuvinte"*). Every relay
+  gesture goes through it — ⌘⌃D, the wheel, the side buttons, *Start Dictation*, the spawn — and the
+  word timings are what put `[📸1🖱️@…]` where he pressed instead of in a list underneath.
+  **Wispr Flow keeps one job**: 🔽 →, which posts Wispr's own chord raw, for dictating *an idea
+  rather than a prompt*. `engine(named:)`'s fallback follows the default now, so a typo picks
+  ElevenLabs and not a third thing; `WT_SOURCE=wispr` / `whisper` / `sm` / `gemini` override for a
+  run, and the `Engine` menu row writes the preference.
 
 ## ElevenLabs Scribe, the third engine (2026-09-18)
 
@@ -286,9 +290,20 @@ sits at rest there.
   (`scribe_v1`; `scribe_v2` is $0.22/h — the newer model is also the cheaper one), which is why it
   is a pick and never a default. The price lives in `ElevenLabsSource.rate`, keyed by model, because
   a hardcoded one in the menu starts lying the moment `WT_ELEVEN_MODEL` is set.
-- **It is never the default and never picked by a typo.** `AppDelegate.engine(named:)` is one table
-  read by both the launch pick and the menu pick, and **anything unrecognised is Wispr** — the one
-  engine that uploads his voice must not be reachable by a misspelled preference.
+- **It is the default since 2026-09-19**, which reverses the rule that stood here (*never the
+  default, and anything unrecognised is Wispr*). That rule was written to keep his voice off a wire
+  by accident; he has now chosen the wire, for the timings. `engine(named:)` is still one table read
+  by both picks, and its fallback is the **default** rather than a named engine, so a typo cannot
+  quietly pick a third recogniser.
+- **Opening the microphone happens off the main thread** (2026-09-19, and it cost a frozen relay to
+  learn). `MicRecorder.start(to:)` is a synchronous CoreAudio device bind: with the audio stack
+  wedged it never returns, and being on the main thread it took the whole app with it — no crash, no
+  log, every route accepted and never answered. `sample` on the wedged process, twice:
+  `ElevenLabsSource.start → MicRecorder.start → AVAudioEngine.inputNode → BindToDeviceInternal →
+  mach_msg`. Open, stop **and** cancel now run on `audioQueue`, the shape `WisprFlowSource.meterQueue`
+  has had since its meter went in. **A second path is still on the main thread** —
+  `RelayWindow.startWarmth`'s timer reaches the meter — and it froze the app the same way once the
+  first was fixed.
 - **The key is `~/.walkie-talkie/elevenlabs.env`** (`ELEVENLABS_API_KEY=…`), environment first, and
   it **follows `--home`** so a test relay cannot bill the real account. A file rather than a shell
   variable because launchd starts this app and it inherits no shell; a file rather than the Keychain

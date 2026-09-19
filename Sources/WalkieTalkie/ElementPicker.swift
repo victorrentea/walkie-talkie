@@ -242,7 +242,14 @@ final class ElementPicker {
     var describeTarget: (() -> [String: Any]?)?
 
     /// Open a dictation the way the microphone coming on does.
-    var onTestDictationStart: (() -> Void)?
+    /// `{"clock": true}` also installs a **wall-clock marker clock** for the
+    /// run: with no microphone open there is no recording for a press to be an
+    /// offset into, so every cue is dropped and every token ends up in the
+    /// footer. Told to, the app measures the press against the moment the
+    /// dictation opened instead — which is what the recorder's own clock would
+    /// have said — and the placement `ShotMarker.place` does becomes reachable
+    /// from a desk. The only way to see a *whole* envelope without talking.
+    var onTestDictationStart: ((Bool) -> Void)?
 
     /// **The wheel drag, without the wheel** — `POST /test/area`
     /// `{"x": …, "y": …, "w": …, "h": …}` in global Cocoa points (2026-09-19).
@@ -257,7 +264,13 @@ final class ElementPicker {
     var onTestArea: ((NSRect?) -> [String: Any])?
 
     /// A fabricated transcript, entering where a real one does.
-    var onTestDictation: ((String) -> Void)?
+    /// **A fabricated transcript, optionally with the timings a recogniser
+    /// would have returned** (`words`, 2026-09-19). Without them the sentence
+    /// enters exactly as it always did and every token is listed in the footer;
+    /// with them `ShotMarker.place` runs for real and the tokens stand where the
+    /// presses fell — which is the only way to see a *complete* envelope from a
+    /// desk, microphone or no microphone.
+    var onTestDictation: ((String, [TimedWord]) -> Void)?
     /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
     /// **A highlight, filed as though he had made it** — `POST /test/selection`
     /// `{"text": …}` (2026-09-13).
@@ -724,7 +737,8 @@ final class ElementPicker {
         // offset until something has started one, so without this the whole
         // naming scheme is only exercisable by talking.
         case ("POST", "/test/dictation/start"):
-            onTestDictationStart?()
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            onTestDictationStart?((body?["clock"] as? Bool) ?? false)
             respond(conn, 200, ["ok": true, "listening": true])
 
         // The wheel drag, without the wheel — see `onTestArea`.
@@ -858,8 +872,15 @@ final class ElementPicker {
             guard let text = text, !text.isEmpty else {
                 return respond(conn, 400, ["ok": false, "error": "expected {\"text\": \"…\"}"])
             }
-            onTestDictation?(text)
-            respond(conn, 200, ["ok": true, "text": text])
+            let words: [TimedWord] = ((body?["words"] as? [[String: Any]]) ?? []).compactMap {
+                guard let text = $0["text"] as? String,
+                      let start = $0["start"] as? Double,
+                      let end = $0["end"] as? Double else { return nil }
+                return TimedWord(text: text, start: start, end: end,
+                                 isSpacing: ($0["type"] as? String) == "spacing")
+            }
+            onTestDictation?(text, words)
+            respond(conn, 200, ["ok": true, "text": text, "words": words.count])
 
         // One mouse gesture, posted as the chord Options+ makes for it — see
         // `onTestGesture`.

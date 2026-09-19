@@ -197,17 +197,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// agree on the same spellings is a third engine's worth of ways to be
     /// wrong; `WT_SOURCE=local` is kept because it was already in the journal.
     ///
-    /// **Anything unrecognised is Wispr**, which is the default in the only
-    /// sense that matters: a typo in a preference must not leave him dictating
-    /// through something he did not choose — least of all the one engine that
-    /// uploads.
+    /// **ElevenLabs Scribe is the default since 2026-09-19**, and that is a
+    /// reversal of the rule directly above this line, which read *anything
+    /// unrecognised is Wispr … least of all the one engine that uploads*.
+    ///
+    /// Victor, 2026-09-19: *"Wispr Flow nu mai e motorul meu de dictare default
+    /// … o să trec la ElevenLabs. Wispr Flow va rămâne motor de dictare atunci
+    /// când vreau să dictez o idee, nu un prompt, cu gestul acela de back plus
+    /// dreapta. M-a mulțumit calitatea, atât în română cât și în engleză, și
+    /// știe și să pună timpii pe cuvinte."*
+    ///
+    /// The old rule was written to protect him from uploading his voice by
+    /// accident. It is not repealed, it is **spent**: he has chosen to upload,
+    /// for a reason the rest of this repo now depends on — Scribe returns
+    /// `words[]` with timings, which is the only thing that can put
+    /// `[📸1🖱️@…]` where he pressed rather than in a list underneath. Wispr
+    /// keeps the one job it is still better at (🔽 → , an idea rather than a
+    /// prompt), and that path does not come through here at all: it posts
+    /// Wispr's own chord raw.
+    ///
+    /// **The fallback follows the default rather than naming an engine**, so a
+    /// typo cannot silently pick a *third* thing — and the day the default
+    /// moves again, this line moves with it.
     private func engine(named id: String?) -> DictationSource {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
         case "sm", "speechmatics": return speechmaticsSource
         case "gemini", "google": return geminiSource
-        default: return wisprSource
+        case "wispr", "wisprflow", "wispr-flow": return wisprSource
+        default: return elevenSource
         }
     }
 
@@ -231,10 +250,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func engineMark(_ id: String) -> String {
         switch id {
         case "whisper": return "(L)"
+        case "wispr": return "(W)"
         case "eleven": return "(E)"
         case "sm": return "(S)"
         case "gemini": return "(G)"
-        default: return "(W)"
+        // The default's letter, like `engine(named:)`'s default source.
+        default: return "(E)"
         }
     }
 
@@ -1718,8 +1739,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return answer
         }
 
-        picker.onTestDictationStart = { [weak self] in
+        picker.onTestDictationStart = { [weak self] wallClock in
             guard let self = self else { return }
+            if wallClock {
+                // The recorder's clock, stood in for by the wall clock. Real
+                // enough for a desk: with nothing recording, the two differ only
+                // by the microphone's own open, which is the thing not happening.
+                self.markerClock = { [weak self] moment in
+                    self?.dictationStartedAt.map { moment.timeIntervalSince($0) }
+                }
+            }
             // **In Replace Wispr it opens a *caret* dictation**, which is the
             // only way the mode's new half — the shutter and the picker, live
             // here since 2026-09-08 — is reachable from a desk. Without this the
@@ -1777,9 +1806,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return ["ok": true, "at": Self.envelopeStamp(offset), "chars": text.count]
         }
-        picker.onTestDictation = { [weak self] text in
+        picker.onTestDictation = { [weak self] text, words in
             guard let self = self else { return }
-            let text = self.resolvingMarkers(text)
+            let text = self.resolvingMarkers(text, words: words.isEmpty ? nil : words)
             // **It goes to the caret when that is where a real one would go.**
             // The route's whole claim is that a fabricated transcript enters
             // exactly where a spoken one does, and after 2026-09-08 that stopped

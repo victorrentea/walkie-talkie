@@ -16,6 +16,19 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   recogniser cost **one new file** plus a case in `engine(named:)`, a row in the Engine submenu, a
   line in `/engine` and a tag in `VoiceCorpus`. Nothing in the chip, the halo, the settle, the
   routing, the envelope or the outbox was touched, because none of them can tell.
+- **ElevenLabs is the default engine since 2026-09-19**, Wispr Flow is what 🔽 → still posts raw,
+  and `engine(named:)`'s fallback follows the default instead of naming Wispr. The old rule —
+  *anything unrecognised is Wispr, the one engine that uploads must not be reachable by a typo* —
+  is spent rather than repealed: he chose the upload, for the word timings the envelope's tokens
+  need. → journal: *ElevenLabs is the engine, and the freeze that found (2026-09-19)*
+- **Never open or close a microphone on the main thread.** `MicRecorder.start(to:)` / `.stop()` are
+  synchronous CoreAudio device binds; when the audio stack is wedged they never return and the whole
+  app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
+  crash and no log line. `WisprFlowSource` has had `meterQueue` for this since its meter went in;
+  `ElevenLabsSource` got `audioQueue` (open, stop and cancel) the day it became the default.
+  `LocalWhisperSource`, `SpeechmaticsSource` and `GeminiSource` still call it inline, and
+  `RelayWindow.startWarmth`'s timer reaches the meter from the main thread too — both are the same
+  bug waiting for the same wedge. → journal: same
 - **Three engines mean a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both the
   launch pick and the menu pick — two chains that had to agree on the same spellings is a third
   engine's worth of ways to be wrong. **Anything unrecognised is Wispr**: a typo in a preference

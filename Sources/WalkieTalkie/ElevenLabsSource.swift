@@ -224,6 +224,40 @@ final class ElevenLabsSource: DictationSource {
     /// `WisprFlowSource`. → `MicRecorder.offset(of:)`
     func audioOffset(of moment: Date) -> TimeInterval? { meter.offset(of: moment) }
 
+    /// **Where the microphone is opened and closed — off the main thread**
+    /// (2026-09-19). `WisprFlowSource` has had this since the day its meter
+    /// went in (`meterQueue`, *"`MicRecorder.start(to:)` is a synchronous device
+    /// open and it was being run on the edge, in front of the ring"*); this
+    /// source did not, because it was never the default and never ran on a
+    /// machine whose audio stack was busy.
+    ///
+    /// **What it costs when it is wrong, measured today**: the relay froze,
+    /// whole, on the first gesture after ElevenLabs became the default. `sample`
+    /// on the wedged process:
+    ///
+    /// ```
+    /// AppDelegate.startDictation → ElevenLabsSource.start()
+    ///   → MicRecorder.start(to:) → -[AVAudioEngine inputNode]
+    ///     → dispatch_sync → AVAudioIOUnit queue → AUHALOutputUnit setDeviceID:
+    ///       → CoreAudio HALC_ProxyObject::HasProperty → mach_msg  (never returns)
+    /// ```
+    ///
+    /// The main thread was inside CoreAudio waiting on a device bind that never
+    /// came back, so every menu, every route and the whole overlay were gone
+    /// with it — no crash, no log line, nothing to see. A device open is an IPC
+    /// to another daemon and can hang for reasons that have nothing to do with
+    /// this app; it may not be on the thread the app is drawn on.
+    ///
+    /// **The ring does not wait for it**, and never did: this repo's own rule is
+    /// that a dictation opens on the *gesture*, the microphone only confirms it
+    /// (`speculativeGrace`). So `start()` still answers immediately.
+    private let audioQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.eleven-mic")
+
+    /// Written on `audioQueue` only — the stop queued behind an open cannot
+    /// overtake it, which is the same reason `WisprFlowSource.recording` lives
+    /// on its queue.
+    private var opening: URL?
+
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
@@ -233,11 +267,26 @@ final class ElevenLabsSource: DictationSource {
             return "no ElevenLabs API key — see \(Self.configURL.lastPathComponent)"
         }
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
-        if let why = meter.start(to: wav) { return why }
         markersInAudio = false
         isRecording = true
         phase = .listening
         Log.info("🎙️ recording started for ElevenLabs — \(wav.lastPathComponent)")
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.opening = wav
+            guard let why = self.meter.start(to: wav) else { return }
+            // A device that will not open is a sentence that cannot be spoken,
+            // and the ring is already up — so it is said out loud rather than
+            // left to the settle's timeout.
+            Log.error("🎙️ ElevenLabs: the microphone would not open — \(why)")
+            self.opening = nil
+            DispatchQueue.main.async {
+                guard self.isRecording else { return }
+                self.isRecording = false
+                self.phase = .done("error")
+                self.didEnd?(.failed(why: why, audio: nil, duration: 0))
+            }
+        }
         didBegin?()
         return nil
     }
@@ -247,8 +296,20 @@ final class ElevenLabsSource: DictationSource {
         isRecording = false
         phase = .transcribing("uploading")
         didStopListening?()
+        // **Closed on the same queue it was opened on** — `MicRecorder.stop()`
+        // tears the same audio engine down and can block for the same reason,
+        // and a close that overtook its own open would find nothing recording.
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            let closed = self.meter.stop()
+            self.opening = nil
+            DispatchQueue.main.async { self.finishRecording(closed) }
+        }
+    }
 
-        guard let (wav, duration) = meter.stop() else {
+    /// The tail of `stop()`, on the main queue, exactly as it always ran.
+    private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?) {
+        guard let (wav, duration) = closed else {
             Log.info("recording discarded — under \(MicRecorder.minimumDuration)s")
             phase = .done("empty")
             didEnd?(.silent(""))
@@ -300,8 +361,17 @@ final class ElevenLabsSource: DictationSource {
         isRecording = false
         phase = .done("dismissed")
         didStopListening?()
-        let taken = meter.stop()
-        didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+        // On `audioQueue` for `stop()`'s reason: the close is a device
+        // teardown, and a cancel is the one path where the app is already
+        // being asked to get out of his way quickly.
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            let taken = self.meter.stop()
+            self.opening = nil
+            DispatchQueue.main.async {
+                self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+            }
+        }
     }
 
     // MARK: - When the network is the thing that broke
