@@ -135,6 +135,52 @@ class HandsOff:
             pass
 
 
+AUDIO_PROBE = (
+    "import sys, numpy, sounddevice as sd;"
+    "sd.play(numpy.zeros(160, dtype='float32'), samplerate=16000,"
+    " device=int(sys.argv[1]), blocking=True)")
+
+
+def audio_stack_is_alive(device_index, seconds=20):
+    """Open and close one stream on the device before committing to a night.
+
+    A wedged CoreAudio does not raise: `Pa_OpenStream` disappears into
+    `HALC_ProxyObject::HasProperty` → `mach_msg2_trap` and never comes back, so
+    a batch started on one hangs on its first clip instead of failing. It cannot
+    be caught in-process either — the call is uninterruptible — so the probe is a
+    **subprocess** that can be killed, which is the only thing that works.
+
+    Measured 2026-09-19: every process on this Mac that tried to open an audio
+    stream — the relay, Wispr Flow, a bare PortAudio client and this batch — was
+    stuck in that same frame, with `coreaudiod` itself alive and two days old.
+    Device *enumeration* kept working throughout, so `query_devices()` is not a
+    test of anything; only opening a stream is.
+
+    And it must not be confused with the loop's own give-up counter, which
+    counts transcripts that came back empty: this blocks earlier, inside the
+    device open, so the loop never completes an iteration and `GIVE_UP_AFTER`
+    can never fire.
+    """
+    probe = subprocess.Popen([sys.executable, "-c", AUDIO_PROBE,
+                              str(device_index)],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        _, err = probe.communicate(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        probe.kill()
+        probe.communicate()
+        return False, (
+            f"opening an audio stream hung for {seconds}s — CoreAudio is wedged.\n"
+            "Nothing on this Mac can open a microphone or a virtual cable until\n"
+            "it is restarted, and the restart needs a password:\n\n"
+            "    sudo killall coreaudiod\n\n"
+            "(the audio subsystem comes straight back; running apps re-open it)")
+    if probe.returncode != 0:
+        return False, ("could not open an audio stream on the device:\n"
+                       + err.decode(errors="replace").strip()[-400:])
+    return True, ""
+
+
 def ensure_columns(db):
     have = {r[1] for r in db.execute("PRAGMA table_info(samples)")}
     for name, kind in (("teacher_text", "TEXT"), ("teacher_at", "TEXT"),
@@ -231,6 +277,10 @@ def main(argv):
 
     idx, name = rig.resolve_device(args.device)
     log(f"device: {name}")
+
+    alive, why = audio_stack_is_alive(idx)
+    if not alive:
+        raise SystemExit("audio preflight failed — " + why)
     if not rig.accessibility_ok():
         raise SystemExit(
             "Accessibility is not granted to this interpreter — CGEventPost does\n"
