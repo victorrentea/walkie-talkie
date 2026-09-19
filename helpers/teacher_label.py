@@ -59,6 +59,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import signal
 import sqlite3
 import subprocess
@@ -83,7 +84,35 @@ SAFE_SINKS = {"TextEdit", "Notes", "Stickies", "Wispr Flow", "Finder"}
 
 # Between samples. Not a rate limit anybody published — a courtesy, and the beat
 # Wispr needs to finish pasting and settle before the next key goes down.
-GAP_SEC = float(os.environ.get("WISPR_BATCH_GAP", "2.0"))
+#
+# **Randomised, and that is the point.** A fixed 2.0 s gap held for six hours is
+# a metronome, and a metronome is the one thing no human dictating into this
+# account could ever produce. This is Victor's own paid account and the audio is
+# his own voice, but a service that looks for automation looks for regularity
+# first, so the batch does not offer any: every gap is drawn fresh, and every
+# twenty-odd samples it takes a pause of a different order, the way somebody who
+# gets up for water does.
+GAP_MIN = float(os.environ.get("WISPR_BATCH_GAP_MIN", "2.5"))
+GAP_MAX = float(os.environ.get("WISPR_BATCH_GAP_MAX", "9.0"))
+#: Every N samples, for S seconds — both drawn per occurrence, never a constant.
+LONG_PAUSE_EVERY = (15, 40)
+LONG_PAUSE_SEC = (25.0, 75.0)
+#: What a sample costs on average, for the estimate the batch prints up front.
+MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
+                + sum(LONG_PAUSE_SEC) / 2 / (sum(LONG_PAUSE_EVERY) / 2))
+
+
+def gaps(rng=None):
+    """Yield the wait after each sample, for ever."""
+    rng = rng or random.Random()
+    until_long = rng.randint(*LONG_PAUSE_EVERY)
+    while True:
+        until_long -= 1
+        if until_long <= 0:
+            until_long = rng.randint(*LONG_PAUSE_EVERY)
+            yield rng.uniform(*LONG_PAUSE_SEC)
+        else:
+            yield rng.uniform(GAP_MIN, GAP_MAX)
 # Consecutive timeouts before giving up. Wispr having quit, lost its network or
 # had its microphone changed all look identical from here, and none of them get
 # better by pressing the key another four hundred times.
@@ -264,7 +293,7 @@ def main(argv):
                    args.minutes)
     total_sec = sum(s["seconds"] or 0 for s in todo)
     log(f"{len(todo)} sample(s) to label, {total_sec/60:.0f} min of audio "
-        f"→ about {(total_sec + len(todo) * (GAP_SEC + 3))/3600:.1f} h of wall clock")
+        f"→ about {(total_sec + len(todo) * (MEAN_GAP_SEC + 3))/3600:.1f} h of wall clock")
 
     if args.dry_run:
         for s in todo[:40]:
@@ -303,6 +332,7 @@ def main(argv):
         signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
 
     done = failed = streak = 0
+    gap = gaps()
     started = time.monotonic()
     with locks:
         for i, s in enumerate(todo, 1):
@@ -343,7 +373,7 @@ def main(argv):
                             "mic": heard.mic,
                         }, ensure_ascii=False) + "\n")
                 log(f"  {i}/{len(todo)} ✓ {s['seconds']:5.1f}s  {heard.asr[:70]}")
-            time.sleep(GAP_SEC)
+            time.sleep(next(gap))
 
     elapsed = (time.monotonic() - started) / 60
     log(f"done: {done} labelled, {failed} failed, {elapsed:.0f} min")

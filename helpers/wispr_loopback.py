@@ -110,8 +110,10 @@ SAMPLE_RATE = 16000
 TAIL_SEC = float(os.environ.get("WISPR_TAIL_SECONDS", "0.5"))
 # Silence played *before* it, for the opposite reason: Wispr drops the first
 # fraction of a second while its recorder spins up, and the corpus WAVs start on
-# a word.
-LEAD_SEC = float(os.environ.get("WISPR_LEAD_SECONDS", "0.6"))
+# a word. **About a second**, per Victor, who watches the indicator every day —
+# the 0.6 s this used to be was inside that window, so every clip lost its first
+# syllable and the teacher was scored on a word it never heard whole.
+LEAD_SEC = float(os.environ.get("WISPR_LEAD_SECONDS", "1.3"))
 # How long to wait for a transcript after the key comes up. Wispr is a network
 # round-trip plus an LLM formatting pass; measured at 1.5–4 s, and a long clip
 # is slower.
