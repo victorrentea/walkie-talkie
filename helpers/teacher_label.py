@@ -57,6 +57,7 @@ only supervision in this whole corpus that could ever teach the student to
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import sqlite3
@@ -143,13 +144,22 @@ def ensure_columns(db):
     db.commit()
 
 
-def pending(db, limit, sources):
+def pending(db, limit, sources, lo=1.0, hi=120.0, minutes=None):
     """Unlabelled samples, shortest first.
 
     Shortest first is the whole scheduling policy and it is deliberate: the run
     is charged in wall-clock seconds of audio, so the cheap half of the corpus is
     labelled in the first fraction of the night. A batch that is killed early
     therefore leaves the most samples behind it, not the most *minutes*.
+
+    `lo`/`hi` narrow that window. Shortest-first over the whole corpus spends its
+    first hour on two-second fragments, which is the right economics for the
+    fine-tune and the wrong sample for a human checking that the rig works at
+    all — so a demo asks for, say, 6–30 s and gets clips with sentences in them.
+
+    `minutes` is a budget in **audio** minutes rather than a count. "Label ten
+    minutes tonight" is the unit the corpus is measured in and the unit Wispr
+    charges in wall-clock; a `--limit` of 40 is neither.
     """
     marks = ",".join("?" * len(sources))
     rows = db.execute(
@@ -157,11 +167,20 @@ def pending(db, limit, sources):
         f" WHERE source IN ({marks})"
         "   AND (teacher_text IS NULL OR teacher_text = '')"
         "   AND wav IS NOT NULL AND seconds IS NOT NULL"
-        "   AND seconds BETWEEN 1 AND 120"
+        "   AND seconds BETWEEN ? AND ?"
         " ORDER BY seconds ASC" + (" LIMIT ?" if limit else ""),
-        (*sources, limit) if limit else tuple(sources),
+        (*sources, lo, hi, limit) if limit else (*sources, lo, hi),
     ).fetchall()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    if minutes:
+        budget, kept = minutes * 60.0, []
+        for r in out:
+            if budget <= 0:
+                break
+            kept.append(r)
+            budget -= r["seconds"] or 0
+        out = kept
+    return out
 
 
 def main(argv):
@@ -171,6 +190,15 @@ def main(argv):
     ap.add_argument("--device", help="virtual output device (substring)")
     ap.add_argument("--dry-run", action="store_true",
                     help="list what would be dictated, press nothing")
+    ap.add_argument("--min-seconds", type=float, default=1.0,
+                    help="skip clips shorter than this (default 1)")
+    ap.add_argument("--max-seconds", type=float, default=120.0,
+                    help="skip clips longer than this (default 120)")
+    ap.add_argument("--minutes", type=float,
+                    help="stop selecting once this many AUDIO minutes are in "
+                         "the batch — the unit a nightly slice is asked for in")
+    ap.add_argument("--manifest", help="write id/wav/seconds/reference/teacher "
+                                       "as JSONL here, as each label lands")
     ap.add_argument(
         "--source", action="append",
         help="which samples to label (default: addons-mic and whisper-local — "
@@ -186,7 +214,8 @@ def main(argv):
     db.row_factory = sqlite3.Row
     ensure_columns(db)
 
-    todo = pending(db, limit, sources)
+    todo = pending(db, limit, sources, args.min_seconds, args.max_seconds,
+                   args.minutes)
     total_sec = sum(s["seconds"] or 0 for s in todo)
     log(f"{len(todo)} sample(s) to label, {total_sec/60:.0f} min of audio "
         f"→ about {(total_sec + len(todo) * (GAP_SEC + 3))/3600:.1f} h of wall clock")
@@ -252,6 +281,17 @@ def main(argv):
                     (heard.asr, datetime.now(timezone.utc).isoformat(),
                      heard.mic, s["id"]))
                 db.commit()
+                if args.manifest:
+                    # Appended per sample for the same reason the UPDATE is
+                    # committed per sample: a night that dies at 3 a.m. leaves a
+                    # manifest describing exactly what it did label.
+                    with open(args.manifest, "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps({
+                            "id": s["id"], "wav": s["wav"],
+                            "seconds": s["seconds"], "source": s["source"],
+                            "student": s["asr_text"], "teacher": heard.asr,
+                            "mic": heard.mic,
+                        }, ensure_ascii=False) + "\n")
                 log(f"  {i}/{len(todo)} ✓ {s['seconds']:5.1f}s  {heard.asr[:70]}")
             time.sleep(GAP_SEC)
 
