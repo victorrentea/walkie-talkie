@@ -120,10 +120,19 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
-        let final = tagArea(rect, on: screen, of: file, offset: offset, index: index)
-        writeHandoverCopy(of: final)
+        let tagged = tagArea(rect, on: screen, of: file, offset: offset, index: index)
+        writeHandoverCopy(of: tagged.file)
+        // **And the region itself, cut out, unscaled** (2026-09-19, Victor:
+        // *"trimite atât ecranul original + 800px ca până acum, dar și selecția
+        // originală decupată (nescalată)"*). The frame answers *where*, this one
+        // answers *what it says there* — measured in `evals/pointing-proof/`: with
+        // nothing highlighted, the 800 px screen alone names the sentence he framed
+        // 21/28, the screen with a cut-out beside it 15/16. The two are one picture
+        // in every count that matters (the chip, `prune`, `paths`); this file is a
+        // sibling found by name, exactly like `-small`.
+        if let px = tagged.px { writeRegionCopy(of: tagged.file, px: px) }
         prune()
-        return final.path
+        return tagged.file.path
     }
 
     /// `shot#01(area-317x210-to-1204x880px).jpg` — the dragged rectangle **in the
@@ -132,23 +141,82 @@ enum ScreenCapture {
     /// Measured off the JPEG rather than multiplied out of the screen's backing
     /// scale, for `tagCursor`'s reason: the two displays here have different
     /// scales and the file is the only thing that knows which one it came from.
+    ///
+    /// Answers the rectangle it wrote into the name as well as the file, because
+    /// `grabArea` needs the same four numbers to cut the region out and reading
+    /// them back off the string it has just formatted is a parser nobody needs.
+    /// Nil when the frame could not be measured — then there is no rectangle in
+    /// the name either, and nothing to cut to.
     private static func tagArea(_ rect: NSRect, on screen: NSScreen, of file: URL,
-                                offset: TimeInterval?, index: Int?) -> URL {
+                                offset: TimeInterval?, index: Int?) -> (file: URL, px: CGRect?) {
         guard let size = pixelSize(of: file),
               let a = cursorFraction(mouse: NSPoint(x: rect.minX, y: rect.maxY), screen: screen),
               let b = cursorFraction(mouse: NSPoint(x: rect.maxX, y: rect.minY), screen: screen)
-        else { return file }
+        else { return (file, nil) }
         let x1 = Int((a.x * size.width).rounded()), y1 = Int((a.y * size.height).rounded())
         let x2 = Int((b.x * size.width).rounded()), y2 = Int((b.y * size.height).rounded())
         let tagged = unique(file.deletingLastPathComponent()
             .appendingPathComponent("shot\(stem(offset, index))(area-\(x1)x\(y1)-to-\(x2)x\(y2)px).jpg"))
+        let px = CGRect(x: CGFloat(min(x1, x2)), y: CGFloat(min(y1, y2)),
+                        width: CGFloat(abs(x2 - x1)), height: CGFloat(abs(y2 - y1)))
         do {
             try FileManager.default.moveItem(at: file, to: tagged)
-            return tagged
+            return (tagged, px)
         } catch {
             Log.error("could not name \(tagged.lastPathComponent): \(error)")
-            return file
+            return (file, nil)
         }
+    }
+
+    /// Write `<name>-zoom.jpg` beside an area frame: **the rectangle he dragged,
+    /// cut out of that very frame, at its own pixels and not downscaled.**
+    ///
+    /// **Why it is cut out of the frame rather than captured again.** A second
+    /// `screencapture -R` is a second subprocess (~200 ms) photographing a screen
+    /// that has had time to change; this is the same instant by construction. It
+    /// costs a full decode and re-encode — the ~100 ms the burned-in cursor mark
+    /// was removed from `grab` for — which is affordable here and nowhere else:
+    /// `fileArea` already runs on a background queue with the panels down.
+    ///
+    /// **No `-small` for this one, deliberately.** It is the unscaled copy or it
+    /// is nothing — `handover(for:)` falls back to the file itself when no small
+    /// sibling exists, so the clause lists this one as it is. The reading tool
+    /// fits any image to 2000 px on the long edge before it charges for it, so
+    /// the worst a zoom can cost is what a whole retina desktop costs (~3450
+    /// tokens) and a typical band of text is 400–900.
+    @discardableResult
+    private static func writeRegionCopy(of file: URL, px: CGRect) -> URL? {
+        guard px.width >= 2, px.height >= 2 else { return nil }
+        let dst = file.deletingLastPathComponent().appendingPathComponent(
+            file.deletingPathExtension().lastPathComponent + "-zoom.jpg")
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let full = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            Log.error("could not read \(file.lastPathComponent) to cut the region out")
+            return nil
+        }
+        // Clamped to the frame: the rectangle is measured through
+        // `cursorFraction`, so a box drawn hard against an edge can round a pixel
+        // past it, and `cropping(to:)` answers nil for a rect that is not inside.
+        let box = px.intersection(CGRect(x: 0, y: 0, width: full.width, height: full.height))
+        guard !box.isNull, let cut = full.cropping(to: box),
+              let dest = CGImageDestinationCreateWithURL(dst as CFURL, "public.jpeg" as CFString, 1, nil)
+        else {
+            Log.error("could not cut \(Int(px.width))x\(Int(px.height)) out of \(file.lastPathComponent)")
+            return nil
+        }
+        CGImageDestinationAddImage(dest, cut, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        Log.info("✂️ region cut out unscaled — \(cut.width)x\(cut.height)px (\(dst.lastPathComponent))")
+        return dst
+    }
+
+    /// The unscaled cut-out beside an area frame, if one was written. Nil for
+    /// every other picture, which is what makes it safe to ask of all of them.
+    static func zoom(for path: String) -> String? {
+        let url = URL(fileURLWithPath: path)
+        let zoom = url.deletingLastPathComponent().appendingPathComponent(
+            url.deletingPathExtension().lastPathComponent + "-zoom.jpg")
+        return FileManager.default.fileExists(atPath: zoom.path) ? zoom.path : nil
     }
 
     /// True for a frame `grabArea` wrote. Read off the name because the name is
@@ -435,13 +503,16 @@ enum ScreenCapture {
                 at: session,
                 includingPropertiesForKeys: [.contentModificationDateKey],
                 options: [.skipsHiddenFiles])) ?? []
-            // **Frames, not files.** Every shot is now two of them — the retina
-            // capture and the small copy handed to the agent — and counting both
-            // would silently halve a cap that is expressed in pictures. The
-            // sibling is dropped together with the frame it belongs to, below.
+            // **Frames, not files.** A shot is two of them — the retina capture
+            // and the small copy handed to the agent — and an area frame is
+            // three, with the unscaled cut-out of the region (2026-09-19).
+            // Counting the siblings would silently divide a cap expressed in
+            // pictures; they are dropped together with the frame they belong to,
+            // below.
             jpgs += files.filter {
-                $0.pathExtension.lowercased() == "jpg"
-                    && !$0.deletingPathExtension().lastPathComponent.hasSuffix("-small")
+                let stem = $0.deletingPathExtension().lastPathComponent
+                return $0.pathExtension.lowercased() == "jpg"
+                    && !stem.hasSuffix("-small") && !stem.hasSuffix("-zoom")
             }
         }
         defer { dropEmptySessions() }
@@ -454,9 +525,11 @@ enum ScreenCapture {
         }
         for stale in sorted.dropFirst(keepNewest) {
             try? FileManager.default.removeItem(at: stale)
-            let small = stale.deletingLastPathComponent().appendingPathComponent(
-                stale.deletingPathExtension().lastPathComponent + "-small.jpg")
-            try? FileManager.default.removeItem(at: small)
+            for suffix in ["-small.jpg", "-zoom.jpg"] {
+                let sibling = stale.deletingLastPathComponent().appendingPathComponent(
+                    stale.deletingPathExtension().lastPathComponent + suffix)
+                try? FileManager.default.removeItem(at: sibling)
+            }
         }
     }
 

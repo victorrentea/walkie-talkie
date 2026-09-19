@@ -34,6 +34,8 @@ would lock out the next.
 
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 import unittest
@@ -359,6 +361,106 @@ class SelectionMarkers(unittest.TestCase):
         self.assertTrue(extra["inlined"])
         # The whole text is still in the outbox even when it was inlined clamped.
         self.assertEqual(self.line["selection"], self.first)
+
+
+class AreaFrame(unittest.TestCase):
+    """The wheel drag: a whole screen, and the region cut out of it unscaled.
+
+    Since 2026-09-14 the drag sends the **display** with the rectangle in the
+    file's name; since 2026-09-19 it sends the rectangle itself as well, at full
+    size, because `evals/pointing-proof/` measured what the name alone costs — a
+    reader with nothing highlighted names the framed sentence 21/28 from the
+    800 px screen and 15/16 with the cut-out beside it.
+
+    The gesture needs a held middle button and a moving hand, so this drives
+    `POST /test/area`, which enters at `fileArea` — below the crop overlay and
+    above everything that names, cuts, attaches and counts.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        state = _get(BASE, "/test/state")
+        if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
+            raise unittest.SkipTest("a real dictation is in flight — not touching it")
+        target = _get(BASE, "/target")
+        cls.previous = target.get("address") if target.get("bound") else None
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/dictation/start")
+        time.sleep(1)
+        cls.area = _post(BASE, "/test/area")
+        assert cls.area.get("ok"), cls.area
+        time.sleep(1)
+        _post(BASE, "/test/dictation", {"text": "asta e zona pe care o arăt"})
+        for _ in range(10):
+            time.sleep(1)
+            entry = _last_line()
+            if "zona pe care o arăt" in (entry.get("text") or ""):
+                cls.line = entry["line"]
+                return
+            _post(BASE, "/bind", {"tty": NOWHERE})
+        raise AssertionError("the dictation never reached the outbox")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            if cls.previous:
+                _post(BASE, "/bind", {"tty": cls.previous})
+            else:
+                _post(BASE, "/unbind")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _size(path):
+        """Pixels, off the file — `sips`, so this file needs no image library."""
+        out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path],
+                             capture_output=True, text=True).stdout
+        got = dict(line.strip().split(": ") for line in out.splitlines() if ": " in line)
+        return int(got["pixelWidth"]), int(got["pixelHeight"])
+
+    def test_the_frame_is_the_whole_screen_with_the_box_in_its_name(self):
+        # Either stem: `shot#01(…)` when a marker number was reserved for it,
+        # `shot-00:01(…)` when the live source cannot place one (Wispr does not
+        # own the recording, so `audioOffset` is nil) — both ship.
+        # `-N` before the suffix is `ScreenCapture.unique` — a second drag at the
+        # same offset around the same box, which is what a re-run of this file is.
+        self.assertRegex(self.line,
+                         r"shot(#\d\d|-\d\d:\d\d)\(area-\d+x\d+-to-\d+x\d+px\)(-\d+)?-small\.jpg")
+        self.assertIn("I am pointing at that region, not cropping to it", self.line)
+
+    def test_the_cut_out_is_a_row_under_its_frame(self):
+        """Indented, so five drags are five pictures and not ten."""
+        rows = [r for r in self.line.splitlines() if r.lstrip().startswith("- ")]
+        zoom = [i for i, r in enumerate(rows) if "-zoom.jpg" in r]
+        self.assertEqual(len(zoom), 1, rows)
+        self.assertTrue(rows[zoom[0]].startswith("  - "), rows[zoom[0]])
+        self.assertIn("unscaled", rows[zoom[0]])
+        # …and it belongs to the frame immediately above it.
+        stem = rows[zoom[0]].split("-zoom.jpg")[0].strip("  - ")
+        self.assertIn(stem, rows[zoom[0] - 1])
+
+    def test_the_clause_says_the_zoom_is_the_exception_to_the_width(self):
+        self.assertIn("≤800px wide", self.line)
+        self.assertIn("`-zoom` is the exception: it is not scaled at all", self.line)
+        self.assertIn("the screen says where, the zoom says what", self.line)
+
+    def test_the_cut_out_matches_the_rectangle_and_is_not_scaled(self):
+        zoom = self.area["zoom"]
+        self.assertTrue(os.path.exists(zoom), zoom)
+        box = re.search(r"area-(\d+)x(\d+)-to-(\d+)x(\d+)px", zoom)
+        x1, y1, x2, y2 = (int(g) for g in box.groups())
+        self.assertEqual(self._size(zoom), (x2 - x1, y2 - y1))
+        # The 800 px copy is of the *screen*, and the cut-out is wider than it —
+        # which is the whole point of sending it.
+        self.assertLessEqual(self._size(self.area["handed"])[0], 800)
+        self.assertGreater(self._size(zoom)[0], 800)
+
+    def test_one_drag_is_one_picture(self):
+        """The chip counts frames; the siblings are siblings."""
+        entry = _last_line()
+        self.assertEqual(len([p for p in entry.get("paths", []) if "(area-" in p]), 1,
+                         entry.get("paths"))
+        self.assertFalse(any("-zoom" in p for p in entry.get("paths", [])))
 
 
 if __name__ == "__main__":

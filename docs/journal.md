@@ -246,6 +246,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The chip says which microphone, and the menu picks it (2026-09-19)](#the-chip-says-which-microphone-and-the-menu-picks-it-2026-09-19)
 - [The pictures are clean, and it is a measurement now (2026-09-19)](#the-pictures-are-clean-and-it-is-a-measurement-now-2026-09-19)
 - [A box round it, with nothing selected (2026-09-19)](#a-box-round-it-with-nothing-selected-2026-09-19)
+- [The region he framed travels at its own size (2026-09-19)](#the-region-he-framed-travels-at-its-own-size-2026-09-19)
 
 ---
 
@@ -10768,3 +10769,57 @@ to take it. Neither is built — the pointing-versus-cropping call is his.
 a sentence. Scene 2's box was located exactly by both runs that then missed — *"it tightly bounds
 this paragraph's four lines, no more, no less"* — and they quoted the paragraph, which is what the
 box really contains. For a sentence inside a paragraph the highlight is still the instrument.
+
+
+## The region he framed travels at its own size (2026-09-19)
+
+The measurement above ended with a recommendation and no code. Victor read it and picked the
+option: *"Trimite atât ecranul original + 800px ca până acum, dar și selecția originală decupată
+(nescalată)."* So a wheel drag now writes **three** files instead of two:
+
+| file | who it is for |
+|---|---|
+| `shot-1-00:04(area-928x877-to-2528x1357px).jpg` | Victor — the display, retina, as `screencapture` made it |
+| `…-small.jpg` | the agent — 800 px, *where* the region is on the screen |
+| `…-zoom.jpg` | the agent — *what it says there*: that rectangle cut out, **not scaled** |
+
+- **The cut comes out of the frame, not out of a second capture.** `screencapture -R` again is
+  200 ms later and photographs a screen that has had time to move; cropping the JPEG already
+  written is the same instant by construction. It costs a decode and a re-encode — the ~100 ms
+  the burned-in cursor mark was removed from `grab` for — and that is affordable here only
+  because `fileArea` runs on a background queue with the crop panels already down.
+- **No `-small` for the cut-out.** It is the unscaled copy or it is nothing, and
+  `handover(for:)` already falls back to the file itself when no small sibling exists, so the
+  clause lists it as it is. The ceiling is the reader's own: any image is fitted to 2000 px
+  before it is charged for, so the worst a zoom can cost is a retina desktop's ~3450 tokens,
+  and a band of text is 400–900.
+- **One drag is still one picture.** The zoom is a sibling found by name, exactly like `-small`:
+  not in `paths`, not in `📸 ×N`, not counted by `prune` (which now drops both siblings with
+  their frame). In the clause it is an **indented** row under its frame — a flat list of two
+  reads as two shots and puts the `[shot N]` enumeration out by one.
+- **Two sentences in the clause had to move.** The area line said the rectangle was *in that
+  picture's own pixels*, which is false for the 800 px copy the reader is actually holding; it
+  now says *in the pixels of the full-resolution frame*, and adds *its `-zoom` is that rectangle
+  cut out at full size: the screen says where, the zoom says what*. The width note gains *a
+  `-zoom` is the exception: it is not scaled at all*, because a reader told everything is
+  ≤800 px and handed a 1600 px band has been lied to about the one file that matters here.
+  (The `sized` condition measured that better wording does not *fix* the addressing — but a
+  sentence that is wrong is still worth correcting.)
+- **`POST /test/area` is new, and it is why any of this could be checked.** The gesture needs a
+  held middle button and a hand that moves: `/test/gesture` posts chords, and the overlay's own
+  selection is driven by events the tap swallows, so the three files were reachable only by
+  making the drag. The route enters at `fileArea` — below the crop UI, above the naming, the
+  cutting, the marker, the attachment and the chip's count — and answers `frame` · `handed` ·
+  `zoom`. `fileArea` takes a rect and a screen now instead of the module's `Selection`, whose
+  memberwise initialiser is internal to `victor-mac-kit`.
+- **Measured on the running build**, `evals/test_envelope.py::AreaFrame`, 5/5: an 800×240-point
+  drag came back as `area-928x877-to-2528x1357px`, a `-zoom.jpg` of exactly **1600×480**, a
+  handover copy of 800, one indented row under its frame, both new sentences in the note, and
+  one picture in the outbox.
+- **Two older classes in that file are red and were before this change** — `EnvelopeShape` and
+  `SelectionMarkers` both fail their `setUpClass` with *the dictation never reached the outbox*,
+  with this change's class not running at all. They are about the marker rewrite, which moved to
+  timestamps earlier the same day: `/test/dictation` enters below the recogniser, so there are no
+  `words[]` to place a cue against and the inline `(screenshot: shot#01)` those tests assert can
+  no longer be produced by that route. Left alone here; it is the marker change's tail, not this
+  one's.

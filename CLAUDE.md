@@ -139,6 +139,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/dictation` `{"text": …}` | a fabricated transcript, entering exactly where a real one does (pastes `caretLine` in Replace Wispr) |
 | `POST /test/selection` `{"text": …}` | file a highlight as though he had made one — it enters at `fileSelection`, so the offset, the window reading and the frozen-slot rule all run; 409 outside a dictation. The one attachment otherwise unreachable from a desk |
 | `POST /test/dictation/start` | open a dictation without talking, so shot offsets have a zero (a caret one in Replace Wispr) |
+| `POST /test/area` `{"x": …, "y": …, "w": …, "h": …}` | **the wheel drag, without the wheel** (2026-09-19) — global Cocoa points, empty body for a box in the middle of the main screen. Enters at `fileArea`, so the naming, the unscaled cut-out, the marker, the attachment and the chip's count all run; only the crop overlay is skipped, and it is the one part of the gesture a desk cannot drive. Answers `frame` · `handed` · `zoom` |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn from a desk; the folder menu on its own |
 | `POST /test/replace-wispr` `{"on": true}` | the mode behind the forward button |
 | `POST /test/wispr` `{"on": true}` | pretend Wispr Flow opened (or closed) the microphone — the ⚡ ring, the chevrons and the ✕'s cancel, without dictating into another app |

@@ -244,6 +244,18 @@ final class ElementPicker {
     /// Open a dictation the way the microphone coming on does.
     var onTestDictationStart: (() -> Void)?
 
+    /// **The wheel drag, without the wheel** — `POST /test/area`
+    /// `{"x": …, "y": …, "w": …, "h": …}` in global Cocoa points (2026-09-19).
+    ///
+    /// The one gesture in this app that needs a *held middle button and a hand
+    /// moving*: `POST /test/gesture` posts chords and cannot drag, and the
+    /// overlay's own selection is driven by events the tap swallows. So the
+    /// three files a drag produces — the display, its 800 px copy and the
+    /// unscaled cut-out — were only ever checkable by making the gesture. This
+    /// enters at `fileArea`, below the crop UI and above everything that names,
+    /// cuts, attaches and counts, which is the part worth asserting.
+    var onTestArea: ((NSRect?) -> [String: Any])?
+
     /// A fabricated transcript, entering where a real one does.
     var onTestDictation: ((String) -> Void)?
     /// …and the same thing for the ⇧-wheel spawn: `POST /test/spawn`.
@@ -714,6 +726,21 @@ final class ElementPicker {
         case ("POST", "/test/dictation/start"):
             onTestDictationStart?()
             respond(conn, 200, ["ok": true, "listening": true])
+
+        // The wheel drag, without the wheel — see `onTestArea`.
+        case ("POST", "/test/area"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let handler = onTestArea else { return respond(conn, 503, ["error": "no handler"]) }
+            // **The rectangle is optional and the default is the handler's.**
+            // A box in the middle of the main screen needs `NSScreen`, which is
+            // AppKit and a main-thread question; this file is a socket listener
+            // and asks neither. Nil means *pick one for me*.
+            var rect: NSRect?
+            if let x = body?["x"] as? Double, let y = body?["y"] as? Double,
+               let w = body?["w"] as? Double, let h = body?["h"] as? Double {
+                rect = NSRect(x: x, y: y, width: w, height: h)
+            }
+            respond(conn, 200, handler(rect))
 
         // Wispr Flow's microphone, faked — see `onTestWispr`.
         case ("POST", "/test/wispr"):

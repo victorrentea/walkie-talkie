@@ -1635,6 +1635,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.describeTarget = { [weak self] in self?.terminal.target.map { Self.describe($0) } }
         // Enters exactly where a real dictation does, so what it exercises is
         // the real path and not a shortcut through it.
+        // **The wheel drag, without the wheel** (2026-09-19). Enters at
+        // `fileArea`, so the naming, the cut-out, the marker, the attachment and
+        // the chip's count all run exactly as they do for his hand; the crop
+        // overlay is the only thing skipped, and it is the only part of the
+        // gesture a desk cannot drive. Answered synchronously on the listener's
+        // thread — the capture is a subprocess either way, and a route that
+        // returned before the files existed would be a route nobody can assert
+        // against.
+        picker.onTestArea = { [weak self] asked in
+            guard let self = self else { return ["ok": false, "error": "gone"] }
+            guard let main = NSScreen.main else { return ["ok": false, "error": "no screen"] }
+            let rect = asked ?? NSRect(x: main.frame.midX - 400, y: main.frame.midY - 120,
+                                       width: 800, height: 240)
+            let screen = NSScreen.screens.first { $0.frame.intersects(rect) } ?? main
+            let source = WindowContext.describe()
+            guard let frame = self.fileArea(rect, on: screen, takenAt: Date(), source: source) else {
+                return ["ok": false, "error": "area capture failed"]
+            }
+            var answer: [String: Any] = ["ok": true, "frame": frame,
+                                         "handed": ScreenCapture.handover(for: frame)]
+            if let zoom = ScreenCapture.zoom(for: frame) { answer["zoom"] = zoom }
+            return answer
+        }
+
         picker.onTestDictationStart = { [weak self] in
             guard let self = self else { return }
             // **In Replace Wispr it opens a *caret* dictation**, which is the
@@ -5154,6 +5178,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // title inside the list.
         var note = "Each is ≤\(ScreenCapture.handoverWidth)px wide; "
             + "drop the -small for the full-resolution original."
+        // **The cut-out is the exception to the width, so the width has to say
+        // so** (2026-09-19). A reader told everything here is ≤800px and handed
+        // a 1700px band of text has been lied to about the one file whose whole
+        // point is that it was not shrunk.
+        if paths.contains(where: { ScreenCapture.zoom(for: $0) != nil })
+            || screen.flatMap(ScreenCapture.zoom(for:)) != nil {
+            note += " A `-zoom` is the exception: it is not scaled at all."
+        }
         // **The one thing a frame cannot say about itself.** A picture of a
         // region and a picture of a display are both a rectangle of pixels, and
         // nothing inside either says whether its edges are the edges of a
@@ -5168,8 +5200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // same digit. Victor: *"you shouldn't say … it should be obvious"*.
         if paths.contains(where: ScreenCapture.isArea) || screen.map(ScreenCapture.isArea) == true {
             note += " A name with `area-x1xy1-to-x2xy2px` in it is a whole screen "
-                + "with a rectangle I dragged on it, in that picture's own pixels, "
-                + "top-left origin — I am pointing at that region, not cropping to it."
+                + "with a rectangle I dragged on it, in the pixels of the "
+                + "full-resolution frame, top-left origin — I am pointing at that "
+                + "region, not cropping to it. Its `-zoom` is that rectangle cut "
+                + "out at full size: the screen says where, the zoom says what."
         }
 
         // Nothing but the automatic frame — 168 of the 180 dictations in the
@@ -5190,7 +5224,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // belongs, rather than a paragraph of its own.
         // The permission to skip moved up into the clause's opening line, where
         // it covers every frame, so row zero is now just row zero.
-        let opening = screen.map { "- " + described($0) }
+        /// One row, plus an indented one for the unscaled cut-out when the frame
+        /// has one. Indented rather than a row of its own: it is the same
+        /// picture, and a flat list of two would read as two shots and put the
+        /// enumeration `[shot N]` refers to out by one.
+        func rows(for original: String) -> [String] {
+            var out = ["- " + described(original)]
+            if let zoom = ScreenCapture.zoom(for: original) {
+                out.append("  - " + ((zoom as NSString).lastPathComponent)
+                           + " — the region itself, cut out of that frame, unscaled")
+            }
+            return out
+        }
 
         // **One frame per line, under a heading, instead of one long sentence.**
         // Five shots joined with `; ` is a paragraph an agent has to parse back
@@ -5203,7 +5248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // order now — `shot-0-00:00`, `shot-1-00:08`, `shot-2-00:13` — and a list
         // that says out loud what its own rows already show is a line of tokens
         // spent twice.
-        let rows = ([opening].compactMap { $0 } + paths.map { "- " + described($0) })
+        let rows = ((screen.map(rows(for:)) ?? []) + paths.flatMap(rows(for:)))
             .joined(separator: "\n")
         // **One bracket around the whole thing**, like every other clause in the
         // envelope — Victor's mock, 2026-09-14. The words carry the references
@@ -5966,7 +6011,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DispatchQueue.global(qos: .userInitiated).async {
-                    self.fileArea(selection, takenAt: takenAt, source: source)
+                    self.fileArea(selection.rect, on: selection.screen,
+                                  takenAt: takenAt, source: source)
                 }
             }
         }
@@ -5975,8 +6021,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tail of `plusOneShot`, for a rectangle instead of a display: name it
     /// by where in the sentence it was taken, attach it to the dictation in
     /// flight, and let the chip count it.
-    private func fileArea(_ selection: CropSelectionOverlay.Selection,
-                          takenAt: Date, source: String?) {
+    /// Takes the rectangle and its screen rather than the overlay's `Selection`,
+    /// so `POST /test/area` can reach this tail without the crop UI — the
+    /// module's struct has no public initialiser, and the two fields are the
+    /// whole of what this needs.
+    @discardableResult
+    private func fileArea(_ rect: NSRect, on screen: NSScreen,
+                          takenAt: Date, source: String?) -> String? {
         // A dragged rectangle is a picture in the same list and gets the same
         // marker; the gesture it belongs to is the release, which is here.
         let marker = reserveMarker(at: takenAt)
@@ -5986,10 +6037,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.unlock()
         let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
 
-        guard let path = ScreenCapture.grabArea(selection.rect, on: selection.screen,
+        guard let path = ScreenCapture.grabArea(rect, on: screen,
                                                 offset: offset, index: marker) else {
             DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
-            return
+            return nil
         }
 
         stateLock.lock()
@@ -6007,11 +6058,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The sentence ended while he was framing. The picture is still
             // worth having on its own — same rule the shutter follows.
             send(kind: "screenshot", paths: [path])
-            return
+            return path
         }
         armOrphanFlush()
         Log.info("✂️ area attached to in-flight dictation (\(count) picture(s) so far)")
         publishShotCount()
+        return path
     }
 
     // MARK: - Picked elements
