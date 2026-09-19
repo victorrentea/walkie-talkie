@@ -102,6 +102,18 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
                 + sum(LONG_PAUSE_SEC) / 2 / (sum(LONG_PAUSE_EVERY) / 2))
 
 
+def out_of_time(started, budget_hours) -> bool:
+    """Whether the wall-clock budget is spent. No budget is never spent.
+
+    Checked before a sample rather than after one: the cost of the sample about
+    to start is known only as an average, and a twenty-minute clip would
+    otherwise walk straight through the deadline and into somebody's morning.
+    """
+    if not budget_hours:
+        return False
+    return (time.monotonic() - started) >= budget_hours * 3600
+
+
 def gaps(rng=None):
     """Yield the wait after each sample, for ever."""
     rng = rng or random.Random()
@@ -272,6 +284,11 @@ def main(argv):
     ap.add_argument("--minutes", type=float,
                     help="stop selecting once this many AUDIO minutes are in "
                          "the batch — the unit a nightly slice is asked for in")
+    ap.add_argument("--stop-after", type=float, metavar="HOURS",
+                    help="stop dictating after this many hours of WALL CLOCK, "
+                         "whatever is left in the batch — a night is a length, "
+                         "and audio minutes stopped predicting it once the mic "
+                         "clips arrived (a 7.8s clip costs ~18s, a 30s one ~41s)")
     ap.add_argument("--manifest", help="write id/wav/seconds/reference/teacher "
                                        "as JSONL here, as each label lands")
     ap.add_argument(
@@ -336,6 +353,10 @@ def main(argv):
     started = time.monotonic()
     with locks:
         for i, s in enumerate(todo, 1):
+            if out_of_time(started, args.stop_after):
+                log(f"stopping at the {args.stop_after:g} h mark with "
+                    f"{len(todo) - i + 1} left — the rest is the next run's")
+                break
             wav = CORPUS / s["wav"]
             if not wav.exists():
                 log(f"  {i}/{len(todo)} missing {s['wav']} — skipped")

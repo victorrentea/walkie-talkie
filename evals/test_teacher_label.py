@@ -63,5 +63,25 @@ class Lead(unittest.TestCase):
         self.assertGreaterEqual(tl.rig.LEAD_SEC, 1.0)
 
 
+class WallClockBudget(unittest.TestCase):
+    """`--minutes` counts audio; a night counts hours. The two stopped agreeing
+    when 3398 mic clips of 7.8 s each landed in the pool: 300 audio minutes of
+    them is 2300 dictations and nearly twelve hours of wall clock."""
+
+    def test_no_budget_never_stops(self):
+        self.assertFalse(tl.out_of_time(started=0.0, budget_hours=None))
+        self.assertFalse(tl.out_of_time(started=0.0, budget_hours=0))
+
+    def test_a_spent_budget_stops(self):
+        import time
+        self.assertTrue(tl.out_of_time(started=time.monotonic() - 3 * 3600,
+                                       budget_hours=2))
+
+    def test_an_unspent_budget_does_not(self):
+        import time
+        self.assertFalse(tl.out_of_time(started=time.monotonic() - 600,
+                                        budget_hours=7))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
