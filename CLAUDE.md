@@ -149,7 +149,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/scratchpad/park` | move Wispr's Scratchpad window to its corner now — smallest size Wispr allows, bottom-right of the second display (the main one's when there is one), all but an 8 pt sliver off the edge; answers the frame it ended up at |
 | `POST /test/wrap-mode` `{"mode": "scratchpad"｜"sink"｜"off"｜"auto"}` | pick how the relay takes Wispr's words for this run; `auto` hands the decision back to the tick and to Wispr's own configuration. The menu tick follows |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
-| `POST /test/shot-marker` `{"text": …, "available": [1,2], "selections": {"1": "…"}}` · `{"play": 1, "kind": "selection"}` | **the marker's unit test, both halves and both kinds** — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
+| `POST /test/shot-marker` `{"text": …, "available": [1,2], "selections": {"1": "…"}}` · `{"words": [{"text": "label", "start": 15.0, "end": 15.6, "type": "word"}, …], "cues": [{"kind": "shot", "index": 1, "at": 15.7}]}` · `{"play": 1, "kind": "selection"}` | **the marker's unit test, both locators and all three kinds** — the `words`/`cues` form drives `ShotMarker.place` (the tokens stand in for what Scribe returned, the cues for the presses), the rest as below. — the first runs the rewrite that turns the words Wispr heard back into `[shot N]`, with `available` standing in for the pictures really attached; the second says one marker into the Loopback device, so *is the sound reaching Wispr's ear* is answerable from a desk with nothing dictated. Touches nothing in the running relay |
 | `POST /test/wispr-state/simulate` `{"steps": […]}` | **the state machine's unit test** — a fresh `WisprState` with a fake clock, driven by a scripted sequence (`{"input": "chord"｜"stop"｜"poll"｜"notify"｜"row"｜"timeout"｜"reset", "on": …, "status": …, "atMs": …}`), answering with its transitions, the final phase and the two lags. Touches nothing in the running relay |
 | `GET /test/wispr-notes` · `POST /test/wispr-notes` `{"since": <unix s>}` | Wispr Flow's **Scratchpad**, read-only (`WisprNotes`, `Notes` + `NoteVersions`): the GET is the baseline before the chord, the POST the delivery read after it (`{"note": null}` when nothing was written since). Wired to no gesture — the reading half of the candidate wrap |
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
@@ -355,6 +355,7 @@ sits at rest there.
   | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — **on by default**, on a serial queue off the tap thread, 200 ms a character. `POST /test/ax-insert` / `POST /test/key-guard` flip both at runtime |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
   | `WT_SHOT_MARKERS=1` | speak a marker into the recogniser's ear at the shutter — **off since 2026-09-18**, see *Spoken markers* |
+  | `WT_MARKER_TIMESTAMPS=0` | stop placing markers by the recogniser's own word timings — **on since 2026-09-19**, see *Timestamp markers* |
   | `WT_MARKER_DEVICE=<name>` | the output device the marker is played into; substring, default `TO Wispr` |
   | `WT_WISPR_COPY_FALLBACK=1` | re-enable the `copy_last_text` (⌘⌃C) fallback — off by default, and see *Never reintroduce* |
 - **Scratchpad mode, in order** (all measured 2026-09-13/14): **start from CLOSED** — a held chord
@@ -550,6 +551,62 @@ sits at rest there.
 - **Nothing streams here and the live text stays unbuilt** (Victor, 2026-09-18): *"nu mi se pare un
   câștig prea mare … mă va face să mă opresc și să tot corectez ce am scris"*. Speechmatics' partials
   stay on the wire and off the screen.
+
+## Timestamp markers (2026-09-19)
+
+> **The marker is a second, not a sound.** `ShotMarker.place`, on by default,
+> `WT_MARKER_TIMESTAMPS=0` to turn it off. It replaces *Spoken markers* below rather than
+> joining it — `resolvingMarkers` runs one locator or the other, never both.
+
+- **The old idea and the old failure.** A spoken marker works only if the recogniser writes the
+  injected phrase back exactly, and Scribe heard `Pict element one` where `resolve` looks for
+  `Pick`. That is not a phrasing to tune: it fails per engine, per language and per accent, and a
+  fuzzier match moves the threshold rather than removing the class.
+- **Scribe already says where every word was.** `words[]` comes back with `start` and `end` in
+  seconds from the top of the WAV — **the WAV this app recorded** — so a shutter press measured
+  on the same ruler lands between two of them with nothing having to be heard. Measured against
+  the live key on 2026-09-19: `scribe_v2` returns 10 ms resolution and, usefully, a `spacing`
+  token for each gap, so an insertion aimed at one cannot land inside a word. It is free —
+  timings are not billed, and `timestamps_granularity=word` is the default, asked for by name
+  anyway because a default is a thing a vendor may change.
+- **The ruler is the recorder's, not the wall clock's.** `MicRecorder.offset(of:)` counts frames
+  actually written and answers *backwards* — position now, minus the age of the press. The
+  microphone opens after the ring goes up, buffers can drop, and a spliced marker makes the file
+  longer than the clock; all three drift `dictationStartedAt` away from the audio and all three
+  are already in the frame count. Corrected for the buffer in flight (≤ 85 ms at 48 kHz), which
+  is a systematic bias rather than noise.
+- **It works only for a source that owns its recording** — `DictationSource.audioOffset(of:)`,
+  which is ElevenLabs and the local model, not Wispr Flow. Wispr answers nil, no number is
+  reserved, and every frame keeps the `mm:ss` name and the row under the words it always had.
+  That fallback is not a degradation: it is the addressing both marker mechanisms were an
+  optimisation over.
+- **Everything downstream is unchanged.** The number is still reserved at the gesture and still
+  keyed by path (`shotMarkerNumbers`), the file is still named `shot#01(…)`, the rewrite still
+  reads `(screenshot: shot#01)` / `(selected text: "…")` / `(the element)`, and a marker with
+  nothing behind it is still dropped rather than guessed at. `ShotMarker.render` is the one
+  vocabulary both locators share, so the two cannot come to disagree about what a reference reads
+  as.
+- **The corpus copy is his words, untouched.** Nothing was put into this audio, so — unlike the
+  spoken path — there is nothing to take out; `resolvingMarkers(inline: false)` returns the text
+  as it came back.
+- **Cues and no `words[]` places nothing, and must not fall back on `resolve`.** A reply that came
+  back without timings is not an invitation to go looking for a phrase: with the spoken marker
+  retired there is nothing in that audio to find, so every match the regex could make would be
+  words he really said, rewritten into a reference to a picture — the retired failure arriving by
+  the back door. Logged as an error, and the frames keep their rows under the sentence.
+- **`evals/test_marker_place.py` guards the seams** — ten cases through
+  `POST /test/shot-marker`: the gap he left, a press inside a word, before the first word and
+  past the last, two presses one space apart, out-of-order cues, a cue with nothing behind it, a
+  highlight's own indentation, the corpus copy, and that the retired spoken path still works. It
+  touches nothing in the running relay, so it is safe to run mid-workshop. The other half — that a
+  press lands on the recording's own clock — is not fakeable and shows in `relay.log` as
+  `⏱️ marker cue: selection 1 at 1.94s into the recording` (measured against a press made 2.0 s
+  after the microphone opened).
+- **What it does not do: live captions.** Scribe's realtime WebSocket carries the same `words[]`
+  on `committed_transcript_with_timestamps` but **not** on partials, and its committed text is a
+  smaller model's — measured on one clip, batch `scribe_v2` said `label of the tooltip` where
+  realtime committed `label on the tooltip`. Streaming is a separate trade (~1 s of visible lag,
+  $0.39/h against $0.22/h) and it buys nothing for markers. → *Never reintroduce*
 
 ## Spoken markers (2026-09-14) — RETIRED 2026-09-18
 

@@ -128,6 +128,43 @@ protocol DictationSource: AnyObject {
     /// The session is over, whichever way it ended. Always exactly once per
     /// `didBegin`, and after `didTranscribe` when there was one.
     var didEnd: ((DictationEnd) -> Void)? { get set }
+
+    /// **Where in the audio this recogniser will transcribe did that moment
+    /// fall** — nil when the source does not own the recording (2026-09-19).
+    ///
+    /// The one question a timestamp marker needs answered, and the one that
+    /// divides the three sources cleanly: this app's own `MicRecorder` writes
+    /// the file that `ElevenLabsSource` and `LocalWhisperSource` hand to a
+    /// recogniser, so a shutter press can be placed on the same ruler the
+    /// returned word timestamps are measured on. Wispr Flow records in another
+    /// process and answers nil — there is no ruler to share.
+    ///
+    /// Nil is not a failure and is never reported as one: a source that cannot
+    /// place a marker simply does not reserve one, and every picture, highlight
+    /// and pick is still listed under the words by its offset exactly as before.
+    /// → `ShotMarker.place`, `MicRecorder.offset(of:)`
+    func audioOffset(of moment: Date) -> TimeInterval?
+}
+
+/// **One token of a transcript, with the moment it was said** (2026-09-19).
+///
+/// The shape ElevenLabs Scribe returns in `words[]`, kept source-agnostic
+/// because it is not Scribe's idea: a recogniser that owns timings can say where
+/// each word sat in the audio, and that is what lets this app put a screenshot
+/// reference *between two of them* without a marker ever having been heard.
+///
+/// **`spacing` is a token too, and that is the useful part.** The whitespace
+/// between two words arrives as its own entry with its own span, so an insertion
+/// aimed at one lands on a gap he really left rather than inside a word — which
+/// is precisely the damage the spliced marker did (`pus sub un-` / `Strat`).
+struct TimedWord {
+    let text: String
+    let start: TimeInterval
+    let end: TimeInterval
+    /// `type` was `spacing` rather than `word`. Not an enum: the only question
+    /// anything here asks is *is this a gap*, and `audio_event` — the third
+    /// value, off in this app — is a word for every purpose below.
+    let isSpacing: Bool
 }
 
 /// What a source hands back when the words arrive.
@@ -211,6 +248,16 @@ struct DictationResult {
     /// `engine`, which is the stable id the corpus files rows under and must
     /// never become a display string.
     var engineLabel: String = ""
+
+    /// **The transcript with a clock on it**, when the recogniser gave one
+    /// (2026-09-19).
+    ///
+    /// Read by exactly one thing — `AppDelegate.resolvingMarkers`, to put a
+    /// screenshot reference at the word he pressed the shutter at. Nil is the
+    /// ordinary case for a source that returns prose and nothing else, and it
+    /// costs only the fallback everything had before: the frames stay listed
+    /// under the sentence by their offsets. → `ShotMarker.place`
+    var words: [TimedWord]? = nil
 }
 
 /// **Who inserts the text.**
@@ -277,4 +324,8 @@ extension DictationSource {
     /// checks `acceptsAudioMarkers` first — so this is the honest no-op rather
     /// than a fallback anybody relies on.
     func mark(_ kind: ShotMarker.Kind, index: Int) {}
+
+    /// **No, for a source that does not own the recording.** The safe answer for
+    /// any recogniser added later, and the true one for Wispr Flow.
+    func audioOffset(of moment: Date) -> TimeInterval? { nil }
 }

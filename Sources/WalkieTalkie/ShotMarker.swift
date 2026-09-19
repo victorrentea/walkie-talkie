@@ -645,49 +645,23 @@ enum ShotMarker {
             // `selected text below`. Left exactly as it was, whitespace
             // included: only a match this app could have spoken is a match.
             guard let index = index else { continue }
+            // **What this marker becomes, when there is anything behind it** —
+            // the one vocabulary the timestamp path shares with this one, so a
+            // reference cannot come out reading two ways depending on how it was
+            // located. → `render`
+            let described = render(kind, index, shots: shots,
+                                   selections: selections, elements: elements)
+            if described != nil {
+                switch kind {
+                case .shot: foundShots.append(index)
+                case .selection: foundSelections.append(index)
+                case .element: foundElements.append(index)
+                }
+            }
             // A leading space rather than none, because the whitespace that was
             // there has just been eaten; the trailing one closes the gap to the
             // word after. Doubles are tidied below.
-            let replacement: String?
-            switch kind {
-            case .shot:
-                // **`(screenshot: shot#01)`** — Victor's own mock of the
-                // envelope, 2026-09-14. A parenthesis rather than a bracket
-                // because this is an aside inside his sentence and brackets are
-                // what the envelope's *clauses* use; and the frame's real file
-                // name rather than an index, so the reference and the row in the
-                // list below are the same string.
-                // **`inline` governs this arm too** — it did not, and the corpus
-                // paid for it (found in review, 2026-09-14): a Wispr dictation
-                // with one picture filed `pune asta (screenshot: shot#01) sub un
-                // strat` against a recording that contains only `pune asta sub un
-                // strat`. That is precisely the poisoned pair the flag exists to
-                // prevent, and the shot was the one kind still ignoring it.
-                guard shots.contains(index) else { replacement = nil; break }
-                replacement = inline ? String(format: " (screenshot: shot#%02d) ", index) : " "
-                foundShots.append(index)
-            case .selection:
-                guard let selected = selections[index] else { replacement = nil; break }
-                // **Bracketed as well as quoted** (2026-09-14). Bare double
-                // quotes are the ones he might have dictated himself — *"it
-                // seemed to be inserted in dictation, but without clear double
-                // quotes. Clearly delimitate them"* — and they break outright on
-                // a highlight that contains a quote of its own, which a line of
-                // code very often does. The bracket says what it is and cannot
-                // be confused with anything he said.
-                replacement = inline
-                    ? " (selected text: \"\(selected)\") " : " "
-                foundSelections.append(index)
-            case .element:
-                // **The whole description, not a reference.** A picked element
-                // is three short facts — the selector, what it said, the page —
-                // and a reader who has them needs nothing looked up; a `#01`
-                // here would send him to a list to reassemble a sentence he is
-                // already reading.
-                guard let described = elements[index] else { replacement = nil; break }
-                replacement = inline ? " (\(described)) " : " "
-                foundElements.append(index)
-            }
+            let replacement: String? = described.map { inline ? " \($0) " : " " }
             // **A match with nothing behind it is left exactly as it was.**
             //
             // It used to be replaced with a space, which is how one wrong guess
@@ -716,6 +690,207 @@ enum ShotMarker {
                      + "\(selections.keys.sorted()). Left in the words untouched.")
         }
         // The ends are his text's, so trimming them is a seam like any other.
+        return (out.trimmingCharacters(in: .whitespacesAndNewlines),
+                foundShots, foundSelections, foundElements)
+    }
+
+    /// **What a marker turns into in the sentence, or nil when nothing is behind
+    /// it** (2026-09-19, extracted when the timestamp path arrived).
+    ///
+    /// It is one function because it is one vocabulary. The two locators —
+    /// `resolve`, which finds the spoken phrase, and `place`, which finds the
+    /// second — must not be able to disagree about what a located marker *reads
+    /// as*, and two copies of these three format strings is exactly the drift
+    /// the rest of this file is arranged to prevent.
+    ///
+    /// Nil is the safety net and the reason every caller has a fallback: a
+    /// number can be reserved for a capture that then fails, and a reference to
+    /// a picture that does not exist is worse than no reference at all.
+    private static func render(_ kind: Kind, _ index: Int,
+                               shots: Set<Int>,
+                               selections: [Int: String],
+                               elements: [Int: String]) -> String? {
+        switch kind {
+        case .shot:
+            // **`(screenshot: shot#01)`** — Victor's own mock of the envelope,
+            // 2026-09-14. A parenthesis rather than a bracket because this is an
+            // aside inside his sentence and brackets are what the envelope's
+            // *clauses* use; and the frame's real file name rather than an
+            // index, so the reference and the row in the list below are the same
+            // string.
+            guard shots.contains(index) else { return nil }
+            return String(format: "(screenshot: shot#%02d)", index)
+        case .selection:
+            // **Bracketed as well as quoted** (2026-09-14). Bare double quotes
+            // are the ones he might have dictated himself — *"it seemed to be
+            // inserted in dictation, but without clear double quotes. Clearly
+            // delimitate them"* — and they break outright on a highlight that
+            // contains a quote of its own, which a line of code very often does.
+            guard let selected = selections[index] else { return nil }
+            return "(selected text: \"\(selected)\")"
+        case .element:
+            // **The whole description, not a reference.** A picked element is
+            // three short facts — the selector, what it said, the page — and a
+            // reader who has them needs nothing looked up; a `#01` here would
+            // send him to a list to reassemble a sentence he is already reading.
+            guard let described = elements[index] else { return nil }
+            return "(\(described))"
+        }
+    }
+
+    // MARK: - The marker that is a second rather than a sound
+
+    /// **ON since 2026-09-19, and it replaces the spoken marker rather than
+    /// joining it.** `WT_MARKER_TIMESTAMPS=0` turns it off for a run.
+    ///
+    /// The spoken marker was retired the day before (`isEnabled`) for a reason
+    /// that was never about the phrasing: it worked only if the recogniser wrote
+    /// the injected words back **exactly**, and no recogniser promises that.
+    /// Scribe heard *Pict* where `resolve` looked for *Pick*, and the marker
+    /// stayed in the prompt as noise.
+    ///
+    /// This does not ask the recogniser to hear anything. Scribe returns every
+    /// word with a `start` measured from the top of the WAV — the same WAV this
+    /// app recorded and therefore has a clock on — so the press at 6.4 s goes
+    /// between the word that ended at 6.31 and the one that begins at 6.48. The
+    /// failure mode that killed the old mechanism cannot occur: there is nothing
+    /// to mishear, nothing is added to the audio, and no word is cut in half.
+    ///
+    /// What it costs is that it only works for a source that owns its recording
+    /// — `DictationSource.audioOffset(of:)` — which is the two engines that call
+    /// an API and not the one that drives an app.
+    static var usesTimestamps: Bool {
+        // **Never both.** With `WT_SHOT_MARKERS=1` the phrase really is in the
+        // audio, so the recogniser really does write it into the words — and
+        // placing by the clock would leave `screenshot one` sitting in the
+        // sentence beside the reference it turned into. The spoken path knows
+        // how to take its own phrase out; this one has nothing to take out and
+        // must not be asked to try.
+        guard !isEnabled else { return false }
+        return ProcessInfo.processInfo.environment["WT_MARKER_TIMESTAMPS"] != "0"
+    }
+
+    /// **One press, filed where it fell in the recording.**
+    ///
+    /// Reserved at the gesture like the spoken marker's number was, and for the
+    /// same reason: two shutter presses a third of a second apart can finish
+    /// filing in the other order, and a position read off a list later would
+    /// name the wrong frame.
+    struct Cue {
+        let kind: Kind
+        let index: Int
+        /// Seconds from the top of the WAV — `MicRecorder.offset(of:)`, the same
+        /// ruler `TimedWord.start` is measured on.
+        let at: TimeInterval
+    }
+
+    /// **Put each marker where the clock says it belongs, in a transcript that
+    /// came back with timings** (2026-09-19).
+    ///
+    /// The whole of it is: find the first token that had not yet begun when he
+    /// pressed, and insert in front of it. Everything else here is about the
+    /// seam.
+    ///
+    /// - Parameter words: the transcript as tokens, `spacing` included — the
+    ///   gaps are what make an insertion land between words rather than inside
+    ///   one, so they must not be filtered out before this.
+    /// - Parameter cues: every press of this dictation, in any order.
+    /// - Parameter inline: false is the **corpus** copy and returns his words
+    ///   untouched. Nothing was ever added to this audio, so unlike the spoken
+    ///   path there is nothing to take out — but the paragraph he had
+    ///   highlighted must still not be filed as though he had said it.
+    /// - Returns: the same shape `resolve` returns, so the caller cannot tell
+    ///   which locator ran.
+    static func place(words: [TimedWord], cues: [Cue],
+                      shots: Set<Int> = [],
+                      selections: [Int: String] = [:],
+                      elements: [Int: String] = [:],
+                      inline: Bool = true)
+        -> (text: String, shots: [Int], selections: [Int], elements: [Int]) {
+        let spoken = words.map(\.text).joined()
+        guard inline, !cues.isEmpty, !words.isEmpty else { return (spoken, [], [], []) }
+
+        /// Where this cue goes: in front of the first token that had not started
+        /// yet. `>=` rather than `>` so a press in the gap before a word belongs
+        /// *to* that word — which is how he uses it, pressing as he arrives at
+        /// the thing he is about to talk about.
+        func slot(_ at: TimeInterval) -> Int {
+            words.firstIndex { $0.start >= at } ?? words.count
+        }
+        // Spelled out rather than chained: the same two lines as one expression
+        // are what the type checker gave up on (2026-09-19).
+        var ordered: [(cue: Cue, slot: Int)] = []
+        for cue in cues { ordered.append((cue: cue, slot: slot(cue.at))) }
+        ordered.sort { a, b in
+            a.slot == b.slot ? a.cue.at < b.cue.at : a.slot < b.slot
+        }
+
+        // **The seams are tidied, the insertions are not** — `resolve`'s rule and
+        // its reason: a highlight of four lines of Java must arrive with its
+        // indentation, and his own words must not arrive with a doubled space
+        // where something was taken out from between them.
+        var pieces: [(text: String, verbatim: Bool)] = []
+        var buffer = ""
+        var foundShots: [Int] = []
+        var foundSelections: [Int] = []
+        var foundElements: [Int] = []
+        var dropped = 0
+        /// The whitespace after an insertion belongs to the insertion, which has
+        /// just supplied its own. Stays armed until something that is not a space
+        /// has been written, so a `spacing` token is swallowed whole.
+        var swallowSpace = false
+
+        func insert(_ rendered: String) {
+            // The gap in front is eaten the way the spoken path's `\s*` ate it.
+            while buffer.last?.isWhitespace == true { buffer.removeLast() }
+            if !buffer.isEmpty { pieces.append((buffer, false)); buffer = "" }
+            // No leading space at the very start of the text, and none after
+            // another insertion that already ends in one — two markers on the
+            // same word would otherwise be two spaces apart.
+            let lead = (pieces.last?.text.last?.isWhitespace ?? true) ? "" : " "
+            pieces.append((lead + rendered + " ", true))
+            swallowSpace = true
+        }
+
+        var next = 0
+        var i = 0
+        while true {
+            while next < ordered.count, ordered[next].slot <= i {
+                let cue = ordered[next].cue
+                next += 1
+                guard let rendered = render(cue.kind, cue.index, shots: shots,
+                                            selections: selections, elements: elements) else {
+                    // A number with nothing behind it — a capture that failed, a
+                    // highlight that was never filed. It costs nothing here: the
+                    // thing simply keeps the line it has always had under the
+                    // words.
+                    dropped += 1
+                    continue
+                }
+                switch cue.kind {
+                case .shot: foundShots.append(cue.index)
+                case .selection: foundSelections.append(cue.index)
+                case .element: foundElements.append(cue.index)
+                }
+                insert(rendered)
+            }
+            guard i < words.count else { break }
+            var text = words[i].text
+            if swallowSpace {
+                while text.first?.isWhitespace == true { text.removeFirst() }
+                if !text.isEmpty { swallowSpace = false }
+            }
+            buffer += text
+            i += 1
+        }
+        if !buffer.isEmpty { pieces.append((buffer, false)) }
+
+        let out = pieces.map { $0.verbatim ? $0.text : tidy($0.text) }.joined()
+        if dropped > 0 {
+            Log.info("markers: \(dropped) cue(s) had nothing behind them — have shots "
+                     + "\(shots.sorted()), selections \(selections.keys.sorted()), "
+                     + "elements \(elements.keys.sorted()). Left out of the words.")
+        }
         return (out.trimmingCharacters(in: .whitespacesAndNewlines),
                 foundShots, foundSelections, foundElements)
     }

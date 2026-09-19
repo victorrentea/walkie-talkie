@@ -540,6 +540,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `screenshot four` for no reason a listener could reconstruct.
     private var markersSpoken: [ShotMarker.Kind: Int] = [:]
 
+    /// **Every press of this dictation, stamped where it fell in the recording**
+    /// (2026-09-19) — the input to `ShotMarker.place`.
+    ///
+    /// The spoken marker put the position *in the audio* and hoped the
+    /// recogniser would write it back; this keeps the position here, where
+    /// nothing can mishear it, and matches it against the word timings the
+    /// recogniser returns anyway. Same lifecycle as `markersSpoken`, which it is
+    /// reset beside everywhere: it describes one sentence.
+    private var markerCues: [ShotMarker.Cue] = []
+
     /// **Which selection markers made it into the words.** Filled by
     /// `resolvingMarkers` at delivery and read when the envelope is built: a
     /// highlight whose marker landed is already *in* the sentence, quoted where
@@ -569,6 +579,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// into the device it listens to, the local model splices into the file it
     /// transcribes. → `DictationSource.mark`
     private var markMarker: ((ShotMarker.Kind, Int) -> Void)?
+
+    /// **Where in the recording a moment fell, or nil when this source has no
+    /// recording of its own** (2026-09-19).
+    ///
+    /// Published beside `markMarker` and for exactly its reason: the shutter
+    /// runs on `DispatchQueue.global()` and may not read `source`, which the
+    /// main thread reassigns. The two are the two mechanisms — one puts a sound
+    /// in the audio, the other reads a clock off it — and a source answers for
+    /// at most one of them. → `DictationSource.audioOffset(of:)`
+    private var markerClock: ((Date) -> TimeInterval?)?
     /// When each deliberate shot was taken, in seconds since this dictation
     /// opened — parallel to `pendingShots`, written under the same lock.
     ///
@@ -989,6 +1009,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it; `setEngine` is what decides, and it tells the row back what is
         // actually running — see its note on the sentence in flight.
         status.onPickEngine = { [weak self] id in self?.setEngine(id) }
+        // **The microphone picker** (2026-09-19). Three closures and no state of
+        // its own: the menu asks what is plugged in and what would record, and
+        // hands back an id. The preference lives in `InputDevice` beside the
+        // matching table, because the thing that resolves a pick into a device
+        // is the only thing that can say whether the pick is still possible.
+        status.micAvailable = { InputDevice.availableIds() }
+        status.micCurrentLabel = { InputDevice.currentShortLabel() }
+        status.onPickMic = { [weak self] id in self?.setMicrophone(id) }
+        status.setMic(InputDevice.chosenId)
+        // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
+        // the row and the gesture must not be able to drift apart. It exists for
+        // `Start Dictation`'s reason: the gesture lives in a Logi Options+
+        // profile, and a Mac without that profile has no other way in.
+        status.onToggleScreenRecording = { [weak self] in
+            DispatchQueue.main.async { self?.toggleFilm() }
+        }
+        status.isFilming = { [weak self] in self?.film != nil }
         // 🔽 ↑ — the screen recording. Hops to main because everything it
         // touches (the film, the overlay, the pending state) is main's.
         hotkeys.onGestureFilm = { [weak self] in
@@ -1210,11 +1247,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for (key, value) in (body["selections"] as? [String: String]) ?? [:] {
                 if let index = Int(key) { selections[index] = value }
             }
+            var elements: [Int: String] = [:]
+            for (key, value) in (body["elements"] as? [String: String]) ?? [:] {
+                if let index = Int(key) { elements[index] = value }
+            }
             let inline = (body["inline"] as? Bool) ?? true
-            let resolved = ShotMarker.resolve(text: text, shots: available,
-                                              selections: selections, inline: inline)
+            // **The timestamp path, driven the same way the spoken one is**
+            // (2026-09-19). `{"words": [{"text": "label", "start": 15.0, "end":
+            // 15.6, "type": "word"}, …], "cues": [{"kind": "shot", "index": 1,
+            // "at": 15.7}]}` — the tokens stand in for what Scribe returned and
+            // the cues for the presses, which is the whole of what `place`
+            // needs. Without it the only way to exercise the mechanism is to
+            // talk at a microphone for twenty seconds, and the seam it has to
+            // get right — the gap in front of the insertion, the space after —
+            // is not a thing anybody can eyeball reliably.
+            let cues: [ShotMarker.Cue] = ((body["cues"] as? [[String: Any]]) ?? []).compactMap {
+                guard let kind = ShotMarker.Kind(rawValue: ($0["kind"] as? String) ?? "shot"),
+                      let index = $0["index"] as? Int,
+                      let at = $0["at"] as? Double else { return nil }
+                return ShotMarker.Cue(kind: kind, index: index, at: at)
+            }
+            let words: [TimedWord] = ((body["words"] as? [[String: Any]]) ?? []).compactMap {
+                guard let text = $0["text"] as? String,
+                      let start = $0["start"] as? Double,
+                      let end = $0["end"] as? Double else { return nil }
+                return TimedWord(text: text, start: start, end: end,
+                                 isSpacing: ($0["type"] as? String) == "spacing")
+            }
+            let resolved = cues.isEmpty
+                ? ShotMarker.resolve(text: text, shots: available,
+                                     selections: selections, elements: elements, inline: inline)
+                : ShotMarker.place(words: words, cues: cues, shots: available,
+                                   selections: selections, elements: elements, inline: inline)
             return ["text": resolved.text, "found": resolved.shots,
-                    "selections": resolved.selections]
+                    "selections": resolved.selections, "elements": resolved.elements]
         }
         picker.onTestWisprStateSimulate = { steps in WisprStateSimulation.run(steps) }
         // Wispr's Scratchpad note, read — see `WisprNotes`. Read-only and wired
@@ -2006,6 +2072,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.lock()
         markMarker = source.acceptsAudioMarkers
             ? { [weak source] kind, index in source?.mark(kind, index: index) } : nil
+        markerClock = { [weak source] moment in source?.audioOffset(of: moment) }
         stateLock.unlock()
         Log.info("dictation source: \(source.name)")
     }
@@ -2214,9 +2281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// transcript enters exactly where a real one does — and it enters *below*
     /// `deliver`, so a rewrite living only there would be the one thing no test
     /// could reach.
-    private func resolvingMarkers(_ text: String, inline: Bool = true) -> String {
+    private func resolvingMarkers(_ text: String, words: [TimedWord]? = nil,
+                                  inline: Bool = true) -> String {
         stateLock.lock()
         let marked = Set(shotMarkerNumbers.values)
+        let cues = markerCues
         // **The highlight as it was at that moment, not as it is now.** Both
         // slots are still pending here — `send` and `caretLine` drain them a
         // beat later — and each carries the number this app said out loud when
@@ -2259,9 +2328,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elements[marker] = pick.inlineDescription
         }
         stateLock.unlock()
-        let resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
-                                          elements: elements,
-                                          inline: inline)
+
+        // **Which locator runs, and never both** (2026-09-19). A sentence that
+        // happens to contain the words *screenshot one* must not be rewritten
+        // twice, and the timestamp path has already placed everything it knows
+        // about — running the regex after it would be the relay guessing at a
+        // phrase it no longer needs to guess at.
+        //
+        // **Cues and no timings is neither, and that is deliberate.** It is the
+        // reply that came back without `words[]` — a vendor default that moved,
+        // an older model — and the tempting fallback is to let `resolve` have a
+        // go at the text. It must not: with the spoken marker retired there is
+        // no phrase in that audio to find, so every match `resolve` could make
+        // would be words Victor really said, rewritten into a reference to a
+        // picture. That is the precise failure the spoken marker was retired
+        // for, arriving by the back door. The frames keep the rows under the
+        // sentence, which is the fallback that has always been there.
+        let resolved: (text: String, shots: [Int], selections: [Int], elements: [Int])
+        if cues.isEmpty {
+            resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
+                                          elements: elements, inline: inline)
+        } else if let words = words, !words.isEmpty {
+            // Nothing was put into this audio, so the corpus copy has nothing to
+            // have taken out of it. (The spoken path *did* put something in,
+            // which is why it still has to be asked.) → `deliver`
+            if !inline { return text }
+            resolved = ShotMarker.place(words: words, cues: cues, shots: marked,
+                                        selections: selections, elements: elements,
+                                        inline: inline)
+        } else {
+            Log.error("markers: \(cues.count) cue(s) and no word timings from the "
+                      + "recogniser — the frames stay listed under the sentence")
+            if !inline { return text }
+            resolved = (text, [], [], [])
+        }
         guard inline else { return resolved.text }
         if !resolved.shots.isEmpty {
             Log.info("📣 \(resolved.shots.count) shot marker(s) placed in the words: "
@@ -2306,7 +2406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // honest about a clip with two seconds in it he did not say.
         // → `DictationResult.markersInAudio`
         let spokenText = result.text
-        result.text = resolvingMarkers(result.text)
+        result.text = resolvingMarkers(result.text, words: result.words)
         // **The corpus gets neither the marker nor the paragraph.** Wispr's
         // recording heard the marker and the relay's did not; *neither* of them
         // heard the text he had highlighted, which this app has just written
@@ -2314,7 +2414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the one with the selection markers taken out and nothing put in their
         // place — the words as he actually said them.
         let corpusText = result.markersInAudio
-            ? spokenText : resolvingMarkers(spokenText, inline: false)
+            ? spokenText : resolvingMarkers(spokenText, words: result.words, inline: false)
 
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
@@ -2880,6 +2980,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotSources = [:]
         shotMarkerNumbers = [:]
         markersSpoken = [:]
+        markerCues = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -3243,6 +3344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shotSources = [:]
         shotMarkerNumbers = [:]
         markersSpoken = [:]
+        markerCues = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
@@ -4775,6 +4877,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (the numbers live in the file names now — `ScreenCapture.stem`)
         shotMarkerNumbers = [:]
         markersSpoken = [:]
+        markerCues = []
         // Read before it is cleared: `deliver` has already rewritten the words
         // with whichever highlights it found markers for, and this is the list
         // of rows the clause below must therefore not repeat.
@@ -5566,7 +5669,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // no number at all. Nil whenever the marker cannot be said — no source
         // that hears one, past the ceiling — and the highlight then keeps the
         // line under the words it has always had.
-        let marker = novel ? reserveMarkerLocked(.selection) : nil
+        // The gesture's own moment, rebuilt from the offset the caller sampled
+        // at it: `opened` is this dictation's zero and `offset` is how far into
+        // it he was. A `Date()` here would be the moment the AX read *finished*.
+        let at = (opened ?? Date()).addingTimeInterval(offset)
+        let marker = novel ? reserveMarkerLocked(.selection, at: at) : nil
         if fillsTheBlank {
             pendingSelection = text
             pendingSelectionAt = offset
@@ -5651,9 +5758,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// injected sound (`acceptsAudioMarkers`), or past `maximumIndex`; in every
     /// one of those the picture is still taken, attached and listed by its
     /// offset exactly as before.
-    private func reserveMarker() -> Int? {
+    private func reserveMarker(at moment: Date) -> Int? {
         stateLock.lock()
-        let number = reserveMarkerLocked(.shot)
+        let number = reserveMarkerLocked(.shot, at: moment)
         stateLock.unlock()
         guard let number = number else { return nil }
         speakMarker(.shot, number)
@@ -5668,11 +5775,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The counter is advanced whether or not the number is usable, so the
     /// eleventh thing of a sentence is silent rather than a second `ten`.
     /// - Precondition: `stateLock` is held.
-    private func reserveMarkerLocked(_ kind: ShotMarker.Kind) -> Int? {
-        guard ShotMarker.isEnabled, dictationInFlight, markMarker != nil else { return nil }
+    private func reserveMarkerLocked(_ kind: ShotMarker.Kind, at moment: Date) -> Int? {
+        guard dictationInFlight else { return nil }
+        // **Two mechanisms, and a number is only worth reserving if one of them
+        // can place it** (2026-09-19). The spoken marker needs a source that can
+        // *hear* one; the timestamp needs a source that owns the recording and
+        // can therefore say where this moment fell in it. Neither, and there is
+        // nothing to reserve — the picture is still taken, still attached, and
+        // still listed under the words by its offset, which is the addressing
+        // both of these were an optimisation over.
+        //
+        // The offset is read **here** rather than at delivery because here is
+        // where the gesture is: `markerClock` answers for a moment in the recent
+        // past, but the recording it is asking about has to still be open.
+        let at = ShotMarker.usesTimestamps ? (markerClock?(moment) ?? nil) : nil
+        let audible = ShotMarker.isEnabled && markMarker != nil
+        guard audible || at != nil else { return nil }
         let number = (markersSpoken[kind] ?? 0) + 1
         markersSpoken[kind] = number
         guard number <= ShotMarker.maximumIndex else { return nil }
+        if let at = at {
+            markerCues.append(ShotMarker.Cue(kind: kind, index: number, at: at))
+            // **The second is logged because it is the number that says whether
+            // this works.** Everything else about a timestamp marker is
+            // invisible until the transcript comes back: if the offset is wrong
+            // the reference simply lands a clause away, which reads like the
+            // recogniser's fault and is not. Against the `start` of the words in
+            // the same reply, this line is the whole diagnosis.
+            Log.info(String(format: "⏱️ marker cue: %@ %d at %.2fs into the recording",
+                            kind.rawValue, number, at))
+        }
         return number
     }
 
@@ -5680,6 +5812,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the source's own wait for a gap in his speech happens on `ShotMarker`'s
     /// queue behind it.
     private func speakMarker(_ kind: ShotMarker.Kind, _ number: Int) {
+        // **The retired half.** A number is now reserved for the timestamp path
+        // too, and that path must not put a sound anywhere near his sentence —
+        // its whole claim is that the audio is untouched. → `ShotMarker.isEnabled`
+        guard ShotMarker.isEnabled else { return }
         stateLock.lock()
         let mark = markMarker
         stateLock.unlock()
@@ -5701,7 +5837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Beside the flash and for its reason: the confirmation — the one he
         // sees and the one Wispr hears — belongs on the keypress, not on the
         // subprocess.
-        let marker = reserveMarker()
+        let marker = reserveMarker(at: takenAt)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -5843,7 +5979,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           takenAt: Date, source: String?) {
         // A dragged rectangle is a picture in the same list and gets the same
         // marker; the gesture it belongs to is the release, which is here.
-        let marker = reserveMarker()
+        let marker = reserveMarker(at: takenAt)
         stateLock.lock()
         let openNow = dictationInFlight
         let startedAt = dictationStartedAt
@@ -5912,7 +6048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A drag that amended the press above keeps the press's marker, because
         // the relay already said that number out loud.
         var pick = pick
-        pick.marker = amended ?? reserveMarkerLocked(.element)
+        pick.marker = amended ?? reserveMarkerLocked(.element, at: pick.at)
         pendingPicks.append(pick)
         pruneStalePicks()
         let count = pendingPicks.count
@@ -6428,6 +6564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let markerNumbers = shotMarkerNumbers
         shotMarkerNumbers = [:]
         markersSpoken = [:]
+        markerCues = []
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false

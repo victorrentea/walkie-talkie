@@ -218,6 +218,12 @@ final class ElevenLabsSource: DictationSource {
     /// Reset at `start()`, because it describes one recording.
     private var markersInAudio = false
 
+    /// **Yes — the file this uploads is the file this recorded**, so a moment on
+    /// the wall clock and a `start` in the reply are two readings of one ruler.
+    /// This is the half that makes `ShotMarker.place` possible here and not in
+    /// `WisprFlowSource`. → `MicRecorder.offset(of:)`
+    func audioOffset(of moment: Date) -> TimeInterval? { meter.offset(of: moment) }
+
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
@@ -281,7 +287,7 @@ final class ElevenLabsSource: DictationSource {
                         text: r.text, language: r.language, audio: wav, duration: duration,
                         engine: "elevenlabs", warning: Self.warning(for: r), delivery: .route,
                         via: "elevenlabs-scribe", markersInAudio: self.markersInAudio,
-                        engineLabel: self.displayModelName))
+                        engineLabel: self.displayModelName, words: r.words))
                     self.phase = .done("formatted")
                     self.didEnd?(.delivered)
                 }
@@ -347,6 +353,11 @@ final class ElevenLabsSource: DictationSource {
         let text: String
         let language: String?
         let languageProbability: Double
+        /// **Every token with the second it was said at**, straight out of
+        /// `words[]` (2026-09-19). The thing that lets a screenshot reference
+        /// land at the word he pressed the shutter at without a marker ever
+        /// having been in the audio. → `ShotMarker.place`
+        let words: [TimedWord]
     }
 
     enum Outcome {
@@ -377,6 +388,12 @@ final class ElevenLabsSource: DictationSource {
         // middle of a prompt bound for an agent.
         field("diarize", "false")
         field("tag_audio_events", "false")
+        // **Asked for by name although it is the default.** It is the input the
+        // whole marker mechanism rests on, and a default is a thing a vendor may
+        // change; a transcript that quietly stopped carrying timings would show
+        // up as markers silently falling back to the list at the end, which is
+        // the failure nobody notices. Free — timings are not billed.
+        field("timestamps_granularity", "word")
 
         guard let audio = try? Data(contentsOf: wav) else {
             return done(.failure("the recording could not be read — \(wav.lastPathComponent)"))
@@ -417,9 +434,21 @@ final class ElevenLabsSource: DictationSource {
                   let text = json["text"] as? String else {
                 return done(.failure("unreadable reply from ElevenLabs"))
             }
+            // **Not trimmed, unlike `text`.** The tokens are the ruler the
+            // markers are placed against, and dropping the leading whitespace
+            // from the string while leaving it in the list would put every
+            // insertion a token out. `place` trims the result at the end.
+            let words: [TimedWord] = ((json["words"] as? [[String: Any]]) ?? []).compactMap { w in
+                guard let text = w["text"] as? String,
+                      let start = w["start"] as? Double,
+                      let end = w["end"] as? Double else { return nil }
+                return TimedWord(text: text, start: start, end: end,
+                                 isSpacing: (w["type"] as? String) == "spacing")
+            }
             done(.success(Result(text: text.trimmingCharacters(in: .whitespacesAndNewlines),
                                  language: json["language_code"] as? String,
-                                 languageProbability: json["language_probability"] as? Double ?? 0)))
+                                 languageProbability: json["language_probability"] as? Double ?? 0,
+                                 words: words)))
         }.resume()
     }
 

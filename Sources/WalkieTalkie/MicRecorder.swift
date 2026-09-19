@@ -72,6 +72,34 @@ final class MicRecorder {
     }
     private var voiced: TimeInterval = 0
 
+    /// **Where in this recording a moment fell** — seconds from the top of the
+    /// WAV, or nil when nothing is being recorded (2026-09-19).
+    ///
+    /// This is the number the whole timestamp marker rests on, and it is asked
+    /// *backwards* on purpose: the caller is a shutter press being filed a beat
+    /// after it happened, and what it knows is the `Date` it happened at. Taking
+    /// the position now and subtracting the age of the press is exact where
+    /// "how long since the recording started" is not — the microphone opens
+    /// after the ring goes up, buffers can be dropped, and a marker spliced in
+    /// makes the file longer than the clock. All three drift the two apart, and
+    /// all three are already in `writtenFrames`.
+    ///
+    /// - Parameter moment: when the gesture happened, sampled at the gesture.
+    /// - Returns: seconds into the file, never negative — a press from before
+    ///   the microphone opened belongs at the very beginning, which is where
+    ///   `0` puts it.
+    func offset(of moment: Date) -> TimeInterval? {
+        lock.lock(); defer { lock.unlock() }
+        guard isRecording, file != nil else { return nil }
+        let written = Double(writtenFrames) / Self.fileFormat.sampleRate
+        // The buffer in flight: audio that has been spoken but not yet written.
+        // Clamped, because a stalled input would otherwise let this run away
+        // past the end of a file that is not growing.
+        let inFlight = lastAppendAt.map { min(Date().timeIntervalSince($0), 0.25) } ?? 0
+        let now = written + inFlight
+        return max(0, now - Date().timeIntervalSince(moment))
+    }
+
     /// **How loud he is right now, 0…1** — the readout `RecordingBeacon` lights
     /// on, updated on the audio thread with every buffer.
     ///
@@ -318,6 +346,8 @@ final class MicRecorder {
         quiet = 0
         live = 0
         noiseFloor = -1
+        writtenFrames = 0
+        lastAppendAt = nil
         isRecording = true
         Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
@@ -394,6 +424,26 @@ final class MicRecorder {
     /// How many seconds of this recording are not his, so `stop()` can report a
     /// duration that still matches the file.
     private var inserted: TimeInterval = 0
+
+    /// **How many frames are in the file so far** — his and any spliced in, in
+    /// the order they were written (2026-09-19).
+    ///
+    /// It exists so `offset(of:)` can answer *where in this recording was that
+    /// moment*, which is the whole of the timestamp marker: a recogniser hands
+    /// back every word with a `start` measured from the top of this file, so a
+    /// shutter press addressed the same way lands between two of them without
+    /// anything having to be *heard*. → `ShotMarker.place`
+    ///
+    /// Counted rather than read off `AVAudioFile.length`: the write happens
+    /// outside the lock (see `append`), so reading the file's own length from
+    /// the gesture's thread would be a race against CoreAudio's.
+    private var writtenFrames: AVAudioFramePosition = 0
+
+    /// When the last buffer was written, so `offset(of:)` can correct for the
+    /// one that has not arrived yet. Buffers land every 4096 frames — 85 ms at
+    /// 48 kHz — and without this the answer is *systematically* that much early
+    /// rather than merely imprecise.
+    private var lastAppendAt: Date?
 
     private func takeInserts() -> [AVAudioPCMBuffer] {
         lock.lock(); defer { lock.unlock() }
@@ -491,6 +541,14 @@ final class MicRecorder {
             for marker in spliced { sink(marker) }
             sink(out)
         }
+        // **After the write and before the meter**, which is the order the whole
+        // of `append` is in: the file is the product and this is a fact *about*
+        // the file, so it may only be advanced by frames that reached it.
+        lock.lock()
+        writtenFrames += AVAudioFramePosition(out.frameLength)
+            + spliced.reduce(0) { $0 + AVAudioFramePosition($1.frameLength) }
+        lastAppendAt = Date()
+        lock.unlock()
         meter(out)
     }
 
