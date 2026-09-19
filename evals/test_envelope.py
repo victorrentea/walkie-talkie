@@ -273,9 +273,24 @@ class FrameList(unittest.TestCase):
         self.assertNotIn("picked element one", self.line)
         self.assertNotIn("element picked in Chrome during dictation", self.line)
 
-    def test_the_hint_names_the_recogniser_and_drops_the_warning(self):
-        self.assertIn("dictated and transcribed in RO or EN by ", self.line)
+    def test_the_hint_is_four_words_and_names_no_recogniser(self):
+        """`[Dictated in RO or EN]`, and the engine is not in it (2026-09-19).
+
+        The **negative** half is the one worth a test. This clause rides on every
+        single dictation, so anything added to it is paid for on every sentence
+        this relay ever sends — and the recogniser's name has already been put
+        in once (2026-09-14) and taken back out once, for cost. Victor:
+        *"Altfel ma costa rau."* Asserting the wording alone would let a
+        well-meaning ` by Scribe (scribe_v2)` back in without a word.
+        """
+        self.assertIn("[Dictated in RO or EN]", self.line)
+        self.assertNotIn("transcribed", self.line)
         self.assertNotIn("hallucinate", self.line)
+        # The engine of the relay under test, whichever it is, must not appear.
+        engine = _get(BASE, "/engine")
+        for name in (engine.get("source"), engine.get("engine")):
+            if name:
+                self.assertNotIn(name, self.line)
 
 
 class SelectionMarkers(unittest.TestCase):

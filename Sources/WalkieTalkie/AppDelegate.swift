@@ -969,7 +969,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// **Which recogniser produced these words** (`DictationResult.engine`),
         /// carried for `via`'s reason: the panel holds every prompt for seconds
         /// and the engine is a menu row that may have been switched by then.
-        /// Read only by `dictatedHint`.
+        ///
+        /// **No longer rendered into the prompt** (2026-09-19): `dictatedHint`
+        /// stopped naming it, so this is now filed in `outbox.jsonl` and read
+        /// back from there — which is where a question about *which recogniser
+        /// heard that sentence* is actually asked, after the fact.
         var engine: String = ""
         /// …and what the source said about who had already inserted it.
         var deliveryKind: DictationDelivery = .route
@@ -4832,23 +4836,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// agent that knows the words came out of a speech recogniser already
     /// discounts them, and the clause was spending a line of every envelope to
     /// say so twice.
-    private static func dictatedHint(_ engine: String) -> String {
-        "[this text dictated and transcribed in RO or EN by \(engineName(engine))]"
-    }
-
-    /// The recogniser's id as the reader should see it: the local model by the
-    /// **name of the weights** (`mlx-community/` dropped — it is the account,
-    /// not the model), Wispr by its product name. An id nobody has taught this
-    /// function is passed through rather than guessed at.
-    private static func engineName(_ label: String) -> String {
-        // **The source says its own name** (found in review, 2026-09-14). This
-        // was a `switch` on the engine id that reached into
-        // `LocalWhisperSource.configuredModel` — downstream code naming a
-        // concrete implementation, which is the one thing `DictationSource`
-        // exists to prevent, and a second place the model's default name would
-        // have to be kept in step. `DictationResult.engineLabel` carries it now.
-        label.isEmpty ? "a speech recogniser" : label
-    }
+    /// **`[Dictated in RO or EN]`, and nothing else** (2026-09-19). It was
+    /// `[this text dictated and transcribed in RO or EN by Scribe (scribe_v2)]`.
+    ///
+    /// Victor: *"In textul emis sunt footere. Simplifica primul la `[Dictated in
+    /// RO or EN]`. Altfel ma costa rau."* This clause rides on **every single
+    /// dictation**, so its length is not a matter of taste — it is a per-sentence
+    /// tax on every agent this relay talks to, paid for ever.
+    ///
+    /// What survives is the only part a reader acts on: *these words were spoken,
+    /// in one of two languages, and may be misheard accordingly*. Everything cut
+    /// was addressed to nobody in particular —
+    ///
+    /// - **`this text … transcribed`** said in six words what the brackets and
+    ///   the verb already say in two.
+    /// - **the recogniser's name** was added on 2026-09-14 for a real reason
+    ///   (*"you can say instead … the name of the local model or the fact that it
+    ///   was a Wispr Flow"*) and it is being taken back out for a better one: the
+    ///   engine is a **menu row and a log line**, both of which Victor reads, and
+    ///   no agent has ever done anything differently on being told it was Scribe
+    ///   rather than Wispr. It was paying tokens on every sentence to answer a
+    ///   question only its author asks, and he can already see the answer.
+    ///
+    /// The engine is still recorded per sentence in `outbox.jsonl` and still on
+    /// the chip; it simply stopped riding into the prompt. → `Message.engine`
+    private static func dictatedHint() -> String { "[Dictated in RO or EN]" }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
     /// what he deliberately attached** (2026-09-08).
@@ -4869,7 +4881,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// | `[look at: …]`, `[pointed at: …]` | ✓ | ✓ — identical wording |
     /// | `[selected: …]` | ✓ | ✓ — identical wording, since 2026-09-09 |
     /// | the context frame, `[Focused window: …]` | ✓ | — none is taken |
-    /// | `[this text was dictated in RO or EN…]` | ✓ | — |
+    /// | `[Dictated in RO or EN]` | ✓ | — |
     ///
     /// **Why the language hint goes and the paths stay.** Both are addressed to a
     /// reader, and the difference is who is certain to be one. A frame's path and
@@ -4979,7 +4991,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
-            parts.append(dictatedHint(m.engine))
+            parts.append(dictatedHint())
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
