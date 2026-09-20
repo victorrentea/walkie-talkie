@@ -571,19 +571,20 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **Deployed = `50a9b52`**, the newest commit at close; nothing committed but undeployed. Page
   vendored at `dc91aa7`. Deploy is `./build-app.sh && ./relay-restart.sh`, only with no ring up
   (`GET /test/state`), under `hands-off run`.
-- **Not done, known**: (1) a style change rebuilds the web view — **~115 ms** to the first
-  frame of a hand-written effect (measured `+117 ms page ready`); keeping one page alive and
-  `pick`ing would remove it; (2) a preset's lag after F9 is the **1.5 s warm-up**
+- **Decided, not omitted**: a style change rebuilds the web view, **~115 ms** to the first
+  frame of a hand-written effect (measured `+117 ms page ready`). Victor does not feel it and
+  chose the simpler rebuild-per-change over keeping a page alive — do not "fix" it.
+- **Not done, known**: (2) a preset's lag after F9 is the **1.5 s warm-up**
   (`MilkDropHalo.warmup`) + ~0.3 s load — the previous panel stays up meanwhile, so nothing
   blinks, but the preset itself cannot come sooner without a shorter warm-up (0.5 s = a flash
-  of bare waveform); (3) **Atom's dots** (`ORB.DOT_NEAR/DOT_FAR`, absolute px) do not scale with
-  its `scale`, so its outline thins as it grows; (4) **presets render dark inside the whole
+  of bare waveform); (3) Atom's dots scale with its `scale` since the last commit (`dotK`, reference 0.0696),
+  so the outline tracks the size both ways; (4) **presets render dark inside the whole
   voice-halo page in a WKWebView** (engine buffer 2/255 vs 67 in `halo.html`, every JS variable
   identical) — unexplained; the presets live in `halo.html` because of it, and the page's
   `Comets`/Water Dream hybrid is Mac-only for the same reason.
-- **`Comets`** (page effect 21, `comets.js`): built for the Water Dream hybrid, which is off the
-  list (`HaloStyle.isOffered`); the effect has no `HaloStyle` case of its own. Victor decides:
-  keep it as a hand-written entry (add a case with `pageIndex: 20`) or drop it from the page.
+- **`Comets` is out** (Victor, 23:05), marked `−` on the page like the other dropped ones;
+  `comets.js` and the Water Dream hybrid stay committed — built twice already (Lagoon, then
+  the hybrid's top layer), he may want it again. No `HaloStyle` case; nothing offers it.
 - **Reading a preset's equations**: on the loaded page, `mdPresets[name].frame_eqs_str` is the
   compiled JS as text — easier than the minified packs. Tunnel and Cauldron drift `cx/cy` (±0.11
   of sines); `pinCenter` appends `a.cx=a.cy=0.5`. Sparks and Snowflake do not drift.

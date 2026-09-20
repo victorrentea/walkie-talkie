@@ -609,8 +609,12 @@ function drawOrbits(t, Rref, density = 1, holeFrac = ORB.HOLE_FRAC, ringFrac = O
 
   const R0 = px * ringFrac * (1 + ORB.A_RADIUS * level);
   const holeR = R0 * holeFrac, F = ORB.PERSPECTIVE;
-  const dotNear = ORB.DOT_NEAR * dpr * (1 + ORB.A_SIZE * level);
-  const dotFar  = ORB.DOT_FAR  * dpr * (1 + ORB.A_SIZE * level * .5);
+  // Punctele urmăresc mărimea efectului în AMBELE sensuri. Erau în pixeli
+  // absoluți, deci la micșorare conturul se îngroșa relativ (ce a cerut Victor)
+  // dar la creștere se subția — iar el voia grosimea percepută constantă.
+  const dotK = ringFrac / ORB.RING_FRAC;
+  const dotNear = ORB.DOT_NEAR * dotK * dpr * (1 + ORB.A_SIZE * level);
+  const dotFar  = ORB.DOT_FAR  * dotK * dpr * (1 + ORB.A_SIZE * level * .5);
   const bright  = 1 + ORB.A_BRIGHT * level;
 
   orbSC.setTransform(1, 0, 0, 1, 0, 0);
@@ -1002,7 +1006,7 @@ const FORMULAS = [
   // care se compune cu `screen`. Codul stă în water.js — 230 de linii inutile aici.
   { name: '− Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
   // stratul de comete al lui Water Dream: presetul dă apa, acesta cometele (comets.js)
-  { name: 'Comets', desc: 'cometele din Lagoon, oglindite în apa presetului de dedesubt', comets: true },
+  { name: '− Comets', desc: 'cometele din Lagoon, oglindite în apa presetului de dedesubt', comets: true },
 ];
 
 
