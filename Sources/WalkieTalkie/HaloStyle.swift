@@ -222,7 +222,9 @@ enum HaloStyle: String, CaseIterable {
     /// effect when the page is bundled; a preset when the engine is too.
     var isAvailable: Bool {
         if pageIndex != nil { return HaloPage.available }
-        if isPreset { return MilkDropHalo.engineAvailable }
+        if let preset = preset {
+            return HaloEngine.current == .native ? ProjectMHalo.available(for: preset) : MilkDropHalo.engineAvailable
+        }
         return true
     }
 

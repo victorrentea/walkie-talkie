@@ -478,6 +478,16 @@ final class CaretHalo {
         return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
     }
 
+    /// **A preset's host, by `HaloEngine.current`**: butterchurn in a web view
+    /// (`MilkDropHalo`) or projectM natively (`ProjectMHalo`, the `projectm`
+    /// branch). Nil when the chosen engine cannot draw this preset.
+    static func engineHost(preset: HaloStyle.Preset, side: CGFloat, screen: CGSize) -> HaloWebHost? {
+        switch HaloEngine.current {
+        case .native: return ProjectMHalo(preset: preset, side: side, screen: screen)
+        case .web:    return MilkDropHalo(preset: preset, side: side, screen: screen)
+        }
+    }
+
     /// The web view — the page (`HaloPage`) for a hand-written effect, the
     /// engine's page (`MilkDropHalo`) for a preset; nil for the film. It
     /// stands in the panel's content view beside the (empty) stage, and the
@@ -487,7 +497,7 @@ final class CaretHalo {
     /// **The layer under the page for a hybrid style** (Water Dream): the
     /// engine's view, pinned to the screen inside the same panel. Fed, started
     /// and stopped alongside `web`; it never follows the pointer.
-    private var under: MilkDropHalo?
+    private var under: HaloWebHost?
 
     /// The pointer in the page's coordinates (CSS px, y down from the
     /// panel's top-left), written on every `follow` and `show`.
@@ -538,7 +548,7 @@ final class CaretHalo {
     /// the old effect goes on running underneath until the new host says
     /// `onVisible`, or 3 s at most, and only then is ordered out. No blink
     /// to empty between F9 presses.
-    private var retiring: (panel: RelayPanel, web: HaloWebHost?, under: MilkDropHalo?)?
+    private var retiring: (panel: RelayPanel, web: HaloWebHost?, under: HaloWebHost?)?
     private func retireOld() {
         guard let old = retiring else { return }
         retiring = nil
@@ -2025,7 +2035,7 @@ final class CaretHalo {
             halo = CALayer()
             let long = max(frame.width, frame.height)
             let side = (long * preset.scale).rounded()
-            if let engine = MilkDropHalo(preset: preset, side: side, screen: frame.size) {
+            if let engine = Self.engineHost(preset: preset, side: side, screen: frame.size) {
                 engine.frame = NSRect(x: ((frame.width - side) / 2).rounded(),
                                       y: (frame.height * (preset.pinnedHorizon ?? 0.5) - side / 2).rounded(),
                                       width: side, height: side)
@@ -2039,15 +2049,16 @@ final class CaretHalo {
             view.addSubview(page)
             web = page
             Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), the preset pinned in a \(Int(side))pt square under the page's comets")
-        } else if let preset = drawn.preset, let host = MilkDropHalo(preset: preset, side: frame.width,
+        } else if let preset = drawn.preset, let host = Self.engineHost(preset: preset, side: frame.width,
                                                               screen: (NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main)?.frame.size ?? frame.size) {
-            // **The engine, in its own page** — see `MilkDropHalo`. The square
-            // follows the pointer as a window (`follow`).
+            // **The engine, in its own page** (`MilkDropHalo`) or natively
+            // (`ProjectMHalo`, `HaloEngine.current`). The square follows the
+            // pointer as a window (`follow`).
             halo = CALayer()
             host.onFailure = { [weak self] why in self?.fallBack(why) }
             view.addSubview(host)
             web = host
-            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), a \(Int(frame.width))pt square in the engine's web view")
+            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), a \(Int(frame.width))pt square in the \(HaloEngine.current == .native ? "native engine" : "engine's web view")")
         } else if drawn.pageIndex != nil, let host = HaloPage(size: frame.size) {
             // **The page, in a web view** — see `HaloPage`. The stage stays,
             // empty, so the bloom and the collapse have something to animate
