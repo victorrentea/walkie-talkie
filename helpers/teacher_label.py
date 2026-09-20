@@ -112,6 +112,39 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 BACKOFF_SEC = (300, 900, 1800)
 
 
+#: How far behind the clip a label may be and still belong to it. Measured over the
+#: first 638 labels (2026-09-20): the gap between Wispr's own row timestamp, the clip
+#: length and the moment the label landed runs 2.7–5.8 s, median 2.9. A label that
+#: belongs to the PREVIOUS clip sits 15–60 s out, because that is how long a dictation
+#: that missed its own window takes to arrive.
+#:
+#: This is the only structural way this rig can be wrong, and absence of duplicates
+#: does not rule it out: `wait_for_new` accepts any newer row, so a row that arrives
+#: after its clip's timeout leaves that clip unlabelled and hands its words to the
+#: NEXT one — an off-by-one that leaves no two rows alike behind it.
+MAX_LABEL_LAG_SEC = float(os.environ.get("WISPR_MAX_LABEL_LAG", "8"))
+
+
+def label_lag(heard, clip_seconds, now=None) -> float | None:
+    """Seconds between the end of the dictation Wispr recorded and this moment.
+
+    None when Wispr's timestamp cannot be read — unknown is not suspicious, and a
+    parse that fails must not start throwing away good labels.
+    """
+    raw = (getattr(heard, "row_ts", "") or "").strip()
+    if not raw:
+        return None
+    text = raw.replace(" +00:00", "+00:00").replace(" ", "T", 1)
+    try:
+        started = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    return (now - started).total_seconds() - (clip_seconds or 0)
+
+
 #: The only two languages Victor speaks. Wispr detects a language per dictation and
 #: is often right about it — `cs`, `uk`, `ru`, `pt`, `fr` all turned up in one night's
 #: labels — and a label in a language he does not speak is the worst kind there is:
@@ -469,6 +502,9 @@ def main(argv):
         signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
 
     done = failed = streak = recoveries = silent = wrong_language = 0
+    misrouted = 0
+    #: Every Wispr row this run has taken, so none is taken twice.
+    consumed = set()
     gap = gaps()
     started = time.monotonic()
     with locks:
@@ -509,6 +545,20 @@ def main(argv):
                         f"and carrying on ({recoveries}/{len(BACKOFF_SEC)})")
                     time.sleep(pause)
                     streak = 0
+            elif heard.id in consumed:
+                # Wispr never reissues an id, so this is the previous clip's row
+                # being handed to this one — the off-by-one, caught by name.
+                streak = recoveries = 0
+                misrouted += 1
+                log(f"  {i}/{len(todo)} ✗ row {heard.id[:8]} was already used — "
+                    "dropped")
+            elif (lag := label_lag(heard, s["seconds"])) is not None \
+                    and lag > MAX_LABEL_LAG_SEC:
+                streak = recoveries = 0
+                misrouted += 1
+                log(f"  {i}/{len(todo)} ✗ label is {lag:.0f}s behind the clip "
+                    f"(max {MAX_LABEL_LAG_SEC:.0f}s) — dropped as the previous "
+                    "clip's")
             elif (why := not_his_language(heard)):
                 # Wispr answered, so the rig is fine and the streak stays reset —
                 # what came back is simply not a label. Keeping it would put words
@@ -519,6 +569,7 @@ def main(argv):
             else:
                 streak = recoveries = 0
                 done += 1
+                consumed.add(heard.id)
                 # Committed per sample, not per batch: the run is hours long and
                 # a crash at 3 a.m. must cost one sample, not the night.
                 db.execute(
@@ -546,7 +597,8 @@ def main(argv):
         # The service answered, so whatever it was refusing earlier is over.
         clear_cooldown()
     log(f"done: {done} labelled, {failed} failed, {silent} silent, "
-        f"{wrong_language} wrong language, {elapsed:.0f} min")
+        f"{wrong_language} wrong language, {misrouted} misrouted, "
+        f"{elapsed:.0f} min")
     left = db.execute(
         "SELECT COUNT(*) FROM samples WHERE (teacher_text IS NULL OR teacher_text = '')"
         f" AND source IN ({','.join('?' * len(sources))})", sources).fetchone()[0]

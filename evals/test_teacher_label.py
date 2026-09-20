@@ -13,6 +13,7 @@ test: a constant would pass every other check in this repo silently.
 
 import array
 import math
+from datetime import datetime, timedelta, timezone
 import os
 import pathlib
 import random
@@ -216,6 +217,42 @@ class Language(unittest.TestCase):
     def test_an_empty_language_is_not_a_reason_to_drop(self):
         """\"Wispr did not say\" is not \"Wispr said Slovak\"."""
         self.assertEqual(tl.not_his_language(self.Heard("Commit and push", "")), "")
+
+
+class LabelLag(unittest.TestCase):
+    """The only way this rig can put a label on the wrong clip, and the reason
+    counting duplicates cannot find it: `wait_for_new` takes any newer row, so a row
+    that arrives after its own clip timed out is handed to the NEXT clip. Nothing is
+    duplicated — the first clip simply goes unlabelled and every later one is one
+    behind. Measured over 638 good labels, the gap runs 2.7–5.8 s; a label from the
+    previous clip sits 15–60 s out."""
+
+    class Heard:
+        def __init__(self, row_ts): self.row_ts = row_ts
+
+    def at(self, seconds_ago):
+        stamp = datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)
+        return self.Heard(stamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " +00:00")
+
+    def test_a_fresh_label_is_within_the_budget(self):
+        """4.6 s clip, dictation started 7 s ago — the ordinary case."""
+        self.assertLess(tl.label_lag(self.at(7.0), 4.6), tl.MAX_LABEL_LAG_SEC)
+
+    def test_the_previous_clips_label_is_far_outside_it(self):
+        self.assertGreater(tl.label_lag(self.at(40.0), 4.6), tl.MAX_LABEL_LAG_SEC)
+
+    def test_an_unreadable_timestamp_drops_nothing(self):
+        """Unknown is not suspicious, and a parse that fails must not start throwing
+        away good labels."""
+        self.assertIsNone(tl.label_lag(self.Heard("not a timestamp"), 4.0))
+        self.assertIsNone(tl.label_lag(self.Heard(""), 4.0))
+
+    def test_the_clip_length_is_subtracted(self):
+        """A long clip legitimately takes longer to finish; only the tail counts."""
+        short = tl.label_lag(self.at(20.0), 3.0)
+        long_ = tl.label_lag(self.at(20.0), 18.0)
+        self.assertGreater(short, tl.MAX_LABEL_LAG_SEC)
+        self.assertLess(long_, tl.MAX_LABEL_LAG_SEC)
 
 
 if __name__ == "__main__":

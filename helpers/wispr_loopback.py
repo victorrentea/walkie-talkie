@@ -616,6 +616,10 @@ class Heard:
     #: It fills this in for about two rows in three; the caller decides what an
     #: empty one means, because "Wispr did not say" is not "Wispr said Romanian".
     language: str = ""
+    #: Wispr's own timestamp on the row, verbatim. The caller needs it to ask *how
+    #: long ago did this dictation start* — the one question that tells a label for
+    #: the clip just played from a late-arriving label for the clip before it.
+    row_ts: str = ""
 
 
 def _open_wispr():
@@ -696,6 +700,7 @@ def _wait_for_text(row_id, deadline, poll) -> Heard | None:
                 mic=row["micDevice"] or "",
                 at=datetime.now(timezone.utc),
                 language=(row["detectedLanguage"] or "").strip().lower(),
+                row_ts=(row["timestamp"] or ""),
             )
             if last.asr:
                 return last
