@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -50,6 +51,43 @@ CORPUS_DB = CORPUS / "corpus.db"
 
 LABEL_COLUMN = {"teacher": "teacher_text", "final": "final_text",
                 "edited": "edited_text"}
+
+
+#: The sentences a recogniser writes when it has nothing to hear — subtitle credits,
+#: channel sign-offs, the end of somebody else's YouTube video. Measured 2026-09-20
+#: over this corpus: **zero** in `teacher_text`, 8 in `asr_text`, 4 in `formatted_text`
+#: and **56 in `final_text`** — which is this script's DEFAULT label. So the guard
+#: lives here rather than in the labeller: the poison is not where it is written, it
+#: is where the training set is made.
+#:
+#: `subscribe` is anchored on purpose. Victor talks about subscriptions — "subscripția
+#: personală de Claude Code" — and a bare match would throw away real sentences.
+CANNED = re.compile(
+    r"abona\w*\s+la\s+canal"
+    r"|mul[țt]umim?\s+pentru\s+vizionare"
+    r"|thanks?\s+for\s+watching"
+    r"|subtitr\w*\s+(de|by|realizat)"
+    r"|amara\.org"
+    r"|subtitles?\s+by"
+    r"|like\s+and\s+subscribe"
+    r"|subscribe\s+to\s+(our|the)\s+channel"
+    r"|la\s+re[țt]eta\s+urm[ăa]toare",
+    re.IGNORECASE)
+
+#: Words per second above which the text cannot be what was said in that audio. The
+#: fastest real label in the corpus is 5.98 w/s (Romanian, spoken fast); a repetition
+#: loop or a label that belongs to a longer clip lands far above this.
+MAX_WORDS_PER_SECOND = 7.0
+
+
+def is_canned(text) -> bool:
+    return bool(CANNED.search(text or ""))
+
+
+def too_fast(text, seconds) -> bool:
+    if not seconds or seconds <= 0:
+        return False
+    return len((text or "").split()) / seconds > MAX_WORDS_PER_SECOND
 
 
 def wav_seconds(path):
@@ -104,6 +142,14 @@ def main(argv):
             continue
         if not (args.min_seconds <= secs <= args.max_seconds):
             dropped["outside the duration window"] += 1
+            continue
+        if is_canned(rec["label"]):
+            # A fluent sentence about nothing, and the one kind of bad label that
+            # looks perfect: right length, right language, correct grammar.
+            dropped["canned recogniser phrase"] += 1
+            continue
+        if too_fast(rec["label"], secs):
+            dropped["more words than the audio can hold"] += 1
             continue
 
         day = rec["wav"].split("/")[0]
