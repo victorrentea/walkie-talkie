@@ -255,5 +255,60 @@ class LabelLag(unittest.TestCase):
         self.assertLess(long_, tl.MAX_LABEL_LAG_SEC)
 
 
+class ExtraSources(unittest.TestCase):
+    """A microphone live beside Pass-Thru is the whole corpus contaminated, silently.
+
+    Wispr transcribes what the virtual device carries, so with the built-in mic also a
+    source the label is what Wispr made of *our clip plus the room*. The WAV stays
+    clean, which is exactly what makes it invisible: the audio and its label stop
+    describing each other and nothing downstream can tell. It was live until Victor
+    noticed it in the Loopback window on 2026-09-20 — no query had found it, and none
+    could have.
+    """
+
+    def plist(self, mic_enabled):
+        import plistlib
+        path = os.path.join(tempfile.mkdtemp(), "Devices.plist")
+        with open(path, "wb") as fh:
+            plistlib.dump({"modelItems": [{
+                "name": "🎓 TO Wispr", "enabled": True,
+                "patchSubModels": [
+                    {"className": "LBSourceAudioDevice", "enabled": mic_enabled,
+                     "audioDeviceReference": {"name": "MacBook Pro Microphone"}},
+                    {"className": "LBSourcePassThru", "enabled": True,
+                     "name": "Pass-Thru"},
+                ]}]}, fh)
+        return path
+
+    def setUp(self):
+        self._real = tl.LOOPBACK_DEVICES
+
+    def tearDown(self):
+        tl.LOOPBACK_DEVICES = self._real
+
+    def test_a_live_microphone_is_reported(self):
+        tl.LOOPBACK_DEVICES = self.plist(mic_enabled=True)
+        self.assertEqual(tl.extra_sources(), ["MacBook Pro Microphone"])
+
+    def test_pass_thru_alone_is_clean(self):
+        tl.LOOPBACK_DEVICES = self.plist(mic_enabled=False)
+        self.assertEqual(tl.extra_sources(), [])
+
+    def test_pass_thru_itself_is_never_reported(self):
+        """It is the channel the whole rig runs on."""
+        tl.LOOPBACK_DEVICES = self.plist(mic_enabled=False)
+        self.assertNotIn("Pass-Thru", tl.extra_sources())
+
+    def test_a_missing_config_does_not_block_a_run(self):
+        """Unknown is not suspicious — Loopback may not even be installed."""
+        tl.LOOPBACK_DEVICES = "/nonexistent/Devices.plist"
+        self.assertEqual(tl.extra_sources(), [])
+
+    def test_another_device_is_not_this_one(self):
+        """Every Loopback device has sources; only the one Wispr listens to matters."""
+        tl.LOOPBACK_DEVICES = self.plist(mic_enabled=True)
+        self.assertEqual(tl.extra_sources(device_hint="TO Zoom"), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

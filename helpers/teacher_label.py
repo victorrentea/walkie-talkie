@@ -112,6 +112,48 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 BACKOFF_SEC = (300, 900, 1800)
 
 
+#: Loopback's own configuration, which says what the virtual device is listening to.
+#: Read rather than clicked: it is written the instant a source is toggled in the UI
+#: (verified 2026-09-20 — the file's mtime changed in the same second), so a check here
+#: runs on every start, costs nothing, and can refuse rather than report.
+LOOPBACK_DEVICES = Path.home() / "Library" / "Application Support" / "Loopback" \
+    / "Devices.plist"
+
+
+def extra_sources(device_hint=None):
+    """Enabled sources on the virtual device other than Pass-Thru.
+
+    **A microphone among them is the whole corpus contaminated and nothing saying so.**
+    Wispr transcribes what the device carries, so with the built-in mic live alongside
+    Pass-Thru the label is what Wispr made of *our clip plus the room* — and the room
+    is another session's speakers, Victor on the phone, or a colleague in the doorway.
+    The WAV in the corpus stays clean, which is what makes it invisible: the audio and
+    its label simply stop describing each other, and no downstream check can tell.
+
+    Victor found it by looking at the Loopback window (2026-09-20): *"Loopback avea și
+    microfonul deschis până adineauri … pe viitor să te asiguri că microfonul fizic nu
+    e și el sursă pe lângă passthrough."*
+    """
+    hint_source = device_hint or getattr(rig, "PINNED_DEVICE_HINT", "to wispr")
+    try:
+        import plistlib
+        with open(LOOPBACK_DEVICES, "rb") as fh:
+            config = plistlib.load(fh)
+    except (OSError, ValueError):
+        return []  # unknown is not suspicious, and a missing file must not block a run
+    hint = hint_source.lower()
+    found = []
+    for device in config.get("modelItems", []):
+        if hint not in (device.get("name") or "").lower():
+            continue
+        for sub in device.get("patchSubModels", []):
+            if sub.get("className") != "LBSourceAudioDevice" or not sub.get("enabled"):
+                continue
+            ref = sub.get("audioDeviceReference") or {}
+            found.append(ref.get("name") or sub.get("name") or "an audio device")
+    return found
+
+
 #: Where this run announces itself, so `corpus_harvest.py` does not harvest our own
 #: playback back into the corpus as though it were a new dictation. It happened:
 #: 1239 rows, 118 minutes, 1056 of them word-for-word a label this rig had just
@@ -460,6 +502,10 @@ def main(argv):
                          "whatever is left in the batch — a night is a length, "
                          "and audio minutes stopped predicting it once the mic "
                          "clips arrived (a 7.8s clip costs ~18s, a 30s one ~41s)")
+    ap.add_argument("--ignore-extra-sources", action="store_true",
+                    help="run even though the Loopback device has a microphone live "
+                         "beside Pass-Thru — for a deliberate experiment, never for a "
+                         "corpus run")
     ap.add_argument("--ignore-cooldown", action="store_true",
                     help="start even though the last run stood down after three "
                          "blocked stretches — for a rig that has been fixed since")
@@ -513,6 +559,15 @@ def main(argv):
             "blocked three times over and stopped on purpose. --ignore-cooldown "
             "overrides, but the reason it exists is that the alternative to waiting "
             "is losing the account.")
+
+    listening_too = extra_sources()
+    if listening_too and not args.ignore_extra_sources:
+        raise SystemExit(
+            "the Loopback device is also listening to " + ", ".join(listening_too) +
+            ".\nEverything Wispr hears would be this clip PLUS that microphone, and "
+            "the\nlabel would describe audio the corpus does not contain. Turn the "
+            "source off\nin Loopback (the device's row, not the device), leaving only "
+            "Pass-Thru.")
 
     front = rig.paste_sink()
     if front not in SAFE_SINKS:
