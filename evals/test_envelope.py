@@ -23,15 +23,18 @@ written at delivery and delivery to a tty with no tab comes back `targetGone`
 without a keystroke reaching any window — which is the only way to get a real
 envelope out of a relay that must not type into anything.
 
-**It leaves the chip saying `Listening…`**, and that is not this file's doing:
-`/test/dictation/start` opens a dictation the recogniser knows nothing about, and
-`/test/dictation` enters *below* the recogniser, so nothing on either route ever
-produces the microphone edge that takes the row down. `./relay-restart.sh` clears
-it. The guard below therefore asks about the **microphone** — `isRecording`,
-`settling`, `speculative` — and not about `listening`, or one run of this file
-would lock out the next.
+**It used to leave the chip saying `Listening…`**, and that is still not this
+file's doing: `/test/dictation/start` opens a dictation the recogniser knows
+nothing about, and `/test/dictation` enters *below* the recogniser, so nothing on
+either route ever produces the microphone edge that takes the row down. It is
+this file's business to clean up after itself, though — `_put_the_relay_down` at
+the bottom cancels on the way out, because a relay left `listening` refuses every
+gesture Victor makes afterwards, silently. The guard below still asks about the
+**microphone** — `isRecording`, `settling`, `speculative` — and not about
+`listening`, or one run of this file would lock out the next.
 """
 
+import atexit
 import json
 import os
 import re
@@ -473,7 +476,132 @@ class AreaFrame(unittest.TestCase):
         self.assertFalse(any("800px" in p for p in entry.get("paths", [])))
 
 
+@unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
+class MicrophoneAfterACancel(unittest.TestCase):
+    """**A cancelled dictation must not swallow the next one** (2026-09-20).
+
+    `MicRecorder.start(to:)` opened with `guard !isRecording else { return nil }`
+    and nil, there, means *the microphone is open*. So any session still open
+    when the next gesture landed — a `cancel()` whose recogniser had nothing to
+    cancel, or a `stop()` still tearing the device down on its own queue three
+    seconds later — was answered as a success: the source logged `recording
+    started`, the halo went up, the file it named was never opened, and the
+    upload of an empty WAV timed out 33 s later with the transcript lost. Nothing
+    in `relay.log` said why; the failure was the silent `nil` itself.
+
+    What is asserted here is the one observable that separates the two worlds:
+    `mic: recording through …`, the line `start(to:)` only reaches when it has
+    actually opened the device. Once per dictation, so a second dictation that
+    does not log it recorded nothing — which is precisely the bug.
+
+    **That this assertion discriminates was not argued, it was observed.** The
+    pre-fix build produced exactly this sequence in `relay.log` — a cancel at
+    10:40:23, then:
+
+        10:40:26 🎙️ recording started for ElevenLabs — mic-1789890026.wav
+        10:41:16 🎙️ recording started for ElevenLabs — mic-1789890076.wav
+
+    with **no `mic: recording through …` between or after either**, and both
+    sentences lost 33 s later to `timed out waiting for the text`. The mutation
+    for this test is in the log of the morning it was written.
+
+    It never speaks: the first dictation is opened for its side effect and thrown
+    away, and the second is closed the same way. That makes it safe to run beside
+    anything else on this Mac, unlike `evals/envelope-live/`, which needs the
+    microphone to itself.
+    """
+
+    LOG = os.path.expanduser("~/.walkie-talkie/relay.log")
+
+    def _log_lines(self, since):
+        with open(self.LOG, encoding="utf-8", errors="replace") as f:
+            return f.read().splitlines()[since:]
+
+    def _log_length(self):
+        with open(self.LOG, encoding="utf-8", errors="replace") as f:
+            return len(f.read().splitlines())
+
+    def _idle(self, timeout=20):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            s = _get(BASE, "/test/state")
+            if not (s["listening"] or s["settling"] or s["isRecording"]):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def setUp(self):
+        s = _get(BASE, "/test/state")
+        if s["isRecording"] or s["settling"] or s["speculative"]:
+            self.skipTest("Victor is talking — not taking the microphone from him")
+        # **A `listening` left by the classes above is cleared here, not waited
+        # out.** They open dictations through `/test/dictation/start`, which the
+        # recogniser never hears about, so nothing downstream ever takes the flag
+        # back down — and this class is precisely the one that cannot start a
+        # dictation while it is up. The guard above is what keeps that safe: a
+        # microphone that is genuinely recording, settling or speculating belongs
+        # to Victor and this file skips rather than touching it.
+        if not self._idle(timeout=2):
+            _post(BASE, "/test/cancel")
+        self.assertTrue(self._idle(), "the relay would not go idle before the test")
+
+    def tearDown(self):
+        _post(BASE, "/test/cancel")
+        self._idle()
+
+    def test_the_dictation_after_a_cancel_still_opens_the_device(self):
+        mark = self._log_length()
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/gesture", {"name": "forward-right"})
+        time.sleep(2)
+        opened = [l for l in self._log_lines(mark) if "mic: recording through" in l]
+        self.assertEqual(len(opened), 1,
+                         "the first dictation did not open the microphone:\n"
+                         + "\n".join(self._log_lines(mark)))
+
+        # **The cancel, and the next gesture on its heels with nothing in
+        # between** — the shape that used to be answered with a silent nil.
+        # `cancel()` tears the device down on `audioQueue`, so the gap here is
+        # the whole experiment: sleep a second and the teardown wins the race and
+        # the old code passes too. The assertion is the *outcome* either way — a
+        # dictation that opened the device — because that is what has to hold
+        # whichever side of the race wins, and a test written against the
+        # pre-emption log line would go quiet the day the race stops happening.
+        mark = self._log_length()
+        _post(BASE, "/test/cancel")
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/gesture", {"name": "forward-right"})
+        time.sleep(2)
+        after = self._log_lines(mark)
+        opened = [l for l in after if "mic: recording through" in l]
+        self.assertEqual(len(opened), 1,
+                         "the dictation after a cancel recorded into a file the "
+                         "device was never attached to:\n" + "\n".join(after))
+
+
+def _put_the_relay_down():
+    """**Close the dictation this file opened**, whatever happened above.
+
+    The docstring at the top used to say the chip is left reading `Listening…`
+    and that `./relay-restart.sh` clears it. That was true and it was not
+    harmless: `listening` is the first thing `startDictation` guards on, and it
+    returns **silently** when it is set — so a relay left in that state refuses
+    every 🔼→ Victor makes, posts the chord, logs nothing, and looks broken with
+    no way to tell why. Measured on 2026-09-20: a run of this file at 10:18 left
+    it set, and the gesture was dead until 10:39 when a cancel was sent by hand.
+
+    A harness is allowed to leave a mess in its own files. It is not allowed to
+    leave the app unusable for the person whose Mac it is running on.
+    """
+    if BASE is None:
+        return
+    state = _get(BASE, "/test/state") or {}
+    if state.get("listening") or state.get("settling") or state.get("isRecording"):
+        _post(BASE, "/test/cancel")
+
+
 if __name__ == "__main__":
     if BASE is None:
         print("no relay on %s — start Walkie Talkie first" % (PORTS,), file=sys.stderr)
+    atexit.register(_put_the_relay_down)
     unittest.main(verbosity=2)

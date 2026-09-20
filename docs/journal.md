@@ -11123,3 +11123,120 @@ Verified on the running build, two dictations one after the other in the same se
 Two `screenshot-0`s, no `-2` anywhere, and the session is the parent of both.
 `evals/test_envelope.py` (AreaFrame + FrameList, 10 cases) and `evals/test_marker_place.py` (10)
 are green against it.
+
+### The silent `nil` that swallowed a dictation, and the whole-envelope samples it was hiding
+
+He asked for something small — *"vreau un exemplu cu o dictare care are și text, nu doar poză …
+parcă impresia este că ce mi-ai trimis sunt doar footere"* — and it was small: `evals/envelope-live/`
+already speaks a Romanian sentence through the speakers, records it on the relay's own microphone,
+transcribes it with Scribe and posts the gestures mid-sentence. Running it is the whole job.
+
+It came back with no words in it at all, three times, and the way it failed is worth the section.
+
+**What the first run produced** was not an envelope but three *shot-only* messages, with the shot
+number reading `📸2026`:
+
+```
+[📁=$WALKIE_SHOTS/2026-09-20-10-18-28]
+[📸2026✂️ = … at 📁/screenshot-2026-09-20-10-37-01.jpg; …]
+```
+
+That number is `ScreenCapture.number(of:)` reading the year out of a timestamped name, and the
+timestamped name is what a shutter with **no dictation around it** is called. So the pictures were
+real and the sentence they belonged to had never opened.
+
+**The first cause: `listening` is sticky, and `startDictation` returns on it silently.** A run of
+`evals/test_envelope.py` at 10:18 left `listening = true` with no recorder behind it — that file's
+own docstring said so and called it harmless (*"./relay-restart.sh clears it"*). It is not
+harmless. `guard !listening, !source.isRecording, !speculative, !settling else { return }` is the
+first line of `startDictation`, and that `return` writes nothing anywhere. For twenty-one minutes
+every 🔼→ posted its chord, logged `POST /test/gesture forward-right — posting ⌃⌥⌘F10`, and did
+nothing at all. **Victor's own gesture was dead the whole time and nothing on screen or in the log
+said why.** `POST /test/cancel` cleared it, and the log's answer confirmed the diagnosis: *"…and
+the recogniser had nothing to cancel"*.
+
+**The second cause is the real one.** With the state clean the gestures opened dictations again,
+and the transcripts still never arrived:
+
+```
+the settle waits: ElevenLabs Scribe is still uploading — 8 s in
+the settle waits: ElevenLabs Scribe is still uploading — 25 s in
+✍️ the words landed: timed out waiting for the text — 33208 ms after the microphone closed
+```
+
+Scribe was not slow — a probe clip through `tools/eleven-test.sh` came back in **0.75 s**. What
+those runs were uploading was an **empty file**, and the tell is an absence: `mic: recording
+through MacBook Pro Microphone` is logged once per dictation by `MicRecorder.start(to:)`, and for
+those two runs it is not in the log at all. The recorder said yes and never opened the device.
+
+```swift
+func start(to destination: URL?) -> String? {
+    lock.lock(); defer { lock.unlock() }
+    guard !isRecording else { return nil }   // ← nil means "the microphone is open"
+```
+
+`nil` is this function's success. So **any session still open swallowed the next dictation
+whole**: the source logged `recording started for ElevenLabs`, the halo went up, the file it named
+was never created, and the upload of nothing sat there until the 33-second timeout. The two ways
+to get there are both ordinary — a `cancel()` whose recogniser had nothing to cancel never reaches
+`meter.stop()`, and a `stop()` that *is* running is a CoreAudio teardown on `audioQueue` that the
+next gesture can easily beat by three seconds.
+
+**The fix distinguishes the two cases the guard was conflating.** The same destination twice is a
+gesture arriving down two paths and keeps the old answer. A **different** destination means the
+open session is stale and the caller is live, so the stale one is closed, its orphan file deleted,
+and the new recording starts — loudly, because this failure's whole nature was its silence.
+Metering is deliberately not allowed to pre-empt: `destination == nil` over an open recording is a
+ring wanting a level, and a ring is never worth a sentence. The teardown `stop()` and the
+pre-emption share is `closeLocked()`, which takes no lock, because
+*`MicRecorder.lock` is not recursive* has been paid for once already.
+
+**And the harness stops leaving the relay unusable.** `evals/test_envelope.py` cancels on its way
+out now (`_put_the_relay_down`, on `atexit`). A test file is allowed to leave a mess in its own
+files; it is not allowed to leave the app dead for the person whose Mac it is running on.
+`MicrophoneAfterACancel` in the same file is the regression test: open, cancel, open again, and
+assert each dictation logged the device line. It never speaks, so it is safe to run mid-workshop.
+
+**With that fixed, the samples he asked for came out first time** — the words, the tokens standing
+where the presses fell, and the footer keyed to them:
+
+```
+[📸0🖱️@1263:1562] Uite ce am pe ecran acum. În zona [📸1✂️760,794→2160,1234] asta vreau să apară un buton nou, la fel ca celelalte
+
+[Dictated in RO or EN]
+[📁=$WALKIE_SHOTS/2026-09-20-10-44-20/10-44-29]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸1✂️ = user-selected area between corners (x,y) (760,794)→(2160,1234) at 📁/screenshot-1.jpg; also available -800px and -original.jpg at 3456x2234px]
+```
+
+```
+[📸0🖱️@1263:1562] Uite aici. [📸1🖱️@1263:1562] Linia asta e problema. [selected: "public Order placeOrder(Cart cart) {" from app Walkie Talkie] Hai să o rescriem mai simplu
+
+[Dictated in RO or EN]
+[📁=$WALKIE_SHOTS/2026-09-20-10-44-20/10-44-44]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸1 = 📁/screenshot-1-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+```
+
+```
+[📸0🖱️@1263:1562] Butonul ăsta [📸1🖱️@1263:1562] și cel de aici [📸2🖱️@1263:1562] trebuie [chrome-selection-1: Salvează] să arate la fel. Schimbă-le pe amândouă
+
+[Dictated in RO or EN]
+[📁=$WALKIE_SHOTS/2026-09-20-10-44-20/10-44-56]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸1 = 📁/screenshot-1-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸2 = 📁/screenshot-2-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[chrome-selection-1 = div.toolbar > button.primary at https://petclinic.victorrentea.ro/orders]
+```
+
+Note the second one: the highlight goes **in front of the clause it belongs to** and the frame list
+under the words does not repeat it — inline *or* listed, never both. And the third's footer has no
+`at 0:0N` stamps anywhere, because with Scribe's word timings every token found a place in the
+sentence and nothing had to fall back to the clock.
+
+**The caret variant is not measured here and is not guessed at either.** Delivering a caret
+dictation means pasting into whatever is frontmost, and the dead-tty trick that makes a terminal
+envelope safe has no caret equivalent — so it was not run rather than typed into a window nobody
+was watching. What `caretLine` does with these tokens is unchanged: the words and the deliberate
+attachments in the same shapes, `[📁=…]` and its legend rows, no automatic `📸0` and no
+`[Dictated in RO or EN]`.

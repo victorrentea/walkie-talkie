@@ -312,6 +312,34 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   MLX puts weights in unified memory. A dead helper has no footprint and the row goes back to its
   bare name, so it doubles as proof the helper is alive. → journal: *The menu says what the model costs*
 
+## `start(to:)` answers *is the microphone open*, and that is not *did I open it* (2026-09-20)
+
+- **A session already open may not be answered with `nil`.** `nil` is this function's success, so
+  `guard !isRecording else { return nil }` told every caller *the microphone is open* while opening
+  nothing: the source logged `recording started`, the halo went up, the file it was handed was never
+  created, and the upload of an empty WAV sat until the settle's timeout — **33 s, transcript lost,
+  and not one line in `relay.log` saying why**. The only trace is an absence: `mic: recording
+  through …` is logged once per real open, so a dictation without it recorded nothing.
+- **The two cases it conflated.** The *same* destination twice (nil included) is one gesture
+  arriving down two paths and keeps the old answer. A *different* destination means the open session
+  is stale — a `cancel()` whose recogniser had nothing to cancel never reaches `meter.stop()`, and a
+  `stop()` in flight is a CoreAudio teardown on another queue that the next gesture beats by
+  seconds. The stale one is closed, its orphan file deleted, and the new recording starts, with a
+  `Log.error` naming which it was: this defect's whole nature was its silence.
+- **Metering never pre-empts a recording.** `destination == nil` arriving over an open recording is
+  a ring wanting a level, and a ring is not worth a sentence; it reads the meter of the recording
+  already open, which is what it wanted. The reverse — a recording over a metering session — is
+  exactly the swallow above and is the case the fix exists for.
+- **`closeLocked()` is the teardown `stop()` and the pre-emption share, and it takes no lock** — see
+  *Do not* below; the caller is holding it. Two copies of a close sequence whose order matters is
+  the drift this repo keeps paying for.
+- **A harness may not leave the relay `listening`.** `startDictation`'s first guard returns on it
+  **silently**, so a stuck flag refuses every 🔼→ Victor makes with no log line and no chip change —
+  measured 2026-09-20: a `evals/test_envelope.py` run left it set at 10:18 and the gesture was dead
+  until a cancel was sent by hand at 10:39. That file cancels on `atexit` now
+  (`_put_the_relay_down`), and `MicrophoneAfterACancel` in it is the regression test for the
+  swallowed dictation — open, cancel, open, assert the device line both times. It never speaks.
+
 ## Do not
 
 - **`MicRecorder.lock` is not recursive: take it exactly once per public entry point, never again
@@ -322,6 +350,11 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   still logging mouse edges that led nowhere. The log shape that dates it: `🎙️ forward button —
   Replace Wispr` and then never `🎙️ local recording started`. Victor reported *"cum apas forward pe
   mouse se blochează"*; the forward button was innocent. → journal: *The mic's own lock is not recursive, and `start` already holds it*
+- **Do not answer `start(to:)` with `nil` for a session that is already open unless it is the same
+  destination.** `nil` is *the microphone is open*, and saying it while opening nothing loses the
+  whole sentence in silence — see the section above.
+- **Do not leave a harness run with `listening` set.** Cancel on the way out; the guard that
+  refuses the next gesture is silent.
 - **Do not reintroduce any of the Wispr Flow database path** (see *One recogniser*). → journal: *The recogniser*
 - **Do not touch the language pin or the prompt without re-reading `evals/short-clip-lid.md`.** → journal: *The language is pinned to {ro, en}, and the prompt carries his vocabulary (2026-09-07)*
 - **Do not re-key the corpus manifest as evidence about this model** — its `detectedLanguage`/`asr`

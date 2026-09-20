@@ -278,7 +278,41 @@ final class MicRecorder {
     @discardableResult
     func start(to destination: URL?) -> String? {
         lock.lock(); defer { lock.unlock() }
-        guard !isRecording else { return nil }
+        // **A session already open is not a reason to answer *yes* and record
+        // nothing** (2026-09-20). This used to be `guard !isRecording else {
+        // return nil }`, and nil here means *the microphone is open* — so a
+        // session that outlived its dictation swallowed every sentence after it:
+        // the caller logged `recording started`, the halo went up, the file it
+        // named was never opened, and the upload of an empty WAV sat there until
+        // it timed out. Measured on the live harness the same morning: one
+        // cancelled dictation at 10:40:23, and the next two runs produced no
+        // `mic: recording through …` line at all and lost their transcripts
+        // after 33 s. Nothing anywhere said why — the whole failure was this one
+        // silent `nil`.
+        //
+        // The two cases it was conflating:
+        //
+        // - **The same request twice** — same destination, nil included. That is
+        //   a gesture arriving down two paths and it is genuinely harmless, so it
+        //   keeps the old answer.
+        // - **A different destination** — a metering session left open by a
+        //   `cancel()` whose recogniser had nothing to cancel, or a `stop()` still
+        //   tearing the device down on its own queue when the next gesture lands
+        //   three seconds later. The open session is the stale one, the caller is
+        //   the live one, and the live one must win.
+        //
+        // Metering is deliberately *not* allowed to pre-empt: `destination == nil`
+        // asking over an open recording is a ring wanting a level, and a ring is
+        // never worth a sentence. It reads the meter of the recording that is
+        // already open, which is what it wanted anyway.
+        if isRecording {
+            guard let destination, url != destination else { return nil }
+            Log.error("mic: a \(url == nil ? "metering session" : "recording") was still open when a "
+                      + "dictation asked for the microphone — closing it and starting fresh, "
+                      + "so \(destination.lastPathComponent) is not written in silence")
+            let (orphan, _) = closeLocked()
+            if let orphan, orphan != destination { try? FileManager.default.removeItem(at: orphan) }
+        }
 
         let input = engine.inputNode
         // Point the engine at a device *before* asking what format it speaks —
@@ -470,6 +504,28 @@ final class MicRecorder {
     func stop() -> (url: URL, duration: TimeInterval)? {
         lock.lock(); defer { lock.unlock() }
         guard isRecording else { return nil }
+        let (out, elapsed) = closeLocked()
+        guard let out = out else { return nil }
+        guard elapsed >= Self.minimumDuration else {
+            try? FileManager.default.removeItem(at: out)
+            return nil
+        }
+        return (out, elapsed)
+    }
+
+    /// **Put the device down and hand back what was on it** — the body `stop()`
+    /// and `start(to:)`'s pre-emption share, so the two cannot drift.
+    ///
+    /// It is one function because closing a recording is a sequence with an
+    /// order that matters, and the order is the comment inside it. The caller
+    /// decides what the file is *for*: `stop()` measures it against
+    /// `minimumDuration` and returns it; the pre-emption deletes it, because a
+    /// recording nobody is waiting for is an orphan by definition.
+    ///
+    /// **The lock is the caller's.** `lock` is an `NSLock` and NSLock is not
+    /// recursive — the same fact `start(to:)` records at length about `voiced`
+    /// — so this must never take it.
+    private func closeLocked() -> (url: URL?, elapsed: TimeInterval) {
         isRecording = false
 
         engine.inputNode.removeTap(onBus: 0)
@@ -488,12 +544,8 @@ final class MicRecorder {
         startedAt = nil
         inserted = 0
         pendingInserts = []
-        guard let out = url else { return nil }
+        let out = url
         url = nil
-        guard elapsed >= Self.minimumDuration else {
-            try? FileManager.default.removeItem(at: out)
-            return nil
-        }
         return (out, elapsed)
     }
 
