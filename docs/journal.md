@@ -10931,6 +10931,42 @@ the outbox:
 
 
 ## ElevenLabs is the engine, and the freeze that found (2026-09-19)
+### The second door, closed — and the live path, run (2026-09-20)
+
+The freeze had two doors and only one was shut that night. The other is
+`RelayWindow.startWarmth`'s 15 Hz ramp, which reads `MicRecorder.voicedSeconds`
+**on the main thread** — and that property was the one meter reading that took
+`lock` rather than trying it, while `start(to:)` holds `lock` across the whole
+device open. So a wedged CoreAudio froze the app through the ramp even after the
+open itself had moved off the main thread.
+
+`voicedSeconds` now uses `lock.try()`, which is the shape `level` and
+`quietSeconds` beside it have had all along; a contended read returns the last
+value instead of waiting. It costs 64 ms of a ramp that fills over seconds, and
+it buys the rule worth having: **no UI thread ever waits on a device open.**
+
+**And with the audio stack recovered the next morning, the live path Victor asked
+for ran for real** — macOS's Romanian voice through the speakers, the relay's own
+microphone, ElevenLabs, gestures posted as chords while the sentence was being
+spoken (`evals/envelope-live/run.py`):
+
+```
+[📸0🖱️@2204:510] Uite ce am pe ecran acum. În zona [📸1✂️760,794→2160,1234] asta vreau să apară un buton nou, la fel ca celelalte
+```
+```
+[📸0🖱️@2204:510] Butonul ăsta [📸1🖱️@2204:510] și cel de aici [📸2🖱️@2204:510] trebuie [chrome-selection-1: Salvează] să arate la fel. Schimbă-le pe amândouă.
+```
+
+Two shutter presses and a Chrome pick, each standing where the press fell,
+placed off Scribe's own word timings (`⏱️ marker cue: shot 1 at 2.46s into the
+recording`, `shot 2 at 4.05s`). The one thing to know about the placement is
+visible in the first: a press lands between the two words nearest it, so *"În
+zona [📸1✂️…] asta"* rather than after *asta* — a word's width, not a clause's.
+
+**Still open, and the same class**: `LocalWhisperSource`, `SpeechmaticsSource`
+and `GeminiSource` open the microphone inline on the main thread. They are picks
+rather than the default, so they are not on the path a wedge would take first.
+
 
 Victor, on the same thread as the template: *"Wispr Flow nu mai e motorul meu de dictare default.
 Reține asta; o să trec la 11 Labs. Wispr Flow va rămâne motor de dictare atunci când vreau să

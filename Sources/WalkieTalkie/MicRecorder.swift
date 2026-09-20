@@ -61,13 +61,27 @@ final class MicRecorder {
     /// language he does not speak, **15%** between one and two, and **1% past
     /// two**.
     ///
-    /// Read from the main thread while the ramp ticks, written from CoreAudio's
-    /// thread; `Double` is not atomic on any platform this ships to, so it goes
-    /// through the same `lock` the rest of the state does. Fifteen reads a
-    /// second against a lock held for one addition is not a contention anybody
-    /// will measure.
+    /// **Read with `try()`, never with `lock()`** — the same shape `level` and
+    /// `quietSeconds` below have, and it is not a micro-optimisation: it is the
+    /// difference between a stale number and a frozen Mac.
+    ///
+    /// `start(to:)` holds `lock` from its first line to its last, and inside it
+    /// is a **synchronous CoreAudio device bind**. When the audio stack is wedged
+    /// that bind never returns — measured 2026-09-19, twice, with `sample` — so
+    /// the lock is held for ever, and the 15 Hz warmth ramp that reads this
+    /// property *on the main thread* went down with it: no crash, no log, every
+    /// route accepted and never answered. The stack was
+    /// `RelayWindow.startWarmth → voicedSeconds → lock` behind
+    /// `MicRecorder.start → AVAudioEngine.inputNode → mach_msg`.
+    ///
+    /// What it costs is the last buffer's worth of speech on a contended read,
+    /// which is 64 ms of a ramp that fills over seconds. What it buys is that
+    /// **no UI thread can ever wait on a device open**. The `Double` is read
+    /// without the lock in that case, exactly as its two neighbours already
+    /// accept — a torn read would cost one frame of the same ramp.
     var voicedSeconds: TimeInterval {
-        lock.lock(); defer { lock.unlock() }
+        guard lock.try() else { return voiced }
+        defer { lock.unlock() }
         return voiced
     }
     private var voiced: TimeInterval = 0
