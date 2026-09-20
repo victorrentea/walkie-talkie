@@ -54,6 +54,7 @@ the paranoid alternative and is not worth doing every two hours.
 """
 
 import fcntl
+import glob
 import hashlib
 import json
 import os
@@ -61,7 +62,7 @@ import sqlite3
 import struct
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HOME = os.path.expanduser("~")
 WISPR_DB = os.path.join(HOME, "Library/Application Support/Wispr Flow/flow.sqlite")
@@ -239,6 +240,48 @@ def open_wispr():
     return db
 
 
+#: Where the labelling rig says when it was dictating. Every run writes one file here,
+#: and this harvester must not take anything Wispr recorded inside those windows.
+#:
+#: The loop it closes, found 2026-09-20: the rig plays a corpus clip into Wispr, Wispr
+#: records it and keeps the recording, and this harvester — which exists to rescue
+#: recordings before Wispr prunes them — takes it as a new dictation. 1239 rows, 118
+#: minutes, **1056 of them with text identical to a label the rig had just written**:
+#: the corpus was eating its own tail, one padded copy per clip, and every one of them
+#: would have been trained on twice.
+#:
+#: Victor said it before any query did: *"Eu nu am vorbit nimic de ieri în microfon."*
+RIG_RUNS = os.path.join(CORPUS, "rig-runs")
+
+
+def rig_windows():
+    """(start, end) of every labelling run, as UTC datetimes. End open = still running."""
+    out = []
+    for path in sorted(glob.glob(os.path.join(RIG_RUNS, "*.json"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                run = json.load(fh)
+            start = datetime.fromisoformat(run["from"])
+            end = (datetime.fromisoformat(run["to"]) if run.get("to")
+                   else datetime.now(timezone.utc))
+        except (OSError, ValueError, KeyError):
+            continue
+        out.append((start, end + timedelta(seconds=RIG_WINDOW_SLACK)))
+    return out
+
+
+#: Wispr writes its row at the key press and finishes seconds later; a window that ends
+#: at the rig's last chord would let the tail of the last clip through.
+RIG_WINDOW_SLACK = 120
+
+
+def is_the_rigs_own(row, windows) -> bool:
+    when = parse_ts(row["timestamp"])
+    if when is None:
+        return False
+    return any(start <= when <= end for start, end in windows)
+
+
 def harvest(corpus, wispr):
     known = set(r[0] for r in corpus.execute("SELECT id FROM samples"))
     rows = wispr.execute(
@@ -249,13 +292,18 @@ def harvest(corpus, wispr):
         " WHERE audio IS NOT NULL AND length(audio) > ?"
         " ORDER BY timestamp", (MIN_WAV_BYTES,)).fetchall()
 
-    new = skipped = 0
+    windows = rig_windows()
+    new = skipped = ours = 0
     new_secs = 0.0
     manifest = open(MANIFEST, "a", encoding="utf-8")
     try:
         for r in rows:
             if r["id"] in known:
                 skipped += 1
+                continue
+            if is_the_rigs_own(r, windows):
+                # Our own playback, coming back round. Not a dictation.
+                ours += 1
                 continue
             blob = wispr.execute(
                 "SELECT audio FROM History WHERE transcriptEntityId = ?", (r["id"],)).fetchone()[0]
@@ -308,7 +356,7 @@ def harvest(corpus, wispr):
     finally:
         manifest.close()
     corpus.commit()
-    return new, new_secs, skipped
+    return new, new_secs, skipped, ours
 
 
 def refresh(corpus, wispr):
@@ -361,16 +409,17 @@ def main():
     corpus.commit()
 
     err = None
-    new = refreshed = skipped = 0
+    new = refreshed = skipped = ours = 0
     new_secs = 0.0
     try:
         import_manifest(corpus)
         wispr = open_wispr()
-        new, new_secs, skipped = harvest(corpus, wispr)
+        new, new_secs, skipped, ours = harvest(corpus, wispr)
         refreshed = refresh(corpus, wispr)
         wispr.close()
-        log("took %d new sample(s), %.1f min; refreshed %d; already had %d"
-            % (new, new_secs / 60.0, refreshed, skipped))
+        log("took %d new sample(s), %.1f min; refreshed %d; already had %d;"
+            " left %d of the rig's own playback where it was"
+            % (new, new_secs / 60.0, refreshed, skipped, ours))
     except Exception as exc:  # a failed run must still leave a trace
         err = "%s: %s" % (type(exc).__name__, exc)
         log("FAILED — %s" % err)

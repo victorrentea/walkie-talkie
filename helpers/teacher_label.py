@@ -112,6 +112,35 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 BACKOFF_SEC = (300, 900, 1800)
 
 
+#: Where this run announces itself, so `corpus_harvest.py` does not harvest our own
+#: playback back into the corpus as though it were a new dictation. It happened:
+#: 1239 rows, 118 minutes, 1056 of them word-for-word a label this rig had just
+#: written — the corpus eating its own tail. Victor spotted it from the outside
+#: (*"Eu nu am vorbit nimic de ieri în microfon"*) before any query did.
+#:
+#: The window is opened at the start with an optimistic end and closed at exit,
+#: including on Ctrl-C and SIGTERM. An end that never gets written is read as *still
+#: running*, which is the safe direction: the harvester skips rather than swallows.
+RIG_RUNS = CORPUS / "rig-runs"
+
+
+def open_run_window():
+    RIG_RUNS.mkdir(parents=True, exist_ok=True)
+    started = datetime.now(timezone.utc)
+    path = RIG_RUNS / (started.strftime("%Y%m%dT%H%M%S") + ".json")
+    path.write_text(json.dumps({"from": started.isoformat(), "to": None}))
+    return path
+
+
+def close_run_window(path):
+    try:
+        run = json.loads(path.read_text())
+        run["to"] = datetime.now(timezone.utc).isoformat()
+        path.write_text(json.dumps(run))
+    except OSError:
+        pass
+
+
 #: How far behind the clip a label may be and still belong to it. Measured over the
 #: first 638 labels (2026-09-20): the gap between Wispr's own row timestamp, the clip
 #: length and the moment the label landed runs 2.7–5.8 s, median 2.9. A label that
@@ -494,12 +523,14 @@ def main(argv):
             "click into it, and start again. (Safe: " + ", ".join(sorted(SAFE_SINKS)) + ")")
     log(f"paste sink: {front}")
 
+    window = open_run_window()
     locks = HandsOff(f"labelling {len(todo)} voice samples with Wispr Flow")
     # The locks have to come down on Ctrl-C and on a SIGTERM too, not only on a
     # clean exit — a killed batch that leaves them up is the failure this whole
     # wrapper exists to prevent.
     for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
+        signal.signal(sig, lambda *_: (close_run_window(window), locks.release(),
+                                       sys.exit(130)))
 
     done = failed = streak = recoveries = silent = wrong_language = 0
     misrouted = 0
@@ -592,6 +623,7 @@ def main(argv):
                 log(f"  {i}/{len(todo)} ✓ {s['seconds']:5.1f}s  {heard.asr[:70]}")
             time.sleep(next(gap))
 
+    close_run_window(window)
     elapsed = (time.monotonic() - started) / 60
     if done:
         # The service answered, so whatever it was refusing earlier is over.
