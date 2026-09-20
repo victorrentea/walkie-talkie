@@ -1588,7 +1588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if let name = body["style"] as? String {
                 guard let style = HaloStyle(rawValue: name) ?? HaloStyle.allCases.first(where: { $0.title.lowercased() == name.lowercased() }) else {
-                    return ["error": "no such style: \(name)", "styles": HaloStyle.allCases.map { $0.rawValue }]
+                    return ["error": "no such style: \(name)", "styles": HaloStyle.offered.map { $0.rawValue }]
                 }
                 self.caretHalo.setStyle(style)
                 self.overlay.flash("✨ \(style.menuTitle)", duration: 1.5)
@@ -1598,7 +1598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if let demo = body["demo"] as? Double, demo > 0 { self.caretHalo.preview(seconds: min(demo, 60)) }
             return ["ok": true, "style": self.caretHalo.style.rawValue, "title": self.caretHalo.style.title,
-                    "opts": MilkDropHalo.optionsOverride ?? "", "styles": HaloStyle.allCases.map { $0.rawValue }]
+                    "opts": MilkDropHalo.optionsOverride ?? "", "styles": HaloStyle.offered.map { $0.rawValue }]
         }
         // One line per selection, in the app's own log: how many frames the box
         // was actually drawn in, and the longest it went without one. It took a

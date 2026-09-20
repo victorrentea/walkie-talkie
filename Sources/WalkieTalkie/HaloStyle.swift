@@ -175,6 +175,14 @@ enum HaloStyle: String, CaseIterable {
 
     var isPreset: Bool { preset != nil }
 
+    /// **On the list today.** Water Dream is off it *"for the moment"*
+    /// (Victor, 2026-09-20 late — the dearest style measured, 0.79 of a GPU
+    /// core and 866 MB, and still "too violent"); its hybrid stays built.
+    /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
+    /// preference off it reads as the film.
+    var isOffered: Bool { self != .milkdrop103 }
+    static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
+
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.
     /// None today (the water went); kept because `HaloPage` refuses such an
     /// effect without WebGL rather than putting a black rectangle on screen.
@@ -214,7 +222,7 @@ enum HaloStyle: String, CaseIterable {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_STYLE"],
            let forced = HaloStyle(rawValue: name) { return forced }
         guard let name = UserDefaults.standard.string(forKey: defaultsKey),
-              let saved = HaloStyle(rawValue: name) else { return .lightning }
+              let saved = HaloStyle(rawValue: name), saved.isOffered else { return .lightning }
         return saved
     }
 

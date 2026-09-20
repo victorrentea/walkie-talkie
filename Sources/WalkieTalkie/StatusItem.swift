@@ -592,7 +592,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // `autoenablesItems` off for the mic submenu's reason. One list, no
         // group line; a preset carries a bolt after its name.
         haloSubmenu.autoenablesItems = false
-        for style in HaloStyle.allCases {
+        for style in HaloStyle.offered {
             let row = NSMenuItem(title: style.unavailableReason.map { "\(style.menuTitle) — \($0)" } ?? style.menuTitle,
                                  action: #selector(haloPicked(_:)), keyEquivalent: "")
             if style.isPreset && style.isAvailable { row.attributedTitle = Self.boltedTitle(style.menuTitle) }

@@ -551,7 +551,7 @@ final class CaretHalo {
     /// on, for the flash.
     @discardableResult
     func cycleStyle(by step: Int) -> HaloStyle {
-        let all = HaloStyle.allCases.filter { $0.isAvailable || $0 == style }
+        let all = HaloStyle.offered.filter { $0.isAvailable || $0 == style }
         let i = all.firstIndex(of: style) ?? 0
         let next = all[((i + step) % all.count + all.count) % all.count]
         setStyle(next)

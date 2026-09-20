@@ -311,6 +311,9 @@ function drawBars() {
 const RING_OF_WIDTH = 0.80;
 const dpr = Math.min(2, window.devicePixelRatio || 1);   // 2 e destul; 3 doar încinge telefonul
 const rad = scale => (RING_OF_WIDTH / 2) * Math.min(innerWidth, innerHeight) / 0.40 * scale;
+// Mărimea unui efect e câmpul lui `scale` și NUMAI el: `draw(t)` cere `rad(this.scale)`.
+// Până pe 2026-09-20 seara fiecare draw() avea raza scrisă cu cifre (rad(0.606)…),
+// deci cele două înjumătățiri ale câmpului (÷2, apoi ÷2.5) n-au mișcat nimic pe ecran.
 
 // plimbarea, în pixeli. Se recalculează o dată pe cadru și se aplică ÎN DESEN
 // (originea pânzei), nu ca transformare CSS pe pânză: o pânză cât ecranul mutată
@@ -722,14 +725,14 @@ function spike(ax, ay, bx, by, hue, width, alpha) {
 //   ★ = îi place mult   • = „are mult potențial"   − = nu-i place
 // Ordinea NU se schimbă niciodată la un review — doar etichetele.
 const FORMULAS = [
-  { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.1212, draw(t) {
+  { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.202, draw(t) {
       // nu mai folosește unda proprie pentru FORMĂ: în liniște amplitudinea e zero,
       // deci rămâne cerc. Ce continuă în tăcere e rotația, nu deformarea.
-      milkdropRing(t, rad(0.606), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.21,
+      milkdropRing(t, rad(this.scale), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.21,
                         W: 1.1, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
   }},
   { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.1212, draw(t) {
-      const R = rad(0.606);
+      const R = rad(this.scale);
       splitWave();
       tunnelLayer({ DECAY: 0.80, ZOOM: 1.007, TWIST: 0.002 }, () => {
         for (const kind of [0, 1]) {
@@ -752,7 +755,7 @@ const FORMULAS = [
   }},
   { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1212, draw(t) {
       // cercul galben care stătea fixat a fost scos; rămân doar barele
-      const R = rad(0.606);
+      const R = rad(this.scale);
       plainLayer(() => {
         const r0 = R * 0.48, N = 96, WIDTH = 3.4;
         for (let k = 0; k < N; k++) {
@@ -770,7 +773,7 @@ const FORMULAS = [
       // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
       // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
       // are exact nuanța primului și cusătura dispare.
-      const R = rad(0.625);
+      const R = rad(this.scale);
       plainLayer(() => {
         const r0 = R * 0.50, M = 150, REST = 0.020;
         for (let k = 0; k < M; k++) {
@@ -788,7 +791,7 @@ const FORMULAS = [
       // Efectul care l-a scos din sărite pe Victor: urma lui umplea pătratul și i se
       // vedea muchia. Acum pânza e tot ecranul, deci ceața se oprește abia în
       // marginea ecranului — fiindcă acolo se termină ecranul, nu fiindcă a tăiat-o ceva.
-      const R = rad(0.50);
+      const R = rad(this.scale);
       // Înainte era un halou FIX sub linii: sectorul de inel stătea pe loc și doar
       // linia vibra deasupra lui. Acum lumina nu mai e desenată ca formă, ci
       // EMISĂ: în fiecare cadru fiecare arc scapă câțiva pufuleți, pe care stratul
@@ -830,10 +833,10 @@ const FORMULAS = [
   { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.0696, draw(t) {
       // gaura din mijloc de 2,5 ori mai mare, iar inelul strâns (RING_FRAC mai mic).
       // Pătratul care tăia mărgelele din față nu mai există deloc.
-      drawOrbits(t, rad(0.348), 0.5, 1.40, 0.22);
+      drawOrbits(t, rad(this.scale), 0.5, 1.40, 0.22);
   }},
   { name: 'Gemini', desc: 'două bile — ceață suflată din contur spre exterior', scale: 0.0909, draw(t) {
-      const R = rad(0.4545);
+      const R = rad(this.scale);
       // Din film: două bile diametral opuse care se rotesc lent în jurul centrului,
       // iar de pe conturul lor se ridică o ceață care e mereu împinsă spre exterior
       // și răsucită de rotație. Ceața NU e desenată ca dâră: e stratul de urmă, cu
@@ -964,7 +967,7 @@ const FORMULAS = [
       // Sclipirea rămâne: mărimea blocului respiră chiar și în liniște.
       fullSize();
       orbSize(fullW, fullH);
-      const px = Math.round(rad(0.80) * 2 * dpr);          // vechea latură: scara mărimilor
+      const px = Math.round(rad(this.scale) * 2 * dpr);          // vechea latură: scara mărimilor
       const half = px / 2, M = 132;
       const cx = (innerWidth / 2 + walkX) * dpr, cy = (innerHeight / 2 + walkY) * dpr;
       orbSC.setTransform(1, 0, 0, 1, 0, 0);
