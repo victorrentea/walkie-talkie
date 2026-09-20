@@ -1561,7 +1561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onHaloDial = { [weak self] step in
             guard let self = self else { return }
             let landed = self.caretHalo.cycleStyle(by: step)
-            self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
+            self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
         }
         // **F9 / F7 step the halo outside a dictation, and preview it on his
         // own voice for six seconds** (2026-09-20, late) — the same cycle as
@@ -1571,7 +1571,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             MilkDropHalo.optionsOverride = nil
             let landed = self.caretHalo.cycleStyle(by: step)
-            self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
+            self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
             self.caretHalo.preview(seconds: 6)
         }
         // **`POST /test/halo`** — the same two moves from a desk, for him and
@@ -1594,7 +1594,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.overlay.flash("✨ \(style.menuTitle)", duration: 1.5)
             } else if let step = body["step"] as? Int {
                 let landed = self.caretHalo.cycleStyle(by: step)
-                self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
+                self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
             }
             if let demo = body["demo"] as? Double, demo > 0 { self.caretHalo.preview(seconds: min(demo, 60)) }
             return ["ok": true, "style": self.caretHalo.style.rawValue, "title": self.caretHalo.style.title,
