@@ -198,6 +198,12 @@ enum HaloStyle: String, CaseIterable {
     }
 }
 
+/// **The frame cap for every web view** (Victor, 2026-09-20: *"30 is more
+/// than enough … I'll probably only run these effects on battery"*): the
+/// pages' per-frame constants are time-based, so 30 looks like 60 at half
+/// the CPU. `WT_HALO_FPS=60` for a comparison run, `0` for no cap.
+let haloFrameCap: Int = ProcessInfo.processInfo.environment["WT_HALO_FPS"].flatMap(Int.init) ?? 30
+
 /// **What `CaretHalo` asks of a web view**, whichever page is in it: the
 /// page's frame loop on and off with the ring, the microphone's samples, the
 /// pointer, and a way to say it cannot go on (the film takes over).

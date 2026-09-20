@@ -127,7 +127,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
             return
         }
         configure()
-        web.evaluateJavaScript("halo.start()", completionHandler: nil)
+        web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
     }
 
     /// The engine's square follows the pointer as a window; nothing to tell the page.

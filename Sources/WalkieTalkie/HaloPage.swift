@@ -187,7 +187,7 @@ final class HaloPage: NSView, HaloWebHost {
             }
             return
         }
-        web.evaluateJavaScript("halo.start()", completionHandler: nil)
+        web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
         // `WT_HALO_PAGE_PROBE=1`: five seconds in, ask the page what it sees —
         // which effect, the canvases' sizes and brightness, the audio's range.
         if ProcessInfo.processInfo.environment["WT_HALO_PAGE_PROBE"] != nil {

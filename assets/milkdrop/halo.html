@@ -122,8 +122,13 @@
   }
 
   // ---- the loop -------------------------------------------------------------
-  function frame() {
+  // Plafonul de cadre al gazdei (halo.fps): pe baterie fiecare cadru costă CPU,
+  // iar presetele sunt scrise în timp (`time`, `fps`), nu în număr de cadre.
+  let lastFrameAt = 0, frameInterval = 0;
+  function frame(now) {
     if (!running) return;
+    if (frameInterval && now - lastFrameAt < frameInterval - 2) { requestAnimationFrame(frame); return; }
+    lastFrameAt = now;
     if (viz) {
       viz.render({ audioLevels: { timeByteArray: audio.time, timeByteArrayL: audio.l, timeByteArrayR: audio.r } });
     } else if (testMode) {
@@ -203,7 +208,8 @@
         audio.time[i] = b; audio.l[i] = b; audio.r[i] = b;
       }
     },
-    start() { if (running) return; running = true; requestAnimationFrame(frame); },
+    start() { if (running) return; running = true; lastFrameAt = 0; requestAnimationFrame(frame); },
+    fps(n) { frameInterval = n > 0 ? 1000 / n : 0; },
     stop() { running = false; },
     engine() { return !!window.butterchurn; }
   };

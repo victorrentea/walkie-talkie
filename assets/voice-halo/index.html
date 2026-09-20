@@ -377,14 +377,14 @@ function updateBands() {
     const hi = Math.max(lo + 1, Math.floor(Math.pow((i + 1) / NB, 2) * spec.length * 0.85));
     let acc = 0; for (let j = lo; j < hi; j++) acc += spec[j];
     const val = acc / (hi - lo);
-    peak[i]   = Math.max(val, peak[i] * 0.9985);
-    floorA[i] = val < floorA[i] ? val : floorA[i] + 0.06;
+    peak[i]   = Math.max(val, peak[i] * perFrame(0.9985));
+    floorA[i] = val < floorA[i] ? val : floorA[i] + 0.06 * dtF;
     const span = Math.max(22, peak[i] - floorA[i]);
     band[i] = Math.pow(Math.max(0, (val - floorA[i] - 2) / span), 1.7);
     sum += band[i];
   }
   const l = Math.min(1, (sum / NB) * 2.4);
-  levelNow += (l - levelNow) * (l > levelNow ? 0.35 : 0.06);   // urcă repede, coboară lent
+  levelNow += (l - levelNow) * inertia(l > levelNow ? 0.35 : 0.06);   // urcă repede, coboară lent
 }
 const e = i => band[Math.min(NB - 1, Math.max(0, i | 0))] || 0;
 const eAt = u => e(u * (NB - 1));
@@ -404,14 +404,15 @@ function idleWave(u, t) {
        + 0.17 * Math.sin(u * Math.PI * 2 * 8 + t * 0.19);
 }
 function updateShape(t) {
-  idleMix += ((1 - Math.min(1, levelNow * 1.6)) - idleMix) * 0.04;
+  idleMix += ((1 - Math.min(1, levelNow * 1.6)) - idleMix) * inertia(0.04);
   for (let i = 0; i < SHAPE_N; i++) {
     const u = i / SHAPE_N;
     const live = Math.abs(v(u));
     const idle = 0.42 * Math.abs(idleWave(u, t));
     const target = live * (1 - idleMix) + idle * idleMix;
-    SHAPE[i] += (target - SHAPE[i]) * 0.12;       // inerția
-    LIVE[i]  += (live   - LIVE[i])  * 0.12;
+    const k = inertia(0.12);
+    SHAPE[i] += (target - SHAPE[i]) * k;          // inerția
+    LIVE[i]  += (live   - LIVE[i])  * k;
   }
 }
 const vs = u => SHAPE[Math.min(SHAPE_N - 1, Math.max(0, (u * SHAPE_N) | 0))] || 0;
@@ -939,15 +940,15 @@ const FORMULAS = [
   // `fade`: inelele vin peste privitor și, la mărime de ecran, albeau tot. Acum se
   // sting spre margine (plin în centru, ~50% la jumătate, ~10% la marginea
   // ecranului) — merg tot până afară, doar că nu mai orbesc.
-  { name: '• Tunnel', desc: 'MilkDrop 7 — Geiss, 3 layers (Tunnel Mix)', preset: 'Geiss - 3 layers (Tunnel Mix)', fade: true, scale: 0.5 },
+  { name: '• Tunnel', desc: 'MilkDrop 7 — Geiss, 3 layers (Tunnel Mix)', preset: 'Geiss - 3 layers (Tunnel Mix)', fade: true, scale: 0.42 },
   { name: 'Cauldron', desc: 'MilkDrop 8 — Geiss, Cauldron painterly 2', preset: 'Geiss - Cauldron - painterly 2 (saturation remix)', scale: 0.35 },
   // cu 30% mai mic, la cerere: `scale` micșorează doar pânza pe ecran, compoziția
   // presetului rămâne intactă
-  { name: '• Tendrils', desc: 'MilkDrop 20 — Aderrasi, Painterly Tendrils', preset: 'Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast', scale: 0.35 },
+  { name: '• Tendrils', desc: 'MilkDrop 20 — Aderrasi, Painterly Tendrils', preset: 'Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast', scale: 0.7 },
   { name: '− Silk', desc: 'MilkDrop 44 — Flexi, truly soft piece of software', preset: 'Flexi - truly soft piece of software - this is generic texturing (Jelly) ', scale: 0.5 },
   { name: '− Nova', desc: 'MilkDrop 77 — ORB, Waaa', preset: 'ORB - Waaa', scale: 0.5 },
-  { name: 'Snowflake', desc: 'MilkDrop 85 — Zylot, Star Ornament (mic)', preset: 'Zylot - Star Ornament', scale: 0.165 },
-  { name: '★ Sparks', desc: 'MilkDrop 87 — martin, chain breaker', preset: 'martin - chain breaker', scale: 0.5 },
+  { name: 'Snowflake', desc: 'MilkDrop 85 — Zylot, Star Ornament (mic)', preset: 'Zylot - Star Ornament', scale: 0.66 },
+  { name: '★ Sparks', desc: 'MilkDrop 87 — martin, chain breaker', preset: 'martin - chain breaker', scale: 0.75 },
   { name: '− Royal', desc: 'MilkDrop 97 — Royal Mashup (197), mai mic', preset: '$$$ Royal - Mashup (197)', scale: 0.31 },
   { name: '− Mosaic', desc: 'MilkDrop 99 — martin, reflections on black tiles', preset: 'martin - reflections on black tiles', scale: 0.5 },
   // presetul „cu apă" pe care și-l amintea Victor: orizont net la mijloc, cer roz
@@ -988,7 +989,7 @@ const FORMULAS = [
   // ── apa: singurul efect cu pânză proprie ───────────────────────────────────
   // E o SCENĂ opacă (cer + bazin), nu un halo aditiv, deci nu poate sta pe #full,
   // care se compune cu `screen`. Codul stă în water.js — 230 de linii inutile aici.
-  { name: 'Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
+  { name: '− Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
 ];
 
 
@@ -1018,10 +1019,10 @@ function tunnelLayer({ DECAY, ZOOM, TWIST }, drawFn) {
   dst.x.globalCompositeOperation = 'source-over';
   dst.x.clearRect(0, 0, fullW, fullH);
   dst.x.save();
-  dst.x.globalAlpha = DECAY;
+  dst.x.globalAlpha = perFrame(DECAY);
   dst.x.translate(ox * dpr, oy * dpr);
-  dst.x.rotate(TWIST);
-  dst.x.scale(ZOOM, ZOOM);
+  dst.x.rotate(TWIST * dtF);
+  dst.x.scale(perFrame(ZOOM), perFrame(ZOOM));
   dst.x.drawImage(src.c, -ox * dpr, -oy * dpr, fullW, fullH);
   dst.x.restore();
 
@@ -1291,7 +1292,7 @@ hudBtn.addEventListener('click', ev => {
 // minute pe versiunea veche fără să dea vreun semn — asta, nu deploy-ul, e ce
 // pare „lent". Pagina își verifică singură amprenta într-un fișier de câțiva
 // octeți, cerut cu no-store, și se reîncarcă singură când s-a publicat altceva.
-const BUILD = '18:43:26 18f2224';
+const BUILD = '19:11:28 14c48d7';
 const verEl = document.getElementById('ver');
 verEl.textContent = 'v ' + BUILD;
 async function checkVersion() {
@@ -1500,8 +1501,21 @@ function meanOf(cv) {
 layout();
 const t0 = performance.now();
 let running = false;
+// ── cadrul, în timp, nu în număr de cadre ─────────────────────────────────────
+// Toate constantele „pe cadru" (DECAY, ZOOM, TWIST, inerțiile, pragurile) au fost
+// reglate la 60 Hz. `dtF` = câte cadre de 60 Hz au trecut de la cadrul precedent
+// (1 la 60 Hz, 2 la 30, 0.5 la 120): o pierdere per cadru p devine p^dtF, o rată
+// aditivă r devine r·dtF, o inerție k devine 1−(1−k)^dtF. Așa arată identic pe
+// un telefon de 120 Hz, pe un Mac la 60 și în Walkie Talkie plafonat la 30 —
+// unde cadrele costă CPU pe baterie (2026-09-20).
+let dtF = 1, lastFrameAt = 0, frameInterval = 0;   // frameInterval: ms între cadre, 0 = fără plafon
+const perFrame = (p, k = dtF) => Math.pow(p, k);           // pierdere/creștere multiplicativă
+const inertia = k => 1 - Math.pow(1 - k, dtF);             // lerp cu factor k pe cadru
 function frame(now) {
   if (!running) return;
+  if (frameInterval && now - lastFrameAt < frameInterval - 2) { requestAnimationFrame(frame); return; }
+  dtF = lastFrameAt ? Math.min(4, Math.max(0.25, (now - lastFrameAt) / (1000 / 60))) : 1;
+  lastFrameAt = now;
   const t = (now - t0) / 1000;
   // cursorul merge cu efectul: vârful lui trebuie să stea mereu în centrul lui,
   // altfel plimbarea le desparte și nu mai vezi unde ar fi mouse-ul în realitate
@@ -1547,8 +1561,9 @@ if (EMBED) {
     pick(i) { pick(i); return FORMULAS[i] ? FORMULAS[i].name : 'no such effect: ' + i; },
     center(x, y) { embedCX = x; embedCY = y; },
     audio(b64) { emuAudio(b64); },
-    start() { calls.start++; clearTrail(); start(); },
+    start() { calls.start++; clearTrail(); lastFrameAt = 0; start(); },
     stop() { running = false; },
+    fps(n) { frameInterval = n > 0 ? 1000 / n : 0; },     // plafonul de cadre al gazdei (0 = liber)
     names() { return FORMULAS.map(f => f.name); },
     // diagnostic: ce vede pagina și cât de luminoase sunt pânzele (host: WT_HALO_PAGE_PROBE=1)
     probe() {
