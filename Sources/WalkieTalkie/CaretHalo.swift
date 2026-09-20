@@ -433,18 +433,23 @@ final class CaretHalo {
     // MARK: - Which halo (2026-09-20)
 
     /// **Which effect is drawn round the pointer.** `.lightning` is the film
-    /// this file has always drawn, and with it chosen nothing below this mark
-    /// runs — every other case hands the band to `HaloEffectRenderer`
-    /// (`HaloEffects.swift`, ported from `voice-halo` at tag `swift-port-01`)
-    /// and keeps the panel, the pointer-following, the bloom and the collapse
-    /// exactly as they are. Read once at launch (`HaloStyle.current`:
-    /// `UserDefaults`, `WT_HALO_STYLE` overriding for a run) and changed only
-    /// through `setStyle`, which the menu's `Halo` row calls.
+    /// this file has always drawn, natively; every other case is an effect of
+    /// the `voice-halo` page, run by the page itself in a web view
+    /// (`HaloPage`, 2026-09-20) on a panel the size of the pointer's screen,
+    /// with the panel, the pointer-following and the collapse kept as they
+    /// are. Read once at launch (`HaloStyle.current`: `UserDefaults`,
+    /// `WT_HALO_STYLE` overriding for a run) and changed only through
+    /// `setStyle`, which the menu's `Halo` row and the wheel's dial call.
     private(set) var style: HaloStyle = HaloStyle.current
-    /// The renderer behind `style` when it is not the film; nil for `.lightning`.
-    private var effect: HaloEffectRenderer?
-    /// The effects' frame clock, 60 Hz while the ring is up. The film needs no
-    /// such thing — its reel and spin are Core Animation's.
+    /// **What the panel actually draws**: `style`, unless the page could not
+    /// be had — missing, failed to load, no WebGL, a preset that would not
+    /// pin — in which case it is `.lightning`, the film, which depends on
+    /// nothing. Never the preference itself: the next `setStyle` tries again.
+    private var drawn: HaloStyle = .lightning
+    /// The page failed once this style; stop asking it until the style changes.
+    private var pageBroken = false
+    /// The clock that feeds the page its audio, 30 Hz while the ring is up.
+    /// The film needs no such thing — its reel and spin are Core Animation's.
     private var renderTimer: Timer?
     /// **The microphone's recent samples**, for the effects that deform on the
     /// shape of a syllable rather than on its loudness. Asked of the same
@@ -452,37 +457,39 @@ final class CaretHalo {
     /// effect idles on its own slow wave.
     var samples: (() -> [Float]?)?
 
-    /// **The panel's frame for the current style**, in screen coordinates
-    /// (2026-09-20, `swift-port-02`). The film and the square effects get the
-    /// ring's square centred on the pointer; a screen-sized style (the water)
-    /// gets the frame of the screen the pointer is on, so the pool sits at
-    /// the bottom of *that* screen and the comets can orbit as wide as the
-    /// page's. The pointer is handed to such a renderer as `center` every
-    /// frame rather than moving the window.
+    /// **The panel's frame for what is drawn**, in screen coordinates. The
+    /// film gets the ring's square centred on the pointer; a page effect gets
+    /// the frame of the screen the pointer is on — the page lays out from the
+    /// viewport, and the pointer is handed in as the origin every move rather
+    /// than the window moved, so nothing an effect draws to the screen's edge
+    /// is ever clipped by a window smaller than the screen.
     private func panelFrame() -> NSRect {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
             ?? NSScreen.main ?? NSScreen.screens[0]
-        if style.coversScreen { return screen.frame }
-        if let preset = style.preset {
+        if drawn.coversScreen { return screen.frame }
+        if let preset = drawn.preset {
+            // The engine's "cover": a square of side max(w, h) of the screen ×
+            // the preset's scale, centred on the pointer and following it.
             let s = (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
             return NSRect(x: (mouse.x - s / 2).rounded(), y: (mouse.y - s / 2).rounded(), width: s, height: s)
         }
         return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
     }
 
-    /// The engine's web view, for a preset style; nil otherwise. It stands in
-    /// the panel's content view beside the (empty) stage, and the panel's
-    /// alpha is what fades it in and out — a web view cannot be a sublayer of
-    /// the stage the collapse scales.
-    private var web: MilkDropHalo?
+    /// The web view — the page (`HaloPage`) for a hand-written effect, the
+    /// engine's page (`MilkDropHalo`) for a preset; nil for the film. It
+    /// stands in the panel's content view beside the (empty) stage, and the
+    /// panel's alpha is what fades it in and out — a web view cannot be a
+    /// sublayer of the stage the collapse scales.
+    private var web: HaloWebHost?
 
-    /// The pointer in a screen-sized renderer's page coordinates (y down
-    /// from the panel's top-left), written on every `follow` and `show`.
+    /// The pointer in the page's coordinates (CSS px, y down from the
+    /// panel's top-left), written on every `follow` and `show`.
     private func aimEffectAtPointer() {
-        guard let effect = effect, effect.style.coversScreen, let panel = panel else { return }
+        guard let web = web, let panel = panel else { return }
         let p = NSEvent.mouseLocation, f = panel.frame
-        effect.center = CGPoint(x: p.x - f.origin.x, y: f.maxY - p.y)
+        web.center(CGPoint(x: p.x - f.origin.x, y: f.maxY - p.y))
         // The bloom and the collapse scale `stage` about its anchor; on a
         // screen-sized panel that anchor has to be the pointer, or the ring
         // would converge on the middle of the screen.
@@ -505,15 +512,33 @@ final class CaretHalo {
         guard new != style else { return }
         Log.info("◯ caret halo style: \(style.rawValue) → \(new.rawValue)")
         style = new
+        pageBroken = false
+        rebuild()
+    }
+
+    /// Tear the panel down and build it again for `style` — a style change,
+    /// a screen change, or the page giving up. Straight out and back, not a
+    /// collapse: what replaces it is the same ring in another dress.
+    private func rebuild() {
         renderTimer?.invalidate(); renderTimer = nil
         timer?.invalidate(); timer = nil
         panel?.orderOut(nil)
         web?.stop()
-        panel = nil; stage = nil; pulse = nil; effect = nil; web = nil
+        panel = nil; stage = nil; pulse = nil; web = nil
         _ = makePanel()
         // `live` stays as it is: `show` reads it through `follow`, which is
         // what puts the new panel on the pointer before it is ordered front.
         if live { show(opening: .whole) }
+    }
+
+    /// **The page could not be had; the film takes over** for this style,
+    /// until the style is changed again. Called from `HaloPage.onFailure`,
+    /// possibly mid-dictation: the ring must not go blank, so the film comes
+    /// up in the same call, on the pointer.
+    private func fallBack(_ why: String) {
+        pageBroken = true
+        Log.error("◯ caret halo: \(style.rawValue) → lightning film, because \(why)")
+        rebuild()
     }
 
     /// **The next halo, or the previous one**, round the list and back to the
@@ -769,16 +794,9 @@ final class CaretHalo {
         arrow.hide()
         Self.followTraceLeft = 6
         follow()
-        // **An effect comes up clean and running.** The fog buffer is cleared
-        // so no trail from the last sentence stands at the pointer, and the
-        // 60 Hz clock starts; the film needs neither.
-        if let effect = effect {
-            effect.reset()
-            renderTimer?.invalidate()
-            let r = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak effect] _ in effect?.step() }
-            renderTimer = r
-            RunLoop.main.add(r, forMode: .common)
-        }
+        // **The page comes up clean and running.** `start` clears its trail
+        // so nothing from the last sentence stands at the pointer, and the
+        // 30 Hz feed of the microphone starts; the film needs neither.
         if let web = web {
             web.start()
             renderTimer?.invalidate()
@@ -1008,13 +1026,11 @@ final class CaretHalo {
         // **A screen-sized panel stays put and the pointer is handed in.**
         // Unless the pointer has crossed to a screen of another size, in
         // which case the panel is rebuilt for that screen.
-        if let effect = effect, effect.style.coversScreen {
+        if drawn.coversScreen {
             let frame = panelFrame()
             if frame.size != panel.frame.size {
-                Log.info("◯ caret halo: the pointer moved to a \(Int(frame.width))×\(Int(frame.height)) screen — rebuilding the water")
-                let current = style
-                style = .lightning       // so `setStyle` sees a change
-                setStyle(current)
+                Log.info("◯ caret halo: the pointer moved to a \(Int(frame.width))×\(Int(frame.height)) screen — rebuilding the page")
+                rebuild()
                 return
             }
             if frame.origin != panel.frame.origin { panel.setFrameOrigin(frame.origin) }
@@ -1024,7 +1040,7 @@ final class CaretHalo {
         }
         // A preset's square is bigger than the ring's, so the origin is the
         // frame's rather than `Self.origin()`, which the arrow keeps.
-        let wanted = web != nil ? panelFrame().origin : Self.origin()
+        let wanted = drawn.preset != nil ? panelFrame().origin : Self.origin()
         panel.setFrameOrigin(wanted)
         // **Who moved it?** (2026-09-14). Victor: *"pe retina merge bine, pe
         // ecranul al doilea îmi aleargă, îmi fuge de acolo, acolo"* — a ring that
@@ -1081,13 +1097,12 @@ final class CaretHalo {
     /// the swell used to say.
     private func refresh() {
         guard live, let panel = panel else { return }
-        // **An effect carries its own breath.** Every one of them already
+        // **A page effect carries its own breath.** Every one of them already
         // brightens, swells or emits on the voice from the samples themselves,
         // and the page shows them at full alpha; a second envelope on the
         // panel would be the same syllable said twice. Only the arrow's
         // schedule is kept.
-        if effect != nil || web != nil {
-            if effect != nil { panel.alphaValue = 1 }
+        if web != nil {
             arrow.refresh(quiet: quietSeconds?() ?? 0, at: Self.origin())
             return
         }
@@ -1885,6 +1900,13 @@ final class CaretHalo {
 
     private func makePanel() -> RelayPanel {
         let side = Self.side
+        // **What this panel draws.** The page, if the style asks for one and
+        // it can be had; the film otherwise — and the film always for
+        // `.lightning`, which never touches a web view.
+        drawn = style != .lightning && !pageBroken && style.isAvailable ? style : .lightning
+        if drawn != style {
+            Log.error("◯ caret halo: \(style.rawValue) asked for, drawing the film — \(pageBroken ? "the page failed this style" : (style.unavailableReason ?? "unavailable"))")
+        }
         let frame = panelFrame()
         // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` drags a
         // borderless window back onto the display and below the menu bar, which
@@ -1911,36 +1933,37 @@ final class CaretHalo {
         stage.frame = CGRect(origin: .zero, size: frame.size)
         let halo: CALayer
         web = nil
-        if let preset = style.preset {
-            // **The engine, in a web view** — see `MilkDropHalo`. The stage
-            // stays, empty, so the bloom and the collapse have something to
-            // animate without moving the web view: what fades it is the
-            // panel's alpha, in `show` and `hide`.
-            effect = nil
+        if let preset = drawn.preset, let host = MilkDropHalo(preset: preset, side: frame.width,
+                                                              screen: (NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main)?.frame.size ?? frame.size) {
+            // **The engine, in its own page** — see `MilkDropHalo`. The square
+            // follows the pointer as a window (`follow`).
             halo = CALayer()
-            let mouse = NSEvent.mouseLocation
-            let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-            if let host = MilkDropHalo(preset: preset, side: frame.width,
-                                       screen: screen?.frame.size ?? frame.size) {
-                view.addSubview(host)
-                web = host
-                Log.info("◯ caret halo: \(style.rawValue) — \(style.title), a \(Int(frame.width))pt square in a web view\(MilkDropHalo.engineAvailable ? "" : " — NO ENGINE bundled, test pattern")")
-            } else {
-                Log.error("◯ caret halo: \(style.rawValue) asked for, but assets/milkdrop is nowhere to be found")
-            }
-        } else if style != .lightning,
-           let renderer = HaloEffectRenderer(style: style, size: frame.size, ringRadius: Self.core) {
-            // **Another halo in the film's place** (2026-09-20). The effect
-            // draws its own motion — every one of them turns, breathes or
-            // emits on its own clock — so it gets no spin of its own from
-            // here; the stage and the pulse above it are unchanged, so the
-            // bloom and the collapse are the same gesture whatever is drawn.
-            renderer.samples = { [weak self] in self?.samples?() ?? nil }
-            effect = renderer
-            halo = renderer.layer
-            Log.info("◯ caret halo: \(style.rawValue) — \(style.title), R=\(Int(renderer.R))pt in a \(Int(frame.width))×\(Int(frame.height))pt panel")
+            host.onFailure = { [weak self] why in self?.fallBack(why) }
+            view.addSubview(host)
+            web = host
+            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), a \(Int(frame.width))pt square in the engine's web view")
+        } else if drawn.pageIndex != nil, let host = HaloPage(size: frame.size) {
+            // **The page, in a web view** — see `HaloPage`. The stage stays,
+            // empty, so the bloom and the collapse have something to animate
+            // without moving the web view: what fades it is the panel's
+            // alpha, in `show` and `hide`. The page is told which effect now
+            // and where the pointer is on every move; if it gives up, the
+            // film takes its place in the same panel slot.
+            halo = CALayer()
+            host.onFailure = { [weak self] why in self?.fallBack(why) }
+            host.pick(drawn)
+            view.addSubview(host)
+            web = host
+            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), the page in a \(Int(frame.width))×\(Int(frame.height))pt web view")
         } else {
-            effect = nil
+            if drawn != .lightning {
+                // The host found no page after `isAvailable` said there was
+                // one — a race with an install; the film, on the film's own
+                // frame, and no retry until the style changes.
+                pageBroken = true
+                Log.error("◯ caret halo: the page vanished between the check and the load — drawing the film")
+                return makePanel()
+            }
             halo = Self.haloLayer(side: side)
             // **The turn goes on the halo, not on the stage** — see `stage` for why
             // the two motions may not share a layer. Its box is the whole panel, so

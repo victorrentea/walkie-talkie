@@ -1,0 +1,1575 @@
+<!doctype html>
+<html lang="ro">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#05070a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Voice Halo</title>
+<style>
+  :root {
+    --ink: #cfd6de; --dim: #7f8894; --line: #1d242d;
+    --hud: 12px;                      /* fontul liniei de jos, referința de scară */
+    --pad-b: env(safe-area-inset-bottom, 0px);
+    --pad-t: env(safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #05070a; color: var(--dim);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  body::before {                       /* fundal, ca să se vadă cum compune halo-ul */
+    content: ""; position: fixed; inset: 0;
+    background: radial-gradient(120vmax 90vmax at 30% 15%, #101b26, #05070a 70%);
+  }
+  /* Pânza pătrată (#wrap + #c) a fost ELIMINATĂ. Orice efect scris de mână
+     desenează acum direct pe #full, cât fereastra: un efect care ajunge la
+     marginea ecranului se oprește acolo fiindcă acolo se termină ecranul, nu
+     fiindcă l-a tăiat un dreptunghi (sau, la fel de rău, un cerc). */
+
+  /* ── comenzi ─────────────────────────────────────────────────────────── */
+  #ui { position: fixed; inset: 0; display: flex; flex-direction: column;
+        justify-content: space-between; padding: calc(var(--pad-t) + 10px) 10px
+        calc(var(--pad-b) + 8px); transition: opacity .35s; z-index: 3 }
+  #ui.faded { opacity: 0 }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center }
+  .chip { flex: 0 0 auto; min-width: 42px; padding: 9px 12px; border-radius: 999px;
+          border: 1px solid var(--line); background: rgba(10,14,19,.72); color: var(--dim);
+          font: 600 14px/1 ui-monospace, monospace; backdrop-filter: blur(8px) }
+  .chip.on { border-color: #3c7fa6; color: #bfe6ff; background: rgba(20,44,60,.8) }
+  /* ★ pe pastilă pentru favoritele din review (vezi FAVS) */
+  .chip.fav::after { content: "★"; font-size: 9px; vertical-align: super; opacity: .75 }
+  #bottom { display: flex; flex-direction: column; gap: 8px; align-items: center }
+  #label { color: var(--ink); font-size: var(--hud); text-align: center; padding: 0 8px;
+           text-shadow: 0 1px 6px #000 }
+  #mic { padding: 13px 20px; border-radius: 999px; border: 1px solid #2f6b8c;
+         background: rgba(16,40,56,.85); color: #bfe6ff; font: 600 15px/1 inherit;
+         backdrop-filter: blur(8px) }
+  #mic.live { border-color: var(--line); background: rgba(10,14,19,.6); color: var(--dim);
+              font-weight: 400; font-size: 12px; padding: 7px 14px }
+  #mic.bad { border-color: #7a3a33; color: #ff9b8a }
+  #ver { font-size: 10px; color: #5c6570; letter-spacing: .04em }
+  #ver.fresh { color: #7fe3ff }
+  /* fundal de IDE: ca să judeci cum compune halo-ul peste o aplicație reală,
+     nu peste un gradient curat. Se comută din butonul din colț. */
+  #ide { position: fixed; inset: 0; z-index: 0; display: none; overflow: hidden;
+         background: #1e1f22; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace }
+  body.ide #ide { display: block }
+  body.ide::before { display: none }
+  #ide .tabs { height: 30px; background: #2b2d30; border-bottom: 1px solid #1e1f22;
+               display: flex; align-items: center; gap: 1px; padding: 0 6px; color: #9da0a8 }
+  #ide .tab { padding: 5px 10px; border-radius: 5px 5px 0 0; font-size: 11px }
+  #ide .tab.on { background: #1e1f22; color: #dfe1e5 }
+  #ide .body { display: flex; height: calc(100% - 30px) }
+  #ide .gutter { width: 34px; padding: 6px 6px 0 0; text-align: right; color: #4b5059;
+                 background: #1e1f22; flex: 0 0 auto }
+  #ide .code { padding: 6px 10px; color: #bcbec4; white-space: pre; flex: 1 1 auto }
+  #ide .k { color: #cf8e6d } #ide .s { color: #6aab73 } #ide .c { color: #7a7e85 }
+  #ide .t { color: #bcbec4 } #ide .n { color: #2aacb8 } #ide .f { color: #56a8f5 }
+  /* stă jos: sus acoperea cifrele și nu se mai putea alege efectul */
+  #bg { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line);
+        background: rgba(10,14,19,.72); color: var(--dim); font: 11px/1 inherit }
+  #row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center }
+  #mdBtn { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line);
+           background: rgba(10,14,19,.72); color: var(--dim); font: 11px/1 inherit }
+  #mdBtn.on, #walkBtn.on, #hudBtn.on, #curBtn.on { border-color: #3c7fa6; color: #bfe6ff;
+                                        background: rgba(20,44,60,.8) }
+  #walkBtn, #hudBtn, #curBtn { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line);
+                      background: rgba(10,14,19,.72); color: var(--dim); font: 11px/1 inherit }
+  /* „ascunde barele": rămân doar butoanele, ca animația să aibă tot ecranul */
+  body.bare #bars, body.bare #label, body.bare #chips { display: none }
+  /* efectele „de tunel" nu se lasă ținute în pătratul halo-ului: urmele lor se
+     împrăștie pe tot ecranul, deci au pânza lor, cât fereastra */
+  #full { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+          mix-blend-mode: screen }
+  /* apa își desenează propriul cer și propriul bazin, deci e o SCENĂ opacă, nu un
+     halo: fără `screen`, altfel fundalul paginii ar transpărea prin apă */
+  #water { position: fixed; inset: 0; z-index: 1; pointer-events: none }
+  .hidden { display: none !important }
+  /* MilkDrop: și la răsfoire, și la presetul fixat — o pânză PĂTRATĂ cu latura
+     max(lățime, înălțime), centrată. E „cover", nu „fit": acoperă ecranul în
+     ambele direcții, deci nu se vede unde se termină, dar păstrează raportul
+     presetului. Întinsă pe 390×844 (1:2.16), fiecare cerc al lui ORB - Waaa
+     devenea o elipsă verticală — sistemul de coordonate al presetului e
+     normalizat la pânză, nu la ecran.
+     Fără mască: masca radială de dinainte era tot un decupaj — ascundea
+     colțurile, dar lăsa un cerc care se plimba.
+     `--walk` (plimbarea) trebuie să fie cea mai din STÂNGA transformare, ca să
+     miște elementul deja așezat, și e COMPUSĂ — nu suprascrisă — altfel ar
+     șterge `translate(-50%,-50%)` și `--mdScale` (presetele 85 și 97).
+     Valoarea „oprit" e translate(0,0), NU `none`: `none` e valid doar singur, iar
+     `none translate(…)` invalidează toată declarația și pânza sare în colț. */
+  #md, #key.md { position: fixed; left: 50%; top: 50%; z-index: 1; pointer-events: none;
+        mix-blend-mode: screen; transform-origin: center center;
+        transform: var(--walk, translate(0px, 0px)) translate(-50%, -50%)
+                   scale(var(--mdScale, 1)) }
+  #key.md { mix-blend-mode: normal }
+  /* `fade`, pe efect, nu global: stingere RADIALĂ a luminozității, cerută explicit
+     pentru 9 (Geiss Tunnel Mix), unde inelele care vin peste tine orbesc ecranul.
+     Nu e decupaj: nimic nu se taie, inelele ajung tot până în marginea ecranului,
+     doar că mai stinse. Elipsa are razele 50vw × 50vh, deci atinge marginile
+     ECRANULUI (nu ale pânzei pătrate, care e mai mare): plin în centru, ~50% la
+     jumătatea drumului, ~10% în margine. Ultimul stop NU e zero și dincolo de el
+     gradientul continuă cu aceeași valoare — deci nu apare nicio graniță. */
+  #md.fade, #key.md.fade {
+    -webkit-mask-image: radial-gradient(ellipse 50vw 50vh at 50% 50%,
+      #000 0%, rgba(0,0,0,.78) 28%, rgba(0,0,0,.50) 50%,
+      rgba(0,0,0,.26) 75%, rgba(0,0,0,.10) 100%);
+    mask-image: radial-gradient(ellipse 50vw 50vh at 50% 50%,
+      #000 0%, rgba(0,0,0,.78) 28%, rgba(0,0,0,.50) 50%,
+      rgba(0,0,0,.26) 75%, rgba(0,0,0,.10) 100%);
+  }
+  /* Cursorul macOS, fix în centrul ECRANULUI (nu al pânzei): când halo-ul se
+     plimbă, el rămâne pe loc, ca să se vadă unde va fi mouse-ul în realitate.
+     Vârful e hotspot-ul, deci colțul din stânga-sus al glifei stă chiar pe centru.
+     Mărimea e legată de fontul din linia de jos (--hud), ca proporția să fie reală. */
+  #cursor { position: fixed; left: 50%; top: 50%; z-index: 2; pointer-events: none;
+            transform: var(--walk, translate(0px, 0px));
+            width: calc(var(--hud) * 1.55); filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)) }
+  body.nocursor #cursor { display: none }
+  /* ── modul „embed" (`?embed=1`): pagina găzduită de Walkie Talkie într-un
+     WKWebView transparent, peste desktop, cu centrul pe mouse-ul REAL. Nu se
+     vede nimic din interfață: nici pastile, nici butoane, nici bare, nici
+     cursorul desenat (e chiar cursorul lui acolo). Fundalul e transparent, deci
+     `mix-blend-mode: screen` n-ar avea cu ce să se compună: efectele proprii
+     au deja alfa corect (linii `lighter` pe pânză goală); pânzele OPACE — #md
+     (motorul MilkDrop șterge pe negru) și #water (scena) — trec printr-o
+     „cheie": #key le copiază cu alfa = max(r,g,b), deci negrul devine
+     transparent și lumina rămâne lumină. Ele sunt SCOASE din DOM (vezi `EMBED`
+     în script), ca pânza nelegată din vechiul halo.html: lăsate în pagină, cu
+     `visibility: hidden` #key citea din pânza WebGL aproape nimic, iar cu
+     `display: none` chiar nimic — WebKit citește altfel o pânză compusă. */
+  html.embed, body.embed { background: transparent !important }
+  body.embed::before, body.embed #ui, body.embed #cursor, body.embed #ide { display: none !important }
+  body.embed #full { mix-blend-mode: normal }
+  #key { display: none; z-index: 1; pointer-events: none }
+  body.embed #key.md, body.embed #key.full { display: block }
+  #key.full { position: fixed; inset: 0; transform: none }
+  /* vumetru: o bară per interval de frecvență, grave la stânga, înalte la dreapta */
+  #bars { display: flex; align-items: flex-end; gap: 2px; width: 100%; height: 46px }
+  #bars div { flex: 1; min-height: 2px; border-radius: 2px 2px 0 0;
+              background: linear-gradient(#7fe3ff, #23566f) }
+</style>
+
+<div id="ide">
+  <div class="tabs">
+    <div class="tab on">VoiceHalo.java</div><div class="tab">Ring.java</div><div class="tab">Audio.java</div>
+  </div>
+  <div class="body">
+    <div class="gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23<br>24<br>25<br>26<br>27<br>28</div>
+    <div class="code"><span class="k">package</span> ro.victorrentea.halo;
+
+<span class="k">import</span> javax.sound.sampled.*;
+
+<span class="c">/** Inelul care ascultă microfonul. */</span>
+<span class="k">public class</span> <span class="t">VoiceHalo</span> {
+
+    <span class="k">private final</span> <span class="t">float</span>[] wave = <span class="k">new</span> <span class="t">float</span>[<span class="n">2048</span>];
+    <span class="k">private</span> <span class="t">double</span> idleMix = <span class="n">1.0</span>;
+
+    <span class="k">public void</span> <span class="f">render</span>(<span class="t">double</span> t) {
+        <span class="k">for</span> (<span class="t">int</span> i = <span class="n">0</span>; i &lt; wave.length; i++) {
+            <span class="t">double</span> u = (<span class="t">double</span>) i / wave.length;
+            <span class="t">double</span> r = radius + amp * <span class="f">abs</span>(wave[i]);
+            <span class="f">plot</span>(<span class="f">cos</span>(u * TAU) * r, <span class="f">sin</span>(u * TAU) * r);
+        }
+    }
+
+    <span class="c">// în tăcere amplitudinea e zero, deci rămâne cerc</span>
+    <span class="k">private</span> <span class="t">double</span> <span class="f">amplitude</span>() {
+        <span class="k">return</span> live * (<span class="n">1</span> - idleMix);
+    }
+}
+</div>
+  </div>
+</div>
+<svg id="cursor" viewBox="0 0 14 21" aria-hidden="true">
+  <path d="M1 1 L1 18.2 L5.2 14.1 L7.9 20 L10.6 18.8 L8 13.1 L13 13.1 Z"
+        fill="#a06bff" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>
+</svg>
+<canvas id="full" class="hidden"></canvas>
+<canvas id="water" class="hidden"></canvas>
+<canvas id="md" class="hidden"></canvas>
+<canvas id="key"></canvas>
+<script src="water.js"></script>
+
+<div id="ui">
+  <div id="chips"></div>
+  <div id="bottom">
+    <div id="label">apasă pe buton ca să pornești microfonul</div>
+    <div id="ver">v —</div>
+    <div id="row">
+      <button id="mic">🎙 pornește microfonul</button>
+      <button id="bg">fundal: IDE</button>
+      <button id="mdBtn">MilkDrop</button>
+      <button id="walkBtn">plimbare</button>
+      <button id="hudBtn">ascunde barele</button>
+      <button id="curBtn">ascunde cursorul</button>
+    </div>
+    <div id="bars"></div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────── modul „embed" ────────────────────────────
+// `index.html?embed=1`: pagina rulează în Walkie Talkie, într-un WKWebView
+// transparent cât ecranul, și e comandată din Swift prin `window.halo`:
+//   halo.pick(i)        — efectul i (indexul din FORMULAS), ca pastila i+1
+//   halo.center(x, y)   — centrul, în px CSS ai ferestrei: mouse-ul REAL.
+//                         Merge prin `walkX/walkY`, exact ca „plimbarea"
+//   halo.audio(b64)     — ultimele eșantioane ale microfonului aplicației
+//                         (Float32 LE, −1…1, 16 kHz); pagina NU deschide niciun
+//                         microfon și nu pornește niciun AudioContext
+//   halo.start() / stop() — bucla de cadre pornește doar cât e inelul pe ecran
+// și răspunde prin `webkit.messageHandlers.halo` cu {event: ready|picked|error}.
+// Scripturile MilkDrop se iau de lângă pagină (`?md=<folder>/`), nu de pe unpkg:
+// haloul trebuie să meargă și în avion.
+const EMBED_PARAMS = new URLSearchParams(location.search);
+const EMBED = EMBED_PARAMS.has('embed');
+if (EMBED) { document.documentElement.classList.add('embed'); document.body.classList.add('embed'); }
+// diagnostic: tot ce ar fi ajuns în consolă (invizibilă într-un WKWebView), pentru halo.probe()
+const consoleLog = [];
+if (EMBED) for (const k of ['log', 'warn', 'error']) { const f = console[k].bind(console); console[k] = (...a) => { consoleLog.push(k + ': ' + a.map(x => String(x)).join(' ').slice(0, 300)); f(...a); }; }
+addEventListener('error', e => consoleLog.push('uncaught: ' + e.message + ' @' + e.lineno));
+addEventListener('unhandledrejection', e => consoleLog.push('rejection: ' + (e.reason && e.reason.message || e.reason)));
+function post(msg) {
+  try { window.webkit.messageHandlers.halo.postMessage(msg); } catch (e) { /* în browser: nimeni nu ascultă */ }
+}
+
+// ─────────────────────────────── audio ────────────────────────────────
+// Pe telefon getUserMedia cere DOUĂ lucruri: origine https (de aici GitHub Pages)
+// și un gest al utilizatorului. iOS mai cere și un actx.resume() în acel gest,
+// altfel contextul rămâne suspendat și forma de undă e numai zerouri.
+const actx = new (window.AudioContext || window.webkitAudioContext)();
+const analyser = actx.createAnalyser();
+analyser.fftSize = 2048;
+analyser.smoothingTimeConstant = 0.72;
+const wave = new Float32Array(analyser.fftSize);
+const spec = new Uint8Array(analyser.frequencyBinCount);
+let micOn = false, micSource = null;
+
+const micBtn = document.getElementById('mic');
+const label  = document.getElementById('label');
+
+async function startMic() {
+  if (micOn) return;
+  try {
+    if (!navigator.mediaDevices) throw new Error('fără mediaDevices (pagina nu e pe https?)');
+    await actx.resume();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }
+    });
+    micSource = actx.createMediaStreamSource(stream);
+    micSource.connect(analyser);
+    if (viz) viz.connectAudio(micSource);
+    micOn = true;
+    micBtn.className = 'live';
+    micBtn.textContent = '🎙 microfon pornit';
+    label.textContent = (fIdx + 1) + ' — ' + FORMULAS[fIdx].name +
+      (FORMULAS[fIdx].desc ? '  ·  ' + FORMULAS[fIdx].desc : '');
+    keepAwake();
+  } catch (e) {
+    micBtn.className = 'bad';
+    micBtn.textContent = 'microfon refuzat: ' + (e.name || e.message);
+  }
+}
+micBtn.addEventListener('click', startMic);
+
+// ecranul să nu se stingă cât te uiți la el
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && micOn) keepAwake();
+});
+
+// ── vumetrul: se vede imediat când intră vocea ────────────────────────
+const BARS = 36, barEls = [];
+{
+  const box = document.getElementById('bars');
+  for (let i = 0; i < BARS; i++) { const d = document.createElement('div'); box.append(d); barEls.push(d); }
+}
+function drawBars() {
+  // vocea stă jos în spectru, deci benzile grave primesc mai multă lățime (scală pătratică)
+  for (let i = 0; i < BARS; i++) {
+    const lo = Math.floor(Math.pow(i / BARS, 2) * spec.length);
+    const hi = Math.max(lo + 1, Math.floor(Math.pow((i + 1) / BARS, 2) * spec.length));
+    let sum = 0; for (let j = lo; j < hi; j++) sum += spec[j];
+    barEls[i].style.height = (2 + (sum / (hi - lo) / 255) * 42) + 'px';
+  }
+}
+
+// ──────────────────────── geometrie / layout ──────────────────────────
+// Cerința lui Victor: cercul de repaus are diametrul = 80% din LĂȚIMEA ecranului.
+// Nu mai există pânză pătrată din care să se deducă o rază: TOTUL se desenează pe
+// #full, cât fereastra. Fiecare efect își declară în schimb un `scale` — raza lui
+// de referință ca fracțiune din LATURA MICĂ a ferestrei — iar `rad()` o traduce în
+// pixeli. Valorile vin, una câte una, din vechiul câmp `rest`: scale = 0.40 / rest,
+// adică exact aceeași mărime pe ecran ca înainte (0.40 = jumătate din cele 80%).
+const RING_OF_WIDTH = 0.80;
+const dpr = Math.min(2, window.devicePixelRatio || 1);   // 2 e destul; 3 doar încinge telefonul
+const rad = scale => (RING_OF_WIDTH / 2) * Math.min(innerWidth, innerHeight) / 0.40 * scale;
+
+// plimbarea, în pixeli. Se recalculează o dată pe cadru și se aplică ÎN DESEN
+// (originea pânzei), nu ca transformare CSS pe pânză: o pânză cât ecranul mutată
+// cu transform lasă o bandă goală la margine, adică fix dreptunghiul de care
+// scăpăm. Singura pânză mutată din CSS e #md, care nu se desenează de aici.
+let walkX = 0, walkY = 0;
+
+function layout() {
+  calls.layout++;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  fullSize();
+  // butterchurn nu scrie singur atributele canvasului (rămân 300×150, adică imagine
+  // decentrată și la altă scară); le punem noi înainte de setRendererSize
+  // Pătrat cu latura cât DIMENSIUNEA MARE a ferestrei: acoperă ecranul în ambele
+  // direcții (deci nu i se vede marginea) și păstrează raportul presetului.
+  const side = Math.max(vw, vh), px = Math.round(side * dpr);
+  mdCanvas.style.width = mdCanvas.style.height = side + 'px';
+  if (mdCanvas.width === px && mdCanvas.height === px) return;   // neschimbat: nu goli pânza WebGL
+  mdCanvas.width = mdCanvas.height = px;
+  if (viz) { calls.rendererSize++; viz.setRendererSize(px, px); }
+}
+const keyCv = document.getElementById('key');
+addEventListener('resize', layout);
+addEventListener('orientationchange', () => setTimeout(layout, 250));
+
+// ─────────────── formulele: desenate în coordonate centrate ───────────
+// v(i) = eșantionul de undă în [-1,1]; s(i) = spectrul în [0,1].
+const v = i => wave[(i * (wave.length - 1)) | 0] || 0;
+const s = i => (spec[(i * (spec.length * 0.55)) | 0] || 0) / 255;
+
+function strokePath(pts, close, hue, width, alpha) {
+  const x = CTX;
+  x.beginPath();
+  pts.forEach(([px, py], k) => k ? x.lineTo(px, py) : x.moveTo(px, py));
+  if (close) x.closePath();
+  x.lineWidth = width; x.lineJoin = 'round'; x.lineCap = 'round';
+  x.strokeStyle = `hsla(${hue % 360}, 85%, 62%, ${alpha})`;
+  x.shadowColor = `hsla(${hue % 360}, 95%, 60%, .9)`;
+  x.shadowBlur = width * 5;
+  x.stroke();
+  x.shadowBlur = 0;
+}
+
+// `rest` = unde stă marginea VIZIBILĂ a efectului, ca fracțiune din R. Pânza se
+// scalează din ea, ca toate să iasă la același diametru pe ecran.
+//
+// Regulile grupului: centrul rămâne LIBER, iar linia pulsează DOAR SPRE EXTERIOR
+// (de aceea peste tot |eșantion|, nu eșantionul cu semn).
+
+// ── benzi de spectru: prag de zgomot + tavan lent + răspuns compresiv ────────
+// Prima variantă sărea în tavan la orice foșnet: normaliza pe maximul RECENT al
+// benzii, deci zgomotul de fond devenea „maxim" în câteva secunde. Acum fiecare
+// bandă ține DOUĂ praguri — o podea care urcă lent spre zgomotul de fond și un
+// tavan care coboară foarte lent — iar între ele răspunsul e compresiv (^1.7),
+// ca vorbitul normal să stea pe la jumătate și abia strigătul să ajungă sus.
+const NB = 64;
+const peak   = new Float32Array(NB).fill(60);
+const floorA = new Float32Array(NB).fill(6);
+const band   = new Float32Array(NB);
+let levelNow = 0;                    // cât de tare se vorbește acum, 0…1
+function updateBands() {
+  let sum = 0;
+  for (let i = 0; i < NB; i++) {
+    const lo = Math.floor(Math.pow(i / NB, 2) * spec.length * 0.85);
+    const hi = Math.max(lo + 1, Math.floor(Math.pow((i + 1) / NB, 2) * spec.length * 0.85));
+    let acc = 0; for (let j = lo; j < hi; j++) acc += spec[j];
+    const val = acc / (hi - lo);
+    peak[i]   = Math.max(val, peak[i] * 0.9985);
+    floorA[i] = val < floorA[i] ? val : floorA[i] + 0.06;
+    const span = Math.max(22, peak[i] - floorA[i]);
+    band[i] = Math.pow(Math.max(0, (val - floorA[i] - 2) / span), 1.7);
+    sum += band[i];
+  }
+  const l = Math.min(1, (sum / NB) * 2.4);
+  levelNow += (l - levelNow) * (l > levelNow ? 0.35 : 0.06);   // urcă repede, coboară lent
+}
+const e = i => band[Math.min(NB - 1, Math.max(0, i | 0))] || 0;
+const eAt = u => e(u * (NB - 1));
+
+// ── forma inelului: voce când se vorbește, undă proprie când e liniște ───────
+// În liniște unda PCM e aproape zero, deci inelele înghețau. Acum, cu cât e mai
+// multă liniște, cu atât se amestecă mai tare o undă LENTĂ proprie — nu tremur,
+// ci o oscilație amplă și domoală. Peste tot se aplică și o inerție: forma
+// desenată urmărește ținta cu întârziere, deci rămâne „un pic în urmă".
+const SHAPE_N = 512;
+const SHAPE = new Float32Array(SHAPE_N);       // cu undă proprie în liniște
+const LIVE  = new Float32Array(SHAPE_N);       // STRICT din voce: în tăcere → 0
+let idleMix = 1;                                  // 1 = liniște, 0 = vorbire
+function idleWave(u, t) {
+  return 0.52 * Math.sin(u * Math.PI * 2 * 3 + t * 0.42)
+       + 0.31 * Math.sin(u * Math.PI * 2 * 5 - t * 0.29)
+       + 0.17 * Math.sin(u * Math.PI * 2 * 8 + t * 0.19);
+}
+function updateShape(t) {
+  idleMix += ((1 - Math.min(1, levelNow * 1.6)) - idleMix) * 0.04;
+  for (let i = 0; i < SHAPE_N; i++) {
+    const u = i / SHAPE_N;
+    const live = Math.abs(v(u));
+    const idle = 0.42 * Math.abs(idleWave(u, t));
+    const target = live * (1 - idleMix) + idle * idleMix;
+    SHAPE[i] += (target - SHAPE[i]) * 0.12;       // inerția
+    LIVE[i]  += (live   - LIVE[i])  * 0.12;
+  }
+}
+const vs = u => SHAPE[Math.min(SHAPE_N - 1, Math.max(0, (u * SHAPE_N) | 0))] || 0;
+// vl = forma DOAR din voce. În tăcere e zero, deci inelul rămâne cerc perfect —
+// exact ce lipsea la 1 și la inelul de blocuri, care se deformau de la sine.
+const vl = u => LIVE[Math.min(SHAPE_N - 1, Math.max(0, (u * SHAPE_N) | 0))] || 0;
+const vAbs = vs;                                   // efectele vechi trec prin aceeași formă
+
+// ── unda ruptă în conținut JOS și SUS (folosită de oscilograme) ─────────────
+// Criteriul de separare: media alunecătoare a undei e partea GRAVĂ (conturul lent),
+// iar ce rămâne după scăderea ei e partea ÎNALTĂ (detaliul rapid, consoanele).
+const LOW = new Float32Array(256), HIGH = new Float32Array(256);
+function splitWave() {
+  const W = 16;
+  for (let i = 0; i < 256; i++) {
+    const c = (i / 256) * (wave.length - 1) | 0;
+    let m = 0;
+    for (let k = -W; k <= W; k++) m += wave[Math.min(wave.length - 1, Math.max(0, c + k))];
+    m /= (2 * W + 1);
+    LOW[i] = m;
+    HIGH[i] = wave[c] - m;
+  }
+}
+
+// ── ceața: aceeași cale, trasă în afară și suflată larg ──────────────────────
+let CTX = null;                       // pânza pe care se desenează acum (ecran sau urmă)
+function fogPath(pts, close, hue, width, alpha, push) {
+  const x = CTX, k = 1 + (push || 0);
+  x.beginPath();
+  pts.forEach(([px, py], i) => i ? x.lineTo(px * k, py * k) : x.moveTo(px * k, py * k));
+  if (close) x.closePath();
+  x.lineWidth = width; x.lineJoin = x.lineCap = 'round';
+  x.strokeStyle = `hsla(${hue % 360}, 80%, 62%, ${alpha})`;
+  x.shadowColor = `hsla(${hue % 360}, 90%, 64%, .85)`;
+  x.shadowBlur = width * 2.4;
+  x.stroke();
+  x.shadowBlur = 0;
+}
+
+// ── inelul MilkDrop ──────────────────────────────────────────────────────────
+// Buclă de feedback proprie nu mai are: e exact ce face `tunnelLayer`, doar că pe
+// tot ecranul. Razele erau scrise în `half` (jumătate din latura pătratului, în
+// pixeli de dispozitiv); acum sunt în R, în pixeli CSS — aceeași valoare, fiindcă
+// tunnelLayer desenează deja cu transformarea dpr pusă.
+function milkdropRing(t, R, { ZOOM, TWIST, DECAY, R0, AMP, W, SEGS = 512, HUE = null, SPIN = 0.12, LIVE_ONLY = false }) {
+  const amp = LIVE_ONLY ? vl : vs;
+  tunnelLayer({ DECAY, ZOOM, TWIST }, () => {
+    const x = CTX;
+    x.strokeStyle = HUE === null ? '#fff' : `hsl(${HUE % 360}, 85%, 70%)`;
+    x.lineJoin = x.lineCap = 'round';
+    x.beginPath();
+    for (let k = 0; k <= SEGS; k++) {
+      const i = k / SEGS, th = i * Math.PI * 2 + t * SPIN;   // + = sensul acelor de ceas
+      const seam = Math.max(0, (i - 0.9) / 0.1);
+      const sample = amp(i) * (1 - seam) + amp(0) * seam;
+      const r = R * (R0 + AMP * sample);
+      k ? x.lineTo(Math.cos(th) * r, Math.sin(th) * r)
+        : x.moveTo(Math.cos(th) * r, Math.sin(th) * r);
+    }
+    x.closePath();
+    x.lineWidth = W * 14;  x.globalAlpha = 0.090; x.stroke();  // halo ×2
+    x.lineWidth = W * 5.2; x.globalAlpha = 0.22;  x.stroke();
+    x.lineWidth = W;       x.globalAlpha = 0.85;  x.stroke();
+    x.globalAlpha = 1;
+  });
+}
+
+// ── orbite de particule (reconstrucția animației din film) ───────────────────
+// Dedus din cadrele 0:15–0:23: fiecare fir e un lanț de mărgele pătrate pe un
+// PLAN ORBITAL propriu (înclinare + azimut), nu un cerc 2D. Trei lucruri fac
+// diferența dintre „seamănă" și „nu seamănă", toate găsite pe cadre consecutive:
+//   · adâncimea se normalizează pe amplitudinea Z a FIRULUI, nu global — altfel
+//     firele plate nu ajung niciodată la mărimea maximă și totul pare turtit;
+//   · numărul de mărgele urmează LUNGIMEA arcului, nu unghiul lui, altfel firele
+//     mici se ard într-o panglică albă continuă;
+//   · filmul pulsează între inel plat și ghem sferic, iar variabila nu e raza, ci
+//     ÎMPRĂȘTIEREA ÎNCLINĂRILOR — aici e legată de cât de tare se vorbește.
+const ORB = {
+  STRANDS: 14, BEADS_PER_TURN: 110, BEADS_MAX: 170,
+  ARC_MIN: 0.55, ARC_MAX: 1.35, COMET_FRACTION: 0.34, COMET_RADIUS_BOOST: 1.16,
+  TILT_MIN_DEG: 6, TILT_MAX_DEG: 58, TILT_CAP_DEG: 72,
+  RADIUS_SPREAD: 0.30, WOBBLE: 0.055, WOBBLE_LOBES: 3,
+  PERSPECTIVE: 2.7, RING_FRAC: 0.30, HOLE_FRAC: 0.56, HOLE_SOFT: 0.30, INNER_FADE: 0.34,
+  DOT_NEAR: 7.6, DOT_FAR: 2.4, TAPER: 0.62,
+  GLOW_NEAR: 1.45, GLOW_FAR: 2.2, GLOW_A_NEAR: 0.22, GLOW_A_FAR: 0.20,
+  CORE_A_NEAR: 0.82, CORE_A_FAR: 0.42,
+  CYAN: [45, 200, 255], MAGENTA: [238, 72, 214], VIOLET: [138, 74, 248], STEPS: 17,
+  IDLE_SPIN: 0.052, SPIN_VAR: 0.55, RETRO: 0.23, PRECESS: 0.021,
+  BREATH_RATE: 0.045, BREATH_AMT: 0.16,
+  A_SPIN: 2.6, A_RADIUS: 0.15, A_SIZE: 0.50, A_BRIGHT: 0.40, A_TILT: 0.55,
+  PULSE_AMP: 0.10, PULSE_LOBES: 2, PULSE_SPEED: 1.35,
+  BLOOM_TIGHT: 5, BLOOM_WIDE: 16, BLOOM_G_TIGHT: 0.40, BLOOM_G_WIDE: 1.05,
+};
+const TAU = Math.PI * 2;
+const orbMix = (a, b, k) => [a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k, a[2]+(b[2]-a[2])*k];
+const orbRGB = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+function orbRamp(k) {                       // 0 = cyan … 1 = magenta, cu mijloc violet
+  const q = Math.sign(k - 0.5) * Math.pow(Math.abs(2 * k - 1), 0.42);
+  const u = 0.5 + 0.5 * q;
+  return u < 0.5 ? orbMix(ORB.CYAN, ORB.VIOLET, u * 2)
+                 : orbMix(ORB.VIOLET, ORB.MAGENTA, (u - 0.5) * 2);
+}
+const orbSprites = [];
+function orbBuildSprites() {
+  orbSprites.length = 0;
+  for (let i = 0; i < ORB.STEPS; i++) {
+    const c = orbRamp(i / (ORB.STEPS - 1));
+    const BS = 96, blob = document.createElement('canvas');
+    blob.width = blob.height = BS;
+    const bg = blob.getContext('2d');
+    const g = bg.createRadialGradient(BS/2, BS/2, 0, BS/2, BS/2, BS/2);
+    g.addColorStop(0, orbRGB(orbMix(c, [255,255,255], .4), 1));
+    g.addColorStop(.16, orbRGB(c, .88)); g.addColorStop(.40, orbRGB(c, .26));
+    g.addColorStop(.72, orbRGB(c, .05)); g.addColorStop(1, orbRGB(c, 0));
+    bg.fillStyle = g; bg.fillRect(0, 0, BS, BS);
+    const SS = 48, sq = document.createElement('canvas');
+    sq.width = sq.height = SS;
+    const sc = sq.getContext('2d'), pad = SS * .10, rr = SS * .15;
+    sc.fillStyle = orbRGB(c, 1);
+    sc.beginPath(); sc.roundRect(pad, pad, SS - 2*pad, SS - 2*pad, rr); sc.fill();
+    const fg = sc.createLinearGradient(SS*.2, SS*.2, SS*.85, SS*.85);
+    fg.addColorStop(0, orbRGB(orbMix(c, [255,255,255], .12), .95));
+    fg.addColorStop(1, orbRGB(orbMix(c, [255,255,255], .10), .35));
+    sc.fillStyle = fg;
+    sc.beginPath(); sc.roundRect(SS*.26, SS*.26, SS*.48, SS*.48, rr*.8); sc.fill();
+    orbSprites.push({ blob, sq });
+  }
+}
+const orbStrands = [];
+function orbBuild() {
+  orbStrands.length = 0;
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < ORB.STRANDS; i++) {
+    const u = i / ORB.STRANDS;
+    const comet = ((i * 0.8090169944) % 1) < ORB.COMET_FRACTION;
+    const arc = TAU * (comet ? ORB.ARC_MIN + 0.25 * ((i * 0.4142) % 1)
+                             : 0.95 + (ORB.ARC_MAX - 0.95) * ((i * 0.2718) % 1));
+    const jit = (i * 0.6180339887) % 1;
+    const radius = (1 + ORB.RADIUS_SPREAD * (((i * 0.7548776662) % 1) * 2 - 1))
+                   * (comet ? ORB.COMET_RADIUS_BOOST : 1);
+    const hueFrom = (i % 2 === 0) ? 0.02 + 0.16 * jit : 0.98 - 0.16 * jit;
+    const hueSpan = (0.30 + 0.06 * ((i * 0.3819) % 1)) * (i % 2 === 0 ? 1 : -1);
+    orbStrands.push({
+      hueFrom, hueSpan, comet, arc, radius,
+      family: hueFrom + hueSpan * 0.5 < 0.5 ? 0 : 1,
+      beads: Math.min(ORB.BEADS_MAX, Math.max(12,
+              Math.round(ORB.BEADS_PER_TURN * (arc / TAU) * radius))),
+      azimuth: i * GOLDEN + u * 0.6,
+      tiltBase: (ORB.TILT_MIN_DEG + (ORB.TILT_MAX_DEG - ORB.TILT_MIN_DEG) * jit) * Math.PI / 180,
+      tiltPhase: u * TAU, wobblePh: u * TAU * 1.7,
+      spin: (ORB.IDLE_SPIN * (1 + ORB.SPIN_VAR * (((i * 0.3301) % 1) * 2 - 1)))
+            * ((i * 0.5391) % 1 < ORB.RETRO ? -1 : 1),
+      theta: u * TAU * 1.3,
+    });
+  }
+}
+orbBuildSprites(); orbBuild();
+
+const orbScene = document.createElement('canvas'), orbSC = orbScene.getContext('2d');
+const orbMipA = document.createElement('canvas'), orbMA = orbMipA.getContext('2d');
+const orbMipB = document.createElement('canvas'), orbMB = orbMipB.getContext('2d');
+let orbLast = 0;
+// Scena orbitelor e acum cât FEREASTRA, nu cât pătratul. Bloom-ul nu se schimbă:
+// raza lui în pixeli e raportul sursă/mip (BLOOM_TIGHT / BLOOM_WIDE), care rămâne
+// același oricât de mare e pânza.
+function orbSize(w, h) {
+  if (orbScene.width === w && orbScene.height === h) return;
+  orbScene.width = w; orbScene.height = h;
+  orbMipA.width  = Math.max(1, Math.round(w / ORB.BLOOM_TIGHT));
+  orbMipA.height = Math.max(1, Math.round(h / ORB.BLOOM_TIGHT));
+  orbMipB.width  = Math.max(1, Math.round(w / ORB.BLOOM_WIDE));
+  orbMipB.height = Math.max(1, Math.round(h / ORB.BLOOM_WIDE));
+  for (const c of [orbSC, orbMA, orbMB]) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'low'; }
+}
+// `Rref` = raza de referință a efectului (vezi rad()). `px` a rămas „latura
+// vechiului pătrat", fiindcă toate mărimile de mai jos sunt scrise în raport cu ea.
+function drawOrbits(t, Rref, density = 1, holeFrac = ORB.HOLE_FRAC, ringFrac = ORB.RING_FRAC) {
+  const used = Math.max(3, Math.round(orbStrands.length * density));
+  const gain = density < 1 ? 0.55 : 1;
+  fullSize();
+  orbSize(fullW, fullH);
+  const px = Math.round(Rref * 2 * dpr);
+  const dt = Math.min(0.05, orbLast ? t - orbLast : 0.016); orbLast = t;
+  const cx = (innerWidth / 2 + walkX) * dpr, cy = (innerHeight / 2 + walkY) * dpr;
+  let bass = 0, treble = 0;
+  for (let i = 0; i < NB / 3; i++) bass += band[i];
+  for (let i = (NB * 2 / 3) | 0; i < NB; i++) treble += band[i];
+  bass /= (NB / 3); treble /= (NB / 3);
+  const level = levelNow;
+
+  const R0 = px * ringFrac * (1 + ORB.A_RADIUS * level);
+  const holeR = R0 * holeFrac, F = ORB.PERSPECTIVE;
+  const dotNear = ORB.DOT_NEAR * dpr * (1 + ORB.A_SIZE * level);
+  const dotFar  = ORB.DOT_FAR  * dpr * (1 + ORB.A_SIZE * level * .5);
+  const bright  = 1 + ORB.A_BRIGHT * level;
+
+  orbSC.setTransform(1, 0, 0, 1, 0, 0);
+  orbSC.clearRect(0, 0, fullW, fullH);
+  orbSC.globalCompositeOperation = 'lighter';
+  const spinMul = 1 + ORB.A_SPIN * level;
+
+  for (let si = 0; si < used; si++) {
+    const st = orbStrands[si];
+    const famDrive = st.family === 0 ? 1 + 0.55 * treble : 1 + 0.55 * bass;
+    st.theta += st.spin * spinMul * famDrive * dt;
+    const azim = st.azimuth + ORB.PRECESS * t * (st.family === 0 ? 1 : -0.7);
+    const tilt = st.tiltBase
+               * (1 + ORB.BREATH_AMT * Math.sin(t * ORB.BREATH_RATE * TAU + st.tiltPhase))
+               * (1 + ORB.A_TILT * level);
+    const tc = Math.min(tilt, ORB.TILT_CAP_DEG * Math.PI / 180);
+    const ca = Math.cos(azim), sa = Math.sin(azim), ct = Math.cos(tc), stt = Math.sin(tc);
+    const N = st.beads;
+    for (let i = 0; i < N; i++) {
+      const u = i / (N - 1), th = st.theta + u * st.arc;
+      let rr = R0 * st.radius * (1 + ORB.WOBBLE * Math.sin(ORB.WOBBLE_LOBES * th + st.wobblePh));
+      rr += R0 * ORB.PULSE_AMP * level
+            * (0.5 + 0.5 * Math.sin(ORB.PULSE_LOBES * th - t * ORB.PULSE_SPEED * TAU));
+      const cth = Math.cos(th), sth = Math.sin(th);
+      const x3 = rr * (cth * ca + sth * (-sa * ct));
+      const y3 = rr * (cth * sa + sth * (ca * ct));
+      const z3 = rr * (sth * stt);
+      const zn = z3 / R0, persp = F / (F - zn);
+      const zAmp = Math.max(0.12, stt * st.radius);
+      const depth = Math.min(1, Math.max(0, (zn / zAmp + 1) * 0.5));
+      let X = x3 * persp, Y = y3 * persp;
+      const d = Math.hypot(X, Y);
+      if (d < holeR * (1 + ORB.HOLE_SOFT)) {           // nimic nu intră în gaură
+        const target = holeR * (1 + ORB.HOLE_SOFT * (d / (holeR * (1 + ORB.HOLE_SOFT))));
+        const k = target / Math.max(d, 1e-3); X *= k; Y *= k;
+      }
+      const dist = Math.hypot(X, Y);
+      const innerFade = Math.min(1, Math.max(0, (dist - holeR) / (holeR * ORB.INNER_FADE)));
+      if (innerFade <= 0.001) continue;
+      const taper = st.comet
+        ? Math.pow(u, 0.45) * (1 - ORB.TAPER * Math.pow(1 - u, 1.4))
+        : 1 - ORB.TAPER * 0.45 * Math.pow(Math.abs(2 * u - 1), 2.2);
+      const size = (dotFar + (dotNear - dotFar) * Math.pow(depth, 1.35)) * taper;
+      if (size < 0.35) continue;
+      let hue = st.hueFrom + st.hueSpan * u; hue -= Math.floor(hue);
+      const spr = orbSprites[Math.min(ORB.STEPS - 1, (hue * ORB.STEPS) | 0)];
+      const glowA = (ORB.GLOW_A_FAR + (ORB.GLOW_A_NEAR - ORB.GLOW_A_FAR) * depth) * taper * bright * innerFade;
+      const coreA = (ORB.CORE_A_FAR + (ORB.CORE_A_NEAR - ORB.CORE_A_FAR) * Math.pow(depth, 1.6)) * taper * bright * innerFade;
+      const gm = (depth > 0.5 ? ORB.GLOW_NEAR : ORB.GLOW_FAR) * size;
+      orbSC.globalAlpha = Math.min(1, glowA * (density < 1 ? 0.45 : 1));
+      orbSC.drawImage(spr.blob, cx + X - gm / 2, cy + Y - gm / 2, gm, gm);
+      orbSC.globalAlpha = Math.min(1, coreA);
+      orbSC.drawImage(spr.sq, cx + X - size / 2, cy + Y - size / 2, size, size);
+    }
+  }
+  orbSC.globalAlpha = 1;
+
+  orbBloom(ORB.BLOOM_G_WIDE * gain, ORB.BLOOM_G_TIGHT * gain);
+}
+
+// bloom ieftin: două nivele de mip, în loc de ctx.filter (de ~4× mai scump)
+function orbBloom(gWide, gTight) {
+  orbMA.clearRect(0, 0, orbMipA.width, orbMipA.height);
+  orbMA.drawImage(orbScene, 0, 0, orbMipA.width, orbMipA.height);
+  orbMB.clearRect(0, 0, orbMipB.width, orbMipB.height);
+  orbMB.drawImage(orbScene, 0, 0, orbMipB.width, orbMipB.height);
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, fullW, fullH);
+  fctx.globalCompositeOperation = 'lighter';
+  fctx.globalAlpha = gWide;  fctx.drawImage(orbMipB, 0, 0, fullW, fullH);
+  fctx.globalAlpha = gTight; fctx.drawImage(orbMipA, 0, 0, fullW, fullH);
+  fctx.globalAlpha = 1;      fctx.drawImage(orbScene, 0, 0);
+  fctx.globalCompositeOperation = 'source-over';
+}
+
+// Lumină care pleacă STRICT spre exterior: un sector de inel exact peste unghiurile
+// segmentului, umplut cu un gradient radial care se stinge în afară. Marginile
+// unghiulare sunt tăiate net, deci între două segmente rămâne negru absolut —
+// nimic nu se scurge tangențial spre vecin, cum se întâmpla cu un contur suflat.
+function radialGlow(a0, a1, rIn, rOut, hue, alpha) {
+  const x = CTX;
+  const g = x.createRadialGradient(0, 0, rIn, 0, 0, rOut);
+  g.addColorStop(0.00, `hsla(${hue % 360}, 90%, 62%, ${alpha})`);
+  g.addColorStop(0.35, `hsla(${hue % 360}, 90%, 62%, ${alpha * 0.45})`);
+  g.addColorStop(1.00, `hsla(${hue % 360}, 90%, 62%, 0)`);
+  x.beginPath();
+  x.arc(0, 0, rIn, a0, a1);
+  x.arc(0, 0, rOut, a1, a0, true);
+  x.closePath();
+  x.fillStyle = g;
+  x.fill();
+}
+
+// vârf stins: segmentul se pierde pe ultimele 25% din lungime, în loc să se taie brusc
+function spike(ax, ay, bx, by, hue, width, alpha) {
+  const x = CTX;
+  const g = x.createLinearGradient(ax, ay, bx, by);
+  g.addColorStop(0.00, `hsla(${hue % 360}, 85%, 62%, ${alpha})`);
+  g.addColorStop(0.75, `hsla(${hue % 360}, 85%, 62%, ${alpha})`);
+  g.addColorStop(1.00, `hsla(${hue % 360}, 85%, 62%, 0)`);
+  x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by);
+  x.lineWidth = width; x.lineCap = 'butt';
+  x.strokeStyle = g;
+  x.shadowColor = `hsla(${hue % 360}, 95%, 60%, .9)`;
+  x.shadowBlur = width * 2.2;
+  x.stroke();
+  x.shadowBlur = 0; x.lineCap = 'round';
+}
+
+// Verdictele lui Victor stau în NUMELE efectului, nu într-un fișier separat: așa
+// se văd pe telefon, în linia de jos, și supraviețuiesc între sesiuni.
+//   ★ = îi place mult   • = „are mult potențial"   − = nu-i place
+// Ordinea NU se schimbă niciodată la un review — doar etichetele.
+const FORMULAS = [
+  { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.303, draw(t) {
+      // nu mai folosește unda proprie pentru FORMĂ: în liniște amplitudinea e zero,
+      // deci rămâne cerc. Ce continuă în tăcere e rotația, nu deformarea.
+      milkdropRing(t, rad(0.606), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.21,
+                        W: 1.1, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
+  }},
+  { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.303, draw(t) {
+      const R = rad(0.606);
+      splitWave();
+      tunnelLayer({ DECAY: 0.80, ZOOM: 1.007, TWIST: 0.002 }, () => {
+        for (const kind of [0, 1]) {
+          const src = kind ? HIGH : LOW;
+          const gain = kind ? 2.4 : 1.1;
+          const hue  = kind ? 348 : 214;
+          const pts = [], N = 256;
+          for (let i = 0; i <= N; i++) {
+            const u = (i % N) / N;
+            const th = u * Math.PI * 2 + t * (kind ? -0.06 : 0.06);
+            const live = Math.min(1, Math.abs(src[i % N]) * gain);
+            const amp = live * (1 - idleMix) + vs(u) * 1.5 * idleMix;
+            const r = R * (0.52 + 0.225 * amp);   // +50% amplitudine
+            pts.push([Math.cos(th) * r, Math.sin(th) * r]);
+          }
+          fogPath(pts, true, hue, 22, .030, 0.02);      // intensitate redusă
+          strokePath(pts, true, hue, 3.0, .42);
+        }
+      });
+  }},
+  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.303, draw(t) {
+      // cercul galben care stătea fixat a fost scos; rămân doar barele
+      const R = rad(0.606);
+      plainLayer(() => {
+        const r0 = R * 0.48, N = 96, WIDTH = 3.4;
+        for (let k = 0; k < N; k++) {
+          const u = k / N, th = u * Math.PI * 2 - t * 0.21;   // rotație +50%
+          const en = eAt((k * 7 % N) / N);
+          const len = R * (0.022 + 0.087 * en);
+          const hue = 32 + t * 5 + en * 40;
+          spike(Math.cos(th) * r0, Math.sin(th) * r0,
+                Math.cos(th) * (r0 + len), Math.sin(th) * (r0 + len),
+                hue, WIDTH, .40 + .5 * en);
+        }
+      });
+  }},
+  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.3125, draw(t) {
+      // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
+      // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
+      // are exact nuanța primului și cusătura dispare.
+      const R = rad(0.625);
+      plainLayer(() => {
+        const r0 = R * 0.50, M = 150, REST = 0.020;
+        for (let k = 0; k < M; k++) {
+          const u = k / M, th = u * Math.PI * 2 + t * 0.13;   // rotație +30%
+          const en = eAt((u * 4) % 1);   // patru sferturi care fac același lucru
+          const len = R * (REST + 0.115 * en);
+          const hue = 250 + 360 * u + t * 6;
+          spike(Math.cos(th) * r0, Math.sin(th) * r0,
+                Math.cos(th) * (r0 + len), Math.sin(th) * (r0 + len),
+                hue, 3.6, .55 + .4 * en);
+        }
+      });
+  }},
+  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.25, draw(t) {
+      // Efectul care l-a scos din sărite pe Victor: urma lui umplea pătratul și i se
+      // vedea muchia. Acum pânza e tot ecranul, deci ceața se oprește abia în
+      // marginea ecranului — fiindcă acolo se termină ecranul, nu fiindcă a tăiat-o ceva.
+      const R = rad(0.50);
+      // Înainte era un halou FIX sub linii: sectorul de inel stătea pe loc și doar
+      // linia vibra deasupra lui. Acum lumina nu mai e desenată ca formă, ci
+      // EMISĂ: în fiecare cadru fiecare arc scapă câțiva pufuleți, pe care stratul
+      // de urmă îi împinge spre exterior. Emisia e inegală de la un arc la altul
+      // (fiecare are propriul ritm), ca să nu iasă un inel uniform.
+      tunnelLayer({ DECAY: 0.84, ZOOM: 1.022, TWIST: 0.004 }, () => {
+        const M = 7, SEG = 20, r0 = R * 0.46;
+        for (let m = 0; m < M; m++) {
+          const a0 = (m / M) * Math.PI * 2 + t * 0.20;
+          const span = (Math.PI * 2 / M) * 0.80;
+          const hue = 195 + m * 6 + t * 12;
+          // cât suflă ARCUL ăsta acum: energia lui proprie × un ritm propriu
+          const own = 0.35 + 0.65 * Math.pow(Math.max(0,
+                        Math.sin(t * (0.7 + m * 0.23) + m * 2.1)), 3);
+          const pts = [];
+          for (let k = 0; k <= SEG; k++) {
+            const u = k / SEG, th = a0 + span * u;
+            const j = vs((m * SEG + k) / (M * SEG));
+            const r = r0 * (1 + 0.51 * j + 0.02 * Math.sin(t * 3.1 + m * 1.7));
+            pts.push([Math.cos(th) * r, Math.sin(th) * r]);
+            // pufuletele de ceață pleacă de pe linie, acolo unde ea chiar vibrează
+            if (k % 7 === 0) {
+              const a = (0.002 + 0.020 * j) * own * (0.15 + 0.85 * levelNow);
+              if (a > 0.004) {
+                const px = Math.cos(th) * r, py = Math.sin(th) * r;
+                const rad = R * (0.05 + 0.05 * j);
+                const g = CTX.createRadialGradient(px, py, 0, px, py, rad);
+                g.addColorStop(0, `hsla(${hue % 360}, 88%, 64%, ${a})`);
+                g.addColorStop(1, `hsla(${hue % 360}, 88%, 64%, 0)`);
+                CTX.beginPath(); CTX.arc(px, py, rad, 0, Math.PI * 2);
+                CTX.fillStyle = g; CTX.fill();
+              }
+            }
+          }
+          strokePath(pts, false, hue, 3.4, .92);   // lumina instantanee a liniei
+        }
+      });
+  }},
+  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.174, draw(t) {
+      // gaura din mijloc de 2,5 ori mai mare, iar inelul strâns (RING_FRAC mai mic).
+      // Pătratul care tăia mărgelele din față nu mai există deloc.
+      drawOrbits(t, rad(0.348), 0.5, 1.40, 0.22);
+  }},
+  { name: 'Gemini', desc: 'două bile — ceață suflată din contur spre exterior', scale: 0.2273, draw(t) {
+      const R = rad(0.4545);
+      // Din film: două bile diametral opuse care se rotesc lent în jurul centrului,
+      // iar de pe conturul lor se ridică o ceață care e mereu împinsă spre exterior
+      // și răsucită de rotație. Ceața NU e desenată ca dâră: e stratul de urmă, cu
+      // zoom > 1 (o împinge în afară) și o rotire mică pe cadru (i-o răsucește).
+      // Fiindcă stratul se compune aditiv sub bile, ceața veche trece peste ele.
+      // raportul dintre TWIST și ZOOM decide dacă ceața iese drept sau se
+      // răsucește: rotație mare + împingere mică = spirala din film
+      // împingere mare, răsucire mică: ceața pleacă radial față de centrul în
+      // jurul căruia se rotesc, nu în coadă după ele
+      tunnelLayer({ DECAY: 0.930, ZOOM: 1.022, TWIST: 0.009 }, () => {
+        const orbit = R * 0.52, rb = R * 0.095;   // cât să mai rămână loc de ceață
+        const spin = t * 0.45;
+        for (const side of [0, 1]) {
+          const a = spin + side * Math.PI;
+          const cx = Math.cos(a) * orbit, cy = Math.sin(a) * orbit;
+          const hue = side ? 210 : 2;                   // albastru / roșu
+
+          // ceața care se ridică de pe contur: un nor moale, chiar pe bilă, pe care
+          // stratul de urmă îl va împinge în afară cadru după cadru
+          // ceața nu se eliberează uniform, ci în VALURI: un puf scurt la fiecare
+          // ~1.4 s, defazat între bile, altfel dâra iese o panglică monotonă
+          const puff = 0.30 + 0.70 * Math.pow(Math.max(0,
+                        Math.sin(t * 1.45 + side * Math.PI * 0.7)), 4);
+          const g = CTX.createRadialGradient(cx, cy, rb * 0.2, cx, cy, rb * 2.1);
+          // Termenul CONSTANT e podeaua de repaus, cel cu levelNow e vocea. Prima
+          // variantă degaja ceață tot timpul, uniform; a doua a legat-o strict de
+          // voce, dar cu podeaua atât de jos (0.006) bilele păreau moarte în
+          // liniște. Acum podeaua e de ~6× mai mare — cât să se vadă un firicel —
+          // iar câștigul pe voce a rămas neatins, deci la voce tare arată identic.
+          g.addColorStop(0.00, `hsla(${hue}, 88%, 60%, ${(0.035 + 0.13 * levelNow) * puff})`);
+          g.addColorStop(0.45, `hsla(${hue}, 88%, 58%, ${(0.014 + 0.06 * levelNow) * puff})`);
+          g.addColorStop(1.00, `hsla(${hue}, 85%, 60%, 0)`);
+          CTX.beginPath(); CTX.arc(cx, cy, rb * 2.1, 0, Math.PI * 2);
+          CTX.fillStyle = g; CTX.fill();
+
+          // conturul bilei, care pulsează pe voce
+          const pts = [], N = 96;
+          for (let k = 0; k <= N; k++) {
+            const u = k / N, th = u * Math.PI * 2;
+            const r = rb * (1 + 0.85 * vl((u + side * 0.5) % 1) + 0.05 * Math.sin(t * 2.3 + side));
+            pts.push([cx + Math.cos(th) * r, cy + Math.sin(th) * r]);
+          }
+          strokePath(pts, true, hue + 10, 2.0, .55);
+          strokePath(pts, true, hue + 10, 7.0, .045);
+        }
+      });
+  }},
+  { name: '− Petals', desc: 'raze ORB — petale rotitoare, fără flash', scale: 0.25, draw(t) {
+      // Din „ORB - Waaa". Presetul are TREI forme suprapuse (100 de laturi fiecare),
+      // rotite cu viteze apropiate și una în sens invers: ang = q2, -1.05*q2 și
+      // 0.899*q2 — de aici bătaia lentă dintre straturi. Culorile sunt chiar
+      // sinusoidele lui: .5+.5*sin(.35*q2), .5+.5*sin(.578*q2), .5+.5*sin(.689*q2).
+      //
+      // SINGURUL efect din set căruia i se permite să treacă peste cursor — la
+      // cererea ta. Ce am scos e miezul: în preset petalele converg într-un punct
+      // și se adună într-un alb orbitor. Aici fiecare petală se STINGE spre centru
+      // printr-un gradient, deci razele trec, dar nu se aprinde nimic în mijloc.
+      tunnelLayer({ DECAY: 0.90, ZOOM: 1.0, TWIST: 0.0 }, () => {
+        const S = Math.min(innerWidth, innerHeight);
+        const q2 = t * 0.55;
+        const LAYERS = [
+          { n: 7, spin:  1.000, len: 0.30, wide: 0.055, a: 0.70, ph: [0.350, 0.578, 0.689] },
+          { n: 6, spin: -1.050, len: 0.44, wide: 0.045, a: 0.60, ph: [0.450, 0.678, 0.689] },
+          { n: 5, spin:  0.899, len: 0.60, wide: 0.036, a: 0.50, ph: [0.450, 0.578, 0.789] },
+        ];
+        const lit = 0.45 + 0.85 * levelNow;
+        for (const L of LAYERS) {
+          const col = Math.round(255 * (0.5 + 0.5 * Math.sin(L.ph[0] * q2))) + ',' +
+                      Math.round(255 * (0.5 + 0.5 * Math.sin(L.ph[1] * q2))) + ',' +
+                      Math.round(255 * (0.5 + 0.5 * Math.sin(L.ph[2] * q2)));
+          for (let k = 0; k < L.n; k++) {
+            const a = q2 * L.spin + (k / L.n) * Math.PI * 2;
+            const en = 0.35 + 0.65 * eAt((k / L.n + L.len) % 1);
+            const rOut = S * L.len * (0.75 + 0.45 * en);
+            const halfW = S * L.wide * (0.6 + 0.6 * en);
+            const ca = Math.cos(a), sa = Math.sin(a);
+            // petala: un fus de la centru spre exterior, lat la mijloc
+            const P = 22, pts = [];
+            for (let i = 0; i <= P; i++) {
+              const u = i / P, w = Math.sin(Math.PI * u) * halfW;
+              pts.push([ca * rOut * u - sa * w, sa * rOut * u + ca * w]);
+            }
+            for (let i = P; i >= 0; i--) {
+              const u = i / P, w = -Math.sin(Math.PI * u) * halfW;
+              pts.push([ca * rOut * u - sa * w, sa * rOut * u + ca * w]);
+            }
+            // gradient pe axă: stins în centru (fără miezul orbitor), plin la mijloc
+            const g = CTX.createLinearGradient(0, 0, ca * rOut, sa * rOut);
+            g.addColorStop(0.00, `rgba(${col},0)`);
+            g.addColorStop(0.22, `rgba(${col},${0.10 * L.a * lit})`);
+            g.addColorStop(0.55, `rgba(${col},${0.55 * L.a * lit})`);
+            g.addColorStop(1.00, `rgba(${col},0)`);
+            CTX.beginPath();
+            pts.forEach(([x, y], i) => i ? CTX.lineTo(x, y) : CTX.moveTo(x, y));
+            CTX.closePath();
+            CTX.fillStyle = g; CTX.fill();
+          }
+        }
+      });
+  }},
+  // ── presetele MilkDrop pe care le-ai ales, rulate CU MOTORUL LOR ──────────
+  // Nu sunt reimplementări: pagina încarcă butterchurn (același motor ca în modul
+  // MilkDrop) și îi fixează presetul, randat pe toată fereastra. Deci arată exact
+  // ca originalul, inclusiv ce trece peste centru.
+  // `fade`: inelele vin peste privitor și, la mărime de ecran, albeau tot. Acum se
+  // sting spre margine (plin în centru, ~50% la jumătate, ~10% la marginea
+  // ecranului) — merg tot până afară, doar că nu mai orbesc.
+  { name: '• Tunnel', desc: 'MilkDrop 7 — Geiss, 3 layers (Tunnel Mix)', preset: 'Geiss - 3 layers (Tunnel Mix)', fade: true, scale: 0.5 },
+  { name: 'Cauldron', desc: 'MilkDrop 8 — Geiss, Cauldron painterly 2', preset: 'Geiss - Cauldron - painterly 2 (saturation remix)', scale: 0.35 },
+  // cu 30% mai mic, la cerere: `scale` micșorează doar pânza pe ecran, compoziția
+  // presetului rămâne intactă
+  { name: '• Tendrils', desc: 'MilkDrop 20 — Aderrasi, Painterly Tendrils', preset: 'Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast', scale: 0.35 },
+  { name: '− Silk', desc: 'MilkDrop 44 — Flexi, truly soft piece of software', preset: 'Flexi - truly soft piece of software - this is generic texturing (Jelly) ', scale: 0.5 },
+  { name: '− Nova', desc: 'MilkDrop 77 — ORB, Waaa', preset: 'ORB - Waaa', scale: 0.5 },
+  { name: 'Snowflake', desc: 'MilkDrop 85 — Zylot, Star Ornament (mic)', preset: 'Zylot - Star Ornament', scale: 0.165 },
+  { name: '★ Sparks', desc: 'MilkDrop 87 — martin, chain breaker', preset: 'martin - chain breaker', scale: 0.5 },
+  { name: '− Royal', desc: 'MilkDrop 97 — Royal Mashup (197), mai mic', preset: '$$$ Royal - Mashup (197)', scale: 0.31 },
+  { name: '− Mosaic', desc: 'MilkDrop 99 — martin, reflections on black tiles', preset: 'martin - reflections on black tiles', scale: 0.5 },
+  // presetul „cu apă" pe care și-l amintea Victor: orizont net la mijloc, cer roz
+  // deasupra, oglindire cu unde dedesubt. E #103 din 103 în lista filtrată.
+  { name: '★ Water Dream', desc: 'MilkDrop 103 — fata morgana (apă cu oglindire)', preset: 'martin [shadow harlequins shape code] - fata morgana', scale: 0.5 },
+  { name: 'Beads', desc: 'inel de blocuri — cerc în repaus, crește doar în afară', scale: 0.4, draw(t) {
+      // în repaus e cerc perfect (amplitudinea vine strict din voce); vocea îl
+      // împinge numai spre exterior, până la aceeași înălțime maximă ca înainte.
+      // Sclipirea rămâne: mărimea blocului respiră chiar și în liniște.
+      fullSize();
+      orbSize(fullW, fullH);
+      const px = Math.round(rad(0.80) * 2 * dpr);          // vechea latură: scara mărimilor
+      const half = px / 2, M = 132;
+      const cx = (innerWidth / 2 + walkX) * dpr, cy = (innerHeight / 2 + walkY) * dpr;
+      orbSC.setTransform(1, 0, 0, 1, 0, 0);
+      orbSC.clearRect(0, 0, fullW, fullH);
+      orbSC.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < M; k++) {
+        const u = k / M;
+        const th = u * Math.PI * 2 + t * 0.22;
+        const amp = vl(u);                                  // zero în tăcere
+        const r = half * (0.35 + 0.12 * amp);   // diametru 70%
+        const X = cx + Math.cos(th) * r, Y = cy + Math.sin(th) * r;
+        const shimmer = 0.5 + 0.5 * Math.sin(t * 2.1 + u * Math.PI * 12);
+        // grosime dublă: la raza înjumătățită blocurile subțiri nu se mai întrețeseau
+        const size = (8.4 + 2.4 * shimmer + 16.0 * Math.min(1, amp * 1.6)) * dpr;
+        const hue = (u + t * 0.05) % 1;
+        const spr = orbSprites[Math.min(ORB.STEPS - 1, (hue * ORB.STEPS) | 0)];
+        const gm = size * 2.1;
+        orbSC.globalAlpha = 0.18 + 0.27 * amp;
+        orbSC.drawImage(spr.blob, X - gm / 2, Y - gm / 2, gm, gm);
+        orbSC.globalAlpha = 0.55 + 0.45 * Math.min(1, amp * 1.5);
+        orbSC.drawImage(spr.sq, X - size / 2, Y - size / 2, size, size);
+      }
+      orbSC.globalAlpha = 1;
+      orbBloom(0.95, 0.40);
+  }},
+  // ── apa: singurul efect cu pânză proprie ───────────────────────────────────
+  // E o SCENĂ opacă (cer + bazin), nu un halo aditiv, deci nu poate sta pe #full,
+  // care se compune cu `screen`. Codul stă în water.js — 230 de linii inutile aici.
+  { name: 'Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
+];
+
+
+
+// ── pânza de tot ecranul + feedback-ul ei ────────────────────────────────────
+const full = document.getElementById('full');
+const fctx = full.getContext('2d');
+const fbuf = [0, 1].map(() => { const c = document.createElement('canvas'); return { c, x: c.getContext('2d') }; });
+let fbFull = 0, fullW = 0, fullH = 0;
+function fullSize() {
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (w === fullW && h === fullH) return;
+  fullW = w; fullH = h;
+  full.width = w; full.height = h;
+  full.style.width = innerWidth + 'px'; full.style.height = innerHeight + 'px';
+  for (const f of fbuf) { f.c.width = w; f.c.height = h; }
+}
+// același truc de feedback, dar pe tot ecranul și cu originea în centru.
+// Centrul e centrul ECRANULUI plus plimbarea — adică exact vârful cursorului
+// desenat. Și pivotul zoom-ului îl urmează, ca urma să fie suflată din efect,
+// nu dintr-un punct fix de pe ecran.
+function tunnelLayer({ DECAY, ZOOM, TWIST }, drawFn) {
+  fullSize();
+  const ox = innerWidth / 2 + walkX, oy = innerHeight / 2 + walkY;
+  const src = fbuf[fbFull], dst = fbuf[1 - fbFull];
+  dst.x.setTransform(1, 0, 0, 1, 0, 0);
+  dst.x.globalCompositeOperation = 'source-over';
+  dst.x.clearRect(0, 0, fullW, fullH);
+  dst.x.save();
+  dst.x.globalAlpha = DECAY;
+  dst.x.translate(ox * dpr, oy * dpr);
+  dst.x.rotate(TWIST);
+  dst.x.scale(ZOOM, ZOOM);
+  dst.x.drawImage(src.c, -ox * dpr, -oy * dpr, fullW, fullH);
+  dst.x.restore();
+
+  dst.x.save();
+  dst.x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  dst.x.translate(ox, oy);
+  dst.x.globalCompositeOperation = 'lighter';
+  const prev = CTX; CTX = dst.x;
+  drawFn();
+  CTX = prev;
+  dst.x.restore();
+
+  fbFull = 1 - fbFull;
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, fullW, fullH);
+  fctx.drawImage(fbuf[fbFull].c, 0, 0);
+}
+
+// Efect FĂRĂ urmă: aceeași pânză de tot ecranul, ștearsă în fiecare cadru.
+// Înainte astea desenau în pătrat; n-aveau nevoie de el, doar așa erau scrise.
+function plainLayer(drawFn) {
+  fullSize();
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, fullW, fullH);
+  fctx.save();
+  fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fctx.translate(innerWidth / 2 + walkX, innerHeight / 2 + walkY);
+  fctx.globalCompositeOperation = 'lighter';
+  const prev = CTX; CTX = fctx;
+  drawFn();
+  CTX = prev;
+  fctx.restore();
+}
+
+// ── apa: pânză proprie, opacă, condusă de analizorul paginii ────────────────
+const waterCv = document.getElementById('water');
+const waterCtx = waterCv.getContext('2d', { alpha: false });
+// grave = treimea de jos a spectrului, înalte = treimea de sus — exact criteriul
+// din drawOrbits, ca efectele să reacționeze la fel la aceeași voce
+function bandThirds() {
+  let bass = 0, treble = 0;
+  for (let i = 0; i < NB / 3; i++) bass += band[i];
+  for (let i = (NB * 2 / 3) | 0; i < NB; i++) treble += band[i];
+  return { bass: bass / (NB / 3), treble: treble / (NB / 3) };
+}
+function drawWater(t) {
+  if (!window.waterScene) return;
+  const { bass, treble } = bandThirds();
+  // centrul = centrul ecranului + plimbarea, adică vârful cursorului desenat
+  waterScene.draw(waterCv, waterCtx, t, levelNow, bass, treble,
+                  innerWidth / 2 + walkX, innerHeight / 2 + walkY, dpr);
+}
+
+// ── modul MilkDrop: presetele reale, încărcate la cerere ─────────────────────
+// Scripturile (≈1 MB) se aduc abia când apeși butonul, ca pagina să rămână ușoară
+// pe date mobile. Se păstrează doar presetele cu undă CIRCULARĂ (wave_mode 0 sau 1)
+// și cele „numai linii" — restul umplu cadrul cu fundal colorat, adică exact ce nu
+// vrem peste o aplicație.
+let viz = null, mdOn = false, mdNames = [], mdPresets = null, mdIdx = 0, pinned = null;
+const mdCanvas = document.getElementById('md');
+const mdBtn = document.getElementById('mdBtn');
+
+function loadScript(src) {
+  return new Promise((ok, no) => {
+    const el = document.createElement('script');
+    el.src = src; el.onload = ok; el.onerror = () => no(new Error(src));
+    document.head.append(el);
+  });
+}
+
+function cleanliness(p) {                    // cât de „numai linii" e presetul
+  const b = p.baseVals;
+  const on = l => (l || []).filter(x => x.baseVals && x.baseVals.enabled).length;
+  return Math.min(b.wave_a || 0, 1) * 2 + (b.wave_thick ? 1 : 0)
+       - Math.abs((b.zoom ?? 1) - 1) * 4 - Math.abs(b.warp || 0) * 1.5
+       - (b.echo_alpha || 0) * 2 - (1 - (b.decay ?? 1)) * 6
+       - on(p.shapes) * 0.7 + on(p.waves) * 0.4
+       - ((p.pixel_eqs_str || '').length > 40 ? 1 : 0);
+}
+
+// încarcă motorul o singură dată; folosit și de modul MilkDrop, și de presetele fixate
+async function mdBoot() {
+  if (mdPresets) return true;
+  return await mdEnable(true);
+}
+
+const calls = { pick: 0, pinPreset: 0, loadPreset: 0, layout: 0, rendererSize: 0, start: 0 };
+async function pinPreset(name, scale, fade) {
+  calls.pinPreset++;
+  if (!(await mdBoot())) return false;
+  if (!mdPresets[name]) { label.textContent = 'presetul nu există: ' + name; return false; }
+  pinned = name;
+  // `scale` doar micșorează pânza pe ecran: compoziția presetului rămâne intactă,
+  // spre deosebire de a-i schimba dimensiunea de randare, care i-ar schimba forma
+  document.documentElement.style.setProperty('--mdScale', String(scale || 1));
+  mdCanvas.classList.toggle('fade', !!fade);
+  keyCv.classList.toggle('fade', !!fade);
+  mdCanvas.classList.remove('hidden');
+  full.classList.add('hidden');
+  waterCv.classList.add('hidden');
+  layout();
+  calls.loadPreset++;
+  viz.loadPreset(mdPresets[name], 0.6);
+  return true;
+}
+
+function unpin() {
+  if (!pinned) return;
+  pinned = null;
+  document.documentElement.style.setProperty('--mdScale', '1');
+  mdCanvas.classList.remove('fade');
+  keyCv.classList.remove('fade');
+  if (!mdOn) mdCanvas.classList.add('hidden');
+  layout();
+}
+
+async function mdEnable(bootOnly) {
+  if (!mdPresets) {
+    label.textContent = 'se încarcă presetele MilkDrop…';
+    // În embed motorul e lângă pagină (`?md=../milkdrop/`), altfel de pe unpkg.
+    const md = EMBED_PARAMS.get('md');
+    const src = md
+      ? [md + 'butterchurn.min.js', md + 'butterchurnPresets.min.js', md + 'butterchurnPresetsExtra.min.js']
+      : ['https://unpkg.com/butterchurn@2.6.7/lib/butterchurn.min.js',
+         'https://unpkg.com/butterchurn-presets@2.4.7/lib/butterchurnPresets.min.js',
+         'https://unpkg.com/butterchurn-presets@2.4.7/lib/butterchurnPresetsExtra.min.js'];
+    try {
+      for (const s of src) await loadScript(s);
+    } catch (e) {
+      label.textContent = 'nu am putut încărca MilkDrop (fără net?)';
+      post({ event: 'error', what: 'milkdrop engine did not load: ' + e.message });
+      return false;
+    }
+    mdPresets = Object.assign({}, butterchurnPresets.getPresets(),
+      (window.butterchurnPresetsExtra || { getPresets: () => ({}) }).getPresets());
+    mdNames = Object.keys(mdPresets)
+      .filter(n => (mdPresets[n].baseVals.wave_mode | 0) <= 1)
+      .sort((a, b) => cleanliness(mdPresets[b]) - cleanliness(mdPresets[a]));
+    // vizualizatorul trebuie creat DUPĂ ce pânza și-a luat dimensiunea finală:
+    // altfel rămâne cu viewport-ul vechi și presetul se desenează la altă scară,
+    // înghesuit într-un colț. De aceea layout() rulează înainte, cu mdOn deja pus.
+    layout();
+    viz = (butterchurn.default || butterchurn).createVisualizer(actx, mdCanvas,
+            { width: mdCanvas.width, height: mdCanvas.height, pixelRatio: 1 });
+    viz.setRendererSize(mdCanvas.width, mdCanvas.height);
+    if (micSource) viz.connectAudio(micSource);
+  }
+  if (!bootOnly) mdLoad(mdIdx);
+  return true;
+}
+
+function mdLoad(i) {
+  if (!mdNames.length) return;
+  mdIdx = (i + mdNames.length) % mdNames.length;
+  viz.loadPreset(mdPresets[mdNames[mdIdx]], 1.2);
+  label.textContent = `MilkDrop ${mdIdx + 1}/${mdNames.length} — ${mdNames[mdIdx]}`;
+  poke();
+}
+
+mdBtn.addEventListener('click', async ev => {
+  ev.stopPropagation();
+  if (!mdOn) {
+    mdOn = true;
+    mdBtn.classList.add('on');
+    // răsfoirea e acum tot pe toată fereastra: presetul fixat rămăsese singurul
+    // full-bleed, iar restul stăteau într-un pătrat mascat rotund — adică tot un decupaj
+    document.documentElement.style.setProperty('--mdScale', '1');
+    mdCanvas.classList.remove('fade');
+    mdCanvas.classList.remove('hidden');
+    if (!(await mdEnable())) {         // fără net: ne întoarcem curat
+      mdOn = false;
+      mdBtn.classList.remove('on');
+      mdCanvas.classList.add('hidden');
+      layout();
+      return;
+    }
+  } else {
+    mdOn = false;
+    label.textContent = (fIdx + 1) + ' — ' + FORMULAS[fIdx].name +
+      (FORMULAS[fIdx].desc ? '  ·  ' + FORMULAS[fIdx].desc : '');
+  }
+  mdBtn.classList.toggle('on', mdOn);
+  mdCanvas.classList.toggle('hidden', !mdOn);
+  layout();
+});
+
+// swipe stânga/dreapta ca să tai prin presete
+let swipeX = null, swipeY = null;
+addEventListener('touchstart', e => {
+  swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY;
+}, { passive: true });
+addEventListener('touchend', e => {
+  if (swipeX === null || !mdOn) return;
+  const dx = e.changedTouches[0].clientX - swipeX;
+  const dy = e.changedTouches[0].clientY - swipeY;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.6) mdLoad(mdIdx + (dx < 0 ? 1 : -1));
+  swipeX = null;
+}, { passive: true });
+// pe desktop, aceleași săgeți
+addEventListener('keydown', e => {
+  if (!mdOn) return;
+  if (e.key === 'ArrowRight') mdLoad(mdIdx + 1);
+  else if (e.key === 'ArrowLeft') mdLoad(mdIdx - 1);
+});
+
+
+// ── plimbarea: halo-ul rătăcește lent pe ecran, ca să se vadă urma din spate ──
+// Traseu Lissajous cu perioade incomensurabile, deci nu se repetă vizibil.
+let walk = false;
+const cursorEl = document.getElementById('cursor');
+const walkBtn = document.getElementById('walkBtn');
+walkBtn.addEventListener('click', ev => {
+  ev.stopPropagation();
+  walk = !walk;
+  walkBtn.classList.toggle('on', walk);
+});
+// Plimbarea se calculează O SINGURĂ DATĂ pe cadru și ajunge în TOATE straturile:
+//   · efectele proprii și apa o primesc ca deplasare a originii de desen;
+//   · cursorul și pânza MilkDrop o primesc prin variabila CSS `--walk`.
+// Bug-ul de dinainte: #md nu o primea deloc, deci cu „plimbare" pornită cursorul
+// pleca de lângă preset. Variabila e COMPUSĂ în fiecare regulă (`var(--walk) …`),
+// nu atribuită peste `transform`, altfel ștergea `scale(var(--mdScale))` și
+// presetele 85 și 97 săreau înapoi la mărime întreagă.
+// În modul embed centrul e mouse-ul real, dat de aplicație prin halo.center():
+// același mecanism (originea desenului + `--walk`), doar că nu rătăcește.
+let embedCX = null, embedCY = null;
+function walkStep(t) {
+  if (EMBED) {
+    walkX = embedCX === null ? 0 : embedCX - innerWidth / 2;
+    walkY = embedCY === null ? 0 : embedCY - innerHeight / 2;
+    document.documentElement.style.setProperty('--walk',
+      `translate(${walkX.toFixed(1)}px,${walkY.toFixed(1)}px)`);
+    return;
+  }
+  if (!walk) {
+    walkX = walkY = 0;
+    document.documentElement.style.setProperty('--walk', 'translate(0px, 0px)');
+    return;
+  }
+  const ax = innerWidth * 0.20, ay = innerHeight * 0.16;
+  walkX = ax * Math.sin(t * 0.21);
+  walkY = ay * Math.sin(t * 0.29 + 1.1);
+  document.documentElement.style.setProperty('--walk',
+    `translate(${walkX.toFixed(1)}px,${walkY.toFixed(1)}px)`);
+}
+
+const curBtn = document.getElementById('curBtn');
+curBtn.addEventListener('click', ev => {
+  ev.stopPropagation();
+  document.body.classList.toggle('nocursor');
+  const off = document.body.classList.contains('nocursor');
+  curBtn.classList.toggle('on', off);
+  curBtn.textContent = off ? 'arată cursorul' : 'ascunde cursorul';
+});
+
+const hudBtn = document.getElementById('hudBtn');
+hudBtn.addEventListener('click', ev => {
+  ev.stopPropagation();
+  document.body.classList.toggle('bare');
+  hudBtn.classList.toggle('on', document.body.classList.contains('bare'));
+  hudBtn.textContent = document.body.classList.contains('bare') ? 'arată barele' : 'ascunde barele';
+});
+
+
+// ── actualizare automată ─────────────────────────────────────────────────────
+// GitHub Pages trimite `cache-control: max-age=600`, deci telefonul poate sta 10
+// minute pe versiunea veche fără să dea vreun semn — asta, nu deploy-ul, e ce
+// pare „lent". Pagina își verifică singură amprenta într-un fișier de câțiva
+// octeți, cerut cu no-store, și se reîncarcă singură când s-a publicat altceva.
+const BUILD = '18:43:26 18f2224';
+const verEl = document.getElementById('ver');
+verEl.textContent = 'v ' + BUILD;
+async function checkVersion() {
+  try {
+    const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const live = (await r.text()).trim();
+    if (live && live !== BUILD) {
+      verEl.classList.add('fresh');
+      verEl.textContent = 'versiune nouă — se reîncarcă…';
+      setTimeout(() => location.reload(), 600);
+    }
+  } catch (e) { /* offline: rămânem pe ce avem */ }
+}
+if (!EMBED) {                  // în aplicație pagina e livrată cu ea, nu se actualizează singură
+  setInterval(checkVersion, 15000);
+  addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+}
+
+// ─────────────────────────── comenzi pe ecran ─────────────────────────
+let fIdx = 0;                       // pornim pe cea care respectă cel mai bine criteriul
+const FAVS = new Set([14, 16, 17]); // ★ din review: chain breaker, black tiles, fata morgana
+const chips = document.getElementById('chips');
+FORMULAS.forEach((f, i) => {
+  const b = document.createElement('button');
+  b.className = 'chip' + (i === fIdx ? ' on' : '') + (FAVS.has(i) ? ' fav' : '');
+  b.textContent = i + 1;
+  b.addEventListener('click', () => pick(i));
+  chips.append(b);
+});
+function pick(i) {
+  calls.pick++;
+  fIdx = i;
+  const F = FORMULAS[i];
+  if (F.preset) {
+    label.textContent = 'se încarcă ' + F.name + '…';
+    [...chips.children].forEach((c, k) => c.classList.toggle('on', k === i));
+    pinPreset(F.preset, F.scale, F.fade).then(ok => {
+      if (ok) label.textContent = (i + 1) + ' — ' + F.name;
+      post({ event: 'picked', index: i, name: F.name, ok: !!ok });
+    });
+    poke();
+    return;
+  }
+  unpin();
+  clearTrail();
+  [...chips.children].forEach((c, k) => c.classList.toggle('on', k === i));
+  label.textContent = (i + 1) + ' — ' + FORMULAS[i].name +
+    (FORMULAS[i].desc ? '  ·  ' + FORMULAS[i].desc : '');
+  layout();
+  poke();
+  post({ event: 'picked', index: i, name: F.name, ok: true });
+}
+function clearTrail() {                    // fără urme de la formula (sau propoziția) veche
+  for (const f of fbuf) f.x.clearRect(0, 0, f.c.width, f.c.height);
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, fullW, fullH);
+}
+
+// comenzile se estompează singure ca să rămână doar halo-ul; o atingere le readuce
+let fadeTimer = null;
+const ui = document.getElementById('ui');
+function poke() {
+  ui.classList.remove('faded');
+  clearTimeout(fadeTimer);
+  fadeTimer = setTimeout(() => ui.classList.add('faded'), 4500);
+}
+document.getElementById('bg').addEventListener('click', ev => {
+  ev.stopPropagation();
+  document.body.classList.toggle('ide');
+  ev.target.textContent = document.body.classList.contains('ide') ? 'fundal: gradient' : 'fundal: IDE';
+});
+addEventListener('pointerdown', poke);
+poke();
+
+// ── embed: analizorul, emulat ─────────────────────────────────────────────────
+// Aplicația dă eșantioanele microfonului EI (16 kHz), nu pagina; deci `wave` și
+// `spec` nu mai vin dintr-un AnalyserNode (ar cere un AudioContext pornit, adică
+// un dispozitiv de ieșire deschis), ci se calculează aici, după cum le-ar fi
+// calculat el: ultimele 2048 de eșantioane la 48 kHz (cele 683 de la 16 kHz,
+// interpolate ×3), fereastră Blackman, FFT, |X|·2/N (sinusul de 0 dBFS = 0 dB),
+// netezire în timp (0.72 pe cadru la 60 Hz ⇒ 0.72² pe apel la 30 Hz), apoi
+// dB → octet între minDecibels −100 și maxDecibels −30.
+const EMU_N = 2048, EMU_IN = Math.ceil(EMU_N / 3);
+const emuRe = new Float32Array(EMU_N), emuIm = new Float32Array(EMU_N), emuMag = new Float32Array(EMU_N / 2);
+const emuWin = new Float32Array(EMU_N);
+// pentru motorul MilkDrop, în embed: TREI tablouri, ca în halo.html — motorul le
+// poate prelucra pe loc, și unul singur dat de trei ori ar fi prelucrat de trei ori
+const mdBytes = new Uint8Array(1024).fill(128), mdBytesL = new Uint8Array(1024).fill(128), mdBytesR = new Uint8Array(1024).fill(128);
+for (let i = 0; i < EMU_N; i++)
+  emuWin[i] = 0.42 - 0.5 * Math.cos(2 * Math.PI * i / EMU_N) + 0.08 * Math.cos(4 * Math.PI * i / EMU_N);
+const emuRev = new Uint16Array(EMU_N);
+for (let i = 0, bits = Math.log2(EMU_N); i < EMU_N; i++) {
+  let r = 0; for (let b = 0; b < bits; b++) r = (r << 1) | ((i >> b) & 1); emuRev[i] = r;
+}
+function emuFFT() {
+  for (let i = 0; i < EMU_N; i++) { const j = emuRev[i]; if (j > i) {
+    let t = emuRe[i]; emuRe[i] = emuRe[j]; emuRe[j] = t; t = emuIm[i]; emuIm[i] = emuIm[j]; emuIm[j] = t; } }
+  for (let len = 2; len <= EMU_N; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < EMU_N; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = a + len / 2;
+        const xr = emuRe[b] * cr - emuIm[b] * ci, xi = emuRe[b] * ci + emuIm[b] * cr;
+        emuRe[b] = emuRe[a] - xr; emuIm[b] = emuIm[a] - xi; emuRe[a] += xr; emuIm[a] += xi;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
+}
+function emuAudio(b64) {
+  const bin = atob(b64), n = bin.length >> 2;
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const pcm = new Float32Array(bytes.buffer, 0, n);
+  const from = Math.max(0, n - EMU_IN);                       // ultimele 683 la 16 kHz
+  for (let i = 0; i < EMU_N; i++) {                          // ×3, liniar, la „48 kHz"
+    const p = i / 3, k = Math.floor(p), f = p - k;
+    const a = pcm[from + k] || 0, b = pcm[from + k + 1] !== undefined ? pcm[from + k + 1] : a;
+    wave[i] = a + (b - a) * f;
+  }
+  // motorul MilkDrop primește eșantioanele BRUTE de 16 kHz (ultimele 1024, 64 ms),
+  // ca în vechiul halo.html — nu fereastra interpolată: aceea îi îngrămădea toată
+  // energia în „bass" și presetele ieșeau stinse (măsurat 2026-09-20)
+  const mdFrom = Math.max(0, n - 1024);
+  for (let i = 0; i < 1024; i++) mdBytes[i] = mdBytesL[i] = mdBytesR[i] = Math.max(0, Math.min(255, Math.round(128 + (pcm[mdFrom + i] || 0) * 127)));
+  for (let i = 0; i < EMU_N; i++) { emuRe[i] = wave[i] * emuWin[i]; emuIm[i] = 0; }
+  emuFFT();
+  const tau = 0.72 * 0.72;
+  for (let k = 0; k < EMU_N / 2; k++) {
+    const m = 2 * Math.hypot(emuRe[k], emuIm[k]) / EMU_N;
+    emuMag[k] = tau * emuMag[k] + (1 - tau) * m;
+    const db = 20 * Math.log10(emuMag[k] + 1e-12);
+    spec[k] = Math.max(0, Math.min(255, Math.round(255 * (db + 100) / 70)));
+  }
+}
+
+// ── embed: cheia — pânzele opace copiate cu alfa = max(r,g,b) ────────────────
+// Același pas pe care îl făcea `halo.html` din Walkie Talkie pentru MilkDrop:
+// negrul motorului devine transparent, lumina rămâne (premultiplicat: fiecare
+// canal ≤ alfa prin construcție). Pentru apă la fel: cerul (6,10,24) devine o
+// tentă de-abia vizibilă, stelele, cometele și reflexiile trec.
+let keyGL = null, keyProg = null, keyTex = null, keyMode = '';
+function keySetup() {
+  keyGL = keyCv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+  if (!keyGL) return false;
+  const gl = keyGL;
+  const compile = (type, code) => {
+    const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  };
+  const vs = compile(gl.VERTEX_SHADER, 'attribute vec2 p; varying vec2 uv; void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }');
+  const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t;
+    void main() { vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y)); gl_FragColor = vec4(c.rgb, max(c.r, max(c.g, c.b))); }`);
+  keyProg = gl.createProgram(); gl.attachShader(keyProg, vs); gl.attachShader(keyProg, fs); gl.linkProgram(keyProg);
+  gl.useProgram(keyProg);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(keyProg, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  keyTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, keyTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.disable(gl.BLEND);
+  return true;
+}
+// mode: 'md' (pătratul MilkDrop, cu --walk/--mdScale/fade din CSS), 'full' (apa,
+// cât fereastra) sau '' (nimic de cheiat: efectele proprii au alfa deja)
+function keyPass(mode, src) {
+  if (mode !== keyMode) {                  // `fade` rămâne: îl pune și îl ia pinPreset/unpin
+    keyMode = mode;
+    keyCv.classList.remove('md', 'full');
+    if (mode) keyCv.classList.add(mode);
+  }
+  if (!mode || !keyGL) return;
+  const gl = keyGL;
+  if (keyCv.width !== src.width || keyCv.height !== src.height) {
+    keyCv.width = src.width; keyCv.height = src.height;
+    keyCv.style.width = src.style.width; keyCv.style.height = src.style.height;
+  }
+  gl.bindTexture(gl.TEXTURE_2D, keyTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  gl.viewport(0, 0, keyCv.width, keyCv.height);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // diagnostic (halo.probe): o mostră de 16×16 din ieșire, luată ÎN cadru — după
+  // compunere pânza e ștearsă, deci o citire de mai târziu ar spune mereu „negru"
+  if (++keyFrames % 30 === 0) {
+    const px = new Uint8Array(4), N = 16; let a = 0, m = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      gl.readPixels(Math.floor((i + .5) * keyCv.width / N), Math.floor((j + .5) * keyCv.height / N), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      a += px[3]; m += Math.max(px[0], px[1], px[2]);
+    }
+    keyStats = { alpha: +(a / N / N).toFixed(1), rgbMax: +(m / N / N).toFixed(1), src: meanOf(src) };
+  }
+}
+let keyFrames = 0, keyStats = null;
+function meanOf(cv) {
+  try { const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d'); x.drawImage(cv, 0, 0, 32, 32); const d = x.getImageData(0, 0, 32, 32).data;
+    let sum = 0, a = 0; for (let i = 0; i < d.length; i += 4) { sum += Math.max(d[i], d[i + 1], d[i + 2]); a += d[i + 3]; }
+    return { rgbMax: +(sum / (d.length / 4)).toFixed(1), alpha: +(a / (d.length / 4)).toFixed(1) }; } catch (e) { return String(e); }
+}
+
+// ─────────────────────────────── bucla ────────────────────────────────
+layout();
+const t0 = performance.now();
+let running = false;
+function frame(now) {
+  if (!running) return;
+  const t = (now - t0) / 1000;
+  // cursorul merge cu efectul: vârful lui trebuie să stea mereu în centrul lui,
+  // altfel plimbarea le desparte și nu mai vezi unde ar fi mouse-ul în realitate
+  walkStep(t);
+  if (!EMBED) {                       // în embed le scrie halo.audio()
+    analyser.getFloatTimeDomainData(wave);
+    analyser.getByteFrequencyData(spec);
+  }
+  updateBands();
+  updateShape(t);
+  if (!EMBED) drawBars();
+  const F = FORMULAS[fIdx];
+  const md = mdOn || pinned;
+  full.classList.toggle('hidden', md || !!F.preset || !!F.water);
+  waterCv.classList.toggle('hidden', md || !F.water);
+  if (md && viz) {
+    // în embed motorul n-are microfon conectat: primește aceleași eșantioane ca
+    // octeții pe care i-ar fi produs analizorul lui (ultimele 1024 ale ferestrei)
+    if (EMBED) viz.render({ audioLevels: { timeByteArray: mdBytes, timeByteArrayL: mdBytesL, timeByteArrayR: mdBytesR } });
+    else viz.render();
+    if (EMBED) keyPass('md', mdCanvas);
+  } else if (F.preset) {
+    // presetul încă se încarcă: nu are draw(), deci nu desenăm nimic în acest cadru
+    if (EMBED) keyPass('', null);
+  } else if (F.water) {
+    drawWater(t);
+    if (EMBED) keyPass('full', waterCv);
+  } else {
+    F.draw(t);                 // fiecare efect își ia singur stratul (tunnel / plain)
+    if (EMBED) keyPass('', null);
+  }
+  requestAnimationFrame(frame);
+}
+function start() { if (running) return; running = true; requestAnimationFrame(frame); }
+
+if (EMBED) {
+  // pânzele opace pe care le cheiază #key ies din DOM (după ce toate referințele
+  // de mai sus le-au găsit): desenate în continuare, dar niciodată compuse
+  mdCanvas.remove();
+  waterCv.remove();
+  const webgl = keySetup();
+  window.halo = {
+    pick(i) { pick(i); return FORMULAS[i] ? FORMULAS[i].name : 'no such effect: ' + i; },
+    center(x, y) { embedCX = x; embedCY = y; },
+    audio(b64) { emuAudio(b64); },
+    start() { calls.start++; clearTrail(); start(); },
+    stop() { running = false; },
+    names() { return FORMULAS.map(f => f.name); },
+    // diagnostic: ce vede pagina și cât de luminoase sunt pânzele (host: WT_HALO_PAGE_PROBE=1)
+    probe() {
+      let lo = 255, hi = 0; for (let i = 0; i < 1024; i++) { lo = Math.min(lo, mdBytes[i]); hi = Math.max(hi, mdBytes[i]); }
+      return JSON.stringify({ console: consoleLog.slice(-12), calls, fIdx, pinned, mdOn, viz: !!viz, running, keyMode, keyClass: keyCv.className,
+        key: { w: keyCv.width, h: keyCv.height, cssW: keyCv.style.width, inFrame: keyStats },
+        md: { w: mdCanvas.width, h: mdCanvas.height, cssW: mdCanvas.style.width },
+        full: { w: full.width, hidden: full.classList.contains('hidden') },
+        presetVals: viz && viz.renderer && viz.renderer.preset ? Object.keys(viz.renderer.preset).slice(0, 8) : null,
+        vizTime: viz && viz.renderer ? viz.renderer.time : null, frames: keyFrames,
+        engine: viz && viz.renderer ? (r => ({ blending: r.blending, tex: [r.texsizeX, r.texsizeY], fps: +r.fps.toFixed(1), frameNum: r.frameNum,
+          levels: { bass: +r.audioLevels.bass.toFixed(2), mid: +r.audioLevels.mid.toFixed(2), treb: +r.audioLevels.treb.toFixed(2) }, lost: r.gl.isContextLost() }))(viz.renderer) : null,
+        mdScale: getComputedStyle(document.documentElement).getPropertyValue('--mdScale'),
+        walk: getComputedStyle(document.documentElement).getPropertyValue('--walk'),
+        audio: { lo, hi, level: +levelNow.toFixed(3) }, dpr, vw: innerWidth, vh: innerHeight });
+    },
+    caps() { return { webgl, dpr, w: innerWidth, h: innerHeight }; },
+  };
+  post({ event: 'ready', webgl, dpr, w: innerWidth, h: innerHeight, names: FORMULAS.map(f => f.name) });
+} else {
+  start();
+}
+</script>
+</html>

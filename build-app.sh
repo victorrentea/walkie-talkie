@@ -53,10 +53,15 @@ cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
 # assembled by hand. `CaretHalo` also finds it in `assets/` when the binary is
 # run straight out of `.build`, which is how the contact sheet and the demo run.
 cp "$DIR/assets/caret-halo-5x5.png" "$CONTENTS/Resources/caret-halo-5x5.png"
-# The MilkDrop halo: the page, the two preset packs and — once dropped in —
-# the engine, `butterchurn.min.js`. Bundled so the halo works on a plane;
-# `MilkDropHalo` finds the folder here or in `assets/` from a `.build` binary.
-rm -rf "$CONTENTS/Resources/milkdrop"
+# The voice-halo page, which the halo runs whole in a web view (`HaloPage`):
+# vendored from a pinned tag of the sibling repo by `tools/vendor-voice-halo.sh`
+# (a no-op without the sibling — the committed copy is what ships), then copied
+# beside the MilkDrop engine and its preset packs (`assets/milkdrop`, where
+# `butterchurn.min.js` is dropped in by hand). Bundled so the halo works on a
+# plane; `HaloPage` finds the folder here or in `assets/` from a `.build` binary.
+"$DIR/tools/vendor-voice-halo.sh"
+rm -rf "$CONTENTS/Resources/voice-halo" "$CONTENTS/Resources/milkdrop"
+cp -R "$DIR/assets/voice-halo" "$CONTENTS/Resources/voice-halo"
 cp -R "$DIR/assets/milkdrop" "$CONTENTS/Resources/milkdrop"
 
 # The Finder / Spotlight / Get Info icon, built here from the *bound* picture —

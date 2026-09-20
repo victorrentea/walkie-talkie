@@ -571,7 +571,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// order Victor ranked them. The preference is `HaloStyle`'s own
     /// (`UserDefaults`, `haloStyle`), written by `CaretHalo.setStyle` — this
     /// row reads it back on every open, so the tick is what is running.
-    private let haloItem = NSMenuItem(title: "Halo", action: nil, keyEquivalent: "")
+    /// **One list** (Victor, 2026-09-20: *"implement in Walkie Talkie the
+    /// effects you have … As a new menu, call it Halo fx"* — his spelling,
+    /// lowercase `fx` — and then *"there must be ONE menu, not 2: and the
+    /// MilkDrop ones should have a lightning bolt in the name"*). The film
+    /// first and apart, the page's hand-written effects, a line, the presets
+    /// with their ⚡ (`HaloStyle.menuTitle`). The row reads out the pick.
+    private let haloItem = NSMenuItem(title: "Halo fx", action: nil, keyEquivalent: "")
     private let haloSubmenu = NSMenu()
 
     /// Victor picked one. `AppDelegate` hands it to the halo.
@@ -579,25 +585,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     private func applyHaloRow() {
         let current = HaloStyle.current
-        haloItem.title = "Halo: \(current.menuTitle)"
+        haloItem.title = "Halo fx: \(current.menuTitle)"
         haloSubmenu.removeAllItems()
-        // **Three groups under two lines**: the film; the hand-written
-        // effects; the MilkDrop presets. A preset row is greyed, and says why,
-        // while the engine is not bundled (`MilkDropHalo.engineAvailable`) —
+        // A row is greyed, and says why, while the page or the engine is not
+        // bundled (`HaloPage.available`, `MilkDropHalo.engineAvailable`) —
         // `autoenablesItems` off for the mic submenu's reason.
         haloSubmenu.autoenablesItems = false
         var lastWasPreset = false
         for style in HaloStyle.allCases {
-            if style.preset != nil && !lastWasPreset { haloSubmenu.addItem(.separator()) }
-            lastWasPreset = style.preset != nil
-            let available = style.isAvailable
-            let row = NSMenuItem(title: available ? style.menuTitle : "\(style.menuTitle) — engine not bundled",
+            if style.isPreset && !lastWasPreset { haloSubmenu.addItem(.separator()) }
+            lastWasPreset = style.isPreset
+            let row = NSMenuItem(title: style.unavailableReason.map { "\(style.menuTitle) — \($0)" } ?? style.menuTitle,
                                  action: #selector(haloPicked(_:)), keyEquivalent: "")
             row.target = self
             row.representedObject = style.rawValue
-            row.isEnabled = available
+            row.isEnabled = style.isAvailable
             row.image = style == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloSubmenu.addItem(row)
+            // The film first and apart: the default, and the one drawn natively.
             if style == .lightning { haloSubmenu.addItem(.separator()) }
         }
     }
@@ -888,11 +893,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // the row under it — the Scratchpad — is a qualification of the answer.
         // The wrap used to be the other one; it went in the same change that
         // gave this row its arrow, as the same question asked twice.
-        engineItem.image = Self.symbolIcon("waveform")
-        engineItem.submenu = engineSubmenu
-        applyEngineRow()
-        menu.addItem(engineItem)
-
+        // **Microphone first, then the engine, Halo fx last** (Victor,
+        // 2026-09-20): what is listening, what is transcribing it, and the
+        // pickers about what is drawn after them.
         micItem.image = Self.symbolIcon("mic")
         // **A submenu auto-enables on its own**, and this is the one list in the
         // app whose whole point is that some rows are dead. The trap is the one
@@ -906,13 +909,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyMicRow()
         menu.addItem(micItem)
 
+        engineItem.image = Self.symbolIcon("waveform")
+        engineItem.submenu = engineSubmenu
+        applyEngineRow()
+        menu.addItem(engineItem)
+
         logiGestures.image = Self.symbolIcon("computermouse")
         logiGestures.submenu = gesturesSubmenu
         applyLogiGesturesRow()
         menu.addItem(logiGestures)
 
-        // **Under Mouse Gestures, above Autosend**: the three pickers together,
-        // each a readout with a list behind it, and the one switch after them.
+        // **`Halo fx`, last of the pickers**, above Autosend.
         haloItem.image = Self.symbolIcon("sparkles")
         haloItem.submenu = haloSubmenu
         applyHaloRow()

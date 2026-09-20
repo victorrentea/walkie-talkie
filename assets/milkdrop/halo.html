@@ -43,13 +43,14 @@
   const out = document.getElementById('out');
   const src = document.createElement('canvas');          // the engine's own canvas, never shown
   let side = 0, dpr = 1, running = false, viz = null, presets = null;
-  let fade = false, fadeRx = 1, fadeRy = 1, testMode = false;
+  let fade = false, fadeRx = 1, fadeRy = 1, screenW = 1, screenH = 1, testMode = false;
   const audio = { time: new Uint8Array(1024), l: new Uint8Array(1024), r: new Uint8Array(1024), fresh: false };
   audio.time.fill(128); audio.l.fill(128); audio.r.fill(128);
 
   // ---- the keying pass ----------------------------------------------------
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
-  let prog = null, tex = null, uFade = null, uRadii = null, uRes = null;
+  let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
+  let fadeFloor = 0.10, gain = 1, rotX = 1;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -59,20 +60,23 @@
     const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
       void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
     const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
-      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res;
-      // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→.10, constant past 1
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain;
+      // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→floor, constant past 1.
+      // floorA is what is left past the fade radius: the page's 0.10, or 0 for a
+      // preset that has to be gone entirely at that distance (Tunnel, 2026-09-20).
       float mask(float d) {
         if (d <= 0.28) return mix(1.0, 0.78, d / 0.28);
         if (d <= 0.50) return mix(0.78, 0.50, (d - 0.28) / 0.22);
         if (d <= 0.75) return mix(0.50, 0.26, (d - 0.50) / 0.25);
-        if (d <= 1.00) return mix(0.26, 0.10, (d - 0.75) / 0.25);
-        return 0.10;
+        if (d <= 1.00) return mix(0.26, floorA, (d - 0.75) / 0.25);
+        return floorA;
       }
       void main() {
         vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y));
+        c.rgb = min(c.rgb * gain, 1.0);          // gain > 1: the preset more opaque and more intense
         float a = max(c.r, max(c.g, c.b));
         if (fade > 0.5) {
-          vec2 q = (uv - 0.5) * res / radii;      // 1 = the screen's edge
+          vec2 q = (uv - 0.5) * res / radii;      // 1 = the fade radius
           a *= mask(length(q));
           c.rgb *= mask(length(q));
         }
@@ -89,6 +93,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
+    uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain');
     gl.disable(gl.BLEND);
   }
   function key() {
@@ -98,6 +103,8 @@
     gl.uniform1f(uFade, fade ? 1 : 0);
     gl.uniform2f(uRadii, fadeRx, fadeRy);
     gl.uniform2f(uRes, side, side);
+    gl.uniform1f(uFloor, fadeFloor);
+    gl.uniform1f(uGain, gain);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -135,12 +142,31 @@
       out.width = out.height = Math.round(s * d);
       src.width = src.height = Math.round(s * d);
       document.documentElement.style.setProperty('--k', String(k || 1));
-      fadeRx = screen.w / 2; fadeRy = screen.h / 2;
+      screenW = screen.w; screenH = screen.h; fadeRx = screen.w / 2; fadeRy = screen.h / 2;
       if (!prog) setupGL();
       if (viz) viz.setRendererSize(src.width, src.height);
     },
-    preset(name, wantFade) {
+    // opts (2026-09-20, Victor on Tunnel: *"de 2x mai opac/intens … fade out complet
+    // la o distanță de 1/2 din width ecran"*, and 2× the rotation):
+    //   fadeRadius: the fade's radius as a fraction of the SCREEN WIDTH, same in
+    //               both axes (default: the page's ellipse, half the screen each way)
+    //   fadeFloor:  what remains past the radius (page: 0.10; 0 = gone entirely)
+    //   gain:       colour multiplier before keying (2 = twice as opaque/intense)
+    //   rot:        multiplier on the preset's per-frame rotation, applied by
+    //               appending to its compiled frame equations — our copy of the
+    //               preset, the vendored pack untouched
+    preset(name, wantFade, opts) {
+      opts = opts || {};
       fade = !!wantFade;
+      fadeFloor = opts.fadeFloor === undefined ? 0.10 : opts.fadeFloor;
+      gain = opts.gain || 1;
+      rotX = opts.rot || 1;
+      //   fadeAtEdge: the fade reaches the CANVAS edge (radius = half the canvas side),
+      //               so a scaled-down preset dies out before its square can show —
+      //               Victor, 2026-09-20: *"it still renders effects with a square crop"*
+      if (opts.fadeAtEdge) { fadeRx = fadeRy = side / 2; }
+      else if (opts.fadeRadius) { fadeRx = fadeRy = screenW * opts.fadeRadius; }
+      else { fadeRx = screenW / 2; fadeRy = screenH / 2; }
       if (!window.butterchurn) { testMode = true; return 'no engine — test pattern'; }
       if (!presets) {
         presets = Object.assign({}, butterchurnPresets.getPresets(),
@@ -155,8 +181,16 @@
         viz.setRendererSize(src.width, src.height);
       }
       if (!presets[name]) return 'no such preset: ' + name;
-      viz.loadPreset(presets[name], 0.6);
-      return 'ok';
+      let p = presets[name];
+      if (rotX !== 1) {
+        // our copy: the frame equations are butterchurn's compiled JS over `a`
+        // (`a.rot=...`); scaling `a.rot` after they ran doubles the whole
+        // per-frame turn, the sine terms included, not only the base value
+        p = JSON.parse(JSON.stringify(p));
+        p.frame_eqs_str = (p.frame_eqs_str || '') + ';a.rot=a.rot*' + rotX + ';';
+      }
+      viz.loadPreset(p, 0.6);
+      return 'ok' + (rotX !== 1 ? ' (rot ×' + rotX + ')' : '');
     },
     // b64: Float32 little-endian, the last 1024 samples in −1…1
     audio(b64) {

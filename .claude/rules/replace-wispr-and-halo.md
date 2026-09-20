@@ -478,66 +478,83 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **Pointer-avoidance and one-panel-per-display are deliberately gone.** A mark centred on the
   cursor cannot be in its way and is on the pointer's screen by construction. → journal: *The beacon is gone — the halo took its job (2026-09-11)*
 
-## Other halos: the effects ported from `voice-halo` (2026-09-20)
+## Other halos: the `voice-halo` page and the MilkDrop engine, in web views (2026-09-20, evening)
 
-- **`HaloStyle` picks what is drawn round the pointer; `.lightning` is the film and the default,
-  and with it chosen nothing in `HaloEffects.swift` runs.** Every other case hands the band to
-  `HaloEffectRenderer` — a `CGContext` bitmap redrawn at 60 Hz into a `CALayer` in the film's
-  place — and keeps the panel, the pointer-following, the bloom, the collapse, the arrow and the
-  idle sweep exactly as they are. Ported from `~/workspace/voice-halo/index.html` (+ `water.js`)
-  at git tag **`swift-port-02`** (d832097; the first pass was `swift-port-01`, 6717b17). The next
-  pass resumes from the diff between tags — that protocol is in that repo's `TODO.md`.
-- **Victor's verdicts travel in the effect names on the page** (`★` likes, `•` potential, `−`
-  dislikes) and decide what is ported: a `−` is dropped (ORB rays went at `swift-port-02`), the
-  others carry their mark into the menu title (`HaloStyle.mark` / `menuTitle`). The order of the
-  list never changes at a review, only the marks.
-- **Sizes derive from the page's `scale` field** (`0.40 / rest`, since `swift-port-02` every
-  effect draws on a viewport-sized canvas with the trail's zoom pivoting on the pointer): `R =
-  core / 0.40 × scale`, so nothing moved on screen and the feedback pivots on the pointer here too.
-- **The water is screen-sized** (`HaloStyle.coversScreen`): the panel is the pointer's screen,
-  `CaretHalo.aimEffectAtPointer` hands the pointer in as `center` every frame and aims the stage's
-  anchor at it so the bloom and the collapse converge on the pointer. Rendered at **1×** (17.5
-  ms/frame, ~30 fps at screen size; at 2× it was under 20). The page's sky is opaque; here it is
-  transparent and the pool stays opaque, as on the page. The reflection is the page's slice
-  blitting verbatim — draw order, `lighter`/`multiply`, the flip with `REFLECT_SQUASH`, and
-  `SKY_MARGIN` consumed by sampling. A pointer crossing to a screen of another size rebuilds it.
-- **The MilkDrop presets run in a `WKWebView`** (`MilkDropHalo`, `assets/milkdrop/halo.html`),
-  Victor's reversal of the scope cut (*"migrate the MilkDrop ones to Swift as well"*): the real
-  butterchurn engine, a square of side `max(w, h)` of the screen × the preset's `scale`, centred
-  on and following the pointer (`coversPointer`); the engine's black keyed to alpha in a second
-  WebGL pass (`a = max(r, g, b)`, the film's own key); 7's radial `fade` in the same shader;
-  audio **pushed in** (`halo.audio`, 1024 samples, 30 Hz) and handed to the engine as its
-  analyser's byte arrays — no `getUserMedia`, no second microphone, no output device; the web
-  view goes out in a fade of the panel's alpha. **The engine file is not in the repo**:
-  `butterchurn.min.js` (2.6.7) could not be fetched under this session's policy; the two preset
-  packs (2.4.7) were vendored from `~/workspace/milkdrop-gallery`'s local tarball. Until the
-  engine is dropped into `assets/milkdrop/` the preset rows are greyed `— engine not bundled`, the
-  wheel dial skips them, and `WT_HALO_STYLE=milkdrop87` shows a **test pattern** through the same
-  keying pass (verified transparent and click-through). Untested end to end for that reason.
-- **The preference is `UserDefaults` `haloStyle`**, written by `CaretHalo.setStyle` (the menu's
-  `Halo` row and the wheel dial both end there); `WT_HALO_STYLE=<case>` overrides for one run.
-- **The effects read the microphone's samples, not only its level.** `MicRecorder.recentSamples`
-  is a 2048-sample ring written in `meter` under the same lock and read with `lock.try()` for
-  `level`'s reason; `AppDelegate` hands it to the halo as nil while no meter is running, and the
-  effect then idles on the page's own slow wave. `VoiceAnalyser` is the page's analyser: a
-  1024-point FFT to 8 kHz, the 64 bands with their noise floor, slow ceiling and `^1.7`, `SHAPE`
-  / `LIVE` with the 0.12 inertia, the LOW/HIGH split. A slow AGC stands in for the browser's
-  `autoGainControl`.
-- **The fog is a feedback buffer.** `.copy` + `clear` before the previous frame is redrawn scaled,
-  twisted and dimmed, or the trail saturates to white. The twist is negated in the bitmap's y-up
-  pass because the effects draw in the page's y-down frame.
-- **Effects carry their own breath**: `refresh` leaves the panel at alpha 1 and applies no pulse
-  scale for them — every one already brightens or swells on the voice from the samples.
-- **Known, deliberate deviations from the page**: stroke widths, bead sizes and blur radii are the
-  page's absolute pixels, tuned for a ring ~250 px in radius, so at the halo's 105 pt they read
-  heavier; the spectrum spans 8 kHz rather than 20; ORB rays uses the panel's side as its `S`
-  and still crosses the pointer, as on the page. Measured: 59–60 fps, 8–13 ms drawing per frame
-  (`WT_HALO_TRACE=1`).
-- **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=8` puts one effect on the real pointer,
-  capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring; **`WT_HALO_DEMO_AUDIO=1`
-  gives the demo a voice** (`DemoVoice`: broadband noise under a slow beat through the same
-  `samples` path `recentSamples` fills — without it every effect idles, honestly). The page renders
-  headlessly with Chrome for a side-by-side (`--headless=new --virtual-time-budget=6000`).
+- **`HaloStyle` picks what is drawn round the pointer; `.lightning` is the film, the default,
+  native, and never waits on a web view.** The eight hand-written effects of the `voice-halo` page
+  are run **by the page itself** in a transparent, click-through `WKWebView` (`HaloPage`) on a
+  panel the size of the pointer's screen; the six MilkDrop presets by the real engine in its own
+  page (`MilkDropHalo`, `assets/milkdrop/halo.html`), a square of side `max(w, h)` × the preset's
+  scale that follows the pointer as a window. The panel, the pointer-following, the collapse (a
+  fade of the panel's alpha for a web view), the arrow and the idle sweep are unchanged. The
+  CoreGraphics ports of nine effects (`HaloEffects.swift`, tags `swift-port-01/02`) went:
+  measured on this Mac, a full-screen CoreGraphics trail pass is 48–86 ms a frame and the page's
+  ring with its shadow blur 58 ms, so the page's geometry at the screen's resolution was never
+  going to run on the CPU, and the hand ports were small, coarse and — for the water — missing the
+  scene. **The hand-drawn water (`Lagoon`) is gone for good** (Victor: *"drop those hand-drawn
+  meteors — go back to the MilkDrop variant"*); `Water Dream` (MilkDrop 103) is the water.
+- **The names are Victor's** (the page's `name` field): Pulse, Amethyst, Crown, Prism, Eclipse,
+  Atom, Gemini, Beads; ⚡ • Tunnel, ⚡ Cauldron, ⚡ • Tendrils, ⚡ Snowflake, ⚡ ★ Sparks, ⚡ ★ Water
+  Dream. `Eclipse` and `Water Dream` are his own words. A `−` on the page (Petals, Silk, Nova,
+  Royal, **Mosaic** — *"the bricks look lame"*) is not implemented.
+- **One menu, `Halo fx`** (his spelling; *"there must be ONE menu, not 2: and the MilkDrop ones
+  should have a lightning bolt in the name"*): the film first and apart, the hand-written effects,
+  a line, the presets with their ⚡ (`HaloStyle.menuTitle`). The menu bar runs Microphone, Engine,
+  Mouse Gestures, `Halo fx`. The preference is `UserDefaults` `haloStyle`, written by
+  `CaretHalo.setStyle` (the row and the wheel dial both end there); `WT_HALO_STYLE=<case>`
+  overrides for one run; a saved style that no longer exists reads as the film.
+- **Vendored, pinned, never fetched.** `tools/vendor-voice-halo.sh` copies `index.html` +
+  `water.js` from `~/workspace/voice-halo` at the commit/tag it pins into `assets/voice-halo/`
+  (+ `VERSION`); `build-app.sh` runs it (a no-op without the sibling) and copies the folder into
+  `Resources/voice-halo` beside `Resources/milkdrop` (the engine's page, the engine and the preset
+  packs; `butterchurn.min.js` is still dropped in by hand — without it the preset rows are greyed
+  `— engine not bundled`). A change on the page reaches the app by bumping the pin and rebuilding;
+  `WT_HALO_PAGE_DIR` points a run at the working checkout, `WT_MILKDROP_DIR` at another engine folder.
+- **`?embed=1` is the page's own mode for this host** (in `victorrentea/voice-halo`, not injected):
+  transparent `html`/`body`, no chips, buttons, bars, version line or drawn cursor; the drawing
+  origin on the real pointer through the page's walk offset (`halo.center(x, y)` on every move);
+  `halo.pick(i)` by `FORMULAS` index (`HaloStyle.pageIndex` — the page never reorders that list,
+  and the name it answers with is logged); `halo.probe()` says what the page sees
+  (`WT_HALO_PAGE_PROBE=1` logs it 5 s in). **Audio is pushed, and the analyser is emulated**:
+  `halo.audio(<base64 Float32>)`, the last 1024 samples at 16 kHz, 30 Hz; the page upsamples the
+  last 683 to a 2048-point 48 kHz window, Blackman + FFT, `2|X|/N`, time smoothing 0.72² per call,
+  −100…−30 dB to bytes. No `getUserMedia`, no running `AudioContext`, no output device.
+  `halo.start()` clears the trail and starts the frame loop; `halo.stop()` halts it.
+- **Why the presets are not in that page** (measured, not found): the same engine, fed the same
+  bytes with the same preset, renders **dark** inside the page in a `WKWebView` — engine buffer
+  mean 2/255 against 67 in `halo.html`, with every JS-side variable identical (levels, `cx/cy`,
+  viewport, texture size, shader link status, no console errors, context not lost), and the
+  canvas shows the composition when put on screen directly. The old page through the new host is
+  bright; the cause was not found in the time there was. `halo.html` stays, with what Victor asked
+  of Tunnel that evening: `halo.preset(name, fade, {fadeRadius, fadeFloor, gain, rot})` — Tunnel at
+  the full canvas, fading to **nothing** at half the screen's width from the pointer, at **2×
+  intensity** (`gain`, before the key) and **2× rotation** (our copy of the preset: `a.rot*=2`
+  appended to its compiled frame equations, the vendored pack untouched).
+- **Composited over the live screen, always.** Nothing captures the desktop: a web view is a
+  window layer over whatever is there, verified by two captures 1.5 s apart over an animated
+  window under every style (all changed) and a near-black census over a bright window (none above
+  the baseline the window's own text sets). Additive effects are faint over pure white, as on the
+  page over its own light — that is the design, not a bug. The engine's black is keyed to alpha
+  (`a = max(r, g, b)`), so a dark preset region is translucent, never a black box.
+- **Failure has a floor, and it is the film.** Page or engine missing → film, said in the log. A
+  page that fails to load, a WebContent process that dies, a preset that will not pin, or no
+  `ready` 2 s after the ring is asked for → `onFailure` → `CaretHalo.fallBack`: the panel is
+  rebuilt as the film **in the same call**, mid-dictation if need be, and `pageBroken` stops the
+  retry until the style changes. `drawn` is what the panel shows; `style` stays the preference.
+  Proven the hard way: a JavaScript error in the page put the film up two seconds later, as designed.
+- **What it costs, measured** (`top`, 1 s samples, ring up, demo voice, 3456×2234): the film
+  0.3 % CPU / 46 MB; a hand-written page effect 4–6 % in the app + 4–7 % WebContent + **20–95 %
+  of a core in the WebKit GPU process** (canvas 2D is drawn there), 50–110 MB + ~40–55 MB; a
+  MilkDrop preset 4 % + ~30 % + ~67 %, **~280–330 MB WebContent + ~240–290 MB GPU process**.
+  Route B (projectM 4.1.7, native, spiked 2026-09-20) renders the presets in 2–3 ms a frame at
+  ~40 MB but needs a from-source build, a 2-line fork (it hard-binds FBO 0), three of the seven
+  presets that exist only as butterchurn JSON, and a texture pack; route C (an engine in
+  Swift/Metal) is 5–8 k lines and 10–15 days for a first render that would still not match
+  butterchurn. The web views are the route until the cost is felt.
+- **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=11 WT_HALO_DEMO_AUDIO=1` puts one effect on the
+  real pointer, capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring. The
+  log says `halo page ready: 20 effects, webgl true` and which page entry a style picked, or
+  `MilkDrop <n>: ok`.
 
 ## The idle sweep (2026-09-15)
 

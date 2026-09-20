@@ -24,13 +24,24 @@ import WebKit
 /// - **Square, side `max(w, h)` of the screen**, CSS-scaled by the preset's
 ///   `scale` — the page's "cover": rendered any other shape the circles come
 ///   out as ovals.
-final class MilkDropHalo: NSView {
+/// - **Why still this page and not the whole `voice-halo` page** (2026-09-20,
+///   evening): the hand-written effects run in `HaloPage`, and the same
+///   engine, fed the same bytes with the same preset, renders **dark** inside
+///   that page in a `WKWebView` (measured: engine buffer mean 2/255 against
+///   67 here, every JS-side variable identical — see the report of that day);
+///   the cause was not found in the time there was, this page is proven, so
+///   the presets stay here.
+final class MilkDropHalo: NSView, HaloWebHost {
     let web: WKWebView
     private let preset: HaloStyle.Preset
     private let screen: CGSize
     private var ready = false
     private var pendingStart = false
     private var lastStatus = ""
+    private var readyWatchdog: Timer?
+    private var failed = false
+    /// The page is unusable, and why — `CaretHalo` draws the film instead.
+    var onFailure: ((String) -> Void)?
 
     /// Where the page and its scripts are — `Resources/milkdrop` installed,
     /// `assets/milkdrop` walking up from a `.build` binary, `WT_MILKDROP_DIR`
@@ -86,10 +97,13 @@ final class MilkDropHalo: NSView {
     private func configure() {
         let side = bounds.width
         let dpr = window?.backingScaleFactor ?? 2
+        let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), gain: \(preset.gain), rot: \(preset.rot)}"
         let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
-               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade))"
+               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), \(opts))"
         web.evaluateJavaScript(js) { [weak self] result, error in
-            let status = (result as? String) ?? error.map { "error: \($0.localizedDescription)" } ?? "?"
+            // The exception's own message, not WebKit's cover line for it.
+            let status = (result as? String) ?? error.map { e in
+                "error: \(((e as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String) ?? e.localizedDescription) at line \((e as NSError).userInfo["WKJavaScriptExceptionLineNumber"] ?? "?")" } ?? "?"
             if status != self?.lastStatus {
                 self?.lastStatus = status
                 Log.info("◯ MilkDrop \(self?.preset.number ?? 0): \(status)")
@@ -98,9 +112,31 @@ final class MilkDropHalo: NSView {
     }
 
     func start() {
-        guard ready else { pendingStart = true; return }
+        guard ready else {
+            pendingStart = true
+            if readyWatchdog == nil {
+                let t = Timer(timeInterval: 2, repeats: false) { [weak self] _ in
+                    guard let self = self, !self.ready else { return }
+                    self.fail("the engine's page was not ready 2 s after the ring was asked for")
+                }
+                readyWatchdog = t
+                RunLoop.main.add(t, forMode: .common)
+            }
+            return
+        }
         configure()
         web.evaluateJavaScript("halo.start()", completionHandler: nil)
+    }
+
+    /// The engine's square follows the pointer as a window; nothing to tell the page.
+    func center(_ p: CGPoint) {}
+
+    private func fail(_ why: String) {
+        guard !failed else { return }
+        failed = true
+        readyWatchdog?.invalidate(); readyWatchdog = nil
+        Log.error("◯ MilkDrop: \(why) — falling back to the film")
+        onFailure?(why)
     }
 
     func stop() {
@@ -127,9 +163,16 @@ final class MilkDropHalo: NSView {
 extension MilkDropHalo: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         ready = true
+        readyWatchdog?.invalidate(); readyWatchdog = nil
         if pendingStart { pendingStart = false; start() }
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        Log.error("◯ MilkDrop page failed to load: \(error.localizedDescription)")
+        fail("the engine's page failed to load: \(error.localizedDescription)")
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        fail("the engine's page failed to load: \(error.localizedDescription)")
+    }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        fail("the web content process died")
     }
 }
