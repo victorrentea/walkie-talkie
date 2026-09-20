@@ -3447,7 +3447,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         // nothing, which is the one thing he cannot afford to guess about. He is
         // speaking, not pointing, so the pointer's absence says nothing about
         // whether this is still worth showing.
-        let target: CGFloat = (anchored && typing && !listening) ? 0.0
+        // **And except while a flash is up** (2026-09-20, late; Victor: *"show
+        // the label next to the mouse when changing the effect, even if the
+        // mouse isn't visible"*): F9 is pressed while typing, so the pointer is
+        // hidden and this rule had faded the chip to nothing exactly when the
+        // effect's name was on it. A flash is something said *to* him, not a
+        // label about the pointer; it shows where the pointer is, drawn or not.
+        let target: CGFloat = (anchored && typing && !listening && flashMessage == nil) ? 0.0
                             : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
