@@ -27,7 +27,7 @@ OUT = HERE / "shots" / "2026-09-19-17-32-15"
 # frame — the numbers the inline `✂️` token and the footer both carry.
 AREA = (900, 345, 2594, 574)
 # Where the pointer was for each whole-screen shot, same pixels.
-MOUSE = {0: (1000, 800), 1: (2400, 1180)}
+MOUSE = {0: (1000, 800), 1: (2400, 1180), 2: (640, 430)}
 
 
 def render(dst):
@@ -51,13 +51,19 @@ def main():
     base = render(OUT / "_render.png")
     assert base.size == (W, H), base.size
 
-    # 📸0 and 📸1 — whole screens. The second is scrolled a little so the two are
-    # not the same picture, which is what makes *which one is the automatic one*
-    # a real question.
-    for n in (0, 1):
+    # 📸0, 📸1 and 📸2 — whole screens, each scrolled differently so they are not
+    # the same picture, which is what makes *which one is the automatic one* and
+    # *which file is 📸2* real questions rather than guesses.
+    #
+    # **Three of them since 2026-09-20, and that is the point of the scene.**
+    # Victor, looking at two identical legend rows: *"Chiar e nevoie de astea? Nu
+    # inferă agentul singur că în loc de 1 trebuie să pună 2?"* With two plain
+    # frames the repetition is barely visible and the inference is trivial; with
+    # three it is the shape he is actually paying for.
+    for n in (0, 1, 2):
         frame = base.copy()
-        if n == 1:
-            frame = frame.transform(frame.size, Image.AFFINE, (1, 0, 0, 0, 1, 260))
+        if n:
+            frame = frame.transform(frame.size, Image.AFFINE, (1, 0, 0, 0, 1, 260 * n))
         frame.save(OUT / f"screenshot-{n}-original.jpg", "JPEG", quality=88)
         small(frame, OUT / f"screenshot-{n}-800px.jpg")
 

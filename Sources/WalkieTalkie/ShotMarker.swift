@@ -743,9 +743,23 @@ enum ShotMarker {
     /// Opus each answered 11/11 questions about what these mean, against 30/33
     /// and 32/33 for the shape they replaced, in half the characters.
     enum Token {
-        static func shot(_ index: Int, mouse: CGPoint?) -> String {
-            guard let mouse = mouse else { return "[📸\(index)]" }
-            return "[📸\(index)🖱️@\(Int(mouse.x)):\(Int(mouse.y))]"
+        /// **`auto` is the frame he did not press for** (2026-09-20), and it is
+        /// five characters that end a guess.
+        ///
+        /// *Which picture was automatic* is the one question this envelope never
+        /// answered: 📸0 has no gesture behind it, so every reader worked it out
+        /// from its position and then said so — both models, in the `unclear`
+        /// field, in **every** run of `evals/envelope-symbols/` since the shape
+        /// shipped. Inference held while each frame had a legend row of its own;
+        /// the day those rows folded into one it stopped holding, and Sonnet
+        /// answered *none* twice out of six, saying exactly why: *"No screenshot
+        /// marker lacked a deliberate 🖱️/✂️ action tag, so I couldn't identify
+        /// one taken automatically."* With the marker: 6/6 both models, 78/78
+        /// overall, in 155 characters less than the envelope it replaces.
+        static func shot(_ index: Int, mouse: CGPoint?, auto: Bool = false) -> String {
+            let tail = auto ? " auto" : ""
+            guard let mouse = mouse else { return "[📸\(index)\(tail)]" }
+            return "[📸\(index)🖱️@\(Int(mouse.x)):\(Int(mouse.y))\(tail)]"
         }
 
         /// `✂️` is *I dragged a box round this*, and the four numbers are its

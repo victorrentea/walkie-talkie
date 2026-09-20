@@ -80,6 +80,27 @@ def _last_line():
         return json.loads(f.read().strip().split("\n")[-1])
 
 
+def _never_arrived():
+    """**Raise, unless Wispr Flow is why** — then skip.
+
+    `startDictation` refuses outright while Wispr Flow's microphone is open
+    (*one engine at a time*), so with the labelling rig running in another
+    session on this Mac a class can fail to get its sentence into the outbox for
+    a reason that has nothing to do with what it asserts. Measured 2026-09-20:
+    the same suite went red once and green twice inside two minutes, the red run
+    with the refusal in the log.
+    """
+    log = os.path.expanduser("~/.walkie-talkie/relay.log")
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            tail = f.read()[-20000:]
+    except OSError:
+        tail = ""
+    if "Wispr Flow's microphone is already open" in tail:
+        raise unittest.SkipTest("Wispr Flow held the microphone — one engine at a time")
+    raise AssertionError("the dictation never reached the outbox")
+
+
 BASE = _find_relay()
 
 
@@ -108,7 +129,7 @@ class EnvelopeShape(unittest.TestCase):
                 _post(BASE, "/unbind")
         except Exception:
             pass
-        print("\n  (the chip is left saying Listening… — ./relay-restart.sh clears it)")
+        _put_the_relay_down()
 
     @classmethod
     def _run(cls):
@@ -142,18 +163,25 @@ class EnvelopeShape(unittest.TestCase):
             if entry.get("text") == cls.marker:
                 return entry
             _post(BASE, "/bind", {"tty": NOWHERE})
-        raise AssertionError("the dictation never reached the outbox")
+        _never_arrived()
 
     # ── the highlights ──────────────────────────────────────────────────────
     def test_selections_are_one_stamped_list(self):
-        """Both highlights, in one `- ` list, each saying when and where."""
-        self.assertIn("text selected during dictation:", self.line["line"])
-        self.assertIn('- 00:03 in ', self.line["line"])
-        self.assertIn('"the twenty-two chars!!"', self.line["line"])
-        self.assertIn('"a second highlight"', self.line["line"])
-        # The pre-2026-09-13 shapes are gone, both of them.
-        self.assertNotIn("[selected:", self.line["line"])
-        self.assertNotIn("[selected 0:", self.line["line"])
+        """Both highlights, each a bracket saying when, what and which app.
+
+        **Rewritten 2026-09-20.** This class asserted the *prose* envelope —
+        `text selected during dictation:` over a `- 00:03 in '…'` list — which
+        Victor's template replaced on 2026-09-19. It went on failing for a day
+        with nobody reading it, because the sentence never reached the outbox and
+        the error said so instead. Now that it does, it may as well pin the shape
+        that actually ships.
+        """
+        line = self.line["line"]
+        self.assertIn('[selected at 0:03: "the twenty-two chars!!" from app ', line)
+        self.assertIn('[selected at 0:06: "a second highlight" from app ', line)
+        # Every shape this replaced, in order of retirement.
+        self.assertNotIn("text selected during dictation:", line)
+        self.assertNotIn("[selected 0:", line)
 
     def test_frozen_selection_keeps_its_key_and_gains_its_offset(self):
         """`selection` still carries the first one; the offset rides beside it."""
@@ -168,16 +196,17 @@ class EnvelopeShape(unittest.TestCase):
         self.assertEqual(extra["seconds"], 6)        # added 2026-09-13
 
     # ── the picks ───────────────────────────────────────────────────────────
-    def test_picks_are_a_list_with_the_page_factored_out(self):
+    def test_picks_are_one_row_each_keyed_by_their_token(self):
+        """A pick is `[chrome-selection-N at m:ss: "…" = <selector> at <url>]`."""
         line = self.line["line"]
-        self.assertIn("elements picked in Chrome during dictation, "
-                      "on 'https://shop.example/cart' (Cart — Shop), oldest first:", line)
-        self.assertIn('- 00:01 div#cart > span.price: "1.299,00 lei"', line)
-        self.assertIn("moved from 120,340 to 500,205 (top-left, page coordinates)", line)
+        self.assertIn('[chrome-selection-1 at 0:01: "1.299,00 lei" = '
+                      'div#cart > span.price at https://shop.example/cart]', line)
+        self.assertIn("[chrome-selection-2 at 0:05:", line)
+        self.assertNotIn("elements picked in Chrome during dictation", line)
 
     def test_pick_carries_the_element_text_and_says_what_it_cut(self):
-        line = self.line["line"]
-        self.assertIn("… (truncated, 3600 chars)", line)
+        """The row shows the head of it; the outbox keeps what was cut."""
+        self.assertIn("The server returned an error. …", self.line["line"])
         picked = self.line["elements"][1]
         self.assertEqual(picked["textChars"], 3600)
         self.assertGreater(len(picked["text"]), 1900)
@@ -188,9 +217,14 @@ class EnvelopeShape(unittest.TestCase):
         self.assertEqual([e["at"] for e in self.line["elements"]], [1, 5])
 
     # ── one clock ───────────────────────────────────────────────────────────
-    def test_every_list_in_the_envelope_uses_mm_ss(self):
-        """The frames are named `shot-00:05`; the other two lists match them."""
-        for stamp in ("- 00:03 ", "- 00:01 ", "- 00:05 "):
+    def test_every_token_in_the_envelope_uses_one_clock(self):
+        """One arithmetic for every stamp — `AppDelegate.clock(_:pad:)`.
+
+        `m:ss` since the template: the frames stopped carrying `00:05` in their
+        names on 2026-09-19, so the `mm:ss` the lists used to match is gone with
+        them and there is one form left rather than two.
+        """
+        for stamp in ("at 0:03:", "at 0:01:", "at 0:05:", "at 0:06:"):
             self.assertIn(stamp, self.line["line"])
 
 
@@ -234,7 +268,7 @@ class FrameList(unittest.TestCase):
                 cls.line = entry["line"]
                 return
             _post(BASE, "/bind", {"tty": NOWHERE})
-        raise AssertionError("the dictation never reached the outbox")
+        _never_arrived()
 
     @classmethod
     def tearDownClass(cls):
@@ -256,12 +290,28 @@ class FrameList(unittest.TestCase):
         self.assertNotRegex(self.line, r"shot-\d\d:\d\d\(")
 
     def test_the_opening_frame_is_a_row_of_the_same_list(self):
-        """Picture zero leads the words, and has its own footer row."""
-        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)?\] ")
+        """Picture zero leads the words, and here it keeps a row of its own.
+
+        `auto` on the token since 2026-09-20 — the frame he did not press for
+        says so rather than being inferred from its position.
+        """
+        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)? auto\] ")
         self.assertRegex(self.line, r"\[📸0 = 📁/screenshot-0(-\d+)?-800px\.jpg")
         self.assertNotIn("[and shot", self.line)
         self.assertNotIn("[the screen when I started talking", self.line)
         self.assertNotIn("open only if the words need it:", self.line)
+
+    def test_rows_that_carry_a_clock_are_never_folded(self):
+        """**The other half of `FoldedFrameRows`** (2026-09-20).
+
+        This route has no word timings, so every frame keeps its `at 0:0N` — and
+        that offset is per-frame information no template can carry. The fold must
+        therefore not happen here, and each frame must keep the row that holds
+        its clock.
+        """
+        self.assertNotIn("[📸n = ", self.line)
+        self.assertRegex(self.line, r"\[📸1 at \d+:\d+ = ")
+        self.assertRegex(self.line, r"\[📸2 at \d+:\d+ = ")
 
     def test_what_was_said_twice_is_no_longer_said_at_all(self):
         self.assertNotIn("oldest first", self.line)
@@ -296,8 +346,24 @@ class FrameList(unittest.TestCase):
                 self.assertNotIn(name, self.line)
 
 
+@unittest.skip("spoken markers were retired 2026-09-18 — see the docstring")
 class SelectionMarkers(unittest.TestCase):
     """A highlight named by a spoken marker lands **in** the sentence (2026-09-14).
+
+    **Skipped since 2026-09-20, and not because it is broken.** It guards the
+    *spoken* marker, which `ShotMarker.isEnabled` turned off on 2026-09-18 —
+    Scribe heard `Pict element one` where `resolve` looks for `Pick`, and a
+    mechanism that rests on a recogniser writing an injected phrase back exactly
+    fails per engine, per language and per accent. So the words come back with no
+    marker in them, nothing is inlined, and all four assertions fail for the one
+    reason that is not a defect: the feature is off.
+
+    It is kept rather than deleted because the mechanism is kept rather than
+    deleted (`WT_SHOT_MARKERS=1`), and a harness cannot set an environment
+    variable on an installed app that is already running — so running this class
+    means relaunching the relay with the flag, by hand. What ships is the
+    **timestamp** marker, and `evals/test_marker_place.py` guards that, green, in
+    ten cases that need no microphone.
 
     The other one is the control: it was filed the same way, its marker was never
     said back by the "recogniser", and it therefore keeps the line under the
@@ -352,7 +418,7 @@ class SelectionMarkers(unittest.TestCase):
             if entry.get("selection") == cls.first:
                 return entry
             _post(BASE, "/bind", {"tty": NOWHERE})
-        raise AssertionError("the dictation never reached the outbox")
+        _never_arrived()
 
     def test_the_marked_highlight_is_quoted_inside_the_sentence(self):
         words = self.line["line"].split("\n\n")[0]
@@ -416,7 +482,7 @@ class AreaFrame(unittest.TestCase):
                 cls.line = entry["line"]
                 return
             _post(BASE, "/bind", {"tty": NOWHERE})
-        raise AssertionError("the dictation never reached the outbox")
+        _never_arrived()
 
     @classmethod
     def tearDownClass(cls):
@@ -477,6 +543,106 @@ class AreaFrame(unittest.TestCase):
 
 
 @unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
+class FoldedFrameRows(unittest.TestCase):
+    """**Three plain frames, one legend row** (2026-09-20).
+
+    Victor, reading a footer whose rows differed by a single digit: *"Chiar e
+    nevoie de astea? Nu inferă agentul singur că în loc de `1` trebuie să pună
+    `2`?"* Measured in `evals/envelope-symbols/` over 36 runs and yes — so
+    `artifactsClause` writes one `[📸n = 📁/screenshot-n-800px.jpg …]` where it
+    used to write one row per frame.
+
+    The rule has four conditions and this pins the two that can actually regress:
+    it folds when the frames have nothing to tell apart, and it does **not** fold
+    when a row carries a clock. That second half is `FrameList` below — the
+    `/test/dictation` route has no word timings, so every row keeps its `at 0:0N`
+    and the per-frame rows must survive.
+
+    Word timings are what put the tokens in the sentence, so they are supplied
+    here: `clock: true` gives the presses a ruler, and the `words` handed to
+    `/test/dictation` are what `ShotMarker.place` measures them against.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        state = _get(BASE, "/test/state")
+        if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
+            raise unittest.SkipTest("a real dictation is in flight — not touching it")
+        target = _get(BASE, "/target")
+        cls.previous = target.get("address") if target.get("bound") else None
+        said = ("uite", "aici", "si", "mai", "jos", "si", "inca", "una", "gata")
+        words, t = [], 0.4
+        for w in said:
+            words.append({"text": w, "start": t, "end": t + 0.35, "type": "word"})
+            words.append({"text": " ", "start": t + 0.35, "end": t + 0.7,
+                          "type": "spacing"})
+            t += 0.7
+        cls.text = " ".join(said)
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        _post(BASE, "/test/dictation/start", {"clock": True})
+        # Three shutter presses, spaced so each lands in a different gap.
+        for _ in range(3):
+            time.sleep(1.4)
+            _post(BASE, "/test/gesture", {"name": "back-click"})
+        time.sleep(1)
+        _post(BASE, "/test/dictation", {"text": cls.text, "words": words})
+        for _ in range(12):
+            time.sleep(1)
+            entry = _last_line()
+            # The tokens are *in* the words by now, so the text does not start
+            # with the plain sentence — match on a word only this run says.
+            if "inca una gata" in (entry.get("text") or ""):
+                cls.line = entry["line"]
+                return
+            _post(BASE, "/bind", {"tty": NOWHERE})
+        _never_arrived()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            if cls.previous:
+                _post(BASE, "/bind", {"tty": cls.previous})
+            else:
+                _post(BASE, "/unbind")
+        except Exception:
+            pass
+        _put_the_relay_down()
+
+    def test_the_plain_frames_share_one_templated_row(self):
+        rows = [r for r in self.line.splitlines() if r.startswith("[📸")]
+        self.assertEqual(
+            ["[📸n = " in r for r in rows].count(True), 1,
+            "expected exactly one templated row:\n" + "\n".join(rows))
+        for n in (0, 1, 2, 3):
+            self.assertNotIn("[📸%d = " % n, self.line,
+                             "frame %d kept a row of its own:\n%s" % (n, self.line))
+
+    def test_the_templated_row_still_says_both_widths(self):
+        row = [r for r in self.line.splitlines() if r.startswith("[📸n = ")][0]
+        self.assertIn("📁/screenshot-n-800px.jpg", row)
+        self.assertIn("at 800px width", row)
+        self.assertIn("-original.jpg", row)
+        # The resolution is the one fact a reader cannot derive from a number.
+        self.assertRegex(row, r"-original\.jpg at \d+x\d+px\]$")
+
+    def test_the_numbers_are_still_in_the_words(self):
+        """Folding the rows may not cost the tokens — that is where `n` comes from.
+
+        Four frames, not three: `/test/dictation/start` takes the context frame
+        as 📸0 exactly as a real gesture does, so the three shutter presses are
+        📸1, 📸2 and 📸3.
+        """
+        for n in (0, 1, 2, 3):
+            self.assertIn("[📸%d" % n, self.line)
+
+    def test_the_automatic_frame_says_so(self):
+        """`auto` on 📸0 — five characters for the one thing readers guessed at."""
+        self.assertRegex(self.line, r"^\[📸0🖱️@\d+:\d+ auto\]")
+        # And only there: a frame he pressed for must not claim to be automatic.
+        self.assertEqual(self.line.count(" auto]"), 1)
+
+
+@unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
 class MicrophoneAfterACancel(unittest.TestCase):
     """**A cancelled dictation must not swallow the next one** (2026-09-20).
 
@@ -521,6 +687,21 @@ class MicrophoneAfterACancel(unittest.TestCase):
         with open(self.LOG, encoding="utf-8", errors="replace") as f:
             return len(f.read().splitlines())
 
+    def _skip_if_wispr_took_it(self, since):
+        """**One engine at a time is a refusal, not a failure of this test.**
+
+        `startDictation` refuses outright while Wispr Flow's microphone is open,
+        and on this Mac that happens whenever the labelling rig in another
+        session is between clips — so the dictation never opens the device for a
+        reason that has nothing to do with what is being asserted. Measured: the
+        test went red once and green twice in the same minute, with the refusal
+        in the log each red time. Skipping keeps the signal honest.
+        """
+        refused = [l for l in self._log_lines(since)
+                   if "Wispr Flow's microphone is already open" in l]
+        if refused:
+            self.skipTest("Wispr Flow held the microphone — one engine at a time")
+
     def _idle(self, timeout=20):
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -554,6 +735,7 @@ class MicrophoneAfterACancel(unittest.TestCase):
         _post(BASE, "/bind", {"tty": NOWHERE})
         _post(BASE, "/test/gesture", {"name": "forward-right"})
         time.sleep(2)
+        self._skip_if_wispr_took_it(mark)
         opened = [l for l in self._log_lines(mark) if "mic: recording through" in l]
         self.assertEqual(len(opened), 1,
                          "the first dictation did not open the microphone:\n"
@@ -572,6 +754,7 @@ class MicrophoneAfterACancel(unittest.TestCase):
         _post(BASE, "/bind", {"tty": NOWHERE})
         _post(BASE, "/test/gesture", {"name": "forward-right"})
         time.sleep(2)
+        self._skip_if_wispr_took_it(mark)
         after = self._log_lines(mark)
         opened = [l for l in after if "mic: recording through" in l]
         self.assertEqual(len(opened), 1,

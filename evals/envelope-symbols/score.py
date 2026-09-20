@@ -34,11 +34,24 @@ def grade(q, got, variant):
     if got is None:
         return False
     if q == "screenshots":
-        return nums(got) == [3]
+        # Three whole screens plus the framed one — the scene grew a third plain
+        # frame on 2026-09-20 so the repeated legend rows would be visible.
+        return nums(got) == [4]
     if q == "automatic":
         return nums(got) == [0] or norm(got) in ("screenshot 0", "0")
     if q == "mouse1":
         return nums(got) == list(envelopes.MOUSE[1])
+    if q == "mouse2":
+        return nums(got) == list(envelopes.MOUSE[2])
+    if q == "s2_full":
+        # **The question the collapsed row is betting on**: with one `[📸n = …]`
+        # line instead of three, naming 📸2's full-resolution file means
+        # instantiating `n` and applying the `-original` rule, neither of which
+        # is written out anywhere for that particular frame.
+        name = str(got).split("/")[-1]
+        want = ("screenshot-2-original.jpg" if variant != "current"
+                else "shot#02(mouse-at-640x430px).jpg")
+        return name == want
     if q == "corners":
         return nums(got) == list(envelopes.AREA)
     if q == "region_file":
@@ -61,9 +74,9 @@ def grade(q, got, variant):
     return False
 
 
-QUESTIONS = ["screenshots", "automatic", "mouse1", "corners", "region_file",
-             "region_says", "film_seconds", "sel_app", "element_page",
-             "after_s1", "original_res"]
+QUESTIONS = ["screenshots", "automatic", "mouse1", "mouse2", "s2_full",
+             "corners", "region_file", "region_says", "film_seconds",
+             "sel_app", "element_page", "after_s1", "original_res"]
 
 
 def main(path):
@@ -78,7 +91,7 @@ def main(path):
 
     print(f"{'envelope':9} {'model':7} {'chars':>6} " +
           " ".join(f"{q[:6]:>7}" for q in QUESTIONS) + f"{'TOTAL':>9}{'$/run':>7}")
-    for variant in ("current", "victor", "shrunk"):
+    for variant in ("current", "victor", "shrunk", "onerow", "onerow_auto"):
         text, _ = envelopes.VARIANTS[variant]()
         for model in ("sonnet", "opus"):
             key = (variant, model)

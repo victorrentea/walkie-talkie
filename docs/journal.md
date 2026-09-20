@@ -11240,3 +11240,83 @@ envelope safe has no caret equivalent — so it was not run rather than typed in
 was watching. What `caretLine` does with these tokens is unchanged: the words and the deliberate
 attachments in the same shapes, `[📁=…]` and its legend rows, no automatic `📸0` and no
 `[Dictated in RO or EN]`.
+
+### The rows that differed by one digit — and the five characters that paid for folding them
+
+*"Chiar e nevoie de astea? Nu inferă agentul singur că în loc de `1` trebuie să pună `2`? Trage
+eval."*
+
+He was looking at this, and he was right to:
+
+```
+[📸1 = 📁/screenshot-1-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+[📸2 = 📁/screenshot-2-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+```
+
+**The eval was rebuilt so the question is the one he asked.** `evals/envelope-symbols/` had two
+plain frames, where the repetition is barely visible and the inference is trivial; the scene now
+renders **three** (📸0, 📸1, 📸2 whole screens, 📸3 the framed region), and two questions were
+added that only a collapsed row can lose — *which file shows screenshot 2 at full resolution* and
+*where was the pointer for 📸2*. Exactly one thing differs between arms.
+
+36 runs, 13 questions, Sonnet and Opus, six repeats each:
+
+| envelope | chars | Sonnet | Opus |
+|---|---|---|---|
+| `victor` — a row per frame, what shipped | 1047 | 78/78 | 78/78 |
+| `onerow` — the plain rows folded into `[📸n = …]` | 887 | **76**/78 | 78/78 |
+| **`onerow_auto` — the same, plus ` auto` on 📸0** | **892** | **78/78** | **78/78** |
+
+**The inference is not close: `s2_full` is 36/36.** Every run of every arm answered
+`screenshot-2-original.jpg` — which means instantiating `n` *and* applying the `-original` rule to
+a frame no row mentions. `mouse2` is 36/36 as well. Two rows that differ by one character were
+paying for nothing.
+
+**What folding costs is the one question the footer never answered.** *Which frame was automatic*
+has always been an inference — 📸0 has no gesture behind it — and both models said so in the
+`unclear` field in **every run of both rounds**. While each frame had a row of its own the
+inference held; with one templated row Sonnet answered `none` twice out of six, and its reason is
+the useful part: *"No screenshot marker lacked a deliberate 🖱️/✂️ action tag, so I couldn't
+identify one taken automatically."* Four of six against six of six is not significant by itself
+(Fisher, p ≈ 0.45); it is the stated reasoning that makes it worth acting on, and it is the same
+thing both models have now asked for twice, unprompted.
+
+So ` auto` ships with the fold — **five characters that turn the last guess in the envelope into a
+fact** — and the pair is 78/78 on both models in **155 characters less** than what it replaces.
+
+```
+[📸0🖱️@1263:1562 auto] uite aici [📸1🖱️@1263:1562] si mai [📸2🖱️@1263:1562] jos si [📸3🖱️@1263:1562] inca una gata
+
+[Dictated in RO or EN]
+[📁=$WALKIE_SHOTS/2026-09-20-12-10-29/12-10-36]
+[📸n = 📁/screenshot-n-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+```
+
+**The fold has four conditions and they are computed, not assumed.** Two or more plain frames (one
+templated as `📸n` is a riddle where its own digit was a fact); the same resolution, because
+`size(path)` is per frame and two displays disagree; a real `-800px` sibling, since
+`handover(for:)` falls back to the original and a row promising `screenshot-n-800px.jpg` would
+then name a file that is not there; and **no clock on any of them**. That last one is the Wispr
+case and it is the important one: with no word timings the tokens cannot go in the sentence, the
+rows carry `at 0:08` instead, and an offset is per-frame information no template can hold. An area
+frame is never folded in either — it carries corners.
+
+`evals/test_envelope.py` pins both halves: `FoldedFrameRows` drives a dictation *with* word
+timings and asserts one templated row, no per-frame rows, the tokens still in the words and `auto`
+on 📸0 and nowhere else; `FrameList.test_rows_that_carry_a_clock_are_never_folded` drives the
+route that has no timings and asserts the opposite.
+
+**Three stale tests came out of the same pass.** `EnvelopeShape` was still asserting the *prose*
+envelope — `text selected during dictation:`, `elements picked in Chrome during dictation, …
+oldest first:` — which Victor's template replaced on 2026-09-19; it had been failing for a day
+behind `the dictation never reached the outbox`, so nobody had read what it was actually
+complaining about. It asserts the shipped shape now. `SelectionMarkers` is a different case and is
+**skipped rather than fixed**: it guards the *spoken* marker, retired on 2026-09-18, so all four of
+its assertions fail for the one reason that is not a defect — the feature is off, and turning it
+on means relaunching the relay with `WT_SHOT_MARKERS=1`, which a harness cannot do to an app that
+is already running. What ships is the timestamp marker and `evals/test_marker_place.py` guards it.
+
+And `MicrophoneAfterACancel` learned to **skip** when Wispr Flow holds the microphone: with the
+labelling rig running in another session, `startDictation` refuses outright — *one engine at a
+time* — so the dictation never opens the device for a reason that has nothing to do with what is
+being asserted. It went red once and green twice inside a minute before that guard went in.

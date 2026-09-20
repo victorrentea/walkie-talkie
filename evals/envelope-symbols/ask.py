@@ -27,6 +27,9 @@ object even if a picture is not what you expected; say so in "unclear" instead.
  "automatic": "<which of them, if any, was taken automatically when I started \
 talking rather than by a deliberate press — answer with its number, or 'none'>",
  "mouse1": "<where my mouse pointer was when screenshot 1 was taken, as x,y>",
+ "s2_full": "<the file name you would open to see screenshot 2 at full \
+resolution>",
+ "mouse2": "<where my mouse pointer was when screenshot 2 was taken, as x,y>",
  "corners": "<the corners of the region I framed with a drag, as x1,y1,x2,y2>",
  "region_file": "<the file name that shows ONLY that framed region, nothing else>",
  "region_says": "<the first six words of the text inside that framed region>",
@@ -76,7 +79,7 @@ def one(variant, model, run):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variants", default="current,victor,shrunk")
+    ap.add_argument("--variants", default="victor,onerow,onerow_auto")
     ap.add_argument("--models", default="sonnet,opus")
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--jobs", type=int, default=6)

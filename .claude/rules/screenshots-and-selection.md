@@ -21,6 +21,31 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 - **The number is reserved at the gesture and is unconditional** (`AppDelegate.reservePicture`): two presses a third of a second apart can finish in the other order, and the name needs a number whether or not a marker can be placed. The cue is the optional half (`cueLocked`).
 - **The disambiguating `-2` goes on the base, before the suffix** (`uniqueBase`): every dictation in a session folder produces a `screenshot-0`, and a `screenshot-0-original-2.jpg` would take its siblings into names nothing can compute.
 
+## The footer folds the plain frames into one row (2026-09-20)
+
+- **`[📸n = 📁/screenshot-n-800px.jpg …]`, once, instead of a row per frame.** Victor: *"Chiar e
+  nevoie de astea? Nu inferă agentul singur că în loc de `1` trebuie să pună `2`?"* Measured before
+  shipping — `evals/envelope-symbols/`, 36 runs, three plain frames in the scene: naming 📸2's
+  full-resolution file from the templated row is **36/36** across both models, which means
+  instantiating `n` *and* applying the `-original` rule to a frame no row mentions. −15% on the
+  whole envelope. → journal: *The rows that differed by one digit*
+- **Four conditions, all computed.** Two or more plain frames; the same resolution (`size(path)` is
+  per frame and two displays disagree); a real `-800px` sibling, because `handover(for:)` falls back
+  to the original and the row would otherwise promise a file that is not there; and **no clock on
+  any of them**. An area frame is never folded — it carries corners.
+- **A row carrying `at 0:08` is never folded, and that is the Wispr case.** With no word timings the
+  tokens cannot go in the sentence, so the offset lives in the row — per-frame information no
+  template can hold. If *any* plain frame needs a clock, none of them fold: a templated row beside
+  a `[📸2 at 0:03 = …]` is worse than three plain rows.
+- **`auto` on 📸0 is what makes the fold safe** — `ShotMarker.Token.shot(_:mouse:auto:)`, true from
+  `AppDelegate.leading` and nowhere else. *Which frame was automatic* was always inferred, and both
+  models said so in every run of both rounds; with the rows folded Sonnet started answering `none`
+  (4/6), because every token now carries a 🖱️ and none of them looks different. Five characters,
+  back to 78/78. → journal: same
+- **`FoldedFrameRows` and `FrameList.test_rows_that_carry_a_clock_are_never_folded` are the two
+  halves**, and neither is worth having without the other: one drives a dictation *with* word
+  timings and asserts the fold, the other drives the route that has none and asserts its absence.
+
 ## The shot's name (before 2026-09-19)
 
 - **Name a shot by offset and pointer, in image pixels.** `shot-01:23(mouse-at-1034x1466px).jpg` — 1m23s into the dictation, pointer at x=1034, y=1466 in *the pixels of that image*, top-left origin (`ScreenCapture.stem` + `tagCursor`). Both facts ride in the name because the path already travels in `paths`; nothing downstream learns a new key. → journal: *The shot's name is *when in the sentence* and *where the mouse was**

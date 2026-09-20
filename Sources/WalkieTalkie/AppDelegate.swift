@@ -5257,12 +5257,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (2026-09-19, Victor's template).
     ///
     /// ```
-    /// [=$WALKIE_SHOTS/2026-09-19-17-32-15]
-    /// [📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+    /// [📁=$WALKIE_SHOTS/2026-09-19-17-32-15/17-33-02]
+    /// [📸n = 📁/screenshot-n-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
     /// [📸3✂️ = user-selected area between corners (x,y) (900,345)→(2594,574) at
     ///  📁/screenshot-3.jpg; also available -800px and -original.jpg]
     /// [chrome-selection-1 = div.wrap > h1 at https://…]
     /// ```
+    ///
+    /// **The plain frames share that first row since 2026-09-20** — see the fold
+    /// below for the four conditions, and `evals/envelope-symbols/` for the 36
+    /// runs that say an agent instantiates `n` for a frame no row mentions.
     ///
     /// What changed, and why each thing went:
     ///
@@ -5299,7 +5303,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func leading(_ m: Message) -> String {
         guard let screen = m.screen, let n = ScreenCapture.number(of: screen),
               !m.inlinedShots.contains(n) else { return "" }
-        return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil) + " "
+        // `auto:` is true here and nowhere else — this *is* the frame he did not
+        // press for, and this is the one place that knows it. See `Token.shot`.
+        return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil, auto: true) + " "
     }
 
     private static func artifactsClause(_ m: Message) -> [String] {
@@ -5329,6 +5335,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return " at \(stamp(offset))"
         }
 
+        // **The plain frames share one row when they have nothing to say apart**
+        // (2026-09-20). Victor, looking at two rows that differed by one digit:
+        // *"Chiar e nevoie de astea? Nu inferă agentul singur că în loc de `1`
+        // trebuie să pună `2`?"* — measured, and yes: `evals/envelope-symbols/`,
+        // 36 runs over a scene with three of them, Sonnet and Opus both name
+        // 📸2's full-resolution file from the templated row exactly as often as
+        // from a row of its own.
+        //
+        // **Only when there is genuinely nothing to tell them apart**, which is
+        // the whole of the rule and why this is computed rather than assumed:
+        //
+        // - **two or more** of them — one frame templated as `📸n` is a riddle
+        //   where its own digit was a fact.
+        // - **the same resolution**, because `size(path)` is per frame and two
+        //   displays do not agree about it.
+        // - **no clock on any of them.** `at 0:08` is the Wispr case — no word
+        //   timings, so the offset cannot go in the sentence and the row is the
+        //   only place it exists. That is per-frame information and it is never
+        //   derivable from a number.
+        // - **a real `-800px` sibling** whose name is the template, since
+        //   `handover(for:)` falls back to the original when the small copy is
+        //   missing and a row promising `screenshot-n-800px.jpg` would then name
+        //   a file that is not there.
+        //
+        // An area frame is never folded in: it carries corners.
+        let plain: [(n: Int, path: String)] = frames.enumerated().compactMap { i, path in
+            guard let n = ScreenCapture.number(of: path),
+                  (m.areas[path] ?? nil) == nil else { return nil }
+            let offset = path == m.screen ? nil
+                : (i < m.shotOffsets.count ? m.shotOffsets[i] : nil)
+            guard when(n, offset, m.inlinedShots).isEmpty else { return nil }
+            let handed = ScreenCapture.handover(for: path)
+            guard (handed as NSString).lastPathComponent
+                    == "screenshot-\(n)-\(ScreenCapture.handoverWidth)px.jpg" else { return nil }
+            return (n, path)
+        }
+        let foldable: Set<String> = {
+            guard plain.count > 1,
+                  Set(plain.map { size($0.path) }).count == 1,
+                  plain.count == frames.compactMap({ (m.areas[$0] ?? nil) == nil ? $0 : nil }).count
+            else { return [] }
+            return Set(plain.map { $0.path })
+        }()
+
         for (i, path) in frames.enumerated() {
             guard let n = ScreenCapture.number(of: path) else { continue }
             // The context frame is picture zero and needs no clock — it is the
@@ -5337,6 +5387,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let offset = path == m.screen ? nil
                 : (i < m.shotOffsets.count ? m.shotOffsets[i] : nil)
             let handed = name(ScreenCapture.handover(for: path))
+            if foldable.contains(path) {
+                // Written once, where the first of them would have stood, so the
+                // footer still reads in the order the sentence does.
+                if path == plain.first?.path {
+                    rows.append("[📸n = 📁/screenshot-n-\(ScreenCapture.handoverWidth)px.jpg "
+                        + "at \(ScreenCapture.handoverWidth)px width, "
+                        + "or -original.jpg at \(size(path))]")
+                }
+                continue
+            }
             if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
                 rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
                     + "user-selected area between corners (x,y) "
