@@ -230,6 +230,21 @@
       key();
       return out.toDataURL('image/png');
     },
+    // The engine's audio statistics this frame — what the presets' `bass`,
+    // `mid`, `treb` (+ `_att`) read; for comparing against projectM's on the
+    // same samples (`WT_MD_LEVELS=1`).
+    levels() {
+      const r = viz && (viz.renderer || viz);
+      const a = r && r.audioLevels; if (!a) return 'none';
+      const au = r.audio || (viz && viz.audio) || {};
+      let ss = 0, sm = 0, ws = 0, wm = 0;
+      if (au.freqArray) for (const v of au.freqArray) { ss += v; if (v > sm) sm = v; }
+      if (au.timeArrayL) for (const v of au.timeArrayL) { ws += Math.abs(v); if (Math.abs(v) > wm) wm = Math.abs(v); }
+      return JSON.stringify({ frame: r.frameNum, fps: +(r.fps || 0).toFixed(1), bass: +a.bass.toFixed(3), mid: +a.mid.toFixed(3), treb: +a.treb.toFixed(3),
+        bass_att: +a.bass_att.toFixed(3), mid_att: +a.mid_att.toFixed(3), treb_att: +a.treb_att.toFixed(3),
+        spec_n: au.freqArray ? au.freqArray.length : 0, spec_sum: +ss.toFixed(2), spec_max: +sm.toFixed(3),
+        wave_n: au.timeArrayL ? au.timeArrayL.length : 0, wave_abs_mean: au.timeArrayL ? +(ws / au.timeArrayL.length).toFixed(3) : 0, wave_abs_max: +wm.toFixed(3) });
+    },
     start() { if (running) return; running = true; lastFrameAt = 0; requestAnimationFrame(frame); },
     fps(n) { frameInterval = n > 0 ? 1000 / n : 0; },
     stop() { running = false; },

@@ -1091,6 +1091,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // written where it is applied, so a restart comes back with the same
         // ring and the menu's tick is read off the same preference.
         status.onPickHalo = { [weak self] style in self?.caretHalo.setStyle(style) }
+        status.onPickHaloEngine = { [weak self] engine in self?.caretHalo.setEngine(engine) }
         status.onToggleLogiGestures = { [weak self] on in
             self?.hotkeys.useLogiGestures = on
             Log.info(on ? "🖱️ Logi gestures on — the wheel is the browser's"

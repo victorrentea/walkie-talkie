@@ -606,6 +606,48 @@ final class StatusItem: NSObject, NSMenuDelegate {
         }
     }
 
+    /// **`Halo engine: Web`, the shape `Engine` has** (the `projectm` branch,
+    /// 2026-09-21): which engine draws a MilkDrop preset — butterchurn in a
+    /// web view, or projectM natively. A readout with the two under the
+    /// arrow, the tick drawn from `HaloEngine.current` on every open, so a
+    /// `WT_HALO_ENGINE` run shows what is running. The film and the page
+    /// effects are unaffected by it; the row says so.
+    private let haloEngineItem = NSMenuItem(title: "Halo engine", action: nil, keyEquivalent: "")
+    private let haloEngineSubmenu = NSMenu()
+    var onPickHaloEngine: ((HaloEngine) -> Void)?
+
+    private func applyHaloEngineRow() {
+        let current = HaloEngine.current
+        haloEngineItem.title = "Halo engine: \(Self.haloEngineTitle(current))"
+        haloEngineSubmenu.removeAllItems()
+        haloEngineSubmenu.autoenablesItems = false
+        for engine in [HaloEngine.web, .native] {
+            let row = NSMenuItem(title: Self.haloEngineTitle(engine), action: #selector(haloEnginePicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = engine.rawValue
+            row.image = engine == current ? Self.symbolIcon("checkmark") : Self.blankIcon
+            haloEngineSubmenu.addItem(row)
+        }
+        haloEngineSubmenu.addItem(.separator())
+        let note = NSMenuItem(title: "For the MilkDrop presets only", action: nil, keyEquivalent: "")
+        note.isEnabled = false
+        haloEngineSubmenu.addItem(note)
+    }
+
+    private static func haloEngineTitle(_ e: HaloEngine) -> String {
+        switch e {
+        case .web:    return "Web (butterchurn)"
+        case .native: return "Native (projectM)"
+        }
+    }
+
+    @objc private func haloEnginePicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let engine = HaloEngine(rawValue: raw),
+              engine != HaloEngine.current else { return }
+        onPickHaloEngine?(engine)
+        applyHaloEngineRow()
+    }
+
     @objc private func haloPicked(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let style = HaloStyle(rawValue: raw),
               style != HaloStyle.current else { return }
@@ -923,6 +965,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloItem.submenu = haloSubmenu
         applyHaloRow()
         menu.addItem(haloItem)
+        // **`Halo engine`, under `Halo fx`** — the same question one level down.
+        haloEngineItem.submenu = haloEngineSubmenu
+        applyHaloEngineRow()
+        menu.addItem(haloEngineItem)
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
@@ -1606,6 +1652,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // has to be right is the moment he is looking at it.
         applyMicRow()
         applyHaloRow()
+        applyHaloEngineRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`

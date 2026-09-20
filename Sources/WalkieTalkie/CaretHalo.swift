@@ -531,6 +531,16 @@ final class CaretHalo {
         rebuild()
     }
 
+    /// **Which engine draws a preset** — the `Halo engine` row. Written as a
+    /// preference (`HaloEngine.defaultsKey`); the panel is rebuilt only when a
+    /// preset is what is drawn, the way a style change rebuilds it.
+    func setEngine(_ engine: HaloEngine) {
+        UserDefaults.standard.set(engine.rawValue, forKey: HaloEngine.defaultsKey)
+        Log.info("◯ caret halo engine → \(engine.rawValue)")
+        pageBroken = false
+        if style.isPreset { rebuild() }
+    }
+
     /// Tear the panel down and build it again for `style` — a style change,
     /// a screen change, or the page giving up. Straight out and back, not a
     /// collapse: what replaces it is the same ring in another dress.

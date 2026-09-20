@@ -51,6 +51,21 @@ final class ProjectMHalo: NSView, HaloWebHost {
     static let audioGain: Float = ProcessInfo.processInfo.environment["WT_PM_AUDIO_GAIN"].flatMap { Float($0) } ?? 1
     /// Pixels per point of the square. The engine's cost is per pixel.
     static let renderScale: CGFloat = ProcessInfo.processInfo.environment["WT_PM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 1
+    /// **The native engine's own gain per preset**, multiplied into the style's
+    /// `gain` before keying — measured 2026-09-21 as the ratio of the web
+    /// twin's mean luminance to the native one over the same three seconds
+    /// of the demo voice (`docs/projectm/lum.py`), then iterated until the
+    /// means agree (`REPORT.md`, *Brightness*). `WT_PM_GAIN_SCALE='{"7": 0.7}'`
+    /// overrides a value for a run.
+    static let gainScale: [Int: CGFloat] = {
+        var table: [Int: CGFloat] = [7: 0.25, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
+        if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),
+           let o = try? JSONSerialization.jsonObject(with: data) as? [String: Double] {
+            for (k, v) in o { if let n = Int(k) { table[n] = CGFloat(v) } }
+        }
+        return table
+    }()
+
     /// Same warm-up as the web route: a feedback preset's first frames are the
     /// bare waveform on an empty buffer.
     static let warmup: TimeInterval = MilkDropHalo.warmup
@@ -196,8 +211,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
         if o.fadeAtEdge { rx = 0.5; ry = 0.5 }
         else if let f = o.fadeRadius { rx = screen.width * f / side; ry = rx }
         else { rx = screen.width / 2 / side; ry = screen.height / 2 / side }
-        pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(o.gain), Float(o.start))
-        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
+        let gain = o.gain * (Self.gainScale[preset.number] ?? 1)
+        pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start))
+        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
 
@@ -287,11 +303,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
         totalFrames += 1
         if ProcessInfo.processInfo.environment["WT_PM_DEBUG_ALPHA"] != nil, totalFrames == 60 || totalFrames == 100 { pmh_debug_alpha(r) }
         engineMs += pmh_last_engine_ms(r); keyMs += pmh_last_key_ms(r)
-        // `WT_PM_SHOOT=<dir/name>` writes frames 90, 150 and 210 (3, 5 and 7 s in
-        // at 30 fps) read back from the surface — the engine's output with nothing
-        // of the screen in it — as `<dir/name>-3s.png` and so on.
+        // `WT_PM_SHOOT=<dir/name>` writes the frame at every whole second from 3
+        // to 8 s (by frame count at the cap) read back from the surface — the
+        // engine's output with nothing of the screen in it — as `<dir/name>-3s.png`…
         let fps = haloFrameCap > 0 ? haloFrameCap : 60
-        if [fps * 3, fps * 5, fps * 7].contains(totalFrames), let base = ProcessInfo.processInfo.environment["WT_PM_SHOOT"], let img = snapshot() {
+        if totalFrames % fps == 0, (3...8).contains(totalFrames / fps), let base = ProcessInfo.processInfo.environment["WT_PM_SHOOT"], let img = snapshot() {
             let path = "\(base)-\(totalFrames / fps)s.png"
             if let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil) {
                 CGImageDestinationAddImage(dest, img, nil)

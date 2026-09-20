@@ -42,6 +42,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
     /// object merged over the style's own; nil = none. Cleared by a style pick.
     static var optionsOverride: String?
     private var readyWatchdog: Timer?
+    private var levelsTimer: Timer?
     /// The preset is loaded once per host, not on every `start`: the engine's
     /// feedback buffer is its picture, and reloading threw it away each dictation.
     private var configured = false
@@ -143,10 +144,10 @@ final class MilkDropHalo: NSView, HaloWebHost {
         if fresh { configure(); configured = true }
         web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
         if !fresh { onVisible?() }
-        // `WT_MD_SHOOT=<dir/name>`: 3, 5 and 7 s in, the engine's own frame, keyed,
+        // `WT_MD_SHOOT=<dir/name>`: at every whole second from 3 to 8 s, the engine's own frame, keyed,
         // with nothing of the screen in it — `ProjectMHalo`'s `WT_PM_SHOOT` twin.
         if fresh, let base = ProcessInfo.processInfo.environment["WT_MD_SHOOT"] {
-            for t in [3, 5, 7] {
+            for t in 3...8 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Double(t)) { [weak self] in
                     self?.web.evaluateJavaScript("halo.snapshot()") { result, error in
                         guard let url = result as? String, let comma = url.firstIndex(of: ","),
@@ -159,6 +160,16 @@ final class MilkDropHalo: NSView, HaloWebHost {
                     }
                 }
             }
+        }
+        // `WT_MD_LEVELS=1`: the engine's bass/mid/treb ten times a second, to the log.
+        if fresh, ProcessInfo.processInfo.environment["WT_MD_LEVELS"] != nil {
+            let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                self?.web.evaluateJavaScript("halo.levels()") { result, _ in
+                    if let s = result as? String { Log.info("[mdaudio] \(s)") }
+                }
+            }
+            RunLoop.main.add(t, forMode: .common)
+            levelsTimer = t
         }
         if fresh {
             web.alphaValue = 0

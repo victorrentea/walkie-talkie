@@ -23,7 +23,8 @@ for s, name in NAMES.items():
             a = np.array(im).astype(float)
             lit = a[..., 3] > 25
             lits.append(f"{100 * lit.mean():.0f}"); alphas.append(f"{a[..., 3][lit].mean() if lit.any() else 0:.0f}")
-            rgb = a[..., :3] + (1 - a[..., 3:4] / 255) * 96      # premultiplied, over grey 96
+            al = a[..., 3:4] / 255
+            rgb = a[..., :3] * al + (1 - al) * 96      # straight alpha (the PNGs are un-premultiplied), over grey 96
             tile = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8)).resize((400, 400), Image.LANCZOS)
             d = ImageDraw.Draw(tile); d.rectangle((0, 0, 190, 16), fill=(0, 0, 0)); d.text((3, 2), f"{name} · {r} · {px}px · {t}", fill=(255, 255, 255))
             tiles.append(tile)
