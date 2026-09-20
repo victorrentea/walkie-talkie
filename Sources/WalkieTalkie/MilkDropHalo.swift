@@ -98,8 +98,10 @@ final class MilkDropHalo: NSView, HaloWebHost {
         let side = bounds.width
         let dpr = window?.backingScaleFactor ?? 2
         let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), gain: \(preset.gain), rot: \(preset.rot)}"
+        // `WT_HALO_PRESET_OPTS='{"gain": 4}'` overrides fields for one run — the knob for looking.
+        let override = ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
-               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), \(opts))"
+               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), Object.assign(\(opts), \(override)))"
         web.evaluateJavaScript(js) { [weak self] result, error in
             // The exception's own message, not WebKit's cover line for it.
             let status = (result as? String) ?? error.map { e in

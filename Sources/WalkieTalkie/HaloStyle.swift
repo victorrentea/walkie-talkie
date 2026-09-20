@@ -109,7 +109,9 @@ enum HaloStyle: String, CaseIterable {
 
     /// **A preset run by the engine**: the page's `preset:` row. `scale`
     /// shrinks the canvas on screen (the composition intact) — the page's
-    /// values, halved on 2026-09-20 with the rest. `fade` is the radial
+    /// values, halved on 2026-09-20 with the rest, then resized on sight the
+    /// same evening: Snowflake ×4 (*"much too small"*), Tendrils ×2, Sparks
+    /// ×1.5, Tunnel ÷3 (*"I was wrong: tunnel needs to be 3x smaller"*). `fade` is the radial
     /// dimming, and the rest are Victor's asks on Tunnel that day: *"de 2x mai
     /// opac/intens … fade out complet la o distanță de 1/2 din width ecran
     /// (adică să se răspândească mai mult pe ecran)"* plus *"2x more
@@ -130,15 +132,18 @@ enum HaloStyle: String, CaseIterable {
     }
     var preset: Preset? {
         switch self {
-        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1,
-                                         fade: true, fadeRadius: 0.5, fadeFloor: 0, gain: 2, rot: 2)
+        // Tunnel: *"3x smaller"* than what he saw (the full-screen canvas), so a
+        // third of the screen's long side; its fade is the canvas edge now (the
+        // half-screen radius would be outside it), at his 2× gain and 2× turn.
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.42,
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 2, rot: 2)
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.35,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.35,
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.165,
+        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.66,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.5,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.75,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop103: return Preset(number: 103, name: "martin [shadow harlequins shape code] - fata morgana", scale: 0.5,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
