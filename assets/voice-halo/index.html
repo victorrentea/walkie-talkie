@@ -732,9 +732,10 @@ const FORMULAS = [
   { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.202, draw(t) {
       // nu mai folosește unda proprie pentru FORMĂ: în liniște amplitudinea e zero,
       // deci rămâne cerc. Ce continuă în tăcere e rotația, nu deformarea.
-      // AMP 0.21 → 0.35 și ceața (haloul lat) de 3× mai lată — Victor, 2026-09-20 seara
+      // AMP 0.21 → 0.35 — Victor, 2026-09-20 seara. Ceața a fost 3× mai lată o oră
+      // („arată groaznic"), înapoi la 1, cum e în clipul din galerie.
       milkdropRing(t, rad(this.scale), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.35,
-                        W: 1.1, FOG: 3, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
+                        W: 1.1, FOG: 1, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
   }},
   { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.1616, draw(t) {
       const R = rad(this.scale);
