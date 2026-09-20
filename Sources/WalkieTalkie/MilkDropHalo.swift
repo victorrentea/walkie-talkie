@@ -42,6 +42,15 @@ final class MilkDropHalo: NSView, HaloWebHost {
     /// object merged over the style's own; nil = none. Cleared by a style pick.
     static var optionsOverride: String?
     private var readyWatchdog: Timer?
+    /// The preset is loaded once per host, not on every `start`: the engine's
+    /// feedback buffer is its picture, and reloading threw it away each dictation.
+    private var configured = false
+    /// **The warm-up is hidden** (Victor, 2026-09-20 late: *"initially it looks
+    /// like a set of white circles … get rid of the beginning part"*). A
+    /// feedback preset's first frames are the bare waveform on an empty
+    /// buffer; the engine runs with the view at alpha 0 for `warmup` seconds
+    /// after a load, then fades in over 0.25 s. Every preset, not only Tunnel.
+    static let warmup: TimeInterval = 1.5
     private var failed = false
     /// The page is unusable, and why — `CaretHalo` draws the film instead.
     var onFailure: ((String) -> Void)?
@@ -129,8 +138,16 @@ final class MilkDropHalo: NSView, HaloWebHost {
             }
             return
         }
-        configure()
+        let fresh = !configured
+        if fresh { configure(); configured = true }
         web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
+        if fresh {
+            web.alphaValue = 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmup) { [weak self] in
+                guard let web = self?.web else { return }
+                NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.25; web.animator().alphaValue = 1 }
+            }
+        }
     }
 
     /// The engine's square follows the pointer as a window; nothing to tell the page.
