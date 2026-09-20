@@ -193,6 +193,7 @@
 <canvas id="md" class="hidden"></canvas>
 <canvas id="key"></canvas>
 <script src="water.js"></script>
+<script src="comets.js"></script>
 
 <div id="ui">
   <div id="chips"></div>
@@ -993,6 +994,8 @@ const FORMULAS = [
   // E o SCENĂ opacă (cer + bazin), nu un halo aditiv, deci nu poate sta pe #full,
   // care se compune cu `screen`. Codul stă în water.js — 230 de linii inutile aici.
   { name: '− Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
+  // stratul de comete al lui Water Dream: presetul dă apa, acesta cometele (comets.js)
+  { name: 'Comets', desc: 'cometele din Lagoon, oglindite în apa presetului de dedesubt', comets: true },
 ];
 
 
@@ -1070,6 +1073,13 @@ function bandThirds() {
   for (let i = 0; i < NB / 3; i++) bass += band[i];
   for (let i = (NB * 2 / 3) | 0; i < NB; i++) treble += band[i];
   return { bass: bass / (NB / 3), treble: treble / (NB / 3) };
+}
+function drawComets(t) {
+  if (!window.cometsScene) return;
+  const { bass, treble } = bandThirds();
+  fullSize();
+  fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fullW, fullH);
+  cometsScene.draw(full, fctx, t, levelNow, bass, treble, innerWidth / 2 + walkX, innerHeight / 2 + walkY, dpr);
 }
 function drawWater(t) {
   if (!window.waterScene) return;
@@ -1542,6 +1552,9 @@ function frame(now) {
     if (EMBED) keyPass('md', mdCanvas);
   } else if (F.preset) {
     // presetul încă se încarcă: nu are draw(), deci nu desenăm nimic în acest cadru
+    if (EMBED) keyPass('', null);
+  } else if (F.comets) {
+    drawComets(t);
     if (EMBED) keyPass('', null);
   } else if (F.water) {
     drawWater(t);

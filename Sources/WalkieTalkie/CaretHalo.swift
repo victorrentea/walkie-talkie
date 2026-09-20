@@ -483,6 +483,10 @@ final class CaretHalo {
     /// panel's alpha is what fades it in and out — a web view cannot be a
     /// sublayer of the stage the collapse scales.
     private var web: HaloWebHost?
+    /// **The layer under the page for a hybrid style** (Water Dream): the
+    /// engine's view, pinned to the screen inside the same panel. Fed, started
+    /// and stopped alongside `web`; it never follows the pointer.
+    private var under: MilkDropHalo?
 
     /// The pointer in the page's coordinates (CSS px, y down from the
     /// panel's top-left), written on every `follow` and `show`.
@@ -524,7 +528,8 @@ final class CaretHalo {
         timer?.invalidate(); timer = nil
         panel?.orderOut(nil)
         web?.stop()
-        panel = nil; stage = nil; pulse = nil; web = nil
+        under?.stop()
+        panel = nil; stage = nil; pulse = nil; web = nil; under = nil
         _ = makePanel()
         // `live` stays as it is: `show` reads it through `follow`, which is
         // what puts the new panel on the pointer before it is ordered front.
@@ -797,12 +802,15 @@ final class CaretHalo {
         // **The page comes up clean and running.** `start` clears its trail
         // so nothing from the last sentence stands at the pointer, and the
         // 30 Hz feed of the microphone starts; the film needs neither.
+        under?.start()
         if let web = web {
             web.start()
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                web?.feed(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024))
+                let samples = self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)
+                web?.feed(samples)
+                self.under?.feed(samples)
             }
             renderTimer = r
             RunLoop.main.add(r, forMode: .common)
@@ -863,7 +871,7 @@ final class CaretHalo {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = Self.collapse
                 panel.animator().alphaValue = 0
-            } completionHandler: { web.stop() }
+            } completionHandler: { [weak self] in web.stop(); self?.under?.stop() }
         }
         // **Straight out, not collapsed.** The ring shrinking into the pointer
         // says *the sentence went there*; an arrow still asking him to place the
@@ -1933,7 +1941,27 @@ final class CaretHalo {
         stage.frame = CGRect(origin: .zero, size: frame.size)
         let halo: CALayer
         web = nil
-        if let preset = drawn.preset, let host = MilkDropHalo(preset: preset, side: frame.width,
+        if drawn.isHybrid, let preset = drawn.preset, let page = HaloPage(size: frame.size) {
+            // **Two web views, one panel**: the preset pinned with its horizon
+            // at the pool's edge, the page's comets over it on the pointer.
+            halo = CALayer()
+            let long = max(frame.width, frame.height)
+            let side = (long * preset.scale).rounded()
+            if let engine = MilkDropHalo(preset: preset, side: side, screen: frame.size) {
+                engine.frame = NSRect(x: ((frame.width - side) / 2).rounded(),
+                                      y: (frame.height * (preset.pinnedHorizon ?? 0.5) - side / 2).rounded(),
+                                      width: side, height: side)
+                engine.autoresizingMask = []
+                engine.onFailure = { [weak self] why in self?.fallBack(why) }
+                view.addSubview(engine)
+                under = engine
+            }
+            page.onFailure = { [weak self] why in self?.fallBack(why) }
+            page.pick(drawn)
+            view.addSubview(page)
+            web = page
+            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), the preset pinned in a \(Int(side))pt square under the page's comets")
+        } else if let preset = drawn.preset, let host = MilkDropHalo(preset: preset, side: frame.width,
                                                               screen: (NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main)?.frame.size ?? frame.size) {
             // **The engine, in its own page** — see `MilkDropHalo`. The square
             // follows the pointer as a window (`follow`).

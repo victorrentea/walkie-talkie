@@ -101,6 +101,8 @@ enum HaloStyle: String, CaseIterable {
         case .twoBalls:       return 6
         // 7 is `− Petals`; 8…17 the presets; 19 `Lagoon`, dropped
         case .blockBeads:     return 18
+        // Water Dream's comets (`comets.js`), drawn over the pinned preset
+        case .milkdrop103:    return 20
         default:              return nil
         }
     }
@@ -127,6 +129,10 @@ enum HaloStyle: String, CaseIterable {
         let number: Int; let name: String; let scale: CGFloat
         var fade = false; var fadeRadius: CGFloat? = nil; var fadeAtEdge = false; var fadeFloor: CGFloat = 0.10
         var gain: CGFloat = 1; var rot: CGFloat = 1
+        /// Pinned to the screen (not following the pointer), the canvas's
+        /// centre — the preset's horizon — at this fraction of the screen's
+        /// height from the bottom. Nil = the square follows the pointer.
+        var pinnedHorizon: CGFloat? = nil
     }
     var preset: Preset? {
         switch self {
@@ -143,8 +149,16 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.75,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop103: return Preset(number: 103, name: "martin [shadow harlequins shape code] - fata morgana", scale: 0.5,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
+        // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
+        // locked in the bottom 20% of the screen, but the meteors follow the
+        // mouse"*): the preset gives the sky and the pool, pinned to the screen
+        // with its horizon at the pool's edge (`pinnedHorizon`), and the page's
+        // `Comets` effect orbits the pointer above it, reflected into the pool.
+        // A canvas 1.1× the screen's long side covers the screen with the
+        // horizon at 20 %. Mac only: on the phone page the presets render dark
+        // in embed, so there Water Dream is the preset alone.
+        case .milkdrop103: return Preset(number: 103, name: "martin [shadow harlequins shape code] - fata morgana", scale: 1.1,
+                                         pinnedHorizon: 0.20)
         default:           return nil
         }
     }
@@ -161,6 +175,9 @@ enum HaloStyle: String, CaseIterable {
     /// its edge by design, and the pointer is handed in as the origin rather
     /// than the window moved (Victor: *nothing may clip; no artificial scaling*).
     var coversScreen: Bool { pageIndex != nil }
+
+    /// Both web views at once: the pinned preset underneath, the page on top.
+    var isHybrid: Bool { pageIndex != nil && preset != nil }
 
     /// Can this style be drawn on this Mac right now? The film always; a page
     /// effect when the page is bundled; a preset when the engine is too.
