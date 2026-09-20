@@ -136,6 +136,9 @@ enum HaloStyle: String, CaseIterable {
         /// its side, y down (the preset's own centre of composition — `cx`/`cy`
         /// in its frame equations). Default the middle.
         var centerAt: CGPoint = CGPoint(x: 0.5, y: 0.5)
+        /// Append `a.cx = a.cy = 0.5` to the preset's frame equations, so a
+        /// composition that drifts its own centre stays on the pointer.
+        var pinCenter = false
         /// Pinned to the screen (not following the pointer), the canvas's
         /// centre — the preset's horizon — at this fraction of the screen's
         /// height from the bottom. Nil = the square follows the pointer.
@@ -151,13 +154,13 @@ enum HaloStyle: String, CaseIterable {
         // the mask, half-light at half the radius. So: full light out to 55 %
         // of the radius, then one fall to nothing at the edge; gain 4 as asked.
         case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.84,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55,
-                                         // *"appears centred slightly below the mouse"*: the preset's own
-                                         // centre is at (0.605, 0.599) of its canvas (its frame equations'
-                                         // cx/cy, read live), so that point goes on the pointer.
-                                         centerAt: CGPoint(x: 0.605, y: 0.599))
+                                         // *"appears centred slightly below the mouse"*, then *"no longer
+                                         // centred"* after a static offset: the preset's centre WANDERS —
+                                         // its frame code adds ±0.11 of sine terms to cx/cy every frame —
+                                         // so the wander is pinned out of our copy (`pinCenter`) instead.
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55, pinCenter: true)
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, pinCenter: true)
         case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
@@ -250,6 +253,10 @@ let haloFrameCap: Int = ProcessInfo.processInfo.environment["WT_HALO_FPS"].flatM
 /// pointer, and a way to say it cannot go on (the film takes over).
 protocol HaloWebHost: AppKit.NSView {
     var onFailure: ((String) -> Void)? { get set }
+    /// The host has something on screen — the page's first pick answered, or
+    /// the engine's warm-up is over and it is fading in. What retires the
+    /// panel before it (`CaretHalo.rebuild`).
+    var onVisible: (() -> Void)? { get set }
     func start()
     func stop()
     func feed(_ samples: [Float])

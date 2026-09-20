@@ -41,6 +41,7 @@ final class HaloPage: NSView, HaloWebHost {
     private var failed = false
     /// The page is unusable, and why. Called at most once per instance.
     var onFailure: ((String) -> Void)?
+    var onVisible: (() -> Void)?
 
     /// Where the page is — `Resources/voice-halo` installed, `assets/voice-halo`
     /// walking up from a `.build` binary, `WT_HALO_PAGE_DIR` overriding both.
@@ -233,6 +234,9 @@ final class HaloPage: NSView, HaloWebHost {
         case "picked":
             if (msg["ok"] as? Bool) == false {
                 fail("the page could not show \(msg["name"] ?? "?")")
+            } else {
+                // One frame later the effect is drawn; say so then.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.onVisible?() }
             }
         case "error":
             fail((msg["what"] as? String) ?? "the page reported an error")

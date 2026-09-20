@@ -54,6 +54,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
     private var failed = false
     /// The page is unusable, and why — `CaretHalo` draws the film instead.
     var onFailure: ((String) -> Void)?
+    var onVisible: (() -> Void)?
 
     /// Where the page and its scripts are — `Resources/milkdrop` installed,
     /// `assets/milkdrop` walking up from a `.build` binary, `WT_MILKDROP_DIR`
@@ -109,7 +110,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
     private func configure() {
         let side = bounds.width
         let dpr = window?.backingScaleFactor ?? 2
-        let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), fadeStart: \(preset.fadeStart), gain: \(preset.gain), rot: \(preset.rot)}"
+        let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), fadeStart: \(preset.fadeStart), gain: \(preset.gain), rot: \(preset.rot), pinCenter: \(preset.pinCenter)}"
         // `WT_HALO_PRESET_OPTS='{"gain": 4}'` overrides fields for one run — the knob for looking.
         let override = Self.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
@@ -141,12 +142,14 @@ final class MilkDropHalo: NSView, HaloWebHost {
         let fresh = !configured
         if fresh { configure(); configured = true }
         web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
+        if !fresh { onVisible?() }
         if fresh {
             web.alphaValue = 0
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmup) { [weak self] in
                 guard let web = self?.web else { return }
                 NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.25; web.animator().alphaValue = 1 }
                 Log.info("◯ MilkDrop \(self?.preset.number ?? 0): fading in after the warm-up \(CaretHalo.sinceStyleChange)")
+                self?.onVisible?()
             }
         }
     }

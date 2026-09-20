@@ -531,16 +531,45 @@ final class CaretHalo {
     static var styleChangedAt: CFAbsoluteTime = 0
     static var sinceStyleChange: String { String(format: "+%.0f ms", (CFAbsoluteTimeGetCurrent() - styleChangedAt) * 1000) }
 
+    /// **The panel before this one, kept on screen until the new one has
+    /// something to show** (2026-09-20, late; Victor: *"the label shows first,
+    /// and only then the animation starts"*). A style change rebuilds the
+    /// panel, and a preset warms up unseen for 1.5 s — so with the ring up
+    /// the old effect goes on running underneath until the new host says
+    /// `onVisible`, or 3 s at most, and only then is ordered out. No blink
+    /// to empty between F9 presses.
+    private var retiring: (panel: RelayPanel, web: HaloWebHost?, under: MilkDropHalo?)?
+    private func retireOld() {
+        guard let old = retiring else { return }
+        retiring = nil
+        old.web?.stop(); old.under?.stop()
+        old.panel.orderOut(nil)
+        Log.info("◯ halo: the previous panel retired \(Self.sinceStyleChange)")
+    }
+
     private func rebuild() {
         Self.styleChangedAt = CFAbsoluteTimeGetCurrent()
         renderTimer?.invalidate(); renderTimer = nil
         timer?.invalidate(); timer = nil
-        panel?.orderOut(nil)
-        web?.stop()
-        under?.stop()
+        retireOld()
+        if live, let old = panel {
+            retiring = (old, web, under)
+        } else {
+            panel?.orderOut(nil)
+            web?.stop()
+            under?.stop()
+        }
         panel = nil; stage = nil; pulse = nil; web = nil; under = nil
         _ = makePanel()
         Log.info("◯ halo panel rebuilt \(Self.sinceStyleChange)")
+        if retiring != nil {
+            if let host = web {
+                host.onVisible = { [weak self] in self?.retireOld() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.retireOld() }
+            } else {
+                retireOld()          // the film is instant
+            }
+        }
         // `live` stays as it is: `show` reads it through `follow`, which is
         // what puts the new panel on the pointer before it is ordered front.
         if live { show(opening: .whole) }
@@ -680,6 +709,7 @@ final class CaretHalo {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             guard let self = self, self.previewGeneration == generation else { return }
             self.setActive(false)
+            self.retireOld()
             if let saved = self.savedClosures { self.samples = saved.samples; self.level = saved.level; self.quietSeconds = saved.quiet }
             self.savedClosures = nil
             self.previewGeneration = 0

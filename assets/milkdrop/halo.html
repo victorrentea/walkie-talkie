@@ -50,7 +50,7 @@
   // ---- the keying pass ----------------------------------------------------
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
-  let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null;
+  let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -172,6 +172,7 @@
       gain = opts.gain || 1;
       fadeStart = opts.fadeStart || 0;
       rotX = opts.rot || 1;
+      pinCenter = !!opts.pinCenter;
       //   fadeAtEdge: the fade reaches the CANVAS edge (radius = half the canvas side),
       //               so a scaled-down preset dies out before its square can show —
       //               Victor, 2026-09-20: *"it still renders effects with a square crop"*
@@ -192,16 +193,21 @@
         viz.setRendererSize(src.width, src.height);
       }
       if (!presets[name]) return 'no such preset: ' + name;
-      let p = presets[name];
-      if (rotX !== 1) {
-        // our copy: the frame equations are butterchurn's compiled JS over `a`
-        // (`a.rot=...`); scaling `a.rot` after they ran doubles the whole
-        // per-frame turn, the sine terms included, not only the base value
+      let p = presets[name], note = '';
+      if (rotX !== 1 || pinCenter) {
+        // our copy: the frame equations are butterchurn's compiled JS over `a`;
+        // whatever is appended runs after them every frame. `a.rot*=k` doubles
+        // the whole per-frame turn, sine terms included; `a.cx=a.cy=.5` pins a
+        // centre the preset wanders (Tunnel, Cauldron: ±0.11 of sines on cx/cy)
+        // to the canvas middle, which is what sits on the pointer.
         p = JSON.parse(JSON.stringify(p));
-        p.frame_eqs_str = (p.frame_eqs_str || '') + ';a.rot=a.rot*' + rotX + ';';
+        p.frame_eqs_str = (p.frame_eqs_str || '') + ';'
+          + (rotX !== 1 ? 'a.rot=a.rot*' + rotX + ';' : '')
+          + (pinCenter ? 'a.cx=0.5;a.cy=0.5;' : '');
+        note = (rotX !== 1 ? ' rot ×' + rotX : '') + (pinCenter ? ' centre pinned' : '');
       }
       viz.loadPreset(p, 0.6);
-      return 'ok' + (rotX !== 1 ? ' (rot ×' + rotX + ')' : '');
+      return 'ok' + (note ? ' (' + note.trim() + ')' : '');
     },
     // b64: Float32 little-endian, the last 1024 samples in −1…1
     audio(b64) {
