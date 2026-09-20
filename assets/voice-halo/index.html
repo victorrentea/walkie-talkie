@@ -497,9 +497,9 @@ function milkdropRing(t, R, { ZOOM, TWIST, DECAY, R0, AMP, W, SEGS = 512, HUE = 
 const ORB = {
   STRANDS: 14, BEADS_PER_TURN: 110, BEADS_MAX: 170,
   ARC_MIN: 0.55, ARC_MAX: 1.35, COMET_FRACTION: 0.34, COMET_RADIUS_BOOST: 1.16,
-  TILT_MIN_DEG: 6, TILT_MAX_DEG: 58, TILT_CAP_DEG: 72,
-  RADIUS_SPREAD: 0.90, WOBBLE: 0.055, WOBBLE_LOBES: 3,
-  PERSPECTIVE: 2.7, RING_FRAC: 0.30, HOLE_FRAC: 0.56, HOLE_SOFT: 0.30, INNER_FADE: 0.34,
+  TILT_MIN_DEG: 6, TILT_MAX_DEG: 46, TILT_CAP_DEG: 56,
+  RADIUS_SPREAD: 0.90, WOBBLE: 0.030, WOBBLE_LOBES: 3,
+  PERSPECTIVE: 2.7, RING_FRAC: 0.30, HOLE_FRAC: 0.56, HOLE_SOFT: 0.90, INNER_FADE: 0.34,
   DOT_NEAR: 7.6, DOT_FAR: 2.4, TAPER: 0.62,
   GLOW_NEAR: 1.45, GLOW_FAR: 2.2, GLOW_A_NEAR: 0.22, GLOW_A_FAR: 0.20,
   CORE_A_NEAR: 0.82, CORE_A_FAR: 0.42,
@@ -649,8 +649,14 @@ function drawOrbits(t, Rref, density = 1, holeFrac = ORB.HOLE_FRAC, ringFrac = O
       const depth = Math.min(1, Math.max(0, (zn / zAmp + 1) * 0.5));
       let X = x3 * persp, Y = y3 * persp;
       const d = Math.hypot(X, Y);
-      if (d < holeR * (1 + ORB.HOLE_SOFT)) {           // nimic nu intră în gaură
-        const target = holeR * (1 + ORB.HOLE_SOFT * (d / (holeR * (1 + ORB.HOLE_SOFT))));
+      // nimic nu intră în gaură — dar împingerea e C¹: vechea rampă liniară avea
+      // pantă SOFT/(1+SOFT) înăuntru și 1 în afară, iar la cusătură firul se
+      // frângea („puncte de curbură prea rigide", Victor 2026-09-20). Curba
+      // a + (1−a)·q^k are f(1)=1 și f′(1)=1, deci firul se așază pe gaură lin.
+      const soft = holeR * (1 + ORB.HOLE_SOFT);
+      if (d < soft) {
+        const a = 1 / (1 + ORB.HOLE_SOFT), q = d / soft;
+        const target = soft * (a + (1 - a) * Math.pow(q, 1 / (1 - a)));
         const k = target / Math.max(d, 1e-3); X *= k; Y *= k;
       }
       const dist = Math.hypot(X, Y);
