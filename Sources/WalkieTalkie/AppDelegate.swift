@@ -902,6 +902,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// while the relay's own microphone was the only one that could be open.
     private var listening = false
 
+    /// **The ten-minute ceiling on one dictation** — armed in `dictationBegan`,
+    /// cancelled in `dictationStoppedListening`, and what it does when it fires
+    /// is `dictationCeilingReached`.
+    ///
+    /// Not to be confused with `wisprHearingCap` above, which is the same ten
+    /// minutes spent on a different question: that one is a backstop that
+    /// unmutes his music when a Wispr row never turns terminal, and reaching it
+    /// is a bug. This one is a **policy** — a microphone left open is ended and
+    /// its words delivered — and reaching it is the feature.
+    private var dictationCeiling: DispatchWorkItem?
+
     /// A message that is built, shown, and *not yet written*. It lives here for
     /// the few seconds the overlay displays it, so Cancel has something to stop.
     /// Main thread only.
@@ -1761,6 +1772,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.setSpawnDestination("at caret", icon: RelayWindow.pinGlyph)
                 }
                 self.listening = true
+                // **The ten-minute ceiling arms here too**, although this route
+                // opens a dictation below `dictationBegan`: a route that skips it
+                // is a route the ceiling cannot be watched from a desk on, and
+                // this one is the only way to hold a sentence open without
+                // talking for ten minutes. With no microphone behind it the
+                // ceiling takes its *no recogniser* branch, which is the half
+                // this route is honest about.
+                self.armDictationCeiling()
                 self.syncBorrowedGestures()
                 self.overlay.setListening(true)
                 self.publishShotCount()
@@ -2274,6 +2293,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         probeRecentSelection()
 
         listening = true
+        // **The clock on this sentence starts with the microphone**, not with
+        // the gesture: a Wispr dictation begins when Electron wakes up, and a
+        // ceiling armed at the chord would spend that gap counting.
+        armDictationCeiling()
         syncBorrowedGestures()
         overlay.setListening(true)
         publishShotCount()
@@ -2302,6 +2325,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dictationStoppedListening() {
         guard listening else { return }
         listening = false
+        // The microphone is shut, however it got shut — the ceiling has nothing
+        // left to end, and a deadline left standing would fire into whatever
+        // sentence is open ten minutes from now.
+        disarmDictationCeiling()
         // **One last look at what is highlighted**, before `syncBorrowedGestures`
         // takes the watcher down — a highlight made in the last seconds of a
         // sentence never gets its three settling reads, and that is exactly when
@@ -2908,6 +2935,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func endDictation() {
         guard listening || source.isRecording else { return }
         source.stop()
+    }
+
+    /// **Ten minutes, and the sentence ends wherever it was going** — Victor,
+    /// 2026-09-20: *"Uneori se întâmplă să rămână pornit microfonul în dictare.
+    /// Vreau să implementăm un hard stop la zece minute … la minutul zece,
+    /// efectiv se întrerupe dictarea și se termină. Orice ar fi fost, legată,
+    /// nelegată, se termină."*
+    ///
+    /// The failure it closes is a microphone nobody is talking into: a gesture
+    /// that opened a dictation he walked away from, a Wispr window that never
+    /// sent its terminal row, a recogniser that died with its input running.
+    /// Until now the only thing that ended those was Victor noticing, and what
+    /// he noticed by was the ring — which is to say, minutes later.
+    ///
+    /// **It stops, it does not cancel.** *"Injectează la cursor sau trimite la
+    /// terminalul legat sau deschide terminalul nou, dacă e un terminal nou"* —
+    /// so this is `source.stop()`, the ordinary end of every sentence, and the
+    /// words go through the destination the dictation already had. Ten minutes
+    /// of speech is not something to throw away because a clock ran out; a
+    /// cancel here would be the ceiling deciding the sentence was worthless.
+    ///
+    /// **The chip has been saying so for two minutes.** `RelayWindow` washes the
+    /// `Listening...` row from the eighth minute and blinks it through the
+    /// ninth, off `RelayWindow.overrunCeiling` — this reads the same constant so
+    /// the warning cannot end up being about a different minute than the stop.
+    private var dictationCeilingDeadline: TimeInterval { RelayWindow.overrunCeiling }
+
+    /// Armed in `dictationBegan`, put down in `dictationStoppedListening`. A
+    /// `DispatchWorkItem` rather than a `Timer` for the reason
+    /// `wisprHearingCap` is one: it is a single deadline that is far more often
+    /// cancelled than reached.
+    private func armDictationCeiling() {
+        dictationCeiling?.cancel()
+        let cap = DispatchWorkItem { [weak self] in self?.dictationCeilingReached() }
+        dictationCeiling = cap
+        DispatchQueue.main.asyncAfter(deadline: .now() + dictationCeilingDeadline, execute: cap)
+    }
+
+    private func disarmDictationCeiling() {
+        dictationCeiling?.cancel()
+        dictationCeiling = nil
+    }
+
+    private func dictationCeilingReached() {
+        dictationCeiling = nil
+        guard listening || source.isRecording else { return }
+        Log.info("⏱️ ten minutes — the ceiling ends this dictation and delivers what it has")
+        // **A recogniser with nothing to stop leaves the relay's own state
+        // standing**, which is the failure `cancelDictationInFlight` documents
+        // at length: `listening` is the relay's claim, `isRecording` is the
+        // source's, and they come apart exactly when this ceiling is most likely
+        // to be the thing that fires. With a microphone open there is a sentence
+        // to deliver; with none there is only a ring to put down, and nothing to
+        // deliver it to.
+        guard source.isRecording else {
+            _ = cancelDictationInFlight(reason: "the ten-minute ceiling, with no recogniser behind it")
+            return
+        }
+        // Said out loud, because the one thing worse than a dictation that runs
+        // for ten minutes is one that ends without him knowing why — the panel
+        // that follows is about the words, not about the clock.
+        overlay.flash("⏱️ 10 min — dictation stopped", duration: 3)
+        endDictation()
     }
 
     /// Bring a source that is not ready up, and honour a gesture that was banked

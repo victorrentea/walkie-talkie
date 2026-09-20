@@ -250,6 +250,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The envelope becomes tokens where he made them (2026-09-19)](#the-envelope-becomes-tokens-where-he-made-them-2026-09-19)
 - [ElevenLabs is the engine, and the freeze that found (2026-09-19)](#elevenlabs-is-the-engine-and-the-freeze-that-found-2026-09-19)
 - [Two engines out, and a folder per dictation (2026-09-20)](#two-engines-out-and-a-folder-per-dictation-2026-09-20)
+- [Ten minutes is the end of a sentence, and the row says so from the eighth (2026-09-20)](#ten-minutes-is-the-end-of-a-sentence-and-the-row-says-so-from-the-eighth-2026-09-20)
 
 ---
 
@@ -11320,3 +11321,76 @@ And `MicrophoneAfterACancel` learned to **skip** when Wispr Flow holds the micro
 labelling rig running in another session, `startDictation` refuses outright — *one engine at a
 time* — so the dictation never opens the device for a reason that has nothing to do with what is
 being asserted. It went red once and green twice inside a minute before that guard went in.
+
+## Ten minutes is the end of a sentence, and the row says so from the eighth (2026-09-20)
+
+Victor: *"Uneori se întâmplă să rămână pornit microfonul în dictare. Vreau să implementăm un hard
+stop la zece minute, iar de la opt minute să înceapă progresiv pe subtextul dictate listening …
+un fel de highlight, un fel de background pe subtext galben care să se — sau ceva, o culoare
+vizibilă, cărămiziu, ceva care să se întindă pe tot textul timp de un minut, încet, și apoi să
+înceapă să clipească pentru încă un minut. Între minutul nouă și minutul zece, practic iar, la
+minutul zece, efectiv se întrerupe dictarea și se termină. Orice ar fi fost, legată, nelegată, se
+termină. Injetează la cursor sau trimite la terminalul legat sau deschide terminalul nou, dacă e
+un terminal nou."*
+
+**The failure being closed is a microphone nobody is talking into.** A gesture that opened a
+dictation he walked away from, a Wispr row that never turned terminal, a recogniser that died with
+its input still running — until now the only thing that ended any of those was Victor noticing,
+and the longest dictation in the whole corpus is **197 s**, so ten minutes is not a ceiling
+anything real is anywhere near.
+
+**It is a stop, not a cancel** — `source.stop()`, the ordinary end of every sentence, so the words
+go through the destination this dictation already had: the caret, the bound terminal, or the
+session the spawn was going to open. That is the sentence of his the ceiling is about: *injectează
+la cursor sau trimite la terminalul legat sau deschide terminalul nou*. Ten minutes of speech is
+not something to throw away for running out of clock, and a cancel here would be the ceiling
+deciding the sentence was worthless. The one case that cannot be stopped is a relay `listening`
+with no microphone behind it (`source.isRecording == false`) — there is nothing to deliver and
+only a ring to put down, so that falls through to `cancelDictationInFlight`, which is the same
+escape hatch the ✕ has had since 2026-09-14.
+
+**The warning had to be the row itself.** `Listening...` says exactly the same thing at ten
+minutes as at ten seconds: the bar fills in the first three voiced seconds and never moves again,
+and `(9m)` is a number he has to read and then compare against a ceiling he has to remember. The
+chip is read in peripheral vision while he talks, so what works there is something *changing*,
+which is the same argument the `HQ` pop is built on.
+
+**Behind the text, never in it.** Every channel of ink on that row is spoken for — the letters are
+the ramp, the blue capsule is `HQ`, the opaque grey is *not yet* — so a fourth meaning painted in
+ink would overwrite one already there. A background overwrites nothing, and it cannot re-run the
+halo failure this file has warned about since `applyTitleText`, because it draws no glyph at all.
+
+- **Eight to nine: it grows.** Left to right across the whole row, the same direction the bar
+  fills in, so the two readings never fight each other. Width rather than deepening colour, for
+  the reason the ramp is a count rather than a fade: a colour judged over a terminal, an editor or
+  a photograph is a question he has nothing to compare against, while an edge crossing the words
+  is a position on the row itself.
+- **Nine to ten: it breathes**, about once a second, at full width. A state became an event,
+  because at that point there is a minute left and something to do about it. The **words** never
+  flicker — what pulses is the ground — so the row stays readable through exactly the minute he is
+  most likely to still be talking into it.
+- **The colour is brick, not yellow.** He asked for the property rather than the hue (*"galben …
+  sau ceva, o culoare vizibilă, cărămiziu"*), and yellow is the one signal colour that disappears
+  over half of what this chip rides on. `systemRed` blended 0.30 toward `systemOrange` at 0.55
+  alpha, resolved **inside `draw(_:)`** where `NSAppearance.current` is set — a
+  `CALayer.backgroundColor` is a fixed `CGColor` and would be the same brick over a dark terminal
+  and a white page, which is the rule *never hardcode a literal colour on a variable backdrop*.
+
+**Cost, and the loop rule.** `RelayWindow.startOverrun` arms **one** timer that fires at eight
+minutes and, in every dictation Victor has ever made, never fires at all; the fifteen-a-second
+tick starts only when there is something for it to move and dies with the dictation. It is written
+under the ramp's rule — it never reaches `layoutContent`, because all it touches is one frame and
+one `alphaValue` on a view nothing is measured from. The right-hand edge it spans to is recorded
+by `placeListenExtras`, which already knows where the minutes end.
+
+**One constant, read from both sides.** `RelayWindow.overrunCeiling` is the only thing in that
+file something outside it reads: `AppDelegate.armDictationCeiling` schedules against it, so the
+warning and the stop cannot end up being about different minutes. The ceiling is armed in
+`dictationBegan` — with the microphone, not with the gesture, because a Wispr dictation begins
+when Electron wakes up and a ceiling armed at the chord would spend that gap counting — and
+cancelled in `dictationStoppedListening`, which is the one place `listening` goes false.
+
+Two new states on the catalogue, `listening-overrun` and `listening-overrun-blinking`, pinned
+through `pinListenOverrun(_:)` for `OverlayStates`' reason: the two minutes this is about are the
+two no shot could otherwise wait for. The blink is photographed at its **dim** end, or the picture
+would be indistinguishable from the full wash above it.

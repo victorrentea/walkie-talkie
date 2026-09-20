@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 43 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 45 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -270,6 +270,26 @@
         <p class="when">Any dictation that has been running for a whole minute — and every one that runs for several.</p>
         <p class="note"><strong><code>(2m)</code> is the one fact the rest of the row cannot carry.</strong> <code>Listening...</code> fills in the first three voiced seconds and then never changes again, so from that moment on nothing distinguishes a sentence from a monologue — and a monologue costs real seconds at the other end, since the decode is charged per second of audio and the panel he has to read while Cancel is running is as long as he made it. Victor&#x27;s ask, 2026-09-09: <em>&quot;să pui după toată povestea o paranteză rotundă în care treci numărul de minute&quot;</em>. <strong>Nothing under a minute</strong>: <code>(0m)</code> would be a readout saying only that a clock exists, an inch from what he is reading, for the length of every ordinary dictation — which is the rent the model id was taken off this row for paying.</p>
         <code class="slug">listening-long</code>
+      </section>
+      <section class="card" id="listening-overrun">
+        <header>
+          <h3>Eight minutes — the wash starts creeping</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-overrun.png" width="308" height="93" style="opacity:0.8" alt="Eight minutes — the wash starts creeping"></div>
+        <p class="when">From the eighth minute of a single dictation. Nothing Victor has ever said reaches it by talking.</p>
+        <p class="note"><strong>A microphone left open is the one failure the row could not report.</strong> <code>Listening...</code> says exactly the same thing at ten minutes as at ten seconds, and <code>(8m)</code> is a number he has to read and then compare against a ceiling he has to remember. So the row itself changes: a brick wash creeps across it left to right over the whole of the eighth minute — the same direction the bar fills in, so the two readings never fight — and reaching the far end is the one-minute warning. <strong>Behind the text, never in it</strong>: the ink on this row is spoken for (the letters are the ramp, the tag is <code>HQ</code>, the grey is <em>not yet</em>), and a background is the only channel left that overwrites no meaning already there. Victor, 2026-09-20: <em>&quot;de la opt minute să înceapă progresiv … un fel de background pe subtext … cărămiziu, ceva care să se întindă pe tot textul timp de un minut, încet&quot;</em>. Shown here about halfway across.</p>
+        <code class="slug">listening-overrun</code>
+      </section>
+      <section class="card" id="listening-overrun-blinking">
+        <header>
+          <h3>Nine minutes — one minute left, and it blinks</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-overrun-blinking.png" width="308" height="93" style="opacity:0.8" alt="Nine minutes — one minute left, and it blinks"></div>
+        <p class="when">The tenth minute of a dictation, right up to the hard stop that ends it.</p>
+        <p class="note"><strong>The wash is full and now breathes</strong>, about once a second, for the last minute — a state became an event, because there is something to do about it. The words never flicker: what pulses is the ground, so the row stays readable through the minute he is most likely to still be talking into it. <strong>At ten minutes the relay stops the dictation itself</strong> and delivers what it has — the caret, the bound terminal, or the new terminal it was going to spawn — because <em>&quot;orice ar fi fost, legată, nelegată, se termină&quot;</em>, and because ten minutes of speech is not something to throw away for running out of clock. A stop, therefore, never a cancel. Photographed at the dim end of the breath; at the bright end it is the picture above, full width.</p>
+        <code class="slug">listening-overrun-blinking</code>
       </section>
       <section class="card" id="listening-cold">
         <header>
@@ -579,7 +599,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 4c8a398 · 19 Sep 2026 · built 19 Sep 2026, 01:04
+  Generated from <code>OverlayStates.swift</code> · repo at a228366 · 20 Sep 2026 · built 20 Sep 2026, 16:09
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

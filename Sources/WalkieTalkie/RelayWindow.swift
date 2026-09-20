@@ -176,6 +176,62 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// One tick a second, and it relayouts at most once a minute — see
     /// `startElapsed`.
     private var elapsedTimer: Timer?
+
+    /// **The last two minutes of a dictation, drawn on the row that is about to
+    /// be cut off** — Victor's ask, 2026-09-20: *"Uneori se întâmplă să rămână
+    /// pornit microfonul în dictare. Vreau să implementăm un hard stop la zece
+    /// minute, iar de la opt minute să înceapă progresiv pe subtextul dictate
+    /// listening … un fel de background pe subtext … cărămiziu, ceva care să se
+    /// întindă pe tot textul timp de un minut, încet, și apoi să înceapă să
+    /// clipească pentru încă un minut."*
+    ///
+    /// A microphone left open is the one failure the chip could not report: the
+    /// row says `Listening...` at ten minutes exactly as it does at ten seconds,
+    /// and `(9m)` is a number he has to read and then compare against a ceiling
+    /// he has to remember. A wash creeping across the words is neither — it is
+    /// the row itself changing, which is what peripheral vision catches, and by
+    /// the time it blinks there is a minute left.
+    ///
+    /// **Behind the text, never in it.** Every other mark on this row goes
+    /// through the ink, and ink is spoken for: the letters are the ramp, the tag
+    /// is `HQ`, the grey is *not yet*. A background is the one channel left that
+    /// does not overwrite a meaning already there — and it cannot re-run into
+    /// the halo problem, because it draws no glyph at all.
+    private let overrunWash = OverrunWash()
+    /// The wall clock the wash is measured from — `listeningSince` is the same
+    /// instant, kept separate because the minutes may be pinned to a number by
+    /// `OverlayStates` while this still has to be nil there.
+    private var overrunSince: Date?
+    /// Armed at the start of every dictation and fires **once**, at eight
+    /// minutes, which is where the wash begins. An ordinary sentence (the
+    /// longest in the corpus is 197s) therefore costs one timer that never
+    /// fires and not a single tick.
+    private var overrunArm: Timer?
+    /// Fifteen ticks a second, and only in the last two minutes. Written under
+    /// the ramp's rule: it never reaches `layoutContent` — it moves one frame
+    /// and one alpha on a view that is not in the row's layout.
+    private var overrunTick: Timer?
+    /// Set only by `pinListenOverrun`, i.e. only by `OverlayStates`: seconds into
+    /// the sentence, so the catalogue can photograph the wash half grown and
+    /// blinking without a clock running for it.
+    private var overrunPinned: TimeInterval?
+    /// The right-hand edge of everything on the row — the minutes if they are
+    /// up, the badge if they are not, the last full stop otherwise. Recorded by
+    /// `placeListenExtras` because the wash spans the whole row and the tick
+    /// that draws it must not re-measure anything.
+    private var listenContentRight: CGFloat = 0
+    /// **Eight minutes: the wash starts.** Far enough out that no dictation
+    /// Victor has ever made reaches it by talking, so the wash appearing is
+    /// already the answer to *is this still a sentence?*
+    private static let overrunWarnAt: TimeInterval = 8 * 60
+    /// **Nine: it is full, and starts blinking.** A minute to fill is slow
+    /// enough to be a state rather than an event; a blink is an event, and there
+    /// is exactly one minute left to act on it.
+    private static let overrunBlinkAt: TimeInterval = 9 * 60
+    /// **Ten: `AppDelegate` ends the dictation where it stands** — the one
+    /// constant in this file that something outside it reads, so the warning and
+    /// the ceiling can never disagree about which minute they are about.
+    static let overrunCeiling: TimeInterval = 10 * 60
     /// **Where the ramp is read from.** Set by `AppDelegate` to the live
     /// recorder's meter; nil in `OverlayStates`, which has no microphone and
     /// falls back to the clock so a photographed state still has a ramp to pin.
@@ -1203,6 +1259,14 @@ private let frontLabel = NSTextField(labelWithString: "")
         elapsedLabel.font = hintFont
         elapsedLabel.textColor = .secondaryLabelColor
         elapsedLabel.isHidden = true
+        // **First into the row, so it is the first thing drawn** — AppKit paints
+        // subviews in the order they were added, and this one has to end up
+        // underneath the words rather than over them.
+        overrunWash.isHidden = true
+        // Layer-backed, because the blink is `alphaValue` and that has no effect
+        // on a view AppKit draws straight into its window.
+        overrunWash.wantsLayer = true
+        engineRow.addSubview(overrunWash)
         engineRow.addSubview(recordDot)
         engineRow.addSubview(engineInfo)
         engineRow.addSubview(listenBadge)
@@ -2924,7 +2988,12 @@ private let frontLabel = NSTextField(labelWithString: "")
         let show = listenBadgeShown
         defer { listenBadgeUp = show }
         var x = (engineInfo.frame.minX + ceil(text.size().width)).rounded()
-        defer { placeElapsed(at: x) }
+        // The wash spans everything on the row, so it is placed last and off the
+        // same edge the minutes end at.
+        defer {
+            listenContentRight = placeElapsed(at: x)
+            placeOverrun()
+        }
         guard show else {
             listenBadge.isHidden = true
             return
@@ -2986,8 +3055,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     ///
     /// `x` is the right edge of whatever precedes it — the badge if it is up, the
     /// last dot of `Listening...` if it is not.
-    private func placeElapsed(at x: CGFloat) {
-        guard let text = elapsedText else { return elapsedLabel.isHidden = true }
+    ///
+    /// - Returns: the right edge of the row's content, which is this label when
+    ///   it is up and `x` when it is not. The overrun wash spans to it.
+    @discardableResult
+    private func placeElapsed(at x: CGFloat) -> CGFloat {
+        guard let text = elapsedText else {
+            elapsedLabel.isHidden = true
+            return x
+        }
         elapsedLabel.stringValue = text
         elapsedLabel.sizeToFit()
         let h = ceil(elapsedLabel.intrinsicContentSize.height)
@@ -2995,6 +3071,127 @@ private let frontLabel = NSTextField(labelWithString: "")
                                     y: ((engineRow.frame.height - h) / 2).rounded(),
                                     width: ceil(elapsedLabel.frame.width), height: h)
         elapsedLabel.isHidden = false
+        return elapsedLabel.frame.maxX
+    }
+
+    /// **How far into the sentence the wash is**, or nil while there is nothing
+    /// to warn about. Seconds rather than a fraction, because the two phases are
+    /// measured from different marks and a single number would have to be
+    /// rescaled at the boundary.
+    private var overrunAge: TimeInterval? {
+        if let pinned = overrunPinned { return pinned }
+        guard listening, let since = overrunSince else { return nil }
+        return Date().timeIntervalSince(since)
+    }
+
+    /// **The wash: grown for a minute, then blinking for a minute.**
+    ///
+    /// Growth is left to right over the whole row — the same direction
+    /// `Listening...` fills in, so the two readings never fight each other — and
+    /// it is width rather than colour for the reason the ramp is a count rather
+    /// than a fade: a colour deepening over a terminal, an editor or a
+    /// photograph is a judgement he has nothing to make against, while an edge
+    /// crossing the words is a position on the row itself.
+    ///
+    /// The blink is opacity on a view of its own, so the words underneath never
+    /// flicker: what pulses is the ground, and the sentence stays readable
+    /// through the last minute — which is the minute he is most likely to still
+    /// be talking into it.
+    ///
+    /// **Never calls `layoutContent`.** It is one frame and one alpha on a view
+    /// no row's height or width is measured from, which is what lets it tick
+    /// fifteen times a second under the same rule the ramp is written under.
+    private func placeOverrun() {
+        guard let age = overrunAge, age >= Self.overrunWarnAt,
+              listening, engineText != nil, !engineRow.isHidden else {
+            overrunWash.isHidden = true
+            return
+        }
+        let grown = min(1, (age - Self.overrunWarnAt) / (Self.overrunBlinkAt - Self.overrunWarnAt))
+        // A hair of bleed either side, so the wash reads as a highlight behind
+        // the words and not as a box drawn around them.
+        let bleed: CGFloat = 3
+        let x = max(0, engineInfo.frame.minX - bleed)
+        let full = max(0, listenContentRight + bleed - x)
+        let h = max(0, engineRow.frame.height - 2)
+        overrunWash.frame = NSRect(x: x, y: ((engineRow.frame.height - h) / 2).rounded(),
+                                   width: (full * CGFloat(grown)).rounded(), height: h)
+        // **Blinking is the second minute, and it is a breath rather than a
+        // strobe** — a hard on/off beside the cursor is the kind of thing he
+        // would turn off, and this one has to survive being looked at for sixty
+        // seconds. A photographed frame takes the dim end, or the catalogue's
+        // picture of the blink would be indistinguishable from the picture of
+        // the full wash.
+        if age >= Self.overrunBlinkAt {
+            if overrunPinned != nil { overrunWash.alphaValue = 0.35 }
+            else {
+                let phase = (age - Self.overrunBlinkAt).truncatingRemainder(dividingBy: Self.overrunBlinkPeriod)
+                let swing = (1 - cos(2 * .pi * phase / Self.overrunBlinkPeriod)) / 2
+                overrunWash.alphaValue = 0.30 + 0.70 * CGFloat(swing)
+            }
+        } else {
+            overrunWash.alphaValue = 1
+        }
+        overrunWash.isHidden = false
+    }
+
+    /// One breath a second, near enough — slow enough to read as a pulse rather
+    /// than a fault light.
+    private static let overrunBlinkPeriod: TimeInterval = 1.0
+
+    /// **Armed at every dictation, ticking in none of them but the long ones.**
+    ///
+    /// A timer that fires once at eight minutes is the whole cost for an
+    /// ordinary sentence; the fifteen-a-second loop starts only when there is
+    /// something for it to move, and it stops with the dictation.
+    private func startOverrun() {
+        stopOverrun()
+        guard overrunPinned == nil else { return placeOverrun() }
+        overrunSince = Date()
+        let arm = Timer(timeInterval: Self.overrunWarnAt, repeats: false) { [weak self] _ in
+            self?.beginOverrunTicks()
+        }
+        // `.common`, for the ramp's reason: the chord that opens the microphone
+        // is a held mouse button, i.e. a tracking loop.
+        RunLoop.main.add(arm, forMode: .common)
+        overrunArm = arm
+    }
+
+    private func beginOverrunTicks() {
+        overrunArm = nil
+        guard listening else { return }
+        let tick = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] tick in
+            guard let self, self.listening else { return tick.invalidate() }
+            self.placeOverrun()
+        }
+        RunLoop.main.add(tick, forMode: .common)
+        overrunTick = tick
+        placeOverrun()
+    }
+
+    private func stopOverrun() {
+        overrunArm?.invalidate()
+        overrunArm = nil
+        overrunTick?.invalidate()
+        overrunTick = nil
+        overrunSince = nil
+        overrunWash.isHidden = true
+        overrunWash.alphaValue = 1
+    }
+
+    /// Freeze the overrun at a number of seconds into the sentence, for
+    /// `OverlayStates` alone — the catalogue photographs a state in the
+    /// millisecond it sets it up, and the two minutes this is about are the two
+    /// no shot could otherwise wait for.
+    func pinListenOverrun(_ seconds: Double?) {
+        overrunPinned = seconds
+        if seconds != nil {
+            overrunArm?.invalidate()
+            overrunArm = nil
+            overrunTick?.invalidate()
+            overrunTick = nil
+        }
+        layoutContent()
     }
 
     /// **One tick a second, and a relayout at most once a minute.**
@@ -3790,8 +3987,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
         reposition()             // …and the chip snaps back to the cursor
-        if value { startPulse(); startWarmth(); startElapsed() }
-        else { stopPulse(); stopWarmth(); stopElapsed(); listeningSince = nil }
+        if value { startPulse(); startWarmth(); startElapsed(); startOverrun() }
+        else { stopPulse(); stopWarmth(); stopElapsed(); stopOverrun(); listeningSince = nil }
     }
 
     /// Freeze the ramp at one frame, for `OverlayStates` alone.
@@ -4620,6 +4817,47 @@ final class PillButton: NSView {
 }
 
 // MARK: - Content view (drag + click)
+
+/// **The brick wash that creeps across `Listening...` in the last two minutes**
+/// — see `RelayWindow.placeOverrun` for what it means and when it moves.
+///
+/// A view of its own, and drawn rather than a layer colour, for the rule the
+/// chip's every surface is written under: **never hardcode a literal colour on
+/// a variable backdrop**. The ink is resolved inside `draw(_:)`, where
+/// `NSAppearance.current` is the one the chip is actually being painted in — a
+/// `CALayer.backgroundColor` is a fixed `CGColor` and would be the same brick
+/// over a dark terminal and a white page.
+///
+/// **Brick, not yellow.** Victor asked for *"galben … sau ceva, o culoare
+/// vizibilă, cărămiziu"*, i.e. for the property rather than the hue: the chip
+/// spends its life over a terminal, an editor and a photograph, and yellow is
+/// the one signal colour that vanishes on half of them. Red blended a third of
+/// the way to orange is a warmth that is legible on all three, and it is mixed
+/// out of two *dynamic* system colours, so it follows the appearance like
+/// everything else on the row.
+///
+/// Translucent, because the point is the words: at 0.55 the letters read
+/// through the wash the whole way across, and what he loses to it is the
+/// backdrop, which was never the message.
+final class OverrunWash: NSView {
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirty: NSRect) {
+        // **Converted before blended, and both inside `draw`.** A system colour
+        // is a catalogue entry rather than three numbers, and `blended` answers
+        // nil for one it cannot resolve; `usingColorSpace` resolves it against
+        // `NSAppearance.current`, which is set for the duration of this call and
+        // nowhere else.
+        let red = NSColor.systemRed.usingColorSpace(.sRGB) ?? .red
+        let orange = NSColor.systemOrange.usingColorSpace(.sRGB) ?? .orange
+        let brick = red.blended(withFraction: 0.30, of: orange) ?? red
+        brick.withAlphaComponent(0.55).setFill()
+        // Rounded like a highlighter's stroke rather than a box: a square edge
+        // reads as a field the words sit in, and this is something spreading
+        // *over* them.
+        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+    }
+}
 
 final class RelayView: NSView {
     weak var owner: RelayWindow?

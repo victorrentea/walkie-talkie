@@ -179,6 +179,28 @@ enum OverlayStates {
                 o.pinListenElapsed(2)
             },
 
+            Shot(slug: "listening-overrun", group: "Dictating", title: "Eight minutes — the wash starts creeping",
+                 when: "From the eighth minute of a single dictation. Nothing Victor has ever said reaches it by talking.",
+                 note: "**A microphone left open is the one failure the row could not report.** `Listening...` says exactly the same thing at ten minutes as at ten seconds, and `(8m)` is a number he has to read and then compare against a ceiling he has to remember. So the row itself changes: a brick wash creeps across it left to right over the whole of the eighth minute — the same direction the bar fills in, so the two readings never fight — and reaching the far end is the one-minute warning. **Behind the text, never in it**: the ink on this row is spoken for (the letters are the ramp, the tag is `HQ`, the grey is *not yet*), and a background is the only channel left that overwrites no meaning already there. Victor, 2026-09-20: *\"de la opt minute să înceapă progresiv … un fel de background pe subtext … cărămiziu, ceva care să se întindă pe tot textul timp de un minut, încet\"*. Shown here about halfway across.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.setShotCount(1)
+                o.pinListenElapsed(8)
+                o.pinListenOverrun(8 * 60 + 30)
+            },
+
+            Shot(slug: "listening-overrun-blinking", group: "Dictating", title: "Nine minutes — one minute left, and it blinks",
+                 when: "The tenth minute of a dictation, right up to the hard stop that ends it.",
+                 note: "**The wash is full and now breathes**, about once a second, for the last minute — a state became an event, because there is something to do about it. The words never flicker: what pulses is the ground, so the row stays readable through the minute he is most likely to still be talking into it. **At ten minutes the relay stops the dictation itself** and delivers what it has — the caret, the bound terminal, or the new terminal it was going to spawn — because *\"orice ar fi fost, legată, nelegată, se termină\"*, and because ten minutes of speech is not something to throw away for running out of clock. A stop, therefore, never a cancel. Photographed at the dim end of the breath; at the bright end it is the picture above, full width.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.setShotCount(1)
+                o.pinListenElapsed(9)
+                o.pinListenOverrun(9 * 60 + 30)
+            },
+
             Shot(slug: "listening-cold", group: "Dictating", title: "The first words — too little speech to trust",
                  when: "From the instant the microphone opens until about a second of actual speech has arrived.",
                  note: "**`Listening...` is a progress bar, and it is empty here.** It fills one character at a time as speech arrives and is full when the last dot lights — a *count*, not a brightness, because a fade over an unknown backdrop gives him nothing to judge \"is it done yet?\" against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted by re-decoding 803 of his own clips, **by voiced seconds**: 42% under one voiced second come back in a language Victor does not speak, 15% between one and two, and 1% past two. (The language pin has since taken that mode to zero — the bar still forecasts everything else that is worse when there is less to hear.)",
@@ -553,6 +575,10 @@ enum OverlayStates {
         // photographed in the same millisecond — so the minutes are pinned, and
         // pinned to nothing unless a shot asks for them.
         o.pinListenElapsed(nil)
+        // And no overrun, for the same reason: the wash is a function of a clock
+        // that does not run here, and the two shots that are *about* it pin
+        // their own minute.
+        o.pinListenOverrun(nil)
     }
 
     // MARK: - Props

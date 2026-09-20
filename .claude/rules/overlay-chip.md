@@ -17,7 +17,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 ## The states page is part of every change
 
 - **No change to the overlay is finished until `docs/overlay-states.html` is rebuilt.**
-  `./docs/shoot-overlay-states.sh` shoots all 41 states and regenerates the HTML. That covers a new
+  `./docs/shoot-overlay-states.sh` shoots all 45 states and regenerates the HTML. That covers a new
   row, a reworded string, a changed glyph, a different colour, a state that starts or stops
   existing. A new state means a new `Shot` in `OverlayStates.swift`; a state that goes away means
   deleting one. **Never edit `docs/overlay-states.html` by hand** — it is overwritten on the next
@@ -180,6 +180,20 @@ yields to `--label`).
   *before* the tag. `startElapsed` ticks once a second and does nothing on 59 ticks in 60 — the
   ramp's timer cannot carry it, it stops at three voiced seconds. `pinListenElapsed` freezes it for
   `OverlayStates`. → journal: *And then the minutes, in brackets (2026-09-09)*
+- **The last two minutes are washed brick, and at ten the dictation is over** (2026-09-20). Eight
+  minutes in, a translucent brick background creeps left to right across the whole `Listening...`
+  row over the ninth minute; through the tenth it is full width and breathes about once a second;
+  at ten `AppDelegate` calls `source.stop()` — a **stop, never a cancel**, so the words go to the
+  destination the sentence already had (a relay `listening` with no microphone behind it falls
+  through to `cancelDictationInFlight`, which is the ✕'s escape hatch). **Behind the text, never
+  in it**: the ink on that row is spoken for three times over (the ramp, the `HQ` capsule, the
+  grey), and a background overwrites no meaning already there and draws no glyph, so it cannot
+  re-run the halo failure. Width rather than deepening colour, for the ramp's reason — an edge
+  crossing the words is a position on the row; a colour over an unknown backdrop is not. The
+  **words** never flicker, only the ground. `RelayWindow.overrunCeiling` is the one constant in
+  that file read from outside it, so the warning and the stop are about the same minute; the
+  fifteen-a-second tick exists only in those two minutes and, like the ramp, never reaches
+  `layoutContent`. → journal: *Ten minutes is the end of a sentence, and the row says so from the eighth (2026-09-20)*
 - **`Transcribing...` fills from `DecodeRate`'s deadline and carries no digits** (2026-09-08).
   `transcribeDeadline`, `transcribeSpan` and the fitted line are what the bar is drawn from; the
   `4s` countdown went the same day (*"e doar stresant. Lasă să se sugereze progressbar-ul prin
