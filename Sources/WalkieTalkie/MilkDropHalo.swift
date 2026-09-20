@@ -120,7 +120,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
                 "error: \(((e as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String) ?? e.localizedDescription) at line \((e as NSError).userInfo["WKJavaScriptExceptionLineNumber"] ?? "?")" } ?? "?"
             if status != self?.lastStatus {
                 self?.lastStatus = status
-                Log.info("◯ MilkDrop \(self?.preset.number ?? 0): \(status)")
+                Log.info("◯ MilkDrop \(self?.preset.number ?? 0): \(status) \(CaretHalo.sinceStyleChange)")
             }
         }
     }
@@ -146,6 +146,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmup) { [weak self] in
                 guard let web = self?.web else { return }
                 NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.25; web.animator().alphaValue = 1 }
+                Log.info("◯ MilkDrop \(self?.preset.number ?? 0): fading in after the warm-up \(CaretHalo.sinceStyleChange)")
             }
         }
     }

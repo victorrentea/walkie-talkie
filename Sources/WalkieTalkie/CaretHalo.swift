@@ -524,7 +524,15 @@ final class CaretHalo {
     /// Tear the panel down and build it again for `style` — a style change,
     /// a screen change, or the page giving up. Straight out and back, not a
     /// collapse: what replaces it is the same ring in another dress.
+    /// When the last style change began — the zero every `+N ms` in the web
+    /// hosts' log lines counts from, so *how long after F9 does it show* is
+    /// answerable from the log (Victor, 2026-09-20 late: *"the label shows
+    /// first, and only then the animation starts"*).
+    static var styleChangedAt: CFAbsoluteTime = 0
+    static var sinceStyleChange: String { String(format: "+%.0f ms", (CFAbsoluteTimeGetCurrent() - styleChangedAt) * 1000) }
+
     private func rebuild() {
+        Self.styleChangedAt = CFAbsoluteTimeGetCurrent()
         renderTimer?.invalidate(); renderTimer = nil
         timer?.invalidate(); timer = nil
         panel?.orderOut(nil)
@@ -532,6 +540,7 @@ final class CaretHalo {
         under?.stop()
         panel = nil; stage = nil; pulse = nil; web = nil; under = nil
         _ = makePanel()
+        Log.info("◯ halo panel rebuilt \(Self.sinceStyleChange)")
         // `live` stays as it is: `show` reads it through `follow`, which is
         // what puts the new panel on the pointer before it is ordered front.
         if live { show(opening: .whole) }

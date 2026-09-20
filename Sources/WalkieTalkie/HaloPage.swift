@@ -151,7 +151,7 @@ final class HaloPage: NSView, HaloWebHost {
         guard ready else { pendingPick = style; return }
         web.evaluateJavaScript("halo.pick(\(i))") { result, error in
             if let error = error { Log.error("◯ halo page: pick(\(i)) failed: \(error.localizedDescription)") }
-            else { Log.info("◯ halo page: \(style.rawValue) → page \(i + 1) — \((result as? String) ?? "?")") }
+            else { Log.info("◯ halo page: \(style.rawValue) → page \(i + 1) — \((result as? String) ?? "?") \(CaretHalo.sinceStyleChange)") }
         }
     }
 
@@ -220,7 +220,7 @@ final class HaloPage: NSView, HaloWebHost {
         case "ready":
             let webgl = msg["webgl"] as? Bool ?? false
             let names = (msg["names"] as? [String]) ?? []
-            Log.info("◯ halo page ready: \(names.count) effects, webgl \(webgl), dpr \(msg["dpr"] ?? "?"), \(msg["w"] ?? "?")×\(msg["h"] ?? "?") CSS px")
+            Log.info("◯ halo page ready \(CaretHalo.sinceStyleChange): \(names.count) effects, webgl \(webgl), dpr \(msg["dpr"] ?? "?"), \(msg["w"] ?? "?")×\(msg["h"] ?? "?") CSS px")
             if !webgl, let style = pendingPick, style.needsWebGL {
                 fail("no WebGL, and \(style.rawValue) needs the keying pass")
                 return
