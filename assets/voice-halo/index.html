@@ -731,7 +731,7 @@ function spike(ax, ay, bx, by, hue, width, alpha) {
 //   ★ = îi place mult   • = „are mult potențial"   − = nu-i place
 // Ordinea NU se schimbă niciodată la un review — doar etichetele.
 const FORMULAS = [
-  { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.202, draw(t) {
+  { name: 'Pulse', desc: 'inel de undă — cerc perfect în tăcere, se rotește', scale: 0.2424, draw(t) {
       // nu mai folosește unda proprie pentru FORMĂ: în liniște amplitudinea e zero,
       // deci rămâne cerc. Ce continuă în tăcere e rotația, nu deformarea.
       // AMP 0.21 → 0.35 — Victor, 2026-09-20 seara. Ceața a fost 3× mai lată o oră
@@ -739,7 +739,7 @@ const FORMULAS = [
       milkdropRing(t, rad(this.scale), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.35,
                         W: 1.1, FOG: 1, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
   }},
-  { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.1616, draw(t) {
+  { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.1939, draw(t) {
       const R = rad(this.scale);
       splitWave();
       tunnelLayer({ DECAY: 0.80, ZOOM: 1.007, TWIST: 0.002 }, () => {
@@ -761,7 +761,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1915, draw(t) {
+  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.2298, draw(t) {
       // cercul galben care stătea fixat a fost scos; rămân doar barele
       const R = rad(this.scale);
       plainLayer(() => {
@@ -777,7 +777,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.1841, draw(t) {
+  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.2209, draw(t) {
       // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
       // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
       // are exact nuanța primului și cusătura dispare.
@@ -795,7 +795,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.1825, draw(t) {
+  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.219, draw(t) {
       // Efectul care l-a scos din sărite pe Victor: urma lui umplea pătratul și i se
       // vedea muchia. Acum pânza e tot ecranul, deci ceața se oprește abia în
       // marginea ecranului — fiindcă acolo se termină ecranul, nu fiindcă a tăiat-o ceva.
@@ -838,7 +838,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.099, draw(t) {
+  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.1188, draw(t) {
       // gaura din mijloc de 2,5 ori mai mare, iar inelul strâns (RING_FRAC mai mic).
       // Pătratul care tăia mărgelele din față nu mai există deloc.
       drawOrbits(t, rad(this.scale), 0.5, 1.40, 0.22);
@@ -903,7 +903,7 @@ const FORMULAS = [
       });
       overLayer(() => { for (const [pts, h] of crisp) { strokePath(pts, true, h, 2.0, .55); strokePath(pts, true, h, 7.0, .045); } });
   }},
-  { name: '− Petals', desc: 'raze ORB — petale rotitoare, fără flash', scale: 0.1, draw(t) {
+  { name: '− Petals', desc: 'raze ORB — petale rotitoare, fără flash', scale: 0.12, draw(t) {
       // Din „ORB - Waaa". Presetul are TREI forme suprapuse (100 de laturi fiecare),
       // rotite cu viteze apropiate și una în sens invers: ang = q2, -1.05*q2 și
       // 0.899*q2 — de aici bătaia lentă dintre straturi. Culorile sunt chiar
@@ -977,7 +977,7 @@ const FORMULAS = [
   // presetul „cu apă" pe care și-l amintea Victor: orizont net la mijloc, cer roz
   // deasupra, oglindire cu unde dedesubt. E #103 din 103 în lista filtrată.
   { name: '★ Water Dream', desc: 'MilkDrop 103 — fata morgana (apă cu oglindire)', preset: 'martin [shadow harlequins shape code] - fata morgana', scale: 0.5 },
-  { name: 'Beads', desc: 'inel de blocuri — cerc în repaus, crește doar în afară', scale: 0.24, draw(t) {
+  { name: 'Beads', desc: 'inel de blocuri — cerc în repaus, crește doar în afară', scale: 0.288, draw(t) {
       // în repaus e cerc perfect (amplitudinea vine strict din voce); vocea îl
       // împinge numai spre exterior, până la aceeași înălțime maximă ca înainte.
       // Sclipirea rămâne: mărimea blocului respiră chiar și în liniște.
