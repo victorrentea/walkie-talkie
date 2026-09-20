@@ -1,0 +1,157 @@
+--- a/src/libprojectM/ProjectM.cpp
++++ b/src/libprojectM/ProjectM.cpp
+@@ -20,6 +20,7 @@
+ */
+ 
+ #include "ProjectM.hpp"
++#include <cstdlib>
+ 
+ #include "Preset.hpp"
+ #include "PresetFactoryManager.hpp"
+@@ -167,7 +168,8 @@
+     m_activePreset->RenderFrame(audioData, renderContext);
+ 
+     // ToDo: Allow external apps to provide a custom target framebuffer.
+-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
++    { const char* e = getenv("PROJECTM_TARGET_FBO");
++      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, e ? (GLuint)atoi(e) : 0); }
+     glViewport(0, 0, renderContext.viewportSizeX, renderContext.viewportSizeY);
+ 
+ #ifdef USE_GLES
+--- a/src/libprojectM/MilkdropPreset/CustomShape.cpp
++++ b/src/libprojectM/MilkdropPreset/CustomShape.cpp
+@@ -235,7 +235,7 @@
+ 
+             glBindBuffer(GL_ARRAY_BUFFER, m_vboIdTextured);
+ 
+-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(TexturedPoint) * (sides + 2), vertexData.data());
++            glBufferData(GL_ARRAY_BUFFER, sizeof(TexturedPoint) * (sides + 2), vertexData.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+ 
+             glBindVertexArray(m_vaoIdTextured);
+             glDrawArrays(GL_TRIANGLE_FAN, 0, sides + 2);
+@@ -249,7 +249,7 @@
+             // Untextured (creates a color gradient: center=r/g/b/a to border=r2/b2/g2/a2)
+             glBindBuffer(GL_ARRAY_BUFFER, m_vboIdUntextured);
+ 
+-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(TexturedPoint) * (sides + 2), vertexData.data());
++            glBufferData(GL_ARRAY_BUFFER, sizeof(TexturedPoint) * (sides + 2), vertexData.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+ 
+             m_presetState.untexturedShader.Bind();
+             m_presetState.untexturedShader.SetUniformMat4x4("vertex_transformation", PresetState::orthogonalProjection);
+@@ -324,7 +324,7 @@
+                         break;
+                 }
+ 
+-                glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizei>(sizeof(Point) * sides), points.data());
++                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizei>(sizeof(Point) * sides), points.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+                 glDrawArrays(GL_LINE_LOOP, 0, sides);
+             }
+         }
+--- a/src/libprojectM/MilkdropPreset/PerPixelMesh.cpp
++++ b/src/libprojectM/MilkdropPreset/PerPixelMesh.cpp
+@@ -375,7 +375,7 @@
+ 
+         if (trianglesQueued > 0)
+         {
+-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(MeshVertex) * trianglesQueued * 3, m_drawVertices.data());
++            glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * trianglesQueued * 3, m_drawVertices.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+             glDrawArrays(GL_TRIANGLES, 0, trianglesQueued * 3);
+         }
+     }
+--- a/src/libprojectM/MilkdropPreset/CustomWaveform.cpp
++++ b/src/libprojectM/MilkdropPreset/CustomWaveform.cpp
+@@ -231,7 +231,7 @@
+                 break;
+         }
+ 
+-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(ColoredPoint) * smoothedVertexCount, pointsSmoothed.data());
++        glBufferData(GL_ARRAY_BUFFER, sizeof(ColoredPoint) * smoothedVertexCount, pointsSmoothed.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+         glDrawArrays(drawType, 0, smoothedVertexCount);
+     }
+ 
+--- a/src/libprojectM/MilkdropPreset/MotionVectors.cpp
++++ b/src/libprojectM/MilkdropPreset/MotionVectors.cpp
+@@ -139,7 +139,7 @@
+             // Draw a row of lines.
+             if (m_lastVertexCount >= vertex)
+             {
+-                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(MotionVectorVertex) * vertex, lineVertices.data());
++                glBufferData(GL_ARRAY_BUFFER, sizeof(MotionVectorVertex) * vertex, lineVertices.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+             }
+             else
+             {
+--- a/src/libprojectM/MilkdropPreset/FinalComposite.cpp
++++ b/src/libprojectM/MilkdropPreset/FinalComposite.cpp
+@@ -125,7 +125,7 @@
+         glDisable(GL_BLEND);
+         glBindVertexArray(m_vaoID);
+         glBindBuffer(GL_ARRAY_BUFFER, m_vboID);
+-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(MeshVertex) * vertexCount, m_vertices.data());
++        glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * vertexCount, m_vertices.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+         glBindBuffer(GL_ARRAY_BUFFER, 0);
+ 
+         m_compositeShader->LoadVariables(presetState, perFrameContext);
+--- a/src/libprojectM/MilkdropPreset/Waveform.cpp
++++ b/src/libprojectM/MilkdropPreset/Waveform.cpp
+@@ -123,7 +123,7 @@
+                     break;
+             }
+ 
+-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Point) * smoothedWave.size(), smoothedWave.data());
++            glBufferData(GL_ARRAY_BUFFER, sizeof(Point) * smoothedWave.size(), smoothedWave.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+             glDrawArrays(drawType, 0, static_cast<GLsizei>(smoothedWave.size()));
+         }
+     }
+--- a/src/libprojectM/MilkdropPreset/Border.cpp
++++ b/src/libprojectM/MilkdropPreset/Border.cpp
+@@ -63,7 +63,7 @@
+ 
+             for (int rot = 0; rot < 4; rot++)
+             {
+-                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Point) * 4, vertices.data());
++                glBufferData(GL_ARRAY_BUFFER, sizeof(Point) * 4, vertices.data(), GL_STREAM_DRAW); // walkie: orphaned, not updated in place
+                 glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+ 
+                 // Rotate 90 degrees
+--- a/src/libprojectM/MilkdropPreset/MilkdropPresetExceptions.hpp
++++ b/src/libprojectM/MilkdropPreset/MilkdropPresetExceptions.hpp
+@@ -24,6 +24,8 @@
+         return m_message;
+     }
+ 
++    const char* what() const noexcept override { return m_message.c_str(); } // walkie: the message reaches the failed-event callback
++
+ private:
+     std::string m_message;
+ };
+@@ -46,6 +48,8 @@
+     {
+         return m_message;
+     }
++
++    const char* what() const noexcept override { return m_message.c_str(); } // walkie: the message reaches the failed-event callback
+ 
+ private:
+     std::string m_message;
+--- a/src/libprojectM/Renderer/Shader.hpp
++++ b/src/libprojectM/Renderer/Shader.hpp
+@@ -36,6 +36,8 @@
+         return m_message;
+     }
+ 
++    const char* what() const noexcept override { return m_message.c_str(); } // walkie: the message reaches the failed-event callback
++
+ private:
+     std::string m_message;
+ };
+--- a/src/libprojectM/PresetFactoryManager.hpp
++++ b/src/libprojectM/PresetFactoryManager.hpp
+@@ -24,6 +24,8 @@
+         return m_message;
+     }
+ 
++    const char* what() const noexcept override { return m_message.c_str(); } // walkie: the message reaches the failed-event callback
++
+ private:
+     std::string m_message;
+ };

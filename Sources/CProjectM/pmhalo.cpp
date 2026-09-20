@@ -97,7 +97,11 @@ static void on_preset_failed(const char* filename, const char* message, void* us
 }
 
 static bool make_surface(pmh* h, Surface& s) {
-    int32_t w = h->px, bpe = 4, bpr = h->px * 4, asz = h->px * h->px * 4; uint32_t pf = 'BGRA';
+    // Rows aligned the way Metal wants an IOSurface it renders into — a 907 px
+    // square (bpr 3628) aborted the process with `isMisalignedIOSurface`.
+    int32_t w = h->px, bpe = 4; uint32_t pf = 'BGRA';
+    int32_t bpr = (int32_t)IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, (size_t)h->px * 4);
+    int32_t asz = (int32_t)IOSurfaceAlignProperty(kIOSurfaceAllocSize, (size_t)bpr * h->px);
     const void* keys[] = { kIOSurfaceWidth, kIOSurfaceHeight, kIOSurfaceBytesPerElement, kIOSurfaceBytesPerRow, kIOSurfaceAllocSize, kIOSurfacePixelFormat };
     const void* vals[] = { CFNumberCreate(nullptr, kCFNumberSInt32Type, &w), CFNumberCreate(nullptr, kCFNumberSInt32Type, &w),
                            CFNumberCreate(nullptr, kCFNumberSInt32Type, &bpe), CFNumberCreate(nullptr, kCFNumberSInt32Type, &bpr),

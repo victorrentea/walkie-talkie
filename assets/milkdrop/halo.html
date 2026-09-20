@@ -220,6 +220,16 @@
         audio.time[i] = b; audio.l[i] = b; audio.r[i] = b;
       }
     },
+    // One frame rendered and keyed on demand, returned as a PNG data URL — the
+    // engine's output with nothing of the screen in it (the native route's
+    // `WT_PM_SHOOT` twin, for the side-by-side in docs/projectm/). Read in the
+    // same task as the draw, so no preserveDrawingBuffer is needed.
+    snapshot() {
+      if (viz) viz.render({ audioLevels: { timeByteArray: audio.time, timeByteArrayL: audio.l, timeByteArrayR: audio.r } });
+      else if (testMode) testFrame();
+      key();
+      return out.toDataURL('image/png');
+    },
     start() { if (running) return; running = true; lastFrameAt = 0; requestAnimationFrame(frame); },
     fps(n) { frameInterval = n > 0 ? 1000 / n : 0; },
     stop() { running = false; },

@@ -13,6 +13,12 @@ web route draws from butterchurn's JSON conversion of the same file:
 | Sparks (87) | `martin - chain breaker.milk` | `milkdrop-gallery/sources/cream` |
 | Water Dream (103) | `martin [shadow harlequins shape code] - fata morgana.milk` | OfficialIncubo/BeatDrop-Music-Visualizer `resources/Milkdrop2/presets` |
 
+**One edit of ours** in `fata morgana.milk`: `per_frame_23`/`24` split the identifier
+`is_beat` across two lines (`k1 = is_` / `beat*equal(...)`), which MilkDrop and
+butterchurn join verbatim and projectM joins with a newline (`PresetFileParser::GetCode`),
+so the engine refused the preset (*Could not compile per-frame code*). The two
+lines are one line here.
+
 `textures/` — what a preset's `sampler_<name>` asks for that is not built into
 the engine (noise textures are). None of the six needs one today; `worms.jpg`
 (projectM's `presets-milkdrop-texture-pack`) is kept from the spike's stand-in

@@ -41,6 +41,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
     /// The microphone's rate, as `MicRecorder` and `DemoVoice` fill `samples`.
     static let sampleRate = 16000
+    static let resample = ProcessInfo.processInfo.environment["WT_PM_RESAMPLE"] == "1"
     /// Pixels per point of the square. The engine's cost is per pixel.
     static let renderScale: CGFloat = ProcessInfo.processInfo.environment["WT_PM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 1
     /// Same warm-up as the web route: a feedback preset's first frames are the
@@ -222,7 +223,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
         guard let r = renderer else { return }
         let fresh = min(samples.count, Self.sampleRate / max(1, haloFrameCap > 0 ? haloFrameCap : 30) + 16)
         let tail = Array(samples.suffix(fresh))
-        tail.withUnsafeBufferPointer { pmh_add_pcm(r, $0.baseAddress, UInt32(tail.count), Int32(Self.sampleRate)) }
+        // **Handed over as they are, not resampled** (`WT_PM_RESAMPLE=1` to resample
+        // to 44.1 kHz): both engines are MilkDrop's beat detector, which reads
+        // its bands off spectrum bins and assumes 44.1 kHz, and the web route
+        // gives butterchurn these very samples raw — so the presets Victor tuned
+        // by eye see the same spectrum here.
+        tail.withUnsafeBufferPointer { pmh_add_pcm(r, $0.baseAddress, UInt32(tail.count), Self.resample ? Int32(Self.sampleRate) : 44100) }
     }
 
     // MARK: The frame loop
@@ -256,13 +262,15 @@ final class ProjectMHalo: NSView, HaloWebHost {
         totalFrames += 1
         if ProcessInfo.processInfo.environment["WT_PM_DEBUG_ALPHA"] != nil, totalFrames == 60 || totalFrames == 100 { pmh_debug_alpha(r) }
         engineMs += pmh_last_engine_ms(r); keyMs += pmh_last_key_ms(r)
-        // `WT_PM_SHOOT=<path.png>` writes the 90th frame (3 s in) read back from
-        // the surface — the engine's output with nothing of the screen in it.
-        if totalFrames == 90, let path = ProcessInfo.processInfo.environment["WT_PM_SHOOT"], let img = snapshot() {
-            let url = URL(fileURLWithPath: path)
-            if let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) {
+        // `WT_PM_SHOOT=<dir/name>` writes frames 90, 150 and 210 (3, 5 and 7 s in
+        // at 30 fps) read back from the surface — the engine's output with nothing
+        // of the screen in it — as `<dir/name>-3s.png` and so on.
+        let fps = haloFrameCap > 0 ? haloFrameCap : 60
+        if [fps * 3, fps * 5, fps * 7].contains(totalFrames), let base = ProcessInfo.processInfo.environment["WT_PM_SHOOT"], let img = snapshot() {
+            let path = "\(base)-\(totalFrames / fps)s.png"
+            if let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil) {
                 CGImageDestinationAddImage(dest, img, nil)
-                Log.info("◯ projectM \(preset.number): frame 90 written to \(path): \(CGImageDestinationFinalize(dest))")
+                Log.info("◯ projectM \(preset.number): frame \(totalFrames) written to \(path): \(CGImageDestinationFinalize(dest))")
             }
         }
         if Self.stats, CFAbsoluteTimeGetCurrent() - statAt > 5, frames > 0 {

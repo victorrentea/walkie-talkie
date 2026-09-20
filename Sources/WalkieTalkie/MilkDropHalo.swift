@@ -143,6 +143,23 @@ final class MilkDropHalo: NSView, HaloWebHost {
         if fresh { configure(); configured = true }
         web.evaluateJavaScript("halo.fps(\(haloFrameCap)); halo.start()", completionHandler: nil)
         if !fresh { onVisible?() }
+        // `WT_MD_SHOOT=<dir/name>`: 3, 5 and 7 s in, the engine's own frame, keyed,
+        // with nothing of the screen in it — `ProjectMHalo`'s `WT_PM_SHOOT` twin.
+        if fresh, let base = ProcessInfo.processInfo.environment["WT_MD_SHOOT"] {
+            for t in [3, 5, 7] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(t)) { [weak self] in
+                    self?.web.evaluateJavaScript("halo.snapshot()") { result, error in
+                        guard let url = result as? String, let comma = url.firstIndex(of: ","),
+                              let data = Data(base64Encoded: String(url[url.index(after: comma)...])) else {
+                            Log.error("◯ MilkDrop: no snapshot — \(error?.localizedDescription ?? "?")"); return
+                        }
+                        let path = "\(base)-\(t)s.png"
+                        try? data.write(to: URL(fileURLWithPath: path))
+                        Log.info("◯ MilkDrop \(self?.preset.number ?? 0): frame at \(t) s written to \(path) (\(data.count) bytes)")
+                    }
+                }
+            }
+        }
         if fresh {
             web.alphaValue = 0
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmup) { [weak self] in
