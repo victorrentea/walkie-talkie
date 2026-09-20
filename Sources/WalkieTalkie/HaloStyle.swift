@@ -157,8 +157,11 @@ enum HaloStyle: String, CaseIterable {
         // A canvas 1.1× the screen's long side covers the screen with the
         // horizon at 20 %. Mac only: on the phone page the presets render dark
         // in embed, so there Water Dream is the preset alone.
+        // *"water dream is too violent"* (the same evening): the light at 0.6.
+        // `POST /test/halo {"style": "milkdrop103", "opts": {"gain": 0.4}}` is
+        // how the next number gets looked at without a rebuild.
         case .milkdrop103: return Preset(number: 103, name: "martin [shadow harlequins shape code] - fata morgana", scale: 1.1,
-                                         pinnedHorizon: 0.20)
+                                         gain: 0.6, pinnedHorizon: 0.20)
         default:           return nil
         }
     }

@@ -250,6 +250,10 @@ final class ElementPicker {
     /// have said — and the placement `ShotMarker.place` does becomes reachable
     /// from a desk. The only way to see a *whole* envelope without talking.
     var onTestDictationStart: ((Bool) -> Void)?
+    /// `POST /test/halo {"style": "milkdrop87", "step": 1, "demo": 6, "opts": {...}}` —
+    /// pick a halo (or step through them), preview it on the clip for `demo`
+    /// seconds, with per-run preset options; answers what is now current.
+    var onTestHalo: (([String: Any]) -> [String: Any])?
 
     /// **The wheel drag, without the wheel** — `POST /test/area`
     /// `{"x": …, "y": …, "w": …, "h": …}` in global Cocoa points (2026-09-19).
@@ -736,6 +740,13 @@ final class ElementPicker {
         // Shots are named by their offset into the dictation, and there is no
         // offset until something has started one, so without this the whole
         // naming scheme is only exercisable by talking.
+        case ("POST", "/test/halo"):
+            let body = ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]) ?? [:]
+            guard let handler = onTestHalo else { return respond(conn, 503, ["error": "no handler"]) }
+            var answer: [String: Any] = [:]
+            DispatchQueue.main.sync { answer = handler(body) }
+            respond(conn, (answer["error"] == nil) ? 200 : 400, answer)
+
         case ("POST", "/test/dictation/start"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             onTestDictationStart?((body?["clock"] as? Bool) ?? false)

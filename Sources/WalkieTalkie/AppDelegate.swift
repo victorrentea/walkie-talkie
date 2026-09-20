@@ -1563,6 +1563,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let landed = self.caretHalo.cycleStyle(by: step)
             self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
         }
+        // **F9 / F7 step the halo outside a dictation, and preview it on his
+        // own voice for six seconds** (2026-09-20, late) — the same cycle as
+        // the wheel, the same preference the menu reads, plus the preview,
+        // which the wheel does not need because the ring is already up.
+        hotkeys.onHaloStep = { [weak self] step in
+            guard let self = self else { return }
+            MilkDropHalo.optionsOverride = nil
+            let landed = self.caretHalo.cycleStyle(by: step)
+            self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
+            self.caretHalo.preview(seconds: 6)
+        }
+        // **`POST /test/halo`** — the same two moves from a desk, for him and
+        // for an agent alike: `{"style": "milkdrop87"}` or `{"step": 1}`,
+        // `"demo": 6` for the preview, `"opts": {"gain": 0.4}` merged over a
+        // preset's options for this run. Answers the style now current.
+        picker.onTestHalo = { [weak self] body in
+            guard let self = self else { return ["error": "gone"] }
+            if let opts = body["opts"] as? [String: Any],
+               let data = try? JSONSerialization.data(withJSONObject: opts) {
+                MilkDropHalo.optionsOverride = String(data: data, encoding: .utf8)
+            } else if body["style"] != nil || body["step"] != nil {
+                MilkDropHalo.optionsOverride = nil
+            }
+            if let name = body["style"] as? String {
+                guard let style = HaloStyle(rawValue: name) ?? HaloStyle.allCases.first(where: { $0.title.lowercased() == name.lowercased() }) else {
+                    return ["error": "no such style: \(name)", "styles": HaloStyle.allCases.map { $0.rawValue }]
+                }
+                self.caretHalo.setStyle(style)
+                self.overlay.flash("✨ \(style.menuTitle)", duration: 1.5)
+            } else if let step = body["step"] as? Int {
+                let landed = self.caretHalo.cycleStyle(by: step)
+                self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
+            }
+            if let demo = body["demo"] as? Double, demo > 0 { self.caretHalo.preview(seconds: min(demo, 60)) }
+            return ["ok": true, "style": self.caretHalo.style.rawValue, "title": self.caretHalo.style.title,
+                    "opts": MilkDropHalo.optionsOverride ?? "", "styles": HaloStyle.allCases.map { $0.rawValue }]
+        }
         // One line per selection, in the app's own log: how many frames the box
         // was actually drawn in, and the longest it went without one. It took a
         // bug report to ask that question the first time.

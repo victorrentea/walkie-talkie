@@ -644,6 +644,38 @@ final class CaretHalo {
         on ? show(opening: opening) : hide()
     }
 
+    /// **A few seconds of the ring, on his own voice, with no dictation** —
+    /// what F7/F9 and `POST /test/halo` show after a change (Victor: *"ca să
+    /// văd ce aleg"*). The clip's samples stand in for the meter for the
+    /// length of the preview and the app's closures are put back after; a
+    /// real dictation opening meanwhile takes the ring over (`live` is
+    /// already true, `setActive` is a no-op) and the preview's end is
+    /// ignored (`previewGeneration`). Nothing is played aloud.
+    private var previewGeneration = 0
+    private var savedClosures: (samples: (() -> [Float]?)?, level: (() -> Float)?, quiet: (() -> TimeInterval)?)?
+    func preview(seconds: TimeInterval) {
+        guard !live || previewGeneration > 0 else { return }   // a real ring is up: leave it
+        previewGeneration &+= 1
+        let generation = previewGeneration
+        if savedClosures == nil { savedClosures = (samples, level, quietSeconds) }
+        if let voice = ClipVoice.load() {
+            samples = { voice.samples() }; level = { voice.level }; quietSeconds = { voice.quietSeconds }
+        } else {
+            let voice = DemoVoice()
+            samples = { voice.samples() }; level = { voice.level }; quietSeconds = { voice.quietSeconds }
+            Log.error("◯ halo preview: no halo-voice.wav bundled — noise instead")
+        }
+        if !live { setActive(true, atCaret: false, opening: .fromPointer) }
+        Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on the clip")
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self = self, self.previewGeneration == generation else { return }
+            self.setActive(false)
+            if let saved = self.savedClosures { self.samples = saved.samples; self.level = saved.level; self.quietSeconds = saved.quiet }
+            self.savedClosures = nil
+            self.previewGeneration = 0
+        }
+    }
+
     /// **The ring is down, the words are still coming, and the heads stay up
     /// pointing at the place they will land** (2026-09-15).
     ///
@@ -2275,6 +2307,66 @@ extension CaretHalo {
 /// near-silence every cycle) plus a little low hum so the bass bands have
 /// something to read. Generated on the audio clock, 16 kHz, into a ring the
 /// size of `MicRecorder.recentSamples`.
+/// **His own voice, looped, as the demo's signal** (2026-09-20, late; Victor:
+/// *"după ce schimb efectul, redă câteva secunde de semnal audio simulat …
+/// eventual un wav din corpusul înregistrat"*). `assets/halo-voice.wav` is
+/// one 3.5 s clip copied out of the corpus (`2026-09-18/21-05-35-11l735.wav`,
+/// *"If I dictate now, how good is this dictation, I wonder?"*) — copied, not
+/// read from the corpus at run time, because that folder is a harvest that
+/// gets pruned. 16 kHz mono Int16, the recorder's own format, so the samples
+/// go down the same path `MicRecorder.recentSamples` fills. Never played
+/// aloud: it drives the picture and nothing else.
+final class ClipVoice {
+    private let clip: [Float]
+    private var ring = [Float](repeating: 0, count: MicRecorder.recentCount)
+    private var head = 0
+    private var produced: Double = 0
+    private let started = CFAbsoluteTimeGetCurrent()
+    private(set) var level: Float = 0
+    private(set) var quietSeconds: TimeInterval = 0
+
+    /// `Resources/halo-voice.wav` installed, `assets/halo-voice.wav` from a
+    /// `.build` binary; nil when neither is there (the demo falls back to
+    /// `DemoVoice`'s noise).
+    static func load() -> ClipVoice? {
+        var candidates: [URL] = []
+        if let res = Bundle.main.resourcePath { candidates.append(URL(fileURLWithPath: res).appendingPathComponent("halo-voice.wav")) }
+        var dir = URL(fileURLWithPath: CommandLine.arguments[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            .standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent()
+        for _ in 0..<4 { candidates.append(dir.appendingPathComponent("assets/halo-voice.wav")); dir = dir.deletingLastPathComponent() }
+        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+              let data = try? Data(contentsOf: url), data.count > 44 else { return nil }
+        // A canonical 44-byte PCM header; the recorder writes exactly that.
+        let pcm = data.dropFirst(44)
+        var samples = [Float](repeating: 0, count: pcm.count / 2)
+        pcm.withUnsafeBytes { raw in
+            let i16 = raw.bindMemory(to: Int16.self)
+            for i in 0..<samples.count { samples[i] = Float(Int16(littleEndian: i16[i])) / 32768 }
+        }
+        guard samples.count > 1600 else { return nil }
+        return ClipVoice(clip: samples)
+    }
+    private init(clip: [Float]) { self.clip = clip }
+
+    /// The last 128 ms, oldest first — the clip advanced to the wall clock, looping.
+    func samples() -> [Float] {
+        let now = CFAbsoluteTimeGetCurrent() - started
+        var peak: Float = 0
+        while produced < now {
+            let v = clip[Int(produced * 16000) % clip.count]
+            ring[head] = v; head = (head + 1) % ring.count
+            produced += 1.0 / 16000
+            peak = max(peak, abs(v))
+        }
+        let e = min(1, peak * 4)
+        level = max(e, level - 1 / 60 / 3)
+        quietSeconds = e > 0.1 ? 0 : quietSeconds + 1 / 60
+        var out = [Float](repeating: 0, count: ring.count)
+        for i in 0..<ring.count { out[i] = ring[(head + i) % ring.count] }
+        return out
+    }
+}
+
 final class DemoVoice {
     private var ring = [Float](repeating: 0, count: MicRecorder.recentCount)
     private var head = 0

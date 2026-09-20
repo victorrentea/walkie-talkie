@@ -38,6 +38,9 @@ final class MilkDropHalo: NSView, HaloWebHost {
     private var ready = false
     private var pendingStart = false
     private var lastStatus = ""
+    /// Per-run preset options from `POST /test/halo {"opts": …}` — a JSON
+    /// object merged over the style's own; nil = none. Cleared by a style pick.
+    static var optionsOverride: String?
     private var readyWatchdog: Timer?
     private var failed = false
     /// The page is unusable, and why — `CaretHalo` draws the film instead.
@@ -99,7 +102,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
         let dpr = window?.backingScaleFactor ?? 2
         let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), gain: \(preset.gain), rot: \(preset.rot)}"
         // `WT_HALO_PRESET_OPTS='{"gain": 4}'` overrides fields for one run — the knob for looking.
-        let override = ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
+        let override = Self.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
                + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), Object.assign(\(opts), \(override)))"
         web.evaluateJavaScript(js) { [weak self] result, error in

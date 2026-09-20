@@ -1636,6 +1636,12 @@ final class HotkeyTap {
     /// One notch: `+1` for up (the next halo), `−1` for down (the previous).
     /// Delivered on the main queue.
     var onHaloDial: ((Int) -> Void)?
+    /// **Bare F7 / F9 step the halo** (Victor, 2026-09-20 late: *"F7 și F9 să
+    /// schimbe efectul curent"*): F9 forward, F7 back, outside a dictation
+    /// too. No modifier — the ⌃⌥⌘F7/F9 chords are Options+'s gestures and
+    /// stay theirs. On a Mac keyboard these need *Use F1, F2… as standard
+    /// function keys*, or the keys arrive as media keys and never reach this.
+    var onHaloStep: ((Int) -> Void)?
 
     /// This press has been turned, so it is a dial and not a drag: the crop
     /// refuses to arm for the rest of it, whatever the hand does. Reset by
@@ -2680,6 +2686,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // otherwise bind and immediately stop the session it just started — the
         // one input mistake this gesture cannot afford. The event is eaten either
         // way, so nothing downstream sees the repeat.
+        if (keyCode == VK_F7 || keyCode == VK_F9) && !cmd && !ctrl && !opt && !flags.contains(.maskShift) {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            let step = keyCode == VK_F9 ? 1 : -1
+            DispatchQueue.main.async { [weak self] in self?.onHaloStep?(step) }
+            return nil
+        }
+
         if keyCode == VK_B && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
             DispatchQueue.global().async { [weak self] in self?.onBindHotkey?() }
