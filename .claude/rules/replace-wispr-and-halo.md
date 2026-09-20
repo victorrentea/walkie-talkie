@@ -417,6 +417,16 @@ closes. Between the two is the whole transcription — the stretch in which he i
 
 ## Tooling
 
+- **Every demo, sweep or shoot that puts a window on his screen or captures it runs under
+  `hands-off run "<what>" -- <command>`, for the WHOLE run** (2026-09-20, late — paid for: a
+  15-style sweep ran on his screen while he was working, with the locks up only for the pointer
+  parking, and the parked pointer read as *"why is it stealing my focus?!"*). The demo path sets
+  `.accessory` and every panel is `.nonactivatingPanel`; nothing in it activates — the thing he
+  feels is his pointer being moved. Batch captures into one locked run; never one per style
+  with the locks dropping in between. A `.build/debug` demo does **not** displace the installed
+  app: `WT_HALO_DEMO` / `WT_SHOOT_*` return before `AppDelegate` exists, so `SingleInstance.enforce`
+  never runs in them (the installed app kept its pid through fifty demo runs that evening).
+
 - **`WT_HALO_DEMO=25` is the only thing that sets `CaretHalo.capturable`** (`.readOnly`); the
   demo has no dictation, transcript or chip in frame. It drives a fabricated voice (six seconds of
   syllables at 3 Hz, six of silence) and ends with the collapse. Measured off the window server:

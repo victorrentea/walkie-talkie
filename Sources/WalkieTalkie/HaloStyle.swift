@@ -80,14 +80,12 @@ enum HaloStyle: String, CaseIterable {
         }
     }
 
-    /// **One list, and the presets carry a ⚡ in the name** (Victor,
-    /// 2026-09-20: *"there must be ONE menu, not 2: and the MilkDrop ones
-    /// should have a lightning bolt in the name"*): `⚡ ★ Sparks`, `⚡ • Tunnel`,
-    /// `⚡ Cauldron`; a hand-written one stays `Pulse`.
-    var menuTitle: String {
-        let parts = [isPreset ? "⚡" : "", mark, title].filter { !$0.isEmpty }
-        return parts.joined(separator: " ")
-    }
+    /// **The menu shows the name and nothing else** (Victor, 2026-09-20 late:
+    /// *"don't put stars or dots in the menu in the effect names any more,
+    /// just a lightning bolt after their name"*): the verdict marks stay on
+    /// the page, where they are recorded; a preset's bolt is a symbol the
+    /// menu appends (`StatusItem.applyHaloRow`), not part of the title.
+    var menuTitle: String { title }
 
     /// **The effect's position in the page's `FORMULAS`** — what `halo.pick`
     /// takes. Nil for the film and for the presets (the engine's page takes
@@ -111,7 +109,7 @@ enum HaloStyle: String, CaseIterable {
     /// shrinks the canvas on screen (the composition intact) — the page's
     /// values, halved on 2026-09-20 with the rest, then resized on sight the
     /// same evening: Snowflake ×4 (*"much too small"*), Tendrils ×2, Sparks
-    /// ×1.5, Tunnel ÷3 (*"I was wrong: tunnel needs to be 3x smaller"*). `fade` is the radial
+    /// ×1.5, Tunnel ÷3 then ×2.5 then ×2 (0.84), Cauldron ×1.5 (0.525). `fade` is the radial
     /// dimming, and the rest are Victor's asks on Tunnel that day: *"de 2x mai
     /// opac/intens … fade out complet la o distanță de 1/2 din width ecran
     /// (adică să se răspândească mai mult pe ecran)"* plus *"2x more
@@ -135,9 +133,9 @@ enum HaloStyle: String, CaseIterable {
         // Tunnel: *"3x smaller"* than what he saw (the full-screen canvas), so a
         // third of the screen's long side; its fade is the canvas edge now (the
         // half-screen radius would be outside it), at his 2× gain and 2× turn.
-        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.42,
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.84,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 2, rot: 2)
-        case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.35,
+        case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)

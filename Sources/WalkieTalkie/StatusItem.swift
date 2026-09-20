@@ -589,14 +589,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloSubmenu.removeAllItems()
         // A row is greyed, and says why, while the page or the engine is not
         // bundled (`HaloPage.available`, `MilkDropHalo.engineAvailable`) —
-        // `autoenablesItems` off for the mic submenu's reason.
+        // `autoenablesItems` off for the mic submenu's reason. One list, no
+        // group line; a preset carries a bolt after its name.
         haloSubmenu.autoenablesItems = false
-        var lastWasPreset = false
         for style in HaloStyle.allCases {
-            if style.isPreset && !lastWasPreset { haloSubmenu.addItem(.separator()) }
-            lastWasPreset = style.isPreset
             let row = NSMenuItem(title: style.unavailableReason.map { "\(style.menuTitle) — \($0)" } ?? style.menuTitle,
                                  action: #selector(haloPicked(_:)), keyEquivalent: "")
+            if style.isPreset && style.isAvailable { row.attributedTitle = Self.boltedTitle(style.menuTitle) }
             row.target = self
             row.representedObject = style.rawValue
             row.isEnabled = style.isAvailable
@@ -730,7 +729,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        bind.image = Self.symbolIcon("mappin", tint: Self.pinRed)
+        bind.image = Self.symbolIcon("link")
         bind.action = #selector(bindClicked)
         bind.target = self
         menu.addItem(bind)
@@ -743,7 +742,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // he had to quit the relay and start it again somewhere else. Disabled
         // while nothing is bound, since it would then be a command with nothing
         // to act on.
-        disconnect.image = Self.symbolIcon("mappin.slash", tint: Self.pinRed)
+        disconnect.image = Self.brokenChainIcon
         disconnect.action = #selector(disconnectClicked)
         disconnect.target = self
         disconnect.isEnabled = false
@@ -753,7 +752,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // question.** Connect points at what is in front, Disconnect lets go, and
         // this one points at something that is *not* in front — the case neither
         // of the other two can express, and the common one by the afternoon.
-        rebind.image = Self.symbolIcon("clock.arrow.circlepath", tint: Self.pinRed)
+        rebind.image = Self.symbolIcon("clock.arrow.circlepath")
         rebind.action = #selector(rebindListClicked)
         rebind.target = self
         menu.addItem(rebind)
@@ -798,12 +797,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         recoverDictation.action = #selector(recoverDictationClicked)
         recoverDictation.target = self
         recoverDictation.isEnabled = false
-        screenRecording.image = Self.emojiIcon("🎥")
+        screenRecording.image = Self.symbolIcon("video")
         screenRecording.action = #selector(screenRecordingClicked)
         screenRecording.target = self
         screenRecording.isEnabled = false
 
-        cancelDictation.image = Self.emojiIcon("🗑️")
+        cancelDictation.image = Self.symbolIcon("trash")
         cancelDictation.action = #selector(cancelDictationClicked)
         cancelDictation.target = self
         cancelDictation.isEnabled = false
@@ -820,7 +819,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Enabled whether or not anything is bound — unlike every other row in
         // the block — because that is the whole point of the gesture: it carries
         // its own destination.
-        newSession.image = Self.emojiIcon("✨")
+        newSession.image = Self.symbolIcon("plus.circle")
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
 
@@ -829,13 +828,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // and not a destination like the rows above: it is what he reaches for
         // once the words have landed somewhere and he wants them somewhere else
         // too — a commit message, a chat, a form.
-        pasteLast.image = Self.emojiIcon("📋")
+        pasteLast.image = Self.symbolIcon("doc.on.clipboard")
         pasteLast.action = #selector(pasteLastClicked)
         pasteLast.target = self
         pasteLast.isEnabled = false
         menu.addItem(pasteLast)
 
-        shot.image = Self.emojiIcon("📷")
+        shot.image = Self.symbolIcon("camera")
         // **A legend, not a command — permanently disabled** (Victor, 2026-09-04),
         // the same rendering `pickLegend` uses for "this is something you do, not
         // something you pick". The shutter itself lives on the back button while
@@ -843,9 +842,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         shot.action = #selector(shotClicked)
         shot.target = self
         shot.isEnabled = false
-        areaShot.image = Self.emojiIcon("✂️")
+        areaShot.image = Self.symbolIcon("scissors")
         areaShot.isEnabled = false
-        pickLegend.image = Self.emojiIcon("✋")
+        pickLegend.image = Self.symbolIcon("hand.raised")
         pickLegend.isEnabled = false
         // **A line between where the words go and what happens while they are
         // being said.** Victor's ask, and the regrouping is the half that makes
@@ -930,7 +929,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyAutosendIcon()
         menu.addItem(autosend)
 
-        messageLog.image = Self.emojiIcon("📜")
+        messageLog.image = Self.symbolIcon("scroll")
         // **The row itself does nothing** — AppKit gives a parent row's click to
         // its submenu, so `Full Log` inside is the one way to the page. The
         // submenu is filled on hover; see `menuNeedsUpdate`.
@@ -945,7 +944,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // it is read once a session, when the question is "am I looking at what
         // I just built?", and that is a question about the app rather than about
         // quitting. Quit is left saying the one thing it does.
-        version.image = Self.emojiIcon("ℹ️")
+        version.image = Self.symbolIcon("info.circle")
         version.isEnabled = false
         menu.addItem(version)
 
@@ -1191,7 +1190,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         let full = NSMenuItem(title: "Full Log", action: #selector(messageLogClicked),
                               keyEquivalent: "")
-        full.image = Self.emojiIcon("📜")
+        full.image = Self.symbolIcon("scroll")
         full.target = self
         promptHistorySubmenu.addItem(full)
         promptHistorySubmenu.addItem(.separator())
@@ -1424,6 +1423,52 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// An emoji drawn into the same box the symbols land in, so the two sources
     /// share one column rather than one row's glyph sitting a few points off the
     /// next one's.
+    /// **A broken chain for Disconnect** (Victor: *"for bind/unbind put a
+    /// chain / broken chain"*). macOS 15 has `link` but no `link.slash`, so
+    /// the slash is drawn: the symbol, then a bar across it in the same
+    /// template ink, a knocked-out gap either side so the break reads.
+    private static let brokenChainIcon: NSImage? = {
+        guard let link = symbolIcon("link") else { return nil }
+        let size = link.size
+        let image = NSImage(size: size, flipped: false) { rect in
+            link.draw(in: rect)
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            let gap = NSBezierPath()
+            gap.move(to: NSPoint(x: rect.minX + 1, y: rect.minY + 1)); gap.line(to: NSPoint(x: rect.maxX - 1, y: rect.maxY - 1))
+            gap.lineWidth = 4.5; NSColor.black.setStroke(); gap.stroke()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            let bar = NSBezierPath()
+            bar.move(to: NSPoint(x: rect.minX + 1, y: rect.minY + 1)); bar.line(to: NSPoint(x: rect.maxX - 1, y: rect.maxY - 1))
+            bar.lineWidth = 1.6; bar.lineCapStyle = .round; NSColor.black.setStroke(); bar.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
+
+    /// **A name with a bolt after it**, for the presets: the symbol as a text
+    /// attachment, so it takes the row's colour like every other icon and
+    /// follows the name with no separator (Victor: *"just a lightning bolt
+    /// after their name, no separator bar"*).
+    private static func boltedTitle(_ name: String) -> NSAttributedString {
+        let font = NSFont.menuFont(ofSize: 0)
+        let title = NSMutableAttributedString(string: name + " ", attributes: [.font: font])
+        if let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: font.pointSize - 1, weight: .medium)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [.labelColor]))) {
+            // A template image inside an attributed title is not re-tinted by
+            // the menu (drawn black on dark, measured headlessly), so the
+            // label colour is set on it; on a highlighted row it stays label
+            // colour rather than turning white — the one visible compromise.
+            bolt.isTemplate = false
+            let attachment = NSTextAttachment()
+            attachment.image = bolt
+            attachment.bounds = NSRect(x: 0, y: font.descender + 1, width: bolt.size.width, height: bolt.size.height)
+            title.append(NSAttributedString(attachment: attachment))
+        }
+        return title
+    }
+
     private static func emojiIcon(_ emoji: String) -> NSImage {
         let size = NSSize(width: 18, height: 16)
         let image = NSImage(size: size)
