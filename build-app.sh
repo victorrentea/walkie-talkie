@@ -63,9 +63,12 @@ cp "$DIR/assets/halo-voice.wav" "$CONTENTS/Resources/halo-voice.wav"
 # `butterchurn.min.js` is dropped in by hand). Bundled so the halo works on a
 # plane; `HaloPage` finds the folder here or in `assets/` from a `.build` binary.
 "$DIR/tools/vendor-voice-halo.sh"
-rm -rf "$CONTENTS/Resources/voice-halo" "$CONTENTS/Resources/milkdrop"
+rm -rf "$CONTENTS/Resources/voice-halo" "$CONTENTS/Resources/milkdrop" "$CONTENTS/Resources/projectm"
 cp -R "$DIR/assets/voice-halo" "$CONTENTS/Resources/voice-halo"
 cp -R "$DIR/assets/milkdrop" "$CONTENTS/Resources/milkdrop"
+# The native engine's presets (`ProjectMHalo`, the `projectm` branch); the engine
+# itself is linked statically, so nothing else has to travel with the app.
+cp -R "$DIR/assets/projectm" "$CONTENTS/Resources/projectm"
 
 # The Finder / Spotlight / Get Info icon, built here from the *bound* picture —
 # the device inside its orange ring. It was the idle one for two days, on the

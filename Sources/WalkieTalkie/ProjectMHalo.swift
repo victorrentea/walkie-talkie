@@ -13,9 +13,9 @@ import ImageIO
 ///
 /// - **Presets are `.milk` files** in `assets/projectm/presets/`, one per
 ///   `HaloStyle.Preset`, named by the preset's butterchurn name; the textures
-///   they reference in `assets/projectm/textures/`. Three of the seven exist
-///   only as butterchurn JSON upstream — see `assets/projectm/README.md` for
-///   what stands in for them.
+///   they reference in `assets/projectm/textures/`. All six are the originals
+///   butterchurn's JSON was converted from (three had to be found upstream —
+///   `assets/projectm/README.md` says where, and the one line edited).
 /// - **`gain`, `rot`, `pinCenter`, the fade** are honoured the way the page
 ///   honours them: the mask and the gain in the keying shader; `rot` and the
 ///   pinned centre as `per_frame_` lines appended to our copy of the preset's
@@ -42,6 +42,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// The microphone's rate, as `MicRecorder` and `DemoVoice` fill `samples`.
     static let sampleRate = 16000
     static let resample = ProcessInfo.processInfo.environment["WT_PM_RESAMPLE"] == "1"
+    /// `WT_PM_AUDIO_GAIN=<k>`: the samples multiplied before the engine — the knob for
+    /// matching the beat response of the web route.
+    static let audioGain: Float = ProcessInfo.processInfo.environment["WT_PM_AUDIO_GAIN"].flatMap { Float($0) } ?? 1
     /// Pixels per point of the square. The engine's cost is per pixel.
     static let renderScale: CGFloat = ProcessInfo.processInfo.environment["WT_PM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 1
     /// Same warm-up as the web route: a feedback preset's first frames are the
@@ -222,7 +225,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
     func feed(_ samples: [Float]) {
         guard let r = renderer else { return }
         let fresh = min(samples.count, Self.sampleRate / max(1, haloFrameCap > 0 ? haloFrameCap : 30) + 16)
-        let tail = Array(samples.suffix(fresh))
+        var tail = Array(samples.suffix(fresh))
+        if Self.audioGain != 1 { for i in tail.indices { tail[i] *= Self.audioGain } }
         // **Handed over as they are, not resampled** (`WT_PM_RESAMPLE=1` to resample
         // to 44.1 kHz): both engines are MilkDrop's beat detector, which reads
         // its bands off spectrum bins and assumes 44.1 kHz, and the web route
