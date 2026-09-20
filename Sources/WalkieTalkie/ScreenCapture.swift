@@ -47,13 +47,14 @@ enum ScreenCapture {
     }
 
     static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil,
-                     index: Int? = nil) -> Frame? {
+                     index: Int? = nil, into folder: URL? = nil) -> Frame? {
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
         let spot = cursorFraction(mouse: mouse, screen: screen)
-        let file = Outbox.shotsDir
-            .appendingPathComponent(uniqueBase(stem(offset, index)) + "-original.jpg")
+        let dir = folder ?? Outbox.shotsDir
+        let file = dir
+            .appendingPathComponent(uniqueBase(stem(offset, index), in: dir) + "-original.jpg")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -130,9 +131,10 @@ enum ScreenCapture {
     /// where the cursor's position already travels, and for the same reason
     /// (nothing is drawn into the picture; see `grab`).
     static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?,
-                         index: Int? = nil) -> Frame? {
-        let file = Outbox.shotsDir
-            .appendingPathComponent(uniqueBase(stem(offset, index)) + "-original.jpg")
+                         index: Int? = nil, into folder: URL? = nil) -> Frame? {
+        let dir = folder ?? Outbox.shotsDir
+        let file = dir
+            .appendingPathComponent(uniqueBase(stem(offset, index), in: dir) + "-original.jpg")
         let display = activeDisplayNumber(of: screen)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -427,8 +429,7 @@ enum ScreenCapture {
     /// name the footer promises nor one `sibling(of:)` can compute. So the
     /// **base** is made unique and the suffixes are composed after it:
     /// `screenshot-0-2-original.jpg`, `screenshot-0-2-800px.jpg`.
-    private static func uniqueBase(_ base: String) -> String {
-        let dir = Outbox.shotsDir
+    private static func uniqueBase(_ base: String, in dir: URL) -> String {
         func taken(_ candidate: String) -> Bool {
             FileManager.default.fileExists(
                 atPath: dir.appendingPathComponent(candidate + "-original.jpg").path)
@@ -498,7 +499,21 @@ enum ScreenCapture {
                                                     includingPropertiesForKeys: nil,
                                                     options: [.skipsHiddenFiles])) ?? []
         var jpgs: [URL] = []
+        // **Two levels now, not one** (2026-09-20): a session folder holds a
+        // folder per dictation, and a walk that stopped at the session would
+        // count nothing and delete nothing — the same trap `film-<stamp>/` fell
+        // into, written down there and repeated here the day the nesting
+        // arrived. `pruneFilms` still walks the sessions themselves.
+        var folders = sessions
         for session in sessions {
+            folders += ((try? fm.contentsOfDirectory(
+                at: session, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])) ?? []).filter {
+                    !$0.lastPathComponent.hasPrefix("film-")
+                        && (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                }
+        }
+        for session in folders {
             let files = (try? fm.contentsOfDirectory(
                 at: session,
                 includingPropertiesForKeys: [.contentModificationDateKey],

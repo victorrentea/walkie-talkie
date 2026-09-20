@@ -249,6 +249,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The region he framed travels at its own size (2026-09-19)](#the-region-he-framed-travels-at-its-own-size-2026-09-19)
 - [The envelope becomes tokens where he made them (2026-09-19)](#the-envelope-becomes-tokens-where-he-made-them-2026-09-19)
 - [ElevenLabs is the engine, and the freeze that found (2026-09-19)](#elevenlabs-is-the-engine-and-the-freeze-that-found-2026-09-19)
+- [Two engines out, and a folder per dictation (2026-09-20)](#two-engines-out-and-a-folder-per-dictation-2026-09-20)
 
 ---
 
@@ -11056,3 +11057,69 @@ Three of them, rendered by the running build:
 
 Note what the footer does **not** say in either: no `at 0:03`. The clock appears on a row only when
 its token could not be placed in the words — which is every Wispr dictation, and no ElevenLabs one.
+
+
+## Two engines out, and a folder per dictation (2026-09-20)
+
+Three things, all his, all small to say and none of them cosmetic.
+
+### Speechmatics and Gemini are gone
+
+*"Renunță la Speechmatics și `GeminiSource`. Scoate-le din cod pt moment."*
+
+Removed **whole**, the way the Wispr database path went in August: `SpeechmaticsSource.swift`
+(795 lines), `GeminiSource.swift` (532), `tools/speechmatics-test.sh`, `tools/gemini-test.sh`,
+`DictationVocabulary.swift` — which existed only for those two and had no callers left the moment
+they went — their two menu rows, their `engine(named:)` cases, their `(S)` / `(G)` chip letters,
+their corpus tags, their `/engine` blocks and their thirteen `WT_SM_*` / `WT_GEMINI_*` switches.
+1,327 lines of source and two tools, in one commit, so `git show` on it is the whole of what
+bringing either back would take. Everything measured about them stays in this journal: the
+bilingual-pack dead end, the `4001 not_authorised` close frame, the truncation Gemini's prompt was
+gated against with `voicedSeconds ≥ 13`.
+
+**A side effect worth naming**: two of the three remaining main-thread microphone opens went with
+them. `LocalWhisperSource` is the only one left, and it is a pick, not the default.
+
+### `[📁=…]`, not `[=…]`
+
+*"N-ar trebui să fie `[📁=$WALKIE_SHOTS/…]`?"* — yes. Every row under it spends the symbol
+(`📁/screenshot-0-800px.jpg`) and the line that **defines** it was the one line not carrying it.
+One character, and the legend is closed.
+
+### One folder per dictation, which is the real answer to his last question
+
+*"Și în mesajele ulterioare se termină cu … după numele pozei în loc de -original. Cum se prinde
+sesiunea de restul?"*
+
+What he was looking at was `screenshot-0-2-800px.jpg` in the second envelope of a session. Every
+dictation numbers its pictures from `📸0`, the session folder held all of them, so the second
+sentence collided with the first and `uniqueBase` hung a `-2` in the middle of the name — a
+disambiguator with no meaning to anybody, inside a name whose whole job is to be read, and the
+`-original` sibling then reads as `screenshot-0-2-original.jpg`, which is exactly the confusion in
+his question.
+
+The fix removes the collision instead of labelling it: **`shots/<session>/<dictation>/`**,
+`Outbox.dictationDir(start)`, stamped `HH-mm-ss` from the moment the sentence opened. Every
+picture in it is `screenshot-<n>` with nothing appended, for ever, and `📁` in the envelope now
+means *this sentence's artifacts* — which is what the one `[📁=…]` line was always trying to say.
+A shutter with no dictation around it still writes into the session folder, where such a picture
+has always gone.
+
+**`prune` had to learn the new depth in the same commit**, or the 300-frame cap would have counted
+nothing and deleted nothing — the identical trap `film-<stamp>/` fell into and has a warning about
+two hundred lines up. It walks sessions *and* their dictation folders now, with `film-` skipped
+because `pruneFilms` owns those.
+
+Verified on the running build, two dictations one after the other in the same session:
+
+```
+[📁=$WALKIE_SHOTS/2026-09-20-10-18-28/10-18-34]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+
+[📁=$WALKIE_SHOTS/2026-09-20-10-18-28/10-18-43]
+[📸0 = 📁/screenshot-0-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
+```
+
+Two `screenshot-0`s, no `-2` anywhere, and the session is the parent of both.
+`evals/test_envelope.py` (AreaFrame + FrameList, 10 cases) and `evals/test_marker_place.py` (10)
+are green against it.

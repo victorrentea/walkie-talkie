@@ -1,8 +1,13 @@
 # The dictation source
 
 Rules for `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`,
-`SpeechmaticsSource`, `GeminiSource`, `DictationVocabulary`, `tools/wispr-test.sh`,
-`tools/eleven-test.sh`, `tools/speechmatics-test.sh`, `tools/gemini-test.sh` and `tools/vocab.txt`.
+`ShotMarker`, `tools/wispr-test.sh` and `tools/eleven-test.sh`.
+
+**Speechmatics and Gemini were removed on 2026-09-20**, whole — the two sources, their two test
+tools, `DictationVocabulary` (which existed only for them), their menu rows, their corpus tags and
+their env switches. Victor: *"renunță la Speechmatics și GeminiSource. Scoate-le din cod pt
+moment."* Everything measured about them is still in the journal, and `git show` on that commit is
+the whole of what it takes to bring either back.
 Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-09-12)*.
 
 ## One interface, and nothing downstream may look behind it
@@ -26,7 +31,7 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
   crash and no log line. `WisprFlowSource` has had `meterQueue` for this since its meter went in;
   `ElevenLabsSource` got `audioQueue` (open, stop and cancel) the day it became the default.
-  `LocalWhisperSource`, `SpeechmaticsSource` and `GeminiSource` still call it inline, and
+  `LocalWhisperSource` still calls it inline, and
   `RelayWindow.startWarmth`'s timer reaches the meter from the main thread too — both are the same
   bug waiting for the same wedge. → journal: same
 - **Three engines mean a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both the
@@ -884,86 +889,6 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   $0.40 an hour of audio.
 - **Not measured yet, and the notes say so:** `languageFloor = 0.5` and the choice of `scribe_v1`
   over `scribe_v2` are both starting points rather than numbers off the corpus. → `evals/`
-
-## Speechmatics, the engine that transcribes while he is still talking (2026-09-18)
-
-- **The first streaming recogniser here, and that is a different thing from a faster server.**
-  `SpeechmaticsSource` opens a WebSocket at the gesture and sends `MicRecorder`'s buffers as they
-  are produced; `ElevenLabsSource`, `LocalWhisperSource` and `WisprFlowSource` all start reading at
-  the release, so their wait grows with the sentence. Here the wait is the **tail**: the last words
-  plus whatever the recogniser was holding for context, flushed by `EndOfStream`.
-- **No conversion anywhere.** `MicRecorder.fileFormat` is 16 kHz mono int16 and `onBuffer` hands out
-  exactly that, which is what `StartRecognition` declares (`pcm_s16le`, `sample_rate: 16000`). The
-  markers ride the same sequence, so the splice that works for the local model works here unchanged.
-- **It streams *and* records**, and the WAV is load-bearing twice: `VoiceCorpus` needs the audio of
-  every sample it files, and a socket that dies mid-sentence leaves the file as the only copy of
-  words already said. That is `DictationEnd.failed`, and it is why the recording is **never**
-  interrupted when the session breaks — `die()` only records the reason while the microphone is
-  open, and the failure is reported once, at the release, with the audio attached.
-- **Do not go looking for a two-language setting: there is none for Romanian.** One `language` per
-  real-time session; the seven bilingual packs (`ar_en`, `cmn_en`, `en_ms`, `en_ta`, `cmn_en_ms_ta`,
-  `tl`, `es`+`domain: bilingual-en`) exclude Romanian; `melia-1` auto-switches but does not list
-  Romanian and is not on this endpoint; `linden-1` is one language at a time with multilingual
-  announced only. This was checked on 2026-09-18 — check the date on the docs before re-deriving it,
-  not the question.
-- **What we do instead is `additional_vocab`, and it is load-bearing.** The English inside his
-  Romanian is exactly what a Romanian pack gets wrong, and the custom dictionary is the vendor's
-  mechanism for it: works in real time, cached their side, `~/.walkie-talkie/speechmatics-vocab.txt`,
-  re-read **per dictation** so a bad word is fixed without a restart. Entries come from the corpus,
-  never from imagination — and `worship` (225 occurrences) is **not** an entry, because that is the
-  local model's repetition loop, not a mishearing anyone needs taught.
-- **The test tool sends the same dictionary**, from his copy first. A tool that measured a different
-  dictionary from the one in force would be measuring nothing.
-- **The pinned language is the price.** Real-time has no language detection at this vendor (batch
-  does), so the session is told `ro` before the first word — the opposite of `ElevenLabsSource`,
-  which pins nothing on purpose. `WT_SM_LANG` overrides, and **the menu row prints it**: an engine
-  that can be quietly listening for the wrong language must say which one it is listening for, in
-  the place the pick is made.
-- **`4001 not_authorised` arrives as a close frame, not as a refused handshake** (measured against
-  the live endpoint, 2026-09-18, with a junk key). URLSession's own error for that says *Socket is
-  not connected*. Prefer `closeReason` over `error.localizedDescription`, or the banner sends him to
-  debug the network.
-- **`EndOfStream` goes on the queue the audio went on**, never straight from the gesture thread —
-  its `last_seq_no` is checked against the frames the server received, and a message that overtakes
-  the last buffers is a session that ends short.
-- **Six seconds for the tail, against the settle's eight**, and a timeout with finals in hand still
-  **delivers**, with a note saying the end may be missing. Only an empty timeout is `.failed`.
-- **`tools/speechmatics-test.sh`** streams a WAV at the speed it was spoken — pacing is the point;
-  a blast down the socket measures throughput, not his wait — and prints *first words N s in* and
-  *tail N s after the release*, plus `--corpus [n]` for the A/B against the transcript on disk.
-- **Not measured yet, and the notes say so:** `confidenceFloor = 0.6` and `max_delay = 1.0`
-  (against a floor of 0.7, for punctuation). → `evals/`
-
-## Gemini, the engine that takes an instruction (2026-09-18)
-
-- **`ElevenLabsSource`'s shape with a language model on the other end.** One WAV, one POST, markers
-  spliced, WAV kept for the corpus and for `.failed`. What is different is that it can be *told*
-  what it is about to hear, and that is the only reason it exists.
-- **The prompt carries two jobs, both learnt from a measurement**: leave the English terms in
-  English (Speechmatics has no field for this — there is no ro-en pack) and **do not summarise**.
-  Written in Romanian on purpose; `WT_GEMINI_PROMPT` replaces it for an experiment.
-- **A language model can shorten instead of mishearing, and nothing else here can catch that.**
-  Measured on his own corpus: `gpt-4o-transcribe`, 24.8 s of Romanian, one and a half sentences
-  back, fluent, no marker. There is no confidence to fall and no language probability to slip.
-- **Gate on `voicedSeconds`, never on wall clock.** This is the first thing in the repo to use the
-  VAD `whisper-and-corpus.md` has been pointing at since 2026-09-07, and the reason is in the
-  numbers: chars-per-**wall**-second over 2,039 samples is median 9.9 / p5 4.3 with the truncation
-  at 3.1 — a floor that catches it fires on 3.9% of good dictations. Chars-per-**voiced**-second is
-  median 25.9 / p1 12.4 with the truncation at 12.7. Floor **13**, 1.1% false positives (5 of 440).
-  **Re-run `evals/voiced-seconds.py` before moving it**, and do not move it onto wall clock.
-- **Read `meter.voicedSeconds` before `meter.stop()` is followed by anything else** — it describes
-  the recording that just ended and the next `start()` resets it.
-- **`thinking_level: LOW`, and there is no off.** `MEDIUM` is Google's default, `MINIMAL` is a
-  documented 400. Not sent to `*-transcribe` models at all. **A 400 retries once with the optional
-  fields dropped — except a 400 about the key**, which a retry cannot fix and which would cost a
-  second upload of the whole recording.
-- **Never `?key=`.** `x-goog-api-key`, so the key is not in every proxy log on the way.
-- **The vocabulary is `DictationVocabulary` and belongs to Victor, not to a vendor.** Speechmatics
-  takes it structured with `sounds_like`; Gemini takes the **terms only** — pronunciations handed to
-  a language model are misspellings taught to it.
-- **The live-text chip is not coming** (Victor, 2026-09-18): *"nu mi se pare un câștig prea mare
-  … mă va face să mă opresc și să tot corectez ce am scris"*. Speechmatics' partials stay on the
-  wire, in `GET /engine`, and off the screen. Do not propose it again without being asked.
 
 ## Do not — the standing ones
 

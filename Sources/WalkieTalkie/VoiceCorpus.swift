@@ -105,8 +105,6 @@ final class VoiceCorpus {
         case "whisper-local": tag = "local"
         case "wispr-flow": tag = "wispr"
         case "elevenlabs": tag = "11l"
-        case "speechmatics": tag = "sm"
-        case "gemini": tag = "gem"
         default: tag = engine
         }
         let stem = "\(Self.timeFormatter.string(from: when))-\(tag)\(Int(when.timeIntervalSince1970 * 1000) % 1000)"

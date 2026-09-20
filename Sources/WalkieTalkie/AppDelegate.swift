@@ -116,17 +116,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// shape; replacing what he deliberately captured was never acceptable.
     private var pendingFilms: [ScreenFilm.Result] = []
 
-    /// **The relay's own microphone, transcribed *while he speaks*** (2026-09-18)
-    /// — see `SpeechmaticsSource`. Costs the same nothing as the one above until
-    /// it is picked: a `MicRecorder` at rest, and no socket until a gesture opens
-    /// one. It is never the default for `elevenSource`'s reason — it uploads.
-    private let speechmaticsSource = SpeechmaticsSource()
-
-    /// **The relay's own microphone, read by a language model** (2026-09-18) —
-    /// see `GeminiSource`. The fifth, and the cheapest of the three that upload;
-    /// like the other two it is never the default, and like them it costs
-    /// nothing until it is picked.
-    private let geminiSource = GeminiSource()
 
     /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
     /// ever answers and never reports (2026-09-17).
@@ -223,8 +212,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
-        case "sm", "speechmatics": return speechmaticsSource
-        case "gemini", "google": return geminiSource
         case "wispr", "wisprflow", "wispr-flow": return wisprSource
         default: return elevenSource
         }
@@ -232,7 +219,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// **The letter the chip wears while that engine is listening** —
     /// `Listening(W)...` for Wispr Flow, `(E)` ElevenLabs, `(L)` the local
-    /// model, `(S)` Speechmatics, `(G)` Gemini.
+    /// model. (`(S)` Speechmatics and `(G)` Gemini went with their sources on
+    /// 2026-09-20 — Victor: *"renunță la Speechmatics și GeminiSource, scoate-le
+    /// din cod pt moment"*.)
     ///
     /// **`L` and not `W` for Whisper**, which is the only real choice in the
     /// table: the two recognisers whose names start with the same letter are
@@ -252,8 +241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "whisper": return "(L)"
         case "wispr": return "(W)"
         case "eleven": return "(E)"
-        case "sm": return "(S)"
-        case "gemini": return "(G)"
         // The default's letter, like `engine(named:)`'s default source.
         default: return "(E)"
         }
@@ -325,8 +312,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var engineId: String {
         if source === whisperSource { return "whisper" }
         if source === elevenSource { return "eleven" }
-        if source === speechmaticsSource { return "sm" }
-        if source === geminiSource { return "gemini" }
         return "wispr"
     }
 
@@ -385,10 +370,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch source {
         case let s where s === elevenSource:
             keyless = ("ELEVENLABS_API_KEY", ElevenLabsSource.configURL.path)
-        case let s where s === speechmaticsSource:
-            keyless = ("SPEECHMATICS_API_KEY", SpeechmaticsSource.configURL.path)
-        case let s where s === geminiSource:
-            keyless = ("GEMINI_API_KEY", GeminiSource.configURL.path)
         default:
             keyless = nil
         }
@@ -1204,8 +1185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // launch, so pasting the key in and opening the menu is the whole of
         // setting it up — see `ElevenLabsSource.reloadKey`.
         status.elevenReady = { [weak self] in self?.elevenSource.reloadKey() ?? false }
-        status.speechmaticsReady = { [weak self] in self?.speechmaticsSource.reloadKey() ?? false }
-        status.geminiReady = { [weak self] in self?.geminiSource.reloadKey() ?? false }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
@@ -1997,8 +1976,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           "rows": self.status.micRowsForTest()]
             out["whisper"] = self.whisperSource.describe()
             out["elevenlabs"] = self.elevenSource.describe()
-            out["speechmatics"] = self.speechmaticsSource.describe()
-            out["gemini"] = self.geminiSource.describe()
             return out
         }
 
@@ -3425,7 +3402,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // not press a shutter for it — he took it by starting to talk — so it
             // gets the number in front of the ones he did, and the list can carry
             // it as a row rather than as a separate sentence underneath.
-            let frame = ScreenCapture.grab(cursor: cursor, offset: offset, index: 0)
+            // This dictation's own folder — read under the lock, because the
+            // capture runs a subprocess later and the sentence may be over by
+            // then. → `Outbox.dictationDir`
+            self.stateLock.lock()
+            let opened = self.dictationStartedAt
+            self.stateLock.unlock()
+            let frame = ScreenCapture.grab(cursor: cursor, offset: offset, index: 0,
+                                           into: Outbox.dictationDir(opened))
             let path = frame?.path
             self.stateLock.lock()
             self.pendingScreen = path
@@ -5326,7 +5310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dir = ((frames.first ?? films.first?.dir.path) as NSString?)?
             .deletingLastPathComponent
         var rows: [String] = []
-        if let dir = dir { rows.append("[=\(shotsRootAbbreviated(dir))]") }
+        if let dir = dir { rows.append("[📁=\(shotsRootAbbreviated(dir))]") }
 
         func name(_ path: String) -> String {
             "📁/" + ((path as NSString).lastPathComponent)
@@ -6090,7 +6074,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let offset = offset { self.stashExtraSelection(at: offset) }
 
             guard let frame = ScreenCapture.grab(cursor: cursor, offset: offset,
-                                                 index: marker) else {
+                                                 index: marker,
+                                                 into: Outbox.dictationDir(startedAt)) else {
                 DispatchQueue.main.async { self.overlay.flash("⚠️ screenshot failed") }
                 return
             }
@@ -6217,7 +6202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let offset = openNow ? takenAt.timeIntervalSince(startedAt ?? takenAt) : nil
 
         guard let frame = ScreenCapture.grabArea(rect, on: screen,
-                                                 offset: offset, index: marker) else {
+                                                 offset: offset, index: marker,
+                                                 into: Outbox.dictationDir(startedAt)) else {
             DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
             return nil
         }

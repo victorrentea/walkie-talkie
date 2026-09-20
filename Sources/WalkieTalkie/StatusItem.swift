@@ -45,6 +45,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// engine's row, so the id lands beside the RAM it is costing.
     var whisperModel: (() -> String?)?
 
+    /// Whether a screen recording is running right now. Asked when the menu
+    /// opens, like the footprint and the key beside it: it flips twice a
+    /// sentence, and the one moment its answer has to be right is the moment
+    /// the row is drawn.
+    var isFilming: (() -> Bool)?
+
     /// **Whether the cloud engine could transcribe a sentence this instant** —
     /// which, for a recogniser with nothing to load, is only ever *is there an
     /// API key*. Asked when the menu opens, like the two above and for their
@@ -53,14 +59,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// had put one there.
     var elevenReady: (() -> Bool)?
 
-    /// The same question for the streaming engine — *is there a key* — asked the
-    /// same way, at the same moment, for `elevenReady`'s reasons.
-    var speechmaticsReady: (() -> Bool)?
 
-    /// And the same for the language model. Three engines now answer *is there a
-    /// key*; the closure is per engine rather than a dictionary because the menu
-    /// asks each one at the moment its row is drawn.
-    var geminiReady: (() -> Bool)?
 
     /// Whether the relay's own microphone is open right now. Asked when the menu
     /// opens, for the same reason the footprint is: it is a fact that changes
@@ -97,6 +96,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// gathered go with it. The counterpart of Stop, for the sentence that came
     /// out wrong before it was ever worth transcribing.
     var onCancelDictation: (() -> Void)?
+
+    /// Picked from **Start / Stop Screen Recording** — the same call 🔽 ↑
+    /// makes, so the row and the gesture cannot drift apart.
+    var onToggleScreenRecording: (() -> Void)?
 
     /// **Undo for the one verdict that could not be undone.** A cancel keeps its
     /// audio in Caches for five minutes; this transcribes it and sends it where a
@@ -229,6 +232,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let stopRecording = NSMenuItem(title: "End Dictation", action: nil, keyEquivalent: "")
     /// Same row, opposite verdict — see `onCancelDictation`.
     private let cancelDictation = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
+    /// **Start / Stop Screen Recording** (2026-09-18) — the film's own row, and
+    /// it exists for the reason `Start Dictation` does: *"the wheel is one button
+    /// on one specific mouse whose battery goes."* 🔽 ↑ is worse than the wheel
+    /// on that count — it is a side button whose chord lives in a Logi Options+
+    /// profile, so a fresh install, a flat battery or a profile that did not
+    /// sync leaves the gesture silent and the feature with no way in at all.
+    ///
+    /// **One row that renames itself, not two.** The dictation rows are a pair
+    /// because Start and End are different verbs with different gestures and
+    /// `Cancel` sits between them; a recording has one verb and one gesture, and
+    /// two rows of which one is always greyed would be saying *the other thing is
+    /// impossible* twice over.
+    private let screenRecording = NSMenuItem(title: "Start Screen Recording",
+                                             action: nil, keyEquivalent: "")
+
     /// The undo of the row above it, and directly under it for that reason.
     private let recoverDictation = NSMenuItem(title: "Recover Cancelled Dictation",
                                               action: nil, keyEquivalent: "")
@@ -725,6 +743,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         recoverDictation.action = #selector(recoverDictationClicked)
         recoverDictation.target = self
         recoverDictation.isEnabled = false
+        screenRecording.image = Self.emojiIcon("🎥")
+        screenRecording.action = #selector(screenRecordingClicked)
+        screenRecording.target = self
+        screenRecording.isEnabled = false
+
         cancelDictation.image = Self.emojiIcon("🗑️")
         cancelDictation.action = #selector(cancelDictationClicked)
         cancelDictation.target = self
@@ -793,6 +816,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(stopRecording)
         menu.addItem(cancelDictation)
         menu.addItem(recoverDictation)
+        // **Under the dictation verbs, because it is one of them.** A recording
+        // only exists inside a sentence, so the row belongs with the rows that
+        // open and close one rather than down with the two gesture legends.
+        menu.addItem(screenRecording)
         // **A line between the verbs that end a dictation and the two legends.**
         // Take Screenshot and Pick Element are both disabled rows now — gestures
         // written down, not commands — so they sit apart from the three rows
@@ -920,6 +947,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // that open and abandon a sentence are one hand movement, reversed.
             // The wheel had no mirror to offer and used a 2s hold instead.
             (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s"),
+            // **The same gesture in both columns**, because it is a side button
+            // either way: the wheel set has nothing to offer here, and inventing a
+            // wheel chord for it would walk into the two conflicts that sent this
+            // gesture to a free row in the first place.
+            (screenRecording, screenRecording.title, "🔽 ↑", "🔽 ↑"),
             (pasteLast, pasteLast.title, "⌘⇧P", "⌘⇧P"),
             (shot, shot.title, "🔽", "🔽"),
             // **The wheel is back in this column, in one row.** Everything else
@@ -1060,7 +1092,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // his eye lands first. Between the two cloud rows the order is the same
         // rule one level down — the one that uploads a file after the fact
         // before the one that streams while he speaks.
-        for id in ["wispr", "whisper", "eleven", "sm", "gemini"] {
+        for id in ["wispr", "whisper", "eleven"] {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
@@ -1182,28 +1214,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
                 ? "ElevenLabs \(model) — \(ElevenLabsSource.rate), audio leaves this Mac"
                 : "ElevenLabs \(model) — no API key"
         }
-        // **And the streaming one says its language out loud**, which no other
-        // row here has to. The other three detect what they are hearing; this
-        // one is *told*, once, before the first word — so the pinned language is
-        // the single thing most able to ruin a sentence on it, and the pick must
-        // not be made without seeing it. → `SpeechmaticsSource`
-        if id == "sm" {
-            let what = "Speechmatics \(SpeechmaticsSource.operatingPoint) "
-                + "(\(SpeechmaticsSource.language))"
-            return speechmaticsReady?() == true
-                ? "\(what) — \(SpeechmaticsSource.rate), live, audio leaves this Mac"
-                : "\(what) — no API key"
-        }
-        // **The model id, because it is the whole of what is configurable here**
-        // — `gemini-3.8-flash` against `gemini-3.5-flash-lite` is a threefold
-        // difference in price and an unknown one in quality, and the row is
-        // where that choice is visible.
-        if id == "gemini" {
-            let model = GeminiSource.model
-            return geminiReady?() == true
-                ? "\(model) — \(GeminiSource.rate), audio leaves this Mac"
-                : "\(model) — no API key"
-        }
         guard id == "whisper" else { return "Wispr Flow" }
         let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
@@ -1226,13 +1236,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
         if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
-        // The language rides along even in the short title: it is two characters
-        // and it is the one fact about this engine he can be wrong about all day.
-        if id == "sm" {
-            let short = "Speechmatics (\(SpeechmaticsSource.language))"
-            return speechmaticsReady?() == true ? short : "\(short) ⚠️"
-        }
-        if id == "gemini" { return geminiReady?() == true ? "Gemini" : "Gemini ⚠️" }
         guard id == "whisper" else { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }
@@ -1263,6 +1266,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         startDictation.isEnabled = !recording
         stopRecording.isEnabled = recording
         cancelDictation.isEnabled = isDictationCancellable?() ?? recording
+        // **Live only while a sentence is open**, which is the whole gate on the
+        // gesture too — a film has to have something to belong to. The title is
+        // the state readout: greyed it still says which of the two it would do,
+        // so the row never claims a recording is running when none is.
+        let filming = isFilming?() ?? false
+        screenRecording.isEnabled = recording || filming
+        screenRecording.title = filming ? "Stop Screen Recording" : "Start Screen Recording"
         // Not while one is running: two transcripts arriving at one panel is an
         // ordering problem there is no reason to create from a menu.
         recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)
@@ -1420,6 +1430,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func stopRecordingClicked() { onStopRecording?() }
     @objc private func cancelDictationClicked() { onCancelDictation?() }
+    @objc private func screenRecordingClicked() { onToggleScreenRecording?() }
     @objc private func recoverDictationClicked() { onRecoverDictation?() }
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }

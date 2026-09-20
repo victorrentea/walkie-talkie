@@ -457,7 +457,11 @@ class AreaFrame(unittest.TestCase):
         self.assertGreater(self._size(zoom)[0], 800)
 
     def test_the_folder_is_said_once_and_the_old_clause_is_gone(self):
-        self.assertRegex(self.line, r"\[=\$WALKIE_SHOTS/[\d-]+\]")
+        # `📁=` and not `=` (2026-09-20, Victor: the line that *defines* the
+        # symbol every row below uses must carry it), and the path now ends in
+        # this dictation's own folder inside the session's.
+        self.assertRegex(self.line, r"\[📁=\$WALKIE_SHOTS/[\d-]+/[\d-]+\]")
+        self.assertNotRegex(self.line, r"\[=\$WALKIE_SHOTS")
         self.assertNotIn("open only if the words need it", self.line)
         self.assertNotIn("≤800px wide", self.line)
 
