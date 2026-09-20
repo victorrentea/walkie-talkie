@@ -189,6 +189,35 @@ final class MicRecorder {
         return quiet
     }
     private var quiet: TimeInterval = 0
+
+    /// **The last 128 ms of what the microphone heard**, oldest first, as floats
+    /// in −1…1 — the raw material the audio-reactive halo effects
+    /// (`HaloEffects.swift`, ported from `voice-halo` at tag `swift-port-01`)
+    /// draw their waveforms and spectra from. A boolean and a level cannot
+    /// drive a ring that deforms on the *shape* of a syllable, which is what
+    /// every one of those effects does; this is the web page's
+    /// `getFloatTimeDomainData` in the one place this app already has the
+    /// samples in hand.
+    ///
+    /// Written on the audio thread inside `meter`, after the write and under
+    /// the same lock; **read with `lock.try()` like `level`**, for `level`'s
+    /// reason — a contended read hands back the previous copy rather than
+    /// stalling the main thread behind a device open. Nothing is written to
+    /// disk from it and nothing downstream may treat it as the recording.
+    var recentSamples: [Float] {
+        guard lock.try() else { return recentCopy }
+        defer { lock.unlock() }
+        var out = [Float](repeating: 0, count: Self.recentCount)
+        for i in 0..<Self.recentCount {
+            out[i] = recent[(recentHead + i) % Self.recentCount]
+        }
+        recentCopy = out
+        return out
+    }
+    static let recentCount = 2048
+    private var recent = [Float](repeating: 0, count: MicRecorder.recentCount)
+    private var recentHead = 0
+    private var recentCopy = [Float](repeating: 0, count: MicRecorder.recentCount)
     /// The dynamic range the light is spread over, in dB above the voiced bar.
     /// 18 dB is ordinary speech's own span at a desk: under it the loud half of
     /// a sentence would sit pinned at full brightness with nothing left to say.
@@ -664,6 +693,13 @@ final class MicRecorder {
         // clock, not against however many buffers the device chose to send.
         let dt = Float(count) / 16000
         live = max(loudest, live - dt / Self.levelFallSeconds)
+        // The samples themselves, for the halo effects — see `recentSamples`.
+        // Under the same lock, on the same thread, after everything the file
+        // needed: a readout, never the product.
+        for i in 0..<count {
+            recent[recentHead] = Float(samples[i]) / 32768
+            recentHead = (recentHead + 1) % Self.recentCount
+        }
         lock.unlock()
     }
 }

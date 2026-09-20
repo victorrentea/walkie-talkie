@@ -478,6 +478,38 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **Pointer-avoidance and one-panel-per-display are deliberately gone.** A mark centred on the
   cursor cannot be in its way and is on the pointer's screen by construction. → journal: *The beacon is gone — the halo took its job (2026-09-11)*
 
+## Other halos: the effects ported from `voice-halo` (2026-09-20)
+
+- **`HaloStyle` picks what is drawn round the pointer; `.lightning` is the film and the default,
+  and with it chosen nothing in `HaloEffects.swift` runs.** Every other case hands the band to
+  `HaloEffectRenderer` — a `CGContext` bitmap redrawn at 60 Hz into a `CALayer` in the film's
+  place — and keeps the panel, the pointer-following, the bloom, the collapse, the arrow and the
+  idle sweep exactly as they are. Ported from `~/workspace/voice-halo/index.html` at git tag
+  **`swift-port-01`** (6717b17), hand-written effects only: the MilkDrop presets are out of scope
+  by Victor's decision, not approximated. The next pass resumes from the diff between tags.
+- **The preference is `UserDefaults` `haloStyle`**, written by `CaretHalo.setStyle` (the menu's
+  `Halo` row and the wheel dial both end there); `WT_HALO_STYLE=<case>` overrides for one run.
+- **The effects read the microphone's samples, not only its level.** `MicRecorder.recentSamples`
+  is a 2048-sample ring written in `meter` under the same lock and read with `lock.try()` for
+  `level`'s reason; `AppDelegate` hands it to the halo as nil while no meter is running, and the
+  effect then idles on the page's own slow wave. `VoiceAnalyser` is the page's analyser: a
+  1024-point FFT to 8 kHz, the 64 bands with their noise floor, slow ceiling and `^1.7`, `SHAPE`
+  / `LIVE` with the 0.12 inertia, the LOW/HIGH split. A slow AGC stands in for the browser's
+  `autoGainControl`.
+- **The fog is a feedback buffer.** `.copy` + `clear` before the previous frame is redrawn scaled,
+  twisted and dimmed, or the trail saturates to white. The twist is negated in the bitmap's y-up
+  pass because the effects draw in the page's y-down frame.
+- **Effects carry their own breath**: `refresh` leaves the panel at alpha 1 and applies no pulse
+  scale for them — every one already brightens or swells on the voice from the samples.
+- **Known, deliberate deviations from the page**: stroke widths, bead sizes and blur radii are the
+  page's absolute pixels, tuned for a ring ~250 px in radius, so at the halo's 105 pt they read
+  heavier; the spectrum spans 8 kHz rather than 20; ORB rays uses the panel's side as its `S`
+  and still crosses the pointer, as on the page. Measured: 59–60 fps, 8–13 ms drawing per frame
+  (`WT_HALO_TRACE=1`).
+- **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=8` puts one effect on the real pointer,
+  capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring. The page renders
+  headlessly with Chrome for a side-by-side (`--headless=new --virtual-time-budget=6000`).
+
 ## The idle sweep (2026-09-15)
 
 - **Nothing of the halo's may stand at the pointer with no dictation in flight, and once it did.**

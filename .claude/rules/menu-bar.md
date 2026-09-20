@@ -65,6 +65,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Engine: <what is listening>` | `waveform` | `>` — a five-row submenu |
 | `Microphone: <glyph> <device>` | `mic` | `>` — automatic + the four devices |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
+| `Halo: <effect>` | `sparkles` | `>` — the lightning ring, a line, the nine ported effects (2026-09-20) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
@@ -218,6 +219,16 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   written, which would have shipped the wheel gestures to the Mac already configured for the new
   ones.
   → journal: *Use Logi Gestures — the tick that chooses between the two sets*
+
+## The Halo row (2026-09-20)
+
+- **`Halo: Lightning ring`, the shape `Engine` and `Mouse Gestures` have** — a readout with the
+  list under the arrow, the tick drawn as an icon on the chosen row. The first row is today's
+  film and the default; under a separator, the nine effects ported from the `voice-halo` page at
+  tag `swift-port-01`, in the order Victor ranked them. `applyHaloRow` runs on every open and reads
+  `HaloStyle.current`, so the tick is whatever is running — including a choice made with the wheel
+  dial mid-dictation (`.claude/rules/mouse-gestures.md`). `onPickHalo` → `CaretHalo.setStyle`,
+  which writes the preference and rebuilds the ring on the spot if it is up.
 
 ## Rebind to…, Recover, Quit and readouts
 

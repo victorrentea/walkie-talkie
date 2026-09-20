@@ -558,6 +558,45 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// What the row is set to right now — read once at launch by `AppDelegate`,
     /// like `isReplaceWispr`.
     var isLogiGestures: Bool { logiGesturesOn }
+
+    // MARK: - Halo (2026-09-20)
+
+    /// **`Halo: Lightning ring`, with the nine effects ported from the
+    /// `voice-halo` page under the arrow** — the shape `Engine` and `Mouse
+    /// Gestures` have: the row says what is drawn round the pointer, the list
+    /// is where it is changed, the tick is on the chosen row and drawn as an
+    /// icon rather than `NSMenuItem.state`, for the column's sake.
+    ///
+    /// **The first row is today's ring and the default**; the rest are in the
+    /// order Victor ranked them. The preference is `HaloStyle`'s own
+    /// (`UserDefaults`, `haloStyle`), written by `CaretHalo.setStyle` — this
+    /// row reads it back on every open, so the tick is what is running.
+    private let haloItem = NSMenuItem(title: "Halo", action: nil, keyEquivalent: "")
+    private let haloSubmenu = NSMenu()
+
+    /// Victor picked one. `AppDelegate` hands it to the halo.
+    var onPickHalo: ((HaloStyle) -> Void)?
+
+    private func applyHaloRow() {
+        let current = HaloStyle.current
+        haloItem.title = "Halo: \(current.title)"
+        haloSubmenu.removeAllItems()
+        for style in HaloStyle.allCases {
+            let row = NSMenuItem(title: style.title, action: #selector(haloPicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = style.rawValue
+            row.image = style == current ? Self.symbolIcon("checkmark") : Self.blankIcon
+            haloSubmenu.addItem(row)
+            if style == .lightning { haloSubmenu.addItem(.separator()) }
+        }
+    }
+
+    @objc private func haloPicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let style = HaloStyle(rawValue: raw),
+              style != HaloStyle.current else { return }
+        onPickHalo?(style)
+        applyHaloRow()
+    }
     /// The tap has to be told; `AppDelegate` owns that wire.
     var onToggleLogiGestures: ((Bool) -> Void)?
 
@@ -860,6 +899,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         logiGestures.submenu = gesturesSubmenu
         applyLogiGesturesRow()
         menu.addItem(logiGestures)
+
+        // **Under Mouse Gestures, above Autosend**: the three pickers together,
+        // each a readout with a list behind it, and the one switch after them.
+        haloItem.image = Self.symbolIcon("sparkles")
+        haloItem.submenu = haloSubmenu
+        applyHaloRow()
+        menu.addItem(haloItem)
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
@@ -1496,6 +1542,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Devices come and go while the app runs, and the only moment this list
         // has to be right is the moment he is looking at it.
         applyMicRow()
+        applyHaloRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`

@@ -122,7 +122,8 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 - Nothing that rides the pointer can be screenshot (`sharingType = .none`; `RELAY_CAPTURABLE=1`
   no longer works on macOS 15). Review with: the states page; `kill -USR1 <pid>` →
   `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HALO` (+ `…-arrow.png`),
-  all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run);
+  all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run; `WT_HALO_STYLE=<effect>` picks a
+  ported halo, `WT_HALO_CYCLE=<s>` dials through them);
   `CGWindowListCopyWindowInfo` for geometry. `RELAY_SHOOT` runs skip every transition.
 
 ## Testing at a desk — the loopback control surface
@@ -219,7 +220,8 @@ sits at rest there.
 - **Mouse:** *Mouse Gestures: Logi* is the default (2026-09-09; a submenu of two rows since
   2026-09-14, `Logi` / `Wheel`, the shape `Engine` has) — the side buttons arrive
   from Options+ as ⌃⌥⌘F3…F12 and every mouse button is passed through; the wheel is untouched
-  except a **drag** while dictating, which crops a screen area (2026-09-10). The chords are
+  except a **drag** while dictating, which crops a screen area (2026-09-10), and a **turn with
+  the wheel held** while the ring is up, which dials to the next halo (2026-09-20). The chords are
   duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. On *Wheel*, the
   wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
 - **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,

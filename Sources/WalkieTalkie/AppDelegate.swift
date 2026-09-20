@@ -1087,6 +1087,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Use Logi Gestures** — pushed into the tap, which is the only thing
         // that acts on it. No flash and no overlay: it is a wiring switch, not
         // something that happens to a dictation.
+        // **The halo picker** (2026-09-20): the choice is the halo's own and is
+        // written where it is applied, so a restart comes back with the same
+        // ring and the menu's tick is read off the same preference.
+        status.onPickHalo = { [weak self] style in self?.caretHalo.setStyle(style) }
         status.onToggleLogiGestures = { [weak self] on in
             self?.hotkeys.useLogiGestures = on
             Log.info(on ? "🖱️ Logi gestures on — the wheel is the browser's"
@@ -1549,6 +1553,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
         hotkeys.onAreaShot = { [weak self] anchor, at in self?.areaShot(from: anchor, at: at) }
+        // **Wheel held and turned over the ring: the next halo** (2026-09-20).
+        // The ring itself changing is the feedback; the chip's flash names it,
+        // because nine of them are hard to tell apart in the corner of an eye.
+        // Same preference the menu's `Halo` row writes and reads, so the tick
+        // follows on the next open.
+        hotkeys.onHaloDial = { [weak self] step in
+            guard let self = self else { return }
+            let landed = self.caretHalo.cycleStyle(by: step)
+            self.overlay.flash("✨ \(landed.title)", duration: 1.5)
+        }
         // One line per selection, in the app's own log: how many frames the box
         // was actually drawn in, and the longest it went without one. It took a
         // bug report to ask that question the first time.
@@ -2029,6 +2043,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // arrow is triggered by silence rather than by volume — see
         // `MicRecorder.quietSeconds` for why that is not read off `level`.
         caretHalo.quietSeconds = { [weak self] in self?.source.meter.quietSeconds ?? 0 }
+        // **And the samples themselves** (2026-09-20), for the halos ported
+        // from the `voice-halo` page, which deform on the shape of a syllable
+        // and not only on its loudness. Nil while no meter is running — a
+        // foreign microphone, `/test/dictation/start` — so the effect idles on
+        // its own wave rather than on a stale buffer.
+        caretHalo.samples = { [weak self] in
+            guard let meter = self?.source.meter, meter.isRecording else { return nil }
+            return meter.recentSamples
+        }
 
         // **The ring covers Wispr Flow's dictations too, since 2026-09-11.**
         // Replace Wispr is off most days, and with it off Wispr Flow is what he
@@ -3941,6 +3964,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Before `setActive`**, because the collapse it triggers is what reads
         // the flag to decide whether the arrow goes with the ring.
         caretHalo.setDelivering(settling && settlingAtCaret)
+        // **The halo dial listens exactly while the ring is up** (2026-09-20)
+        // — the same expression, pushed into the tap here so the gesture and
+        // the ring cannot come to mean two different things by *dictating*.
+        hotkeys.haloUp = listening || speculative || wisprHearing
         caretHalo.setActive(listening || speculative || wisprHearing,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)

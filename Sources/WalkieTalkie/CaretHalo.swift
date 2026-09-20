@@ -429,6 +429,60 @@ final class CaretHalo {
     static var capturable = false
 
     private var panel: RelayPanel?
+
+    // MARK: - Which halo (2026-09-20)
+
+    /// **Which effect is drawn round the pointer.** `.lightning` is the film
+    /// this file has always drawn, and with it chosen nothing below this mark
+    /// runs — every other case hands the band to `HaloEffectRenderer`
+    /// (`HaloEffects.swift`, ported from `voice-halo` at tag `swift-port-01`)
+    /// and keeps the panel, the pointer-following, the bloom and the collapse
+    /// exactly as they are. Read once at launch (`HaloStyle.current`:
+    /// `UserDefaults`, `WT_HALO_STYLE` overriding for a run) and changed only
+    /// through `setStyle`, which the menu's `Halo` row calls.
+    private(set) var style: HaloStyle = HaloStyle.current
+    /// The renderer behind `style` when it is not the film; nil for `.lightning`.
+    private var effect: HaloEffectRenderer?
+    /// The effects' frame clock, 60 Hz while the ring is up. The film needs no
+    /// such thing — its reel and spin are Core Animation's.
+    private var renderTimer: Timer?
+    /// **The microphone's recent samples**, for the effects that deform on the
+    /// shape of a syllable rather than on its loudness. Asked of the same
+    /// meter `level` is; nil when no meter is running, in which case the
+    /// effect idles on its own slow wave.
+    var samples: (() -> [Float]?)?
+
+    /// Pick another halo. Written to the preference, and if the ring is up
+    /// the panel is rebuilt on the spot so the choice is seen at once — the
+    /// old panel goes out in a cut rather than a collapse, because what
+    /// replaces it is the same ring in another dress, not a sentence ending.
+    func setStyle(_ new: HaloStyle) {
+        HaloStyle.save(new)
+        guard new != style else { return }
+        Log.info("◯ caret halo style: \(style.rawValue) → \(new.rawValue)")
+        style = new
+        renderTimer?.invalidate(); renderTimer = nil
+        timer?.invalidate(); timer = nil
+        panel?.orderOut(nil)
+        panel = nil; stage = nil; pulse = nil; effect = nil
+        _ = makePanel()
+        // `live` stays as it is: `show` reads it through `follow`, which is
+        // what puts the new panel on the pointer before it is ordered front.
+        if live { show(opening: .whole) }
+    }
+
+    /// **The next halo, or the previous one**, round the list and back to the
+    /// film — the wheel's dial (`HotkeyTap.haloDial`). Returns what it landed
+    /// on, for the flash.
+    @discardableResult
+    func cycleStyle(by step: Int) -> HaloStyle {
+        let all = HaloStyle.allCases
+        let i = all.firstIndex(of: style) ?? 0
+        let next = all[((i + step) % all.count + all.count) % all.count]
+        setStyle(next)
+        return next
+    }
+
     /// The layer the collapse is played on. It sits between the panel's own view
     /// and the halo so that the two motions never share a matrix: **this one
     /// scales, the halo underneath turns**, and Core Animation rebuilds
@@ -669,6 +723,16 @@ final class CaretHalo {
         arrow.hide()
         Self.followTraceLeft = 6
         follow()
+        // **An effect comes up clean and running.** The fog buffer is cleared
+        // so no trail from the last sentence stands at the pointer, and the
+        // 60 Hz clock starts; the film needs neither.
+        if let effect = effect {
+            effect.reset()
+            renderTimer?.invalidate()
+            let r = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak effect] _ in effect?.step() }
+            renderTimer = r
+            RunLoop.main.add(r, forMode: .common)
+        }
         panel.orderFrontRegardless()
 
         // Global catches every other app the pointer moves over; local catches
@@ -707,6 +771,10 @@ final class CaretHalo {
     private func hide() {
         timer?.invalidate()
         timer = nil
+        // The effect's last frame is what collapses into the pointer, the
+        // same way the film's last frame does.
+        renderTimer?.invalidate()
+        renderTimer = nil
         growGraceTimer?.invalidate()
         growGraceTimer = nil
         growOnShow = false
@@ -837,6 +905,8 @@ final class CaretHalo {
                          "\(atCaret)", monitors.count))
         panel?.orderOut(nil)
         arrow.hide()
+        renderTimer?.invalidate()
+        renderTimer = nil
         releaseMonitorsIfIdle()
     }
 
@@ -846,7 +916,8 @@ final class CaretHalo {
     /// believe* is answerable from a desk.
     func windowsReport() -> [String: Any] {
         ["ring": ["visible": panel?.isVisible ?? false, "alpha": Double(panel?.alphaValue ?? 0),
-                  "live": live, "closing": closing, "small": small, "monitors": monitors.count],
+                  "live": live, "closing": closing, "small": small, "monitors": monitors.count,
+                  "style": style.rawValue],
          "heads": arrow.report,
          "delivering": delivering, "atCaret": atCaret]
     }
@@ -923,6 +994,16 @@ final class CaretHalo {
     /// the swell used to say.
     private func refresh() {
         guard live, let panel = panel else { return }
+        // **An effect carries its own breath.** Every one of them already
+        // brightens, swells or emits on the voice from the samples themselves,
+        // and the page shows them at full alpha; a second envelope on the
+        // panel would be the same syllable said twice. Only the arrow's
+        // schedule is kept.
+        if effect != nil {
+            panel.alphaValue = 1
+            arrow.refresh(quiet: quietSeconds?() ?? 0, at: Self.origin())
+            return
+        }
         let loud = CGFloat(max(0, min(1, level?() ?? 0)))
         let floor = Self.opacity(Self.rest), ceiling = Self.opacity(Self.loud)
         panel.alphaValue = floor + (ceiling - floor) * loud
@@ -1740,24 +1821,40 @@ final class CaretHalo {
         // no opinion about the halo at all.
         let stage = CALayer()
         stage.frame = CGRect(x: 0, y: 0, width: side, height: side)
-        let halo = Self.haloLayer(side: side)
-        // **The turn goes on the halo, not on the stage** — see `stage` for why
-        // the two motions may not share a layer. Its box is the whole panel, so
-        // its centre is the pointer, and the picture inside is hung with its own
-        // centroid on that same point: the rotation therefore has no radius to
-        // wobble around. The envelope goes round with it and cannot tell,
-        // because a radial mask turned about its centre is the same mask.
-        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
-        turn.fromValue = 0
-        turn.toValue = -2 * Double.pi
-        turn.duration = Self.spin
-        turn.repeatCount = .infinity
-        // Like the film's own reel, and for the film's own reason: the panel is
-        // ordered out between dictations rather than rebuilt, so an animation
-        // that tidied itself away would leave a ring that turns for one sentence
-        // and stands still for every one after it.
-        turn.isRemovedOnCompletion = false
-        halo.add(turn, forKey: "spin")
+        let halo: CALayer
+        if style != .lightning,
+           let renderer = HaloEffectRenderer(style: style, side: side, ringRadius: Self.core) {
+            // **Another halo in the film's place** (2026-09-20). The effect
+            // draws its own motion — every one of them turns, breathes or
+            // emits on its own clock — so it gets no spin of its own from
+            // here; the stage and the pulse above it are unchanged, so the
+            // bloom and the collapse are the same gesture whatever is drawn.
+            renderer.samples = { [weak self] in self?.samples?() ?? nil }
+            renderer.syntheticLevel = { [weak self] in self?.samples == nil ? (self?.level?() ?? 0) : 0 }
+            effect = renderer
+            halo = renderer.layer
+            Log.info("◯ caret halo: \(style.rawValue) — \(style.title), R=\(Int(renderer.R))pt in a \(Int(side))pt panel")
+        } else {
+            effect = nil
+            halo = Self.haloLayer(side: side)
+            // **The turn goes on the halo, not on the stage** — see `stage` for why
+            // the two motions may not share a layer. Its box is the whole panel, so
+            // its centre is the pointer, and the picture inside is hung with its own
+            // centroid on that same point: the rotation therefore has no radius to
+            // wobble around. The envelope goes round with it and cannot tell,
+            // because a radial mask turned about its centre is the same mask.
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            turn.fromValue = 0
+            turn.toValue = -2 * Double.pi
+            turn.duration = Self.spin
+            turn.repeatCount = .infinity
+            // Like the film's own reel, and for the film's own reason: the panel is
+            // ordered out between dictations rather than rebuilt, so an animation
+            // that tidied itself away would leave a ring that turns for one sentence
+            // and stands still for every one after it.
+            turn.isRemovedOnCompletion = false
+            halo.add(turn, forKey: "spin")
+        }
         // **A third layer, for a third motion.** `stage` belongs to the collapse
         // and the film to the spin, and the swell is written from a timer 20
         // times a second — three claims on one `transform`, where Core Animation
@@ -1813,6 +1910,15 @@ extension CaretHalo {
         }
         halo.quietSeconds = { max(0, phase() - 6) }
         halo.setActive(true, atCaret: true, opening: .fromPointer)
+        // **`WT_HALO_CYCLE=<seconds>` turns the dial on the live ring**, the
+        // way the wheel would — the one path a `.build/debug` binary cannot
+        // reach through the tap, and the one that rebuilds the panel under a
+        // dictation.
+        if let every = ProcessInfo.processInfo.environment["WT_HALO_CYCLE"].flatMap(Double.init), every > 0 {
+            Timer.scheduledTimer(withTimeInterval: every, repeats: true) { _ in
+                Log.info("◯ demo dial → \(halo.cycleStyle(by: 1).title)")
+            }
+        }
         // **It ends the way a dictation ends, not with `exit(0)`.** The collapse
         // is the half of this that no still can show and that a demo cut off
         // mid-frame cannot either — so the last half-second of every demo is the

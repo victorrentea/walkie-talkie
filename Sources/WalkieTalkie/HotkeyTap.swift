@@ -1537,6 +1537,7 @@ final class HotkeyTap {
         case .otherMouseDown:
             areaAnchor = nil
             areaCropping = false
+            haloDialed = false
             // **Bare, and with no chord underneath it.** ⌘ and ⌥ mean something
             // *inside* the selection — move the box, draw it from its middle —
             // but at the press they are the spawn's modifier and would be two
@@ -1563,7 +1564,10 @@ final class HotkeyTap {
                 DispatchQueue.main.async { CropSelectionOverlay.dragMoved(toCG: where_) }
                 return true
             }
-            guard let anchor = areaAnchor, dictating else { return false }
+            // **A press that has been turned is a dial, not a drag** — see
+            // `haloDial`. The hand wobbles while it works the wheel, and a box
+            // opening under a halo he is choosing is the collision this guards.
+            guard let anchor = areaAnchor, dictating, !haloDialed else { return false }
             let now = event.location
             guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return false }
             areaCropping = true
@@ -1585,6 +1589,7 @@ final class HotkeyTap {
             let cropping = areaCropping
             areaAnchor = nil
             areaCropping = false
+            haloDialed = false
             // **The press's own bookkeeping is finished here, because this
             // release never reaches the branch that normally finishes it.** With
             // *Use Logi Gestures* off the press was swallowed and `wheelArmed`
@@ -1614,6 +1619,76 @@ final class HotkeyTap {
         default:
             return false
         }
+    }
+
+    // MARK: - The halo dial: wheel held, wheel turned (2026-09-20)
+
+    /// **Is the ring up** — the gate for the halo dial, pushed in from
+    /// `syncBorrowedGestures` beside `caretHalo.setActive`, so the two cannot
+    /// disagree about what *dictating* means for a gesture that is about the
+    /// halo. Written from the main thread, read from the tap thread.
+    var haloUp: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return haloUpFlag }
+        set { stateLock.lock(); haloUpFlag = newValue; stateLock.unlock() }
+    }
+    private var haloUpFlag = false
+
+    /// One notch: `+1` for up (the next halo), `−1` for down (the previous).
+    /// Delivered on the main queue.
+    var onHaloDial: ((Int) -> Void)?
+
+    /// This press has been turned, so it is a dial and not a drag: the crop
+    /// refuses to arm for the rest of it, whatever the hand does. Reset by
+    /// `areaDrag` at every middle press and release.
+    private var haloDialed = false
+    private var lastHaloDialAt: CFTimeInterval = 0
+    /// One step per notch — a wheel spun fast reports several lines per
+    /// event and several events a frame, and a dial that skipped three halos
+    /// on one flick is one he cannot aim.
+    private static let haloDialDebounce: CFTimeInterval = 0.12
+
+    /// **Middle button held, wheel turned, ring up: the next (or previous)
+    /// halo.** Victor, 2026-09-20: a way to change the effect without opening
+    /// a menu, *only while dictating*. Outside that state — or with the middle
+    /// button up — every scroll passes through untouched, because this is a
+    /// global tap on his everyday machine and a swallowed middle-scroll in
+    /// another app is a regression nobody would forgive.
+    ///
+    /// **Same button as the crop drag, told apart by what the hand does.** The
+    /// crop arms once the pointer has travelled `areaDragThreshold` with the
+    /// wheel down; this fires on the wheel *turning* with the wheel down. The
+    /// first of the two to happen owns the press: a press that has dialed
+    /// cannot become a crop (`haloDialed`), and a press that is cropping does
+    /// not dial (`areaCropping`) — its scrolls pass through, since a hand
+    /// dragging a box is not aiming a dial. In Wheel mode the press has
+    /// meanings of its own, and the dial claims it exactly as the drag does
+    /// (`claimWheelPress`, the hold cancelled), so the release ends nothing.
+    ///
+    /// The button is asked of the window server rather than of this tap's
+    /// bookkeeping: in Logi mode the press goes straight past and leaves no
+    /// mark here, and `rightIsHeld` already reaches for the same instrument.
+    private func haloDial(_ event: CGEvent) -> Bool {
+        guard haloUp, !areaCropping else { return false }
+        guard CGEventSource.buttonState(.combinedSessionState, button: .center)
+           || CGEventSource.buttonState(.hidSystemState, button: .center) else { return false }
+        // Ours from here: the wheel is down and the ring is up, so nothing
+        // underneath should scroll — including a trackpad's momentum tail.
+        if !haloDialed {
+            haloDialed = true
+            _ = claimWheelPress()
+            wheelHold?.cancel()
+            wheelHold = nil
+        }
+        guard event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else { return true }
+        let delta = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        guard delta != 0 else { return true }
+        let now = CACurrentMediaTime()
+        guard now - lastHaloDialAt >= Self.haloDialDebounce else { return true }
+        lastHaloDialAt = now
+        let step = delta > 0 ? 1 : -1
+        Log.info("✨ wheel held and turned \(step > 0 ? "up" : "down") over the ring — \(step > 0 ? "next" : "previous") halo")
+        DispatchQueue.main.async { [weak self] in self?.onHaloDial?(step) }
+        return true
     }
 
     private func claimWheelPress() -> Bool {
@@ -1715,6 +1790,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                  // the question can be answered is in the events between them.
                  // Everything that is not a middle drag goes straight back out.
                  | CGEventMask(1 << CGEventType.otherMouseDragged.rawValue)
+                 // **The wheel's turn, for the one gesture that reads it** — the
+                 // halo dial (2026-09-20). Every scroll on the machine comes past
+                 // here and goes straight back out unless the middle button is
+                 // down while the ring is up; see `haloDial`.
+                 | CGEventMask(1 << CGEventType.scrollWheel.rawValue)
                  | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
                  | CGEventMask(1 << CGEventType.leftMouseUp.rawValue)
                  | CGEventMask(1 << CGEventType.rightMouseDown.rawValue)
@@ -1748,6 +1828,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         if type.rawValue == 0xFFFFFFFE || type.rawValue == 0xFFFFFFFF {
             if let port = tapPort { CGEvent.tapEnable(tap: port, enable: true) }
             return Unmanaged.passUnretained(event)
+        }
+
+        // **The wheel turned: the halo dial, in both modes, or nothing.** Judged
+        // before either mode's wiring because neither reads a scroll — this is
+        // the only branch that does, and everything it does not take goes out
+        // untouched.
+        if type == .scrollWheel {
+            return haloDial(event) ? nil : Unmanaged.passUnretained(event)
         }
 
         // **In Logi mode every mouse button goes straight past.** The two side
