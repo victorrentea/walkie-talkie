@@ -189,9 +189,11 @@ enum HaloStyle: String, CaseIterable {
     /// **On the list today.** Water Dream is off it *"for the moment"*
     /// (Victor, 2026-09-20 late — the dearest style measured, 0.79 of a GPU
     /// core and 866 MB, and still "too violent"); its hybrid stays built.
+    /// Snowflake is off it too, temporarily (Victor, 2026-09-20: *"scoate
+    /// temporar din meniu/din efecte Snowflake"*); the preset stays in place.
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
-    var isOffered: Bool { self != .milkdrop103 }
+    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.
