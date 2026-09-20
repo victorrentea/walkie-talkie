@@ -566,6 +566,28 @@ closes. Between the two is the whole transcription — the stretch in which he i
   log says `halo page ready: 20 effects, webgl true` and which page entry a style picked, or
   `MilkDrop <n>: ok`.
 
+## Where the halo work stopped (2026-09-20, 23:00) — for the next session
+
+- **Deployed = `50a9b52`**, the newest commit at close; nothing committed but undeployed. Page
+  vendored at `dc91aa7`. Deploy is `./build-app.sh && ./relay-restart.sh`, only with no ring up
+  (`GET /test/state`), under `hands-off run`.
+- **Not done, known**: (1) a style change rebuilds the web view — **~115 ms** to the first
+  frame of a hand-written effect (measured `+117 ms page ready`); keeping one page alive and
+  `pick`ing would remove it; (2) a preset's lag after F9 is the **1.5 s warm-up**
+  (`MilkDropHalo.warmup`) + ~0.3 s load — the previous panel stays up meanwhile, so nothing
+  blinks, but the preset itself cannot come sooner without a shorter warm-up (0.5 s = a flash
+  of bare waveform); (3) **Atom's dots** (`ORB.DOT_NEAR/DOT_FAR`, absolute px) do not scale with
+  its `scale`, so its outline thins as it grows; (4) **presets render dark inside the whole
+  voice-halo page in a WKWebView** (engine buffer 2/255 vs 67 in `halo.html`, every JS variable
+  identical) — unexplained; the presets live in `halo.html` because of it, and the page's
+  `Comets`/Water Dream hybrid is Mac-only for the same reason.
+- **`Comets`** (page effect 21, `comets.js`): built for the Water Dream hybrid, which is off the
+  list (`HaloStyle.isOffered`); the effect has no `HaloStyle` case of its own. Victor decides:
+  keep it as a hand-written entry (add a case with `pageIndex: 20`) or drop it from the page.
+- **Reading a preset's equations**: on the loaded page, `mdPresets[name].frame_eqs_str` is the
+  compiled JS as text — easier than the minified packs. Tunnel and Cauldron drift `cx/cy` (±0.11
+  of sines); `pinCenter` appends `a.cx=a.cy=0.5`. Sparks and Snowflake do not drift.
+
 ## The idle sweep (2026-09-15)
 
 - **Nothing of the halo's may stand at the pointer with no dictation in flight, and once it did.**
