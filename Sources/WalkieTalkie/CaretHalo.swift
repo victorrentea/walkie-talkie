@@ -470,9 +470,10 @@ final class CaretHalo {
         if drawn.coversScreen { return screen.frame }
         if let preset = drawn.preset {
             // The engine's "cover": a square of side max(w, h) of the screen ×
-            // the preset's scale, centred on the pointer and following it.
+            // the preset's scale, its `centerAt` point on the pointer, following it.
             let s = (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
-            return NSRect(x: (mouse.x - s / 2).rounded(), y: (mouse.y - s / 2).rounded(), width: s, height: s)
+            return NSRect(x: (mouse.x - s * preset.centerAt.x).rounded(),
+                          y: (mouse.y - s * (1 - preset.centerAt.y)).rounded(), width: s, height: s)
         }
         return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
     }
@@ -665,7 +666,6 @@ final class CaretHalo {
             samples = { voice.samples() }; level = { voice.level }; quietSeconds = { voice.quietSeconds }
             Log.error("◯ halo preview: no halo-voice.wav bundled — noise instead")
         }
-        panel?.sharingType = .readOnly
         if !live { setActive(true, atCaret: false, opening: .fromPointer) }
         Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on the clip")
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
@@ -674,7 +674,6 @@ final class CaretHalo {
             if let saved = self.savedClosures { self.samples = saved.samples; self.level = saved.level; self.quietSeconds = saved.quiet }
             self.savedClosures = nil
             self.previewGeneration = 0
-            self.panel?.sharingType = Self.capturable ? .readOnly : .none
         }
     }
 
@@ -1961,12 +1960,15 @@ final class CaretHalo {
         p.backgroundColor = .clear
         p.hasShadow = false
         p.ignoresMouseEvents = true
-        p.level = .statusBar
+        // **One level under the chip and the heads** (both `.statusBar`): the
+        // effects are drawn under the tooltip, never over it (Victor, 2026-09-20
+        // late — a screen-sized web view ordered front had covered the chip).
+        p.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        // A preview (F7/F9, `/test/halo`) has no dictation in frame, so it may
-        // be captured — the one way an agent can check what it changed on the
-        // deployed app without a debug binary on his screen.
-        p.sharingType = Self.capturable || previewGeneration > 0 ? .readOnly : .none
+        // **Never in a screenshot or a recording**, previews included — the
+        // standing rule; `WT_HALO_DEMO` is the only exception, and it never
+        // runs on his screen (`.claude/rules`).
+        p.sharingType = Self.capturable ? .readOnly : .none
 
         let view = NSView(frame: NSRect(origin: .zero, size: frame.size))
         view.wantsLayer = true

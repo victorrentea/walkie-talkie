@@ -132,6 +132,10 @@ enum HaloStyle: String, CaseIterable {
         /// Full light out to this fraction of the fade radius, then one smooth
         /// fall to `fadeFloor`; 0 = the page's four-stop mask.
         var fadeStart: CGFloat = 0
+        /// The point of the canvas that sits on the pointer, as fractions of
+        /// its side, y down (the preset's own centre of composition — `cx`/`cy`
+        /// in its frame equations). Default the middle.
+        var centerAt: CGPoint = CGPoint(x: 0.5, y: 0.5)
         /// Pinned to the screen (not following the pointer), the canvas's
         /// centre — the preset's horizon — at this fraction of the screen's
         /// height from the bottom. Nil = the square follows the pointer.
@@ -147,12 +151,16 @@ enum HaloStyle: String, CaseIterable {
         // the mask, half-light at half the radius. So: full light out to 55 %
         // of the radius, then one fall to nothing at the edge; gain 4 as asked.
         case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.84,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55,
+                                         // *"appears centred slightly below the mouse"*: the preset's own
+                                         // centre is at (0.605, 0.599) of its canvas (its frame equations'
+                                         // cx/cy, read live), so that point goes on the pointer.
+                                         centerAt: CGPoint(x: 0.605, y: 0.599))
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.46,
+        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.75,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)

@@ -819,7 +819,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Enabled whether or not anything is bound — unlike every other row in
         // the block — because that is the whole point of the gesture: it carries
         // its own destination.
-        newSession.image = Self.symbolIcon("plus.circle")
+        newSession.image = Self.emojiIcon("🆕")   // his two exceptions to the monochrome menu: 🆕 and ✨
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
 
@@ -919,7 +919,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(logiGestures)
 
         // **`Halo fx`, last of the pickers**, above Autosend.
-        haloItem.image = Self.symbolIcon("sparkles")
+        haloItem.image = Self.emojiIcon("✨")
         haloItem.submenu = haloSubmenu
         applyHaloRow()
         menu.addItem(haloItem)
