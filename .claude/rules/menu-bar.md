@@ -65,7 +65,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Engine: <what is listening>` | `waveform` | `>` — a five-row submenu |
 | `Microphone: <glyph> <device>` | `mic` | `>` — automatic + the four devices |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
-| `Halo: <effect>` | `sparkles` | `>` — the lightning ring, a line, the nine ported effects (2026-09-20) |
+| `Halo: <effect>` | `sparkles` | `>` — the lightning ring, a line, the nine ported effects, a line, the seven MilkDrop presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`) (2026-09-20) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |

@@ -53,6 +53,11 @@ cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
 # assembled by hand. `CaretHalo` also finds it in `assets/` when the binary is
 # run straight out of `.build`, which is how the contact sheet and the demo run.
 cp "$DIR/assets/caret-halo-5x5.png" "$CONTENTS/Resources/caret-halo-5x5.png"
+# The MilkDrop halo: the page, the two preset packs and — once dropped in —
+# the engine, `butterchurn.min.js`. Bundled so the halo works on a plane;
+# `MilkDropHalo` finds the folder here or in `assets/` from a `.build` binary.
+rm -rf "$CONTENTS/Resources/milkdrop"
+cp -R "$DIR/assets/milkdrop" "$CONTENTS/Resources/milkdrop"
 
 # The Finder / Spotlight / Get Info icon, built here from the *bound* picture —
 # the device inside its orange ring. It was the idle one for two days, on the

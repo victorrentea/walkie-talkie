@@ -4,10 +4,11 @@ import QuartzCore
 
 /// **The audio-reactive halo effects, ported from the `voice-halo` web page.**
 ///
-/// Source of truth: `~/workspace/voice-halo/index.html` at git tag
-/// **`swift-port-01`** (commit 6717b17). Every formula, constant and comment
-/// about *why* a number is what it is comes from that file; where this port
-/// deviates it says so beside the line. A later pass resumes from that tag.
+/// Source of truth: `~/workspace/voice-halo/index.html` (and `water.js`) at
+/// git tag **`swift-port-02`** (commit d832097; the first pass was
+/// `swift-port-01`, 6717b17). Every formula, constant and comment about *why*
+/// a number is what it is comes from those files; where this port deviates it
+/// says so beside the line. A later pass resumes from the diff between tags.
 ///
 /// What the page does in a `<canvas>` with `mix-blend-mode: screen`, this does
 /// in a `CGContext` bitmap handed to a `CALayer` every frame. Two things are
@@ -36,12 +37,21 @@ import QuartzCore
 /// from unpkg at run time — none of which belongs in an overlay that has to be
 /// up before he starts talking.
 ///
-/// *ORB rays* is the one hand-written effect that takes its shapes from a
-/// preset; it has no engine behind it and is ported like the rest. On the page
-/// it runs on a full-viewport canvas and is the one effect allowed to cross the
-/// cursor; here its `S` is the panel's side, so the petals reach the panel's
-/// edge and still pass over the pointer, faded to nothing at the centre as the
-/// page has them.
+/// *ORB rays* was ported in the first pass and **removed at `swift-port-02`**:
+/// Victor marked it `−` in the review (his verdicts live in the effect names on
+/// the page — `★` likes, `•` has potential, `−` dislikes — and a `−` is not
+/// ported). No hand-written effect carries a `★` or `•` at this tag, so the
+/// menu titles carry no marks yet; `HaloStyle.mark` is where they go when one
+/// does.
+///
+/// **Since `swift-port-02` every effect on the page draws on a viewport-sized
+/// canvas**, with the trail's zoom pivoting on the pointer — which is what this
+/// panel has done from the start, so the change here is only that sizes derive
+/// from the page's `scale` field (`0.40 / rest`, same size on screen). One
+/// effect is genuinely screen-sized: **water** (`water.js`) puts a pool across
+/// the bottom fifth of the *screen* and orbits the pointer with comets, so for
+/// it `CaretHalo` builds a panel the size of the pointer's screen and hands the
+/// pointer in as `center` every frame.
 enum HaloStyle: String, CaseIterable {
     /// **What ships and what he uses every day** — the rotating lightning film
     /// in `CaretHalo`. Nothing in this file runs when this is the style.
@@ -62,8 +72,13 @@ enum HaloStyle: String, CaseIterable {
     case blockBeads
     /// Page 6: *orbite rare — gaură mare, blocuri clare*.
     case orbits
-    /// Page 8: *raze ORB — petale rotitoare, fără flash*.
-    case orbRays
+    /// Page 19 (`water.js`): *apă — comete oglindite în apa de jos*.
+    case water
+    /// **The MilkDrop presets pinned on the page**, run by the real engine in
+    /// a web view (`MilkDropHalo`) — Victor's reversal of 2026-09-20, *"migrate
+    /// the MilkDrop ones to Swift as well"*. The `−` ones (44, 77, 97) are not
+    /// here. Numbers are the page's positions; `scale` and `fade` are his.
+    case milkdrop7, milkdrop8, milkdrop20, milkdrop85, milkdrop87, milkdrop99, milkdrop103
 
     /// The menu row's wording. English, like every string the app renders.
     var title: String {
@@ -77,28 +92,83 @@ enum HaloStyle: String, CaseIterable {
         case .twoBalls:       return "Two balls with fog"
         case .blockBeads:     return "Block-bead ring"
         case .orbits:         return "Sparse particle orbits"
-        case .orbRays:        return "ORB rays, no flash"
+        case .water:          return "Water with mirrored comets"
+        case .milkdrop7:      return "MilkDrop 7 — Geiss, 3 layers (Tunnel Mix)"
+        case .milkdrop8:      return "MilkDrop 8 — Geiss, Cauldron painterly 2"
+        case .milkdrop20:     return "MilkDrop 20 — Aderrasi, Painterly Tendrils"
+        case .milkdrop85:     return "MilkDrop 85 — Zylot, Star Ornament (small)"
+        case .milkdrop87:     return "MilkDrop 87 — martin, chain breaker"
+        case .milkdrop99:     return "MilkDrop 99 — martin, reflections on black tiles"
+        case .milkdrop103:    return "MilkDrop 103 — fata morgana (water, mirrored)"
         }
     }
 
-    /// The page's `rest`: where the effect's **visible** edge sits as a
-    /// fraction of its canvas radius. The canvas radius is derived from it so
-    /// every effect comes out at the same diameter on screen — here the
-    /// lightning ring's `CaretHalo.core`.
-    var rest: CGFloat {
+    /// Victor's review mark, as the page carries it in the effect's name
+    /// (`★` likes a lot, `•` has potential) — the reason the list is ordered
+    /// as it is. Empty for every hand-written effect at `swift-port-02`. A
+    /// `−` is never here, because a `−` effect is not ported.
+    var mark: String {
         switch self {
-        case .lightning:      return 1
-        case .lightningChain: return 0.80
-        case .crown:          return 0.66
-        case .segments:       return 0.64
-        case .oscillogram:    return 0.66
-        case .waveRing:       return 0.66
-        case .twoBalls:       return 0.88
-        case .blockBeads:     return 0.50
-        case .orbits:         return 1.15
-        case .orbRays:        return 1
+        case .milkdrop7, .milkdrop20:                return "•"
+        case .milkdrop87, .milkdrop99, .milkdrop103: return "★"
+        default:                                     return ""
         }
     }
+
+    /// **A preset run by the engine**: the page's `preset:` row. `scale`
+    /// shrinks the canvas on screen (the composition intact); `fade` is the
+    /// radial dimming asked for on 7, where the rings coming at the viewer
+    /// whited the whole screen.
+    struct Preset { let number: Int; let name: String; let scale: CGFloat; let fade: Bool }
+    var preset: Preset? {
+        switch self {
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1, fade: true)
+        case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.70, fade: false)
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70, fade: false)
+        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.33, fade: false)
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 1, fade: false)
+        case .milkdrop99:  return Preset(number: 99, name: "martin - reflections on black tiles", scale: 1, fade: false)
+        case .milkdrop103: return Preset(number: 103, name: "martin [shadow harlequins shape code] - fata morgana", scale: 1, fade: false)
+        default:           return nil
+        }
+    }
+
+    /// Can this style be drawn on this Mac right now? Only the presets can
+    /// say no — when the engine is not bundled.
+    var isAvailable: Bool { preset == nil || MilkDropHalo.engineAvailable }
+
+    /// `mark` + `title`, for the menu.
+    var menuTitle: String { mark.isEmpty ? title : "\(mark) \(title)" }
+
+    /// **The page's `scale`** (since `swift-port-02`): the effect's reference
+    /// radius as a fraction of the viewport's short side, replacing `rest`
+    /// (`scale = 0.40 / rest`, so nothing moved on screen). Here the reference
+    /// radius is `CaretHalo.core` at `scale` 0.40, so `R = core / 0.40 × scale`.
+    var scale: CGFloat {
+        switch self {
+        case .lightning:      return 0.40
+        case .lightningChain: return 0.50
+        case .crown:          return 0.606
+        case .segments:       return 0.625
+        case .oscillogram:    return 0.606
+        case .waveRing:       return 0.606
+        case .twoBalls:       return 0.4545
+        case .blockBeads:     return 0.80
+        case .orbits:         return 0.348
+        case .water:          return 0.40      // unused: the comets size off the screen
+        default:              return 0.40      // the presets: `preset.scale` is the one that matters
+        }
+    }
+
+    /// **Drawn on a panel the size of the pointer's screen**, not the ring's
+    /// square — the water is anchored to the bottom of the screen and the
+    /// comets orbit far wider than the panel.
+    var coversScreen: Bool { self == .water }
+
+    /// **Drawn on a square of side `max(w, h)` of the screen × `preset.scale`,
+    /// centred on the pointer and following it** — the page's "cover" canvas
+    /// for a pinned preset, with the cursor at its centre.
+    var coversPointer: Bool { preset != nil }
 
     /// **Persisted like the app's other preferences**: `UserDefaults`, not
     /// `~/.walkie-talkie` — it is a preference, not data, and `--home` has no
@@ -526,14 +596,24 @@ private enum Orb {
 final class HaloEffectRenderer {
     let style: HaloStyle
     let layer = CALayer()
-    /// The panel's side, in points. Everything is drawn in the page's
-    /// coordinates — y down, the centre at the origin — inside a square of
-    /// this size.
-    let side: CGFloat
-    /// The page's `R`: the canvas radius, chosen so the effect's resting edge
-    /// sits at `CaretHalo.core` — the same diameter the lightning ring has.
+    /// The panel's size, in points — the ring's square for every effect but
+    /// the water, which gets the pointer's screen. Everything is drawn in the
+    /// page's coordinates: y down, the origin at `center`.
+    let width: CGFloat, height: CGFloat
+    /// `min(width, height)`, the page's `min(innerWidth, innerHeight)`.
+    var side: CGFloat { min(width, height) }
+    /// **Where the pointer is**, in page coordinates (y down from the panel's
+    /// top-left). The square effects keep it at the middle; `CaretHalo`
+    /// writes it every frame for a screen-sized panel.
+    var center: CGPoint
+    /// The page's `rad(scale)`: the effect's reference radius, chosen so the
+    /// ring sits at `CaretHalo.core` — the same diameter the lightning ring has.
     let R: CGFloat
-    private let scale: CGFloat = 2
+    /// Device pixels per point. 2 for the ring's square; **1 for a
+    /// screen-sized panel** — the water has no hairline in it, and at 2× a
+    /// 3456×2234 bitmap copied twice a frame plus 73 slice blits ran under
+    /// 20 fps. Every size in the effects is in points, so nothing else knows.
+    private let scale: CGFloat
     private let bitmap: CGContext
     private let voice = VoiceAnalyser()
     private var t0 = CFAbsoluteTimeGetCurrent()
@@ -548,22 +628,21 @@ final class HaloEffectRenderer {
     /// in which case the effect idles on its own slow wave exactly as the
     /// page does before the microphone is turned on.
     var samples: (() -> [Float]?)?
-    /// A stand-in for `samples` when there is no microphone at all — the
-    /// `WT_HALO_DEMO` run fabricates a voice from `level` this way.
-    var syntheticLevel: (() -> Float)?
-
-    init?(style: HaloStyle, side: CGFloat, ringRadius: CGFloat) {
+    init?(style: HaloStyle, size: CGSize, ringRadius: CGFloat) {
         self.style = style
-        self.side = side
-        self.R = ringRadius / style.rest
-        let px = Int((side * scale).rounded())
-        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+        self.width = size.width
+        self.height = size.height
+        self.center = CGPoint(x: size.width / 2, y: size.height / 2)
+        self.R = ringRadius / 0.40 * style.scale
+        self.scale = style.coversScreen ? 1 : 2
+        let px = Int((size.width * scale).rounded()), py = Int((size.height * scale).rounded())
+        guard let ctx = CGContext(data: nil, width: px, height: py, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.setAllowsAntialiasing(true)
-        ctx.interpolationQuality = .high
+        ctx.interpolationQuality = style.coversScreen ? .low : .high
         bitmap = ctx
-        layer.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        layer.frame = CGRect(x: 0, y: 0, width: size.width, height: size.height)
         layer.contentsScale = scale
         layer.contentsGravity = .resize
         layer.isOpaque = false
@@ -581,27 +660,8 @@ final class HaloEffectRenderer {
         layer.contents = nil
     }
 
-    private var synthPhase: Float = 0
     private func currentSamples() -> [Float] {
-        if let real = samples?() ?? nil { return real }
-        // A voice-shaped signal scaled by the demo's level: a few harmonics
-        // whose pitch and mix wander, under a syllable envelope, with a little
-        // noise — enough for every effect to be seen moving. A steady tone
-        // would average out under the shape's inertia into a perfect circle,
-        // which is what a steady tone should do and not what a voice does.
-        let level = syntheticLevel?() ?? 0
-        var out = [Float](repeating: 0, count: MicRecorder.recentCount)
-        let f0: Float = 140 + 60 * sin(synthPhase * 1.7)
-        for i in 0..<out.count {
-            let n = Float(i) / 16000
-            let ph = synthPhase + n
-            let env = 0.35 + 0.65 * abs(sin(ph * .pi * 4.3))
-            let noise = Float.random(in: -1...1) * 0.08
-            out[i] = level * env * (0.5 * sin(ph * 2 * .pi * f0) + 0.3 * sin(ph * 2 * .pi * f0 * 2.02 + 1)
-                                    + 0.15 * sin(ph * 2 * .pi * f0 * 3.1 + 2) + 0.1 * sin(ph * 2 * .pi * 2900) + noise)
-        }
-        synthPhase += Float(out.count) / 16000
-        return out
+        samples?() ?? nil ?? [Float](repeating: 0, count: MicRecorder.recentCount)
     }
 
     /// **What a frame costs**, logged every 300 frames under `WT_HALO_TRACE=1`.
@@ -624,7 +684,7 @@ final class HaloEffectRenderer {
                 busy += CFAbsoluteTimeGetCurrent() - now
                 frames += 1
                 if traceStarted == 0 { traceStarted = now }
-                if frames % 300 == 0 {
+                if frames % 60 == 0 {
                     let wall = now - traceStarted
                     Log.info(String(format: "◯ halo %@: %.1f fps over %d frames, %.1f ms drawing per frame",
                                     style.rawValue, Double(frames) / wall, frames, busy / Double(frames) * 1000))
@@ -640,7 +700,6 @@ final class HaloEffectRenderer {
         case .oscillogram:    feedback(decay: 0.80, zoom: 1.007, twist: 0.002, full: full)
         case .twoBalls:       feedback(decay: 0.930, zoom: 1.022, twist: 0.009, full: full)
         case .waveRing:       feedback(decay: 0.88, zoom: 1.006, twist: 0.004, full: full)
-        case .orbRays:        feedback(decay: 0.90, zoom: 1.0, twist: 0, full: full)
         default:
             bitmap.saveGState()
             bitmap.setBlendMode(.copy)
@@ -648,11 +707,12 @@ final class HaloEffectRenderer {
             bitmap.restoreGState()
         }
 
-        // The page's frame: y down, the origin at the centre, additive.
+        // The page's frame: y down, the origin at the pointer, additive — the
+        // page's `tunnelLayer` / `plainLayer` since `swift-port-02`.
         bitmap.saveGState()
         bitmap.translateBy(x: 0, y: H)
         bitmap.scaleBy(x: scale, y: -scale)
-        bitmap.translateBy(x: side / 2, y: side / 2)
+        bitmap.translateBy(x: center.x, y: center.y)
         bitmap.setBlendMode(.plusLighter)
         switch style {
         case .lightning:      break
@@ -664,7 +724,8 @@ final class HaloEffectRenderer {
         case .twoBalls:       drawTwoBalls(t)
         case .blockBeads:     drawBlockBeads(t)
         case .orbits:         drawOrbits(t, density: 0.5, holeFrac: 1.40, ringFrac: 0.22)
-        case .orbRays:        drawOrbRays(t)
+        case .water:          drawWater(t)
+        default:              break            // the presets draw in a web view, not here
         }
         bitmap.restoreGState()
         lastT = t
@@ -684,10 +745,15 @@ final class HaloEffectRenderer {
         bitmap.clear(full)
         bitmap.setBlendMode(.normal)
         bitmap.setAlpha(decay)
-        bitmap.translateBy(x: W / 2, y: H / 2)
+        // Pivot on the pointer, not the panel's middle — the page's
+        // `tunnelLayer` since `swift-port-02` (*"urma să fie suflată din
+        // efect, nu dintr-un punct fix de pe ecran"*). The same point for the
+        // square effects, where the pointer is the middle.
+        let px = center.x * scale, py = H - center.y * scale
+        bitmap.translateBy(x: px, y: py)
         bitmap.rotate(by: -twist)
         bitmap.scaleBy(x: zoom, y: zoom)
-        bitmap.translateBy(x: -W / 2, y: -H / 2)
+        bitmap.translateBy(x: -px, y: -py)
         bitmap.draw(prev, in: full)
         bitmap.restoreGState()
     }
@@ -838,9 +904,13 @@ final class HaloEffectRenderer {
             let cx = cos(a) * orbit, cy = sin(a) * orbit
             let hue: CGFloat = side == 1 ? 210 : 2
             let puff = 0.30 + 0.70 * pow(max(0, sin(t * 1.45 + fs * .pi * 0.7)), 4)
+            // The constant term is the resting floor, the `levelNow` term the
+            // voice. At 0.006 the balls looked dead in silence; since
+            // `swift-port-02` the floor is ~6× higher — a visible wisp — and
+            // the gain on the voice is untouched, so loud looks the same.
             bitmap.fillRadial(cx: cx, cy: cy, r0: rb * 0.2, r1: rb * 2.1, stops: [
-                (0.00, hsla(hue, 0.88, 0.60, (0.006 + 0.13 * levelNow) * puff)),
-                (0.45, hsla(hue, 0.88, 0.58, (0.002 + 0.06 * levelNow) * puff)),
+                (0.00, hsla(hue, 0.88, 0.60, (0.035 + 0.13 * levelNow) * puff)),
+                (0.45, hsla(hue, 0.88, 0.58, (0.014 + 0.06 * levelNow) * puff)),
                 (1.00, hsla(hue, 0.85, 0.60, 0)),
             ])
             let N = 96
@@ -864,16 +934,17 @@ final class HaloEffectRenderer {
     /// ones, drawn back additively at their gains.
     private func sceneContexts() -> (CGContext, CGContext, CGContext)? {
         if let s = scene, let a = mipA, let b = mipB { return (s, a, b) }
-        let px = bitmap.width
+        let pw = bitmap.width, ph = bitmap.height
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        func make(_ n: Int) -> CGContext? {
-            let c = CGContext(data: nil, width: max(1, n), height: max(1, n), bitsPerComponent: 8, bytesPerRow: 0,
+        func make(_ w: Int, _ h: Int) -> CGContext? {
+            let c = CGContext(data: nil, width: max(1, w), height: max(1, h), bitsPerComponent: 8, bytesPerRow: 0,
                               space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
             c?.interpolationQuality = .low
             return c
         }
-        guard let s = make(px), let a = make(Int((CGFloat(px) / Orb.BLOOM_TIGHT).rounded())),
-              let b = make(Int((CGFloat(px) / Orb.BLOOM_WIDE).rounded())) else { return nil }
+        func down(_ n: Int, _ k: CGFloat) -> Int { Int((CGFloat(n) / k).rounded()) }
+        guard let s = make(pw, ph), let a = make(down(pw, Orb.BLOOM_TIGHT), down(ph, Orb.BLOOM_TIGHT)),
+              let b = make(down(pw, Orb.BLOOM_WIDE), down(ph, Orb.BLOOM_WIDE)) else { return nil }
         s.setAllowsAntialiasing(true)
         scene = s; mipA = a; mipB = b
         return (s, a, b)
@@ -883,31 +954,33 @@ final class HaloEffectRenderer {
     /// the bloom plus the scene onto the bitmap.
     private func withBloom(gWide: CGFloat, gTight: CGFloat, _ draw: (CGContext) -> Void) {
         guard let (s, a, b) = sceneContexts() else { return }
-        let px = CGFloat(s.width)
+        let pw = CGFloat(s.width), ph = CGFloat(s.height)
         s.saveGState()
         s.setBlendMode(.copy)
-        s.clear(CGRect(x: 0, y: 0, width: px, height: px))
+        s.clear(CGRect(x: 0, y: 0, width: pw, height: ph))
         s.restoreGState()
         s.saveGState()
-        s.translateBy(x: 0, y: px)
+        s.translateBy(x: 0, y: ph)
         s.scaleBy(x: scale, y: -scale)
-        s.translateBy(x: side / 2, y: side / 2)
+        s.translateBy(x: center.x, y: center.y)
         s.setBlendMode(.plusLighter)
         draw(s)
         s.restoreGState()
         guard let sceneImage = s.makeImage() else { return }
         for m in [a, b] {
-            let n = CGFloat(m.width)
-            m.saveGState(); m.setBlendMode(.copy); m.clear(CGRect(x: 0, y: 0, width: n, height: n)); m.restoreGState()
-            m.draw(sceneImage, in: CGRect(x: 0, y: 0, width: n, height: n))
+            let mw = CGFloat(m.width), mh = CGFloat(m.height)
+            m.saveGState(); m.setBlendMode(.copy); m.clear(CGRect(x: 0, y: 0, width: mw, height: mh)); m.restoreGState()
+            m.draw(sceneImage, in: CGRect(x: 0, y: 0, width: mw, height: mh))
         }
         guard let ia = a.makeImage(), let ib = b.makeImage() else { return }
-        // Back in the page frame the caller set up: a square of `side` points
-        // centred on the origin.
-        let box = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
+        // Back in the page frame the caller set up: the whole panel, with the
+        // origin at the pointer.
+        let box = CGRect(x: -center.x, y: -center.y, width: width, height: height)
         bitmap.saveGState()
         // Images are drawn upright in y-up space; the frame is flipped, so
-        // flip back for the three blits.
+        // flip back for the three blits (about the panel's own middle, so the
+        // box lands where the scene was).
+        bitmap.translateBy(x: 0, y: height - 2 * center.y)
         bitmap.scaleBy(x: 1, y: -1)
         bitmap.setAlpha(gWide);  bitmap.draw(ib, in: box)
         bitmap.setAlpha(gTight); bitmap.draw(ia, in: box)
@@ -1024,57 +1097,234 @@ final class HaloEffectRenderer {
         }
     }
 
-    // MARK: Page 8 — ORB rays, no flash
+    // MARK: Page 19 — water with mirrored comets (water.js)
 
-    /// *raze ORB — petale rotitoare, fără flash*: from the preset "ORB - Waaa".
-    /// Three overlaid shapes (7, 6 and 5 petals), turned at close speeds with
-    /// one in reverse — `q2`, `−1.05 q2`, `0.899 q2`, which is where the slow
-    /// beat between layers comes from — coloured by the preset's own sinusoids.
-    /// What was taken out is the core: in the preset the petals converge into a
-    /// blinding white point; here each petal **fades to nothing toward the
-    /// centre** through its gradient, so the rays pass but nothing lights up in
-    /// the middle. The page draws this on a full-viewport canvas; here `S` is
-    /// the panel's side.
-    private func drawOrbRays(_ t: CGFloat) {
-        struct Layer { let n: Int; let spin, len, wide, a: CGFloat; let ph: [CGFloat] }
-        let S = side
-        let q2 = t * 0.55
-        let layers = [
-            Layer(n: 7, spin:  1.000, len: 0.30, wide: 0.055, a: 0.70, ph: [0.350, 0.578, 0.689]),
-            Layer(n: 6, spin: -1.050, len: 0.44, wide: 0.045, a: 0.60, ph: [0.450, 0.678, 0.689]),
-            Layer(n: 5, spin:  0.899, len: 0.60, wide: 0.036, a: 0.50, ph: [0.450, 0.578, 0.789]),
+    /// **The scene from `water.js`, on a panel the size of the screen.** A pool
+    /// across the bottom fifth, four comets orbiting the pointer with tapering
+    /// tails, and everything above the waterline mirrored into the pool with
+    /// ripples that grow with depth and with the voice. Its file names what is
+    /// load-bearing and every one of those is kept: the **draw order** (sky
+    /// offscreen → sky on screen → water gradient → reflection slices →
+    /// multiply tint → specular + waterline), the **blend modes** (`lighter`
+    /// for the slices, `multiply` for the depth tint, `source-over` at the
+    /// end), the single **vertical flip about the waterline** with
+    /// `REFLECT_SQUASH`, and **`SKY_MARGIN` consumed by sampling** into the
+    /// margin (`sx`) rather than offsetting the destination — the thing that
+    /// stops a hard vertical seam at the pool's edge.
+    ///
+    /// **One deviation, and it is the overlay's**: the page's sky is opaque
+    /// (`BG_TOP → BG_BOT`, and the canvas is `alpha: false`) because it is a
+    /// scene; over his work the sky is left **transparent** — the stars, the
+    /// centre halo and the comets draw over whatever is there, and the
+    /// reflection adds only their light, exactly as `lighter` over a black sky
+    /// would. The pool itself stays opaque, as on the page: a pool is a pool.
+    private enum Water {
+        static let WATER_Y: CGFloat = 0.80
+        static let SKY_MARGIN: CGFloat = 56
+        static let SLICE_H: CGFloat = 3
+        static let REFLECT_ALPHA: CGFloat = 1.00, REFLECT_FADE: CGFloat = 1.35, REFLECT_SQUASH: CGFloat = 0.42
+        static let TINT_TOP: [CGFloat] = [232, 240, 255], TINT_BOT: [CGFloat] = [126, 176, 255]
+        static let RIPPLE_AMP: CGFloat = 9.0, RIPPLE_DEPTH_GAIN: CGFloat = 1.0, RIPPLE_MIN: CGFloat = 0.12
+        static let RIPPLE_F1: CGFloat = 0.055, RIPPLE_S1: CGFloat = 1.25
+        static let RIPPLE_F2: CGFloat = 0.017, RIPPLE_S2: CGFloat = 0.62
+        static let RIPPLE_AUDIO: CGFloat = 2.4
+        struct Comet { let r, spd, hue, w, tail, phase: CGFloat }
+        static let COMETS = [
+            Comet(r: 0.30, spd:  0.62, hue: 190, w: 3.4, tail: 1.05, phase: 0.0),
+            Comet(r: 0.46, spd: -0.41, hue: 265, w: 2.8, tail: 0.85, phase: 2.1),
+            Comet(r: 0.62, spd:  0.29, hue: 160, w: 2.2, tail: 0.70, phase: 4.0),
+            Comet(r: 0.80, spd: -0.19, hue: 325, w: 1.7, tail: 0.55, phase: 5.4),
         ]
-        let lit = 0.45 + 0.85 * CGFloat(voice.levelNow)
+        static let TAIL_SEGMENTS = 22
+        static let TAIL_AUDIO: CGFloat = 0.9, SPEED_AUDIO: CGFloat = 1.8, BRIGHT_AUDIO: CGFloat = 0.85
+        static let HEAD_R: CGFloat = 5.5, BASS_RADIUS: CGFloat = 0.10, TREBLE_FLICKER: CGFloat = 0.35
+        static let CENTER_CLEAR_R: CGFloat = 26, CENTER_HALO_R: CGFloat = 92
+        static let STARS = 110
+        static let WATER_TOP: [CGFloat] = [8, 16, 34], WATER_BOT: [CGFloat] = [2, 4, 11]
+    }
+    private struct Star { let x, y, r, a, tw: CGFloat }
+    private var stars: [Star] = []
+    private var skyCtx: CGContext?
+
+    /// Canvas `drawImage` semantics inside the page frame: the image upright
+    /// in page coordinates, whatever the CTM. CG hangs an image's top at the
+    /// rect's *maximum* y, which in a flipped frame is its bottom; the local
+    /// un-flip about the rect's middle puts it the way the page has it — and
+    /// under the page's own mirror flip it therefore mirrors, as it should.
+    private func pageImage(_ ctx: CGContext, _ img: CGImage, in rect: CGRect) {
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: rect.midY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(img, in: CGRect(x: rect.minX, y: -rect.height / 2, width: rect.width, height: rect.height))
+        ctx.restoreGState()
+    }
+
+    private func linearFill(_ ctx: CGContext, rect: CGRect, from: CGPoint, to: CGPoint, stops: [(CGFloat, CGColor)]) {
+        ctx.saveGState()
+        ctx.clip(to: rect)
+        if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                              colors: stops.map { $0.1 } as CFArray, locations: stops.map { $0.0 }) {
+            ctx.drawLinearGradient(g, start: from, end: to, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        }
+        ctx.restoreGState()
+    }
+
+    private func drawWater(_ t: CGFloat) {
+        // The frame the caller set up has its origin at the pointer; the water
+        // is in absolute page coordinates, so step back to the panel's corner.
+        bitmap.translateBy(x: -center.x, y: -center.y)
+        let W = width, H = height
+        let waterY = (H * Water.WATER_Y).rounded(), waterH = H - waterY
+        let M = Water.SKY_MARGIN
+        let level = CGFloat(voice.levelNow)
+        let (bassF, trebleF) = voice.bassTreble
+        let bass = CGFloat(bassF), treble = CGFloat(trebleF)
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        for L in layers {
-            let col: [CGFloat] = L.ph.map { (255 * (0.5 + 0.5 * sin($0 * q2))).rounded() }
-            for k in 0..<L.n {
-                let fk = CGFloat(k) / CGFloat(L.n)
-                let a = q2 * L.spin + fk * 2 * .pi
-                let en = 0.35 + 0.65 * CGFloat(voice.eAt(Float((fk + L.len).truncatingRemainder(dividingBy: 1))))
-                let rOut = S * L.len * (0.75 + 0.45 * en)
-                let halfW = S * L.wide * (0.6 + 0.6 * en)
-                let ca = cos(a), sa = sin(a)
-                // The petal: a spindle from the centre outward, widest mid-way.
-                let P = 22
-                var pts: [Pt] = []
-                for i in 0...P {
-                    let u = CGFloat(i) / CGFloat(P), w = sin(.pi * u) * halfW
-                    pts.append((ca * rOut * u - sa * w, sa * rOut * u + ca * w))
-                }
-                for i in stride(from: P, through: 0, by: -1) {
-                    let u = CGFloat(i) / CGFloat(P), w = -sin(.pi * u) * halfW
-                    pts.append((ca * rOut * u - sa * w, sa * rOut * u + ca * w))
-                }
-                guard let g = CGGradient(colorsSpace: cs, colors: [
-                    rgba(col, 0), rgba(col, 0.10 * L.a * lit), rgba(col, 0.55 * L.a * lit), rgba(col, 0)
-                ] as CFArray, locations: [0, 0.22, 0.55, 1]) else { continue }
-                bitmap.saveGState()
-                bitmap.path(pts, close: true)
-                bitmap.clip()
-                bitmap.drawLinearGradient(g, start: .zero, end: CGPoint(x: ca * rOut, y: sa * rOut), options: [])
-                bitmap.restoreGState()
+
+        if skyCtx == nil {
+            skyCtx = CGContext(data: nil, width: Int(((W + 2 * M) * scale).rounded()), height: Int((waterY * scale).rounded()),
+                               bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            skyCtx?.setAllowsAntialiasing(true)
+            stars = (0..<Water.STARS).map { _ in
+                Star(x: -M + CGFloat.random(in: 0...1) * (W + 2 * M), y: CGFloat.random(in: 0...1) * waterY,
+                     r: 0.4 + CGFloat.random(in: 0...1) * 1.2, a: 0.22 + CGFloat.random(in: 0...1) * 0.7,
+                     tw: CGFloat.random(in: 0...1) * 6.28)
             }
         }
+        guard let sky = skyCtx else { return }
+
+        // ---------- 1. the sky (offscreen): everything that will reflect.
+        // Page coordinates, shifted by the margin; transparent (see above).
+        sky.saveGState()
+        sky.setBlendMode(.copy)
+        sky.clear(CGRect(x: 0, y: 0, width: sky.width, height: sky.height))
+        sky.restoreGState()
+        sky.saveGState()
+        sky.translateBy(x: 0, y: CGFloat(sky.height))
+        sky.scaleBy(x: scale, y: -scale)
+        sky.translateBy(x: M, y: 0)
+        sky.setBlendMode(.plusLighter)
+        for s in stars {
+            let a = s.a * (0.65 + 0.35 * sin(t * 0.8 + s.tw))
+            sky.setFillColor(CGColor(srgbRed: 200 / 255, green: 220 / 255, blue: 1, alpha: a))
+            sky.fillEllipse(in: CGRect(x: s.x - s.r, y: s.y - s.r, width: 2 * s.r, height: 2 * s.r))
+        }
+        // The centre halo: a soft ring whose inner edge ramps up only past
+        // CENTER_CLEAR_R, so the cursor sits on untouched background — ramped,
+        // not punched; a hard hole reads as a black disc against the glow.
+        let HR = Water.CENTER_HALO_R * (1 + 0.5 * bass)
+        let cf = min(0.85, Water.CENTER_CLEAR_R / HR)
+        sky.fillRadial(cx: center.x, cy: center.y, r0: 0, r1: HR, stops: [
+            (0, CGColor(srgbRed: 90 / 255, green: 150 / 255, blue: 1, alpha: 0)),
+            (cf, CGColor(srgbRed: 90 / 255, green: 150 / 255, blue: 1, alpha: 0)),
+            (min(0.98, cf + 0.26), CGColor(srgbRed: 110 / 255, green: 175 / 255, blue: 1, alpha: 0.11 + 0.24 * level)),
+            (1, CGColor(srgbRed: 60 / 255, green: 90 / 255, blue: 200 / 255, alpha: 0)),
+        ])
+        // The comets.
+        let unit = min(W, H) * 0.5
+        let speed = 1 + Water.SPEED_AUDIO * level
+        sky.setLineCap(.round)
+        for (i, c) in Water.COMETS.enumerated() {
+            let fi = CGFloat(i)
+            let Rc = unit * c.r * (1 + Water.BASS_RADIUS * bass * sin(t * 0.7 + fi))
+            let ang = c.phase + t * c.spd * speed
+            let span = c.tail * (1 + Water.TAIL_AUDIO * level) * (c.spd < 0 ? -1 : 1)
+            let flick = 1 + Water.TREBLE_FLICKER * treble * sin(t * 9.1 + fi * 2.3)
+            let bri = (1 + Water.BRIGHT_AUDIO * level) * flick
+            let col = { (a: CGFloat) in hsla(c.hue + 25 * level, 1, (62 + 12 * level) / 100, a) }
+            var px = center.x + cos(ang) * Rc, py = center.y + sin(ang) * Rc
+            for j in 1...Water.TAIL_SEGMENTS {
+                let f = CGFloat(j) / CGFloat(Water.TAIL_SEGMENTS)
+                let a2 = ang - span * f
+                let nx = center.x + cos(a2) * Rc, ny = center.y + sin(a2) * Rc
+                let fade = (1 - f) * (1 - f)
+                sky.setStrokeColor(col(min(1, 0.55 * fade * bri)))
+                sky.setLineWidth(c.w * (0.25 + 0.75 * (1 - f)))
+                sky.beginPath(); sky.move(to: CGPoint(x: px, y: py)); sky.addLine(to: CGPoint(x: nx, y: ny)); sky.strokePath()
+                px = nx; py = ny
+            }
+            let hx = center.x + cos(ang) * Rc, hy = center.y + sin(ang) * Rc
+            let hr = Water.HEAD_R * (1 + 0.6 * level)
+            sky.fillRadial(cx: hx, cy: hy, r0: 0, r1: hr * 3, stops: [
+                (0, hsla(c.hue, 1, 0.92, min(1, 0.95 * bri))),
+                (0.3, col(min(1, 0.55 * bri))),
+                (1, hsla(c.hue, 1, 0.60, 0)),
+            ])
+        }
+        sky.restoreGState()
+        guard let skyImage = sky.makeImage() else { return }
+
+        // ---------- 2. blit the sky, source-over.
+        bitmap.setBlendMode(.normal)
+        bitmap.setAlpha(1)
+        if let visible = skyImage.cropping(to: CGRect(x: M * scale, y: 0, width: W * scale, height: waterY * scale)) {
+            pageImage(bitmap, visible, in: CGRect(x: 0, y: 0, width: W, height: waterY))
+        }
+
+        // ---------- 3. the water body.
+        linearFill(bitmap, rect: CGRect(x: 0, y: waterY, width: W, height: waterH),
+                   from: CGPoint(x: 0, y: waterY), to: CGPoint(x: 0, y: H),
+                   stops: [(0, rgba(Water.WATER_TOP, 1)), (1, rgba(Water.WATER_BOT, 1))])
+
+        // ---------- 4. the reflection: one vertical flip about the waterline,
+        // each slice shifted by the ripple — by sampling into the margin.
+        let rip = 1 + Water.RIPPLE_AUDIO * level
+        bitmap.saveGState()
+        bitmap.clip(to: CGRect(x: 0, y: waterY, width: W, height: waterH))
+        bitmap.translateBy(x: 0, y: waterY)
+        bitmap.scaleBy(x: 1, y: -1)
+        bitmap.setBlendMode(.plusLighter)
+        let sh = Water.SLICE_H, K = Water.REFLECT_SQUASH, shSrc = sh / K
+        var d: CGFloat = 0
+        while d < waterH {
+            let sy = waterY - (d + sh) / K
+            if sy < 0 { break }
+            let dn = d / waterH
+            let amp = Water.RIPPLE_AMP * (Water.RIPPLE_MIN + Water.RIPPLE_DEPTH_GAIN * dn) * rip
+            let dx = amp * (sin(d * Water.RIPPLE_F1 - t * Water.RIPPLE_S1)
+                            + 0.6 * sin(d * Water.RIPPLE_F2 + t * Water.RIPPLE_S2 + 1.7))
+            bitmap.setAlpha(Water.REFLECT_ALPHA * exp(-dn * Water.REFLECT_FADE))
+            let sx = (M - max(-M, min(M, dx))) * scale
+            if let slice = skyImage.cropping(to: CGRect(x: sx, y: sy * scale, width: W * scale, height: shSrc * scale)) {
+                pageImage(bitmap, slice, in: CGRect(x: 0, y: -(d + sh), width: W, height: sh))
+            }
+            d += sh
+        }
+        bitmap.restoreGState()
+        bitmap.setAlpha(1)
+
+        // ---------- 5. the blue shift with depth: one multiply rect.
+        bitmap.saveGState()
+        bitmap.setBlendMode(.multiply)
+        linearFill(bitmap, rect: CGRect(x: 0, y: waterY, width: W, height: waterH),
+                   from: CGPoint(x: 0, y: waterY), to: CGPoint(x: 0, y: H),
+                   stops: [(0, rgba(Water.TINT_TOP, 1)), (1, rgba(Water.TINT_BOT, 1))])
+        bitmap.restoreGState()
+
+        // ---------- 6. the surface: specular streaks and the waterline.
+        bitmap.setBlendMode(.plusLighter)
+        for k in 0..<7 {
+            let fk = CGFloat(k)
+            let y = waterY + 2 + fk * 3.1
+            let ph = t * (0.7 + fk * 0.23) + fk * 1.9
+            let x = (sin(ph) * 0.5 + 0.5) * W
+            let w = (34 + 26 * sin(ph * 1.7)) * (1 + level)
+            linearFill(bitmap, rect: CGRect(x: x - w, y: y, width: 2 * w, height: 1.4),
+                       from: CGPoint(x: x - w, y: 0), to: CGPoint(x: x + w, y: 0), stops: [
+                        (0, CGColor(srgbRed: 150 / 255, green: 200 / 255, blue: 1, alpha: 0)),
+                        (0.5, CGColor(srgbRed: 170 / 255, green: 215 / 255, blue: 1, alpha: (0.10 + 0.18 * level) * (1 - fk / 8))),
+                        (1, CGColor(srgbRed: 150 / 255, green: 200 / 255, blue: 1, alpha: 0)),
+                       ])
+        }
+        linearFill(bitmap, rect: CGRect(x: 0, y: waterY - 0.5, width: W, height: 1.6),
+                   from: CGPoint(x: 0, y: 0), to: CGPoint(x: W, y: 0), stops: [
+                    (0, CGColor(srgbRed: 120 / 255, green: 180 / 255, blue: 1, alpha: 0.10)),
+                    (min(0.95, max(0.05, center.x / W)), CGColor(srgbRed: 190 / 255, green: 225 / 255, blue: 1, alpha: 0.55 + 0.35 * level)),
+                    (1, CGColor(srgbRed: 120 / 255, green: 180 / 255, blue: 1, alpha: 0.10)),
+                   ])
+        bitmap.setFillColor(CGColor(srgbRed: 120 / 255, green: 170 / 255, blue: 1, alpha: 0.10 + 0.10 * level))
+        bitmap.fill(CGRect(x: 0, y: waterY - 3, width: W, height: 6))
+        bitmap.setBlendMode(.normal)
     }
 }

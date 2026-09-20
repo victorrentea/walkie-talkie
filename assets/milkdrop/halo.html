@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<meta charset="utf-8">
+<title>MilkDrop halo</title>
+<!--
+  The MilkDrop halo: the real butterchurn engine, the way voice-halo runs it,
+  hosted by `MilkDropHalo.swift` in a transparent, click-through WKWebView.
+
+  What this page adds to the engine, and why:
+
+  · A SQUARE canvas of side max(screen w, h), CSS-scaled by the preset's
+    `scale` — the page's "cover, not fit". Rendered non-square, every circle
+    in a preset comes out an oval (the preset's coordinates are normalised to
+    the canvas, not the screen); that bug cost the page a round trip.
+  · A KEYING pass: butterchurn clears to opaque black. On the page that black
+    vanishes under `mix-blend-mode: screen`; over the desktop there is nothing
+    to blend with, so a second WebGL canvas samples the engine's canvas and
+    emits premultiplied (rgb, max(r,g,b)) — black becomes transparent, light
+    stays light. The same key the lightning film was cut with.
+  · The page's `fade` (MilkDrop 7): a radial mask, full at the centre, ~50% at
+    half the screen, ~10% at its edge and constant beyond — applied in the
+    same shader, on an ellipse the size of the SCREEN, not the canvas.
+  · Audio comes from the app: `halo.audio(<base64 Float32>)` with the last
+    1024 samples at 16 kHz. They are handed to the engine as the byte arrays
+    its analyser would have produced (`render({audioLevels})`), so no
+    AudioContext ever opens a microphone or an output device here.
+  · No engine bundled (`butterchurn.min.js` missing): a test pattern goes
+    through the same keying pass, so the host's transparency, sizing and
+    audio bridge can be checked without it.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent !important; }
+  #out { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(var(--k, 1)); display: block; }
+</style>
+<body>
+<canvas id="out"></canvas>
+<script src="butterchurn.min.js"></script>
+<script src="butterchurnPresets.min.js"></script>
+<script src="butterchurnPresetsExtra.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const out = document.getElementById('out');
+  const src = document.createElement('canvas');          // the engine's own canvas, never shown
+  let side = 0, dpr = 1, running = false, viz = null, presets = null;
+  let fade = false, fadeRx = 1, fadeRy = 1, testMode = false;
+  const audio = { time: new Uint8Array(1024), l: new Uint8Array(1024), r: new Uint8Array(1024), fresh: false };
+  audio.time.fill(128); audio.l.fill(128); audio.r.fill(128);
+
+  // ---- the keying pass ----------------------------------------------------
+  const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+  let prog = null, tex = null, uFade = null, uRadii = null, uRes = null;
+  function compile(type, code) {
+    const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  }
+  function setupGL() {
+    const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
+      void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
+    const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res;
+      // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→.10, constant past 1
+      float mask(float d) {
+        if (d <= 0.28) return mix(1.0, 0.78, d / 0.28);
+        if (d <= 0.50) return mix(0.78, 0.50, (d - 0.28) / 0.22);
+        if (d <= 0.75) return mix(0.50, 0.26, (d - 0.50) / 0.25);
+        if (d <= 1.00) return mix(0.26, 0.10, (d - 0.75) / 0.25);
+        return 0.10;
+      }
+      void main() {
+        vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y));
+        float a = max(c.r, max(c.g, c.b));
+        if (fade > 0.5) {
+          vec2 q = (uv - 0.5) * res / radii;      // 1 = the screen's edge
+          a *= mask(length(q));
+          c.rgb *= mask(length(q));
+        }
+        gl_FragColor = vec4(c.rgb, a);           // premultiplied: every channel <= a by construction
+      }`);
+    prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
+    gl.disable(gl.BLEND);
+  }
+  function key() {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    gl.viewport(0, 0, out.width, out.height);
+    gl.uniform1f(uFade, fade ? 1 : 0);
+    gl.uniform2f(uRadii, fadeRx, fadeRy);
+    gl.uniform2f(uRes, side, side);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // ---- the test pattern, when there is no engine ---------------------------
+  let t0 = performance.now();
+  function testFrame() {
+    const c = src.getContext('2d'), px = src.width, t = (performance.now() - t0) / 1000;
+    c.fillStyle = '#000'; c.fillRect(0, 0, px, px);
+    let loud = 0; for (let i = 0; i < 1024; i += 8) loud = Math.max(loud, Math.abs(audio.time[i] - 128) / 128);
+    for (let k = 0; k < 4; k++) {
+      const r = px * (0.12 + 0.09 * k) * (1 + 0.5 * loud);
+      c.strokeStyle = `hsl(${(t * 40 + k * 70) % 360}, 90%, 60%)`; c.lineWidth = px * 0.01;
+      c.beginPath(); c.arc(px / 2 + Math.cos(t + k) * px * 0.05, px / 2 + Math.sin(t * 1.3 + k) * px * 0.05, r, 0, 6.2832); c.stroke();
+    }
+  }
+
+  // ---- the loop -------------------------------------------------------------
+  function frame() {
+    if (!running) return;
+    if (viz) {
+      viz.render({ audioLevels: { timeByteArray: audio.time, timeByteArrayL: audio.l, timeByteArrayR: audio.r } });
+    } else if (testMode) {
+      testFrame();
+    }
+    key();
+    requestAnimationFrame(frame);
+  }
+
+  // ---- the API the host calls ---------------------------------------------
+  window.halo = {
+    // side: CSS px of the square; k: the preset's scale; screen: {w, h} for the fade ellipse
+    size(s, k, d, screen) {
+      side = s; dpr = d;
+      out.style.width = out.style.height = s + 'px';
+      out.width = out.height = Math.round(s * d);
+      src.width = src.height = Math.round(s * d);
+      document.documentElement.style.setProperty('--k', String(k || 1));
+      fadeRx = screen.w / 2; fadeRy = screen.h / 2;
+      if (!prog) setupGL();
+      if (viz) viz.setRendererSize(src.width, src.height);
+    },
+    preset(name, wantFade) {
+      fade = !!wantFade;
+      if (!window.butterchurn) { testMode = true; return 'no engine — test pattern'; }
+      if (!presets) {
+        presets = Object.assign({}, butterchurnPresets.getPresets(),
+          (window.butterchurnPresetsExtra || { getPresets: () => ({}) }).getPresets());
+      }
+      if (!viz) {
+        // A context is required by the constructor; it is never resumed and
+        // nothing is connected to it, so no device is ever opened.
+        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        viz = (butterchurn.default || butterchurn).createVisualizer(actx, src,
+                { width: src.width, height: src.height, pixelRatio: 1 });
+        viz.setRendererSize(src.width, src.height);
+      }
+      if (!presets[name]) return 'no such preset: ' + name;
+      viz.loadPreset(presets[name], 0.6);
+      return 'ok';
+    },
+    // b64: Float32 little-endian, the last 1024 samples in −1…1
+    audio(b64) {
+      const bin = atob(b64), n = bin.length >> 2, dv = new DataView(new ArrayBuffer(bin.length));
+      for (let i = 0; i < bin.length; i++) dv.setUint8(i, bin.charCodeAt(i));
+      const count = Math.min(1024, n);
+      for (let i = 0; i < 1024; i++) {
+        const v = i < count ? dv.getFloat32(i * 4, true) : 0;
+        const b = Math.max(0, Math.min(255, Math.round(128 + v * 127)));
+        audio.time[i] = b; audio.l[i] = b; audio.r[i] = b;
+      }
+    },
+    start() { if (running) return; running = true; requestAnimationFrame(frame); },
+    stop() { running = false; },
+    engine() { return !!window.butterchurn; }
+  };
+})();
+</script>
+</body>
+</html>

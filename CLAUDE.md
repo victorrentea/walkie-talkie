@@ -123,7 +123,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   no longer works on macOS 15). Review with: the states page; `kill -USR1 <pid>` →
   `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HALO` (+ `…-arrow.png`),
   all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run; `WT_HALO_STYLE=<effect>` picks a
-  ported halo, `WT_HALO_CYCLE=<s>` dials through them);
+  ported halo, `WT_HALO_CYCLE=<s>` dials through them, `WT_HALO_DEMO_AUDIO=1` gives it a voice);
   `CGWindowListCopyWindowInfo` for geometry. `RELAY_SHOOT` runs skip every transition.
 
 ## Testing at a desk — the loopback control surface

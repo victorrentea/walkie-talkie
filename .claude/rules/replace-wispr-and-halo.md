@@ -484,9 +484,36 @@ closes. Between the two is the whole transcription — the stretch in which he i
   and with it chosen nothing in `HaloEffects.swift` runs.** Every other case hands the band to
   `HaloEffectRenderer` — a `CGContext` bitmap redrawn at 60 Hz into a `CALayer` in the film's
   place — and keeps the panel, the pointer-following, the bloom, the collapse, the arrow and the
-  idle sweep exactly as they are. Ported from `~/workspace/voice-halo/index.html` at git tag
-  **`swift-port-01`** (6717b17), hand-written effects only: the MilkDrop presets are out of scope
-  by Victor's decision, not approximated. The next pass resumes from the diff between tags.
+  idle sweep exactly as they are. Ported from `~/workspace/voice-halo/index.html` (+ `water.js`)
+  at git tag **`swift-port-02`** (d832097; the first pass was `swift-port-01`, 6717b17). The next
+  pass resumes from the diff between tags — that protocol is in that repo's `TODO.md`.
+- **Victor's verdicts travel in the effect names on the page** (`★` likes, `•` potential, `−`
+  dislikes) and decide what is ported: a `−` is dropped (ORB rays went at `swift-port-02`), the
+  others carry their mark into the menu title (`HaloStyle.mark` / `menuTitle`). The order of the
+  list never changes at a review, only the marks.
+- **Sizes derive from the page's `scale` field** (`0.40 / rest`, since `swift-port-02` every
+  effect draws on a viewport-sized canvas with the trail's zoom pivoting on the pointer): `R =
+  core / 0.40 × scale`, so nothing moved on screen and the feedback pivots on the pointer here too.
+- **The water is screen-sized** (`HaloStyle.coversScreen`): the panel is the pointer's screen,
+  `CaretHalo.aimEffectAtPointer` hands the pointer in as `center` every frame and aims the stage's
+  anchor at it so the bloom and the collapse converge on the pointer. Rendered at **1×** (17.5
+  ms/frame, ~30 fps at screen size; at 2× it was under 20). The page's sky is opaque; here it is
+  transparent and the pool stays opaque, as on the page. The reflection is the page's slice
+  blitting verbatim — draw order, `lighter`/`multiply`, the flip with `REFLECT_SQUASH`, and
+  `SKY_MARGIN` consumed by sampling. A pointer crossing to a screen of another size rebuilds it.
+- **The MilkDrop presets run in a `WKWebView`** (`MilkDropHalo`, `assets/milkdrop/halo.html`),
+  Victor's reversal of the scope cut (*"migrate the MilkDrop ones to Swift as well"*): the real
+  butterchurn engine, a square of side `max(w, h)` of the screen × the preset's `scale`, centred
+  on and following the pointer (`coversPointer`); the engine's black keyed to alpha in a second
+  WebGL pass (`a = max(r, g, b)`, the film's own key); 7's radial `fade` in the same shader;
+  audio **pushed in** (`halo.audio`, 1024 samples, 30 Hz) and handed to the engine as its
+  analyser's byte arrays — no `getUserMedia`, no second microphone, no output device; the web
+  view goes out in a fade of the panel's alpha. **The engine file is not in the repo**:
+  `butterchurn.min.js` (2.6.7) could not be fetched under this session's policy; the two preset
+  packs (2.4.7) were vendored from `~/workspace/milkdrop-gallery`'s local tarball. Until the
+  engine is dropped into `assets/milkdrop/` the preset rows are greyed `— engine not bundled`, the
+  wheel dial skips them, and `WT_HALO_STYLE=milkdrop87` shows a **test pattern** through the same
+  keying pass (verified transparent and click-through). Untested end to end for that reason.
 - **The preference is `UserDefaults` `haloStyle`**, written by `CaretHalo.setStyle` (the menu's
   `Halo` row and the wheel dial both end there); `WT_HALO_STYLE=<case>` overrides for one run.
 - **The effects read the microphone's samples, not only its level.** `MicRecorder.recentSamples`
@@ -507,7 +534,9 @@ closes. Between the two is the whole transcription — the stretch in which he i
   and still crosses the pointer, as on the page. Measured: 59–60 fps, 8–13 ms drawing per frame
   (`WT_HALO_TRACE=1`).
 - **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=8` puts one effect on the real pointer,
-  capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring. The page renders
+  capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring; **`WT_HALO_DEMO_AUDIO=1`
+  gives the demo a voice** (`DemoVoice`: broadband noise under a slow beat through the same
+  `samples` path `recentSamples` fills — without it every effect idles, honestly). The page renders
   headlessly with Chrome for a side-by-side (`--headless=new --virtual-time-budget=6000`).
 
 ## The idle sweep (2026-09-15)

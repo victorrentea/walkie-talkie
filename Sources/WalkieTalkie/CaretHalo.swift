@@ -452,6 +452,50 @@ final class CaretHalo {
     /// effect idles on its own slow wave.
     var samples: (() -> [Float]?)?
 
+    /// **The panel's frame for the current style**, in screen coordinates
+    /// (2026-09-20, `swift-port-02`). The film and the square effects get the
+    /// ring's square centred on the pointer; a screen-sized style (the water)
+    /// gets the frame of the screen the pointer is on, so the pool sits at
+    /// the bottom of *that* screen and the comets can orbit as wide as the
+    /// page's. The pointer is handed to such a renderer as `center` every
+    /// frame rather than moving the window.
+    private func panelFrame() -> NSRect {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        if style.coversScreen { return screen.frame }
+        if let preset = style.preset {
+            let s = (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
+            return NSRect(x: (mouse.x - s / 2).rounded(), y: (mouse.y - s / 2).rounded(), width: s, height: s)
+        }
+        return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
+    }
+
+    /// The engine's web view, for a preset style; nil otherwise. It stands in
+    /// the panel's content view beside the (empty) stage, and the panel's
+    /// alpha is what fades it in and out — a web view cannot be a sublayer of
+    /// the stage the collapse scales.
+    private var web: MilkDropHalo?
+
+    /// The pointer in a screen-sized renderer's page coordinates (y down
+    /// from the panel's top-left), written on every `follow` and `show`.
+    private func aimEffectAtPointer() {
+        guard let effect = effect, effect.style.coversScreen, let panel = panel else { return }
+        let p = NSEvent.mouseLocation, f = panel.frame
+        effect.center = CGPoint(x: p.x - f.origin.x, y: f.maxY - p.y)
+        // The bloom and the collapse scale `stage` about its anchor; on a
+        // screen-sized panel that anchor has to be the pointer, or the ring
+        // would converge on the middle of the screen.
+        if let stage = stage {
+            let ax = (p.x - f.origin.x) / f.width, ay = (p.y - f.origin.y) / f.height
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            stage.anchorPoint = CGPoint(x: ax, y: ay)
+            stage.position = CGPoint(x: ax * f.width, y: ay * f.height)
+            CATransaction.commit()
+        }
+    }
+
     /// Pick another halo. Written to the preference, and if the ring is up
     /// the panel is rebuilt on the spot so the choice is seen at once — the
     /// old panel goes out in a cut rather than a collapse, because what
@@ -464,7 +508,8 @@ final class CaretHalo {
         renderTimer?.invalidate(); renderTimer = nil
         timer?.invalidate(); timer = nil
         panel?.orderOut(nil)
-        panel = nil; stage = nil; pulse = nil; effect = nil
+        web?.stop()
+        panel = nil; stage = nil; pulse = nil; effect = nil; web = nil
         _ = makePanel()
         // `live` stays as it is: `show` reads it through `follow`, which is
         // what puts the new panel on the pointer before it is ordered front.
@@ -476,7 +521,7 @@ final class CaretHalo {
     /// on, for the flash.
     @discardableResult
     func cycleStyle(by step: Int) -> HaloStyle {
-        let all = HaloStyle.allCases
+        let all = HaloStyle.allCases.filter { $0.isAvailable || $0 == style }
         let i = all.firstIndex(of: style) ?? 0
         let next = all[((i + step) % all.count + all.count) % all.count]
         setStyle(next)
@@ -691,6 +736,7 @@ final class CaretHalo {
         // said yet is the same lie a frozen indicator tells. The stage is set
         // to full size or to the pointer's dot, depending on how this one opens.
         small = opening != .whole
+        aimEffectAtPointer()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         pulse?.transform = CATransform3DIdentity
@@ -732,6 +778,18 @@ final class CaretHalo {
             let r = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak effect] _ in effect?.step() }
             renderTimer = r
             RunLoop.main.add(r, forMode: .common)
+        }
+        if let web = web {
+            web.start()
+            renderTimer?.invalidate()
+            let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
+                guard let self = self else { return }
+                web?.feed(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024))
+            }
+            renderTimer = r
+            RunLoop.main.add(r, forMode: .common)
+            // `alphaValue` is the web view's fade — see `hide`.
+            panel.alphaValue = 1
         }
         panel.orderFrontRegardless()
 
@@ -780,6 +838,15 @@ final class CaretHalo {
         growOnShow = false
         small = false
         stage?.removeAnimation(forKey: "bloom")
+        // **A web view goes out in a fade**, over `collapse`: it is not on the
+        // stage the collapse scales, and a fade is the one thing a window can
+        // do to a view it does not draw. The engine's loop stops at the end.
+        if let web = web, let panel = panel {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = Self.collapse
+                panel.animator().alphaValue = 0
+            } completionHandler: { web.stop() }
+        }
         // **Straight out, not collapsed.** The ring shrinking into the pointer
         // says *the sentence went there*; an arrow still asking him to place the
         // caret while it does would be asking for something already decided.
@@ -800,6 +867,7 @@ final class CaretHalo {
         closing = true
         closingGeneration &+= 1
         let generation = closingGeneration
+        aimEffectAtPointer()
 
         // **Sampled, both of them, against one eased progress.** `u` is how far
         // in it has travelled and `t` is how much of the half-second has gone;
@@ -937,7 +1005,26 @@ final class CaretHalo {
         // out and the heads are the only thing left: they are what says *the
         // words are landing here*, so they have to go on meaning the pointer.
         guard live || closing || delivering, let panel = panel else { return }
-        let wanted = Self.origin()
+        // **A screen-sized panel stays put and the pointer is handed in.**
+        // Unless the pointer has crossed to a screen of another size, in
+        // which case the panel is rebuilt for that screen.
+        if let effect = effect, effect.style.coversScreen {
+            let frame = panelFrame()
+            if frame.size != panel.frame.size {
+                Log.info("◯ caret halo: the pointer moved to a \(Int(frame.width))×\(Int(frame.height)) screen — rebuilding the water")
+                let current = style
+                style = .lightning       // so `setStyle` sees a change
+                setStyle(current)
+                return
+            }
+            if frame.origin != panel.frame.origin { panel.setFrameOrigin(frame.origin) }
+            aimEffectAtPointer()
+            delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
+            return
+        }
+        // A preset's square is bigger than the ring's, so the origin is the
+        // frame's rather than `Self.origin()`, which the arrow keeps.
+        let wanted = web != nil ? panelFrame().origin : Self.origin()
         panel.setFrameOrigin(wanted)
         // **Who moved it?** (2026-09-14). Victor: *"pe retina merge bine, pe
         // ecranul al doilea îmi aleargă, îmi fuge de acolo, acolo"* — a ring that
@@ -999,8 +1086,8 @@ final class CaretHalo {
         // and the page shows them at full alpha; a second envelope on the
         // panel would be the same syllable said twice. Only the arrow's
         // schedule is kept.
-        if effect != nil {
-            panel.alphaValue = 1
+        if effect != nil || web != nil {
+            if effect != nil { panel.alphaValue = 1 }
             arrow.refresh(quiet: quietSeconds?() ?? 0, at: Self.origin())
             return
         }
@@ -1798,11 +1885,12 @@ final class CaretHalo {
 
     private func makePanel() -> RelayPanel {
         let side = Self.side
+        let frame = panelFrame()
         // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` drags a
         // borderless window back onto the display and below the menu bar, which
         // for something pinned to the pointer is precisely wrong — at the top of
         // the screen it would shove the ring off the cursor to keep it whole.
-        let p = RelayPanel(contentRect: NSRect(x: 0, y: 0, width: side, height: side),
+        let p = RelayPanel(contentRect: NSRect(origin: .zero, size: frame.size),
                            styleMask: [.borderless, .nonactivatingPanel],
                            backing: .buffered, defer: false)
         p.isOpaque = false
@@ -1813,27 +1901,44 @@ final class CaretHalo {
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         p.sharingType = Self.capturable ? .readOnly : .none
 
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: side, height: side))
+        let view = NSView(frame: NSRect(origin: .zero, size: frame.size))
         view.wantsLayer = true
         // **A stage of our own, rather than the view's backing layer.** AppKit
         // owns that one and resets its transform on any layout it feels like
         // doing; the collapse would then be undone mid-flight by something with
         // no opinion about the halo at all.
         let stage = CALayer()
-        stage.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        stage.frame = CGRect(origin: .zero, size: frame.size)
         let halo: CALayer
-        if style != .lightning,
-           let renderer = HaloEffectRenderer(style: style, side: side, ringRadius: Self.core) {
+        web = nil
+        if let preset = style.preset {
+            // **The engine, in a web view** — see `MilkDropHalo`. The stage
+            // stays, empty, so the bloom and the collapse have something to
+            // animate without moving the web view: what fades it is the
+            // panel's alpha, in `show` and `hide`.
+            effect = nil
+            halo = CALayer()
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+            if let host = MilkDropHalo(preset: preset, side: frame.width,
+                                       screen: screen?.frame.size ?? frame.size) {
+                view.addSubview(host)
+                web = host
+                Log.info("◯ caret halo: \(style.rawValue) — \(style.title), a \(Int(frame.width))pt square in a web view\(MilkDropHalo.engineAvailable ? "" : " — NO ENGINE bundled, test pattern")")
+            } else {
+                Log.error("◯ caret halo: \(style.rawValue) asked for, but assets/milkdrop is nowhere to be found")
+            }
+        } else if style != .lightning,
+           let renderer = HaloEffectRenderer(style: style, size: frame.size, ringRadius: Self.core) {
             // **Another halo in the film's place** (2026-09-20). The effect
             // draws its own motion — every one of them turns, breathes or
             // emits on its own clock — so it gets no spin of its own from
             // here; the stage and the pulse above it are unchanged, so the
             // bloom and the collapse are the same gesture whatever is drawn.
             renderer.samples = { [weak self] in self?.samples?() ?? nil }
-            renderer.syntheticLevel = { [weak self] in self?.samples == nil ? (self?.level?() ?? 0) : 0 }
             effect = renderer
             halo = renderer.layer
-            Log.info("◯ caret halo: \(style.rawValue) — \(style.title), R=\(Int(renderer.R))pt in a \(Int(side))pt panel")
+            Log.info("◯ caret halo: \(style.rawValue) — \(style.title), R=\(Int(renderer.R))pt in a \(Int(frame.width))×\(Int(frame.height))pt panel")
         } else {
             effect = nil
             halo = Self.haloLayer(side: side)
@@ -1862,7 +1967,7 @@ final class CaretHalo {
         // the same way: two animations on one transform overwrite rather than
         // compose. Its box is the whole panel, so it scales about the pointer.
         let pulse = CALayer()
-        pulse.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        pulse.frame = CGRect(origin: .zero, size: frame.size)
         pulse.addSublayer(halo)
         stage.addSublayer(pulse)
         view.layer?.addSublayer(stage)
@@ -1891,6 +1996,15 @@ extension CaretHalo {
     ///
     /// `atCaret` is on, because the arrow is half of what there is to look at.
     ///
+    /// **`WT_HALO_DEMO_AUDIO=1` gives the demo a voice** (2026-09-20): with no
+    /// dictation there are no samples, so every ported effect sits in its
+    /// idle state and the film breathes only on the fabricated `level`.
+    /// `DemoVoice` fills the same `samples` closure `MicRecorder.recentSamples`
+    /// normally fills — broadband noise under a slow beat, not a tone, because
+    /// a tone traces a clean circle and proves nothing — and `level` follows
+    /// its envelope, so the film and the effects react to the same thing.
+    /// Without the flag the demo is exactly what a foreign microphone gives.
+    ///
     /// It is the only path that sets `capturable`, so it is also the only way a
     /// screenshot of this app can contain the ring — which is what makes any of
     /// this provable rather than merely asserted.
@@ -1909,6 +2023,13 @@ extension CaretHalo {
             return Float(0.25 + 0.75 * abs(sin(t * .pi * 3)))
         }
         halo.quietSeconds = { max(0, phase() - 6) }
+        if ProcessInfo.processInfo.environment["WT_HALO_DEMO_AUDIO"] != nil {
+            let voice = DemoVoice()
+            halo.samples = { voice.samples() }
+            halo.level = { voice.level }
+            halo.quietSeconds = { voice.quietSeconds }
+            Log.info("◯ demo voice: broadband noise under a slow beat, through the samples path")
+        }
         halo.setActive(true, atCaret: true, opening: .fromPointer)
         // **`WT_HALO_CYCLE=<seconds>` turns the dial on the live ring**, the
         // way the wheel would — the one path a `.build/debug` binary cannot
@@ -2095,5 +2216,44 @@ extension CaretHalo {
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else { return }
         try? png.write(to: URL(fileURLWithPath: path))
+    }
+}
+
+/// **A voice for the demo** — see `CaretHalo.demo`. Broadband noise shaped by
+/// a slow beat (syllables at ~2.4 Hz under a ~0.2 Hz swell, with a breath of
+/// near-silence every cycle) plus a little low hum so the bass bands have
+/// something to read. Generated on the audio clock, 16 kHz, into a ring the
+/// size of `MicRecorder.recentSamples`.
+final class DemoVoice {
+    private var ring = [Float](repeating: 0, count: MicRecorder.recentCount)
+    private var head = 0
+    private var produced: Double = 0
+    private let started = CFAbsoluteTimeGetCurrent()
+    private(set) var level: Float = 0
+    private(set) var quietSeconds: TimeInterval = 0
+
+    private func envelope(at t: Double) -> Float {
+        let swell = 0.55 + 0.45 * sin(t * 2 * .pi * 0.2)
+        let syllable = max(0, sin(t * 2 * .pi * 2.4))
+        let breath: Double = sin(t * 2 * .pi * 0.2) < -0.8 ? 0.05 : 1
+        return Float(pow(syllable, 0.6) * swell * breath)
+    }
+
+    /// The last 128 ms, oldest first — advanced to the wall clock.
+    func samples() -> [Float] {
+        let now = CFAbsoluteTimeGetCurrent() - started
+        while produced < now {
+            let e = envelope(at: produced)
+            let hum = 0.25 * sin(produced * 2 * .pi * 130) + 0.12 * sin(produced * 2 * .pi * 260)
+            ring[head] = (Float.random(in: -1...1) * 0.6 + Float(hum)) * e * 0.5
+            head = (head + 1) % ring.count
+            produced += 1.0 / 16000
+        }
+        let e = envelope(at: now)
+        level = max(e, level - 1 / 60 / 3)         // the beacon's three-second fall
+        quietSeconds = e > 0.1 ? 0 : quietSeconds + 1 / 60
+        var out = [Float](repeating: 0, count: ring.count)
+        for i in 0..<ring.count { out[i] = ring[(head + i) % ring.count] }
+        return out
     }
 }

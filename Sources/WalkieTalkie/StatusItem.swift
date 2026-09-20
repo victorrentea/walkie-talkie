@@ -579,12 +579,23 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     private func applyHaloRow() {
         let current = HaloStyle.current
-        haloItem.title = "Halo: \(current.title)"
+        haloItem.title = "Halo: \(current.menuTitle)"
         haloSubmenu.removeAllItems()
+        // **Three groups under two lines**: the film; the hand-written
+        // effects; the MilkDrop presets. A preset row is greyed, and says why,
+        // while the engine is not bundled (`MilkDropHalo.engineAvailable`) —
+        // `autoenablesItems` off for the mic submenu's reason.
+        haloSubmenu.autoenablesItems = false
+        var lastWasPreset = false
         for style in HaloStyle.allCases {
-            let row = NSMenuItem(title: style.title, action: #selector(haloPicked(_:)), keyEquivalent: "")
+            if style.preset != nil && !lastWasPreset { haloSubmenu.addItem(.separator()) }
+            lastWasPreset = style.preset != nil
+            let available = style.isAvailable
+            let row = NSMenuItem(title: available ? style.menuTitle : "\(style.menuTitle) — engine not bundled",
+                                 action: #selector(haloPicked(_:)), keyEquivalent: "")
             row.target = self
             row.representedObject = style.rawValue
+            row.isEnabled = available
             row.image = style == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloSubmenu.addItem(row)
             if style == .lightning { haloSubmenu.addItem(.separator()) }

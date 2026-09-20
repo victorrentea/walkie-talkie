@@ -1561,7 +1561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onHaloDial = { [weak self] step in
             guard let self = self else { return }
             let landed = self.caretHalo.cycleStyle(by: step)
-            self.overlay.flash("✨ \(landed.title)", duration: 1.5)
+            self.overlay.flash("✨ \(landed.menuTitle)", duration: 1.5)
         }
         // One line per selection, in the app's own log: how many frames the box
         // was actually drawn in, and the longest it went without one. It took a
