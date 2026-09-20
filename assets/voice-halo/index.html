@@ -732,7 +732,7 @@ const FORMULAS = [
       milkdropRing(t, rad(this.scale), { ZOOM: 1.006, TWIST: 0.004, DECAY: 0.88, R0: 0.42, AMP: 0.35,
                         W: 1.1, FOG: 3, SPIN: 0.30, LIVE_ONLY: true });   // diametru 80%
   }},
-  { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.0808, draw(t) {
+  { name: 'Amethyst', desc: 'oscilogramă mov — albastrul și roșul suprapuse', scale: 0.1616, draw(t) {
       const R = rad(this.scale);
       splitWave();
       tunnelLayer({ DECAY: 0.80, ZOOM: 1.007, TWIST: 0.002 }, () => {
@@ -754,7 +754,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.0606, draw(t) {
+  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1212, draw(t) {
       // cercul galben care stătea fixat a fost scos; rămân doar barele
       const R = rad(this.scale);
       plainLayer(() => {
@@ -770,7 +770,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.0625, draw(t) {
+  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.125, draw(t) {
       // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
       // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
       // are exact nuanța primului și cusătura dispare.
@@ -788,7 +788,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.05, draw(t) {
+  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.10, draw(t) {
       // Efectul care l-a scos din sărite pe Victor: urma lui umplea pătratul și i se
       // vedea muchia. Acum pânza e tot ecranul, deci ceața se oprește abia în
       // marginea ecranului — fiindcă acolo se termină ecranul, nu fiindcă a tăiat-o ceva.
@@ -831,7 +831,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.0348, draw(t) {
+  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.0696, draw(t) {
       // gaura din mijloc de 2,5 ori mai mare, iar inelul strâns (RING_FRAC mai mic).
       // Pătratul care tăia mărgelele din față nu mai există deloc.
       drawOrbits(t, rad(this.scale), 0.5, 1.40, 0.22);
