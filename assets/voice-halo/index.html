@@ -498,7 +498,7 @@ const ORB = {
   STRANDS: 14, BEADS_PER_TURN: 110, BEADS_MAX: 170,
   ARC_MIN: 0.55, ARC_MAX: 1.35, COMET_FRACTION: 0.34, COMET_RADIUS_BOOST: 1.16,
   TILT_MIN_DEG: 6, TILT_MAX_DEG: 58, TILT_CAP_DEG: 72,
-  RADIUS_SPREAD: 0.30, WOBBLE: 0.055, WOBBLE_LOBES: 3,
+  RADIUS_SPREAD: 0.55, WOBBLE: 0.055, WOBBLE_LOBES: 3,
   PERSPECTIVE: 2.7, RING_FRAC: 0.30, HOLE_FRAC: 0.56, HOLE_SOFT: 0.30, INNER_FADE: 0.34,
   DOT_NEAR: 7.6, DOT_FAR: 2.4, TAPER: 0.62,
   GLOW_NEAR: 1.45, GLOW_FAR: 2.2, GLOW_A_NEAR: 0.22, GLOW_A_FAR: 0.20,
@@ -555,7 +555,9 @@ function orbBuild() {
     const arc = TAU * (comet ? ORB.ARC_MIN + 0.25 * ((i * 0.4142) % 1)
                              : 0.95 + (ORB.ARC_MAX - 0.95) * ((i * 0.2718) % 1));
     const jit = (i * 0.6180339887) % 1;
-    const radius = (1 + ORB.RADIUS_SPREAD * (((i * 0.7548776662) % 1) * 2 - 1))
+    // răsfirate DOAR spre exterior (Victor, 2026-09-20): raza minimă e gaura, restul
+    // se întind în afară, așa că liniile nu se mai calcă una pe alta
+    const radius = (1 + ORB.RADIUS_SPREAD * ((i * 0.7548776662) % 1))
                    * (comet ? ORB.COMET_RADIUS_BOOST : 1);
     const hueFrom = (i % 2 === 0) ? 0.02 + 0.16 * jit : 0.98 - 0.16 * jit;
     const hueSpan = (0.30 + 0.06 * ((i * 0.3819) % 1)) * (i % 2 === 0 ? 1 : -1);
@@ -759,7 +761,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1212, draw(t) {
+  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1596, draw(t) {
       // cercul galben care stătea fixat a fost scos; rămân doar barele
       const R = rad(this.scale);
       plainLayer(() => {
@@ -775,7 +777,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.125, draw(t) {
+  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.1534, draw(t) {
       // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
       // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
       // are exact nuanța primului și cusătura dispare.
@@ -793,7 +795,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.10, draw(t) {
+  { name: 'Eclipse', desc: 'lanț de fulgere — lasă valuri de ceață în urmă', scale: 0.1825, draw(t) {
       // Efectul care l-a scos din sărite pe Victor: urma lui umplea pătratul și i se
       // vedea muchia. Acum pânza e tot ecranul, deci ceața se oprește abia în
       // marginea ecranului — fiindcă acolo se termină ecranul, nu fiindcă a tăiat-o ceva.
@@ -836,7 +838,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.0696, draw(t) {
+  { name: 'Atom', desc: 'orbite rare — gaură mare, blocuri clare', scale: 0.099, draw(t) {
       // gaura din mijloc de 2,5 ori mai mare, iar inelul strâns (RING_FRAC mai mic).
       // Pătratul care tăia mărgelele din față nu mai există deloc.
       drawOrbits(t, rad(this.scale), 0.5, 1.40, 0.22);
@@ -852,9 +854,12 @@ const FORMULAS = [
       // răsucește: rotație mare + împingere mică = spirala din film
       // împingere mare, răsucire mică: ceața pleacă radial față de centrul în
       // jurul căruia se rotesc, nu în coadă după ele
-      tunnelLayer({ DECAY: 0.930, ZOOM: 1.022, TWIST: 0.009 }, () => {
-        const orbit = R * 0.52, rb = R * 0.095;   // cât să mai rămână loc de ceață
-        const spin = t * 0.45;
+      const crisp = [];
+      // ZOOM 1.022 → 1.011: urmele pleacă de 2× mai încet spre exterior, iar bilele
+      // se rotesc de 1.3× mai repede — ca urma să se așeze în spirală (Victor, 2026-09-20)
+      tunnelLayer({ DECAY: 0.930, ZOOM: 1.011, TWIST: 0.009 }, () => {
+        const orbit = R * 0.676, rb = R * 0.1235;   // ×1.3 și ×1.3 (Victor, 2026-09-20)
+        const spin = t * 0.585;   // ×1.3
         for (const side of [0, 1]) {
           const a = spin + side * Math.PI;
           const cx = Math.cos(a) * orbit, cy = Math.sin(a) * orbit;
@@ -888,10 +893,15 @@ const FORMULAS = [
             const r = rb * (1 + 0.85 * vl((u + side * 0.5) % 1) + 0.05 * Math.sin(t * 2.3 + side));
             pts.push([cx + Math.cos(th) * r, cy + Math.sin(th) * r]);
           }
-          strokePath(pts, true, hue + 10, 2.0, .55);
-          strokePath(pts, true, hue + 10, 7.0, .045);
+          // În stratul de urmă conturul intră doar cât e voce: în tăcere bila nu
+          // lasă nimic în urmă, deci urmele spun CÂND s-a vorbit (Victor, 2026-09-20).
+          // Conturul crisp se desenează după, peste strat, fără să se hrănească în el.
+          strokePath(pts, true, hue + 10, 2.0, .55 * levelNow);
+          strokePath(pts, true, hue + 10, 7.0, .045 * levelNow);
+          crisp.push([pts, hue + 10]);
         }
       });
+      overLayer(() => { for (const [pts, h] of crisp) { strokePath(pts, true, h, 2.0, .55); strokePath(pts, true, h, 7.0, .045); } });
   }},
   { name: '− Petals', desc: 'raze ORB — petale rotitoare, fără flash', scale: 0.1, draw(t) {
       // Din „ORB - Waaa". Presetul are TREI forme suprapuse (100 de laturi fiecare),
@@ -957,7 +967,7 @@ const FORMULAS = [
   { name: 'Cauldron', desc: 'MilkDrop 8 — Geiss, Cauldron painterly 2', preset: 'Geiss - Cauldron - painterly 2 (saturation remix)', scale: 0.525 },
   // cu 30% mai mic, la cerere: `scale` micșorează doar pânza pe ecran, compoziția
   // presetului rămâne intactă
-  { name: '• Tendrils', desc: 'MilkDrop 20 — Aderrasi, Painterly Tendrils', preset: 'Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast', scale: 0.7 },
+  { name: '• Tendrils', desc: 'MilkDrop 20 — Aderrasi, Painterly Tendrils', preset: 'Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast', scale: 0.56 },
   { name: '− Silk', desc: 'MilkDrop 44 — Flexi, truly soft piece of software', preset: 'Flexi - truly soft piece of software - this is generic texturing (Jelly) ', scale: 0.5 },
   { name: '− Nova', desc: 'MilkDrop 77 — ORB, Waaa', preset: 'ORB - Waaa', scale: 0.5 },
   { name: 'Snowflake', desc: 'MilkDrop 85 — Zylot, Star Ornament (mic)', preset: 'Zylot - Star Ornament', scale: 0.69 },
@@ -991,7 +1001,11 @@ const FORMULAS = [
         // mărimea e plafonată la 70% din pasul de pe circumferință (Victor: „să le văd separat")
         const pitch = 2 * Math.PI * half * 0.35 / M;
         const size = Math.min(pitch * 0.7, (8.4 + 2.4 * shimmer + 16.0 * Math.min(1, amp * 1.6)) * dpr);
-        const hue = (u + t * 0.05) % 1;
+        // rampa cyan→violet→magenta NU e ciclică, deci la u=1→0 stăteau alăturate
+        // capetele ei (aceeași cusătură ca la Prism). Nuanța urcă și coboară pe
+        // aceeași rampă (dus-întors), deci cercul se închide fără salt (2026-09-20).
+        const phase = (u + t * 0.05) % 1;
+        const hue = 1 - Math.abs(2 * phase - 1);
         const spr = orbSprites[Math.min(ORB.STEPS - 1, (hue * ORB.STEPS) | 0)];
         const gm = size * 2.1;
         orbSC.globalAlpha = 0.18 + 0.27 * amp;
@@ -1065,6 +1079,19 @@ function plainLayer(drawFn) {
   fullSize();
   fctx.setTransform(1, 0, 0, 1, 0, 0);
   fctx.clearRect(0, 0, fullW, fullH);
+  fctx.save();
+  fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fctx.translate(innerWidth / 2 + walkX, innerHeight / 2 + walkY);
+  fctx.globalCompositeOperation = 'lighter';
+  const prev = CTX; CTX = fctx;
+  drawFn();
+  CTX = prev;
+  fctx.restore();
+}
+
+// Desenat PESTE ce a lăsat stratul de urmă în cadrul ăsta, fără să intre în el:
+// ce trece pe aici nu se hrănește în feedback, deci nu lasă urmă (Gemini, 2026-09-20).
+function overLayer(drawFn) {
   fctx.save();
   fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   fctx.translate(innerWidth / 2 + walkX, innerHeight / 2 + walkY);
