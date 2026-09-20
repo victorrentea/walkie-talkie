@@ -5,7 +5,7 @@
 # the page reaches the app by bumping TAG here and re-running this. The
 # vendored copy is committed, so the app builds without the sibling repo.
 set -euo pipefail
-TAG="${VOICE_HALO_TAG:-81a4911}"
+TAG="${VOICE_HALO_TAG:-17eb803}"
 SRC="${VOICE_HALO_REPO:-$HOME/workspace/voice-halo}"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$DIR/assets/voice-halo"

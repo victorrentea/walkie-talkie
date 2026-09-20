@@ -50,7 +50,7 @@
   // ---- the keying pass ----------------------------------------------------
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
-  let fadeFloor = 0.10, gain = 1, rotX = 1;
+  let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -60,11 +60,15 @@
     const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
       void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
     const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
-      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain;
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart;
       // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→floor, constant past 1.
       // floorA is what is left past the fade radius: the page's 0.10, or 0 for a
       // preset that has to be gone entirely at that distance (Tunnel, 2026-09-20).
+      // fadeStart > 0: full light out to that fraction of the radius, then one
+      // smooth fall to floorA at the edge — for a preset that has to stay
+      // visible across its canvas (Tunnel: "2x more visible", 2026-09-20)
       float mask(float d) {
+        if (fadeStart > 0.0) return d <= fadeStart ? 1.0 : mix(1.0, floorA, smoothstep(fadeStart, 1.0, d));
         if (d <= 0.28) return mix(1.0, 0.78, d / 0.28);
         if (d <= 0.50) return mix(0.78, 0.50, (d - 0.28) / 0.22);
         if (d <= 0.75) return mix(0.50, 0.26, (d - 0.50) / 0.25);
@@ -93,7 +97,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
-    uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain');
+    uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain'); uStart = gl.getUniformLocation(prog, 'fadeStart');
     gl.disable(gl.BLEND);
   }
   function key() {
@@ -105,6 +109,7 @@
     gl.uniform2f(uRes, side, side);
     gl.uniform1f(uFloor, fadeFloor);
     gl.uniform1f(uGain, gain);
+    gl.uniform1f(uStart, fadeStart);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -165,6 +170,7 @@
       fade = !!wantFade;
       fadeFloor = opts.fadeFloor === undefined ? 0.10 : opts.fadeFloor;
       gain = opts.gain || 1;
+      fadeStart = opts.fadeStart || 0;
       rotX = opts.rot || 1;
       //   fadeAtEdge: the fade reaches the CANVAS edge (radius = half the canvas side),
       //               so a scaled-down preset dies out before its square can show —

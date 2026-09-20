@@ -129,6 +129,9 @@ enum HaloStyle: String, CaseIterable {
         let number: Int; let name: String; let scale: CGFloat
         var fade = false; var fadeRadius: CGFloat? = nil; var fadeAtEdge = false; var fadeFloor: CGFloat = 0.10
         var gain: CGFloat = 1; var rot: CGFloat = 1
+        /// Full light out to this fraction of the fade radius, then one smooth
+        /// fall to `fadeFloor`; 0 = the page's four-stop mask.
+        var fadeStart: CGFloat = 0
         /// Pinned to the screen (not following the pointer), the canvas's
         /// centre — the preset's horizon — at this fraction of the screen's
         /// height from the bottom. Nil = the square follows the pointer.
@@ -139,13 +142,17 @@ enum HaloStyle: String, CaseIterable {
         // Tunnel: *"3x smaller"* than what he saw (the full-screen canvas), so a
         // third of the screen's long side; its fade is the canvas edge now (the
         // half-screen radius would be outside it), at his 2× gain and 2× turn.
+        // *"Tunnel 2x more visible"*: measured, gain 3 or 4 changes nothing the
+        // key can show (the bright parts are at 1 already) — what dims Tunnel is
+        // the mask, half-light at half the radius. So: full light out to 55 %
+        // of the radius, then one fall to nothing at the edge; gain 4 as asked.
         case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.84,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 2, rot: 2)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55)
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.70,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.66,
+        case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.46,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.75,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
