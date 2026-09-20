@@ -65,7 +65,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -108,6 +108,37 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 #: Giving up is still in here, at the end: a Wispr that has quit or a channel that
 #: is really dead does not get better by pressing its key another four hundred times.
 BACKOFF_SEC = (300, 900, 1800)
+
+
+#: How long the rig stays off after the ladder runs out. Three blocked stretches in
+#: a row is not a slow night — it is the service saying no, and the way to lose this
+#: account is to keep dictating into it for another five hours. The cooldown is
+#: written to disk rather than kept in memory, because the process that learned it is
+#: about to exit and the next run is the one that must not start.
+COOLDOWN_FILE = Path.home() / ".walkie-talkie" / "teacher-cooldown"
+COOLDOWN_HOURS = float(os.environ.get("WISPR_COOLDOWN_HOURS", "3"))
+
+
+def cooldown_left(now=None) -> float:
+    """Hours still to wait before dictating again. 0.0 when the rig is free."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        until = datetime.fromisoformat(COOLDOWN_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+    return max(0.0, (until - now).total_seconds() / 3600)
+
+
+def start_cooldown(hours=None) -> datetime:
+    """Refuse to dictate until this much later, and say so on disk."""
+    until = datetime.now(timezone.utc) + timedelta(hours=hours or COOLDOWN_HOURS)
+    COOLDOWN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    COOLDOWN_FILE.write_text(until.isoformat())
+    return until
+
+
+def clear_cooldown() -> None:
+    COOLDOWN_FILE.unlink(missing_ok=True)
 
 
 def backoff_for(recoveries) -> float | None:
@@ -304,6 +335,9 @@ def main(argv):
                          "whatever is left in the batch — a night is a length, "
                          "and audio minutes stopped predicting it once the mic "
                          "clips arrived (a 7.8s clip costs ~18s, a 30s one ~41s)")
+    ap.add_argument("--ignore-cooldown", action="store_true",
+                    help="start even though the last run stood down after three "
+                         "blocked stretches — for a rig that has been fixed since")
     ap.add_argument("--manifest", help="write id/wav/seconds/reference/teacher "
                                        "as JSONL here, as each label lands")
     ap.add_argument(
@@ -347,6 +381,14 @@ def main(argv):
             "Accessibility is not granted to this interpreter — CGEventPost does\n"
             "nothing and Wispr would never start recording. Grant it in System\n"
             "Settings → Privacy & Security → Accessibility.")
+    waiting = cooldown_left()
+    if waiting and not args.ignore_cooldown:
+        raise SystemExit(
+            f"standing down for another {waiting*60:.0f} min — the last run was "
+            "blocked three times over and stopped on purpose. --ignore-cooldown "
+            "overrides, but the reason it exists is that the alternative to waiting "
+            "is losing the account.")
+
     front = rig.paste_sink()
     if front not in SAFE_SINKS:
         raise SystemExit(
@@ -385,9 +427,11 @@ def main(argv):
                 if streak >= GIVE_UP_AFTER:
                     pause = backoff_for(recoveries)
                     if pause is None:
+                        until = start_cooldown()
                         log(f"giving up after {streak} failures and {recoveries} "
-                            "pauses — check that Wispr is running and on the right "
-                            "microphone")
+                            f"pauses — standing down until "
+                            f"{until.astimezone().strftime('%H:%M')} so this does not "
+                            "turn into a banned account")
                         break
                     recoveries += 1
                     log(f"{streak} failures in a row — pausing {pause/60:.0f} min "
@@ -420,6 +464,9 @@ def main(argv):
             time.sleep(next(gap))
 
     elapsed = (time.monotonic() - started) / 60
+    if done:
+        # The service answered, so whatever it was refusing earlier is over.
+        clear_cooldown()
     log(f"done: {done} labelled, {failed} failed, {elapsed:.0f} min")
     left = db.execute(
         "SELECT COUNT(*) FROM samples WHERE (teacher_text IS NULL OR teacher_text = '')"

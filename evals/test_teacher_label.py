@@ -12,8 +12,10 @@ test: a constant would pass every other check in this repo silently.
 """
 
 import os
+import pathlib
 import random
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helpers"))
@@ -104,6 +106,42 @@ class Backoff(unittest.TestCase):
     def test_the_ladder_is_shorter_than_a_night(self):
         """A night is seven hours; a ladder that outlasts it never reaches its own end."""
         self.assertLess(sum(tl.BACKOFF_SEC), 2 * 3600)
+
+
+class Cooldown(unittest.TestCase):
+    """Three blocked stretches in a row is the service saying no. The ladder already
+    stops the run; this is what stops the *next* one. Without it, 2026-09-20 went
+    give-up at 06:23, restart at 06:36, and another fifty minutes of dictating into an
+    account that was refusing — the exact behaviour that gets an account banned."""
+
+    def setUp(self):
+        self._real = tl.COOLDOWN_FILE
+        self._tmp = tempfile.mkdtemp()
+        tl.COOLDOWN_FILE = pathlib.Path(self._tmp) / "cooldown"
+
+    def tearDown(self):
+        tl.COOLDOWN_FILE = self._real
+
+    def test_no_file_means_free_to_run(self):
+        self.assertEqual(tl.cooldown_left(), 0.0)
+
+    def test_a_started_cooldown_blocks_the_next_run(self):
+        tl.start_cooldown(hours=2)
+        self.assertGreater(tl.cooldown_left(), 1.9)
+
+    def test_it_expires_on_its_own(self):
+        tl.start_cooldown(hours=-1)
+        self.assertEqual(tl.cooldown_left(), 0.0)
+
+    def test_a_run_that_worked_clears_it(self):
+        tl.start_cooldown(hours=2)
+        tl.clear_cooldown()
+        self.assertEqual(tl.cooldown_left(), 0.0)
+
+    def test_rubbish_on_disk_does_not_wedge_the_rig(self):
+        """A half-written file must not become a permanent refusal to work."""
+        tl.COOLDOWN_FILE.write_text("not a date")
+        self.assertEqual(tl.cooldown_left(), 0.0)
 
 
 if __name__ == "__main__":
