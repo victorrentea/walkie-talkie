@@ -10,11 +10,13 @@ and fewer), and every native preset is brighter than its web twin.
 
 ## Recommendation: ship as an opt-in engine, not yet the default
 
-- **Cost**: the native route replaces 40–96 % of a core in WebContent (plus a
-  share of the WebKit GPU process) and 260–1100 MB of WebContent with **5–10 %
-  in the app itself and no extra process**; the app's RSS *drops* (74 → 40 MB)
-  because no `WKWebView` is built. A preset frame costs **1.0–3.5 ms of CPU**
-  at either resolution.
+- **Cost**: the native route replaces the **40–96 % of a core** a web view
+  spends in the two processes it spawns (its WebContent *and its own* WebKit
+  GPU process — a census of Tunnel: GPU 56–59 %, WebContent 26 %) and its
+  260–1100 MB of WebContent with **5–12 % in the app itself and no extra
+  process**; the app's RSS *drops* (74 → 40 MB) because no `WKWebView` is
+  built. A preset frame costs **0.7–3.5 ms of CPU** at either resolution, on a
+  render queue of its own — the main thread only receives the surface.
 - **Visuals**: Tunnel, Cauldron, Tendrils and Water Dream are the same picture;
   Snowflake and Sparks are recognisably the same preset but not the same
   frame. Victor has to look before this can be the default — the review
@@ -68,14 +70,18 @@ and fewer), and every native preset is brighter than its web twin.
 `top`, 1 s samples, ring up on the demo voice (`WT_HALO_DEMO=12
 WT_HALO_DEMO_AUDIO=1`), 3456×2234 display, frame cap 30, `.build/debug`
 binary, 2026-09-21 00:50–00:57 (`docs/projectm/sweep-2026-09-21.md`; two
-earlier sweeps agree within noise). "WebContent" is the process the demo
-spawned; WebKit's *shared* GPU process was sampled before each run and the
-baseline subtracted, and is **not attributable tonight** — the installed
-app's own web view kept that process at ~50 % throughout (the rule file's
-earlier figure for it: ~67 % of a core and 240–290 MB per preset).
-WindowServer sat at 20–40 % for every row, film included.
+earlier sweeps agree within noise). **"WebKit" is the sum of the two
+processes the demo's web view spawned** — its WebContent and its own GPU
+process (a census of a Tunnel run, 01:22: GPU 56–59 % at ~45 MB, WebContent
+26 % at ~500 MB; the sweep's classifier only knew the GPU processes that
+existed *before* the run, so it filed the new one under WebContent — the sum
+is right, the split is in the census). The web route's numbers before this
+branch (rule file: ~30 % WebContent + ~67 % GPU process, 280–330 + 240–290
+MB) are the same shape. WindowServer sat at 20–40 % for every row, film
+included; the native rows were re-measured after the render queue went in
+(01:19) and did not move.
 
-| preset | route | app CPU % | WebContent CPU % | app RSS MB | WebContent RSS MB | native frame, CPU ms |
+| preset | route | app CPU % | WebKit CPU % (WebContent + its GPU proc) | app RSS MB | WebContent RSS MB | native frame, CPU ms |
 |---|---|---|---|---|---|---|
 | film (lightning) | — | 0.1 | — | 47 | — | — |
 | Tunnel | web (butterchurn, 2×) | 3.8 | 80.9 | 74 | 361 | — |
@@ -101,9 +107,11 @@ WindowServer sat at 20–40 % for every row, film included.
   per-frame and per-vertex code, not in pixels (as the spike found at 3456²);
   so the native route can render at the backing scale (`WT_PM_SCALE`, default 1
   — 2 costs nothing measurable and is the web route's resolution).
-- **The app's 5–10 %** is the 30 Hz timer, the engine's CPU part (1–3.5 ms),
-  the IOSurface seed bump and the `CATransaction`. A render thread would take
-  it off the main thread; it would not make it smaller.
+- **The app's 5–12 %** is the engine's CPU part (0.7–3.5 ms a frame) on its
+  own queue, the IOSurface seed bump, and the `CATransaction` on the main
+  thread. **At 60 fps** (`WT_HALO_FPS=60`, measured 01:19): Tunnel 8.6–10.7 %,
+  Sparks 21 %, frames 286–301 per 5 s — it scales with the frame count, as
+  expected; the web route at 60 fps was not cleanly measured.
 - **Water Dream** still carries the `voice-halo` page for its comets
   (`HaloPage`, a second web view), so its WebContent column is the page, not
   the preset; the preset's share went from ~1100 MB to nothing.
@@ -175,9 +183,11 @@ texture; noise textures are built in).
 3. **Snowflake and Sparks**: decide whether the native look is acceptable or
    whether the web route stays for those two (`engineHost` could pick per
    preset — a one-line change).
-4. **A render thread**: the engine's 1–3.5 ms a frame is on the main thread
-   today, like the web route's JavaScript bridge was. Moving `pmh_render` to a
-   thread with its own current context frees the main thread for the tap.
+4. ~~A render thread~~ — done at 01:19: `renderQueue` (serial,
+   `.userInteractive`), a `DispatchSourceTimer` on it, `pmh_render` and the
+   PCM pushes there, the surface handed to the layer on the main thread. The
+   `WT_HALO_DEMO=11` regression check (the arrow crossing `patience` at t=8)
+   exits 0 on the native route.
 5. **Upstream the patch** (or keep it): the orphaning buffer uploads are worth
    a projectM issue; the newline-joined `per_frame_` lines
    (`PresetFileParser::GetCode`) are a preset-compatibility bug there too.
@@ -185,8 +195,11 @@ texture; noise textures are built in).
    `WKWebView`. Either port the comets natively or accept the page for it.
 7. **60 fps** was not measured (the cap is 30 everywhere); the engine's CPU
    part would double, ~10–20 % in the app.
-8. The idle web-view cost of the installed app (the 24 % + 50 % pair) deserves
-   its own look — that is the web route's bill even before this branch.
+8. The idle web-view cost of the installed app (the 24 % + 50 % pair, which
+   the census shows is exactly one live web halo's WebContent + GPU process)
+   deserves its own look — that is the web route's bill even before this
+   branch. Nothing on this branch touched or measured the installed app
+   beyond `ps`.
 
 ## How to reproduce
 

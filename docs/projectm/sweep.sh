@@ -30,7 +30,11 @@ run() {  # run <tag> <env...>
   local NEW="$(comm -13 <(echo "$BEFORE") <(echo "$AFTER")) $(pgrep -f com.apple.WebKit.GPU)"
   local WS=$(pgrep -x WindowServer | head -1)
   local PIDS="-pid $P -pid $WS"; for w in $NEW; do PIDS="$PIDS -pid $w"; done
-  { echo "app=$P windowserver=$WS webkit=$(echo $NEW | tr '\n' ' ') gpu=$GPUS"; echo "$BASE"; } > "$OUT/$TAG.stats"
+  # A web view spawns its OWN GPU process beside its WebContent (measured: a
+  # census of a Tunnel demo — GPU 56–59 %, WebContent 26 %, app 5 %); the roles
+  # are recorded so summarize.py can tell them apart.
+  local ROLES=""; for p in $NEW; do ROLES="$ROLES $p:$(ps -o comm= -p $p 2>/dev/null | sed 's|.*com.apple.WebKit.||')"; done
+  { echo "app=$P windowserver=$WS webkit=$(echo $NEW | tr '\n' ' ') gpu=$GPUS roles=$ROLES"; echo "$BASE"; } > "$OUT/$TAG.stats"
   # 4 one-second samples from t≈3.5 s (the first top sample is discarded by top itself)
   top -l 5 -s 1 -stats pid,cpu,rsize,command $PIDS 2>/dev/null | grep -E "^[0-9]+ " >> "$OUT/$TAG.stats" &
   local T=$!

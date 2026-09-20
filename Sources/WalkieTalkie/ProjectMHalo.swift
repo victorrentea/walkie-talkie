@@ -31,7 +31,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
     private let screen: CGSize
     private var renderer: OpaquePointer?
     private let picture = CALayer()
-    private var timer: Timer?
+    /// **The engine renders off the main thread** — its own serial queue, where
+    /// the CGL context is made current for each frame; the main thread only
+    /// receives the finished surface. The tap and the chip never wait on a frame.
+    private let renderQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.projectm", qos: .userInteractive)
+    private var timer: DispatchSourceTimer?
     private var configured = false
     private var failed = false
     private var frames = 0, totalFrames = 0
@@ -112,7 +116,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
         root.addSublayer(picture)
     }
     required init?(coder: NSCoder) { fatalError() }
-    deinit { stopTimer(); if let r = renderer { pmh_destroy(r) } }
+    deinit {
+        stopTimer()
+        if let r = renderer { renderQueue.sync { pmh_destroy(r) } }
+    }
 
     override var isFlipped: Bool { false }
     override func layout() {
@@ -224,6 +231,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// newest 1/30 s of them go to the engine (resampled to 44.1 kHz in the glue).
     func feed(_ samples: [Float]) {
         guard let r = renderer else { return }
+        // Pushed on the render queue, behind whatever frame is in flight: the
+        // engine's PCM ring is not written from two threads.
         let fresh = min(samples.count, Self.sampleRate / max(1, haloFrameCap > 0 ? haloFrameCap : 30) + 16)
         var tail = Array(samples.suffix(fresh))
         if Self.audioGain != 1 { for i in tail.indices { tail[i] *= Self.audioGain } }
@@ -232,7 +241,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // its bands off spectrum bins and assumes 44.1 kHz, and the web route
         // gives butterchurn these very samples raw — so the presets Victor tuned
         // by eye see the same spectrum here.
-        tail.withUnsafeBufferPointer { pmh_add_pcm(r, $0.baseAddress, UInt32(tail.count), Self.resample ? Int32(Self.sampleRate) : 44100) }
+        renderQueue.async {
+            tail.withUnsafeBufferPointer { pmh_add_pcm(r, $0.baseAddress, UInt32(tail.count), Self.resample ? Int32(Self.sampleRate) : 44100) }
+        }
     }
 
     // MARK: The frame loop
@@ -240,28 +251,38 @@ final class ProjectMHalo: NSView, HaloWebHost {
     private func startTimer() {
         stopTimer()
         let interval = 1.0 / Double(haloFrameCap > 0 ? haloFrameCap : 60)
-        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.frame() }
+        let t = DispatchSource.makeTimerSource(queue: renderQueue)
+        t.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(2))
+        t.setEventHandler { [weak self] in self?.frame() }
+        t.resume()
         timer = t
-        RunLoop.main.add(t, forMode: .common)
     }
-    private func stopTimer() { timer?.invalidate(); timer = nil }
+    private func stopTimer() { timer?.cancel(); timer = nil }
 
+    /// One frame, on the render queue: the engine and the key pass, the
+    /// surface's seed bumped, the layer told on the main thread.
     private func frame() {
         guard let r = renderer, !failed else { return }
         // A CF object out of a C function comes back `Unmanaged`; handed to
         // `contents` as it is, the layer shows nothing and says nothing.
-        guard let surface = pmh_render(r)?.takeUnretainedValue() else { fail("a GL error in the keying pass"); return }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
+        guard let surface = pmh_render(r)?.takeUnretainedValue() else {
+            DispatchQueue.main.async { [weak self] in self?.fail("a GL error in the keying pass") }
+            return
+        }
         // **CA does not see a GPU write.** It reads an IOSurface's *seed*, which
         // only a CPU lock bumps, and the object alternates between two surfaces
         // it has already seen — so without one of these it keeps showing the
         // first frame each surface ever held (measured: a dark disc at alpha
         // ≤ 20 on screen while the readback was bright). `WT_PM_SYNC=nil`
         // clears the contents first; the default bumps the seed with an empty lock.
-        if Self.syncMode == "nil" { picture.contents = nil }
-        else { IOSurfaceLock(surface, [], nil); IOSurfaceUnlock(surface, [], nil) }
-        picture.contents = surface
-        CATransaction.commit()
+        if Self.syncMode != "nil" { IOSurfaceLock(surface, [], nil); IOSurfaceUnlock(surface, [], nil) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            if Self.syncMode == "nil" { self.picture.contents = nil }
+            self.picture.contents = surface
+            CATransaction.commit()
+        }
         frames += 1
         totalFrames += 1
         if ProcessInfo.processInfo.environment["WT_PM_DEBUG_ALPHA"] != nil, totalFrames == 60 || totalFrames == 100 { pmh_debug_alpha(r) }
@@ -291,6 +312,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// captures in `docs/projectm/` and for tests. Nil before the first frame.
     func snapshot() -> CGImage? {
         guard let r = renderer else { return nil }
+        // From the render queue (the shoot) or from main with the queue drained.
         let px = Int((bounds.width * Self.renderScale).rounded())
         var buf = [UInt8](repeating: 0, count: px * px * 4)
         guard pmh_read_pixels(r, &buf) == 0 else { return nil }

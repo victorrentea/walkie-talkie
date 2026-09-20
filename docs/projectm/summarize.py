@@ -16,6 +16,9 @@ def stats(tag):
     for part in re.findall(r"(\w+)=([^=]*?)(?=\s\w+=|$)", lines[0]): head[part[0]] = part[1].strip()
     app, ws = head.get("app"), head.get("windowserver")
     gpus = set(head.get("gpu", "").split())
+    for pr in head.get("roles", "").split():
+        pid, _, role = pr.partition(":")
+        if role == "GPU": gpus.add(pid)
     base = {}
     cpu = defaultdict(list); rss = {}; name = {}
     for l in lines[1:]:
@@ -52,7 +55,7 @@ def stats(tag):
 
 def f(v, d=1): return "—" if v is None else f"{v:.{d}f}"
 rows = []
-rows.append("| preset | route | app CPU % | WebContent CPU % | WebKit GPU CPU % | WindowServer CPU % | app RSS MB | WebContent RSS MB | GPU proc RSS MB | native frame ms (CPU) |")
+rows.append("| preset | route | app CPU % | WebContent CPU % (+ its GPU process, in sweeps before the roles were recorded) | WebKit GPU CPU % | WindowServer CPU % | app RSS MB | WebContent RSS MB | GPU proc RSS MB | native frame ms (CPU) |")
 rows.append("|---|---|---|---|---|---|---|---|---|---|")
 for tag in ["film"] + [f"{s}-{r}" for s in ["milkdrop7", "milkdrop8", "milkdrop20", "milkdrop85", "milkdrop87", "milkdrop103"] for r in ["web", "native1", "native2"]]:
     st = stats(tag)
