@@ -38,10 +38,12 @@ enum HaloStyle: String, CaseIterable {
     case lightningChain
     /// Page 6, *Atom*: orbite rare — gaură mare, blocuri clare.
     case orbits
+    /// Page 19, *Beads*: inel de blocuri — cerc în repaus, crește doar în afară.
+    /// Listed before Gemini (Victor, 2026-09-20: *"beads: before gemini"*) —
+    /// the menu, the dial and F7/F9 walk this order, not the page's.
+    case blockBeads
     /// Page 7, *Gemini*: două bile — ceață suflată din contur spre exterior.
     case twoBalls
-    /// Page 19, *Beads*: inel de blocuri — cerc în repaus, crește doar în afară.
-    case blockBeads
     /// **The MilkDrop presets pinned on the page** (chips 9, 10, 11, 14, 15,
     /// 18), run by the real engine. 99 (*Mosaic*) went on 2026-09-20 — *"the
     /// bricks look lame"* — with the other `−` ones. The numbers are the
