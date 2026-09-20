@@ -57,6 +57,8 @@ only supervision in this whole corpus that could ever teach the student to
 from __future__ import annotations
 
 import argparse
+import wave
+import array
 import json
 import os
 import random
@@ -108,6 +110,33 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 #: Giving up is still in here, at the end: a Wispr that has quit or a channel that
 #: is really dead does not get better by pressing its key another four hundred times.
 BACKOFF_SEC = (300, 900, 1800)
+
+
+#: A clip whose loudest sample is below this is not a quiet dictation, it is an empty
+#: file. Measured 2026-09-20 over the whole queue: the clips Wispr labelled peak at
+#: 0.16–0.99, the dead ones at 0.001 — two orders of magnitude apart, with nothing in
+#: between to argue about. They matter because the batch takes the SHORTEST first and
+#: silence is short, so all 135 of them sit at the head of the queue in front of 2974
+#: good ones. Playing them to Wispr and calling the empty answer a failure is how a
+#: night spends itself on five consecutive nothings and stands down.
+SILENT_PEAK = float(os.environ.get("WISPR_SILENT_PEAK", "0.02"))
+
+
+def peak_of(path) -> float:
+    """The loudest sample in a 16-bit WAV, 0.0–1.0. Stdlib only, and it is the file
+    the batch is about to play — measured here rather than trusted from the manifest,
+    because a manifest can describe a file that was replaced."""
+    try:
+        with wave.open(str(path)) as handle:
+            if handle.getsampwidth() != 2:
+                return 1.0  # not our format — let Wispr be the judge
+            data = array.array("h")
+            data.frombytes(handle.readframes(handle.getnframes()))
+    except (OSError, wave.Error, ValueError):
+        return 1.0
+    if not data:
+        return 0.0
+    return max(abs(min(data)), abs(max(data))) / 32768.0
 
 
 #: How long the rig stays off after the ladder runs out. Three blocked stretches in
@@ -405,7 +434,7 @@ def main(argv):
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
 
-    done = failed = streak = recoveries = 0
+    done = failed = streak = recoveries = silent = 0
     gap = gaps()
     started = time.monotonic()
     with locks:
@@ -417,6 +446,14 @@ def main(argv):
             wav = CORPUS / s["wav"]
             if not wav.exists():
                 log(f"  {i}/{len(todo)} missing {s['wav']} — skipped")
+                continue
+            peak = peak_of(wav)
+            if peak < SILENT_PEAK:
+                # Not a failure: nothing was asked of Wispr, so the streak that
+                # decides whether the rig is broken must not hear about it.
+                silent += 1
+                log(f"  {i}/{len(todo)} ⌀ silent ({s['seconds']:.1f}s, peak "
+                    f"{peak:.4f}) — not played")
                 continue
             heard = rig.dictate(wav, idx)
             if heard is None or not heard.asr.strip():
@@ -467,7 +504,8 @@ def main(argv):
     if done:
         # The service answered, so whatever it was refusing earlier is over.
         clear_cooldown()
-    log(f"done: {done} labelled, {failed} failed, {elapsed:.0f} min")
+    log(f"done: {done} labelled, {failed} failed, {silent} silent, "
+        f"{elapsed:.0f} min")
     left = db.execute(
         "SELECT COUNT(*) FROM samples WHERE (teacher_text IS NULL OR teacher_text = '')"
         f" AND source IN ({','.join('?' * len(sources))})", sources).fetchone()[0]

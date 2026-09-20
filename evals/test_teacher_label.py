@@ -11,12 +11,15 @@ there is. `gaps()` is what keeps the batch from producing one, so it is worth a
 test: a constant would pass every other check in this repo silently.
 """
 
+import array
+import math
 import os
 import pathlib
 import random
 import sys
 import tempfile
 import unittest
+import wave
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helpers"))
 
@@ -142,6 +145,39 @@ class Cooldown(unittest.TestCase):
         """A half-written file must not become a permanent refusal to work."""
         tl.COOLDOWN_FILE.write_text("not a date")
         self.assertEqual(tl.cooldown_left(), 0.0)
+
+
+class Silence(unittest.TestCase):
+    """135 empty files sat at the head of the queue on 2026-09-20, in front of 2974
+    good ones, because the batch takes the shortest clip first and silence is short.
+    Played to Wispr they come back with no words, five in a row trips the ladder, and
+    a morning stands down having labelled nothing. They are not failures — there was
+    nothing in them to hear — so they must never reach the streak that decides whether
+    the rig is broken."""
+
+    def wav(self, amplitude, seconds=1.0, rate=16000):
+        path = os.path.join(tempfile.mkdtemp(), "clip.wav")
+        frames = array.array("h", [int(amplitude * 32767 * math.sin(i / 8.0))
+                                   for i in range(int(rate * seconds))])
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+            w.writeframes(frames.tobytes())
+        return path
+
+    def test_an_empty_file_reads_as_silent(self):
+        self.assertLess(tl.peak_of(self.wav(0.0)), tl.SILENT_PEAK)
+
+    def test_the_dead_clips_measured_on_2026_09_20_read_as_silent(self):
+        """peak 0.001 is what the 135 of them measured."""
+        self.assertLess(tl.peak_of(self.wav(0.001)), tl.SILENT_PEAK)
+
+    def test_the_quietest_clip_wispr_did_label_is_not_silent(self):
+        """0.161 was the quietest of ten labelled clips sampled that morning."""
+        self.assertGreaterEqual(tl.peak_of(self.wav(0.161)), tl.SILENT_PEAK)
+
+    def test_a_missing_file_is_not_called_silent(self):
+        """Unreadable is a different problem, and Wispr is the one to judge it."""
+        self.assertEqual(tl.peak_of("/nonexistent/clip.wav"), 1.0)
 
 
 if __name__ == "__main__":
