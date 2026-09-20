@@ -504,7 +504,7 @@ const ORB = {
   GLOW_NEAR: 1.45, GLOW_FAR: 2.2, GLOW_A_NEAR: 0.22, GLOW_A_FAR: 0.20,
   CORE_A_NEAR: 0.82, CORE_A_FAR: 0.42,
   CYAN: [45, 200, 255], MAGENTA: [238, 72, 214], VIOLET: [138, 74, 248], STEPS: 17,
-  IDLE_SPIN: 0.052, SPIN_VAR: 0.55, RETRO: 0.23, PRECESS: 0.021,
+  IDLE_SPIN: 0.052, SPIN_VAR: 0.55, RETRO: 0.5, PRECESS: 0.09,
   BREATH_RATE: 0.045, BREATH_AMT: 0.16,
   A_SPIN: 2.6, A_RADIUS: 0.15, A_SIZE: 0.50, A_BRIGHT: 0.40, A_TILT: 0.55,
   PULSE_AMP: 0.10, PULSE_LOBES: 2, PULSE_SPEED: 1.35,
@@ -572,6 +572,7 @@ function orbBuild() {
       spin: (ORB.IDLE_SPIN * (1 + ORB.SPIN_VAR * (((i * 0.3301) % 1) * 2 - 1)))
             * ((i * 0.5391) % 1 < ORB.RETRO ? -1 : 1),
       theta: u * TAU * 1.3,
+      precess: (i % 2 ? -1 : 1) * (0.6 + 0.8 * ((i * 0.917) % 1)),
     });
   }
 }
@@ -628,7 +629,9 @@ function drawOrbits(t, Rref, density = 1, holeFrac = ORB.HOLE_FRAC, ringFrac = O
     const st = orbStrands[si];
     const famDrive = st.family === 0 ? 1 + 0.55 * treble : 1 + 0.55 * bass;
     st.theta += st.spin * spinMul * famDrive * dt;
-    const azim = st.azimuth + ORB.PRECESS * t * (st.family === 0 ? 1 : -0.7);
+    // traseele sunt independente: fiecare inel se rotește în planul lui cu
+    // viteza lui, iar vecinul de listă în sens INVERS (Victor, 2026-09-20)
+    const azim = st.azimuth + ORB.PRECESS * t * st.precess;
     const tilt = st.tiltBase
                * (1 + ORB.BREATH_AMT * Math.sin(t * ORB.BREATH_RATE * TAU + st.tiltPhase))
                * (1 + ORB.A_TILT * level);
