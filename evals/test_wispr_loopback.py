@@ -33,7 +33,8 @@ CREATE TABLE History (
     duration REAL,
     micDevice TEXT,
     asrText TEXT,
-    formattedText TEXT
+    formattedText TEXT,
+    detectedLanguage TEXT
 )
 """
 
@@ -49,7 +50,7 @@ class FakeWispr:
         db = sqlite3.connect(self.path)
         db.executescript(SCHEMA)
         db.execute("INSERT INTO History VALUES ('old', '2026-09-19 18:00:00', 3.0,"
-                   " '🎓 TO Wispr (Virtual)', 'earlier clip', 'Earlier clip.')")
+                   " '🎓 TO Wispr (Virtual)', 'earlier clip', 'Earlier clip.', 'ro')")
         db.commit()
         db.close()
 
@@ -57,7 +58,7 @@ class FakeWispr:
         """Wispr's row at key-down: an id, a device, and no words yet."""
         db = sqlite3.connect(self.path)
         db.execute("INSERT INTO History VALUES ('new', '2026-09-19 18:05:00', 1.1,"
-                   " '🎓 TO Wispr (Virtual)', '', '')")
+                   " '🎓 TO Wispr (Virtual)', '', '', 'ro')")
         db.commit()
         db.close()
 
@@ -105,6 +106,15 @@ class WaitForTranscript(unittest.TestCase):
         fake = FakeWispr(fills_after=0)
         lb._open_wispr = fake.open
         self.assertIsNone(lb.wait_for_new("old", timeout=0.2, poll=0.01))
+
+    def test_the_language_wispr_detected_comes_back_with_the_words(self):
+        """A label in a language Victor does not speak is fluent, plausible and
+        useless — the one thing that tells them apart is this column."""
+        fake = FakeWispr(fills_after=1)
+        lb._open_wispr = fake.open
+        fake.press()
+        heard = lb.wait_for_new("old", timeout=5, poll=0.01)
+        self.assertEqual(heard.language, "ro")
 
 
 if __name__ == "__main__":

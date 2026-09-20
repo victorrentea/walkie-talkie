@@ -112,6 +112,40 @@ MEAN_GAP_SEC = ((GAP_MIN + GAP_MAX) / 2
 BACKOFF_SEC = (300, 900, 1800)
 
 
+#: The only two languages Victor speaks. Wispr detects a language per dictation and
+#: is often right about it — `cs`, `uk`, `ru`, `pt`, `fr` all turned up in one night's
+#: labels — and a label in a language he does not speak is the worst kind there is:
+#: fluent, plausible, the right length, and words he never said. Seven in the first
+#: 640 (2026-09-20).
+SPOKEN = {"ro", "en", "ron", "eng", "ro-ro", "en-us", "en-gb"}
+
+#: The letters Romanian adds to the Latin alphabet, and nothing else. A diacritic
+#: outside this set is a language that is not his — `č`, `á`, `è`, `я` — and this is
+#: the only signal left for the third of rows where Wispr detects nothing at all.
+ROMANIAN_LETTERS = set("ăâîșțĂÂÎȘȚşţŞŢ")
+
+
+def foreign_letters(text) -> set:
+    """Non-ASCII letters in `text` that Romanian does not use."""
+    return {c for c in text if c.isalpha() and ord(c) > 127
+            and c not in ROMANIAN_LETTERS}
+
+
+def not_his_language(heard) -> str:
+    """Why this label should be thrown away, or "" to keep it.
+
+    Wispr's own detection is asked first and believed when it says anything at all;
+    the letters are the fallback, because they only ever catch a language that spells
+    itself differently and would miss, say, Italian.
+    """
+    if heard.language and heard.language not in SPOKEN:
+        return f"Wispr heard {heard.language}"
+    strange = foreign_letters(heard.asr)
+    if strange:
+        return "letters Romanian does not use: " + "".join(sorted(strange))
+    return ""
+
+
 #: A clip whose loudest sample is below this is not a quiet dictation, it is an empty
 #: file. Measured 2026-09-20 over the whole queue: the clips Wispr labelled peak at
 #: 0.16–0.99, the dead ones at 0.001 — two orders of magnitude apart, with nothing in
@@ -434,7 +468,7 @@ def main(argv):
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: (locks.release(), sys.exit(130)))
 
-    done = failed = streak = recoveries = silent = 0
+    done = failed = streak = recoveries = silent = wrong_language = 0
     gap = gaps()
     started = time.monotonic()
     with locks:
@@ -475,6 +509,13 @@ def main(argv):
                         f"and carrying on ({recoveries}/{len(BACKOFF_SEC)})")
                     time.sleep(pause)
                     streak = 0
+            elif (why := not_his_language(heard)):
+                # Wispr answered, so the rig is fine and the streak stays reset —
+                # what came back is simply not a label. Keeping it would put words
+                # he never said into the one column the student is trained on.
+                streak = recoveries = 0
+                wrong_language += 1
+                log(f"  {i}/{len(todo)} ✗ {why} — dropped: {heard.asr[:48]}")
             else:
                 streak = recoveries = 0
                 done += 1
@@ -505,7 +546,7 @@ def main(argv):
         # The service answered, so whatever it was refusing earlier is over.
         clear_cooldown()
     log(f"done: {done} labelled, {failed} failed, {silent} silent, "
-        f"{elapsed:.0f} min")
+        f"{wrong_language} wrong language, {elapsed:.0f} min")
     left = db.execute(
         "SELECT COUNT(*) FROM samples WHERE (teacher_text IS NULL OR teacher_text = '')"
         f" AND source IN ({','.join('?' * len(sources))})", sources).fetchone()[0]

@@ -180,5 +180,43 @@ class Silence(unittest.TestCase):
         self.assertEqual(tl.peak_of("/nonexistent/clip.wav"), 1.0)
 
 
+class Language(unittest.TestCase):
+    """Seven of the first 640 labels were in languages Victor does not speak — Czech,
+    Ukrainian, Russian, Portuguese, French. They are the worst labels in the corpus:
+    fluent, the right length, and words he never said, so nothing downstream can tell
+    them from good ones. Wispr's own `detectedLanguage` names most of them; the rest
+    give themselves away by their letters."""
+
+    class Heard:
+        def __init__(self, asr, language=""):
+            self.asr, self.language = asr, language
+
+    def test_romanian_is_kept(self):
+        h = self.Heard("Și mecheria este să simți că faci progres", "ro")
+        self.assertEqual(tl.not_his_language(h), "")
+
+    def test_english_is_kept(self):
+        self.assertEqual(tl.not_his_language(self.Heard("Run everything.", "en")), "")
+
+    def test_romanian_diacritics_are_not_foreign_letters(self):
+        h = self.Heard("Înțeleg că ăsta-i șirul, țin minte", "")
+        self.assertEqual(tl.not_his_language(h), "")
+
+    def test_wisprs_own_detection_is_believed(self):
+        h = self.Heard("Čo je? No je, je nejaké emócie", "cs")
+        self.assertIn("cs", tl.not_his_language(h))
+
+    def test_the_letters_catch_what_wispr_did_not_label(self):
+        """Two rows in three carry no language at all — this is all that is left."""
+        h = self.Heard("Ну, вечер, че вечер", "")
+        self.assertTrue(tl.not_his_language(h))
+        self.assertTrue(tl.not_his_language(self.Heard("Aqui testa, hã", "")))
+        self.assertTrue(tl.not_his_language(self.Heard("Zéro la SOTA AI", "")))
+
+    def test_an_empty_language_is_not_a_reason_to_drop(self):
+        """\"Wispr did not say\" is not \"Wispr said Slovak\"."""
+        self.assertEqual(tl.not_his_language(self.Heard("Commit and push", "")), "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

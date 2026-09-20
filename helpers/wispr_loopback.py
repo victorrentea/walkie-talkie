@@ -612,6 +612,10 @@ class Heard:
     seconds: float
     mic: str
     at: datetime
+    #: Wispr's own reading of which language it heard (`detectedLanguage`), or "".
+    #: It fills this in for about two rows in three; the caller decides what an
+    #: empty one means, because "Wispr did not say" is not "Wispr said Romanian".
+    language: str = ""
 
 
 def _open_wispr():
@@ -653,7 +657,7 @@ def wait_for_new(since_id, timeout=RESULT_TIMEOUT_SEC, poll=0.5) -> Heard | None
         try:
             row = fresh.execute(
                 "SELECT transcriptEntityId AS id, timestamp, duration, micDevice,"
-                "       asrText, formattedText"
+                "       asrText, formattedText, detectedLanguage"
                 "  FROM History ORDER BY timestamp DESC LIMIT 1"
             ).fetchone()
         finally:
@@ -678,7 +682,7 @@ def _wait_for_text(row_id, deadline, poll) -> Heard | None:
         try:
             row = fresh.execute(
                 "SELECT transcriptEntityId AS id, timestamp, duration, micDevice,"
-                "       asrText, formattedText"
+                "       asrText, formattedText, detectedLanguage"
                 "  FROM History WHERE transcriptEntityId = ?", (row_id,)
             ).fetchone()
         finally:
@@ -691,6 +695,7 @@ def _wait_for_text(row_id, deadline, poll) -> Heard | None:
                 seconds=float(row["duration"] or 0),
                 mic=row["micDevice"] or "",
                 at=datetime.now(timezone.utc),
+                language=(row["detectedLanguage"] or "").strip().lower(),
             )
             if last.asr:
                 return last
