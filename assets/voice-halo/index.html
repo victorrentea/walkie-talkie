@@ -498,7 +498,7 @@ const ORB = {
   STRANDS: 14, BEADS_PER_TURN: 110, BEADS_MAX: 170,
   ARC_MIN: 0.55, ARC_MAX: 1.35, COMET_FRACTION: 0.34, COMET_RADIUS_BOOST: 1.16,
   TILT_MIN_DEG: 6, TILT_MAX_DEG: 58, TILT_CAP_DEG: 72,
-  RADIUS_SPREAD: 0.55, WOBBLE: 0.055, WOBBLE_LOBES: 3,
+  RADIUS_SPREAD: 0.90, WOBBLE: 0.055, WOBBLE_LOBES: 3,
   PERSPECTIVE: 2.7, RING_FRAC: 0.30, HOLE_FRAC: 0.56, HOLE_SOFT: 0.30, INNER_FADE: 0.34,
   DOT_NEAR: 7.6, DOT_FAR: 2.4, TAPER: 0.62,
   GLOW_NEAR: 1.45, GLOW_FAR: 2.2, GLOW_A_NEAR: 0.22, GLOW_A_FAR: 0.20,
@@ -761,7 +761,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1596, draw(t) {
+  { name: 'Crown', desc: 'coroană — numai barele, fără cerc fix', scale: 0.1915, draw(t) {
       // cercul galben care stătea fixat a fost scos; rămân doar barele
       const R = rad(this.scale);
       plainLayer(() => {
@@ -777,7 +777,7 @@ const FORMULAS = [
         }
       });
   }},
-  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.1534, draw(t) {
+  { name: 'Prism', desc: 'inel de segmente — nuanța se închide fără cusătură', scale: 0.1841, draw(t) {
       // nuanța parcurgea doar 170° și, la închiderea cercului, portocaliul ajungea
       // lipit de albastru. Acum face un tur COMPLET de 360°, deci ultimul segment
       // are exact nuanța primului și cusătura dispare.

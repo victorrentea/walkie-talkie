@@ -191,9 +191,11 @@ enum HaloStyle: String, CaseIterable {
     /// core and 866 MB, and still "too violent"); its hybrid stays built.
     /// Snowflake is off it too, temporarily (Victor, 2026-09-20: *"scoate
     /// temporar din meniu/din efecte Snowflake"*); the preset stays in place.
+    /// Pulse went the same evening (*"scoate pulse"*), after its fog came back
+    /// down to 1×; the page still draws it.
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
-    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 }
+    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.
