@@ -665,6 +665,7 @@ final class CaretHalo {
             samples = { voice.samples() }; level = { voice.level }; quietSeconds = { voice.quietSeconds }
             Log.error("◯ halo preview: no halo-voice.wav bundled — noise instead")
         }
+        panel?.sharingType = .readOnly
         if !live { setActive(true, atCaret: false, opening: .fromPointer) }
         Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on the clip")
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
@@ -673,6 +674,7 @@ final class CaretHalo {
             if let saved = self.savedClosures { self.samples = saved.samples; self.level = saved.level; self.quietSeconds = saved.quiet }
             self.savedClosures = nil
             self.previewGeneration = 0
+            self.panel?.sharingType = Self.capturable ? .readOnly : .none
         }
     }
 
@@ -1961,7 +1963,10 @@ final class CaretHalo {
         p.ignoresMouseEvents = true
         p.level = .statusBar
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        p.sharingType = Self.capturable ? .readOnly : .none
+        // A preview (F7/F9, `/test/halo`) has no dictation in frame, so it may
+        // be captured — the one way an agent can check what it changed on the
+        // deployed app without a debug binary on his screen.
+        p.sharingType = Self.capturable || previewGeneration > 0 ? .readOnly : .none
 
         let view = NSView(frame: NSRect(origin: .zero, size: frame.size))
         view.wantsLayer = true
