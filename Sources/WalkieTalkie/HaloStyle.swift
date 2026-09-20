@@ -138,6 +138,9 @@ enum HaloStyle: String, CaseIterable {
         /// its side, y down (the preset's own centre of composition — `cx`/`cy`
         /// in its frame equations). Default the middle.
         var centerAt: CGPoint = CGPoint(x: 0.5, y: 0.5)
+        /// A fixed shift of the whole canvas from the pointer, in points, y up
+        /// (Cocoa). Tunnel sits 50 pt above it (Victor, 2026-09-20).
+        var offset: CGPoint = .zero
         /// Append `a.cx = a.cy = 0.5` to the preset's frame equations, so a
         /// composition that drifts its own centre stays on the pointer.
         var pinCenter = false
@@ -160,10 +163,11 @@ enum HaloStyle: String, CaseIterable {
                                          // centred"* after a static offset: the preset's centre WANDERS —
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55, pinCenter: true)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55, pinCenter: true,
+                                         offset: CGPoint(x: 0, y: 50))
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, pinCenter: true)
-        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.56,
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.728,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)

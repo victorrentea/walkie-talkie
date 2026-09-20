@@ -472,8 +472,8 @@ final class CaretHalo {
             // The engine's "cover": a square of side max(w, h) of the screen ×
             // the preset's scale, its `centerAt` point on the pointer, following it.
             let s = (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
-            return NSRect(x: (mouse.x - s * preset.centerAt.x).rounded(),
-                          y: (mouse.y - s * (1 - preset.centerAt.y)).rounded(), width: s, height: s)
+            return NSRect(x: (mouse.x - s * preset.centerAt.x + preset.offset.x).rounded(),
+                          y: (mouse.y - s * (1 - preset.centerAt.y) + preset.offset.y).rounded(), width: s, height: s)
         }
         return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
     }
