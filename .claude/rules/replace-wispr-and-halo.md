@@ -509,7 +509,17 @@ closes. Between the two is the whole transcription — the stretch in which he i
   and Snowflake as *"efectul de stars"* — a dictated ask names what he saw, so read it against the
   destination it is about (`picks` in `POST /test/halo`) rather than against this list.
   **A size ask is a factor on what is drawn today**, not on the page's `FORMULAS` number: *"mai mic
-  cu treizeci la sută"* twice over is 0.75 → 0.525 → 0.3675, and the page's entry still says 0.75. `Eclipse` and `Water Dream` are his own words. A `−` on the page (Petals, Silk, Nova,
+  cu treizeci la sută"* twice over is 0.75 → 0.525 → 0.3675, and the page's entry still says 0.75.
+  Sparks then went ×3 the same evening (*"should be three times larger than it is right now"*) —
+  0.3675 → **1.1025**, a 1905 pt canvas, wider than the built-in screen: the two shrinks were
+  asked of it while the destinations were still moving, the ×3 of it wearing the one it keeps.
+  **"Not centred on the tip of my mouse" was a size complaint**, measured that evening:
+  `docs/projectm/captures/sparks-on-pointer-2026-09-21.png` — the demo on his own screen with the
+  pointer in frame, differenced against a baseline capture — puts the cloud's centre of light
+  within ~10 pt of the tip at 0.3675, over four frames. A ~160 pt knot in a 635 pt canvas leaves
+  the pointer at its edge, and a knot that wanders frame to frame reads as off-centre. Reach for
+  `scale` before `centerAt`/`offset`; a static shift on a composition that is already centred is
+  what made Tunnel *"no longer centred"* the other way. `Eclipse` and `Water Dream` are his own words. A `−` on the page (Petals, Silk, Nova,
   Royal, **Mosaic** — *"the bricks look lame"*) is not implemented.
 - **One menu, `Halo fx`** (his spelling; *"there must be ONE menu, not 2: and the MilkDrop ones
   should have a lightning bolt in the name"*): the film first and apart, the hand-written effects,
@@ -522,10 +532,14 @@ closes. Between the two is the whole transcription — the stretch in which he i
   on 2026-09-21** (*"când am Wispr Flow, dictare să apară mozaic. Când am dictare în terminal nou,
   să apară stars. Când am dictare legată, să apară Cauldron. Și când am dictare nelegată la
   carrot, îmi apare tunnel"*), and that reading is the current one: **Tunnel** at the caret,
-  **Cauldron** bound, **Snowflake** into a new claude, **Mosaic** for Wispr's own. Two effects lost
-  a destination that morning and stay on the list a tick away — **Tendrils** (bound until Cauldron
-  took it) and **Sparks** (new claude until *"tre să redea efectul de stars"*; Zylot's *Star
-  Ornament* is the only star in the catalogue). `AppDelegate.syncBorrowedGestures`
+  **Cauldron** bound, **Sparks** into a new claude (*"la dictarea in terminal nou, sa redai
+  efectul stars, nu snowflake"* — the correction of that same day), **Mosaic** for Wispr's own. One effect lost
+  a destination that morning and stays on the list a tick away — **Tendrils** (bound until
+  Cauldron took it). **Snowflake** held the new claude for a few hours of that same morning, on a
+  reading of *stars* as a title (Zylot's *Star Ornament* is the only star in the catalogue) rather
+  than as a picture, and went back off the offered list when Sparks was given it back: a
+  destination's dress is named by what it **looks like**, so look in `docs/projectm/captures/`
+  before matching a dictated word to a menu row. `AppDelegate.syncBorrowedGestures`
   pushes the destination into `CaretHalo.setDestination` **only while the ring is up**, on every
   sync, from the same facts `atCaret` is read from, `foreignMic` tested first.
 - **A foreign Wispr dictation is its own destination** (2026-09-21, later the same day). It wore

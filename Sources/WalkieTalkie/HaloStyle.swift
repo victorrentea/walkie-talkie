@@ -211,6 +211,30 @@ enum HaloStyle: String, CaseIterable {
         // mai mic cu treizeci la sută"*) — 0.75 → 0.525 the evening before,
         // 0.525 → 0.3675 now. Each ask is a factor on what is drawn today, not
         // on the page's original, so the two compound.
+        // **…and ×3 the same evening**, which is why it is now the biggest
+        // canvas of the six (Victor, 2026-09-21, after a day of Sparks being
+        // the dress a new claude wears: *"the stars effect … should be three
+        // times larger than it is right now. It is very similar to what I
+        // want"*): 0.3675 → 1.1025. The two shrinks above were asked of it
+        // while the destinations were still being sorted out; this one was
+        // asked of it wearing the destination it keeps.
+        // **The same sentence said it was *not centred on the tip of my
+        // mouse*, and it already is** — measured, not argued: the demo on his
+        // own screen with the pointer in frame, the halo differenced against a
+        // baseline capture, gives the cloud's centre of light within ~10 pt of
+        // the tip over four frames
+        // (`docs/projectm/captures/sparks-on-pointer-2026-09-21.png`, the
+        // crosshair is the tip). What was wrong is the size: a ~160 pt cloud
+        // in a 635 pt canvas leaves the pointer sitting at the edge of the
+        // bright knot rather than inside it, and a knot that wanders frame to
+        // frame reads as off-centre. So the fix for *centred* is the ×3, and
+        // `centerAt`/`offset` stay at their defaults — a static shift on a
+        // composition that is already centred is what made Tunnel *"no longer
+        // centred"* in the other direction.
+        // The canvas is 1905 pt on the built-in retina, wider than the screen,
+        // so the edge fade now lands past the screen's corners and Sparks
+        // costs about what Water Dream costs. That is the price of the ask,
+        // and `scale` is the one knob to walk back if it shows.
         // **Sparks is drawn by butterchurn even when the engine is projectM**
         // (`webOnly`, 2026-09-21: *"Stars nu arată cum arată originalul … linia
         // aia e prea lăbărțat"*). chain breaker offsets spark *n* by a smoothed
@@ -227,7 +251,7 @@ enum HaloStyle: String, CaseIterable {
         // Worth knowing before anyone "fixes" this back: real MilkDrop windows
         // its FFT too, so the chain is arguably the preset's intended look and
         // the cloud is butterchurn's deviation. The cloud is the one he picked.
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.3675,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 1.1025,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
