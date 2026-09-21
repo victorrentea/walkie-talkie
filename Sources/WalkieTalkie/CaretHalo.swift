@@ -518,14 +518,47 @@ final class CaretHalo {
         }
     }
 
-    /// Pick another halo. Written to the preference, and if the ring is up
-    /// the panel is rebuilt on the spot so the choice is seen at once — the
-    /// old panel goes out in a cut rather than a collapse, because what
-    /// replaces it is the same ring in another dress, not a sentence ending.
-    func setStyle(_ new: HaloStyle) {
-        HaloStyle.save(new)
+    /// **Which destination's dress is on** — `.caret` until a dictation says
+    /// otherwise. Written by `setDestination` from the one expression in
+    /// `syncBorrowedGestures` that knows where a sentence is going.
+    private(set) var destination: HaloDestination = .caret
+
+    /// **This dictation is headed there; wear that** (2026-09-21). Called on
+    /// the edge that raises the ring, and again on any sync while it is up —
+    /// a ⌘⌃B made mid-sentence changes the destination, and the ring changes
+    /// with it, the same way the arrow stops asking for a place to paste.
+    func setDestination(_ new: HaloDestination) {
+        destination = new
+        use(HaloStyle.current(for: new))
+    }
+
+    /// Pick another halo **for one destination**, and write it down. If that
+    /// destination is the one being worn, the change is seen at once.
+    func setStyle(_ new: HaloStyle, for dest: HaloDestination) {
+        HaloStyle.save(new, for: dest)
+        Log.info("◯ caret halo style for \(dest.rawValue): \(new.rawValue)")
+        guard dest == destination else { return }
+        use(new)
+    }
+
+    /// **All three at once** — the top-level list in the menu, which is the
+    /// answer to *"dacă îl selectez precis, atunci toate trei sunt puse pe
+    /// același"* (Victor, 2026-09-21).
+    func setStyleEverywhere(_ new: HaloStyle) {
+        for dest in HaloDestination.allCases { HaloStyle.save(new, for: dest) }
+        Log.info("◯ caret halo style for all three destinations: \(new.rawValue)")
+        use(new)
+    }
+
+    /// **Draw this, without writing anything down.** Every change of dress
+    /// lands here: the destination's own pick, the menu's, F7/F9's preview.
+    /// If the ring is up the panel is rebuilt on the spot so the choice is
+    /// seen at once — the old panel goes out in a cut rather than a collapse,
+    /// because what replaces it is the same ring in another dress, not a
+    /// sentence ending.
+    func use(_ new: HaloStyle) {
         guard new != style else { return }
-        Log.info("◯ caret halo style: \(style.rawValue) → \(new.rawValue)")
+        Log.info("◯ caret halo draws: \(style.rawValue) → \(new.rawValue)")
         style = new
         pageBroken = false
         rebuild()
@@ -605,15 +638,34 @@ final class CaretHalo {
         rebuild()
     }
 
-    /// **The next halo, or the previous one**, round the list and back to the
-    /// film — the wheel's dial (`HotkeyTap.haloDial`). Returns what it landed
-    /// on, for the flash.
-    @discardableResult
-    func cycleStyle(by step: Int) -> HaloStyle {
+    /// The style one step along the offered list from what is drawn.
+    private func stepped(by step: Int) -> HaloStyle {
         let all = HaloStyle.offered.filter { $0.isAvailable || $0 == style }
         let i = all.firstIndex(of: style) ?? 0
-        let next = all[((i + step) % all.count + all.count) % all.count]
-        setStyle(next)
+        return all[((i + step) % all.count + all.count) % all.count]
+    }
+
+    /// **The next halo, or the previous one, and nothing written down** —
+    /// F7/F9 (Victor, 2026-09-21: *"F7, F9 rămân doar de preview așa"*). They
+    /// are pressed outside a dictation to look at effects; a keystroke that
+    /// silently rewrote one of the three preferences is how a destination's
+    /// pick would get lost while he browsed. Returns what it landed on, for
+    /// the flash.
+    @discardableResult
+    func cycleStyle(by step: Int) -> HaloStyle {
+        let next = stepped(by: step)
+        use(next)
+        return next
+    }
+
+    /// **The wheel's dial** (`HotkeyTap.haloDial`), which turns only while the
+    /// ring is up — so the destination is known, and the pick is written to
+    /// *that* destination's preference. This is the gesture that changes what
+    /// a kind of dictation looks like; F7/F9 only look.
+    @discardableResult
+    func dialStyle(by step: Int) -> HaloStyle {
+        let next = stepped(by: step)
+        setStyle(next, for: destination)
         return next
     }
 

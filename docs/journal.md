@@ -251,6 +251,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [ElevenLabs is the engine, and the freeze that found (2026-09-19)](#elevenlabs-is-the-engine-and-the-freeze-that-found-2026-09-19)
 - [Two engines out, and a folder per dictation (2026-09-20)](#two-engines-out-and-a-folder-per-dictation-2026-09-20)
 - [Ten minutes is the end of a sentence, and the row says so from the eighth (2026-09-20)](#ten-minutes-is-the-end-of-a-sentence-and-the-row-says-so-from-the-eighth-2026-09-20)
+- [The ring says where the sentence is going (2026-09-21)](#the-ring-says-where-the-sentence-is-going-2026-09-21)
 
 ---
 
@@ -11394,3 +11395,61 @@ Two new states on the catalogue, `listening-overrun` and `listening-overrun-blin
 through `pinListenOverrun(_:)` for `OverlayStates`' reason: the two minutes this is about are the
 two no shot could otherwise wait for. The blink is photographed at its **dim** end, or the picture
 would be indistinguishable from the full wash above it.
+
+
+## The ring says where the sentence is going (2026-09-21)
+
+**One preference became three, one per destination.** Victor, in one dictation: *"tendrils să fie
+.7x mărime (mai mic). tunnel să fie la dictarea la caret. tendrils dacă sunt legat și sparks dacă
+dictez în terminal nou"*, and, when the menu was still a single list: *"să nu apară niciunul
+selectat. Dacă îl selectez precis, atunci toate trei sunt puse pe același. De fapt, mi-ar plăcea să
+pot alege separat cele trei efecte. Poți să faci cu submeniuri toate … F7, F9 rămân doar de preview
+așa. Și Wispr Flow, când dictează, să fie dictare la caret."*
+
+The halo had been *what this app looks like*; it is now *what this sentence is for*. There are
+exactly three destinations a dictation can have, and every one of them is already decided before
+the microphone opens — `AppDelegate.syncBorrowedGestures` computes `atCaret` from `pasteMode`,
+`isBound` and `spawnPending` on every edge. `HaloDestination` is that same expression given a name,
+and `HaloStyle.current(for:)` a preference per case:
+
+| destination | what it is | Victor's pick |
+|---|---|---|
+| `caret` | Replace Wispr, an unbound sentence, **and any dictation Wispr Flow runs on its own** | Tunnel |
+| `bound` | ⌘⌃B was pressed; the words are typed into that terminal | Tendrils |
+| `spawn` | `Start dictation to new claude` | Sparks |
+
+**The foreign microphone is a caret dictation here, and only here.** `atCaret` deliberately
+excludes it (*The ring comes back for the dictations he starts himself*, 2026-09-18): that flag
+arms `DropArrow`, and the heads promise a delivery this app is not making. What the ring *wears*
+is a different question with a different answer — Wispr types where the caret is, whoever started
+it — so the destination reads `atCaret || foreignMic`, and the arrow is left exactly as it was.
+
+**Pushed only while the ring is up.** A bind made in silence does not reach into an F7 preview and
+change the effect under him; a bind made mid-sentence does, in the same sync that stops the arrow
+asking for a place to paste.
+
+**The menu has both shapes, because he asked for both.** The full list stays at the top of
+`Halo fx` and sets all three at once, ticked only while all three agree — with three different
+picks nothing is ticked and the row drops its readout, since naming one of the three would be the
+one claim that is false. Under it, a row per destination (`At the caret: Tunnel`, `Bound terminal:
+Tendrils`, `New claude: Sparks`), each carrying the same list under its own arrow. `Fx engine`
+stays last.
+
+**F7/F9 stop writing; the wheel keeps writing.** They are the same cycle, and that was the point:
+F7/F9 are pressed *outside* a dictation to browse the list, so with three preferences a keystroke
+that saved would quietly rewrite whichever destination was last worn. They now draw without saving
+(`CaretHalo.use`). The wheel's dial turns **only while the ring is up**, where the destination is
+known, so it writes that destination's row and the flash names it: `✨ Tendrils · Bound terminal`.
+
+**Tendrils ×0.7** the same evening (0.728 → 0.51), the move Sparks got the night before. The
+number the app draws at is `HaloStyle.Preset.scale`; the page's own `FORMULAS` entry still says
+0.728, and `assets/voice-halo` is pinned to a tag, so the two are out of step until the page is
+re-vendored.
+
+**`POST /test/halo` previews by default now.** `{"style": …}` draws it for this run and writes
+nothing; `{"style": …, "for": "bound"}` writes that destination's preference; `{"for": "spawn"}`
+alone wears that destination's dress. A harness looking at effects has no business leaving his
+three picks rearranged behind it. The answer carries `destination` and `picks` beside `style`.
+
+**The old `haloStyle` key is not read any more.** It held one answer to a question that now has
+three, and the three defaults above are better than any migration of it would have been.

@@ -580,29 +580,40 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let haloItem = NSMenuItem(title: "Halo fx", action: nil, keyEquivalent: "")
     private let haloSubmenu = NSMenu()
 
-    /// Victor picked one. `AppDelegate` hands it to the halo.
-    var onPickHalo: ((HaloStyle) -> Void)?
+    /// Victor picked one — for one destination, or, from the top-level list,
+    /// for all three at once (`nil`). `AppDelegate` hands it to the halo.
+    var onPickHalo: ((HaloStyle, HaloDestination?) -> Void)?
 
+    /// **Three effects, one per destination, since 2026-09-21** (Victor:
+    /// *"mi-ar plăcea să pot alege separat cele trei efecte … poți să faci cu
+    /// submeniuri toate"*). The submenu therefore has both shapes:
+    ///
+    /// - **the full list at the top**, which sets all three at once and is
+    ///   ticked only while all three agree — *"să nu apară niciunul selectat …
+    ///   dacă îl selectez precis, atunci toate trei sunt puse pe același"*;
+    /// - **a row per destination under it**, each reading out its own pick and
+    ///   carrying the same list under its own arrow.
+    ///
+    /// `Fx engine` stays last. Each destination's row is rebuilt on every open
+    /// for `applyEngineRow`'s reason: the tick has to be what is running, and
+    /// a preference can change from the wheel between two opens.
     private func applyHaloRow() {
-        let current = HaloStyle.current
-        haloItem.title = "Halo fx: \(current.menuTitle)"
+        let picks = HaloDestination.allCases.map { HaloStyle.current(for: $0) }
+        let shared = picks.dropFirst().allSatisfy { $0 == picks[0] } ? picks[0] : nil
+        // No readout while the three differ: the row would have to name one of
+        // them, and naming one is exactly the claim that is not true.
+        haloItem.title = shared.map { "Halo fx: \($0.menuTitle)" } ?? "Halo fx"
         haloSubmenu.removeAllItems()
-        // A row is greyed, and says why, while the page or the engine is not
-        // bundled (`HaloPage.available`, `MilkDropHalo.engineAvailable`) —
-        // `autoenablesItems` off for the mic submenu's reason. One list, no
-        // group line; a preset carries a bolt after its name.
         haloSubmenu.autoenablesItems = false
-        for style in HaloStyle.offered {
-            let row = NSMenuItem(title: style.unavailableReason.map { "\(style.menuTitle) — \($0)" } ?? style.menuTitle,
-                                 action: #selector(haloPicked(_:)), keyEquivalent: "")
-            if style.isPreset && style.isAvailable { row.attributedTitle = Self.boltedTitle(style.menuTitle) }
-            row.target = self
-            row.representedObject = style.rawValue
-            row.isEnabled = style.isAvailable
-            row.image = style == current ? Self.symbolIcon("checkmark") : Self.blankIcon
+        fillStyleRows(into: haloSubmenu, ticked: shared, destination: nil)
+        haloSubmenu.addItem(.separator())
+        for (destination, pick) in zip(HaloDestination.allCases, picks) {
+            let row = NSMenuItem(title: "\(destination.title): \(pick.menuTitle)", action: nil, keyEquivalent: "")
+            let list = NSMenu()
+            list.autoenablesItems = false
+            fillStyleRows(into: list, ticked: pick, destination: destination)
+            row.submenu = list
             haloSubmenu.addItem(row)
-            // The film first and apart: the default, and the one drawn natively.
-            if style == .lightning { haloSubmenu.addItem(.separator()) }
         }
         // **`Fx engine`, last row of the same submenu** (Victor, 2026-09-21:
         // *"pune fx engine sub halo effects (în submeniu)"*) — one level down
@@ -611,6 +622,26 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloEngineItem.submenu = haloEngineSubmenu
         applyHaloEngineRow()
         haloSubmenu.addItem(haloEngineItem)
+    }
+
+    /// The one list of effects, drawn into a menu. A row is greyed, and says
+    /// why, while the page or the engine is not bundled (`HaloPage.available`,
+    /// `MilkDropHalo.engineAvailable`) — `autoenablesItems` off for the mic
+    /// submenu's reason. One list, no group line; a preset carries a bolt
+    /// after its name. `destination` nil means *the pick sets all three*.
+    private func fillStyleRows(into menu: NSMenu, ticked: HaloStyle?, destination: HaloDestination?) {
+        for style in HaloStyle.offered {
+            let row = NSMenuItem(title: style.unavailableReason.map { "\(style.menuTitle) — \($0)" } ?? style.menuTitle,
+                                 action: #selector(haloPicked(_:)), keyEquivalent: "")
+            if style.isPreset && style.isAvailable { row.attributedTitle = Self.boltedTitle(style.menuTitle) }
+            row.target = self
+            row.representedObject = "\(destination?.rawValue ?? "all"):\(style.rawValue)"
+            row.isEnabled = style.isAvailable
+            row.image = style == ticked ? Self.symbolIcon("checkmark") : Self.blankIcon
+            menu.addItem(row)
+            // The film first and apart: the default, and the one drawn natively.
+            if style == .lightning { menu.addItem(.separator()) }
+        }
     }
 
     /// **`Halo engine: Web`, the shape `Engine` has** (the `projectm` branch,
@@ -656,9 +687,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     }
 
     @objc private func haloPicked(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let style = HaloStyle(rawValue: raw),
-              style != HaloStyle.current else { return }
-        onPickHalo?(style)
+        guard let raw = sender.representedObject as? String else { return }
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let style = HaloStyle(rawValue: parts[1]) else { return }
+        // `all` is the top-level list: it sets the three together, and it is
+        // worth running even when one of them already holds this style.
+        let destination = HaloDestination(rawValue: parts[0])
+        if let destination = destination, style == HaloStyle.current(for: destination) { return }
+        onPickHalo?(style, destination)
         applyHaloRow()
     }
     /// The tap has to be told; `AppDelegate` owns that wire.

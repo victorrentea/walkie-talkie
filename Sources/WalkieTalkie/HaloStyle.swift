@@ -167,7 +167,11 @@ enum HaloStyle: String, CaseIterable {
                                          offset: CGPoint(x: 0, y: 50), pinCenter: true)
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, pinCenter: true)
-        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.728,
+        // Tendrils ×0.7 on sight (Victor, 2026-09-21: *"tendrils să fie .7x
+        // mărime (mai mic)"*) — 0.728 → 0.51, the same move Sparks got the
+        // evening before. The page's own `FORMULAS` entry still says 0.728;
+        // the number the app draws at is this one.
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.51,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
@@ -240,19 +244,72 @@ enum HaloStyle: String, CaseIterable {
     /// business moving it. `WT_HALO_STYLE=<case>` overrides it for one run, the
     /// way `WT_HALO_DESIGN` does for the film's texture. A saved style that no
     /// longer exists (the water, Mosaic) reads as the film.
-    static let defaultsKey = "haloStyle"
-
-    static var current: HaloStyle {
+    ///
+    /// **Three preferences since 2026-09-21, one per destination** — see
+    /// `HaloDestination`. The single old key (`haloStyle`) is no longer read:
+    /// it held one answer to a question that now has three, and the three
+    /// defaults Victor asked for are better than any migration of it.
+    static func current(for destination: HaloDestination) -> HaloStyle {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_STYLE"],
            let forced = HaloStyle(rawValue: name) { return forced }
-        guard let name = UserDefaults.standard.string(forKey: defaultsKey),
-              let saved = HaloStyle(rawValue: name), saved.isOffered else { return .lightning }
+        guard let name = UserDefaults.standard.string(forKey: destination.defaultsKey),
+              let saved = HaloStyle(rawValue: name), saved.isOffered else { return destination.fallback }
         return saved
     }
 
-    static func save(_ style: HaloStyle) {
-        UserDefaults.standard.set(style.rawValue, forKey: defaultsKey)
+    /// What is drawn before the first dictation of the session says where it is
+    /// going — the caret's, because an unbound sentence is the common case.
+    static var current: HaloStyle { current(for: .caret) }
+
+    static func save(_ style: HaloStyle, for destination: HaloDestination) {
+        UserDefaults.standard.set(style.rawValue, forKey: destination.defaultsKey)
     }
+}
+
+/// **Where the sentence being dictated is headed** — and therefore which
+/// effect is drawn round the pointer while it is being said.
+///
+/// Victor, 2026-09-21: *"tunnel să fie la dictarea la caret … tendrils dacă
+/// sunt legat și sparks dacă dictez în terminal nou"*, then *"mi-ar plăcea să
+/// pot alege separat cele trei efecte"*. One preference per destination rather
+/// than one for the app: the ring is already the only thing on screen while he
+/// talks, and the destination is the one fact about a dictation that he cannot
+/// otherwise see without looking away from the pointer.
+///
+/// `AppDelegate.syncBorrowedGestures` decides which of the three a dictation is
+/// — the same expression that decides `atCaret`, plus `spawnPending` — and
+/// pushes it into `CaretHalo.setDestination` on the edge that raises the ring.
+enum HaloDestination: String, CaseIterable {
+    /// Replace Wispr, an unbound sentence, and **every dictation Wispr Flow
+    /// runs on its own** (Victor, 2026-09-21: *"Wispr Flow, când dictează, să
+    /// fie dictare la caret"*) — a foreign microphone types where the caret is,
+    /// whatever this app is bound to.
+    case caret
+    /// ⌘⌃B was pressed: the words are typed into the bound terminal.
+    case bound
+    /// `Start dictation to new claude` — the sentence opens a terminal of its own.
+    case spawn
+
+    /// The menu row's wording, in the menu's own vocabulary.
+    var title: String {
+        switch self {
+        case .caret: return "At the caret"
+        case .bound: return "Bound terminal"
+        case .spawn: return "New claude"
+        }
+    }
+
+    /// **Victor's three picks of 2026-09-21**, and what an unset preference
+    /// reads as. Not the film: he named a preset for each of the three.
+    var fallback: HaloStyle {
+        switch self {
+        case .caret: return .milkdrop7    // Tunnel
+        case .bound: return .milkdrop20   // Tendrils
+        case .spawn: return .milkdrop87   // Sparks
+        }
+    }
+
+    var defaultsKey: String { "haloStyle.\(rawValue)" }
 }
 
 /// **The frame cap for every web view** (Victor, 2026-09-20: *"30 is more

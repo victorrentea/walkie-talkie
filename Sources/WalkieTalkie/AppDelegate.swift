@@ -1090,7 +1090,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The halo picker** (2026-09-20): the choice is the halo's own and is
         // written where it is applied, so a restart comes back with the same
         // ring and the menu's tick is read off the same preference.
-        status.onPickHalo = { [weak self] style in self?.caretHalo.setStyle(style) }
+        // A pick under one of the three destination rows writes that
+        // destination's preference; a pick in the top-level list writes all
+        // three (Victor, 2026-09-21: *"dacă îl selectez precis, atunci toate
+        // trei sunt puse pe același"*).
+        status.onPickHalo = { [weak self] style, destination in
+            guard let self = self else { return }
+            if let destination = destination { self.caretHalo.setStyle(style, for: destination) }
+            else { self.caretHalo.setStyleEverywhere(style) }
+        }
         status.onPickHaloEngine = { [weak self] engine in self?.caretHalo.setEngine(engine) }
         status.onToggleLogiGestures = { [weak self] on in
             self?.hotkeys.useLogiGestures = on
@@ -1557,17 +1565,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Wheel held and turned over the ring: the next halo** (2026-09-20).
         // The ring itself changing is the feedback; the chip's flash names it,
         // because nine of them are hard to tell apart in the corner of an eye.
-        // Same preference the menu's `Halo` row writes and reads, so the tick
+        // Same preferences the menu's destination rows read, so the tick
         // follows on the next open.
+        // **The dial writes, and it writes the destination's row** (2026-09-21):
+        // it turns only while the ring is up, so what kind of dictation is on
+        // screen is known, and the turn is a decision about *that* kind.
         hotkeys.onHaloDial = { [weak self] step in
             guard let self = self else { return }
-            let landed = self.caretHalo.cycleStyle(by: step)
-            self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
+            let landed = self.caretHalo.dialStyle(by: step)
+            self.overlay.flash("✨ \(landed.menuTitle) · \(self.caretHalo.destination.title)", duration: 4)
         }
         // **F9 / F7 step the halo outside a dictation, and preview it on his
         // own voice for six seconds** (2026-09-20, late) — the same cycle as
-        // the wheel, the same preference the menu reads, plus the preview,
-        // which the wheel does not need because the ring is already up.
+        // the wheel, plus the preview, which the wheel does not need because
+        // the ring is already up. **Preview and nothing else since
+        // 2026-09-21** (*"F7, F9 rămân doar de preview așa"*): they are how he
+        // browses the list, and browsing must not rewrite any of the three
+        // destinations' picks. `cycleStyle` draws without saving.
         hotkeys.onHaloStep = { [weak self] step in
             guard let self = self else { return }
             MilkDropHalo.optionsOverride = nil
@@ -1578,7 +1592,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **`POST /test/halo`** — the same two moves from a desk, for him and
         // for an agent alike: `{"style": "milkdrop87"}` or `{"step": 1}`,
         // `"demo": 6` for the preview, `"opts": {"gain": 0.4}` merged over a
-        // preset's options for this run. Answers the style now current.
+        // preset's options for this run. Answers the style now drawn, the
+        // destination being worn and what each of the three is set to.
+        //
+        // **It previews by default and saves only when asked** (2026-09-21):
+        // `{"style": …}` draws it for this run, `{"style": …, "for": "bound"}`
+        // writes that destination's preference, `{"for": "spawn"}` alone wears
+        // that destination's dress. A harness looking at effects has no
+        // business leaving Victor's three picks rearranged behind it.
         picker.onTestHalo = { [weak self] body in
             guard let self = self else { return ["error": "gone"] }
             if let opts = body["opts"] as? [String: Any],
@@ -1587,18 +1608,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if body["style"] != nil || body["step"] != nil {
                 MilkDropHalo.optionsOverride = nil
             }
+            let destination = (body["for"] as? String).flatMap(HaloDestination.init(rawValue:))
             if let name = body["style"] as? String {
                 guard let style = HaloStyle(rawValue: name) ?? HaloStyle.allCases.first(where: { $0.title.lowercased() == name.lowercased() }) else {
                     return ["error": "no such style: \(name)", "styles": HaloStyle.offered.map { $0.rawValue }]
                 }
-                self.caretHalo.setStyle(style)
+                if let destination = destination { self.caretHalo.setStyle(style, for: destination) }
+                else { self.caretHalo.use(style) }
                 self.overlay.flash("✨ \(style.menuTitle)", duration: 1.5)
             } else if let step = body["step"] as? Int {
                 let landed = self.caretHalo.cycleStyle(by: step)
                 self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
+            } else if let destination = destination {
+                self.caretHalo.setDestination(destination)
             }
             if let demo = body["demo"] as? Double, demo > 0 { self.caretHalo.preview(seconds: min(demo, 60)) }
             return ["ok": true, "style": self.caretHalo.style.rawValue, "title": self.caretHalo.style.title,
+                    "destination": self.caretHalo.destination.rawValue,
+                    "picks": Dictionary(uniqueKeysWithValues: HaloDestination.allCases.map {
+                        ($0.rawValue, HaloStyle.current(for: $0).rawValue) }),
                     "opts": MilkDropHalo.optionsOverride ?? "", "styles": HaloStyle.offered.map { $0.rawValue }]
         }
         // One line per selection, in the app's own log: how many frames the box
@@ -4006,7 +4034,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // — the same expression, pushed into the tap here so the gesture and
         // the ring cannot come to mean two different things by *dictating*.
         hotkeys.haloUp = listening || speculative || wisprHearing
-        caretHalo.setActive(listening || speculative || wisprHearing,
+        // **Which effect this sentence wears** (2026-09-21) — Tunnel at the
+        // caret, Tendrils bound, Sparks into a new claude, each of the three
+        // his own to change (`HaloDestination`). Read off the same facts
+        // `atCaret` is, with one difference: a **foreign** Wispr dictation is
+        // a caret one here (*"Wispr Flow, când dictează, să fie dictare la
+        // caret"*) although it is deliberately not `atCaret` — that flag arms
+        // the arrow, and the arrow promises a delivery this app is not making.
+        //
+        // Pushed only while the ring is up, so a bind made with nothing being
+        // said does not quietly pull an F7 preview off the screen; and on
+        // every sync while it is up, so a ⌘⌃B made mid-sentence changes the
+        // dress the way it changes the arrow.
+        let ringUp = listening || speculative || wisprHearing
+        if ringUp {
+            let destination: HaloDestination = (atCaret || foreignMic) ? .caret
+                : spawnPending ? .spawn
+                : isBound ? .bound : .caret
+            caretHalo.setDestination(destination)
+        }
+        caretHalo.setActive(ringUp,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **The music pauses for every dictation, and so reads `listening`, not

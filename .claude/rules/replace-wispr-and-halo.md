@@ -510,9 +510,27 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **One menu, `Halo fx`** (his spelling; *"there must be ONE menu, not 2: and the MilkDrop ones
   should have a lightning bolt in the name"*): the film first and apart, the hand-written effects,
   a line, the presets with their ⚡ (`HaloStyle.menuTitle`). The menu bar runs Microphone, Engine,
-  Mouse Gestures, `Halo fx`. The preference is `UserDefaults` `haloStyle`, written by
-  `CaretHalo.setStyle` (the row and the wheel dial both end there); `WT_HALO_STYLE=<case>`
-  overrides for one run; a saved style that no longer exists reads as the film.
+  Mouse Gestures, `Halo fx`. `WT_HALO_STYLE=<case>` overrides for one run; a saved style that no
+  longer exists reads as that destination's default.
+- **One effect per destination, not one per app** (2026-09-21). `HaloDestination` — `caret`,
+  `bound`, `spawn` — has a preference each (`UserDefaults` `haloStyle.<case>`; the single old
+  `haloStyle` key is no longer read) and a default each: **Tunnel** at the caret, **Tendrils**
+  bound, **Sparks** into a new claude. `AppDelegate.syncBorrowedGestures` pushes the destination
+  into `CaretHalo.setDestination` **only while the ring is up**, on every sync, from the same facts
+  `atCaret` is read from — plus one difference: **a foreign Wispr dictation counts as caret here**
+  (*"Wispr Flow, când dictează, să fie dictare la caret"*) although it is deliberately not
+  `atCaret`, because that flag arms `DropArrow` and the heads must not promise a delivery this app
+  is not making.
+- **`use` draws, `setStyle` writes.** `CaretHalo.use(_:)` changes the dress without touching a
+  preference; `setStyle(_:for:)` writes one destination's, `setStyleEverywhere` all three. **F7/F9
+  (`cycleStyle`) only draw** — they are how he browses the list outside a dictation, and browsing
+  must not rewrite a pick (*"F7, F9 rămân doar de preview așa"*). **The wheel dial (`dialStyle`)
+  writes**, to the destination being worn: it turns only while the ring is up, so the turn is a
+  decision about that kind of dictation, and the flash names it (`✨ Tendrils · Bound terminal`).
+- **`POST /test/halo` previews by default**: `{"style": …}` draws without saving, `"for":
+  "<destination>"` makes it a write (or, alone, wears that destination's dress). The answer carries
+  `destination` and `picks`.
+  → journal: *The ring says where the sentence is going (2026-09-21)*
 - **Vendored, pinned, never fetched.** `tools/vendor-voice-halo.sh` copies `index.html` +
   `water.js` from `~/workspace/voice-halo` at the commit/tag it pins into `assets/voice-halo/`
   (+ `VERSION`); `build-app.sh` runs it (a no-op without the sibling) and copies the folder into
