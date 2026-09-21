@@ -2395,8 +2395,13 @@ final class ClipVoice {
     /// `Resources/halo-voice.wav` installed, `assets/halo-voice.wav` from a
     /// `.build` binary; nil when neither is there (the demo falls back to
     /// `DemoVoice`'s noise).
+    /// `WT_HALO_VOICE_WAV=<path>` pune ALT clip în locul celui livrat — orice WAV de
+    /// 16 kHz mono Int16, deci o mostră din corpus merge direct. Nu e o preferință,
+    /// e singurul fel în care lanțurile din `VoicePrep` pot fi judecate pe vocea lui
+    /// dintr-o zi anume de curs: clipul livrat are 3,5 secunde și e mereu același.
     static func load() -> ClipVoice? {
         var candidates: [URL] = []
+        if let p = ProcessInfo.processInfo.environment["WT_HALO_VOICE_WAV"] { candidates.append(URL(fileURLWithPath: p)) }
         if let res = Bundle.main.resourcePath { candidates.append(URL(fileURLWithPath: res).appendingPathComponent("halo-voice.wav")) }
         var dir = URL(fileURLWithPath: CommandLine.arguments[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             .standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent()
