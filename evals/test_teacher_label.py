@@ -236,10 +236,23 @@ class LabelLag(unittest.TestCase):
 
     def test_a_fresh_label_is_within_the_budget(self):
         """4.6 s clip, dictation started 7 s ago — the ordinary case."""
-        self.assertLess(tl.label_lag(self.at(7.0), 4.6), tl.MAX_LABEL_LAG_SEC)
+        self.assertLess(tl.label_lag(self.at(7.0), 4.6), tl.lag_budget(4.6))
 
     def test_the_previous_clips_label_is_far_outside_it(self):
-        self.assertGreater(tl.label_lag(self.at(40.0), 4.6), tl.MAX_LABEL_LAG_SEC)
+        self.assertGreater(tl.label_lag(self.at(40.0), 4.6), tl.lag_budget(4.6))
+
+    def test_a_long_clip_gets_a_longer_budget(self):
+        """The mistake of 2026-09-21: a constant 8 s, calibrated on 3–5 s clips,
+        threw away 242 good labels once the queue reached 16 s ones, at lags of
+        8–13 s. The lag is padding plus Wispr's round trip, and Wispr is slower on
+        a longer clip."""
+        self.assertGreater(tl.lag_budget(17), tl.lag_budget(4))
+        # 17 s clip, label 12 s behind — what the log showed being dropped.
+        self.assertLess(tl.label_lag(self.at(29.0), 17.0), tl.lag_budget(17.0))
+
+    def test_an_off_by_one_on_a_long_clip_is_still_caught(self):
+        """The previous clip's row is a whole cycle back — 45 s or more."""
+        self.assertGreater(tl.label_lag(self.at(62.0), 17.0), tl.lag_budget(17.0))
 
     def test_an_unreadable_timestamp_drops_nothing(self):
         """Unknown is not suspicious, and a parse that fails must not start throwing
