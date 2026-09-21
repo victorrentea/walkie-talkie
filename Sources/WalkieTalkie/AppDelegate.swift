@@ -4035,11 +4035,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the ring cannot come to mean two different things by *dictating*.
         hotkeys.haloUp = listening || speculative || wisprHearing
         // **Which effect this sentence wears** (2026-09-21) — Tunnel at the
-        // caret, Tendrils bound, Sparks into a new claude, each of the three
-        // his own to change (`HaloDestination`). Read off the same facts
-        // `atCaret` is, with one difference: a **foreign** Wispr dictation is
-        // a caret one here (*"Wispr Flow, când dictează, să fie dictare la
-        // caret"*) although it is deliberately not `atCaret` — that flag arms
+        // caret, Tendrils bound, Sparks into a new claude, Cauldron for a
+        // dictation Wispr Flow is running on its own, each of the four his own
+        // to change (`HaloDestination`). Read off the same facts `atCaret` is,
+        // with one addition: `foreignMic` is its **own** destination and is
+        // tested first.
+        //
+        // It wore the caret's dress until later the same day, on the reading
+        // that Wispr types at the caret so the two are one thing. They are not:
+        // *"Wispr-ul este o dictare … la fel de dictare. Folosește un efect
+        // MilkDrop rămas pentru el"*. Where the words go is the same; whose
+        // microphone is open is not, and that is the one the ring answers.
+        // It stays deliberately out of `atCaret` either way — that flag arms
         // the arrow, and the arrow promises a delivery this app is not making.
         //
         // Pushed only while the ring is up, so a bind made with nothing being
@@ -4048,7 +4055,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dress the way it changes the arrow.
         let ringUp = listening || speculative || wisprHearing
         if ringUp {
-            let destination: HaloDestination = (atCaret || foreignMic) ? .caret
+            let destination: HaloDestination = foreignMic ? .wispr
+                : atCaret ? .caret
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
             caretHalo.setDestination(destination)

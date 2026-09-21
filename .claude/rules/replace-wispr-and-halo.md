@@ -513,14 +513,27 @@ closes. Between the two is the whole transcription — the stretch in which he i
   Mouse Gestures, `Halo fx`. `WT_HALO_STYLE=<case>` overrides for one run; a saved style that no
   longer exists reads as that destination's default.
 - **One effect per destination, not one per app** (2026-09-21). `HaloDestination` — `caret`,
-  `bound`, `spawn` — has a preference each (`UserDefaults` `haloStyle.<case>`; the single old
-  `haloStyle` key is no longer read) and a default each: **Tunnel** at the caret, **Tendrils**
-  bound, **Sparks** into a new claude. `AppDelegate.syncBorrowedGestures` pushes the destination
-  into `CaretHalo.setDestination` **only while the ring is up**, on every sync, from the same facts
-  `atCaret` is read from — plus one difference: **a foreign Wispr dictation counts as caret here**
-  (*"Wispr Flow, când dictează, să fie dictare la caret"*) although it is deliberately not
-  `atCaret`, because that flag arms `DropArrow` and the heads must not promise a delivery this app
-  is not making.
+  `bound`, `spawn`, `wispr` — has a preference each (`UserDefaults` `haloStyle.<case>`; the single
+  old `haloStyle` key is no longer read) and a default each: **Tunnel** at the caret, **Tendrils**
+  bound, **Sparks** into a new claude, **Cauldron** for Wispr's own. `AppDelegate.syncBorrowedGestures`
+  pushes the destination into `CaretHalo.setDestination` **only while the ring is up**, on every
+  sync, from the same facts `atCaret` is read from, `foreignMic` tested first.
+- **A foreign Wispr dictation is its own destination** (2026-09-21, later the same day). It wore
+  the caret's dress first, on the reading that Wispr types at the caret so the two are one thing;
+  Victor split them: *"Wispr-ul este o dictare … la fel de dictare. Folosește un efect MilkDrop
+  rămas pentru el"*. Cauldron is the *rămas* — the only offered preset none of the other three had
+  claimed (Snowflake and Water Dream are built but off the menu). It stays deliberately out of
+  `atCaret` either way, because that flag arms `DropArrow` and the heads must not promise a
+  delivery this app is not making.
+- **Only two gestures raise it at all, and with the Engine off Wispr they are the only witnesses
+  there are.** `HotkeyTap` watches exactly `54+61` (right ⌘ + right ⌥ held, Wispr's `ptt`, tested
+  on the **device-right** flag bits) and `49+59+63` (fn ⌃ Space, `popo`). `WisprFlowSource.watch`
+  — the CoreAudio second witness, 0–6 s late and sometimes absent — is started by `prepare()`,
+  which `AppDelegate` calls on the **selected** source only, so with `dictationSource` on
+  `eleven` or `whisper` it never runs. Start a Wispr dictation any other way (the F18 Scratchpad
+  hold, a rebound chord, Wispr's own menu) and nothing tells the relay: no `gestureSeen`, no
+  `hearingChanged`, `ringUp` stays false, no halo. That is the whole answer to *"de ce nu intră
+  Walkie să deseneze"*.
 - **`use` draws, `setStyle` writes.** `CaretHalo.use(_:)` changes the dress without touching a
   preference; `setStyle(_:for:)` writes one destination's, `setStyleEverywhere` all three. **F7/F9
   (`cycleStyle`) only draw** — they are how he browses the list outside a dictation, and browsing

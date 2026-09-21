@@ -276,19 +276,30 @@ enum HaloStyle: String, CaseIterable {
 /// talks, and the destination is the one fact about a dictation that he cannot
 /// otherwise see without looking away from the pointer.
 ///
-/// `AppDelegate.syncBorrowedGestures` decides which of the three a dictation is
-/// — the same expression that decides `atCaret`, plus `spawnPending` — and
-/// pushes it into `CaretHalo.setDestination` on the edge that raises the ring.
+/// `AppDelegate.syncBorrowedGestures` decides which of the four a dictation is
+/// — the same expression that decides `atCaret`, plus `spawnPending` and
+/// `foreignMic` — and pushes it into `CaretHalo.setDestination` on the edge
+/// that raises the ring.
 enum HaloDestination: String, CaseIterable {
-    /// Replace Wispr, an unbound sentence, and **every dictation Wispr Flow
-    /// runs on its own** (Victor, 2026-09-21: *"Wispr Flow, când dictează, să
-    /// fie dictare la caret"*) — a foreign microphone types where the caret is,
-    /// whatever this app is bound to.
+    /// Replace Wispr and an unbound sentence — **this app's** microphone typing
+    /// where the caret is, whatever it is bound to.
     case caret
     /// ⌘⌃B was pressed: the words are typed into the bound terminal.
     case bound
     /// `Start dictation to new claude` — the sentence opens a terminal of its own.
     case spawn
+    /// **A dictation Wispr Flow is running on its own** — right ⌘⌥ held, or
+    /// fn ⌃ Space: the relay rings for it and routes nothing (`relay: false`).
+    ///
+    /// It wore the caret's dress until 2026-09-21 (*"Wispr Flow, când
+    /// dictează, să fie dictare la caret"*, which was about the **destination**
+    /// — Wispr types at the caret — and was read as being about the effect too).
+    /// Victor separated the two the same day: *"Wispr-ul este o dictare … la fel
+    /// de dictare. Folosește un efect MilkDrop rămas pentru el"*. A foreign
+    /// microphone is worth telling apart on sight, because it is the one kind of
+    /// sentence none of this app's gestures apply to — no shot, no pick, no
+    /// arrow, nothing to hang on it.
+    case wispr
 
     /// The menu row's wording, in the menu's own vocabulary.
     var title: String {
@@ -296,16 +307,23 @@ enum HaloDestination: String, CaseIterable {
         case .caret: return "At the caret"
         case .bound: return "Bound terminal"
         case .spawn: return "New claude"
+        case .wispr: return "Wispr Flow's own"
         }
     }
 
-    /// **Victor's three picks of 2026-09-21**, and what an unset preference
-    /// reads as. Not the film: he named a preset for each of the three.
+    /// **Victor's picks of 2026-09-21**, and what an unset preference reads as.
+    /// Not the film: he named a preset for each.
+    ///
+    /// `wispr` gets **Cauldron**, which is *"un efect MilkDrop rămas"* quite
+    /// literally: of the six presets on the page it is the only one still
+    /// offered in the menu that none of the other three had claimed (Snowflake
+    /// and Water Dream are built but off the list).
     var fallback: HaloStyle {
         switch self {
         case .caret: return .milkdrop7    // Tunnel
         case .bound: return .milkdrop20   // Tendrils
         case .spawn: return .milkdrop87   // Sparks
+        case .wispr: return .milkdrop8    // Cauldron
         }
     }
 
