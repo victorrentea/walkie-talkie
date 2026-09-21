@@ -1050,6 +1050,12 @@ final class HotkeyTap {
     /// whole of the wiring. Raised on the tap thread, so the other end hops.
     var onEngineBusy: ((String) -> Void)?
 
+    /// **A Wispr Flow sentence was thrown away by ⬅️ on the back button.** The
+    /// banner is the overlay's and the tap may not reach for it, exactly as
+    /// `onEngineBusy`. Only for a sentence the relay does **not** own — one it
+    /// owns goes down `onLocalCancel`, which has a banner of its own.
+    var onWisprCancel: (() -> Void)?
+
     /// **Is Wispr Flow's microphone open right now?** — supplied by
     /// `AppDelegate` and read from the tap thread, so it must be cheap and it
     /// must be safe there: `WisprWatch.sampleIsRunningInput` is three CoreAudio
@@ -2805,6 +2811,41 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
                 return nil
 
+            // ⬅️ on the **back** button — throw a Wispr Flow sentence away.
+            //
+            // The row was free until 2026-09-21 (*"dacă sunt în dictare Wispr Flow
+            // … apăs butonul de back și mut la stânga … trebuie să anuleze dictarea
+            // Wispr Flow"*), and it is where that gesture belongs rather than on
+            // the forward button: **the thumb is already on the back button**
+            // during a Wispr sentence, because that is the button that stops it.
+            // Stop and abandon are then the same button, one flick apart, which
+            // is the shape ⬆️/⬅️ already have on the forward one.
+            //
+            // The body is the back *click*'s stop with one word changed —
+            // `postWisprCancel` (⌃Escape, Wispr's own `dismiss`) where that
+            // posts the hands-free chord — and it is gated the same way, on
+            // `ownDictation`, for the same reason: a relay sentence has Wispr's
+            // microphone open because the relay opened it, and it has its own
+            // cancel with its own banner and its own clearing-up.
+            //
+            // `onWisprRawChord(true)` closes the listening phase here rather
+            // than waiting for the CoreAudio edge, which is 0–6 s late where it
+            // fires at all — a ring still turning after he has abandoned the
+            // sentence is the thing this gesture exists to stop.
+            case VK_F3:
+                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                if wisprMicIsOpen?() == true, !ownDictation {
+                    Log.info("🗑️ ⬅️ back button flicked left — dismissing Wispr Flow's dictation")
+                    Self.postWisprCancel()
+                    onWisprRawChord?(true)
+                    DispatchQueue.global().async { [weak self] in self?.onWisprCancel?() }
+                    return nil
+                }
+                // Nothing of Wispr's to throw away: the relay's own cancel, so
+                // the flick is never a gesture that silently does nothing.
+                DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
+                return nil
+
             // ⬆️ — dictate at a session that does not exist yet: the spawn, which
             // used to be the wheel clicked twice. A gesture of its own again,
             // rather than a conversion of a dictation already in flight, because
@@ -3657,7 +3698,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
          ("back-click",    VK_F6,  "⌃⌥⌘F6",  "the stop of a 🔽 → dictation, a picture while any other one is dictating, Return otherwise"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
          ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Wispr Flow's raw hands-free chord — and the back click becomes its stop"),
-         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "free row — assigned in Options+, unclaimed here"),
+         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "cancel Wispr Flow's dictation — the relay's own when there is none"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }
 

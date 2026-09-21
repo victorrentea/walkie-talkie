@@ -44,6 +44,11 @@
   const src = document.createElement('canvas');          // the engine's own canvas, never shown
   let side = 0, dpr = 1, running = false, viz = null, presets = null;
   let fade = false, fadeRx = 1, fadeRy = 1, screenW = 1, screenH = 1, testMode = false;
+  // Rata pe care butterchurn crede ca o au esantioanele din `timeByteArray` —
+  // rata AudioContext-ului lui, fiindca acolo isi ia FFT-ul cand il lasi sa-si
+  // traga singur sunetul (`connectAudio`). Vezi `audio(b64)`.
+  let engineRate = 48000;
+  const HOST_RATE = 16000;   // MicRecorder / DemoVoice; see `audio(b64)`
   const audio = { time: new Uint8Array(1024), l: new Uint8Array(1024), r: new Uint8Array(1024), fresh: false };
   audio.time.fill(128); audio.l.fill(128); audio.r.fill(128);
 
@@ -129,13 +134,27 @@
   // ---- the loop -------------------------------------------------------------
   // Plafonul de cadre al gazdei (halo.fps): pe baterie fiecare cadru costă CPU,
   // iar presetele sunt scrise în timp (`time`, `fps`), nu în număr de cadre.
-  let lastFrameAt = 0, frameInterval = 0;
+  let speed = 1;
+  let lastFrameAt = 0, frameInterval = 0, lastRenderAt = 0;
   function frame(now) {
     if (!running) return;
     if (frameInterval && now - lastFrameAt < frameInterval - 2) { requestAnimationFrame(frame); return; }
     lastFrameAt = now;
     if (viz) {
-      viz.render({ audioLevels: { timeByteArray: audio.time, timeByteArrayL: audio.l, timeByteArrayR: audio.r } });
+      // `speed`: presetele sunt scrise in timp, deci singurul mod de a le incetini
+      // este sa le minti despre cat a trecut. `render({elapsedTime})` e chiar
+      // parametrul motorului (`calcTimeAndFPS`), nu un hack al nostru: la
+      // speed = 0.6 secunda presetului trece in 1.67 s de-ale noastre, la aceeasi
+      // rata de cadre — deci mai lent, nu mai sacadat (plafonul de cadre de mai
+      // sus face exact invers si de-aia nu el e knob-ul).
+      // Primul cadru n-are delta; ii dam pasul nominal, nu zero.
+      let dt = lastRenderAt ? (now - lastRenderAt) / 1000 : (frameInterval ? frameInterval / 1000 : 1 / 60);
+      lastRenderAt = now;
+      // O fila care a stat in fundal poate intoarce un delta de secunde; presetul
+      // ar sari. Plafon la 4 pasi nominali.
+      dt = Math.min(dt, 4 * (frameInterval ? frameInterval / 1000 : 1 / 60));
+      viz.render({ audioLevels: { timeByteArray: audio.time, timeByteArrayL: audio.l, timeByteArrayR: audio.r },
+                   elapsedTime: dt * speed });
     } else if (testMode) {
       testFrame();
     }
@@ -173,6 +192,10 @@
       fadeStart = opts.fadeStart || 0;
       rotX = opts.rot || 1;
       pinCenter = !!opts.pinCenter;
+      //   speed:      how fast the preset's own clock runs, 1 = real time. See
+      //               the frame loop for why this and not the frame cap.
+      speed = opts.speed || 1;
+      lastRenderAt = 0;
       //   fadeAtEdge: the fade reaches the CANVAS edge (radius = half the canvas side),
       //               so a scaled-down preset dies out before its square can show —
       //               Victor, 2026-09-20: *"it still renders effects with a square crop"*
@@ -188,6 +211,7 @@
         // A context is required by the constructor; it is never resumed and
         // nothing is connected to it, so no device is ever opened.
         const actx = new (window.AudioContext || window.webkitAudioContext)();
+        engineRate = actx.sampleRate || 48000;
         viz = (butterchurn.default || butterchurn).createVisualizer(actx, src,
                 { width: src.width, height: src.height, pixelRatio: 1 });
         viz.setRendererSize(src.width, src.height);
@@ -209,13 +233,36 @@
       viz.loadPreset(p, 0.6);
       return 'ok' + (note ? ' (' + note.trim() + ')' : '');
     },
-    // b64: Float32 little-endian, the last 1024 samples in −1…1
+    // b64: Float32 little-endian, the last N samples in −1…1, at `HOST_RATE`.
+    //
+    // **Esantioanele se reesantioneaza la rata motorului, si asta nu e o
+    // finete** (2026-09-21). butterchurn isi imparte binurile de FFT in
+    // bass/mid/treb dupa indici ficsi peste cele 1024 de valori, presupunand ca
+    // sunt la rata AudioContext-ului sau — asa cum sunt cand isi trage singur
+    // sunetul prin `connectAudio`, cum face pagina publicata
+    // (victorrentea.github.io/voice-halo, care apeleaza `render()` gol).
+    // Microfonul relayului inregistreaza la 16 kHz, deci 1024 de esantioane
+    // brute sunt 64 ms de sunet turnate intr-un tablou pe care motorul il crede
+    // de 21 ms: **tot spectrul aterizeaza cu un factor de 3 mai jos**, vorbirea
+    // citeste ca bas, iar detectia de bataie — de care atarna `q27` al
+    // mozaicului, adica insusi pasul retelei de placi — nu mai porneste la fel.
+    // De aici *"nici nu are toate fazele acelei animatii de pe net"*.
+    //
+    // Deci luam exact atatea esantioane cat inseamna 1024 la rata motorului
+    // (341 la 16 kHz contra 48 kHz) si le interpolam liniar pana la 1024. Nu e
+    // un filtru de reesantionare cumsecade — pentru o fereastra de forma de unda
+    // pe care motorul o trece prin propriul FFT, liniara e destul, si pastreaza
+    // frecventele acolo unde le asteapta el.
     audio(b64) {
       const bin = atob(b64), n = bin.length >> 2, dv = new DataView(new ArrayBuffer(bin.length));
       for (let i = 0; i < bin.length; i++) dv.setUint8(i, bin.charCodeAt(i));
-      const count = Math.min(1024, n);
+      const ratio = HOST_RATE / engineRate;                 // 16000/48000 = 1/3
+      const need = Math.max(2, Math.min(n, Math.round(1024 * ratio)));
+      const from = n - need;                                // cele mai noi `need`
+      const at = (i) => dv.getFloat32((from + i) * 4, true);
       for (let i = 0; i < 1024; i++) {
-        const v = i < count ? dv.getFloat32(i * 4, true) : 0;
+        const x = i * (need - 1) / 1023, j = Math.floor(x), f = x - j;
+        const v = n >= 2 ? at(j) * (1 - f) + at(Math.min(j + 1, need - 1)) * f : 0;
         const b = Math.max(0, Math.min(255, Math.round(128 + v * 127)));
         audio.time[i] = b; audio.l[i] = b; audio.r[i] = b;
       }

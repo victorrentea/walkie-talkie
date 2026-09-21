@@ -158,6 +158,17 @@ enum HaloStyle: String, CaseIterable {
         /// kept in two heads. `CaretHalo.engineHost` and `isAvailable` both read
         /// it, and nothing else may branch on a preset number.
         var webOnly = false
+        /// **How fast the preset's own clock runs**, 1 = real time. Presets are
+        /// written in *time* (`time`, `fps` in their equations), not in frames,
+        /// so the frame cap cannot slow one down — it only makes it choppier.
+        /// This is butterchurn's own `render({elapsedTime})`, i.e. the engine
+        /// being told how much of its second has passed: at 0.6 the animation
+        /// takes 1.67 s to do what it did in 1 s, at the same frame rate.
+        ///
+        /// **Honoured by the web route only.** `ProjectMHalo` says so in the log
+        /// rather than ignoring it quietly, and a preset that sets `speed`
+        /// should carry `webOnly` with it.
+        var speed: CGFloat = 1
     }
     var preset: Preset? {
         switch self {
@@ -239,7 +250,12 @@ enum HaloStyle: String, CaseIterable {
         // prea mare. Micșorează-l cu cincizeci la sută"*): 1.1025 → 0.55125,
         // a 953 pt canvas — back inside the screen, still ~1.5× the 635 pt it
         // wore before the ×3, which is the part that put the pointer inside
-        // the bright knot rather than at its edge.
+        // the bright knot rather than at its edge. **Then ×1.3 straight after**
+        // (*"fa stars mai mare cu 30%"*): 0.55125 → 0.716625, a 1238 pt canvas.
+        // Two corrections in opposite directions inside an hour are him homing
+        // in by eye; the size is converging somewhere around ¾ of the ×3, not
+        // oscillating, so apply the next factor to this number and do not try
+        // to average the sequence.
         // **Sparks is drawn by butterchurn even when the engine is projectM**
         // (`webOnly`, 2026-09-21: *"Stars nu arată cum arată originalul … linia
         // aia e prea lăbărțat"*). chain breaker offsets spark *n* by a smoothed
@@ -256,16 +272,34 @@ enum HaloStyle: String, CaseIterable {
         // Worth knowing before anyone "fixes" this back: real MilkDrop windows
         // its FFT too, so the chain is arguably the preset's intended look and
         // the cloud is butterchurn's deviation. The cloud is the one he picked.
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.55125,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.716625,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
         // 2026-09-20 with the other `−` effects — *"the bricks look lame"* —
         // and is here now because he asked for it by name against a
         // destination, which is a different question from *do I like it in a
-        // gallery*. The page's scale, unhalved: 0.5.
-        case .milkdrop99:  return Preset(number: 99, name: "martin - reflections on black tiles", scale: 0.5,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
+        // gallery*.
+        //
+        // **×1.5, slower, brighter, and butterchurn's** (2026-09-21 evening:
+        // *"mozaicul … trebuie să fie de 1.5 ori mai mare și mai intens, puțin
+        // mai lent, să pot să văd acele animații cum se mișcă. Am impresia că,
+        // în animația originală, mai avea și alte efecte decât aceasta,
+        // comparativ cu cea din web"*). The last sentence is the one that
+        // decides the engine: he is right, and it had been measured before he
+        // said it — natively each tile is a large smooth lens blob with thick
+        // dark seams, where butterchurn draws small tiles with fine swirl
+        // interiors and the crisp coloured `wave_0` dots. Rendering at the
+        // backing scale fixed the *size* of the tiles and not their insides,
+        // and the remaining difference is engine dynamics rather than a knob
+        // (`docs/projectm/captures/mosaic-2026-09-21/`). So `webOnly`, the same
+        // move Sparks needed for the same kind of reason.
+        //
+        // 0.5 → 0.75 is his ×1.5; `speed` 0.6 is *"puțin mai lent"*, which the
+        // frame cap cannot do (see `Preset.speed`).
+        case .milkdrop99:  return Preset(number: 99, name: "martin - reflections on black tiles", scale: 0.75,
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 1,
+                                         webOnly: true, speed: 0.6)
         // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
         // locked in the bottom 20% of the screen, but the meteors follow the
         // mouse"*): the preset gives the sky and the pool, pinned to the screen

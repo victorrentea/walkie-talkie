@@ -111,7 +111,7 @@ final class MilkDropHalo: NSView, HaloWebHost {
     private func configure() {
         let side = bounds.width
         let dpr = window?.backingScaleFactor ?? 2
-        let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), fadeStart: \(preset.fadeStart), gain: \(preset.gain), rot: \(preset.rot), pinCenter: \(preset.pinCenter)}"
+        let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), fadeStart: \(preset.fadeStart), gain: \(preset.gain), rot: \(preset.rot), pinCenter: \(preset.pinCenter), speed: \(preset.speed)}"
         // `WT_HALO_PRESET_OPTS='{"gain": 4}'` overrides fields for one run — the knob for looking.
         let override = Self.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "

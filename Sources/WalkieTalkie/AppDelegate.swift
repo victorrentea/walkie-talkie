@@ -2164,6 +2164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onEngineBusy = { [weak self] why in
             DispatchQueue.main.async { self?.overlay.flash("⚠️ \(why)", duration: 5) }
         }
+        // The same word the relay's own cancel flashes, because from where he is
+        // sitting it is the same thing happening — see `HotkeyTap.onWisprCancel`.
+        hotkeys.onWisprCancel = { [weak self] in
+            DispatchQueue.main.async { self?.overlay.flash("🗑️ Cancelled", duration: 1.5) }
+        }
         // **A chord this app posts for a gesture has to announce itself**
         // (2026-09-18) — the tap filters its own posts out of the keyboard
         // branch, so without this a 🔽 → dictation reaches `WisprState` through
