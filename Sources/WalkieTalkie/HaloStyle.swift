@@ -161,6 +161,14 @@ enum HaloStyle: String, CaseIterable {
     }
     var preset: Preset? {
         switch self {
+        // **×0.7 on 2026-09-21 evening** (*"circumferința interioară să fie cu 30 %
+        // mai mic și să fie mai pregnant vizibil pe ecran"*): 0.84 → 0.588, so the
+        // ring hugs the pointer closer. It pays for itself twice — a smaller
+        // canvas is fewer engine pixels, so the preset's structures are thicker
+        // relative to it, which is most of the brightness the move to the backing
+        // scale had cost. The other half is `ProjectMHalo.gainScale[7]`, and the
+        // reasoning for both numbers is written out there.
+        //
         // Tunnel: *"3x smaller"* than what he saw (the full-screen canvas), so a
         // third of the screen's long side; its fade is the canvas edge now (the
         // half-screen radius would be outside it), at his 2× gain and 2× turn.
@@ -168,7 +176,7 @@ enum HaloStyle: String, CaseIterable {
         // key can show (the bright parts are at 1 already) — what dims Tunnel is
         // the mask, half-light at half the radius. So: full light out to 55 %
         // of the radius, then one fall to nothing at the edge; gain 4 as asked.
-        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.84,
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.588,
                                          // *"appears centred slightly below the mouse"*, then *"no longer
                                          // centred"* after a static offset: the preset's centre WANDERS —
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —

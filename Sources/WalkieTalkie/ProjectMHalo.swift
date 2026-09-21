@@ -86,7 +86,23 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// means agree (`REPORT.md`, *Brightness*). `WT_PM_GAIN_SCALE='{"7": 0.7}'`
     /// overrides a value for a run.
     static let gainScale: [Int: CGFloat] = {
-        var table: [Int: CGFloat] = [7: 0.12, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
+        // **Tunnel is 0.34 since 2026-09-21 evening, and the number is a
+        // repair.** The whole table was measured at `renderScale` 1; moving the
+        // default to the backing scale halved Tunnel, because its bright
+        // structures are drawn in *texture* pixels and twice the resolution
+        // spreads them over half the screen area. Measured paired, same display,
+        // 18 frames a side: **0.55× the mean luminance and 0.58× the lit area**
+        // at 2× — and Victor saw it within the hour (*"efectul de tunel
+        // într-adevăr e abia vizibil"*). Shrinking the canvas 30 % took it from
+        // 4.89 back to 7.05 on its own (a smaller canvas is fewer engine pixels,
+        // so the structures are thicker relative to it); the gain carries the
+        // rest and then the *"mai pregnant vizibil"* he asked for on top.
+        // Swept at the new canvas: 0.12 → mean 7.05, 0.22 → 11.3, 0.34 → 19.6,
+        // 0.50 → 20.3 with the lit area going *down* — 0.34 is the knee, and
+        // nothing saturates at any of them (0.000 % of pixels at 255).
+        // **The other five are still 1× numbers.** They were not reported and are
+        // not re-measured here; if one of them looks washed out, this is why.
+        var table: [Int: CGFloat] = [7: 0.34, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
         if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),
            let o = try? JSONSerialization.jsonObject(with: data) as? [String: Double] {
             for (k, v) in o { if let n = Int(k) { table[n] = CGFloat(v) } }
