@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 SRC, DST = sys.argv[1], sys.argv[2]
 os.makedirs(DST, exist_ok=True)
-NAMES = {"milkdrop7": "tunnel", "milkdrop8": "cauldron", "milkdrop20": "tendrils", "milkdrop85": "snowflake", "milkdrop87": "sparks", "milkdrop103": "water-dream"}
+NAMES = {"milkdrop1": "bipolar", "milkdrop7": "tunnel", "milkdrop8": "cauldron", "milkdrop20": "tendrils", "milkdrop85": "snowflake", "milkdrop87": "sparks", "milkdrop103": "water-dream"}
 print("| preset | route | px | lit % (alpha > 25), 3 s / 5 s / 7 s | mean alpha of the lit part, 3 / 5 / 7 s |")
 print("|---|---|---|---|---|")
 TIMES = ["3s", "5s", "7s"]
