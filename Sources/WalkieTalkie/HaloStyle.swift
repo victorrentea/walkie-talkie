@@ -201,7 +201,8 @@ enum HaloStyle: String, CaseIterable {
     /// down to 1×; the page still draws it.
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
-    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing }
+    /// Gemini too (2026-09-21, *"scoate gemini din opțiuni"*).
+    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.

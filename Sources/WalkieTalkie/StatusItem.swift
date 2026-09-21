@@ -604,6 +604,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // The film first and apart: the default, and the one drawn natively.
             if style == .lightning { haloSubmenu.addItem(.separator()) }
         }
+        // **`Fx engine`, last row of the same submenu** (Victor, 2026-09-21:
+        // *"pune fx engine sub halo effects (în submeniu)"*) — one level down
+        // from the styles, not a sibling row in the main menu.
+        haloSubmenu.addItem(.separator())
+        haloEngineItem.submenu = haloEngineSubmenu
+        applyHaloEngineRow()
+        haloSubmenu.addItem(haloEngineItem)
     }
 
     /// **`Halo engine: Web`, the shape `Engine` has** (the `projectm` branch,
@@ -612,13 +619,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// arrow, the tick drawn from `HaloEngine.current` on every open, so a
     /// `WT_HALO_ENGINE` run shows what is running. The film and the page
     /// effects are unaffected by it; the row says so.
-    private let haloEngineItem = NSMenuItem(title: "Halo engine", action: nil, keyEquivalent: "")
+    private let haloEngineItem = NSMenuItem(title: "Fx engine", action: nil, keyEquivalent: "")
     private let haloEngineSubmenu = NSMenu()
     var onPickHaloEngine: ((HaloEngine) -> Void)?
 
     private func applyHaloEngineRow() {
         let current = HaloEngine.current
-        haloEngineItem.title = "Halo engine: \(Self.haloEngineTitle(current))"
+        haloEngineItem.title = "Fx engine: \(Self.haloEngineTitle(current))"
         haloEngineSubmenu.removeAllItems()
         haloEngineSubmenu.autoenablesItems = false
         for engine in [HaloEngine.web, .native] {
@@ -965,10 +972,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloItem.submenu = haloSubmenu
         applyHaloRow()
         menu.addItem(haloItem)
-        // **`Halo engine`, under `Halo fx`** — the same question one level down.
-        haloEngineItem.submenu = haloEngineSubmenu
-        applyHaloEngineRow()
-        menu.addItem(haloEngineItem)
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
