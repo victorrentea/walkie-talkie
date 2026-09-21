@@ -57,6 +57,18 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// of the demo voice (`docs/projectm/lum.py`), then iterated until the
     /// means agree (`REPORT.md`, *Brightness*). `WT_PM_GAIN_SCALE='{"7": 0.7}'`
     /// overrides a value for a run.
+    ///
+    /// **Bipolar (1) is deliberately absent — it has never been measured.**
+    /// Added 2026-09-21 with **the screen locked**, and a locked screen is a
+    /// capture stop for both routes: the engine runs and counts frames but the
+    /// surface reads back pure black, and the web twin never starts at all
+    /// (*"the engine's page was not ready 2 s after the ring was asked for"*).
+    /// The control proves it is the screen and not the preset — **Cauldron,
+    /// measured at 0.95 the night before, came back just as black.** So no
+    /// web/native ratio exists for Bipolar. A missing entry reads as 1 — the
+    /// honest value until someone runs
+    /// `ROUTES="web native1" docs/projectm/shoot.sh /tmp/shoot milkdrop1`
+    /// **at an unlocked screen** and puts the measured number here.
     static let gainScale: [Int: CGFloat] = {
         var table: [Int: CGFloat] = [7: 0.12, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
         if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),

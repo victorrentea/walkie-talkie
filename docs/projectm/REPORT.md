@@ -311,6 +311,25 @@ texture; noise textures are built in).
    branch's, and the reason the last verification run is the 02:05 one.
 10. The `Halo engine` row has not been seen on screen (no shoot path for the
     status menu); Victor opening the menu is the test.
+11. **Bipolar (`milkdrop1`, added 2026-09-21) has never been seen.** The
+    preset is the original `.milk` — *Geiss - Bipolar 2 Enhanced*, shipped
+    with MilkDrop 2, taken from projectM's `presets_milkdrop_200` and checked
+    field by field against butterchurn's JSON (same `fWaveScale` 0.559671,
+    `fGammaAdj` 1.998, `warp` 0.099892, `rot` −0.01, `fWaveAlpha` 5.9, three
+    `per_frame_` lines, one `per_pixel_`, no waves, no shapes) — but it could
+    not be rendered, because **the screen was locked**
+    (`CGSSessionScreenIsLocked`), and that stops both routes at once: the
+    native engine loads the preset and counts its frames, but the surface
+    reads back pure black, and the web twin never starts
+    (*"the engine's page was not ready 2 s after the ring was asked for"*).
+    **The control is the proof it is the screen and not the preset — Cauldron,
+    0.95 the night before, came back just as black from the same run.** So
+    Bipolar's `scale` (0.75) is a first guess and it has **no `gainScale`
+    entry** (a missing one reads as 1); nothing was iterated against a web
+    twin. Re-shoot at an unlocked screen before trusting either number:
+    `ROUTES="web native1" docs/projectm/shoot.sh /tmp/shoot milkdrop1`.
+    **A locked screen is the first thing to check when a capture run comes
+    back black** — it costs a whole run to rediscover.
 
 ## How to reproduce
 
