@@ -457,6 +457,80 @@ final class CaretHalo {
     /// effect idles on its own slow wave.
     var samples: (() -> [Float]?)?
 
+    /// **The microphone brought to one loudness before the engine** — the
+    /// same point for both engines, because both read this timer's samples.
+    ///
+    /// A MilkDrop preset is written against a signal at *music* level, and what
+    /// reaches here is a voice through whatever microphone is in front of it.
+    /// Measured over Victor's own dictations of 2026-09-21, the same evening,
+    /// the same man: the 128 ms window RMS is **0.095 on the headset at 19:12
+    /// and 0.026 at the MacBook at 20:45** — a factor of 3.7 between two hours,
+    /// and he named the reason before the numbers were in (*"în funcție de
+    /// sursa efectivă folosită, microfonul să aibă diverse puteri fiecare …
+    /// XLR-ul mă aștept că e mult mai puternic decât un microfon de Mac"*).
+    ///
+    /// **What that costs is not brightness, it is shape.** Tunnel draws its
+    /// waveform as a circle whose radius the samples push out; at the MacBook's
+    /// level the push is too small to break the circle, so the preset renders a
+    /// clean red ring and nothing else — the thing Victor kept reporting as an
+    /// artefact and which no output-side knob could remove, because at that
+    /// level the ring *is* the whole picture. At the demo clip's level the same
+    /// preset is the starburst he approved. So the fix is neither a threshold
+    /// nor a dimmer: it is to stop handing the engine three different
+    /// microphones.
+    ///
+    /// Slow on purpose. The gain follows a **two-second** RMS, not the frame's,
+    /// so a syllable still swells and falls — that modulation is the effect —
+    /// and only the microphone's own level is taken out. It is clamped to
+    /// 0.5…8× and does nothing under `noiseFloor`, so a quiet room stays quiet
+    /// instead of being amplified into a light show. `WT_HALO_AGC=0` turns it
+    /// off; `WT_HALO_AGC_TARGET` moves the target.
+    private static let agc = ProcessInfo.processInfo.environment["WT_HALO_AGC"] != "0"
+    /// The bundled demo clip's own window RMS — the level every preset in the
+    /// catalogue was looked at and tuned against, so it is the level to hold.
+    private static let agcTarget = ProcessInfo.processInfo.environment["WT_HALO_AGC_TARGET"]
+        .flatMap { Float($0) } ?? 0.086
+    private static let noiseFloor: Float = 0.004
+    private static var agcMean: Float = 0
+    private static var agcGain: Float = 1
+
+    /// **And a gate under it, because a pause is where the circle lives.**
+    /// The gain above is deliberately slow, so through the half-second between
+    /// two phrases it is still the one speech earned — and it spends it on
+    /// breath and room, which is a *smooth* signal, which Tunnel draws as the
+    /// clean red circle. Measured on Victor's own clips: with the gain alone,
+    /// the frames that still show a ring are exactly his pauses.
+    ///
+    /// So the short-term level is compared against the long-term one and the
+    /// samples fall away under a quarter of it, to nothing at a twelfth. The
+    /// tunnel keeps decaying on screen through the pause, which is what it
+    /// should do; only the newly drawn curve goes. Opening is instant and
+    /// closing takes ~200 ms, so the gate cannot chop a soft syllable.
+    private static var gate: Float = 1
+
+    static func levelled(_ samples: [Float]) -> [Float] {
+        guard agc, !samples.isEmpty else { return samples }
+        var sum: Float = 0
+        for v in samples { sum += v * v }
+        let rms = (sum / Float(samples.count)).squareRoot()
+        // A 2 s time constant at this timer's 30 Hz: the microphone's level,
+        // not the syllable's.
+        let a: Float = 1.0 / (2.0 * 30.0)
+        agcMean += a * (rms - agcMean)
+        if agcMean > noiseFloor {
+            let want = min(max(agcTarget / agcMean, 0.5), 8)
+            // The gain itself is eased too, so a cough cannot step it.
+            agcGain += a * (want - agcGain)
+        }
+        let open = agcMean * 0.25, shut = agcMean * 0.0833
+        let want: Float = agcMean <= noiseFloor ? 0
+            : rms >= open ? 1 : rms <= shut ? 0 : (rms - shut) / (open - shut)
+        gate = want > gate ? want : gate + (1.0 / 6.0) * (want - gate)
+        let k = agcGain * gate
+        guard abs(k - 1) > 0.01 else { return samples }
+        return samples.map { min(max($0 * k, -1), 1) }
+    }
+
     /// **The panel's frame for what is drawn**, in screen coordinates. The
     /// film gets the ring's square centred on the pointer; a page effect gets
     /// the frame of the screen the pointer is on — the page lays out from the
@@ -960,7 +1034,7 @@ final class CaretHalo {
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                let samples = self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)
+                let samples = Self.levelled(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024))
                 web?.feed(samples)
                 self.under?.feed(samples)
             }
