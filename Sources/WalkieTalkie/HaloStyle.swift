@@ -199,6 +199,18 @@ enum HaloStyle: String, CaseIterable {
         /// blur this file spent the evening removing.
         /// `WT_MD_SCALE` overrides it for a run.
         var renderScale: CGFloat? = nil
+        /// **Gaura din mijloc**, ca fractiune din raza mastii: sub ea nu se vede
+        /// nimic, pana la ea urca lin. Un preset care isi strange liniile spre
+        /// centru le pune exact peste cursor, care e locul pe care haloul trebuie
+        /// sa-l lase liber (Victor, 2026-09-21: *"sa nu mai aiba linii atat de
+        /// apropiate de centru"*). 0 = fara gaura.
+        var hole: CGFloat = 0
+        /// **Cat de opac e stratul, in varf** — 1 = cum a fost pana acum. Atinge
+        /// DOAR alfa, niciodata culoarea: scazuta din culoare ar da „mai
+        /// intunecat", iar ce trebuie e „mai transparent", fiindcă stratul se
+        /// compune peste ecranul viu. Cu `fadeFloor` relativ la el: `peak` 0,20 si
+        /// `fadeFloor` 0,25 dau exact 20% in mijloc si 5% la margine.
+        var peak: CGFloat = 1
     }
     var preset: Preset? {
         switch self {
@@ -217,13 +229,32 @@ enum HaloStyle: String, CaseIterable {
         // key can show (the bright parts are at 1 already) — what dims Tunnel is
         // the mask, half-light at half the radius. So: full light out to 55 %
         // of the radius, then one fall to nothing at the edge; gain 4 as asked.
-        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.588,
+        // **Tunnel nu mai e un halo, e o camera** (Victor, 2026-09-21 noaptea:
+        // *"fa tunnel sa se raspandeasca pe tot ecranul, cu transparenta 20%-5%,
+        // nu doar in zona din jurul mouse"*). Deci `pinnedHorizon` — panza nu mai
+        // urmareste cursorul — si latura = latura LUNGA a ecranului, adica acopera
+        // tot. `offset`-ul de 50 pt deasupra cursorului a plecat odata cu urmarirea:
+        // nu mai exista un cursor fata de care sa fie deasupra.
+        //
+        // Transparenta, exact cum a cerut-o: `peak` 0,20 in mijloc, `fadeFloor`
+        // 0,25 din el la margine = 0,05. Si `hole` 0,22, ca liniile sa nu se mai
+        // stranga peste centru — *"sa nu mai aiba linii atat de apropiate de
+        // centru"*.
+        //
+        // „Calmeaza un pic formula": `rot` 2 → 1,5 si `gain` 4 → 3,2. Sunt cele
+        // doua butoane onorate de AMBELE motoare; nimic din `.milk` nu s-a atins,
+        // deci un pas inapoi e o singura cifra, nu o editare de preset.
+        // Marimea structurii: 0,588 → 1,0 din latura lunga, cu mult peste cei
+        // +10% ceruti, fiindca intrebarea s-a schimbat intre timp din „cat de mare
+        // e haloul" in „cat de mult din ecran acopera".
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
                                          // *"appears centred slightly below the mouse"*, then *"no longer
                                          // centred"* after a static offset: the preset's centre WANDERS —
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55,
-                                         offset: CGPoint(x: 0, y: 50), pinCenter: true)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0.25, gain: 3.2, rot: 1.5,
+                                         fadeStart: 0.30, pinCenter: true, pinnedHorizon: 0.5,
+                                         hole: 0.22, peak: 0.20)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was

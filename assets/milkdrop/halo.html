@@ -71,6 +71,7 @@
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
   let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
+  let hole = 0, peak = 1, uHole = null, uPeak = null;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -80,7 +81,7 @@
     const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
       void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
     const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
-      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart;
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart; uniform float hole; uniform float peak;
       // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→floor, constant past 1.
       // floorA is what is left past the fade radius: the page's 0.10, or 0 for a
       // preset that has to be gone entirely at that distance (Tunnel, 2026-09-20).
@@ -95,15 +96,23 @@
         if (d <= 1.00) return mix(0.26, floorA, (d - 0.75) / 0.25);
         return floorA;
       }
+      // gaura din mijloc: sub `hole` nu se vede nimic, pana la ea urca lin
+      float inner(float d) { return hole <= 0.0 ? 1.0 : smoothstep(hole * 0.45, hole, d); }
       void main() {
         vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y));
         c.rgb = min(c.rgb * gain, 1.0);          // gain > 1: the preset more opaque and more intense
         float a = max(c.r, max(c.g, c.b));
         if (fade > 0.5) {
           vec2 q = (uv - 0.5) * res / radii;      // 1 = the fade radius
-          a *= mask(length(q));
-          c.rgb *= mask(length(q));
+          float d = length(q);
+          float m = mask(d) * inner(d);
+          a *= m;
+          c.rgb *= m;
         }
+        // `peak` e opacitatea stratului: se inmulteste in AMBELE, ca iesirea sa
+        // ramana premultiplicata (fiecare canal <= a). Doar pe alfa ar rupe fix
+        // invariantul pe care il promite linia de mai jos.
+        a *= peak; c.rgb *= peak;
         gl_FragColor = vec4(c.rgb, a);           // premultiplied: every channel <= a by construction
       }`);
     prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
@@ -118,6 +127,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
     uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain'); uStart = gl.getUniformLocation(prog, 'fadeStart');
+    uHole = gl.getUniformLocation(prog, 'hole'); uPeak = gl.getUniformLocation(prog, 'peak');
     gl.disable(gl.BLEND);
   }
   function key() {
@@ -130,6 +140,8 @@
     gl.uniform1f(uFloor, fadeFloor);
     gl.uniform1f(uGain, gain);
     gl.uniform1f(uStart, fadeStart);
+    gl.uniform1f(uHole, hole);
+    gl.uniform1f(uPeak, peak);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -214,6 +226,8 @@
       fadeFloor = opts.fadeFloor === undefined ? 0.10 : opts.fadeFloor;
       gain = opts.gain || 1;
       fadeStart = opts.fadeStart || 0;
+      hole = opts.hole || 0;
+      peak = opts.peak == null ? 1 : opts.peak;
       rotX = opts.rot || 1;
       pinCenter = !!opts.pinCenter;
       //   speed:      how fast the preset's own clock runs, 1 = real time. See

@@ -39,6 +39,7 @@ const char* kVS = "#version 330 core\n"
 // out to that fraction of the radius and one smooth fall to the floor.
 const char* kFS = "#version 330 core\n"
     "uniform sampler2D src;uniform float fade;uniform vec2 radii;uniform float floorA;uniform float gain;uniform float fadeStart;"
+    "uniform float hole;uniform float peak;"
     "in vec2 uv;out vec4 frag;\n"
     "float mask(float d){"
     " if(fadeStart>0.0) return d<=fadeStart?1.0:mix(1.0,floorA,smoothstep(fadeStart,1.0,d));"
@@ -47,12 +48,17 @@ const char* kFS = "#version 330 core\n"
     " if(d<=0.75) return mix(0.50,0.26,(d-0.50)/0.25);"
     " if(d<=1.00) return mix(0.26,floorA,(d-0.75)/0.25);"
     " return floorA;}\n"
+    // `hole`: gaura din mijloc. Un preset ca Tunnel isi strange liniile spre centru
+    // si acolo sta cursorul, deci se stinge dinauntru in afara, cu aceeasi panta
+    // moale ca marginea, nu cu un cerc taiat.
+    "float inner(float d){ return hole<=0.0 ? 1.0 : smoothstep(hole*0.45, hole, d); }\n"
     "void main(){"
     // GL's row 0 is the bottom; the IOSurface's row 0 is the top the layer shows.
     " vec4 c=texture(src,vec2(uv.x,1.0-uv.y));"
     " c.rgb=min(c.rgb*gain,1.0);"
     " float a=max(c.r,max(c.g,c.b));"
-    " if(fade>0.5){float m=mask(length((uv-0.5)/radii));a*=m;c.rgb*=m;}"
+    " if(fade>0.5){float d=length((uv-0.5)/radii);float m=mask(d)*inner(d);a*=m;c.rgb*=m;}"
+    " a*=peak;c.rgb*=peak;"
     " frag=vec4(c.rgb,a);}\n";
 
 GLuint compile(GLenum type, const char* src, std::string& log) {
@@ -80,10 +86,10 @@ struct pmh {
     CGLContextObj ctx = nullptr;
     GLuint tex = 0, rbo = 0, fbo = 0;        // the engine's target
     GLuint prog = 0, vao = 0;                 // the key pass
-    GLint uFade, uRadii, uFloor, uGain, uStart, uSrc;
+    GLint uFade, uRadii, uFloor, uGain, uStart, uSrc, uHole, uPeak;
     Surface surf[2]; int cur = 0;
     projectm_handle pm = nullptr;
-    bool fade = false; float rx = 0.5f, ry = 0.5f, floorA = 0.1f, gain = 1.f, fadeStart = 0.f;
+    bool fade = false; float rx = 0.5f, ry = 0.5f, floorA = 0.1f, gain = 1.f, fadeStart = 0.f, hole = 0.f, peak = 1.f;
     double engineMs = 0, keyMs = 0;
     unsigned engineErrors = 0, keyErrors = 0;
     bool finish = false;                      // WT_PM_FINISH=1: glFinish for honest timings
@@ -191,6 +197,8 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     h->uFade = glGetUniformLocation(h->prog, "fade");
     h->uRadii = glGetUniformLocation(h->prog, "radii");
     h->uFloor = glGetUniformLocation(h->prog, "floorA");
+    h->uHole = glGetUniformLocation(h->prog, "hole");
+    h->uPeak = glGetUniformLocation(h->prog, "peak");
     h->uGain = glGetUniformLocation(h->prog, "gain");
     h->uStart = glGetUniformLocation(h->prog, "fadeStart");
 
@@ -265,8 +273,9 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
     projectm_pcm_add_float(h->pm, h->resampled.data(), out, PROJECTM_MONO);
 }
 
-void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start) {
+void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start, float hole, float peak) {
     h->fade = fade; h->rx = rx; h->ry = ry; h->floorA = floor_a; h->gain = gain; h->fadeStart = fade_start;
+    h->hole = hole; h->peak = peak;
 }
 
 IOSurfaceRef pmh_render(pmh* h) {
@@ -293,6 +302,8 @@ IOSurfaceRef pmh_render(pmh* h) {
     glUniform1f(h->uFade, h->fade ? 1.f : 0.f);
     glUniform2f(h->uRadii, h->rx, h->ry);
     glUniform1f(h->uFloor, h->floorA);
+    glUniform1f(h->uHole, h->hole);
+    glUniform1f(h->uPeak, h->peak);
     glUniform1f(h->uGain, h->gain);
     glUniform1f(h->uStart, h->fadeStart);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
