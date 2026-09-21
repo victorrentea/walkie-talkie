@@ -2,8 +2,10 @@
 
 A macOS overlay that relays Victor's dictation — **ElevenLabs Scribe since 2026-09-19**, with a
 local Whisper behind it — into a bound terminal, a Claude Code session it spawns, or the caret.
-**Wispr Flow left the `Engine` list on 2026-09-22** and keeps only 🔽 → (an idea rather than a
-prompt), where it pastes for itself and nothing has to intercept it. Speechmatics and Gemini were removed on
+**Wispr Flow is behind a firewall since the evening of 2026-09-22**: `HotkeyTap` drops its ⌘V at
+the session tap for every sentence, the words come from its `History` row, and the relay delivers
+them — the bound terminal, or the caret. It left the `Engine` list that morning and came back
+that night, third row. Speechmatics and Gemini were removed on
 2026-09-20 (*"renunță la Speechmatics și GeminiSource … scoate-le din cod pt moment"*); `git show
 <this commit>` is how they come back.
 `README.md` says what it is and how it works.
@@ -75,8 +77,8 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   executable's mtime — the one place that says which build is running.
 - The app is `.regular` (Dock tile — Force Quit is the escape hatch when it hangs — and a minimal
   main menu); nothing in it ever calls `NSApp.activate`.
-- **Dependencies:** **Wispr Flow** — no longer an engine (2026-09-22), still the app 🔽 → drives
-  by posting its own shortcuts; the relay does not launch it, and nothing breaks if it is absent
+- **Dependencies:** **Wispr Flow** — an engine again since the evening of 2026-09-22, behind the
+  firewall; the app 🔽 → drives by posting its own shortcuts; the relay does not launch it, and nothing breaks if it is absent
   except that gesture. For the local source,
   `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`; the model is
   `mlx-community/whisper-large-v3-turbo` (`RELAY_WHISPER_MODEL` overrides). The Chrome
@@ -280,12 +282,40 @@ sits at rest there.
   gesture goes through it — ⌘⌃D, the wheel, the side buttons, *Start Dictation*, the spawn — and the
   word timings are what put `[📸1🖱️@…]` where he pressed instead of in a list underneath.
   **Wispr Flow keeps one job**: 🔽 →, which posts Wispr's own chord raw, for dictating *an idea
-  rather than a prompt* — and since **2026-09-22** that is its only one, because it is no longer in
-  the `Engine` list at all (*"n-am reușit niciodată să-l integrăm ca lumea în fluxul nostru să-i
-  preluăm ce text injectează"*). `engine(named:)` has two cases and its fallback is the default, so
-  a stored `wispr` preference migrates to ElevenLabs instead of resurrecting a source the menu
-  cannot name; `WT_SOURCE=whisper` overrides for a run, and the `Engine` menu row writes the
-  preference.
+  rather than a prompt*. It left the `Engine` list on the morning of **2026-09-22** (*"n-am reușit
+  niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce text injectează"*) and was
+  **back that evening, behind the firewall** — see the next section. `WT_SOURCE=whisper` overrides
+  for a run, and the `Engine` menu row writes the preference.
+
+## The Wispr firewall (2026-09-22, evening)
+
+- **Victor's objective, verbatim:** *"vreau wisprflow să NU mai fie lăsat să insereze text el …
+  să interceptăm outputul lui fără ca acesta să apuce să dea paste; îi luăm transcrierea din DB,
+  cât Walkie e pornit."* The motivating case: **app1 in front, the relay bound to terminal 2 —
+  nothing lands in app1, the words reach terminal 2.** Two earlier attempts failed by *surviving*
+  the paste (the Scratchpad, the sink, a swallow armed at the chord); he rules out any solution
+  that moves the focus, and the Scratchpad.
+- **The mechanism is three parts** (`docs/wispr-injection-attack-plan.md` ①+③): the session tap
+  drops Wispr's ⌘V **statelessly** — `HotkeyTap`, keyed on the posting pid being Wispr, no arm,
+  no window; `WisprFlowSource` treats **every** Wispr sentence as the relay's (`intercepting`
+  whatever the gesture) and delivers the `History` row at `formatted` (`historyIsTheRoute` is the
+  default now, the pasteboard is never read); `AppDelegate` wires `wisprSource` **whichever engine
+  is picked**, so a sentence started with Wispr's own chord follows the binding exactly as ⌘⌃D's
+  would. The headline finding behind it: there is no Accessibility dictation path in Wispr —
+  every dictation ends in a plain session-visible ⌘V.
+- **Measured 2026-09-22, `tools/wispr-loop.sh`:** `hand-started` 3/3, `hand-started-bound` 2/2
+  (195 chars in the tty, **0 in the app in front**), `caret-short` and `bound` with Wispr as the
+  engine green — row `formatted` 458–540 ms after the microphone closed, the ⌘V dropped 407–506 ms
+  after it, words landed within 5–10 ms of the row.
+- **Identity is signed, not named.** `isWispr` answers *now* from the process name (fail closed)
+  and demotes off the tap thread when the code is not signed by Team ID `C9VQZ78H85`; the cache is
+  keyed on `(pid, start time)` so a reused pid is a new question.
+- **The canary is not optional.** A tap can report enabled and be inert after a re-sign, and
+  `build-app.sh` re-signs on every change. `HotkeyTap.proveAlive` posts a stamped bare V key-up
+  at launch and after every wake and asserts the callback saw it (0.9–3.8 ms measured); a miss
+  flashes the overlay for 20 s. `POST /test/firewall` runs one on demand.
+- **A ⌘V no capture claimed is rescued from the row**, not lost — `rescueFromRow` in
+  `WisprFlowSource`. `WT_WISPR_FIREWALL=0` turns the drop off for one run.
 
 ## ElevenLabs Scribe, the third engine (2026-09-18)
 
@@ -355,7 +385,8 @@ sits at rest there.
   | variable | what it does |
   |---|---|
   | `WT_SOURCE=whisper` | the local model instead of ElevenLabs (also the `dictationSource` preference the menu writes) |
-  | ~~`WT_SOURCE=wispr`~~ | **gone 2026-09-22** — falls through to the default; Wispr Flow is not a selectable engine |
+  | `WT_SOURCE=wispr` | Wispr Flow, behind the firewall (gone for one day, 2026-09-22) |
+  | `WT_WISPR_FIREWALL=0` | let Wispr's ⌘V through for one run — `POST /test/firewall {"on": false}` at runtime |
   | `WT_SOURCE=eleven` | ElevenLabs Scribe — the relay's own microphone, uploaded at the release |
   | `WT_SOURCE=sm` | Speechmatics — the same microphone, **streamed while he speaks** |
   | `SPEECHMATICS_API_KEY` | the key, environment first, else `~/.walkie-talkie/speechmatics.env` |
@@ -379,7 +410,7 @@ sits at rest there.
   | `WT_SCRATCHPAD_REDIRECT_KEYS=0` | stop taking his keystrokes while Wispr's window is up — **on by default**: measured 7/7 letters into the victim in all three `wrap-*` scenarios, none in the note, deliveries 12–18 ms |
   | `WT_SCRATCHPAD_NOTE_MAY_DELIVER=1` | let the Scratchpad note be delivered as text — off, because a note that has had his typing in it is not a transcript |
   | `WISPR_SCRATCHPAD_KEYS=79` | override the *Open Scratchpad* chord (the same variable `helpers/wispr_loopback.py` reads) |
-  | `WT_WISPR_HISTORY_ROUTE=1` | in `sink` / `off`, deliver from the `History` row rather than waiting `pasteGrace` for a ⌘V |
+  | `WT_WISPR_HISTORY_ROUTE=0` | wait `pasteGrace` for a ⌘V before taking the row — **the row is the delivery by default since 2026-09-22** |
   | `WT_SCRATCHPAD_AX_INSERT=0` | deliver redirected printable keys by `postToPid` instead of `AXSelectedText` — **on by default**, on a serial queue off the tap thread, 200 ms a character. `POST /test/ax-insert` / `POST /test/key-guard` flip both at runtime |
   | `WT_KEY_TRACE=1` | log every keyboard event the tap sees and the decision it made — keycode and posting process only, never a character. `POST /test/key-trace {"on": true}` is the same switch at runtime, because an installed app does not inherit a shell's environment |
   | `WT_SHOT_MARKERS=1` | speak a marker into the recogniser's ear at the shutter — **off since 2026-09-18**, see *Spoken markers* |

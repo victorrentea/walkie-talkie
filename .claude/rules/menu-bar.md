@@ -154,7 +154,10 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   modelului, dacă mă întreabă cineva ce folosesc"*. The caret-paste mode itself is untouched and
   still lives on the forward side button; what it has lost is its row, its tick and its legend.
   → journal: *The engine is a choice with two names on it (2026-09-14)*
-- **Wispr Flow left the list on 2026-09-22, and the list is two rows now** — `Local` and
+- **Wispr Flow is the third row again since the evening of 2026-09-22**, behind the firewall
+  (`HotkeyTap` drops its ⌘V, the relay reads its `History` row) — the exact condition the
+  paragraph below asked for. Its title says so: *its own app, the relay reads its History row*.
+- **Wispr Flow left the list on the morning of 2026-09-22, and the list was two rows** — `Local` and
   `ElevenLabs`. Victor: *"scoate wisprflow ca sursă de dictare din lista de Engine — n-am reușit
   niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce text injectează."* It is a
   capability and not a ranking: the other two hand the app a transcript, Wispr pastes into
@@ -403,9 +406,9 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 - Do not turn the `Engine` submenu back into a pop-up, and do not let it tick a row the app has
   not switched to.
 - Do not put `Replace WisprFlow` back as a row without asking — it was removed deliberately.
-- Do not put **Wispr Flow** back in the `Engine` submenu without asking — removed 2026-09-22, for
-  the reason in the section above. Its source object stays wired for the gestures; that is not an
-  invitation to make it selectable again.
+- Do not take **Wispr Flow** out of the `Engine` submenu again without asking — it went on the
+  morning of 2026-09-22 and came back that evening once the firewall made its words as sure as
+  the other engines'. Removing the row would not remove the firewall.
 - Do not set `NSMenuItem.state` on any row, and do not read a label back off an item that has an
   `attributedTitle`.
 - Do not give `Quit` a ⌘Q key equivalent in the status menu.

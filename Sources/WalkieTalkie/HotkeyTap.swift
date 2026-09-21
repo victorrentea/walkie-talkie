@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
+import Security
 import VictorMacKit
 
 private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -808,9 +809,6 @@ final class HotkeyTap {
     /// a recogniser that types turning `relay.log` into a transcript of itself.
     private static let injectionProbeLines = 6
     private var injectionProbeLeft = 0
-    /// Answers cached per pid, exactly as `remapperPids` are: this runs on the
-    /// event tap and a pid does not change identity.
-    private var wisprPids: [pid_t: Bool] = [:]
 
     /// The wheel clicked **with the left button already held** — point the relay
     /// The wheel clicked **with the left button already held** — point the relay
@@ -1841,6 +1839,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if let port = tapPort { CGEvent.tapEnable(tap: port, enable: true) }
             return Unmanaged.passUnretained(event)
         }
+        // The canary — see `proveAlive`. Ours, harmless, and never let through.
+        if event.getIntegerValueField(.eventSourceUserData) == Self.canaryStamp {
+            stateLock.lock(); canarySeenAt = CFAbsoluteTimeGetCurrent(); stateLock.unlock()
+            return nil
+        }
 
         // **The wheel turned: the halo dial, in both modes, or nothing.** Judged
         // before either mode's wiring because neither reads a scroll — this is
@@ -2541,7 +2544,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
         }
 
-        if (type == .keyDown || type == .keyUp), injectionArmedNow() {
+        if type == .keyDown || type == .keyUp {
             let pid = pid_t(event.getIntegerValueField(.eventSourceUnixProcessID))
             let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
             // **pid 0 is a key Victor pressed.** Real hardware carries no
@@ -2549,16 +2552,29 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // whole reason a swallow here is safe at all. The stamp is this
             // app's own keystrokes, which must never be eaten either.
             if pid != 0, event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
-                if type == .keyDown { probeInjected(pid: pid, code: code, flags: event.flags) }
+                stateLock.lock()
+                let armed = injectionArmed
+                let swallows = injectionSwallows
+                let firewall = wisprFirewall
+                stateLock.unlock()
+                if armed, type == .keyDown { probeInjected(pid: pid, code: code, flags: event.flags) }
                 if code == Self.VK_V, event.flags.contains(.maskCommand), isWispr(pid) {
                     if type == .keyDown {
                         let who = processName(pid)
                         DispatchQueue.global().async { [weak self] in self?.onInjectedPaste?(who) }
                     }
-                    stateLock.lock()
-                    let swallow = injectionSwallows
-                    stateLock.unlock()
-                    if swallow { return self.swallow("the Wispr ⌘V capture", type, event) }
+                    // **The firewall: Wispr's ⌘V never reaches an application
+                    // while this app runs** (2026-09-22; Victor: *"vreau
+                    // wisprflow să NU mai fie lăsat să insereze text el"*).
+                    // Stateless on purpose — the armed gate below is the
+                    // ordering bet that leaked 5/5 on 2026-09-13, a paste
+                    // arriving before the relay knew the microphone had shut.
+                    // The words are never lost with it: every Wispr sentence
+                    // is a `History` row, `WisprFlowSource` reads that row and
+                    // the relay delivers it — the bound agent, or the caret,
+                    // through the same door as every other engine's words.
+                    if firewall { return self.swallow("the Wispr firewall", type, event) }
+                    if armed, swallows { return self.swallow("the Wispr ⌘V capture", type, event) }
                 }
             }
         }
@@ -3808,15 +3824,123 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                  + "from pid \(pid) (\(processName(pid)))")
     }
 
+    // ── The Wispr firewall ───────────────────────────────────────────────────
+
+    /// **Wispr Flow's ⌘V is dropped at the session tap, always, while this app
+    /// runs** — `WT_WISPR_FIREWALL=0` for one run, `POST /test/firewall` at
+    /// runtime. Read under `stateLock` on the tap thread beside the capture.
+    private var wisprFirewall = ProcessInfo.processInfo.environment["WT_WISPR_FIREWALL"] != "0"
+    var wisprFirewallOn: Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return wisprFirewall
+    }
+    func setWisprFirewall(_ on: Bool) {
+        stateLock.lock(); wisprFirewall = on; stateLock.unlock()
+        Log.info("🛡️ Wispr firewall \(on ? "on — Wispr's ⌘V is dropped and the relay delivers" : "off — Wispr pastes where the focus is")")
+    }
+    /// **Is this pid Wispr Flow?** — answered on the tap thread, and it has to
+    /// be right, because under an always-on drop a wrong *yes* eats an innocent
+    /// application's ⌘V.
+    ///
+    /// Two layers. The name is the cheap one and it decides **now** — fail
+    /// closed: a process called Wispr is dropped from its first paste. The
+    /// signature is the sure one and runs once per process off the tap thread:
+    /// a name match whose code is not signed by Wispr's Team ID is demoted, a
+    /// signed Wispr under a name that does not say so is promoted. The cache is
+    /// keyed on the pid **and its start time**, so a pid the kernel hands to
+    /// another program after Wispr quits is a new question, not a stale yes.
+    private struct ProcessKey: Hashable { let pid: pid_t; let started: Int64 }
+    private var wisprIdentity: [ProcessKey: Bool] = [:]
+    static let wisprTeamId = "C9VQZ78H85"
+
     private func isWispr(_ pid: pid_t) -> Bool {
+        let key = ProcessKey(pid: pid, started: Self.startTime(of: pid))
         stateLock.lock()
-        if let known = wisprPids[pid] { stateLock.unlock(); return known }
+        if let known = wisprIdentity[key] { stateLock.unlock(); return known }
+        // A dead pid's entry is never read again; drop them when the map grows.
+        if wisprIdentity.count > 64 {
+            wisprIdentity = wisprIdentity.filter { kill($0.key.pid, 0) == 0 && Self.startTime(of: $0.key.pid) == $0.key.started }
+        }
         stateLock.unlock()
         let match = processName(pid).lowercased().contains("wispr")
         stateLock.lock()
-        wisprPids[pid] = match
+        wisprIdentity[key] = match
         stateLock.unlock()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let team = Self.teamIdentifier(of: pid)
+            let signed = team == Self.wisprTeamId
+            if signed != match {
+                self.stateLock.lock()
+                self.wisprIdentity[key] = signed
+                self.stateLock.unlock()
+                Log.error("🛡️ pid \(pid) (\(self.processName(pid))) — name said \(match ? "Wispr" : "not Wispr"), signature says team \(team ?? "none"): \(signed ? "treating it as Wispr" : "not Wispr after all")")
+            }
+        }
         return match
+    }
+
+    /// `kp_proc.p_starttime`, in microseconds; 0 for a pid that is gone.
+    private static func startTime(of pid: pid_t) -> Int64 {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return 0 }
+        let t = info.kp_proc.p_un.__p_starttime
+        return Int64(t.tv_sec) * 1_000_000 + Int64(t.tv_usec)
+    }
+
+    /// The Team ID the running code at `pid` is signed with, or nil.
+    static func teamIdentifier(of pid: pid_t) -> String? {
+        var code: SecCode?
+        let attrs = [kSecGuestAttributePid: pid] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attrs, [], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return nil }
+        return dict[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    // ── The canary: is the tap actually alive? ───────────────────────────────
+
+    /// **A tap can say `enabled` and be inert** — `build-app.sh` re-signs this
+    /// app on every change, and a green badge over a dead tap is a leaked
+    /// sentence under an always-on drop. So the tap is asked to *prove* it:
+    /// a harmless key (a bare V key-up, which no application acts on) is posted
+    /// at the HID level carrying `canaryStamp`; this callback swallows it and
+    /// says so. Not seen within the grace → the tap is dead, whatever
+    /// `CGEventTapIsEnabled` reports, and `completion(false)` is the alarm.
+    static let canaryStamp: Int64 = 0x7774_4341_4E41_5259   // "wtCANARY"
+    private var canarySeenAt: CFAbsoluteTime = 0
+    private(set) var lastCanary: (alive: Bool, ms: Double, at: Date)?
+
+    func proveAlive(_ why: String, completion: @escaping (Bool) -> Void) {
+        stateLock.lock(); canarySeenAt = 0; stateLock.unlock()
+        let posted = CFAbsoluteTimeGetCurrent()
+        let source = CGEventSource(stateID: .privateState)
+        source?.userData = Self.canaryStamp
+        guard let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_V, keyDown: false) else {
+            Log.error("🛡️ canary: could not even build the event"); completion(false); return
+        }
+        up.flags = []
+        up.post(tap: .cghidEventTap)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            self.stateLock.lock(); let seen = self.canarySeenAt; self.stateLock.unlock()
+            let alive = seen > 0
+            let ms = alive ? (seen - posted) * 1000 : 500
+            self.stateLock.lock(); self.lastCanary = (alive, ms, Date()); self.stateLock.unlock()
+            let enabled = self.tapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+            if alive {
+                Log.info(String(format: "🛡️ canary (%@): the tap is alive — seen after %.1f ms", why, ms))
+            } else {
+                Log.error("🛡️ canary (\(why)): the tap did NOT see its own event — enabled=\(enabled). The firewall is down: Wispr's ⌘V would reach the front app")
+                if let port = self.tapPort { CGEvent.tapEnable(tap: port, enable: true) }
+            }
+            completion(alive)
+        }
     }
 
     private func processName(_ pid: pid_t) -> String {

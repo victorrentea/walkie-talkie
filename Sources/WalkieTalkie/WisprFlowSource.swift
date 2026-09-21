@@ -122,6 +122,12 @@ final class WisprFlowSource: DictationSource {
     var wrapMode: WrapMode {
         guard wrapWispr else { return .off }
         if let modeOverride { return modeOverride }
+        // **With the firewall up there is nothing to wrap** (2026-09-22): the
+        // tap drops Wispr's ⌘V whatever the mode, and the words come from the
+        // `History` row. No window, no sink, no held chord — `.off` here means
+        // *Wispr is asked plainly and never gets to paste*, which is the shape
+        // the Scratchpad and the sink were both approximations of.
+        if hotkeys.wisprFirewallOn { return .off }
         guard !scratchpadBroken else { return .sink }
         return HotkeyTap.scratchpadIsConfigured ? .scratchpad : .sink
     }
@@ -130,6 +136,9 @@ final class WisprFlowSource: DictationSource {
         guard wrapWispr else { return "the wrap is off (WT_WRAP_WISPR / POST /test/wrap-mode — there is no menu row since 2026-09-14) — Wispr inserts where the focus is and the relay only draws the ring" }
         if let modeOverride {
             return "forced to \(modeOverride.rawValue) by WT_WRAP_MODE / POST /test/wrap-mode"
+        }
+        if hotkeys.wisprFirewallOn {
+            return "the firewall drops Wispr's ⌘V at the tap and the History row is the delivery — no window, no sink"
         }
         if scratchpadBroken {
             return "the Scratchpad window would not close, and a held chord writes no note while it is open — the sink until it does"
@@ -584,7 +593,11 @@ final class WisprFlowSource: DictationSource {
     /// the day the grant comes back.
     ///
     /// `WT_WISPR_HISTORY_ROUTE=1`, or `POST /test/wispr {"historyRoute": true}`.
-    var historyIsTheRoute = ProcessInfo.processInfo.environment["WT_WISPR_HISTORY_ROUTE"] == "1" {
+    ///
+    /// **On by default since 2026-09-22**, the day the firewall went in: the ⌘V
+    /// never lands anywhere, so waiting `pasteGrace` for it is a second of
+    /// nothing. `WT_WISPR_HISTORY_ROUTE=0` puts the wait back.
+    var historyIsTheRoute = ProcessInfo.processInfo.environment["WT_WISPR_HISTORY_ROUTE"] != "0" {
         didSet {
             Log.info("wispr history route \(historyIsTheRoute ? "on — the row is the delivery, no ⌘V is waited for" : "off — the ⌘V is the delivery and the row is the backstop")")
         }
@@ -1266,7 +1279,13 @@ final class WisprFlowSource: DictationSource {
         relayStarted = relay
         startedByHeldPair = heldPair
         startedMode = relay ? (mode ?? wrapMode) : .off
-        intercepting = relay && wrapWispr
+        // **Every Wispr sentence is the relay's to deliver** (2026-09-22). Until
+        // today a dictation Victor started with Wispr's own chord was watched
+        // and left to Wispr to paste; with the firewall dropping that paste at
+        // the tap there is nobody else to put the words anywhere. `relayStarted`
+        // still says whose gesture it was — `AppDelegate` sends his own chord's
+        // words to the caret rather than the bound agent.
+        intercepting = wrapWispr
         gestureAt = CFAbsoluteTimeGetCurrent()
         openedAt = Date().timeIntervalSince1970
         state.startChord(why)
@@ -1742,7 +1761,7 @@ final class WisprFlowSource: DictationSource {
         // and puts it straight back there too, and with nothing pasted anywhere
         // the only thing a watcher could report is the restore — which is the
         // bug that filed a Word contract as a dictation three times.
-        let watchesBoard = takes && startedMode != .scratchpad
+        let watchesBoard = takes && startedMode != .scratchpad && !hotkeys.wisprFirewallOn
         let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             guard watchesBoard else { return }
             guard let self, self.capturing else { return }
@@ -2396,13 +2415,32 @@ final class WisprFlowSource: DictationSource {
             letRetiredDiscardGo("its ⌘V arrived and went nowhere")
             return
         }
-        guard capturing else { return }
+        guard capturing else {
+            // **No capture at all — a sentence this app never saw start**, and
+            // the firewall has just eaten its paste. The words are in Wispr's
+            // `History` row all the same; that row is delivered, late, rather
+            // than lost.
+            if hotkeys.wisprFirewallOn { rescueFromRow(after: process) }
+            return
+        }
         if discardOnArrival {
             Log.info("🗑️ ⌘V from \(process) after the cancel — swallowed and dropped; the capture closes now")
             endCapture(quiet: true)
             return
         }
-        guard intercepting else { return }
+        guard intercepting else {
+            if hotkeys.wisprFirewallOn { rescueFromRow(after: process) }
+            return
+        }
+        // **Under the firewall the ⌘V is only a dropped key, never the words**
+        // (2026-09-22). The pasteboard it points at is Wispr's and is about to
+        // be restored; the sentence is read from the `History` row and nowhere
+        // else, which is one source of truth instead of two racing.
+        if hotkeys.wisprFirewallOn {
+            Log.info(String(format: "🛡️ ⌘V from %@ dropped — %.0f ms after the microphone closed; the History row delivers",
+                            process, (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000))
+            return
+        }
         // **Taken and dropped.** In Scratchpad mode the words are already the
         // row's; this key exists only so that it cannot land anywhere, and the
         // line is the probe's record of Wispr still delivering the way it did.
@@ -2416,6 +2454,38 @@ final class WisprFlowSource: DictationSource {
                         wrapWispr ? " (taken)" : " (let through)"))
         deliver(reason: "Wispr's ⌘V", via: "wispr-cmdv",
                 delivery: wrapWispr ? .route : .alreadyInserted)
+    }
+
+    /// **A ⌘V the firewall dropped that no capture was taking.** Wispr's row
+    /// for it is on top of `History` (it posts the paste after writing the
+    /// row), so the newest terminal row that is not one this app has already
+    /// delivered is that sentence. Polled briefly, because the paste and the
+    /// `formatted` status land within the same few hundred milliseconds and in
+    /// no fixed order.
+    private var rescueTries = 0
+    private func rescueFromRow(after process: String) {
+        rescueTries = 0
+        Log.error("🛡️ ⌘V from \(process) dropped with no capture open — delivering the sentence from Wispr's History row instead")
+        func attempt() {
+            rescueTries += 1
+            guard let e = WisprHistory.newest(), e.rowid != lastRow, e.rowid != historyRow else {
+                Log.error("🛡️ rescue: the newest row is one already delivered — nothing to put anywhere"); return
+            }
+            if WisprState.intermediateStatuses.contains(e.status) || e.status.isEmpty {
+                if rescueTries < 20 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: attempt) }
+                else { Log.error("🛡️ rescue: row \(e.rowid) never became terminal — still \(e.status)") }
+                return
+            }
+            lastRow = e.rowid
+            let text = e.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { Log.error("🛡️ rescue: row \(e.rowid) is \(e.status) and carries nothing"); return }
+            Log.info("🛡️ rescue: row \(e.rowid) (\(e.status)) — \(text.count) chars handed to the relay")
+            didTranscribe?(DictationResult(text: text, language: nil, audio: nil, duration: 0,
+                                           engine: "wispr-flow", warning: nil, delivery: .route,
+                                           via: "wispr-history", focusPid: nil, markersInAudio: false,
+                                           engineLabel: "Wispr Flow"))
+        }
+        attempt()
     }
 
     private func captureExpired() {

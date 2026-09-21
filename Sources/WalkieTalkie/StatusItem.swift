@@ -1411,7 +1411,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Wispr Flow keeps the one job that never needed interception — 🔽 →
         // posts its chord raw, and Wispr pastes where he is typing, which is
         // the whole point of that gesture.
-        for id in ["whisper", "eleven"] {
+        // **Wispr Flow is the third row again since the evening of 2026-09-22**,
+        // behind the firewall in `HotkeyTap`: its ⌘V is dropped at the tap and
+        // the relay reads the `History` row, so the words it hands over are as
+        // sure as the other two engines'.
+        for id in ["whisper", "eleven", "wispr"] {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
@@ -1537,6 +1541,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // one, which is why it is here and not on `engineShortTitle`: up there
         // the engine stands alone with nothing to be different from, and ⚠️
         // already has the spot.
+        if id == "wispr" { return "Wispr Flow — its own app, the relay reads its History row" }
         if id == "eleven" {
             let model = ElevenLabsSource.model
             return elevenReady?() == true
@@ -1564,6 +1569,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
         if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
+        if id == "wispr" { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }
         return String(format: "Local (%.1f GB)", Double(bytes) / 1_073_741_824)

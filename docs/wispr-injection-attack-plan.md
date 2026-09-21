@@ -1,7 +1,8 @@
 # Can Wispr Flow's text injection be blocked? — attack plan
 
-**Status:** research done 2026-09-22, nothing implemented. This file is a work order for
-whoever picks it up.
+**Status:** research done 2026-09-22; **① + ③ shipped the same evening** (see CLAUDE.md, *The
+Wispr firewall*, and the journal). §5's quality test was skipped on Victor's word — the objective
+was the block itself. ② (the extension host) and ④ are still open as the fallbacks they were.
 
 **Produced by** a 10-angle research fan-out (TCC, event taps, AX writes, pasteboard, in-flight
 cancellation, sandbox/VM, Wispr's own config, wrapper/shim, target hardening, an OS-mechanism

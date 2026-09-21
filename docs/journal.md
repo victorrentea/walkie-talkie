@@ -11569,3 +11569,57 @@ than `—`, which read as *this button does nothing*.
 for as long as it was a browser page, and became an app string the moment it turned into an
 AppKit panel. `vocabulary` says `Logi` / `Wheel`, the two words the `Mouse Gestures` row already
 uses, so the panel and the menu cannot come to call the same set different things.
+
+## The firewall (2026-09-22, evening)
+
+Victor, twelve hours after taking Wispr Flow out of the Engine list: *"scopul e să interceptăm
+outputul lui wisprflow fără ca acesta să apuce să dea paste/injecteze textul. Îi luăm transcrierea
+din db, dar tre' blocată app să nu mai insereze (cât walkie e pornit)."* Then, as the first cut
+re-posted the dropped paste for his own chord: *"vreau wisprflow să NU mai fie lăsat să insereze
+text el."* And the case that decides the routing: *"e focusată app1, dar walkie e legat la
+terminalul 2. wispr să nu insereze în app1, ci textul să ajungă în term 2."* Constraints from the
+two failed attempts: *"NU accept soluție care să mute focusul în alt câmp. nici scratchpad nu
+încerca — nu ne-a mers."*
+
+**What made it a three-line change rather than a fourth subsystem** is the attack plan's headline
+finding: Wispr has no Accessibility dictation path at all. The log line that justified the
+Scratchpad — `direct AXValue set did not stick, falling back to clipboard paste` — belongs to its
+meeting-chat composer. Every dictation ends in a plain `CGEventPost` ⌘V that a session tap sees,
+and the tap already swallowed it — behind a gate armed per dictation, which is the ordering bet
+that leaked 5/5 on 09-13. So:
+
+- **The drop is stateless.** `HotkeyTap` eats keycode 9 + ⌘ from a Wispr pid, both halves, always.
+  No arm, no window, nothing to be early or late for. `WT_WISPR_FIREWALL=0` for one run.
+- **The words come from the row and only the row.** `historyIsTheRoute` is the default; the
+  pasteboard watch is off under the firewall and `injected()` treats the ⌘V as a dropped key, not
+  as the words. One source of truth instead of two racing Wispr's own clipboard restore.
+- **Every Wispr sentence is the relay's.** `intercepting = wrapWispr`, whoever pressed the chord;
+  and `wireDictationSource` wires `wisprSource`'s five callbacks whichever engine is picked, so
+  his own chord with ElevenLabs as the engine is booked, dressed and routed like ⌘⌃D — to the
+  bound terminal, or to the caret when nothing is bound.
+
+**Three iterations in one evening**, each one a sentence from Victor:
+
+1. First cut re-posted the dropped ⌘V for a hand-started sentence — the relay's own key, Wispr's
+   clipboard. Green in the loop (1 copy in TextEdit, focus untouched) and rejected: that is still
+   Wispr's text landing where Wispr aimed it.
+2. Second cut delivered through the relay but read the words off the pasteboard at the ⌘V
+   (`wispr-cmdv`, because the key arrived 30 ms before `formatted`). Rejected: the DB is the source.
+3. Third cut: the row, and the routing follows the binding. `hand-started` 3/3,
+   `hand-started-bound` 2/2 — 195 chars in the tty, **0 in the app in front** — `caret-short` and
+   `bound` green with Wispr as the engine. Row `formatted` 458–540 ms after the microphone closed,
+   the ⌘V dropped 407–506 ms after it, words landed 5–10 ms after the row.
+
+**Two things the plan called non-negotiable, both in:** `isWispr` fails closed on the name and
+demotes off the tap thread when the code is not signed by Team ID `C9VQZ78H85`, keyed on
+`(pid, start time)`; and the **canary** — `build-app.sh` re-signs on every change and a tap can
+report enabled while inert, so `proveAlive` posts a stamped bare V key-up at launch and after
+every wake and asserts the callback saw it (0.9–3.8 ms). `POST /test/firewall` runs one on demand.
+
+**Left as found:** the harness's *Wispr's microphone opened before the clip played* is red on
+every hand-started run (10 s, then the clip is played anyway and transcribed) — the CoreAudio
+watch does not see the Loopback edge for a chord the relay did not post; it was red before this
+evening and it is not the firewall's. The plan's §5 quality test (Scribe+cleanup vs Wispr) was
+not run: Victor said the objective was the block. ② (Wispr's own extension host, the vendor's
+*hand me the text, do not paste* contract) stays the better endgame if a Wispr update ever
+switches to `CGEventPostToPid`.

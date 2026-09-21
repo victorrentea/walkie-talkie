@@ -3762,6 +3762,71 @@ def scenario_wrap_silence(ctx) -> Result:
     return result
 
 
+def scenario_hand_started_bound(ctx) -> Result:
+    """**The motivating case of the firewall** (Victor, 2026-09-22): *"e focusată
+    app1, dar walkie e legat la terminalul 2. wispr să nu insereze în app1, ci
+    textul să ajungă în term 2."* A TextEdit document is front and key, the
+    relay is bound to a scratch tty, and the dictation is started with
+    **Wispr's own chord** — not a relay gesture. The words must reach the tty
+    and nothing may land in the document.
+    """
+    relay, result, mark, outbox = ctx.relay, ctx.result, ctx.mark, ctx.outbox
+    sink_file = os.path.join(ctx.scratch, "bound-sink.txt")
+    tty = None
+    victim = None
+    try:
+        if not relay.dry_run:
+            open(sink_file, "w").close()
+            tty = _open_scratch_terminal(sink_file)
+        else:
+            tty = "ttysNNN"
+        result.check(bool(tty) or relay.dry_run, "a scratch terminal to bind", tty or "(dry run)")
+        if not tty and not relay.dry_run:
+            return result
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": True})
+        relay.post("/bind", {"tty": tty})
+        target = relay.get("/target")
+        result.check(bool(target.get("bound")) or relay.dry_run, "the relay is bound to it",
+                     target.get("address") or "—")
+        victim = _open_witness(ctx)
+        result.check(bool(victim), "a victim document, front and key", victim or "none")
+
+        relay.post("/test/wispr-handsfree", {"hand": True})
+        _await_microphone(ctx)
+        seconds = play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
+        relay.post("/test/wispr-handsfree", {"hand": True})
+        settled, waited = _await_settled(relay, mark, timeout=seconds + 45)
+        result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
+
+        typed, _ = wait_for(lambda: _read(sink_file).strip(), timeout=10, poll=0.25, dry=relay.dry_run)
+        result.check(normalise(ctx.fixture.get("transcript", "")) in normalise(typed or "")
+                     or relay.dry_run, "the words reached the bound tty",
+                     "%d chars — %r" % (len(typed or ""), (typed or "")[:60]))
+        text = _witness_text(ctx, victim)
+        result.check(not text.strip(), "nothing landed in the app in front",
+                     "%d chars — %r" % (len(text), text[:60]))
+        d = (relay.state() or {}).get("lastDelivery") or {}
+        result.check((d.get("via") == "wispr-history" and str(d.get("to", "")).startswith("terminal:"))
+                     or relay.dry_run, "delivered from the History row to the terminal", json.dumps(d)[:100])
+        dropped = [line.text for line in mark.lines()
+                   if "key 9" in line.text and "SWALLOWED by the Wispr firewall" in line.text]
+        result.check(bool(dropped) or relay.dry_run, "Wispr's ⌘V was dropped by the firewall",
+                     dropped[0][-60:] if dropped else "(no firewall line — is key-trace on?)")
+        result.answer = "hand-started, bound: %d chars in the tty, %d in the app in front" % (
+            len(typed or ""), len(text))
+    finally:
+        if not relay.dry_run:
+            relay.post("/test/key-trace", {"on": False})
+        stand_down(relay)
+        if victim and not relay.dry_run:
+            _close_victim(victim)
+        relay.post("/unbind")
+        if tty and not relay.dry_run:
+            _close_scratch_terminal(tty)
+    return result
+
+
 def scenario_hand_started(ctx) -> Result:
     """**Victor's own dictation: the relay watches and touches nothing.**
 
@@ -3795,9 +3860,13 @@ def scenario_hand_started(ctx) -> Result:
         relay.post("/test/wispr-handsfree", {"hand": True})
 
         state_during = relay.state() or {}
-        result.check(state_during.get("intercepting") is False or relay.dry_run,
-                     "the relay is not intercepting a hand-started dictation",
-                     "intercepting=%s" % state_during.get("intercepting"))
+        firewall = bool(state_during.get("firewall"))
+        # Since 2026-09-22 (the firewall) every Wispr sentence is the relay's:
+        # intercepting is True, the words come from the History row and land at
+        # the caret through the relay's own paste. Before it, the opposite.
+        result.check((state_during.get("intercepting") is firewall) or relay.dry_run,
+                     "the relay %s a hand-started dictation" % ("intercepts" if firewall else "is not intercepting"),
+                     "intercepting=%s firewall=%s" % (state_during.get("intercepting"), firewall))
 
         settled, waited = _await_settled(relay, mark, timeout=seconds + 45)
         result.check(settled or relay.dry_run, "the run ended", "after %.1f s" % waited)
@@ -3806,14 +3875,20 @@ def scenario_hand_started(ctx) -> Result:
         typed, _ = wait_for(lambda: _witness_text(ctx, victim).strip(), timeout=10, poll=0.4,
                             dry=relay.dry_run)
         times = _count_occurrences(typed or "", want)
-        result.check(times == 1 or relay.dry_run, "Wispr pasted into the victim exactly once",
+        result.check(times == 1 or relay.dry_run, "the words landed in the victim exactly once",
                      "%d occurrence(s) — %r" % (times, (typed or "")[:60]))
 
         state = relay.state() or {}
-        result.check(state.get("lastDelivery") == before_delivery or relay.dry_run,
-                     "the relay delivered nothing",
-                     "lastDelivery %s" % ("unchanged" if state.get("lastDelivery") == before_delivery
-                                          else "MOVED to %s" % state.get("lastDelivery")))
+        if firewall:
+            d = state.get("lastDelivery") or {}
+            result.check((d != before_delivery and d.get("via") == "wispr-history" and d.get("to") == "caret")
+                         or relay.dry_run,
+                         "the relay delivered it from the History row, at the caret", json.dumps(d)[:100])
+        else:
+            result.check(state.get("lastDelivery") == before_delivery or relay.dry_run,
+                         "the relay delivered nothing",
+                         "lastDelivery %s" % ("unchanged" if state.get("lastDelivery") == before_delivery
+                                              else "MOVED to %s" % state.get("lastDelivery")))
         result.check(not outbox.fresh(), "no outbox line was written",
                      "%d line(s)" % len(outbox.fresh()))
         result.check(not notes_diff(notes_before, wispr_notes()) or relay.dry_run,
@@ -3822,12 +3897,19 @@ def scenario_hand_started(ctx) -> Result:
         t = read_timings(mark.lines())
         result.check(bool(t.ring_down_reason), "the ring went down",
                      t.ring_down_reason or "(no ring down line)")
-        # The tap must have let Wispr's own ⌘V through, not taken it.
-        taken = [line.text for line in mark.lines()
-                 if "key 9" in line.text and "Wispr" in line.text and "SWALLOWED" in line.text]
-        result.check(not taken, "Wispr's ⌘V was not swallowed",
-                     taken[0] if taken else "passed through, as a hand-started one must")
-        result.answer = "hand-started: Wispr pasted %d copy, relay delivered nothing" % times
+        # **Since 2026-09-22 the firewall drops Wispr's ⌘V unconditionally**, and
+        # a hand-started sentence is put back by the relay's own ⌘V from the tap
+        # — the words still land, and the tap's two lines say who did it. Before
+        # that day the contract was the opposite (the ⌘V let through untouched).
+        dropped = [line.text for line in mark.lines()
+                   if "key 9" in line.text and "SWALLOWED by the Wispr firewall" in line.text]
+        if firewall:
+            result.check(bool(dropped) or relay.dry_run, "Wispr's ⌘V was dropped by the firewall",
+                         dropped[0][-70:] if dropped else "(no firewall line in the trace)")
+        else:
+            result.check(not dropped, "Wispr's ⌘V was not swallowed (firewall off)",
+                         dropped[0] if dropped else "passed through, as a hand-started one must")
+        result.answer = "hand-started: %d copy in the victim" % times
     finally:
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
@@ -3878,6 +3960,9 @@ SCENARIOS = {
                    "Scratchpad mode, 🔼 → — the words are typed into the bound tty", False),
     "wrap-spawn": (scenario_wrap_spawn,
                    "Scratchpad mode, 🔼 ↑ — the words go to a session that did not exist", False),
+    "hand-started-bound": (scenario_hand_started_bound,
+                           "Wispr's own chord with app1 in front and the relay bound to a tty — "
+                           "the firewall's motivating case: nothing in app1, the words in the tty", False),
     "hand-started": (scenario_hand_started,
                      "POST /test/wispr-handsfree {\"hand\": true} — Victor's own chord: ring only, "
                      "Wispr pastes, the relay touches nothing", False),

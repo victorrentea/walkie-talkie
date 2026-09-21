@@ -342,6 +342,7 @@ a failed assertion, not papered over.
 | **`wispr-alone`** | the app stood all the way down, Wispr driven by its own `fn ⌃ Space` | the sentence in the front window exactly once, the row `formatted` — then relaunch and re-bind |
 | **`scratchpad-hold`** | hold the *Open Scratchpad* key (F18) · play · release | the sentence reaches a Wispr **note**, the victim is untouched, no window opens, focus never moves |
 | **`dismiss-before-paste`** | raw chord · play · stop · *wait for `formatted`* · `--dismiss-delay` ms · ⌃Escape | **answered, negatively** — see below |
+| **`hand-started-bound`** | Wispr's own chord · a TextEdit victim in front · the relay bound to a scratch tty | **the firewall's motivating case** (2026-09-22): the ⌘V dropped, nothing in the victim, the words in the tty by `wispr-history` |
 | **`sink-key-at-start`** | sink key · `forward-click` · play · `forward-click` | the control for the pair below: the words are in the sink, the victim document is empty |
 | **`sink-key-at-stop`** | `forward-click` · play · `forward-click` · **sink key** | the same, with the keyboard taken ~100 ms *after* the stop chord — see below |
 

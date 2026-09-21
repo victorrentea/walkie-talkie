@@ -332,6 +332,12 @@ final class ElementPicker {
     /// never waits for a ⌘V.
     var onTestHistoryRoute: ((Bool) -> Void)?
 
+    /// `POST /test/firewall` `{"on": bool}` (optional) — flip the Wispr firewall
+    /// at runtime, and **prove the tap is alive** either way: the answer carries
+    /// the canary's verdict, so a harness can ask *would a ⌘V be dropped right
+    /// now* rather than *does the app think so*. See `HotkeyTap.proveAlive`.
+    var onTestFirewall: ((Bool?) -> [String: Any])?
+
     /// `POST /test/wispr-state/simulate` `{"steps": [...]}` — run a scripted
     /// sequence of inputs through a **fresh** `WisprState` and answer with the
     /// transitions it made.
@@ -546,6 +552,11 @@ final class ElementPicker {
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
     var describeEngine: (() -> [String: Any])?
+    /// `POST /engine` `{"id": "whisper"|"eleven"|"wispr"}` — the menu's pick,
+    /// for a harness that has to run a scenario on a given engine without a
+    /// click. Refused mid-sentence exactly as the menu is; the answer is
+    /// `/engine` afterwards, so the caller reads what is actually running.
+    var onPickEngine: ((String) -> Void)?
 
     /// **A dictation is running and forwarding is on** — the only window in which ⌘ in
     /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
@@ -987,6 +998,10 @@ final class ElementPicker {
             respond(conn, 200, ["ok": true].merging(onTestScratchpadPark?() ?? [:]) { _, new in new })
 
         // How the relay takes Wispr's words — see `onTestWrapMode`.
+        case ("POST", "/test/firewall"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            respond(conn, 200, ["ok": true].merging(onTestFirewall?(body?["on"] as? Bool) ?? [:]) { _, new in new })
+
         case ("POST", "/test/wrap-mode"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             let mode = ((body?["mode"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1051,6 +1066,14 @@ final class ElementPicker {
             respond(conn, 200, ["ok": true, "cleared": true])
 
         case ("GET", "/engine"):
+            respond(conn, 200, ["ok": true].merging(describeEngine?() ?? [:]) { _, new in new })
+
+        case ("POST", "/engine"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let id = body?["id"] as? String, !id.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "id required"])
+            }
+            onPickEngine?(id)
             respond(conn, 200, ["ok": true].merging(describeEngine?() ?? [:]) { _, new in new })
 
         case ("GET", "/target"):

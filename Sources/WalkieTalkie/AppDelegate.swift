@@ -260,12 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
-        // **`wispr` is no longer a case, and that is the migration** (2026-09-22):
-        // the preference survives on disk from before the row went, and falling
-        // through to the default silently moves those launches to ElevenLabs
-        // rather than resurrecting a source the menu can no longer name. An
-        // engine that can be running but not picked is the one state where the
-        // chip and the menu disagree.
+        // **Back on 2026-09-22, the same day it left**, behind the firewall:
+        // `HotkeyTap` drops Wispr's ⌘V at the tap whatever the mode, and the
+        // words come from the `History` row — the row the menu could not offer
+        // while a sentence might land in the front window on its own.
+        case "wispr": return wisprSource
         default: return elevenSource
         }
     }
@@ -293,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper": return "(L)"
         case "eleven": return "(E)"
+        case "wispr": return "(W)"
         // The default's letter, like `engine(named:)`'s default source.
         default: return "(E)"
         }
@@ -368,6 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is never assigned to `source` at all.
     private var engineId: String {
         if source === whisperSource { return "whisper" }
+        if source === wisprSource { return "wispr" }
         return "eleven"
     }
 
@@ -1316,6 +1317,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.sync { answer = WisprScratchpad.park() }
             return answer
         }
+        picker.onTestFirewall = { [weak self] on in
+            guard let self else { return ["ok": false, "error": "gone"] }
+            if let on { self.hotkeys.setWisprFirewall(on) }
+            let gate = DispatchSemaphore(value: 0)
+            var alive = false
+            self.hotkeys.proveAlive("POST /test/firewall") { alive = $0; gate.signal() }
+            _ = gate.wait(timeout: .now() + 1.0)
+            return ["firewall": self.hotkeys.wisprFirewallOn, "alive": alive,
+                    "canaryMs": self.hotkeys.lastCanary?.ms ?? -1]
+        }
         picker.onTestWrapMode = { [weak self] mode in
             guard let self else { return ["ok": false, "error": "gone"] }
             var answer: [String: Any] = [:]
@@ -2114,6 +2125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.sync { out = AboutWindow.describe() }
             return out
         }
+        picker.onPickEngine = { [weak self] id in
+            DispatchQueue.main.sync { self?.setEngine(id) }
+        }
         picker.describeEngine = { [weak self] in
             guard let self else { return [:] }
             var out: [String: Any] = ["source": self.source.name,
@@ -2150,6 +2164,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let trusted = AXIsProcessTrusted()
         let tapped = hotkeys.start()
+        // **The firewall proves itself** — at launch, and after every wake, the
+        // two moments a tap is most likely to be enabled and dead. A dead tap
+        // under an always-on drop is not a dead hotkey, it is Wispr's next
+        // sentence landing in his document, so the alarm goes on the screen.
+        if tapped {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.canary("launch") }
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { self?.canary("wake") }
+            }
+        }
         // **And who macOS thinks is asking.** On 2026-09-21 the app went entirely
         // dead — no hotkey, no gesture — while the Accessibility checkbox beside a
         // row called "Walkie Talkie" was still ticked, and this line said only
@@ -2340,6 +2365,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// everything this app does about a dictation hangs off those. Which source
     /// produced them is not asked anywhere past this method — see
     /// `DictationSource` for why that is the whole point.
+    /// See `HotkeyTap.proveAlive`. The verdict goes to the log either way and to
+    /// the overlay only when it is bad.
+    private func canary(_ why: String) {
+        hotkeys.proveAlive(why) { [weak self] alive in
+            guard !alive else { return }
+            DispatchQueue.main.async {
+                self?.overlay.flash("⚠️ the event tap is dead (\(why)) — Wispr's ⌘V would reach your document; relaunch Walkie Talkie", duration: 20)
+            }
+        }
+    }
+
     private func wireDictationSource() {
         source.didMaybeBegin = { [weak self] why in self?.dictationMaybeBeginning(why) }
         source.didBegin = { [weak self] in self?.dictationBegan() }
@@ -2347,6 +2383,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
         source.prepare()
+        // **Wispr Flow is wired whichever engine is picked** (2026-09-22): the
+        // firewall in `HotkeyTap` drops its paste for every sentence, including
+        // one Victor starts with Wispr's own chord while the engine is
+        // ElevenLabs, so its words have to come through here or nowhere. The
+        // same five handlers, and the same routing — **the motivating case is
+        // app1 in front with the relay bound to terminal 2: Wispr must not
+        // insert into app1, the words go to terminal 2** — so a hand-started
+        // sentence follows the binding exactly as a relay-started one, and
+        // goes to the caret only when nothing is bound. When Wispr *is* the
+        // engine this repeats the generic wiring above, harmlessly.
+        wisprSource.didMaybeBegin = { [weak self] why in self?.dictationMaybeBeginning(why) }
+        wisprSource.didBegin = { [weak self] in self?.dictationBegan() }
+        wisprSource.didStopListening = { [weak self] in self?.dictationStoppedListening() }
+        wisprSource.didTranscribe = { [weak self] result in self?.deliver(result) }
+        wisprSource.didEnd = { [weak self] end in self?.dictationEnded(end) }
         // **One letter on the chip, saying which recogniser is listening**
         // (2026-09-18) — `Listening(W)...`. Pushed from here because here is the
         // one place in the app that is allowed to know there are three of them;
@@ -4730,6 +4781,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             out["bound"] = NSNull()
         }
         out["historyRow"] = wisprSource.historyRow.map { NSNumber(value: $0) } ?? NSNull()
+        out["firewall"] = hotkeys.wisprFirewallOn
+        out["tapAlive"] = hotkeys.lastCanary.map { $0.alive } ?? NSNull()
         // **Where the recogniser is in its own round trip** — source-agnostic
         // (`DictationPhase`), beside the Wispr-specific machine that produced it.
         out["phase"] = source.phase.name

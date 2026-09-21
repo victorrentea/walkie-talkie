@@ -26,7 +26,15 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   *anything unrecognised is Wispr, the one engine that uploads must not be reachable by a typo* —
   is spent rather than repealed: he chose the upload, for the word timings the envelope's tokens
   need. → journal: *ElevenLabs is the engine, and the freeze that found (2026-09-19)*
-- **Wispr Flow is not a selectable engine at all since 2026-09-22** — *"scoate wisprflow ca sursă
+- **The Wispr firewall (2026-09-22, evening).** Wispr's ⌘V is dropped at the session tap for every
+  sentence (`HotkeyTap`, stateless), every Wispr sentence is the relay's (`intercepting = wrapWispr`,
+  whoever pressed the chord), the words come from the `History` row at `formatted` and never from
+  the pasteboard, and `AppDelegate.wireDictationSource` wires `wisprSource` whichever engine is
+  picked so a hand-started sentence follows the binding. **Never a focus move, never the
+  Scratchpad** — both were tried and Victor rules them out. `wrapMode` answers `.off` while the
+  firewall is up; `POST /test/wrap-mode` overrides still work for the old scenarios.
+  → CLAUDE.md *The Wispr firewall*; journal *The firewall (2026-09-22, evening)*
+- **Wispr Flow was not a selectable engine for one day, 2026-09-22** (back that evening) — *"scoate wisprflow ca sursă
   de dictare din lista de Engine — n-am reușit niciodată să-l integrăm ca lumea în fluxul nostru
   să-i preluăm ce text injectează."* There are **two** rows in the Engine submenu now, no `wispr`
   case in `engine(named:)`, no `(W)` in `engineMark`, and `engineId` answers `eleven` for anything
