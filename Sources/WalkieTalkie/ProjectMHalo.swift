@@ -46,7 +46,32 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
     /// The microphone's rate, as `MicRecorder` and `DemoVoice` fill `samples`.
     static let sampleRate = 16000
-    static let resample = ProcessInfo.processInfo.environment["WT_PM_RESAMPLE"] == "1"
+    /// **The samples are resampled to 44.1 kHz before the engine** (2026-09-21
+    /// evening; `WT_PM_RESAMPLE=0` hands them over raw, declared as 44.1 kHz).
+    /// Until then they went in raw, on the grounds that the web route gave
+    /// butterchurn the same raw samples and so the two engines saw the same
+    /// (wrong) spectrum. That stopped being true with `403044b`: `halo.audio`
+    /// now resamples to the AudioContext's rate, so raw here meant the native
+    /// beat detector alone read speech three times too low. Measured on Mosaic
+    /// over the same looped clip (`docs/projectm/captures/mosaic-match-2026-09-21/`):
+    /// the preset's beat peak `q22` — the brightness of its `wave_0` dots —
+    /// averaged 2.5 raw against 1.2–1.5 on the web route, and 1.4 resampled.
+    /// Neither choice makes the beat *index* follow the web's (it does not
+    /// even follow itself run to run: 1–82 % same-index agreement between
+    /// web runs, see `beat-index.txt` there), so this is about magnitudes.
+    static let resample = ProcessInfo.processInfo.environment["WT_PM_RESAMPLE"] != "0"
+    /// **The engine's spectrum scale, re-measured for the resampled feed.**
+    /// `PM_SPECTRUM_SCALE` (`vendor/projectm/walkie.patch`) was 5.3 for the
+    /// raw feed; the spectrum's sum over the same clip is 214 raw, 48
+    /// resampled, 112–124 on the web route, so 12.7 lands the resampled feed
+    /// on the web's level. Beat detection is a ratio and does not see this;
+    /// the presets' spectrum-driven waves do (none of the six is one).
+    /// **Does the linked engine honour `PM_TIME_SCALE`?** Asked of the library
+    /// that is actually linked in, not of a version number: the patch that adds
+    /// it lives outside the vendored `.a` until someone rebuilds it, and the two
+    /// states are indistinguishable from Swift otherwise.
+    static let engineHonoursTimeScale: Bool = pmh_honours_time_scale() != 0
+    static let spectrumScale: Double = ProcessInfo.processInfo.environment["PM_SPECTRUM_SCALE"].flatMap(Double.init) ?? (resample ? 12.7 : 5.3)
     /// `WT_PM_AUDIO_GAIN=<k>`: the samples multiplied before the engine — the knob for
     /// matching the beat response of the web route.
     static let audioGain: Float = ProcessInfo.processInfo.environment["WT_PM_AUDIO_GAIN"].flatMap { Float($0) } ?? 1
@@ -102,7 +127,20 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // nothing saturates at any of them (0.000 % of pixels at 255).
         // **The other five are still 1× numbers.** They were not reported and are
         // not re-measured here; if one of them looks washed out, this is why.
-        var table: [Int: CGFloat] = [7: 0.34, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
+        // **Tunnel 0.34 → 0.65 because `resample` came on**, and that is the third
+        // time today this table has had to follow something underneath it. The
+        // resampled feed hands the engine a different spectrum, and Tunnel lost
+        // 43 % of its light to it — paired runs, same display, 12 frames a side:
+        // mean 15.02 → 8.61, lit area 20.4 % → 12.8 %. Left alone that would have
+        // quietly undone the *"mai pregnant vizibil"* of an hour earlier.
+        // Swept back at 0.45 / 0.59 / 0.75 and measured at 0.65: mean **15.49**
+        // against the 15.02 he approved, p99 145.9 against 116.9 — brighter
+        // peaks, slightly less spread (lit 17.9 % against 20.4 %: the resampled
+        // feed concentrates the light rather than widening it), nothing
+        // saturating. **Cauldron, Tendrils and Water Dream were not re-measured**
+        // for the resampled feed; nobody has reported them and their numbers are
+        // still the 1×, raw-feed ones.
+        var table: [Int: CGFloat] = [7: 0.65, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
         if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),
            let o = try? JSONSerialization.jsonObject(with: data) as? [String: Double] {
             for (k, v) in o { if let n = Int(k) { table[n] = CGFloat(v) } }
@@ -233,6 +271,25 @@ final class ProjectMHalo: NSView, HaloWebHost {
         let side = bounds.width
         let px = max(64, Int((side * Self.renderScale).rounded()))
         var err = [CChar](repeating: 0, count: 512)
+        // `Preset.speed`, honoured the way the web route honours it: the engine's
+        // clock runs at that rate (`PM_TIME_SCALE`, read by the patched
+        // `TimeKeeper` every frame — see `vendor/projectm/walkie.patch`).
+        // `PM_TIME_SCALE=<k>` set by hand in the environment wins, for a run.
+        setenv("PM_TIME_SCALE", "\(preset.speed)", 0)
+        // **And say so out loud when nothing will read it.** The engine committed
+        // in `vendor/` carries no `PM_TIME_SCALE` — `strings` on the `.a` finds
+        // the symbol zero times, against one for `PM_SPECTRUM_SCALE` — so on an
+        // unpatched build the line above is a no-op and the preset runs at full
+        // speed. That is a thing to be told rather than to discover by watching:
+        // a `speed` that silently does nothing is how a knob gets turned twice
+        // and then blamed. `Preset.speed` says it too, and a preset that sets it
+        // must keep `webOnly` until the patched library ships
+        // (`docs/projectm/captures/mosaic-match-2026-09-21/walkie-audio-time.patch`
+        // plus the recipe in `vendor/projectm/README.md`).
+        if preset.speed != 1, !Self.engineHonoursTimeScale {
+            Log.error("○ projectM \(preset.number): speed ×\(preset.speed) ignored — this engine has no PM_TIME_SCALE; keep the style webOnly or rebuild the library with walkie-audio-time.patch")
+        }
+        setenv("PM_SPECTRUM_SCALE", "\(Self.spectrumScale)", 0)
         let texDirs = [dir.appendingPathComponent("textures").path, dir.appendingPathComponent("presets").path]
         var cstrs: [UnsafeMutablePointer<CChar>?] = texDirs.map { strdup($0) } + [nil]
         defer { cstrs.forEach { free($0) } }
@@ -296,11 +353,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
         let fresh = min(samples.count, Self.sampleRate / max(1, haloFrameCap > 0 ? haloFrameCap : 30) + 16)
         var tail = Array(samples.suffix(fresh))
         if Self.audioGain != 1 { for i in tail.indices { tail[i] *= Self.audioGain } }
-        // **Handed over as they are, not resampled** (`WT_PM_RESAMPLE=1` to resample
-        // to 44.1 kHz): both engines are MilkDrop's beat detector, which reads
-        // its bands off spectrum bins and assumes 44.1 kHz, and the web route
-        // gives butterchurn these very samples raw — so the presets Victor tuned
-        // by eye see the same spectrum here.
+        // Resampled to 44.1 kHz in the glue (see `resample`): the engine reads
+        // its beat bands off spectrum bins and assumes that rate.
         renderQueue.async {
             tail.withUnsafeBufferPointer { pmh_add_pcm(r, $0.baseAddress, UInt32(tail.count), Self.resample ? Int32(Self.sampleRate) : 44100) }
         }

@@ -36,6 +36,14 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
 /// renderer, valid until the frame after next), or NULL on a GL failure.
 IOSurfaceRef pmh_render(pmh* h);
 
+/// **Does this build of the engine read `PM_TIME_SCALE`?** 1 when the library was
+/// rebuilt with `walkie-audio-time.patch` (a preset's own clock, the native twin
+/// of butterchurn's `render({elapsedTime})`), 0 for the stock vendored one. Swift
+/// asks rather than assumes, because the two `.a` files are otherwise
+/// indistinguishable from up there and a `speed` that quietly does nothing is
+/// worse than one that is refused out loud.
+int pmh_honours_time_scale(void);
+
 /// The GPU-inclusive time of the last `pmh_render`, in ms (engine part and key part).
 double pmh_last_engine_ms(pmh* h);
 double pmh_last_key_ms(pmh* h);

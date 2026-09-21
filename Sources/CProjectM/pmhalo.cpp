@@ -8,6 +8,7 @@
 #define GL_SILENCE_DEPRECATION 1
 #include "pmhalo.h"
 #include <OpenGL/OpenGL.h>
+#include <CoreGraphics/CoreGraphics.h>
 #include <OpenGL/CGLIOSurface.h>
 #include <OpenGL/gl3.h>
 #include <projectM-4/projectM.h>
@@ -96,6 +97,17 @@ static void on_preset_failed(const char* filename, const char* message, void* us
     h->loadError = std::string(message ? message : "?");
 }
 
+// See the header. `PMH_TIME_SCALE` is defined by the build only when the vendored
+// library was rebuilt with `walkie-audio-time.patch`; the stock engine has no
+// `PM_TIME_SCALE` in it at all (`strings` on the .a finds it zero times).
+extern "C" int pmh_honours_time_scale(void) {
+#ifdef PMH_TIME_SCALE
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 static bool make_surface(pmh* h, Surface& s) {
     // Rows aligned the way Metal wants an IOSurface it renders into — a 907 px
     // square (bpr 3628) aborted the process with `isMisalignedIOSurface`.
@@ -111,6 +123,19 @@ static bool make_surface(pmh* h, Surface& s) {
     s.ios = IOSurfaceCreate(d);
     CFRelease(d);
     if (!s.ios) return false;
+    // **The surface is tagged sRGB.** Untagged, Core Animation shows it in the
+    // display's own space — on a P3 panel every colour lands more saturated
+    // than the same pixels in the web view, whose WebGL canvas is sRGB.
+    // Measured on Mosaic (docs/projectm/captures/mosaic-match-2026-09-21/):
+    // the engines' own readbacks agree on saturation (web 132, native 123
+    // over the lit part) while on screen they did not (web ~115, native
+    // ~150). `WT_PM_COLORSPACE=none` leaves the surface untagged.
+    { const char* e = getenv("WT_PM_COLORSPACE");
+      if (!(e && strcmp(e, "none") == 0)) {
+          CGColorSpaceRef cs = CGColorSpaceCreateWithName(e && *e ? CFStringCreateWithCString(nullptr, e, kCFStringEncodingUTF8) : kCGColorSpaceSRGB);
+          if (cs) { CFPropertyListRef pl = CGColorSpaceCopyPropertyList(cs);
+                    if (pl) { IOSurfaceSetValue(s.ios, CFSTR("IOSurfaceColorSpace"), pl); CFRelease(pl); }
+                    CGColorSpaceRelease(cs); } } }
     glGenTextures(1, &s.tex);
     glBindTexture(GL_TEXTURE_RECTANGLE, s.tex);
     if (CGLTexImageIOSurface2D(h->ctx, GL_TEXTURE_RECTANGLE, GL_RGBA, h->px, h->px, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, s.ios, 0) != kCGLNoError) return false;

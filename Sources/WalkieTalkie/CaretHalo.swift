@@ -486,7 +486,11 @@ final class CaretHalo {
         // **A `webOnly` preset is butterchurn's whichever engine is picked** —
         // the reason lives with the preset (`HaloStyle.Preset.webOnly`), because
         // it is a fact about that preset and not about this switch.
-        case .native where preset.webOnly: return MilkDropHalo(preset: preset, side: side, screen: screen)
+        // `WT_HALO_IGNORE_WEBONLY=1`: the native engine even for a `webOnly`
+        // preset — the knob the engine-against-engine recordings need
+        // (`docs/projectm/captures/mosaic-match-2026-09-21/`), nothing else.
+        case .native where preset.webOnly && ProcessInfo.processInfo.environment["WT_HALO_IGNORE_WEBONLY"] == nil:
+            return MilkDropHalo(preset: preset, side: side, screen: screen)
         case .native: return ProjectMHalo(preset: preset, side: side, screen: screen)
         case .web:    return MilkDropHalo(preset: preset, side: side, screen: screen)
         }
@@ -2245,12 +2249,24 @@ extension CaretHalo {
             return Float(0.25 + 0.75 * abs(sin(t * .pi * 3)))
         }
         halo.quietSeconds = { max(0, phase() - 6) }
-        if ProcessInfo.processInfo.environment["WT_HALO_DEMO_AUDIO"] != nil {
-            let voice = DemoVoice()
-            halo.samples = { voice.samples() }
-            halo.level = { voice.level }
-            halo.quietSeconds = { voice.quietSeconds }
-            Log.info("◯ demo voice: broadband noise under a slow beat, through the samples path")
+        if let kind = ProcessInfo.processInfo.environment["WT_HALO_DEMO_AUDIO"] {
+            // `WT_HALO_DEMO_AUDIO=clip`: the bundled voice clip (`ClipVoice`, the
+            // preview's signal) instead of the noise — the same samples on every
+            // run, which an engine-against-engine comparison of two recordings
+            // needs; `DemoVoice` draws its noise fresh each run.
+            // `clip:<path.wav>`: another 16 kHz mono clip in place of the bundled one.
+            if kind.hasPrefix("clip"), let voice = ClipVoice.load(path: kind.hasPrefix("clip:") ? String(kind.dropFirst(5)) : nil) {
+                halo.samples = { voice.samples() }
+                halo.level = { voice.level }
+                halo.quietSeconds = { voice.quietSeconds }
+                Log.info("◯ demo voice: halo-voice.wav looped, through the samples path")
+            } else {
+                let voice = DemoVoice()
+                halo.samples = { voice.samples() }
+                halo.level = { voice.level }
+                halo.quietSeconds = { voice.quietSeconds }
+                Log.info("◯ demo voice: broadband noise under a slow beat, through the samples path")
+            }
         }
         halo.setActive(true, atCaret: true, opening: .fromPointer)
         // **`WT_HALO_CYCLE=<seconds>` turns the dial on the live ring**, the
@@ -2467,8 +2483,9 @@ final class ClipVoice {
     /// `Resources/halo-voice.wav` installed, `assets/halo-voice.wav` from a
     /// `.build` binary; nil when neither is there (the demo falls back to
     /// `DemoVoice`'s noise).
-    static func load() -> ClipVoice? {
+    static func load(path: String? = nil) -> ClipVoice? {
         var candidates: [URL] = []
+        if let path = path { candidates.append(URL(fileURLWithPath: path)) }
         if let res = Bundle.main.resourcePath { candidates.append(URL(fileURLWithPath: res).appendingPathComponent("halo-voice.wav")) }
         var dir = URL(fileURLWithPath: CommandLine.arguments[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             .standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent()
