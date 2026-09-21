@@ -515,8 +515,18 @@ final class CaretHalo {
     /// rather than a canned animation being replaced by a live one. And it is
     /// seeded at the shared timer, so all four destinations get it — the
     /// film (`lightning`) reads no samples and is unaffected.
+    ///
+    /// **1.25 s and not 0.75** (Victor, minutes after the first one: *"contracția
+    /// înapoi să fie oleacă mai lentă la start; forța sau viteza cu care vine
+    /// înapoi spre poziția originală să fie mai mică un pic"*). What contracts
+    /// is this: the seed swells the picture and the picture falls back as it
+    /// goes, so the *speed* he is asking about is the envelope's steepest
+    /// slope, π/2T, and the window is the only thing it depends on. 0.75 → 1.25
+    /// takes 40 % off it and leaves the peak where he approved it — a longer
+    /// window rather than a flatter curve, because flattening the curve moves
+    /// the top as well.
     private static let seedSeconds = ProcessInfo.processInfo.environment["WT_HALO_SEED"]
-        .flatMap { Double($0) } ?? 0.75
+        .flatMap { Double($0) } ?? 1.25
     private static var seedFrom: CFAbsoluteTime = 0
     private static var seedPhase: Float = 0
 
