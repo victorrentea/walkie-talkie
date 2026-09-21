@@ -417,6 +417,24 @@ closes. Between the two is the whole transcription — the stretch in which he i
 
 ## Tooling
 
+- **Changing `vendor/projectm/lib/*.a` does NOT relink the app** (2026-09-21, and it cost a
+  whole repair round). `Package.swift` links projectM with `.unsafeFlags(["-L", …])` +
+  `.linkedLibrary`, and SwiftPM tracks neither as a build input: swapping the `.a` and running
+  `swift build` prints `Build complete` without running the linker, so `build-app.sh` installs the
+  **old** engine and the bug you just fixed is still there. `rm -f .build/release/WalkieTalkie`
+  (and `.build/debug/…`) first, and check the output actually says `Linking WalkieTalkie`. The
+  same trap catches anyone iterating on a projectM fork: the binary under test can be two engine
+  builds behind the library on disk.
+- **A crashing projectM takes the whole app with it, and it looks like *the app will not start*.**
+  2026-09-21, four `EXC_BAD_ACCESS` in `libprojectM::Audio::WaveformAligner::Align` ←
+  `PCM::UpdateFrameAudioData` ← `ProjectM::RenderFrame` ← `ProjectMHalo.frame()`, on the
+  `…wispr-relay.projectm` queue, one per dictation that drew a **native** preset; a dictation that
+  drew Sparks (the web route) in between was fine. The halo is the first thing a dictation raises,
+  so the app dies 2 s in, relaunches, and the log shows nothing but a fresh `ready`. Read
+  `~/Library/Logs/DiagnosticReports/Walkie Talkie-*.ips` — the faulting thread's queue name says
+  which engine — and cross-check the halo style in `relay.log` at the same second.
+  `defaults write ro.victorrentea.wispr-relay haloEngine web` is the escape hatch: it takes
+  projectM out of the picture entirely with nothing to rebuild.
 - **Every demo, sweep or shoot that puts a window on his screen or captures it runs under
   `hands-off run "<what>" -- <command>`, for the WHOLE run** (2026-09-20, late — paid for: a
   15-style sweep ran on his screen while he was working, with the locks up only for the pointer
