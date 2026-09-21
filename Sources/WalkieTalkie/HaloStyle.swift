@@ -48,7 +48,7 @@ enum HaloStyle: String, CaseIterable {
     /// 18), run by the real engine. 99 (*Mosaic*) went on 2026-09-20 — *"the
     /// bricks look lame"* — with the other `−` ones. The numbers are the
     /// presets' numbers on the page, not the chips'.
-    case milkdrop7, milkdrop8, milkdrop20, milkdrop85, milkdrop87, milkdrop103
+    case milkdrop7, milkdrop8, milkdrop20, milkdrop85, milkdrop87, milkdrop99, milkdrop103
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -67,6 +67,7 @@ enum HaloStyle: String, CaseIterable {
         case .milkdrop20:     return "Tendrils"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
+        case .milkdrop99:     return "Mosaic"
         case .milkdrop103:    return "Water Dream"
         }
     }
@@ -194,6 +195,14 @@ enum HaloStyle: String, CaseIterable {
         // 0.525 → 0.3675 now. Each ask is a factor on what is drawn today, not
         // on the page's original, so the two compound.
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.3675,
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
+        // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
+        // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
+        // 2026-09-20 with the other `−` effects — *"the bricks look lame"* —
+        // and is here now because he asked for it by name against a
+        // destination, which is a different question from *do I like it in a
+        // gallery*. The page's scale, unhalved: 0.5.
+        case .milkdrop99:  return Preset(number: 99, name: "martin - reflections on black tiles", scale: 0.5,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
         // locked in the bottom 20% of the screen, but the meteors follow the
@@ -343,14 +352,20 @@ enum HaloDestination: String, CaseIterable {
     var fallback: HaloStyle {
         switch self {
         case .caret: return .milkdrop7    // Tunnel
-        case .bound: return .milkdrop20   // Tendrils
+        // **Cauldron moved here from Wispr's row** (Victor, 2026-09-21, naming
+        // all four in one breath: *"când am dictare legată, să apară
+        // Cauldron"*). Tendrils held this destination for the morning and
+        // stays on the list, a tick away.
+        case .bound: return .milkdrop8    // Cauldron
         // **Snowflake, since 2026-09-21** (*"dictarea în terminal nou tre să
         // redea efectul de stars"*) — Zylot's *Star Ornament*, which is the
         // only star in the catalogue. Sparks held this destination for a few
         // hours before it; it keeps the 0.7× he asked for that morning and
         // stays on the list, so the row is one tick away.
         case .spawn: return .milkdrop85   // Snowflake
-        case .wispr: return .milkdrop8    // Cauldron
+        // **Mosaic** (*"când am Wispr Flow, dictare să apară mozaic"*) —
+        // brought back from the page's `−` list for this one destination.
+        case .wispr: return .milkdrop99   // Mosaic
         }
     }
 

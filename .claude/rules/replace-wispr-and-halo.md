@@ -518,10 +518,14 @@ closes. Between the two is the whole transcription — the stretch in which he i
   longer exists reads as that destination's default.
 - **One effect per destination, not one per app** (2026-09-21). `HaloDestination` — `caret`,
   `bound`, `spawn`, `wispr` — has a preference each (`UserDefaults` `haloStyle.<case>`; the single
-  old `haloStyle` key is no longer read) and a default each: **Tunnel** at the caret, **Tendrils**
-  bound, **Snowflake** into a new claude (**Sparks** held it for the first few hours, until
-  *"dictarea în terminal nou tre să redea efectul de stars"* — Zylot's *Star Ornament* is the only
-  star in the catalogue, and it came back onto the offered list for it), **Cauldron** for Wispr's own. `AppDelegate.syncBorrowedGestures`
+  old `haloStyle` key is no longer read) and a default each. **Victor named all four in one breath
+  on 2026-09-21** (*"când am Wispr Flow, dictare să apară mozaic. Când am dictare în terminal nou,
+  să apară stars. Când am dictare legată, să apară Cauldron. Și când am dictare nelegată la
+  carrot, îmi apare tunnel"*), and that reading is the current one: **Tunnel** at the caret,
+  **Cauldron** bound, **Snowflake** into a new claude, **Mosaic** for Wispr's own. Two effects lost
+  a destination that morning and stay on the list a tick away — **Tendrils** (bound until Cauldron
+  took it) and **Sparks** (new claude until *"tre să redea efectul de stars"*; Zylot's *Star
+  Ornament* is the only star in the catalogue). `AppDelegate.syncBorrowedGestures`
   pushes the destination into `CaretHalo.setDestination` **only while the ring is up**, on every
   sync, from the same facts `atCaret` is read from, `foreignMic` tested first.
 - **A foreign Wispr dictation is its own destination** (2026-09-21, later the same day). It wore

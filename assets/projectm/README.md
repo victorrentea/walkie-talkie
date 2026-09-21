@@ -11,6 +11,7 @@ web route draws from butterchurn's JSON conversion of the same file:
 | Tendrils (20) | `Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast.milk` | clangen/projectM-musikcube `presets_milkdrop_200` |
 | Snowflake (85) | `Zylot - Star Ornament.milk` | `milkdrop-gallery/sources/original` |
 | Sparks (87) | `martin - chain breaker.milk` | `milkdrop-gallery/sources/cream` |
+| Mosaic (99) | `martin - reflections on black tiles.milk` | `milkdrop-gallery/sources/original` |
 | Water Dream (103) | `martin [shadow harlequins shape code] - fata morgana.milk` | OfficialIncubo/BeatDrop-Music-Visualizer `resources/Milkdrop2/presets` |
 
 **One edit of ours** in `fata morgana.milk`: `per_frame_23`/`24` split the identifier
