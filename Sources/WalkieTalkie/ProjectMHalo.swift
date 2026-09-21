@@ -23,9 +23,10 @@ import ImageIO
 /// - **Selected by `HaloEngine.current`** (`WT_HALO_ENGINE=native`, or the
 ///   `haloEngine` default); the web route (`MilkDropHalo`) stays the default
 ///   until this one is judged.
-/// - **Resolution**: `WT_PM_SCALE` pixels per point of the square (default 1 —
-///   the web route renders at the backing scale, 2; measured, see
-///   `docs/projectm/REPORT.md`).
+/// - **Resolution**: `WT_PM_SCALE` pixels per point of the square. The default
+///   is the **display's backing scale**, which is what the web route has always
+///   rendered at; it was a flat `1` until 2026-09-21 and that is what *"mozaic …
+///   e pixelat cumva"* was — see `renderScale`.
 final class ProjectMHalo: NSView, HaloWebHost {
     private let preset: HaloStyle.Preset
     private let screen: CGSize
@@ -49,8 +50,35 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// `WT_PM_AUDIO_GAIN=<k>`: the samples multiplied before the engine — the knob for
     /// matching the beat response of the web route.
     static let audioGain: Float = ProcessInfo.processInfo.environment["WT_PM_AUDIO_GAIN"].flatMap { Float($0) } ?? 1
-    /// Pixels per point of the square. The engine's cost is per pixel.
-    static let renderScale: CGFloat = ProcessInfo.processInfo.environment["WT_PM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 1
+    /// **Pixels per point of the square — the display's own backing scale.**
+    ///
+    /// It was a flat `1` from the day this engine went in, while the web route
+    /// has always rendered at the backing scale (2 on every Retina here). So on
+    /// the built-in display every native preset was drawn at **half** the web
+    /// route's resolution and stretched back up by the `CALayer`, and on
+    /// 2026-09-21 Victor saw it: *"mozaic, care e pixelat cumva"*.
+    ///
+    /// Mosaic showed it first and worst because that preset lays its tile
+    /// lattice out in **texture pixels** rather than canvas fractions
+    /// (`zz = uv1*texsize.xy*.015*q27`), so half the pixels is not merely softer
+    /// — every tile is drawn twice the size, and the 8-texel warp displacement
+    /// twice as far. The captures are in `docs/projectm/captures/mosaic-2026-09-21/`;
+    /// `crop-run3-6s.png` shows the device-pixel blocks at 1× beside the web
+    /// route and beside 2×.
+    ///
+    /// **It costs nothing measurable**, which `REPORT.md` had already written
+    /// down before anything read it: the engine's frame is CPU-bound in the
+    /// per-frame and per-vertex code, not in pixels — Water Dream 1× 17.6 ms
+    /// against 2× 16.7 ms. The default was simply never moved.
+    ///
+    /// The **maximum** over the attached screens rather than the one the pointer
+    /// is on: this is read once at launch and the halo follows the pointer
+    /// across displays, so the alternative is a ring that renders coarse after
+    /// the hand crosses onto the Retina. Over-rendering on a 1× display is the
+    /// cost that was just measured at nothing. `WT_PM_SCALE` still wins, which
+    /// is what `docs/projectm/shoot.sh` and `sweep.sh` set.
+    static let renderScale: CGFloat = ProcessInfo.processInfo.environment["WT_PM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) }
+        ?? NSScreen.screens.map(\.backingScaleFactor).max() ?? 2
     /// **The native engine's own gain per preset**, multiplied into the style's
     /// `gain` before keying — measured 2026-09-21 as the ratio of the web
     /// twin's mean luminance to the native one over the same three seconds

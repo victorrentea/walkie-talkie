@@ -149,6 +149,15 @@ enum HaloStyle: String, CaseIterable {
         /// centre — the preset's horizon — at this fraction of the screen's
         /// height from the bottom. Nil = the square follows the pointer.
         var pinnedHorizon: CGFloat? = nil
+        /// **This preset is drawn by butterchurn whichever engine is picked.**
+        /// Not a preference and not a fallback: a preset whose *look* depends on
+        /// how the engine reads the spectrum, where the two engines disagree and
+        /// the web one is the picture Victor approved. It lives here, beside the
+        /// preset's other knobs, because the alternative — a preset number
+        /// compared by hand at each of the two places that decide — is a fact
+        /// kept in two heads. `CaretHalo.engineHost` and `isAvailable` both read
+        /// it, and nothing else may branch on a preset number.
+        var webOnly = false
     }
     var preset: Preset? {
         switch self {
@@ -194,8 +203,24 @@ enum HaloStyle: String, CaseIterable {
         // mai mic cu treizeci la sută"*) — 0.75 → 0.525 the evening before,
         // 0.525 → 0.3675 now. Each ask is a factor on what is drawn today, not
         // on the page's original, so the two compound.
+        // **Sparks is drawn by butterchurn even when the engine is projectM**
+        // (`webOnly`, 2026-09-21: *"Stars nu arată cum arată originalul … linia
+        // aia e prea lăbărțat"*). chain breaker offsets spark *n* by a smoothed
+        // difference of spectrum bins *n* and *n+dif*, so the shape of the
+        // effect is a property of the **spectrum's smoothness**, not of any knob
+        // here: projectM FFTs 480 Hann-windowed samples zero-padded to 1024 and
+        // its neighbouring bins agree (measured r = 0.90 on his own speech), so
+        // the 256 sparks land next to each other and string into a chain;
+        // butterchurn FFTs 1024 raw samples with no window, its bins are
+        // independent (r = 0.32), and the sparks scatter into the cloud he
+        // starred. Measured across `PM_SPECTRUM_SCALE` 1…5.3, with `rand()` and
+        // `fps` forced, and against the same gain in both engines — a chain
+        // never becomes a cloud (`docs/projectm/captures/sparks-2026-09-21/`).
+        // Worth knowing before anyone "fixes" this back: real MilkDrop windows
+        // its FFT too, so the chain is arguably the preset's intended look and
+        // the cloud is butterchurn's deviation. The cloud is the one he picked.
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.3675,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
         // 2026-09-20 with the other `−` effects — *"the bricks look lame"* —
@@ -260,7 +285,9 @@ enum HaloStyle: String, CaseIterable {
     var isAvailable: Bool {
         if pageIndex != nil { return HaloPage.available }
         if let preset = preset {
-            return HaloEngine.current == .native ? ProjectMHalo.available(for: preset) : MilkDropHalo.engineAvailable
+            // A `webOnly` preset needs the web engine to exist, whichever engine
+            // is picked — see `Preset.webOnly` and `CaretHalo.engineHost`.
+            return HaloEngine.current == .native && !preset.webOnly ? ProjectMHalo.available(for: preset) : MilkDropHalo.engineAvailable
         }
         return true
     }

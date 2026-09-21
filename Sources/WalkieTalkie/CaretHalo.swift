@@ -483,6 +483,10 @@ final class CaretHalo {
     /// branch). Nil when the chosen engine cannot draw this preset.
     static func engineHost(preset: HaloStyle.Preset, side: CGFloat, screen: CGSize) -> HaloWebHost? {
         switch HaloEngine.current {
+        // **A `webOnly` preset is butterchurn's whichever engine is picked** —
+        // the reason lives with the preset (`HaloStyle.Preset.webOnly`), because
+        // it is a fact about that preset and not about this switch.
+        case .native where preset.webOnly: return MilkDropHalo(preset: preset, side: side, screen: screen)
         case .native: return ProjectMHalo(preset: preset, side: side, screen: screen)
         case .web:    return MilkDropHalo(preset: preset, side: side, screen: screen)
         }
@@ -2131,7 +2135,12 @@ final class CaretHalo {
             host.onFailure = { [weak self] why in self?.fallBack(why) }
             view.addSubview(host)
             web = host
-            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), a \(Int(frame.width))pt square in the \(HaloEngine.current == .native ? "native engine" : "engine's web view")")
+            // **The engine that actually drew it, not the one that was picked.**
+            // A `webOnly` preset is butterchurn's under a `native` preference, so
+            // reading `HaloEngine.current` here would have this line say *native
+            // engine* over a frame the web view produced — and a log that names
+            // the wrong engine is how an afternoon goes looking at the wrong one.
+            Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), a \(Int(frame.width))pt square in the \(host is ProjectMHalo ? "native engine" : "engine's web view")")
         } else if drawn.pageIndex != nil, let host = HaloPage(size: frame.size) {
             // **The page, in a web view** — see `HaloPage`. The stage stays,
             // empty, so the bloom and the collapse have something to animate
