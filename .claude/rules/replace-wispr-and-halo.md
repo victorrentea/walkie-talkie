@@ -511,8 +511,12 @@ closes. Between the two is the whole transcription — the stretch in which he i
   **A size ask is a factor on what is drawn today**, not on the page's `FORMULAS` number: *"mai mic
   cu treizeci la sută"* twice over is 0.75 → 0.525 → 0.3675, and the page's entry still says 0.75.
   Sparks then went ×3 the same evening (*"should be three times larger than it is right now"*) —
-  0.3675 → **1.1025**, a 1905 pt canvas, wider than the built-in screen: the two shrinks were
+  0.3675 → 1.1025, a 1905 pt canvas, wider than the built-in screen: the two shrinks were
   asked of it while the destinations were still moving, the ×3 of it wearing the one it keeps.
+  **And ×0.5 an hour later**, watching that one run (*"efectul de stars e prea mare. Micșorează-l
+  cu cincizeci la sută"*): 1.1025 → **0.55125**, a 953 pt canvas — inside the screen again, and
+  still ~1.5× the 635 pt it wore before the ×3, which is the part that earned the ×3 in the first
+  place. Four factors on one preset in two days, each one on what was drawn at the time.
   **"Not centred on the tip of my mouse" was a size complaint**, measured that evening:
   `docs/projectm/captures/sparks-on-pointer-2026-09-21.png` — the demo on his own screen with the
   pointer in frame, differenced against a baseline capture — puts the cloud's centre of light

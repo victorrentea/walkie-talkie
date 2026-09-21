@@ -231,10 +231,15 @@ enum HaloStyle: String, CaseIterable {
         // `centerAt`/`offset` stay at their defaults — a static shift on a
         // composition that is already centred is what made Tunnel *"no longer
         // centred"* in the other direction.
-        // The canvas is 1905 pt on the built-in retina, wider than the screen,
-        // so the edge fade now lands past the screen's corners and Sparks
-        // costs about what Water Dream costs. That is the price of the ask,
-        // and `scale` is the one knob to walk back if it shows.
+        // The canvas was 1905 pt on the built-in retina, wider than the
+        // screen, so the edge fade landed past the screen's corners and Sparks
+        // cost about what Water Dream costs. `scale` was named there as the
+        // one knob to walk back if it showed, and **it was walked back the
+        // same evening** (Victor, looking at it running: *"efectul de stars e
+        // prea mare. Micșorează-l cu cincizeci la sută"*): 1.1025 → 0.55125,
+        // a 953 pt canvas — back inside the screen, still ~1.5× the 635 pt it
+        // wore before the ×3, which is the part that put the pointer inside
+        // the bright knot rather than at its edge.
         // **Sparks is drawn by butterchurn even when the engine is projectM**
         // (`webOnly`, 2026-09-21: *"Stars nu arată cum arată originalul … linia
         // aia e prea lăbărțat"*). chain breaker offsets spark *n* by a smoothed
@@ -251,7 +256,7 @@ enum HaloStyle: String, CaseIterable {
         // Worth knowing before anyone "fixes" this back: real MilkDrop windows
         // its FFT too, so the chain is arguably the preset's intended look and
         // the cloud is butterchurn's deviation. The cloud is the one he picked.
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 1.1025,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.55125,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
