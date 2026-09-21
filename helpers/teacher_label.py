@@ -193,7 +193,23 @@ def close_run_window(path):
 #: does not rule it out: `wait_for_new` accepts any newer row, so a row that arrives
 #: after its clip's timeout leaves that clip unlabelled and hands its words to the
 #: NEXT one — an off-by-one that leaves no two rows alike behind it.
+#: The budget is `base + per_second × clip`, not a constant, and the constant is what
+#: this cost: calibrated on the first 638 labels — all of them clips of 3–5 s, where
+#: the lag ran 2.7–5.8 s — it began throwing away good labels the moment the queue
+#: reached 16-second clips, **242 of them between 02:00 and 05:00 on 2026-09-21**,
+#: at lags of 8–13 s.
+#:
+#: The lag is not a constant because it is not overhead: it is `lead + tail` (1.8 s of
+#: padding we add) plus Wispr's own round trip, and Wispr is slower on a longer clip —
+#: its own documented p99 is 7.1 s with a maximum of 13.7. An off-by-one is still far
+#: outside this: the previous clip's row is a whole cycle back, which for a 17 s clip
+#: is 45 s or more against a budget of 20.
 MAX_LABEL_LAG_SEC = float(os.environ.get("WISPR_MAX_LABEL_LAG", "8"))
+MAX_LABEL_LAG_PER_SEC = float(os.environ.get("WISPR_MAX_LABEL_LAG_PER_SEC", "0.7"))
+
+
+def lag_budget(clip_seconds) -> float:
+    return MAX_LABEL_LAG_SEC + MAX_LABEL_LAG_PER_SEC * (clip_seconds or 0)
 
 
 def label_lag(heard, clip_seconds, now=None) -> float | None:
@@ -639,12 +655,12 @@ def main(argv):
                 log(f"  {i}/{len(todo)} ✗ row {heard.id[:8]} was already used — "
                     "dropped")
             elif (lag := label_lag(heard, s["seconds"])) is not None \
-                    and lag > MAX_LABEL_LAG_SEC:
+                    and lag > lag_budget(s["seconds"]):
                 streak = recoveries = 0
                 misrouted += 1
                 log(f"  {i}/{len(todo)} ✗ label is {lag:.0f}s behind the clip "
-                    f"(max {MAX_LABEL_LAG_SEC:.0f}s) — dropped as the previous "
-                    "clip's")
+                    f"(max {lag_budget(s['seconds']):.0f}s for {s['seconds']:.0f}s "
+                    "of audio) — dropped as the previous clip's")
             elif (why := not_his_language(heard)):
                 # Wispr answered, so the rig is fine and the streak stays reset —
                 # what came back is simply not a label. Keeping it would put words
