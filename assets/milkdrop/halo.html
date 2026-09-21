@@ -70,7 +70,8 @@
   // ---- the keying pass ----------------------------------------------------
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
-  let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
+  let black = 0, uBlack = null;
+let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -80,7 +81,7 @@
     const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
       void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
     const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
-      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart;
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float black; uniform float fadeStart;
       // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→floor, constant past 1.
       // floorA is what is left past the fade radius: the page's 0.10, or 0 for a
       // preset that has to be gone entirely at that distance (Tunnel, 2026-09-20).
@@ -97,7 +98,11 @@
       }
       void main() {
         vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y));
-        c.rgb = min(c.rgb * gain, 1.0);          // gain > 1: the preset more opaque and more intense
+        // black: subtracted after the gain, the range stretched back, so the
+        // bright structures keep their brightness and only the faint wash
+        // below it keys away. Tunnel's red circle lives under it — see
+        // HaloStyle.Preset.black for why it needs one and the sweep behind 0.10.
+        c.rgb = clamp((c.rgb * gain - black) / max(1.0 - black, 1e-3), 0.0, 1.0);
         float a = max(c.r, max(c.g, c.b));
         if (fade > 0.5) {
           vec2 q = (uv - 0.5) * res / radii;      // 1 = the fade radius
@@ -117,7 +122,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
-    uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain'); uStart = gl.getUniformLocation(prog, 'fadeStart');
+    uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain'); uBlack = gl.getUniformLocation(prog, 'black'); uStart = gl.getUniformLocation(prog, 'fadeStart');
     gl.disable(gl.BLEND);
   }
   function key() {
@@ -129,6 +134,7 @@
     gl.uniform2f(uRes, side, side);
     gl.uniform1f(uFloor, fadeFloor);
     gl.uniform1f(uGain, gain);
+    gl.uniform1f(uBlack, black);
     gl.uniform1f(uStart, fadeStart);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -205,6 +211,8 @@
     //               both axes (default: the page's ellipse, half the screen each way)
     //   fadeFloor:  what remains past the radius (page: 0.10; 0 = gone entirely)
     //   gain:       colour multiplier before keying (2 = twice as opaque/intense)
+    //   black:      a black level applied after the gain; everything under it
+    //               keys to nothing and the rest is stretched back to 1
     //   rot:        multiplier on the preset's per-frame rotation, applied by
     //               appending to its compiled frame equations — our copy of the
     //               preset, the vendored pack untouched
@@ -213,6 +221,7 @@
       fade = !!wantFade;
       fadeFloor = opts.fadeFloor === undefined ? 0.10 : opts.fadeFloor;
       gain = opts.gain || 1;
+      black = opts.black || 0;
       fadeStart = opts.fadeStart || 0;
       rotX = opts.rot || 1;
       pinCenter = !!opts.pinCenter;

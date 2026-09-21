@@ -247,9 +247,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
     /// Per-run options, as `MilkDropHalo.optionsOverride` / `WT_HALO_PRESET_OPTS` carry them
     /// (`{"gain": 4, "rot": 2, "fadeFloor": 0, "fadeStart": 0.5, "pinCenter": true}`).
-    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?) {
+    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?, black: CGFloat) {
         var gain = preset.gain, rot = preset.rot, floor = preset.fadeFloor, start = preset.fadeStart
         var pin = preset.pinCenter, atEdge = preset.fadeAtEdge, radius = preset.fadeRadius
+        var black = ProcessInfo.processInfo.environment["WT_PM_BLACK"].flatMap { Double($0) }.map { CGFloat($0) } ?? preset.black
         let raw = MilkDropHalo.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         if let data = raw.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let v = o["gain"] as? Double { gain = CGFloat(v) }
@@ -259,8 +260,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
             if let v = o["pinCenter"] as? Bool { pin = v }
             if let v = o["fadeAtEdge"] as? Bool { atEdge = v }
             if let v = o["fadeRadius"] as? Double { radius = CGFloat(v) }
+            if let v = o["black"] as? Double { black = CGFloat(v) }
         }
-        return (gain, rot, floor, start, pin, atEdge, radius)
+        return (gain, rot, floor, start, pin, atEdge, radius, black)
     }
 
     private func configure() -> Bool {
@@ -313,8 +315,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
         else if let f = o.fadeRadius { rx = screen.width * f / side; ry = rx }
         else { rx = screen.width / 2 / side; ry = screen.height / 2 / side }
         let gain = o.gain * (Self.gainScale[preset.number] ?? 1)
-        pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start))
-        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
+        pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start), Float(o.black))
+        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "")\(o.black > 0 ? ", black \(o.black)" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
 

@@ -30,7 +30,7 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate);
 /// The keying pass's mask (the page's four-stop mask, or one fall from
 /// `fade_start`), all in fractions of the square's side: `rx`/`ry` are the fade
 /// radii, `floor_a` what remains past them, `gain` a multiplier before keying.
-void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start);
+void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start, float black);
 
 /// Render one frame and key it. Returns the IOSurface carrying it (owned by the
 /// renderer, valid until the frame after next), or NULL on a GL failure.

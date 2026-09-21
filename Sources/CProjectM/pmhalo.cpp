@@ -38,7 +38,7 @@ const char* kVS = "#version 330 core\n"
 // .5→.5, .75→.26, 1→floor, constant past 1; or, with fade_start > 0, full light
 // out to that fraction of the radius and one smooth fall to the floor.
 const char* kFS = "#version 330 core\n"
-    "uniform sampler2D src;uniform float fade;uniform vec2 radii;uniform float floorA;uniform float gain;uniform float fadeStart;"
+    "uniform sampler2D src;uniform float fade;uniform vec2 radii;uniform float floorA;uniform float gain;uniform float fadeStart;uniform float black;"
     "in vec2 uv;out vec4 frag;\n"
     "float mask(float d){"
     " if(fadeStart>0.0) return d<=fadeStart?1.0:mix(1.0,floorA,smoothstep(fadeStart,1.0,d));"
@@ -50,7 +50,13 @@ const char* kFS = "#version 330 core\n"
     "void main(){"
     // GL's row 0 is the bottom; the IOSurface's row 0 is the top the layer shows.
     " vec4 c=texture(src,vec2(uv.x,1.0-uv.y));"
-    " c.rgb=min(c.rgb*gain,1.0);"
+    // **The black level, subtracted after the gain and the range stretched back**
+    // so the bright structures keep the brightness they were tuned to and only
+    // the faint wash below it keys to nothing. Tunnel needs it: the thin red
+    // circle it draws every frame is dim, but it sits on black inside the
+    // tunnel's mouth, so the gain that made the tunnel "pregnant vizibil"
+    // lifted it over the floor as well. 0 = off, and off is every other preset.
+    " c.rgb=clamp((c.rgb*gain-black)/max(1.0-black,1e-3),0.0,1.0);"
     " float a=max(c.r,max(c.g,c.b));"
     " if(fade>0.5){float m=mask(length((uv-0.5)/radii));a*=m;c.rgb*=m;}"
     " frag=vec4(c.rgb,a);}\n";
@@ -80,10 +86,10 @@ struct pmh {
     CGLContextObj ctx = nullptr;
     GLuint tex = 0, rbo = 0, fbo = 0;        // the engine's target
     GLuint prog = 0, vao = 0;                 // the key pass
-    GLint uFade, uRadii, uFloor, uGain, uStart, uSrc;
+    GLint uFade, uRadii, uFloor, uGain, uStart, uBlack, uSrc;
     Surface surf[2]; int cur = 0;
     projectm_handle pm = nullptr;
-    bool fade = false; float rx = 0.5f, ry = 0.5f, floorA = 0.1f, gain = 1.f, fadeStart = 0.f;
+    bool fade = false; float rx = 0.5f, ry = 0.5f, floorA = 0.1f, gain = 1.f, fadeStart = 0.f, black = 0.f;
     double engineMs = 0, keyMs = 0;
     unsigned engineErrors = 0, keyErrors = 0;
     bool finish = false;                      // WT_PM_FINISH=1: glFinish for honest timings
@@ -192,6 +198,7 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     h->uRadii = glGetUniformLocation(h->prog, "radii");
     h->uFloor = glGetUniformLocation(h->prog, "floorA");
     h->uGain = glGetUniformLocation(h->prog, "gain");
+    h->uBlack = glGetUniformLocation(h->prog, "black");
     h->uStart = glGetUniformLocation(h->prog, "fadeStart");
 
     // The vendored engine draws its final pass into whatever this names.
@@ -265,8 +272,8 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
     projectm_pcm_add_float(h->pm, h->resampled.data(), out, PROJECTM_MONO);
 }
 
-void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start) {
-    h->fade = fade; h->rx = rx; h->ry = ry; h->floorA = floor_a; h->gain = gain; h->fadeStart = fade_start;
+void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start, float black) {
+    h->fade = fade; h->rx = rx; h->ry = ry; h->floorA = floor_a; h->gain = gain; h->fadeStart = fade_start; h->black = black;
 }
 
 IOSurfaceRef pmh_render(pmh* h) {
@@ -295,6 +302,7 @@ IOSurfaceRef pmh_render(pmh* h) {
     glUniform1f(h->uFloor, h->floorA);
     glUniform1f(h->uGain, h->gain);
     glUniform1f(h->uStart, h->fadeStart);
+    glUniform1f(h->uBlack, h->black);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0); glUseProgram(0); glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
