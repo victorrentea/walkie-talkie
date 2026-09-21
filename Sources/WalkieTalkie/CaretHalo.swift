@@ -549,6 +549,59 @@ final class CaretHalo {
         return samples.map { min(max($0 * liftGain, -1), 1) }
     }
 
+    /// **A tail on the signal, so the picture does not snap home the moment he
+    /// stops** (Victor, 2026-09-21, on Stars: *"în momentul în care eu tac,
+    /// imediat se duc înapoi la origine steluțele. Vreau să le întârzii puțin
+    /// … un fel de reverb, sau să prelungești undele sonore pe care le dai"*).
+    ///
+    /// His word for it is the right one, and so is the place: not an animation
+    /// on the picture but a **release on the signal**, because every one of
+    /// these presets is already a physical thing driven by sound — give it
+    /// sound that fades instead of sound that stops, and the fading is the
+    /// preset's own, in its own idiom. An easing curve bolted onto the layer
+    /// would be a second motion arguing with the first.
+    ///
+    /// **The last window of real speech is what is prolonged**, replayed under
+    /// an envelope that falls 60 dB over `tailSeconds`, its read position
+    /// advancing so it never repeats itself into a standing pattern. Not the
+    /// live samples scaled up: those are room tone during a pause, and a smooth
+    /// signal is what draws Tunnel's clean circle — the tail has to be shaped
+    /// like a voice because that is what the presets answer to.
+    ///
+    /// Only under `liftFloor`, i.e. only when he has actually stopped; a
+    /// syllable arriving takes over immediately, the way it does with the seed.
+    private static let tailSeconds = ProcessInfo.processInfo.environment["WT_HALO_TAIL"]
+        .flatMap { Double($0) } ?? 0.6
+    private static var tailBuf: [Float] = []
+    private static var tailEnv: Float = 0
+    private static var tailPos = 0
+
+    static func tailed(_ samples: [Float]) -> [Float] {
+        guard tailSeconds > 0, !samples.isEmpty else { return samples }
+        var sum: Float = 0
+        for v in samples { sum += v * v }
+        let rms = (sum / Float(samples.count)).squareRoot()
+        if rms > liftFloor {
+            tailBuf = samples
+            tailEnv = max(tailEnv, rms)
+            return samples
+        }
+        // −60 dB over the window, at the feed timer's 30 Hz.
+        tailEnv *= Float(pow(0.001, 1.0 / (tailSeconds * 30)))
+        guard tailEnv > liftFloor * 0.5, !tailBuf.isEmpty else { return samples }
+        var bsum: Float = 0
+        for v in tailBuf { bsum += v * v }
+        let bRms = (bsum / Float(tailBuf.count)).squareRoot()
+        guard bRms > 1e-6 else { return samples }
+        let k = tailEnv / bRms
+        var out = samples
+        for i in out.indices {
+            tailPos = (tailPos + 1) % tailBuf.count
+            out[i] = min(max(out[i] + tailBuf[tailPos] * k, -1), 1)
+        }
+        return out
+    }
+
     /// **A breath of signal at the start, so the ring opens with a picture on
     /// it** (Victor, 2026-09-21: *"când pornește animația, să i se dea un input
     /// suficient cât să deseneze un input bogat … toate cele patru efecte, fără
@@ -1103,7 +1156,7 @@ final class CaretHalo {
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                let samples = Self.seeded(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024))))
+                let samples = Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
                 web?.feed(samples)
                 self.under?.feed(samples)
             }
