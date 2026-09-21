@@ -1,8 +1,9 @@
 # Walkie Talkie — rules
 
-A macOS overlay that relays Victor's dictation — **ElevenLabs Scribe since 2026-09-19**, with
-Wispr Flow (🔽 →, an idea rather than a prompt) and a local Whisper behind it — into a bound
-terminal, a Claude Code session it spawns, or the caret. Speechmatics and Gemini were removed on
+A macOS overlay that relays Victor's dictation — **ElevenLabs Scribe since 2026-09-19**, with a
+local Whisper behind it — into a bound terminal, a Claude Code session it spawns, or the caret.
+**Wispr Flow left the `Engine` list on 2026-09-22** and keeps only 🔽 → (an idea rather than a
+prompt), where it pastes for itself and nothing has to intercept it. Speechmatics and Gemini were removed on
 2026-09-20 (*"renunță la Speechmatics și GeminiSource … scoate-le din cod pt moment"*); `git show
 <this commit>` is how they come back.
 `README.md` says what it is and how it works.
@@ -40,7 +41,9 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 - Where the strings live: `RelayWindow.swift` (`shotHint`, `recordText`, `engineText`,
   `hqBadge`, `elapsedText`, `pickHint`, `pickText`, `titleText`), the `flash(_:)` /
   `flashTitle(_:)` call sites in `AppDelegate.swift`, `StatusItem.swift` (the longest list),
-  `chrome-extension/inspect.js` and `relay.js`. Rows hidden behind `showsGestureHints` still
+  `AboutWindow.swift`, `chrome-extension/inspect.js` and `relay.js`. **`AboutWindow` joined the
+  list on 2026-09-22**: its copy was Romanian for as long as it was an HTML page opened in a
+  browser, and became an app string the moment it turned into an AppKit panel. Rows hidden behind `showsGestureHints` still
   count — they must be English when the flag comes back.
 
 ## Build, install, restart
@@ -72,8 +75,9 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   executable's mtime — the one place that says which build is running.
 - The app is `.regular` (Dock tile — Force Quit is the escape hatch when it hangs — and a minimal
   main menu); nothing in it ever calls `NSApp.activate`.
-- **Dependencies:** **Wispr Flow** (the default source — the relay drives it by posting its own
-  shortcuts and reads its delivery; it does not launch it). For the retired local source,
+- **Dependencies:** **Wispr Flow** — no longer an engine (2026-09-22), still the app 🔽 → drives
+  by posting its own shortcuts; the relay does not launch it, and nothing breaks if it is absent
+  except that gesture. For the local source,
   `mlx_whisper` (`pip install mlx-whisper`) and `ffmpeg`; the model is
   `mlx-community/whisper-large-v3-turbo` (`RELAY_WHISPER_MODEL` overrides). The Chrome
   extension is loaded unpacked by hand (`chrome://extensions` → Developer mode → Load unpacked);
@@ -259,7 +263,8 @@ sits at rest there.
 
 ## The dictation source (2026-09-12)
 
-- **One interface, three recognisers** (five until 2026-09-20). `DictationSource` —
+- **One interface, three implementations, two of them selectable** (five until 2026-09-20; Wispr
+  Flow stopped being pickable on 2026-09-22 and stayed wired for 🔽 →). `DictationSource` —
   `start` / `stop` / `cancel`, `didMaybeBegin` / `didBegin` / `didStopListening` / `didTranscribe` /
   `didEnd`, plus a `meter` the halo breathes on. `WisprFlowSource`, `LocalWhisperSource`,
   and `ElevenLabsSource` implement it and **nothing downstream may name any of them**: the chip, the
@@ -275,9 +280,12 @@ sits at rest there.
   gesture goes through it — ⌘⌃D, the wheel, the side buttons, *Start Dictation*, the spawn — and the
   word timings are what put `[📸1🖱️@…]` where he pressed instead of in a list underneath.
   **Wispr Flow keeps one job**: 🔽 →, which posts Wispr's own chord raw, for dictating *an idea
-  rather than a prompt*. `engine(named:)`'s fallback follows the default now, so a typo picks
-  ElevenLabs and not a third thing; `WT_SOURCE=wispr` / `whisper` override for a
-  run, and the `Engine` menu row writes the preference.
+  rather than a prompt* — and since **2026-09-22** that is its only one, because it is no longer in
+  the `Engine` list at all (*"n-am reușit niciodată să-l integrăm ca lumea în fluxul nostru să-i
+  preluăm ce text injectează"*). `engine(named:)` has two cases and its fallback is the default, so
+  a stored `wispr` preference migrates to ElevenLabs instead of resurrecting a source the menu
+  cannot name; `WT_SOURCE=whisper` overrides for a run, and the `Engine` menu row writes the
+  preference.
 
 ## ElevenLabs Scribe, the third engine (2026-09-18)
 
@@ -346,7 +354,8 @@ sits at rest there.
 - **Every switch the dictation source reads**, in one place:
   | variable | what it does |
   |---|---|
-  | `WT_SOURCE=whisper` | the local model instead of Wispr Flow (also the `dictationSource` default) |
+  | `WT_SOURCE=whisper` | the local model instead of ElevenLabs (also the `dictationSource` preference the menu writes) |
+  | ~~`WT_SOURCE=wispr`~~ | **gone 2026-09-22** — falls through to the default; Wispr Flow is not a selectable engine |
   | `WT_SOURCE=eleven` | ElevenLabs Scribe — the relay's own microphone, uploaded at the release |
   | `WT_SOURCE=sm` | Speechmatics — the same microphone, **streamed while he speaks** |
   | `SPEECHMATICS_API_KEY` | the key, environment first, else `~/.walkie-talkie/speechmatics.env` |

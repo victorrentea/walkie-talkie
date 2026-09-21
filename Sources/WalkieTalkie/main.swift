@@ -162,7 +162,7 @@ private func installAppMenu(_ app: NSApplication) {
 /// status item's own controller does not exist yet at this point in launch.
 private final class AppMenuActions: NSObject {
     static let shared = AppMenuActions()
-    @objc func about() { AboutPage.openInBrowser() }
+    @objc func about() { AboutWindow.show() }
 }
 
 /// Re-exec through `open` when this bundle's executable was started by path.

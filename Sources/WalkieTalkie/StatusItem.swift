@@ -175,12 +175,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// **The gestures are drawn, not spelled.** `hold left, click the wheel` is
     /// six words describing two objects, and it was read in a menu opened for a
     /// second: `hold ⬅️ + 🛞` is the same sentence in the shape of the mouse it is
-    /// about. Right-aligning them into the shortcut column was the first ask and
-    /// is not something `NSMenuItem` offers — the column belongs to
-    /// `keyEquivalent`, and a wheel is not a key — so it is drawn as one: the
-    /// chord rides in an attributed title right-aligned to a tab stop set just
-    /// left of the shortcut column, and the two columns line up. See
-    /// `layOutGestures`, and `restyleGestures` for the price it costs.
+    /// about.
+    ///
+    /// **And since 2026-09-22 the menu draws one glyph, not that sentence.**
+    /// Right-aligning the chords *into* AppKit's own shortcut column — flush with
+    /// the `>` of the submenu rows — was Victor's ask three times over, and it is
+    /// possible only there, where a row gets one key glyph and no more. So `◀️ + 🔼`
+    /// became `◐`, the emoji legend moved to the About page onto a drawing of his
+    /// mouse, and the menu kept the alignment. See `applyGestureColumn` for the
+    /// measurements behind that, and `AboutWindow` for where the sentence went.
     private let bind = NSMenuItem(title: "Connect Terminal", action: nil, keyEquivalent: "")
 
     /// **Rebind to** — every destination the relay has spoken to, most recent
@@ -198,9 +201,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// is the rest of the menu.** Attached as a submenu this row was correct and
     /// cost nothing to open — but AppKit reserves the disclosure-arrow gutter on
     /// **every row of the menu** the moment one item has a submenu, and this menu
-    /// spends its right-hand side on the gesture column that `layOutGestures`
-    /// lines up. One arrow moved all of it (Victor, 2026-09-10: *"a fugit toată
-    /// coloana de meniuri din cauza >"*).
+    /// spends its right-hand side on the gesture column. One arrow moved all of
+    /// it (Victor, 2026-09-10: *"a fugit toată coloana de meniuri din cauza >"*).
+    /// That gutter is measured in `applyGestureColumn` now — 31 pt, 47 with a key
+    /// equivalent in the menu — and the chords have moved *into* it, so an arrow
+    /// costs the column nothing any more. The row stays a pop-up on its own
+    /// merits, below.
     ///
     /// A popped-up menu keeps everything the submenu was for — it is still built
     /// at the instant it is asked for, never when the menu bar is clicked — and
@@ -363,18 +369,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// So the row **says which engine is running**, and opens the list of both:
     ///
     /// ```
-    ///   Engine: Wispr Flow…
-    ///        ✓ Wispr Flow
+    ///   Engine: ElevenLabs
     ///          whisper-large-v3-turbo — 1.6 GB RAM
+    ///        ✓ ElevenLabs scribe_v1 — $0.40/h ☁️
     /// ```
+    ///
+    /// **Wispr Flow is not one of them since 2026-09-22** — Victor:
+    /// *"scoate wisprflow ca sursă de dictare din lista de Engine — n-am reușit
+    /// niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce text
+    /// injectează."* See `applyEngineRow` for why, and for what Wispr keeps.
     ///
     /// **It is an ordinary submenu, with the arrow** — *"tre submeniu obișnuit
     /// cu >, nu un modal"* (Victor, 2026-09-14, having looked at the other one).
     ///
     /// It was a dispatched `popUp` for one build, on `Rebind to…`'s reasoning:
     /// one disclosure arrow makes AppKit reserve the gutter on *every* row and
-    /// the gesture column `layOutGestures` lines up shifts with it (2026-09-10:
-    /// *"a fugit toată coloana de meniuri din cauza >"*). That argument was
+    /// the gesture column shifted with it (2026-09-10: *"a fugit toată coloana de
+    /// meniuri din cauza >"*; the chords live inside that gutter since
+    /// 2026-09-22, so the argument no longer holds anywhere). That argument was
     /// carried over rather than re-tested, and what it bought here is a list
     /// that appears detached from the row it came from — which reads as a modal,
     /// not as a branch of the menu. The gutter is the cheaper of the two costs
@@ -392,14 +404,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// footprint, which `menuWillOpen` already re-reads for the row above.
     private let engineSubmenu = NSMenu()
 
-    /// Which engine is live, as `AppDelegate` last reported it — `wispr` or
-    /// `whisper`.
+    /// Which engine is live, as `AppDelegate` last reported it — `whisper` or
+    /// `eleven`.
     ///
     /// **The tick is drawn from the app's answer, never from the click.** A
     /// switch asked for mid-sentence is refused, and a row that had ticked
     /// itself optimistically would be the only thing in the app claiming an
     /// engine that is not listening.
-    private var engineId = "wispr"
+    private var engineId = "eleven"
 
     /// Victor picked one. `AppDelegate` swaps the source and calls `setEngine`
     /// back with whatever is actually running afterwards.
@@ -804,11 +816,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// taken at the moment the arrow is hovered.
     private let promptHistorySubmenu = NSMenu()
 
-    /// **The build stamp, on a disabled row of its own, one row above Quit**
-    /// (2026-09-13). It was the clickable About row (`Victor's Walkie Talkie
-    /// (<build>)`, opening `AboutPage`) until Victor asked for the same plain
-    /// `Version: <build>` readout in all three menu bar apps, for cleanliness.
-    /// The About page is still one click away from the Dock tile's main menu.
+    /// **The build stamp, one row above Quit**, reading `Version: <build>` — the
+    /// same plain readout all three menu bar apps end with (2026-09-13), which is
+    /// why it stopped being the old `Victor's Walkie Talkie (<build>)` About row.
+    ///
+    /// **It opens the About page again since 2026-09-22**, and the title stayed
+    /// plain: the row is still the version readout, it has simply stopped being
+    /// the only dead row in the menu. What made it worth clicking is what the page
+    /// now holds — a drawing of the mouse with every button named — which is the
+    /// legend the gesture rows themselves gave up when their chords moved into
+    /// AppKit's shortcut column, where a row gets one glyph and no more. The
+    /// vocabulary has to live somewhere it can be drawn full size; this is the
+    /// row that leads there, and the `info.circle` beside it already promised as
+    /// much.
     private let version = NSMenuItem(title: "Version: \(StatusItem.buildStamp)",
                                      action: nil, keyEquivalent: "")
     private var engineLoading = false
@@ -1072,12 +1092,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // **The build stamp is a disabled readout, not a row that does anything**:
-        // it is read once a session, when the question is "am I looking at what
-        // I just built?", and that is a question about the app rather than about
-        // quitting. Quit is left saying the one thing it does.
+        // The stamp answers "am I looking at what I just built?" without a click;
+        // the click is there for the other question the row can now answer, which
+        // is what the glyph on each gesture row means. See `version`.
         version.image = Self.symbolIcon("info.circle")
-        version.isEnabled = false
+        version.action = #selector(versionClicked)
+        version.target = self
         menu.addItem(version)
 
         // ⌘Q as a key equivalent (2026-09-13), for the same reason it sits on the
@@ -1122,46 +1142,50 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // reason: against a thin `↑` the difference has to be visible at a
         // glance, and a boxed arrow next to a bare one is not.
         //
-        // **Two legends per row**, because both gesture sets are live: the first
-        // is what the row is performed with while *Use Logi Gestures* is ticked,
-        // the second what it was before — the wheel's own vocabulary, where `🛞`
-        // is the wheel and `+` joins a held modifier button to it. `restyleGestures`
-        // picks, and it runs whenever the tick changes as well as on every open.
+        // **Two legends per row, and a glyph for each** (2026-09-22). The two
+        // strings are the emoji sentence — `🔼 →` — which is what the About page
+        // prints beside the drawn mouse; the two `Chord`s are what the menu's own
+        // shortcut column draws, one monochrome glyph apiece, because that column
+        // holds exactly one. Both pairs are Logi first, wheel second;
+        // `applyGestureColumn` picks, on the tick as well as on every open.
         gestureRows = [
-            (bind, bind.title, "◀️ + 🔼", "◀️ + 🛞"),
-            (disconnect, disconnect.title, "🔽 ↓", "▶️ + 🛞"),
-            (startDictation, startDictation.title, "🔼 →", "🛞"),
+            (bind, bind.title, "◀️ + 🔼", "◀️ + 🛞", Chord("", "◐"), Chord("", "◐")),
+            (disconnect, disconnect.title, "🔽 ↓", "▶️ + 🛞", Chord("", "⇓"), Chord("", "◑")),
+            (startDictation, startDictation.title, "🔼 →", "🛞", Chord("", "⇢"), Chord("", "◎")),
             // Right under `Start Dictation`'s own gesture, which is the pair the
             // order is for: one talks to what is bound, the one above it talks to
             // a session that is not open yet.
-            (newSession, newSession.title, "🔼 ↑", "🛞🛞"),
+            (newSession, newSession.title, "🔼 ↑", "🛞🛞", Chord("", "⇡"), Chord("", "⦿")),
             // The same gesture as Start: it is one toggle, and writing it twice
             // is how the menu says so without a sentence.
-            (stopRecording, stopRecording.title, "🔼 →", "🛞"),
+            (stopRecording, stopRecording.title, "🔼 →", "🛞", Chord("", "⇢"), Chord("", "◎")),
             // The mirror direction of the one that starts it — the two gestures
             // that open and abandon a sentence are one hand movement, reversed.
-            // The wheel had no mirror to offer and used a 2s hold instead.
-            (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s"),
+            // The wheel had no mirror to offer and used a 2s hold instead, and
+            // `⟳` is that hold: a turn rather than a direction.
+            (cancelDictation, cancelDictation.title, "🔼 ←", "🛞 2s", Chord("", "⇠"), Chord("", "⟳")),
             // **The same gesture in both columns**, because it is a side button
             // either way: the wheel set has nothing to offer here, and inventing a
             // wheel chord for it would walk into the two conflicts that sent this
             // gesture to a free row in the first place.
-            (screenRecording, screenRecording.title, "🔽 ↑", "🔽 ↑"),
-            (pasteLast, pasteLast.title, "⌘⇧P", "⌘⇧P"),
-            (shot, shot.title, "🔽", "🔽"),
+            (screenRecording, screenRecording.title, "🔽 ↑", "🔽 ↑", Chord("", "⇑"), Chord("", "⇑")),
+            // **The two rows with nothing in the title**: the chord really is a
+            // keyboard one,
+            // so AppKit draws the whole of it — modifiers and key — in its own
+            // column, and a button glyph in front would be naming a button that
+            // is already drawn there (`⇧⌘◀`). They keep their plain titles, and
+            // with them the native dimming an attributed title costs.
+            (pasteLast, pasteLast.title, "⌘⇧P", "⌘⇧P",
+             Chord("", "p", [.command, .shift]), Chord("", "p", [.command, .shift])),
+            (shot, shot.title, "🔽", "🔽", Chord("", "●"), Chord("", "●")),
             // **The wheel is back in this column, in one row.** Everything else
             // it used to say is gone from Logi mode — but a *drag* is not a
-            // click, so this one costs the middle click nothing. Written as the
-            // button and then the movement, the vocabulary the side-button rows
-            // already use, except that the direction is whichever way he draws
-            // the box.
-            (areaShot, areaShot.title, "🛞 drag", "🛞 drag"),
-            // **No `+`, and the button drawn rather than spelled** (Victor,
-            // 2026-09-09): the modifiers and the click are one continuous
-            // gesture — hold ⌘⇧ and click — not two things added together, and
-            // the chord column is narrow enough that a `+` is a character spent
-            // on punctuation.
-            (pickLegend, pickLegend.title, "⌘⇧◀️", "⌘⇧◀️"),
+            // click, so this one costs the middle click nothing. `⤢` is the drag
+            // itself: the box he draws, with `◎` in front saying what he draws it
+            // with.
+            (areaShot, areaShot.title, "🛞 drag", "🛞 drag", Chord("", "⤢"), Chord("", "⤢")),
+            (pickLegend, pickLegend.title, "⌘⇧◀️", "⌘⇧◀️",
+             Chord("", "◀", [.command, .shift]), Chord("", "◀", [.command, .shift])),
         ]
         layOutGestures(in: menu)
 
@@ -1169,80 +1193,171 @@ final class StatusItem: NSObject, NSMenuDelegate {
         mirror.start()
     }
 
-    /// The item, **its label**, and the chord it is performed with.
+    /// **What the shortcut column draws for one row**: the glyph, and the
+    /// modifiers AppKit prefixes it with.
+    ///
+    /// A key equivalent is the only thing that reaches that column — see
+    /// `applyGestureColumn` — and it holds **one** glyph plus `⌃⌥⇧⌘`. That is the
+    /// whole shape of the vocabulary: the style of the arrow says which button
+    /// (dotted = the front side button, double = the back one), its direction says
+    /// the movement, and a mark says a press with no movement at all.
+    private struct Chord {
+        /// **Empty on every row, and kept for the day it is not.** Anything put
+        /// here rides at the end of the title, right-aligned to `gestureTab`. Two
+        /// builds on 2026-09-22 used it for half the chord — once for the button,
+        /// once for the movement — and both were rejected: what the column shows
+        /// has to be the *whole* gesture, or the row reads as two scattered marks.
+        let head: String
+        /// **The whole chord, in AppKit's own shortcut column — flush with `>`.**
+        /// One glyph, which is all that column holds: the **style** of the arrow
+        /// says which button (dotted `⇢ ⇠ ⇡` = the front side button, doubled
+        /// `⇑ ⇓` = the back one) and its **direction** says the movement.
+        let key: String
+        let mask: NSEvent.ModifierFlags
+        init(_ head: String, _ key: String, _ mask: NSEvent.ModifierFlags = []) {
+            self.head = head
+            self.key = key
+            self.mask = mask
+        }
+
+        /// The same chord as a string, for the About page — AppKit draws it from
+        /// the mask and the key, and the page has to print what the reader is
+        /// looking at in the menu. Modifier order is the system's own
+        /// (`⌃⌥⇧⌘`), and a letter key is drawn uppercase.
+        var rendered: String {
+            var out = head.isEmpty ? "" : head + " "
+            if mask.contains(.control) { out += "⌃" }
+            if mask.contains(.option) { out += "⌥" }
+            if mask.contains(.shift) { out += "⇧" }
+            if mask.contains(.command) { out += "⌘" }
+            return out + (mask.isEmpty ? key : key.uppercased())
+        }
+    }
+
+    /// The item, **its label**, the chord it is performed with, and the glyph the
+    /// shortcut column draws for it.
     ///
     /// **The label is stored and not read back off the item**, which is the bug
-    /// that shipped: setting `attributedTitle` also rewrites `title`, so the
-    /// second pass built `label \t chord \t chord` out of a title that already
-    /// carried one, and every gesture row in the menu printed its chord twice on
-    /// two lines. `restyleGestures` runs on every `menuWillOpen`, so it was the
-    /// second open that broke it, not the first.
-    private var gestureRows: [(item: NSMenuItem, label: String, logi: String, wheel: String)] = []
-    /// The legend for the mode that is on right now.
-    private func gesture(_ row: (item: NSMenuItem, label: String, logi: String, wheel: String)) -> String {
+    /// that shipped when the chords rode in an attributed title: setting
+    /// `attributedTitle` also rewrites `title`, so the second pass built
+    /// `label \t chord \t chord` and every gesture row printed its chord twice.
+    /// Nothing sets an attributed title here any more, but the labels stay stored
+    /// — the About page reads them, and a title is a thing the menu rewrites.
+    private var gestureRows: [(item: NSMenuItem, label: String,
+                               logi: String, wheel: String,
+                               logiGlyph: Chord, wheelGlyph: Chord)] = []
+    /// The emoji legend for the mode that is on right now — what the About page
+    /// prints, and what the menu drew until 2026-09-22.
+    private func gesture(_ row: (item: NSMenuItem, label: String, logi: String, wheel: String,
+                                 logiGlyph: Chord, wheelGlyph: Chord)) -> String {
         logiGesturesOn ? row.logi : row.wheel
     }
-    /// Where that column's right edge sits, measured from the widest row.
+
+    /// Where the button column's right edge sits, measured from the widest row.
     private var gestureTab: CGFloat = 0
 
-    /// **One tab stop for the whole menu**, so the chords line up with each other
-    /// rather than each floating at the end of its own label. It is the widest
-    /// of two things: the longest plain row in the menu, and the longest
-    /// label + gap + chord — whichever it is, no row can then need more width
-    /// than the column gives it, and none of them collide.
+    /// **The movement is a key equivalent; the button is drawn beside it**
+    /// (2026-09-22).
     ///
-    /// **Re-measured on every open, not once at build** (2026-09-14). Half the
-    /// rows get their real title long after the menu is assembled — `Engine:
-    /// Local (2.6 GB)`, `Mouse Gestures: Wheel`, and above all `Bound to:
-    /// <folder>@<branch>`, which is as long as the branch name is. A title wider
-    /// than the tab widens the menu without moving the tab, and the chords then
-    /// hang in the middle of a menu that has grown to the right of them.
+    /// Victor asked, for the third time, why the chords do not line up with the
+    /// `>` of the submenu rows. Measured, on a menu built for the question: from
+    /// a title they cannot. AppKit reserves that gutter — **31 pt for a submenu
+    /// arrow, 47 when some row also carries a key equivalent** — *after* every
+    /// row's content, so anything written into the title pushes the gutter right
+    /// along with it and the gap never closes. A right tab stop, a negative kern
+    /// to lie about the measured width, a trailing pad: all three were built, and
+    /// all three moved the column and the arrow together.
     ///
-    /// **The plain rows are read off `item.title`, the gesture rows off the
-    /// stored label** — never off the item. A gesture row's `title` is the
-    /// attributed one AppKit wrote back, `label \t chord`, so measuring *that*
-    /// would add the chord a second time and push the column right on every
-    /// open, one chord's width at a time.
+    /// The one thing drawn *inside* that gutter is `keyEquivalent`, and it holds
+    /// **one glyph** plus the modifiers of `keyEquivalentModifierMask`. `"▲→"`
+    /// draws `▲`; `"ABC"` draws `⇧A`. So the column takes the half of the chord
+    /// that has to line up — the **movement** — and the button stays in the title,
+    /// right-aligned to `gestureTab` just left of it.
+    ///
+    /// **One glyph carries the whole gesture: the style is the button, the
+    /// direction is the movement.** Dotted `⇢ ⇠ ⇡` is the front side button,
+    /// doubled `⇑ ⇓` the back one.
+    ///
+    /// That is the third arrangement of the same night and the one that stands.
+    /// The second put the button in the title as `▲`/`▼` with the movement in the
+    /// column (*"nu poti pune un arrowhead langa spre sus"*), the third swapped
+    /// them (*"nu in titlu, ci in key shortcut tre sa fie arrowheadul"*) — and
+    /// both were rejected on sight, for the same reason underneath: **a gesture
+    /// split across two columns is read as two marks**, and the row it belongs to
+    /// gets neither. *"revino la 2 tipuri de sageti: punctata pt forward si inca
+    /// una pt back."* The convention costs one reading of the About window, which
+    /// draws it on a picture of his own mouse; the split cost a reading of every
+    /// row, every time.
+    ///
+    /// Plain `→ ← ↑ ↓` are not available: AppKit normalises them into the
+    /// arrow-*key* glyphs `▶ ◀ ▲ ▼`, which is the second reason the two families
+    /// are the dotted and the doubled ones — they are drawn as given. The rest of
+    /// the vocabulary is a mark rather than an arrow, because the gesture has no
+    /// direction: `●` a press, `⤢` the wheel drag, `⟳` a 2 s hold, `◐`/`◑` a
+    /// button held while another is pressed, `◎` the wheel, `⦿` twice.
+    ///
+    /// **None of these ever fire as key equivalents.** A status-item app never
+    /// becomes the key app, so the menu matches them only while it is open, and a
+    /// glyph like `⇢` is not a key any keyboard produces. `⌘⇧P` and `⌘⇧◀` name
+    /// chords `HotkeyTap` owns globally; the menu matching them while it is open
+    /// does the same thing they do.
+    ///
+    /// **One tab stop for the whole menu**, re-measured on every open, exactly as
+    /// the old full-chord column was: half the rows get their real title long
+    /// after the menu is assembled (`Bound to: <folder>@<branch>`), and a title
+    /// wider than the tab widens the menu without moving the tab.
     private func layOutGestures(in menu: NSMenu) {
         let font = NSFont.menuFont(ofSize: 0)
         func width(_ text: String) -> CGFloat {
             ceil((text as NSString).size(withAttributes: [.font: font]).width)
         }
-        // Wide enough that the chord reads as a second column and not as the end
-        // of the sentence — the same distance AppKit leaves before its own.
-        let gap: CGFloat = 28
+        // Wide enough that the movement reads as a column of its own and not as
+        // the end of the label.
+        let gap: CGFloat = 26
         var tab: CGFloat = 0
         let drawn = Set(gestureRows.map { ObjectIdentifier($0.item) })
         for item in menu.items
         where !item.isSeparatorItem && !drawn.contains(ObjectIdentifier(item)) {
             tab = max(tab, width(item.title))
         }
-        // **Measured against the widest of *both* legend sets**, not just the one
+        // **Measured against the widest of *both* vocabularies**, not just the one
         // showing: the tick can be flipped with the menu open, and a column that
-        // resized under the pointer would move every chord on screen.
+        // resized under the pointer would move every glyph on screen.
         for row in gestureRows {
-            tab = max(tab, width(row.label) + gap + width(row.logi))
-            tab = max(tab, width(row.label) + gap + width(row.wheel))
+            tab = max(tab, width(row.label) + gap + width(row.logiGlyph.head))
+            tab = max(tab, width(row.label) + gap + width(row.wheelGlyph.head))
         }
         gestureTab = tab
-        restyleGestures()
+        applyGestureColumn()
     }
 
     /// **The price of an attributed title: AppKit stops dimming the row.** A
     /// disabled item is greyed by the menu only while it is drawing the title
-    /// itself; hand it an attributed string and the colours in that string are
-    /// the last word, so a disabled `End Dictation` came out as black as a live
-    /// one. The colour is therefore chosen here, and this runs from
-    /// `menuWillOpen` — the one moment every `isEnabled` in the file is known to
-    /// be current.
-    private func restyleGestures() {
+    /// itself; hand it an attributed string and the colours in that string are the
+    /// last word, so a disabled `End Dictation` came out as black as a live one.
+    /// The ink is therefore chosen here, and this runs from `menuWillOpen` — the
+    /// one moment every `isEnabled` in the file is known to be current. The
+    /// *movement* glyph is not affected: AppKit draws the shortcut column itself
+    /// and dims it on its own, which is one more thing the move into that column
+    /// bought back. A row with no button glyph keeps a plain title and never pays
+    /// this at all.
+    private func applyGestureColumn() {
         let font = NSFont.menuFont(ofSize: 0)
         let style = NSMutableParagraphStyle()
         style.tabStops = [NSTextTab(textAlignment: .right, location: gestureTab)]
         for row in gestureRows {
+            let chord = logiGesturesOn ? row.logiGlyph : row.wheelGlyph
+            row.item.keyEquivalent = chord.key
+            row.item.keyEquivalentModifierMask = chord.mask
+            guard !chord.head.isEmpty else {
+                // Back to a plain title, in case the other vocabulary had a head.
+                row.item.attributedTitle = nil
+                row.item.title = row.label
+                continue
+            }
             let ink: NSColor = row.item.isEnabled ? .labelColor : .disabledControlTextColor
             row.item.attributedTitle = NSAttributedString(
-                string: "\(row.label)\t\(gesture(row))",
+                string: "\(row.label)\t\(chord.head)",
                 attributes: [.font: font, .foregroundColor: ink, .paragraphStyle: style])
         }
     }
@@ -1280,14 +1395,23 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // carrying both says it twice.
         engineItem.title = "Engine: \(engineShortTitle(engineId))"
         engineSubmenu.removeAllItems()
-        // **Wispr, local, then the two that upload — and it is the order of
-        // trust** (2026-09-18). The default first, the offline fallback second,
-        // and the ones that leave the Mac last: a list he scans while the menu
-        // is open over his work should not put a billed, networked engine where
-        // his eye lands first. Between the two cloud rows the order is the same
-        // rule one level down — the one that uploads a file after the fact
-        // before the one that streams while he speaks.
-        for id in ["wispr", "whisper", "eleven"] {
+        // **Local first, then the one that uploads — and it is the order of
+        // trust** (2026-09-18). The offline engine before the one that leaves
+        // the Mac: a list he scans while the menu is open over his work should
+        // not put a billed, networked engine where his eye lands first.
+        //
+        // **Wispr Flow left this list on 2026-09-22** — Victor: *"scoate
+        // wisprflow ca sursă de dictare din lista de Engine — n-am reușit
+        // niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce
+        // text injectează."* It is not a ranking, it is a capability: the
+        // other two hand this app a transcript, Wispr pastes into whatever has
+        // focus and the wrap spent a month failing to intercept that reliably
+        // (`WisprFlowSource.wrapMode`). A row offering an engine whose words
+        // the relay cannot be sure of catching is a row that loses sentences.
+        // Wispr Flow keeps the one job that never needed interception — 🔽 →
+        // posts its chord raw, and Wispr pastes where he is typing, which is
+        // the whole point of that gesture.
+        for id in ["whisper", "eleven"] {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
@@ -1404,23 +1528,21 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // picks from. `$0.40/h` is there because it is the half of the trade a
         // menu can state and a comment cannot make him feel.
         //
-        // **☁️ at the end of both networked rows, and the sentence that used to
+        // **☁️ at the end of the networked row, and the sentence that used to
         // spell it out is gone** (Victor, 2026-09-21: *"pun în dreptul lor un
         // norișor la final … și scoate băta aia cu «voice leaves computer»"*).
         // `audio leaves this Mac` was a warning written out in words on a list
         // read in a second; the cloud is the picture everybody already has for
-        // it, and it says the same thing about Wispr Flow — which never carried
-        // the warning — without a second sentence. The badge is the whole
-        // difference between these two rows and the local one, which is why it
-        // is here and not on `engineShortTitle`: up there the engine stands
-        // alone with nothing to be different from, and ⚠️ already has the spot.
+        // it. The badge is the whole difference between this row and the local
+        // one, which is why it is here and not on `engineShortTitle`: up there
+        // the engine stands alone with nothing to be different from, and ⚠️
+        // already has the spot.
         if id == "eleven" {
             let model = ElevenLabsSource.model
             return elevenReady?() == true
                 ? "ElevenLabs \(model) — \(ElevenLabsSource.rate) ☁️"
                 : "ElevenLabs \(model) — no API key ☁️"
         }
-        guard id == "whisper" else { return "Wispr Flow ☁️" }
         let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
         if let bytes = whisperFootprint?() {
@@ -1442,7 +1564,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
         if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
-        guard id == "whisper" else { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }
         return String(format: "Local (%.1f GB)", Double(bytes) / 1_073_741_824)
@@ -1751,7 +1872,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`
         // above have just written the titles that are longest, and the column
         // has to be laid out against the menu he is about to see.
-        layOutGestures(in: menu)
+        applyGestureColumn()
     }
 
     /// **`Bound to: petclinic@main`**, not the bare line the chip shows.
@@ -1794,6 +1915,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
         onExit?()
     }
 
+    /// **The page is handed the table rather than keeping its own copy.** The menu
+    /// is where the gestures are written down — `gestureRows` is the only place
+    /// each chord exists — so About renders what the menu is showing at the moment
+    /// it is asked, including which of the two vocabularies is ticked. Published
+    /// here and not at build time because the tick can change between two openings.
+    @objc private func versionClicked() {
+        AboutWindow.gestures = gestureRows.map {
+            AboutWindow.Gesture(label: $0.label, logi: $0.logi, wheel: $0.wheel,
+                                logiGlyph: $0.logiGlyph.rendered, wheelGlyph: $0.wheelGlyph.rendered)
+        }
+        AboutWindow.logiGesturesOn = logiGesturesOn
+        AboutWindow.show()
+    }
+
 
 
 
@@ -1803,9 +1938,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         UserDefaults.standard.set(on, forKey: Self.logiGesturesKey)
         applyLogiGesturesRow()
         // **The legend column is rewritten, not just the tick.** The menu is
-        // where every gesture is written down, and a row saying `🔼 →` on a Mac
+        // where every gesture is written down, and a row saying `⇢` on a Mac
         // whose forward button does nothing is worse than no legend at all.
-        restyleGestures()
+        applyGestureColumn()
     }
 
     @objc private func gesturesPicked(_ sender: NSMenuItem) {

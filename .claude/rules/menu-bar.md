@@ -9,7 +9,7 @@ paths:
 # The menu bar item
 
 Rules for the 🤖 in the menu bar and its menu (`StatusItem`), the mirrors on the other screens
-(`MenuBarMirror`), the Prompt Log page (`MessageLog`) and the About page (`AboutPage`).
+(`MenuBarMirror`), the Prompt Log page (`MessageLog`) and the About panel (`AboutWindow`).
 Full history and reasoning: docs/journal.md — see the sections named after each rule below.
 
 ## The header and the menu's job
@@ -62,7 +62,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
-| `Engine: <what is listening>` | `waveform` | `>` — a five-row submenu |
+| `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
 | `Microphone: <glyph> <device>` | `mic` | `>` — automatic + the four devices |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
 | `Halo fx[: <effect>]` | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Fx engine` (2026-09-20; three destinations 2026-09-21) |
@@ -83,21 +83,47 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   → journal: *Use Logi Gestures — the tick that chooses between the two sets*
 - **Rebind to… sits with the destination rows** (2026-09-10) — its rules are below.
   → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
-- **One shortcut column, not two** (2026-09-06). Chords are drawn via a **right tab stop in an
-  attributed title**; ⌘⌃B and ⌘⌃D have no `keyEquivalent` and ⌘⇧P lives in the drawn column. None
-  of them ever fired *as* a menu key equivalent — this app is never the key app — the chords belong
-  to `HotkeyTap`. `StatusItem.layOutGestures` measures **one** tab position for the whole menu (the
-  widest of the longest plain row and label + 28 + chord).
+- **The whole chord is one glyph, in AppKit's own shortcut column** (2026-09-22, after three asks
+  and two rejected arrangements). The item's **`keyEquivalent`** carries it, so it is drawn flush
+  with the `>` of the submenu rows and with `⌘Q` — which is what Victor asked for three times
+  (*"chiar nu avem nici o opțiune să trecem shortcuturile să fie pe aceeași coloană cu >"*).
+  **The style of the arrow is the button and its direction is the movement**: dotted `⇢ ⇠ ⇡` is the
+  front side button, doubled `⇑ ⇓` the back one. Where the gesture has no direction the glyph is a
+  mark instead — `●` a press, `⤢` the wheel drag, `⟳` a 2 s hold, `◐`/`◑` a button held while
+  another is pressed, `◎` the wheel, `⦿` twice.
+- **Why it cannot be two glyphs, measured.** AppKit reserves the disclosure-arrow gutter **after**
+  every row's content — **31 pt**, or **47** once any row carries a key equivalent — so anything
+  written into a title pushes the gutter right along with it and the gap never closes. A right tab
+  stop, a negative kern to under-report the measured width, and a trailing pad were all built and
+  all three moved the column and the arrow together. `keyEquivalent` is the only thing drawn
+  *inside* that gutter, and it holds **one glyph** plus `⌃⌥⇧⌘`: `"▲→"` draws `▲`, `"ABC"` draws
+  `⇧A`.
+- **Do not split the gesture across the title and the column.** Both halves were tried in one
+  night — the button as `▲`/`▼` at the end of the title with the movement in the column, then the
+  two swapped (*"nu in titlu, ci in key shortcut tre sa fie arrowheadul"*) — and both were rejected
+  on sight: a gesture in two columns is read as two marks. *"revino la 2 tipuri de sageti: punctata
+  pt forward si inca una pt back."* The first attempt at the convention was rejected too
+  (*"punctat = but din fata e neintuitiv"*) and came back anyway, because the alternative costs a
+  reading of **every** row; the convention costs one reading of the About window, which draws it on
+  a picture of his own mouse.
+- **Plain `→ ← ↑ ↓` are normalised by AppKit into `▶ ◀ ▲ ▼`**, the arrow-*key* glyphs — the second
+  reason the two families are the dotted and the doubled ones: those it draws as given.
+- **None of these fire as key equivalents**: this app is never the key app, so the menu matches
+  them only while it is open, and `⇢` is not a key any keyboard produces. ⌘⌃B and ⌘⌃D are not
+  written on rows at all; ⌘⇧P and ⌘⇧◀ are drawn by AppKit from the mask and belong to `HotkeyTap`.
+- **The emoji legend moved to the About window** (`AboutWindow`, `Glyphs.mouse`): a menu row holds
+  one glyph, a drawing of his own mouse holds the vocabulary.
   → journal: *Every row has an icon, and two alphabets share the column*
 - **`attributedTitle` rewrites `title` — store labels in `gestureRows`, never read them back off
   the item.** `restyleGestures` once built its string from `row.item.title`, so the second pass
   concatenated the chord onto a title already carrying one: every gesture row printed its chord
   twice, on two lines, right on first open and wrong every open after.
   → journal: *Every row has an icon, and two alphabets share the column*
-- **An attributed title stops AppKit dimming a disabled row.** A disabled `End Dictation` came
-  out as black as a live one. `restyleGestures` picks the ink off `isEnabled` and runs from
-  `menuWillOpen`, the one moment every flag is current — the same reason the header and the
-  footprint are read there.
+- **An attributed title stopped AppKit dimming a disabled row**, and no gesture row has one any
+  more: with the chord in the shortcut column the titles are plain again, AppKit dims the row
+  *and* its glyph, and `restyleGestures`'s re-inking from `menuWillOpen` went with it. `Chord.head`
+  is still wired through `applyGestureColumn` for the day something has to ride beside the glyph —
+  and the ink rule is kept there, because that is the moment it would be needed again.
   → journal: *Every row has an icon, and two alphabets share the column*
 - **Every icon in the column is a template SF Symbol** (Victor, 2026-09-21: *"să fie toate
   monocrome"*). The column used to have two alphabets — SF Symbols wherever a row had an *off*
@@ -128,8 +154,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   modelului, dacă mă întreabă cineva ce folosesc"*. The caret-paste mode itself is untouched and
   still lives on the forward side button; what it has lost is its row, its tick and its legend.
   → journal: *The engine is a choice with two names on it (2026-09-14)*
+- **Wispr Flow left the list on 2026-09-22, and the list is two rows now** — `Local` and
+  `ElevenLabs`. Victor: *"scoate wisprflow ca sursă de dictare din lista de Engine — n-am reușit
+  niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce text injectează."* It is a
+  capability and not a ranking: the other two hand the app a transcript, Wispr pastes into
+  whatever has focus and the wrap never made that dependable. **`WisprFlowSource` is not deleted**
+  — 🔽 → still posts its chord raw, `hearingChanged` still feeds the ⚡ ring, and the wrap is left
+  standing for the day the injection can be blocked outright. What went is the row, the
+  `engine(named:)` case and the `(W)` mark.
+  → journal: *Wispr Flow leaves the Engine list (2026-09-22)*
 - **The row is a readout of `AppDelegate.source` first and a control second.** Its title is
-  `Engine: Wispr Flow` or `Engine: <model> — 1.6 GB RAM`, so the answer is readable without opening
+  `Engine: ElevenLabs` or `Engine: Local (2.6 GB)`, so the answer is readable without opening
   anything. No `…` on it — the arrow already says there is more.
 - **It is an ordinary submenu with the arrow** — *"tre submeniu obișnuit cu >, nu un modal"*
   (Victor, 2026-09-14, after seeing the alternative). It was a dispatched `popUp` for one build, on
@@ -145,8 +180,11 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **Picking the local model brings the weights up on the spot.** `LocalWhisperSource.prepare()` is
   deliberately a no-op, but a deliberate pick *is* the gesture that asks for it — a first dictation
   answered with `the local model is still loading` reads as the switch having failed.
-- **`GET /engine` answers `engine` (`wispr` / `whisper`) beside `source`**, so a test asserts the
-  pick without matching a display name.
+- **`GET /engine` answers `engine` (`whisper` / `eleven`) beside `source`**, so a test asserts the
+  pick without matching a display name. A stored `dictationSource=wispr` from before 2026-09-22
+  falls through `engine(named:)`'s default and comes back as `eleven` — the migration is the
+  fallback, deliberately, because an engine that can run but cannot be picked is the one state
+  where the chip and the menu disagree.
 
 ## The Microphone row (2026-09-19)
 
@@ -287,12 +325,23 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   unified memory and the two disagree. It doubles as liveness: a dead helper has no footprint and
   the row goes back to its bare name.
   → journal: *The menu says what the model costs*
-- **The build stamp is a disabled `Version: <build>` row one above Quit (2026-09-13)** — formerly
-  the clickable About row `Victor's Walkie Talkie (<build>)`, before that `Quit — built Aug 28,
-  17:48`. Same plain readout in Victor Addons and Victor Effects; `AboutPage` stays reachable
-  from the Dock tile's main menu only. The stamp **is the executable's own mtime**, never a
-  sed'ed constant.
+- **The build stamp is a `Version: <build>` row one above Quit (2026-09-13)** — formerly the
+  clickable About row `Victor's Walkie Talkie (<build>)`, before that `Quit — built Aug 28,
+  17:48`. Same plain readout in Victor Addons and Victor Effects. The stamp **is the executable's
+  own mtime**, never a sed'ed constant.
   → journal: *The menu bar item*, *Version row and ⌘Q (2026-09-13)*
+- **It is clickable again since 2026-09-22 and opens `AboutWindow`** — a native
+  `.nonactivatingPanel`, not the HTML page in a browser it was for a day (*"să fie nu webpage ci
+  pagina swift de about"*). It stopped being the only dead row in the menu; the title stays the
+  plain version readout, and what makes it worth clicking is what the panel holds — the mouse
+  drawn with every button named, which is the legend the gesture rows gave up when their chords
+  moved into AppKit's shortcut column. Still reachable from the Dock tile's main menu too.
+- **The panel is adjusted to the live gesture vocabulary** (*"ajustat după alegerea actuală de
+  gestures"*): it names `Logi` or `Wheel` in its headings, shows **only** that set's column, and
+  derives each button's action list from the table `StatusItem` publishes rather than from a
+  hand-written one — so a chord that moves, or a vocabulary switched, changes the panel with
+  nobody editing it. A button idle in the live set says so by name.
+  → journal: *The About page becomes a window (2026-09-22)*
 - **Quit carries ⌘Q as a key equivalent (2026-09-13)**, matching the other two apps; it fires only
   while the menu is open (the app never becomes key), the real ⌘Q is in the main menu `main.swift`
   installs. Quit goes through the same `endSession(reason:)` as the ✕, so the outbox gets its
@@ -354,6 +403,9 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 - Do not turn the `Engine` submenu back into a pop-up, and do not let it tick a row the app has
   not switched to.
 - Do not put `Replace WisprFlow` back as a row without asking — it was removed deliberately.
+- Do not put **Wispr Flow** back in the `Engine` submenu without asking — removed 2026-09-22, for
+  the reason in the section above. Its source object stays wired for the gestures; that is not an
+  invitation to make it selectable again.
 - Do not set `NSMenuItem.state` on any row, and do not read a label back off an item that has an
   `attributedTitle`.
 - Do not give `Quit` a ⌘Q key equivalent in the status menu.

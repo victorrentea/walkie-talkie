@@ -238,6 +238,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// prompt), and that path does not come through here at all: it posts
     /// Wispr's own chord raw.
     ///
+    /// **And since 2026-09-22 that is the *only* job it has.** Victor:
+    /// *"scoate wisprflow ca sursă de dictare din lista de Engine — n-am reușit
+    /// niciodată să-l integrăm ca lumea în fluxul nostru să-i preluăm ce text
+    /// injectează."* `WisprFlowSource` is still built and still a
+    /// `DictationSource` — the raw-chord gesture, the meter, the
+    /// `hearingChanged` witness and the ⚡ ring all hang off `wisprSource` —
+    /// but it is no longer something `source` can *be*, so `wispr` is not a
+    /// case below and has no row in the menu. The wrap was the whole of the
+    /// integration and the wrap never became dependable: a recogniser that
+    /// pastes into whatever has focus cannot be made to hand this app a
+    /// transcript without a race, and the settle, the corpus and the envelope
+    /// all assume the words come back. The Scratchpad parking, the sink window,
+    /// the `History` polling and the key redirection were all the price of
+    /// that one missing thing, and none of them bought it outright.
+    ///
     /// **The fallback follows the default rather than naming an engine**, so a
     /// typo cannot silently pick a *third* thing — and the day the default
     /// moves again, this line moves with it.
@@ -245,34 +260,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
-        case "wispr", "wisprflow", "wispr-flow": return wisprSource
+        // **`wispr` is no longer a case, and that is the migration** (2026-09-22):
+        // the preference survives on disk from before the row went, and falling
+        // through to the default silently moves those launches to ElevenLabs
+        // rather than resurrecting a source the menu can no longer name. An
+        // engine that can be running but not picked is the one state where the
+        // chip and the menu disagree.
         default: return elevenSource
         }
     }
 
     /// **The letter the chip wears while that engine is listening** —
-    /// `Listening(W)...` for Wispr Flow, `(E)` ElevenLabs, `(L)` the local
-    /// model. (`(S)` Speechmatics and `(G)` Gemini went with their sources on
-    /// 2026-09-20 — Victor: *"renunță la Speechmatics și GeminiSource, scoate-le
-    /// din cod pt moment"*.)
+    /// `Listening(E)...` for ElevenLabs, `(L)` the local model. (`(S)`
+    /// Speechmatics and `(G)` Gemini went with their sources on 2026-09-20 —
+    /// Victor: *"renunță la Speechmatics și GeminiSource, scoate-le din cod pt
+    /// moment"*; `(W)` Wispr Flow went with its Engine row on 2026-09-22.)
     ///
-    /// **`L` and not `W` for Whisper**, which is the only real choice in the
-    /// table: the two recognisers whose names start with the same letter are
-    /// exactly the two he most needs to tell apart, and one of them puts his
-    /// voice on a wire. So the local one is named by *where it runs* rather than
-    /// by what it is — which is also the fact that matters at the moment this is
-    /// read.
+    /// **`L` and not `W` for Whisper** was the only real choice in this table
+    /// while Wispr was in it: the two recognisers whose names start with the
+    /// same letter were exactly the two he most needed to tell apart. The
+    /// letter stays `L` now that the clash is gone, because the local one is
+    /// better named by *where it runs* than by what it is — which is also the
+    /// fact that matters at the moment this is read.
     ///
     /// Beside `engineId` rather than on the sources, because it is a fact about
     /// this app's vocabulary — the menu's `Engine` row and this letter have to
-    /// agree — and a source may not know it is one of five. **A new engine adds
-    /// a row here**; the default is Wispr's letter for the same reason
-    /// `engine(named:)` falls back to Wispr, and an unknown id reaching this is
-    /// already a bug somewhere above.
+    /// agree — and a source may not know it is one of two. **A new engine adds
+    /// a row here**; the default is ElevenLabs' letter for the same reason
+    /// `engine(named:)` falls back to ElevenLabs, and an unknown id reaching
+    /// this is already a bug somewhere above.
     private static func engineMark(_ id: String) -> String {
         switch id {
         case "whisper": return "(L)"
-        case "wispr": return "(W)"
         case "eleven": return "(E)"
         // The default's letter, like `engine(named:)`'s default source.
         default: return "(E)"
@@ -339,13 +358,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Which of the five `source` currently is, in the menu's vocabulary.
+    /// Which of the two `source` currently is, in the menu's vocabulary.
     /// Derived rather than stored: the source is the fact, and a second copy of
     /// it is a second thing that can be wrong.
+    ///
+    /// **Anything that is not the local model is ElevenLabs**, and after
+    /// 2026-09-22 that is a total statement rather than a fallback:
+    /// `engine(named:)` can only hand back one of these two, and `wisprSource`
+    /// is never assigned to `source` at all.
     private var engineId: String {
         if source === whisperSource { return "whisper" }
-        if source === elevenSource { return "eleven" }
-        return "wispr"
+        return "eleven"
     }
 
     /// **Swap the recogniser under a running relay** (2026-09-14).

@@ -26,6 +26,16 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   *anything unrecognised is Wispr, the one engine that uploads must not be reachable by a typo* —
   is spent rather than repealed: he chose the upload, for the word timings the envelope's tokens
   need. → journal: *ElevenLabs is the engine, and the freeze that found (2026-09-19)*
+- **Wispr Flow is not a selectable engine at all since 2026-09-22** — *"scoate wisprflow ca sursă
+  de dictare din lista de Engine — n-am reușit niciodată să-l integrăm ca lumea în fluxul nostru
+  să-i preluăm ce text injectează."* There are **two** rows in the Engine submenu now, no `wispr`
+  case in `engine(named:)`, no `(W)` in `engineMark`, and `engineId` answers `eleven` for anything
+  that is not the local model. **`WisprFlowSource` is still built and still a `DictationSource`**:
+  the raw-chord gesture, the meter, `hearingChanged`, the ⚡ ring and the back button's stop all
+  hang off `wisprSource`, and only `source` can no longer *be* it. The wrap below is left standing
+  rather than deleted — everything it documents is still true, and it is what the row would come
+  back to if the injection can ever be blocked outright.
+  → journal: *Wispr Flow leaves the Engine list (2026-09-22)*
 - **Never open or close a microphone on the main thread.** `MicRecorder.start(to:)` / `.stop()` are
   synchronous CoreAudio device binds; when the audio stack is wedged they never return and the whole
   app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
@@ -34,10 +44,11 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   `LocalWhisperSource` still calls it inline, and
   `RelayWindow.startWarmth`'s timer reaches the meter from the main thread too — both are the same
   bug waiting for the same wedge. → journal: same
-- **Three engines mean a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both the
-  launch pick and the menu pick — two chains that had to agree on the same spellings is a third
-  engine's worth of ways to be wrong. **Anything unrecognised is Wispr**: a typo in a preference
-  must not leave him dictating through the one engine that uploads.
+- **More than one engine means a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both
+  the launch pick and the menu pick — two chains that had to agree on the same spellings is another
+  engine's worth of ways to be wrong. **Anything unrecognised is the default**, which is ElevenLabs
+  since 2026-09-19; the older rule here said *anything unrecognised is Wispr*, and both it and the
+  `wispr` case itself are gone (2026-09-22).
 - **Every callback lands on the main queue.** The two sources produce their edges on three
   different threads between them (CoreAudio's listener queue, a transcription callback, the event
   tap), and what the callbacks drive is AppKit. One rule at the boundary, not a hop per call site.
@@ -49,7 +60,7 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   status string is the recogniser's own vocabulary and nothing outside the source may branch on
   it. → journal: *Three witnesses instead of one (2026-09-13, evening)*
 - **Which source is live is a menu row since 2026-09-14** — `Engine`, replacing `Replace
-  WisprFlow`. `AppDelegate.setEngine` nils the old source's five callbacks, assigns `source`, writes
+  WisprFlow`; two rows since 2026-09-22, when Wispr Flow left it. `AppDelegate.setEngine` nils the old source's five callbacks, assigns `source`, writes
   `dictationSource` and re-runs `wireDictationSource()`; that is the whole switch, because nothing
   downstream knows there is more than one answer. It **refuses while a sentence is in flight** and
   tells the menu what is actually running either way. `WT_SOURCE=whisper` still wins for one run.

@@ -20,6 +20,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *The oblique wipe: a message replaces a message*, *What the cancel actually looked like…*, *`WT_SHOOT_WIPE` — because this is the least reviewable thing in the app* — **retired 2026-09-18**: `ChipWipe.swift`, its rule file and the `WT_SHOOT_WIPE` harness are deleted; a chip message is swapped in one frame (*The chip swaps in one frame*)
 - *The DJI receiver is the microphone whenever it is plugged in* (2026-09-01) — superseded 2026-09-19: *automatic* is a ladder, 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in, and the receiver is its second rung (*The chip says which microphone, and the menu picks it*)
+- *Wispr Flow everywhere (2026-09-12)*, and every later line making Wispr one of the engines — superseded 2026-09-22 by *Wispr Flow leaves the Engine list*: it is not selectable at all any more, and keeps only 🔽 →. The wrap sections are **not** retired — they still describe the mechanism accurately and it is what the row would come back to
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -252,6 +253,8 @@ The journal contradicts itself over time, because it was written as things chang
 - [Two engines out, and a folder per dictation (2026-09-20)](#two-engines-out-and-a-folder-per-dictation-2026-09-20)
 - [Ten minutes is the end of a sentence, and the row says so from the eighth (2026-09-20)](#ten-minutes-is-the-end-of-a-sentence-and-the-row-says-so-from-the-eighth-2026-09-20)
 - [The ring says where the sentence is going (2026-09-21)](#the-ring-says-where-the-sentence-is-going-2026-09-21)
+- [Wispr Flow leaves the Engine list (2026-09-22)](#wispr-flow-leaves-the-engine-list-2026-09-22)
+- [The About page becomes a window (2026-09-22)](#the-about-page-becomes-a-window-2026-09-22)
 
 ---
 
@@ -11453,3 +11456,116 @@ three picks rearranged behind it. The answer carries `destination` and `picks` b
 
 **The old `haloStyle` key is not read any more.** It held one answer to a question that now has
 three, and the three defaults above are better than any migration of it would have been.
+
+## Wispr Flow leaves the Engine list (2026-09-22)
+
+Victor: *"scoate wisprflow ca sursă de dictare din lista de Engine — n-am reușit niciodată să-l
+integrăm ca lumea în fluxul nostru să-i preluăm ce text injectează."*
+
+**It is a capability, not a ranking.** The other two engines hand this app a transcript;
+Wispr Flow pastes into whatever has focus, and every one of the mechanisms in *The wrap, end to
+end* exists to survive that rather than to prevent it. The Scratchpad parking, the sink window,
+the `History` poll at `formatted`, the key redirection, the 57 ms between `formatted` and the
+⌘V — all of it is the price of one missing thing, a string returned to the caller, and none of
+it bought that outright. A recogniser whose words the relay cannot be *sure* of catching is a
+recogniser that loses sentences, and the settle, the corpus and the envelope all assume the
+words come back.
+
+**What actually changed is four lines and a list.** `applyEngineRow` iterates
+`["whisper", "eleven"]`, `engine(named:)` has no `wispr` case, `engineId` answers `eleven` for
+anything that is not the local model, and `engineMark` lost `(W)`. Everything else about
+`WisprFlowSource` stands, because the class was never only a recogniser:
+
+| what still runs on `wisprSource` | why |
+|---|---|
+| 🔽 → posts Wispr's own chord raw | dictating *an idea rather than a prompt*, Wispr inserting where he is typing — which is the whole point of that gesture and needs no interception at all |
+| `hearingChanged` → the ⚡ ring | the one witness wired whichever engine is live, so a dictation he starts himself still shows a ring |
+| `noteRawChord`, `pushToTalkReleased`, the back button's stop | the gesture vocabulary, unchanged |
+| `wisprSource.meter` | the level meter for a dictation the relay did not start |
+| `wrapWispr` / `wrapMode` / `WisprSink` / `WisprScratchpad` | not reachable from any engine pick any more, and deliberately not deleted — see below |
+
+**The wrap is left standing rather than deleted**, which is a decision and not laziness. The
+same evening Victor asked for the row to go he asked for the question behind it to be taken
+seriously for the first time — ten agents on whether the injection can be *blocked* outright
+(TCC revoked and restored per-app mid-sentence, a permanent event tap keyed on Wispr's pid,
+`EnableSecureEventInput`, owning the pasteboard inside the 57 ms, `SIGSTOP` between `formatted`
+and the ⌘V, Wispr in a VM, a faceless target process, or a setting inside Wispr nobody has
+looked for). If any of those lands, the row comes back and the wrap is what it comes back to.
+`git show` on this commit is the whole of the menu change either way.
+
+**The stored preference migrates by falling through.** A Mac that had `dictationSource=wispr`
+in `UserDefaults` from before today now launches on ElevenLabs, because `engine(named:)`'s
+default catches it — deliberately, rather than keeping a case that would let an engine run that
+the menu can no longer name. An engine that is live but unpickable is the one state where the
+chip and the menu disagree, and that is worse than a silent migration.
+
+## The About page becomes a window (2026-09-22)
+
+Three asks in one evening, and each one threw out the answer to the one before it.
+
+**"să fie nu webpage ci pagina swift de about".** `AboutPage` rendered an HTML string, wrote it
+to `~/Library/Caches/…/about.html` and handed it to `NSWorkspace`. The reason it was a page is
+in its own doc comment and is *not* the reason it changed: this app never activates itself, so a
+modal it puts up arrives behind whatever is in front and steals focus from the bound terminal.
+
+That argument is against an **`NSAlert`**, not against a window. A `.nonactivatingPanel` is what
+the overlay already is — it comes up in front, takes no focus, and the terminal underneath keeps
+the caret. `AboutWindow` is that panel at `.floating`, with `becomesKeyOnlyIfNeeded` (nothing in
+it takes typing) and `orderFrontRegardless`, never `makeKeyAndOrderFront`. The page was costing
+three things: every drawing rasterised **twice** to base64, one per palette; a file in Caches the
+system may purge, plus a stylesheet duplicating what AppKit already knows about type and spacing;
+and leaving the app to read about the app.
+
+**Rendering it is what found the bugs, and they were all one bug.** `.cgColor` on a dynamic
+`NSColor` resolves *there and then*, so anything coloured at construction is frozen in whatever
+palette the process was in. The dark snapshot came back with an invisible mouse and five white
+cards. Both are now painted in `draw(_:)` — `MouseView` from `effectiveAppearance`, `CardBox`
+likewise — and both ask for a redraw in `viewDidChangeEffectiveAppearance`. The page's old
+comment already said `performAsCurrentDrawingAppearance` does not fix it and that passing the
+colours in does; that is still true, and what changed is only *what they are chosen from*: this
+view's appearance rather than the process's.
+
+**"cauta o schita in care sa se vada si butoanele laterale"**, and then, on sight of the result,
+**"1 singura poza, din diagonala cumva sa se vada toate butoanele"**.
+
+The first ask produced `Glyphs.mouseSide` — the left flank traced off Logitech's own *Product
+Overview* schematic, callout 8 being the back/forward pair. Tracing it taught two things worth
+keeping: the tail is a quarter-round whose corner three samples and a midpoint quadratic turn
+into a **chip out of the back of the mouse** (so 49 columns, ends unsmoothed), and the wheel from
+the side is a **hump breaking the shell line**, not a disc — drawn as a filled circle it read as
+a ball stuck on the nose.
+
+The second ask threw that away, and rightly. Two views is not a drawing, it is a drawing plus an
+instruction to assemble one mouse out of two pictures — which is the work the picture existed to
+save. `Glyphs.mouseIso` is the three-quarter, traced off Logitech's
+`m650-graphite-large-3qtr-front-angle` gallery render, and it has all five buttons in one frame.
+The render has a real alpha channel, so for the first time the silhouette is not sampled off ink:
+72 points marched from the centroid, **IoU 0.998** against the real alpha. The interior came out
+of a luminance pass (the green LED at u 0.509, v 0.192 is exact to a pixel) and a dark-blob pass
+over the flank, which is what settled that the thumb buttons are **one trough split in two**
+rather than two islands.
+
+Two correction passes, both found by rendering. Every hand-listed interior point loop came out
+**too thin** — a lens drawn through a few points is narrower than the band it was read off — so
+the strip, the well and the wheel became `bar`s taking an axis and a width as numbers. And the
+wheel at 0.18 × 0.15 is a circle, which on the end of the strip reads as a lollipop; at 2:1 along
+the mouse's own axis it reads as a wheel.
+
+**"sa apara o fereastra swift cu indicatii de ce buton e ce simbol si ce face. ajustat dupa
+alegerea actuala de gestures."** The `Version:` row was already wired to it; what was missing was
+the second half. The panel printed **both** vocabularies side by side with the inactive pair
+faded — four columns describing a mouse that has one set of gestures at a time — and the
+per-button notes were hand-written, i.e. a second copy of `gestureRows` that described the Logi
+set while the menu might be on the wheel set. Now `actions(for:)` reads the live table and picks
+the active chord, the headings name `Logi` or `Wheel`, and the table has three columns. A chord
+that presses two buttons appears under **both**, because `◀️ + 🔼` is a fact about each of them.
+
+That change forced the layout: under `Wheel` the wheel carries seven gestures and the forward
+button carries none, so five fixed-width cards became a ragged grid. A vertical list is what a
+legend is anyway — and a button idle in the live set now says `unused in the Wheel set` rather
+than `—`, which read as *this button does nothing*.
+
+**The copy is English**, finally, and that is the rule catching up with the move: it was Romanian
+for as long as it was a browser page, and became an app string the moment it turned into an
+AppKit panel. `vocabulary` says `Logi` / `Wheel`, the two words the `Mouse Gestures` row already
+uses, so the panel and the menu cannot come to call the same set different things.

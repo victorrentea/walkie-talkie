@@ -322,7 +322,7 @@ once, each taking one):
 | click | On a prompt: send it now. Otherwise: nothing — the chip is a label, not a switch |
 | hover | Reveals the ✕ that ends the session — **panel only**, never on the chip beside the pointer |
 | menu bar **Autosend** | Off at every launch. Ticked, the pre-send panel opens for one second with no Send and no Cancel on it, and the message goes |
-| menu bar **Engine** | Which recogniser is listening — Wispr Flow, the local MLX model by name, ElevenLabs Scribe, or Speechmatics streamed live. Clicking the row opens the four, ticked; picking the local one loads its weights, and the two cloud rows say what they cost and whether their key is there |
+| menu bar **Engine** | Which recogniser is listening — the local MLX model by name, or ElevenLabs Scribe. Clicking the row opens the two, ticked; picking the local one loads its weights, and the cloud row says what it costs and whether its key is there. **Wispr Flow is not one of them** (2026-09-22): it delivers by pasting into whatever has focus rather than handing the relay a transcript, and every attempt to intercept that reliably failed — it keeps 🔽 → only, where pasting for itself is the point |
 | menu bar 🤖 | Always there while the app runs — shows which session it is, and **every action with the gesture that performs it**. Rows grey out when they cannot act right now; they never disappear |
 
 **The chip itself teaches nothing.** It carries state — the pulse, what is being
