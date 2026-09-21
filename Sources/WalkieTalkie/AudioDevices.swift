@@ -69,4 +69,44 @@ enum AudioDevices {
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
     }
+
+    /// **The default input device's own gain, 0…1 — the slider in System
+    /// Settings ▸ Sound ▸ Input.**
+    ///
+    /// It is not a user preference that sits where it is put. macOS's voice
+    /// processing runs an AGC on it, and Victor watched it happen: *"dacă țip
+    /// mai tare, el într-adevăr coboară, și dacă tac mai mult timp se ridică la
+    /// loc la 100%"*. Measured on his built-in microphone the evening of
+    /// 2026-09-21, it walked 100 → 94 → 87 → 72 → 60 % inside five minutes of
+    /// dictation, which is 1.7× of signal gone without anything in this app
+    /// changing.
+    ///
+    /// **`osascript` cannot answer this.** `input volume of (get volume
+    /// settings)` returned 100 while the slider and CoreAudio both said 72 — it
+    /// does not read per device. Only this does.
+    ///
+    /// nil when the device exposes no input gain at all (several virtual ones
+    /// here do not), which is not a failure and means *nothing is moving*.
+    static func inputVolume() -> Float? {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var id: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address,
+                                         0, nil, &size, &id) == noErr, id != 0 else { return nil }
+        // The master element first, then channel 1: devices differ in which of
+        // the two they expose, and reading only the master misses some.
+        for element: AudioObjectPropertyElement in [kAudioObjectPropertyElementMain, 1] {
+            var volume = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                                                    mScope: kAudioDevicePropertyScopeInput,
+                                                    mElement: element)
+            guard AudioObjectHasProperty(id, &volume) else { continue }
+            var v: Float32 = 0
+            var sz = UInt32(MemoryLayout<Float32>.size)
+            guard AudioObjectGetPropertyData(id, &volume, 0, nil, &sz, &v) == noErr else { continue }
+            return v
+        }
+        return nil
+    }
 }

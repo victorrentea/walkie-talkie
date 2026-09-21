@@ -457,6 +457,86 @@ final class CaretHalo {
     /// effect idles on its own slow wave.
     var samples: (() -> [Float]?)?
 
+    /// **macOS's own adjustment of the microphone gain, divided back out** —
+    /// Victor's idea, and it is the right instrument where two of mine were
+    /// not (*"să citim auto ajustarea aceea, să o luăm în seamă"*).
+    ///
+    /// A MilkDrop preset is written against a signal at music level. What
+    /// arrives is a voice whose gain macOS moves underneath us: the input
+    /// slider is driven by the voice-processing AGC and walked 100 → 60 % in
+    /// five minutes of his dictation (`AudioDevices.inputVolume`). At 60 % the
+    /// waveform Tunnel draws is too small to break its own circle, so the
+    /// preset renders a clean red ring and nothing else — the artefact reported
+    /// all evening.
+    ///
+    /// **Why not measure the samples instead.** That was tried and shipped and
+    /// reverted the same hour. An RMS-following gain cannot tell *he has
+    /// stopped talking* from *the device got quieter*, so it spends every pause
+    /// amplifying breath into a clean circle — measured: at his loud clip, six
+    /// frames with no ring became two frames with one. The slider is not a
+    /// guess: it is the exact number by which the signal was reduced, so
+    /// dividing by it restores the level and **leaves silence silent**.
+    ///
+    /// Capped at 4× (the slider can go to 0, and 1/0 is not a picture), read
+    /// every half second because an AGC moves in steps and a property read per
+    /// frame buys nothing. `WT_HALO_UNDO_GAIN=0` turns it off.
+    private static let undoGain = ProcessInfo.processInfo.environment["WT_HALO_UNDO_GAIN"] != "0"
+    private static var inputGain: Float = 1
+    private static var inputGainReadAt: CFAbsoluteTime = 0
+
+    static func undoInputGain(_ samples: [Float]) -> [Float] {
+        guard undoGain, !samples.isEmpty else { return samples }
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - inputGainReadAt > 0.5 {
+            inputGainReadAt = now
+            // No input gain to read is not a failure: several virtual devices
+            // have none, and then there is nothing being taken away either.
+            inputGain = AudioDevices.inputVolume().map { $0 > 0.01 ? min(1 / $0, 4) : 4 } ?? 1
+        }
+        guard inputGain > 1.01 else { return samples }
+        return samples.map { min(max($0 * inputGain, -1), 1) }
+    }
+
+    /// **A breath of signal at the start, so the ring opens with a picture on
+    /// it** (Victor, 2026-09-21: *"când pornește animația, să i se dea un input
+    /// suficient cât să deseneze un input bogat … toate cele patru efecte, fără
+    /// să fie nevoie eu să vorbesc în avans"*).
+    ///
+    /// Every one of these presets is a **feedback** composition: what it shows
+    /// is fifty frames of its own decayed output, so from an empty buffer it
+    /// has nothing to show and the first second of a dictation is a bare ring
+    /// however loud he starts. There is nothing to tune about that — it is what
+    /// *starting* looks like — so the buffer is given something to work on
+    /// instead: three quarters of a second of broadband noise at the level the
+    /// catalogue was tuned against, fading out on a cosine.
+    ///
+    /// **Mixed in, never substituted.** His first syllable lands on top of it
+    /// and takes over as the seed fades, so the opening is the effect arriving
+    /// rather than a canned animation being replaced by a live one. And it is
+    /// seeded at the shared timer, so all four destinations get it — the
+    /// film (`lightning`) reads no samples and is unaffected.
+    private static let seedSeconds = ProcessInfo.processInfo.environment["WT_HALO_SEED"]
+        .flatMap { Double($0) } ?? 0.75
+    private static var seedFrom: CFAbsoluteTime = 0
+    private static var seedPhase: Float = 0
+
+    static func seeded(_ samples: [Float]) -> [Float] {
+        guard seedSeconds > 0, !samples.isEmpty else { return samples }
+        let age = CFAbsoluteTimeGetCurrent() - seedFrom
+        guard age >= 0, age < seedSeconds else { return samples }
+        // Cosine out: full at the first frame, nothing at the last, no step at
+        // either end — a linear ramp is audible as a shape in the tunnel.
+        let envelope = Float((cos(age / seedSeconds * .pi) + 1) / 2) * 0.086
+        var out = samples
+        for i in out.indices {
+            // A cheap coloured noise: white through a one-pole, so it has the
+            // low end a voice has and does not read as a hiss ring.
+            seedPhase += 0.35 * (Float.random(in: -1...1) - seedPhase)
+            out[i] = min(max(out[i] + seedPhase * envelope * 3, -1), 1)
+        }
+        return out
+    }
+
     /// **The panel's frame for what is drawn**, in screen coordinates. The
     /// film gets the ring's square centred on the pointer; a page effect gets
     /// the frame of the screen the pointer is on — the page lays out from the
@@ -957,10 +1037,11 @@ final class CaretHalo {
         under?.start()
         if let web = web {
             web.start()
+            Self.seedFrom = CFAbsoluteTimeGetCurrent()
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                let samples = self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)
+                let samples = Self.seeded(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))
                 web?.feed(samples)
                 self.under?.feed(samples)
             }
