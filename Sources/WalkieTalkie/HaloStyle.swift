@@ -171,7 +171,7 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.75,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.525,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
         // locked in the bottom 20% of the screen, but the meteors follow the
