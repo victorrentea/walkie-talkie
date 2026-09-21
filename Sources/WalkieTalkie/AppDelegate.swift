@@ -2080,7 +2080,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let trusted = AXIsProcessTrusted()
         let tapped = hotkeys.start()
-        Log.info("accessibility trusted=\(trusted) eventTap=\(tapped)")
+        // **And who macOS thinks is asking.** On 2026-09-21 the app went entirely
+        // dead — no hotkey, no gesture — while the Accessibility checkbox beside a
+        // row called "Walkie Talkie" was still ticked, and this line said only
+        // `trusted=false`, which reads as *Victor has not granted it yet*. The
+        // truth was that a bundle assembled by two concurrent builds had lost its
+        // `Info.plist`, so the process had **no bundle identifier at all** and TCC
+        // was attributing it to its executable path, as a second application with
+        // none of the grants. `bundle=` is the whole diagnosis in one word: if it
+        // is not `ro.victorrentea.wispr-relay`, no checkbox anywhere will help and
+        // the fix is `./build-app.sh`, not System Settings.
+        Log.info("accessibility trusted=\(trusted) eventTap=\(tapped) bundle=\(Bundle.main.bundleIdentifier ?? "<none>")")
         if !trusted || !tapped {
             DispatchQueue.main.async { [weak self] in
                 self?.overlay.flash("⚠️ grant Accessibility to Walkie Talkie", duration: 15)

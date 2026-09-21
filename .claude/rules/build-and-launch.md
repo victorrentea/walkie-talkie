@@ -41,6 +41,40 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   what I just built?" had no answer anywhere in the app.
   → journal: *A stale bundle in /Applications is three bugs at once*
 
+## Two builds into /Applications leave an app with no identity (2026-09-21)
+
+- **The bundle is assembled beside /Applications and swapped in whole; a lock keeps a second
+  build out.** Three worktrees of this repo exist (`walkie-talkie`, `-projectm`,
+  `-state-machine`) and each carries this script, so two runs into the same `/Applications`
+  path is not hypothetical — on 2026-09-21 two of them interleaved over three minutes and
+  what was left had **no `Contents/Info.plist` at all**, a signature made at 13:16:57 with
+  the executable copied in at 13:17:02 and the preset packs at 13:17:45, i.e. resources added
+  after sealing. The assembly window used to be the whole two minutes of `cp`; it is now one
+  `mv`.
+- **No Info.plist means no bundle identifier, and TCC then falls back to the executable
+  path.** This is the same end state as launching the app by its path (the section below),
+  reached without launching anything by its path — and it is worth separating, because the
+  rule below was read as *the only* way to get a path row and it is not. Two tells in
+  `codesign -dv`, both present that day: `Identifier=Walkie Talkie` (codesign defaults to the
+  executable's **file name** when it cannot read a plist) and **`Info.plist=not bound`**.
+- **The symptom is the app going completely dead with the checkbox still ticked.**
+  `accessibility trusted=false eventTap=false`, no hotkey, no gesture, while System Settings
+  shows Accessibility on for a row called "Walkie Talkie" — the *bundle-id* row, which the
+  process was no longer being matched to. Nothing in System Settings can fix it; the fix is
+  `./build-app.sh`. The startup line now carries `bundle=…` so the question is answered in
+  one word instead of a TCC query.
+- **`codesign --identifier "$BUNDLE_ID"` is passed explicitly**, so a missing plist can no
+  longer be signed over in silence, and **`build-app.sh` verifies before it installs**: the
+  plist exists and its `CFBundleIdentifier` matches, `codesign --verify --deep --strict`
+  passes, the signed `Identifier=` matches, and the plist is *bound*. A build that fails any
+  of them leaves the working app where it is and names the line that failed.
+- **The corruption was collateral damage from a machine already thrashing.** Each tiny `cp`
+  in that window took 10–60 seconds (a jetsam report at 12:40 shows WindowServer at 10.3 GB
+  and a Virtualization VM at 12.9 GB on a 64 GB Mac), which is both why two builds overlapped
+  so widely and why the Mac had to be shut down with the power button
+  (`ResetCounter… Boot faults: btn_rst,finger_reset force_off`). Worth remembering when a
+  build "did nothing wrong" and the bundle is still wrong.
+
 ## Never launch the installed app by its executable path
 
 - **`open "/Applications/Walkie Talkie.app"` — never
