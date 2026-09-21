@@ -111,22 +111,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// means agree (`REPORT.md`, *Brightness*). `WT_PM_GAIN_SCALE='{"7": 0.7}'`
     /// overrides a value for a run.
     ///
-    /// **Bipolar (1) is deliberately absent — it has never been measured.**
-    /// Added 2026-09-21. It renders (`docs/projectm/captures/bipolar.png`) but
-    /// the ratio this table is made of needs a **web twin**, and the web route
-    /// refuses to start in the `.build/debug` binary at all —
-    /// *"the engine's page was not ready 2 s after the ring was asked for"*,
-    /// every attempt, this preset and Cauldron alike. So there is no number to
-    /// put here and a missing entry reads as 1.
-    ///
-    /// Two things that cost a run each, for whoever measures it next.
-    /// **A locked screen is a capture stop**: the engine counts its frames but
-    /// the surface reads back pure black, and the web route never starts —
-    /// check `CGSSessionScreenIsLocked` before believing a black shoot.
-    /// And **Cauldron came back black even unlocked** at its gain of 0.3 while
-    /// Bipolar rendered, so a black control is not by itself proof that the
-    /// screen is the problem; there is a second, older native-render fault on
-    /// this branch that is not understood yet.
+    /// **Bipolar (1) was removed on 2026-09-21**, the evening of the day it was
+    /// added: *"acest efect nu îmi place, scoate-l de tot"*. It never got a number
+    /// here — the ratio this table is made of needs a web twin, and the web route
+    /// refused to start in the `.build/debug` binary for it — so nothing is missing
+    /// now that it is gone.
     static let gainScale: [Int: CGFloat] = {
         // **Tunnel is 0.34 since 2026-09-21 evening, and the number is a
         // repair.** The whole table was measured at `renderScale` 1; moving the

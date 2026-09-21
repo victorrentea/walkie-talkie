@@ -6,7 +6,7 @@ import sys, os
 from PIL import Image
 import numpy as np
 SRC = sys.argv[1]
-NAMES = {"milkdrop1": "bipolar", "milkdrop7": "tunnel", "milkdrop8": "cauldron", "milkdrop20": "tendrils", "milkdrop85": "snowflake", "milkdrop87": "sparks", "milkdrop103": "water-dream"}
+NAMES = {"milkdrop7": "tunnel", "milkdrop8": "cauldron", "milkdrop20": "tendrils", "milkdrop85": "snowflake", "milkdrop87": "sparks", "milkdrop103": "water-dream"}
 def lum(p):
     a = np.array(Image.open(p).convert("RGBA")).astype(float)
     # The PNGs carry STRAIGHT alpha (ImageIO and canvas.toDataURL both

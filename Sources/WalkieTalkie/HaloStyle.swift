@@ -48,11 +48,14 @@ enum HaloStyle: String, CaseIterable {
     /// 18), run by the real engine. 99 (*Mosaic*) went on 2026-09-20 — *"the
     /// bricks look lame"* — with the other `−` ones. The numbers are the
     /// presets' numbers on the page, not the chips'.
-    /// Page 1, *Bipolar* — the first preset the page lists (*"MilkDrop
-    /// 1/103"*), asked for by name on 2026-09-21. Shipped with MilkDrop 2 and
-    /// bundled with butterchurn as JSON; the original `.milk` came from
-    /// projectM's `presets_milkdrop_200`, so nothing was converted.
-    case milkdrop1
+    /// **Bipolar (page 1) was here for one evening and went, 2026-09-21.** Asked
+    /// for by name in the morning — *"efectul 1 MilkDrop precedent"* — and
+    /// rejected on sight the same night: *"acest efect nu îmi place, scoate-l de
+    /// tot"*. It never looked right natively either (`docs/projectm/REPORT.md`
+    /// item 11: 0.75–0.89% of the canvas lit, the circular waveform and none of
+    /// the feedback trails the preset is known for), so nothing was tuned before
+    /// it went. `git show` on this commit brings back the case, the `Preset` row
+    /// and the `.milk`.
     case milkdrop7, milkdrop8, milkdrop20, milkdrop85, milkdrop87, milkdrop99, milkdrop103
 
     /// The menu row's wording — Victor's short names.
@@ -67,7 +70,6 @@ enum HaloStyle: String, CaseIterable {
         case .orbits:         return "Atom"
         case .twoBalls:       return "Gemini"
         case .blockBeads:     return "Beads"
-        case .milkdrop1:      return "Bipolar"
         case .milkdrop7:      return "Tunnel"
         case .milkdrop8:      return "Cauldron"
         case .milkdrop20:     return "Tendrils"
@@ -200,13 +202,6 @@ enum HaloStyle: String, CaseIterable {
     }
     var preset: Preset? {
         switch self {
-        // Bipolar: a feedback preset — a thick waveform whose trail is pushed
-        // outward at the centre and pulled inward at the rim
-        // (`zoom = 0.9615 + 0.1*rad`), so its composition fills the canvas the
-        // way Tunnel's does and fades at the canvas edge rather than at a
-        // radius. Its frame code does not move `cx`/`cy`, so nothing to pin.
-        case .milkdrop1:   return Preset(number: 1, name: "Geiss - Bipolar 2 Enhanced", scale: 0.75,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **×0.7 on 2026-09-21 evening** (*"circumferința interioară să fie cu 30 %
         // mai mic și să fie mai pregnant vizibil pe ecran"*): 0.84 → 0.588, so the
         // ring hugs the pointer closer. It pays for itself twice — a smaller
