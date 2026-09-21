@@ -658,6 +658,19 @@ closes. Between the two is the whole transcription — the stretch in which he i
   **The ruler is how to ask it again**: a copy of `assets/milkdrop/` whose `preset()` draws a
   4-px white grid into `src` and returns, `WT_MILKDROP_DIR` at it, one `screencapture`, and read
   a column. A 1:1 path gives `255 38 38 38`; anything else is resampling something.
+- **Resolution is a feature-size dial for a MilkDrop preset, not a quality dial** (2026-09-21,
+  the same evening, after the fix above did not settle it — *"parcă tot puncte cețoase văd"*).
+  A preset's features are **not** a constant fraction of its canvas: measured on the same 10 % of
+  the canvas at the same second of the same clip, a chain-breaker spark is **~5 canvas px at 1610,
+  ~20 at 3220, ~56 at 6440** — it grows faster than the canvas does, so more pixels means bigger,
+  softer, more crowded sparks that merge into a wash, and fewer pixels means small separate stars.
+  On his screen at 1:1 the 3220 canvas is a milky veil with the text under it unreadable and the
+  1610 one is stars over a readable desktop (`docs/projectm/captures/sparks-resolution-2026-09-21/`).
+  So **a big halo with small sparks is only possible by rendering the canvas coarser than the
+  screen** — `HaloStyle.Preset.renderScale`, canvas pixels per point, nil = the backing scale,
+  **1 for Sparks alone**; `WT_MD_SCALE` overrides, `ProjectMHalo`'s `WT_PM_SCALE` twin. Keep the
+  ratio an **exact integer** (1 pt = 2 device px), because a fractional one is the blur of the
+  bullet above. Reach for it only for a preset Victor calls foggy — everything else wants 1:1.
 - **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=11 WT_HALO_DEMO_AUDIO=1` puts one effect on the
   real pointer, capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring. The
   log says `halo page ready: 20 effects, webgl true` and which page entry a style picked, or

@@ -169,6 +169,28 @@ enum HaloStyle: String, CaseIterable {
         /// rather than ignoring it quietly, and a preset that sets `speed`
         /// should carry `webOnly` with it.
         var speed: CGFloat = 1
+        /// **Canvas pixels per point** — nil = the display's backing scale, one
+        /// canvas pixel per device pixel, which is right for every preset but
+        /// one.
+        ///
+        /// **It is not a quality dial, it is a feature-size dial** (2026-09-21,
+        /// Victor on Sparks after the 1:1 fix: *"parcă tot puncte cețoase
+        /// văd"*). A MilkDrop preset's features are not a constant fraction of
+        /// its canvas: measured on the same 10 % of the canvas at the same
+        /// second of the same clip, a chain-breaker spark is ~5 canvas px at
+        /// 1610, ~20 at 3220 and ~56 at 6440 — **it grows faster than the
+        /// canvas does**, so more pixels means bigger, softer, more crowded
+        /// sparks that merge into the wash he called fog. Fewer pixels means
+        /// small, separate stars. The screen captures are in
+        /// `docs/projectm/captures/sparks-resolution-2026-09-21/`.
+        ///
+        /// So the halo can be big and its sparks small only by rendering the
+        /// canvas coarser than the screen and letting the compositor scale it
+        /// up. Keep the ratio an exact integer — 1 pt = 2 device px here — so
+        /// the upscale is the gentlest one there is; a fractional one is the
+        /// blur this file spent the evening removing.
+        /// `WT_MD_SCALE` overrides it for a run.
+        var renderScale: CGFloat? = nil
     }
     var preset: Preset? {
         switch self {
@@ -272,8 +294,13 @@ enum HaloStyle: String, CaseIterable {
         // Worth knowing before anyone "fixes" this back: real MilkDrop windows
         // its FFT too, so the chain is arguably the preset's intended look and
         // the cloud is butterchurn's deviation. The cloud is the one he picked.
+        // **Sparks renders at 1 canvas pixel per point, half the screen's own
+        // resolution** — see `Preset.renderScale`. It is the one preset whose
+        // sparks were merging into a wash at 1:1, and the only one that asks
+        // for this.
         case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.9316125,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true,
+                                         renderScale: 1)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
         // 2026-09-20 with the other `−` effects — *"the bricks look lame"* —

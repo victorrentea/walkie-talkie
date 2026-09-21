@@ -122,7 +122,12 @@ final class MilkDropHalo: NSView, HaloWebHost {
         // The geometry the page settled on rides back with the preset's status,
         // because *what size is it actually drawing at* was a question only a
         // patched page could answer until 2026-09-21.
-        let js = "var geom = halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
+        // **Canvas pixels per point**: the preset's own, else the display's
+        // backing scale. `WT_MD_SCALE` is the knob for looking, `ProjectMHalo`'s
+        // `WT_PM_SCALE` twin.
+        let pxPerPt = ProcessInfo.processInfo.environment["WT_MD_SCALE"].flatMap { Double($0) }.map { CGFloat($0) }
+            ?? preset.renderScale ?? dpr
+        let js = "var geom = halo.size(\(side), \(pxPerPt), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
                + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), Object.assign(\(opts), \(override))) + ' · ' + geom"
         web.evaluateJavaScript(js) { [weak self] result, error in
             // The exception's own message, not WebKit's cover line for it.

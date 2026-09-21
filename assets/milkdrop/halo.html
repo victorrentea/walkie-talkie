@@ -180,22 +180,24 @@
   // ---- the API the host calls ---------------------------------------------
   window.halo = {
     // side: CSS px of the square (the host has already applied the preset's
-    // `scale` to it); k: unused since 2026-09-21, kept so the call keeps its
-    // shape; d: device pixels per CSS px; screen: {w, h} for the fade ellipse
-    size(s, k, d, screen) {
+    // `scale` to it); r: canvas pixels per point, the preset's `renderScale`
+    // or the backing scale; d: the display's backing scale, for the record;
+    // screen: {w, h} for the fade ellipse
+    size(s, r, d, screen) {
       side = s; dpr = d;
-      // **The canvas fills the host's view, one canvas pixel per device
-      // pixel.** `k` is no longer used for anything: the host has already
-      // multiplied the preset's `scale` into the view it hands us (its side IS
-      // `max(screen w, h) × scale`), and scaling it a second time here is what
-      // both of 2026-09-21's faults were — see the note at the top.
+      // **The canvas fills the host's view**, at `r` pixels per point — the
+      // display's backing scale for every preset but Sparks, which asks for
+      // half of it (`HaloStyle.Preset.renderScale`, and the reason is there).
+      // It is never CSS-scaled: the host has already multiplied the preset's
+      // `scale` into the view it hands us, and scaling it a second time here is
+      // what both of 2026-09-21's faults were — see the note at the top.
       out.style.width = out.style.height = s + 'px';
-      out.width = out.height = Math.round(s * d);
-      src.width = src.height = Math.round(s * d);
+      out.width = out.height = Math.round(s * r);
+      src.width = src.height = Math.round(s * r);
       screenW = screen.w; screenH = screen.h; fadeRx = screen.w / 2; fadeRy = screen.h / 2;
       if (!prog) setupGL();
       if (viz) viz.setRendererSize(src.width, src.height);
-      return s + 'pt canvas, ' + out.width + 'px';
+      return s + 'pt canvas, ' + out.width + 'px' + (r === d ? '' : ' (' + r + 'px/pt, screen is ' + d + ')');
     },
     // opts (2026-09-20, Victor on Tunnel: *"de 2x mai opac/intens … fade out complet
     // la o distanță de 1/2 din width ecran"*, and 2× the rotation):
@@ -309,7 +311,11 @@
       let ss = 0, sm = 0, ws = 0, wm = 0;
       if (au.freqArray) for (const v of au.freqArray) { ss += v; if (v > sm) sm = v; }
       if (au.timeArrayL) for (const v of au.timeArrayL) { ws += Math.abs(v); if (Math.abs(v) > wm) wm = Math.abs(v); }
-      return JSON.stringify({ frame: r.frameNum, fps: +(r.fps || 0).toFixed(1), bass: +a.bass.toFixed(3), mid: +a.mid.toFixed(3), treb: +a.treb.toFixed(3),
+      // The preset's own frame variables (its beat index is Mosaic's `q27`), for
+      // comparing the animation's phase against the native engine's.
+      const fv = (r.presetEquationRunner && r.presetEquationRunner.mdVSFrame) || {};
+      return JSON.stringify({ frame: r.frameNum, fps: +(r.fps || 0).toFixed(1), time: +(r.time || 0).toFixed(2), q23: fv.q23, q27: fv.q27, q24: fv.q24, q22: +(fv.q22 || 0).toFixed(3),
+        bass: +a.bass.toFixed(3), mid: +a.mid.toFixed(3), treb: +a.treb.toFixed(3),
         bass_att: +a.bass_att.toFixed(3), mid_att: +a.mid_att.toFixed(3), treb_att: +a.treb_att.toFixed(3),
         spec_n: au.freqArray ? au.freqArray.length : 0, spec_sum: +ss.toFixed(2), spec_max: +sm.toFixed(3),
         wave_n: au.timeArrayL ? au.timeArrayL.length : 0, wave_abs_mean: au.timeArrayL ? +(ws / au.timeArrayL.length).toFixed(3) : 0, wave_abs_max: +wm.toFixed(3) });
