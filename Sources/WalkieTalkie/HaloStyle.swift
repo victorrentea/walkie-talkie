@@ -253,6 +253,18 @@ enum HaloStyle: String, CaseIterable {
         //   ×1.3 → 0.716625          *"fa stars mai mare cu 30%"*
         //   ×1.3 → 0.9316125         the same sentence again, minutes later;
         //                            1610 pt on the built-in retina
+        //   ×0.5 → 0.46580625        *"redu efectul stars la 50% dimensiune
+        //                            (vocea mai puternică îl triggerează mai
+        //                            bine)"* — and the parenthesis is the whole
+        //                            reason: the two ×1.3 above were asked
+        //                            while macOS's input volume was down on the
+        //                            built-in microphone, so Sparks was being
+        //                            fed a third of the signal it is written
+        //                            for and he was enlarging a faint thing to
+        //                            see it. With the slider back up it
+        //                            triggers properly and wants to be small
+        //                            again — which lands it near the 0.55125 it
+        //                            had before the two enlargements
         // The last three are him homing in by eye on a thing that only exists
         // while it is running. Since the halving the direction has been one
         // way, so multiply **this** number for the next ask: do not average the
@@ -298,7 +310,7 @@ enum HaloStyle: String, CaseIterable {
         // resolution** — see `Preset.renderScale`. It is the one preset whose
         // sparks were merging into a wash at 1:1, and the only one that asks
         // for this.
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.9316125,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.46580625,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true,
                                          renderScale: 1)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
