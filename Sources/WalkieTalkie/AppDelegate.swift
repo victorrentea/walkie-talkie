@@ -2136,6 +2136,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // for the back button's stop — see `wisprMic`. Read from the tap
         // thread, where the sample is the only thing cheap enough to ask.
         wisprMic.start()
+        // **…and by the source itself, for the ring** (2026-09-21). Same fact,
+        // a second subscriber, because the two want it in two different ways:
+        // `wisprMic` is sampled by the tap and reports nothing, while the
+        // source's own watch drives `edge(_:measured:)` and therefore
+        // `hearingChanged`, which is what raises the halo. Its `start()` used
+        // to be reached only through `prepare()` — i.e. only when Wispr was the
+        // wired engine — and that was the whole of *"nu intră Walkie să
+        // deseneze"*: a dictation started any way other than the tap's two
+        // chords had no witness at all. See `WisprFlowSource.watchMicrophone`.
+        wisprSource.watchMicrophone()
         hotkeys.wisprMicIsOpen = { [weak self] in self?.wisprMic.sampleIsRunningInput() ?? false }
         // **A refused gesture has to say so**, or it is indistinguishable from a
         // gesture the mouse dropped — and the one thing he would then do is make

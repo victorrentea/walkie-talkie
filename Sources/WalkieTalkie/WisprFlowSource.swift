@@ -627,6 +627,30 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **Watch Wispr's microphone whichever engine is wired up** (Victor,
+    /// 2026-09-21: *"ori de câte ori Wispr Flow interceptează vocea, trebuie să
+    /// fie o animație pe ecran … că pornesc cu apăsat taste, că pornesc din
+    /// gesturi de mouse"*).
+    ///
+    /// Everything else this source does for a foreign dictation is already
+    /// unconditional — the tap's two chords and `onWisprRawChord` are wired in
+    /// `init` and in `AppDelegate` whatever `dictationSource` says. The
+    /// CoreAudio watch was the one witness that was not: it is started by
+    /// `prepare()`, which `AppDelegate.wireDictationSource` calls on the
+    /// **selected** source only, so with the engine on ElevenLabs or the local
+    /// Whisper it never ran. The consequence was a hole exactly the shape of
+    /// *every way of starting Wispr that is neither of those two chords* — the
+    /// F18 Scratchpad hold, a rebound shortcut, Wispr's own window — for which
+    /// nothing at all appeared on screen.
+    ///
+    /// `WisprWatch.start()` is idempotent, so `prepare()` may still call it and
+    /// the source that is wired up loses nothing. This is deliberately **only**
+    /// the watch: the Scratchpad sweep and the front-restore in `prepare()` are
+    /// wrap machinery, and the relay wraps nothing it did not start.
+    func watchMicrophone() {
+        watch.start()
+    }
+
     func prepare() {
         watch.start()
         // **The orphan sweep runs for the life of the app** (2026-09-14). It was

@@ -525,15 +525,22 @@ closes. Between the two is the whole transcription — the stretch in which he i
   claimed (Snowflake and Water Dream are built but off the menu). It stays deliberately out of
   `atCaret` either way, because that flag arms `DropArrow` and the heads must not promise a
   delivery this app is not making.
-- **Only two gestures raise it at all, and with the Engine off Wispr they are the only witnesses
-  there are.** `HotkeyTap` watches exactly `54+61` (right ⌘ + right ⌥ held, Wispr's `ptt`, tested
-  on the **device-right** flag bits) and `49+59+63` (fn ⌃ Space, `popo`). `WisprFlowSource.watch`
-  — the CoreAudio second witness, 0–6 s late and sometimes absent — is started by `prepare()`,
-  which `AppDelegate` calls on the **selected** source only, so with `dictationSource` on
-  `eleven` or `whisper` it never runs. Start a Wispr dictation any other way (the F18 Scratchpad
-  hold, a rebound chord, Wispr's own menu) and nothing tells the relay: no `gestureSeen`, no
-  `hearingChanged`, `ringUp` stays false, no halo. That is the whole answer to *"de ce nu intră
-  Walkie să deseneze"*.
+- **Every open Wispr microphone gets a halo, however it was opened** (Victor, 2026-09-21: *"ori
+  de câte ori Wispr Flow interceptează vocea, trebuie să fie o animație pe ecran … că pornesc cu
+  apăsat taste, că pornesc din gesturi de mouse"*). Three witnesses, all unconditional now:
+  `HotkeyTap`'s two chords — `54+61` (right ⌘ + right ⌥ held, `ptt`, tested on the **device-right**
+  flag bits) and `49+59+63` (fn ⌃ Space, `popo`); `onWisprRawChord` for the chords this app posts
+  itself (🔽 →, the back-button stop), which the tap filters out by design; and
+  `WisprFlowSource.watch`, the CoreAudio edge.
+- **The watch is started by `watchMicrophone()`, not by `prepare()`** — that was the bug. `prepare()`
+  is called on the **selected** source only, so with `dictationSource` on `eleven` or `whisper` the
+  CoreAudio witness never ran, and a dictation started any way other than the two chords (the F18
+  Scratchpad hold, a rebound shortcut, Wispr's own window) had no witness at all: no `gestureSeen`,
+  no `hearingChanged`, `ringUp` false, nothing on screen. `AppDelegate` now calls `watchMicrophone()`
+  beside `wisprMic.start()`, always; `WisprWatch.start()` is idempotent so `prepare()` may still call
+  it. **Only the watch** — the Scratchpad sweep and the front-restore stay in `prepare()`, because
+  the relay wraps nothing it did not start. Cost of the CoreAudio route: it is 0–6 s late, so a
+  chord-started dictation is still the one that lights instantly.
 - **`use` draws, `setStyle` writes.** `CaretHalo.use(_:)` changes the dress without touching a
   preference; `setStyle(_:for:)` writes one destination's, `setStyleEverywhere` all three. **F7/F9
   (`cycleStyle`) only draw** — they are how he browses the list outside a dictation, and browsing

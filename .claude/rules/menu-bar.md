@@ -99,9 +99,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `menuWillOpen`, the one moment every flag is current — the same reason the header and the
   footprint are read there.
   → journal: *Every row has an icon, and two alphabets share the column*
-- **On/off pairs are SF Symbols on both sides; everything with no off state is an emoji rendered
-  through `StatusItem.emojiIcon` at the column's size.** Unicode has no crossed-out map pin or
-  microphone, and a pair drawn by two alphabets reads as two unrelated rows.
+- **Every icon in the column is a template SF Symbol** (Victor, 2026-09-21: *"să fie toate
+  monocrome"*). The column used to have two alphabets — SF Symbols wherever a row had an *off*
+  half (Unicode has no crossed-out map pin or microphone, and a pair drawn by two alphabets reads
+  as two unrelated rows), emoji everywhere else — and by the end only two emoji were left, 🆕 and
+  ✨, which read as two rows that are *special* rather than two rows that are *different*. They
+  are `mic.badge.plus` (pairing with `mic` / `mic.slash` above and below) and `sparkles` (✨'s own
+  symbol). `StatusItem.emojiIcon` is gone; `symbolIcon(_:tint:)` keeps its `tint`, unused, and a
+  tint costs the image its template flag and with it the highlight and dark mode.
   → journal: *Every row has an icon, and two alphabets share the column*
 - **`mappin`, not 📍.** 📍 is `ROUND PUSHPIN`, a thumbtack at an angle; `mappin` is the teardrop
   marker everybody means. Victor raised it by name.

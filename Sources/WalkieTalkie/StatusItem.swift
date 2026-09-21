@@ -904,7 +904,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Enabled whether or not anything is bound — unlike every other row in
         // the block — because that is the whole point of the gesture: it carries
         // its own destination.
-        newSession.image = Self.emojiIcon("🆕")   // his two exceptions to the monochrome menu: 🆕 and ✨
+        // **`mic.badge.plus`, not 🆕** (Victor, 2026-09-21: *"să fie toate
+        // monocrome"*). It was the last colour in the column beside ✨, and the
+        // badge says the same thing the emoji did while reading as a pair with
+        // `mic` above it and `mic.slash` below: the same verb, into one that is
+        // not there yet.
+        newSession.image = Self.symbolIcon("mic.badge.plus")
         newSession.action = #selector(newSessionClicked)
         newSession.target = self
 
@@ -1003,8 +1008,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyLogiGesturesRow()
         menu.addItem(logiGestures)
 
-        // **`Halo fx`, last of the pickers**, above Autosend.
-        haloItem.image = Self.emojiIcon("✨")
+        // **`Halo fx`, last of the pickers**, above Autosend. `sparkles` is ✨'s
+        // own SF Symbol, so the row keeps its picture and loses only the colour.
+        haloItem.image = Self.symbolIcon("sparkles")
         haloItem.submenu = haloSubmenu
         applyHaloRow()
         menu.addItem(haloItem)
@@ -1479,15 +1485,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// is also the one row the eye finds without reading.
     private static let pinRed = NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1)
 
-    /// **The icon column, and why it has two sources.**
+    /// **The icon column: SF Symbols, one source, no colour** (Victor,
+    /// 2026-09-21: *"să fie toate monocrome"*).
     ///
-    /// Emoji are what was asked for and they carry their own colour, but Unicode
-    /// has no crossed-out map pin and no crossed-out microphone. Both of those are
-    /// the *off* half of a pair, and a pair whose halves come from two different
-    /// alphabets reads as two unrelated rows — so **Connect/Disconnect and
-    /// Start/End are SF Symbols on both sides**, where the slash exists and is
-    /// drawn by the same hand as the thing it crosses, and every row without an
-    /// off state is an emoji.
+    /// Emoji were what was asked for first and they came with their own colour,
+    /// but two rows kept it while every other row had given it up — 🆕 beside
+    /// `mic`, ✨ at the head of the pickers — and two coloured rows in a
+    /// monochrome column read as two rows that are special rather than two rows
+    /// that are different. They are `mic.badge.plus` and `sparkles` now, which
+    /// are the same pictures in the menu's own ink. The argument that put the
+    /// symbols there in the first place still holds and is why the swap is free:
+    /// Unicode has no crossed-out map pin and no crossed-out microphone, both of
+    /// those are the *off* half of a pair, and a pair whose halves come from two
+    /// alphabets reads as two unrelated rows — so Connect/Disconnect and
+    /// Start/End were SF Symbols on both sides from the start.
+    ///
+    /// **Nothing here is tinted.** `tint` is kept for a caller that has a reason;
+    /// it costs the image its template flag, and with it the menu's highlight and
+    /// dark mode.
     ///
     /// 📍 in particular is `ROUND PUSHPIN` — a thumbtack stuck in at an angle, not
     /// the teardrop marker everybody means by a pin on a map. `mappin` is the
@@ -1552,20 +1567,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
             title.append(NSAttributedString(attachment: attachment))
         }
         return title
-    }
-
-    private static func emojiIcon(_ emoji: String) -> NSImage {
-        let size = NSSize(width: 18, height: 16)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13)]
-        let text = emoji as NSString
-        let ink = text.size(withAttributes: attrs)
-        text.draw(at: NSPoint(x: ((size.width - ink.width) / 2).rounded(),
-                              y: ((size.height - ink.height) / 2).rounded()),
-                  withAttributes: attrs)
-        image.unlockFocus()
-        return image
     }
 
     /// The icon column's own width, drawn and empty. A row whose state is *off*
