@@ -169,6 +169,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `WT_SOURCE=whisper` for one run; the menu's **Engine** row for good —
     /// see `setEngine`, which is the only thing that writes `engineKey`.
+    /// **The microphone that is actually open, which is not always the wired
+    /// engine's.**
+    ///
+    /// The halo breathes on a level and deforms on a waveform, and it used to
+    /// ask `source.meter` for both. `source` is the engine the `Engine` row
+    /// picked — ElevenLabs since 2026-09-19 — while **a dictation Wispr Flow
+    /// runs on its own records into `wisprSource.meter`**, a different object,
+    /// whichever engine is wired (`WisprFlowSource.startMeter`, called from the
+    /// CoreAudio edge that is the only witness such a sentence has). So on every
+    /// Wispr dictation the halo asked an idle recorder, got nil, and
+    /// `CaretHalo`'s render timer fed the effect **1024 zeros, thirty times a
+    /// second** — digital silence, for the whole sentence.
+    ///
+    /// Victor found it on the dress that shows it most (2026-09-21, Mosaic on
+    /// the Wispr destination): *"abia, abia după zece secunde … au început să
+    /// apară firav niște pătrate … nu se rotesc, nu sunt diagonale, e
+    /// amatoricește. Ori sonorul nu e considerat destul de puternic"*. He was
+    /// right about the cause and generous about it: there was no sound at all.
+    /// The faint squares are the preset drifting on its own clock.
+    ///
+    /// It was invisible for as long as it was because it needs **two** things
+    /// true at once — the engine not being Wispr, and the sentence being one
+    /// Wispr started — and with the engine on Wispr the two objects are the
+    /// same one.
+    ///
+    /// Order matters: the wired engine first, so a relay sentence reads its own
+    /// recorder even if a stale Wispr meter were somehow still open.
+    var liveMeter: MicRecorder? {
+        if source.meter.isRecording { return source.meter }
+        if wisprSource.meter.isRecording { return wisprSource.meter }
+        return nil
+    }
+
     private lazy var source: DictationSource = {
         let wanted = ProcessInfo.processInfo.environment["WT_SOURCE"]?.lowercased()
             ?? UserDefaults.standard.string(forKey: AppDelegate.engineKey)
@@ -2114,20 +2147,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The same seam the chip's warmth ramp is fed through one line up, and
         // the same reason: the ring lights on his voice, and which recorder is
         // holding the microphone is this delegate's business, not its own.
-        caretHalo.level = { [weak self] in self?.source.meter.level ?? 0 }
+        caretHalo.level = { [weak self] in self?.liveMeter?.level ?? 0 }
         // And it asks a second question of the same recorder, because the drop
         // arrow is triggered by silence rather than by volume — see
         // `MicRecorder.quietSeconds` for why that is not read off `level`.
-        caretHalo.quietSeconds = { [weak self] in self?.source.meter.quietSeconds ?? 0 }
+        caretHalo.quietSeconds = { [weak self] in self?.liveMeter?.quietSeconds ?? 0 }
         // **And the samples themselves** (2026-09-20), for the halos ported
         // from the `voice-halo` page, which deform on the shape of a syllable
-        // and not only on its loudness. Nil while no meter is running — a
-        // foreign microphone, `/test/dictation/start` — so the effect idles on
+        // and not only on its loudness. Nil while no meter is running —
+        // `/test/dictation/start` opens no microphone — so the effect idles on
         // its own wave rather than on a stale buffer.
-        caretHalo.samples = { [weak self] in
-            guard let meter = self?.source.meter, meter.isRecording else { return nil }
-            return meter.recentSamples
-        }
+        caretHalo.samples = { [weak self] in self?.liveMeter?.recentSamples }
 
         // **The ring covers Wispr Flow's dictations too, since 2026-09-11.**
         // Replace Wispr is off most days, and with it off Wispr Flow is what he
@@ -4035,10 +4065,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The ring, and nothing else, for a sentence that is not ours.** The
         // heads say *the words are landing here, do not move the mouse* — a
         // promise about a delivery this app is not making; and their schedule is
-        // silence, read off `source.meter`, which for a foreign dictation is a
-        // recorder that is not running and therefore a stale reading. Same
-        // reason the ring will not breathe for one: it sits at rest alpha, which
-        // is honest — *a microphone is open* is the whole of what is known.
+        // silence, read off the meter — a promise about a delivery this app is
+        // not making either way.
+        //
+        // **The ring does breathe for one now** (2026-09-21). This note used to
+        // go on: *"same reason the ring will not breathe for one — a microphone
+        // is open is the whole of what is known"*. That was never true of the
+        // audio and only true of where the code looked: `wisprSource.meter` is
+        // open for the whole of such a sentence, and it was `source.meter` — the
+        // wired engine's, idle — that was being asked. See `liveMeter`.
         let atCaret = !foreignMic && (pasteMode
             || (speculative && !listening)
             || (listening && !isBound && !spawnPending)
@@ -4584,6 +4619,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The two windows as they are, beside the flags as they claim to be
             // (2026-09-15) — the reading the idle sweep acts on.
             "halo": caretHalo.windowsReport(),
+            // **Which microphone the halo is breathing on**, because *the effect
+            // looks dead* and *the effect is being fed silence* are the same
+            // picture from outside the process and were the same bug for two
+            // days. `engine` is the wired source's own recorder, `wispr` the one
+            // a sentence Wispr started records into; `none` means the effect is
+            // idling on its own wave, which is correct outside a dictation.
+            "meter": (source.meter.isRecording ? "engine"
+                      : wisprSource.meter.isRecording ? "wispr" : "none"),
             "chip": overlay.renderedRows,
             // The destination, in the three flags that decide it plus the one
             // latched at the microphone's close.
