@@ -514,9 +514,12 @@ closes. Between the two is the whole transcription — the stretch in which he i
   0.3675 → 1.1025, a 1905 pt canvas, wider than the built-in screen: the two shrinks were
   asked of it while the destinations were still moving, the ×3 of it wearing the one it keeps.
   **And ×0.5 an hour later**, watching that one run (*"efectul de stars e prea mare. Micșorează-l
-  cu cincizeci la sută"*): 1.1025 → **0.55125**, a 953 pt canvas — inside the screen again, and
+  cu cincizeci la sută"*): 1.1025 → 0.55125, a 953 pt canvas — inside the screen again, and
   still ~1.5× the 635 pt it wore before the ×3, which is the part that earned the ×3 in the first
-  place. Four factors on one preset in two days, each one on what was drawn at the time.
+  place. **Then ×1.3 straight after** (*"fa stars mai mare cu 30%"*) — 0.55125 → **0.716625**,
+  1238 pt. Five factors on one preset in two days; two of them in opposite directions within an
+  hour is him homing in by eye, not changing his mind, so apply the next one to the number the app
+  draws at now and never to the page's 0.75.
   **"Not centred on the tip of my mouse" was a size complaint**, measured that evening:
   `docs/projectm/captures/sparks-on-pointer-2026-09-21.png` — the demo on his own screen with the
   pointer in frame, differenced against a baseline capture — puts the cloud's centre of light
