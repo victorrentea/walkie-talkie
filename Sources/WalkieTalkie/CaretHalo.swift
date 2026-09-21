@@ -497,6 +497,58 @@ final class CaretHalo {
         return samples.map { min(max($0 * inputGain, -1), 1) }
     }
 
+    /// **Quiet speech lifted on a logarithmic curve, with a floor under it so
+    /// the pauses are not lifted with it** (Victor, 2026-09-21: *"coboară și
+    /// mai mult limita de sunet de la care amplifică, cumva logaritmic,
+    /// volumele încete, ca să nu fie nevoie să zbier să văd efectul ăsta … eu
+    /// vorbesc de la jumătate de metru de laptop și tunelul face urme foarte
+    /// firave"*).
+    ///
+    /// **Tuned on his own recordings, as he asked.** Eight dictations of
+    /// 2026-09-21, window RMS: his **pauses cluster at 0.0017 and his speech at
+    /// 0.060**, a factor of 35 apart, and the catalogue was tuned on a clip
+    /// whose median is 0.067 while his median is 0.027. So there is a wide, safe
+    /// gap to put a floor in, and the reason he has to shout is that his
+    /// ordinary voice sits at four tenths of what the presets expect.
+    ///
+    /// - **floor 0.010** — 6× under his speech, 6× over his pauses. Under it
+    ///   nothing is touched, which is the whole difference from the RMS AGC
+    ///   that was tried and reverted (6ba30f8): that one followed a *two-second
+    ///   mean*, so a pause still carried the gain speech had earned and got
+    ///   amplified into the clean red circle. This is the window's own level,
+    ///   so a pause is quiet by its own measure and is left alone.
+    /// - **target 0.10**, half again over the demo clip — measured, his loud
+    ///   clip at ×1.8 of demo draws no ring in six frames while ×0.6 draws one,
+    ///   so aiming at the level that is known clean rather than at the edge.
+    /// - **exponent 0.8**, which is the *logarithmic* part: the gain is
+    ///   `(target/rms)^0.8`, so a whisper is lifted hard and a shout barely, and
+    ///   the swell of a syllable survives instead of being flattened into one
+    ///   loudness. Full normalisation (1.0) would make the ring stop answering
+    ///   his voice, which is the one thing it is on screen to do.
+    /// - **never below 1×**, capped at 8×.
+    ///
+    /// `WT_HALO_LIFT=0` off, `WT_HALO_LIFT_FLOOR`, `WT_HALO_LIFT_TARGET`.
+    private static let lifting = ProcessInfo.processInfo.environment["WT_HALO_LIFT"] != "0"
+    private static let liftFloor = ProcessInfo.processInfo.environment["WT_HALO_LIFT_FLOOR"]
+        .flatMap { Float($0) } ?? 0.010
+    private static let liftTarget = ProcessInfo.processInfo.environment["WT_HALO_LIFT_TARGET"]
+        .flatMap { Float($0) } ?? 0.10
+    private static var liftGain: Float = 1
+
+    static func lift(_ samples: [Float]) -> [Float] {
+        guard lifting, !samples.isEmpty else { return samples }
+        var sum: Float = 0
+        for v in samples { sum += v * v }
+        let rms = (sum / Float(samples.count)).squareRoot()
+        let want: Float = rms <= liftFloor ? 1 : min(max(pow(liftTarget / rms, 0.8), 1), 8)
+        // Eased over ~4 frames at 30 Hz. Not to smooth the *level* — that is the
+        // point of the curve — but so a gain that steps between two frames does
+        // not read as a click in the picture.
+        liftGain += 0.3 * (want - liftGain)
+        guard liftGain > 1.01 else { return samples }
+        return samples.map { min(max($0 * liftGain, -1), 1) }
+    }
+
     /// **A breath of signal at the start, so the ring opens with a picture on
     /// it** (Victor, 2026-09-21: *"când pornește animația, să i se dea un input
     /// suficient cât să deseneze un input bogat … toate cele patru efecte, fără
@@ -1051,7 +1103,7 @@ final class CaretHalo {
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                let samples = Self.seeded(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))
+                let samples = Self.seeded(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024))))
                 web?.feed(samples)
                 self.under?.feed(samples)
             }
