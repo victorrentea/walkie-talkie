@@ -235,6 +235,14 @@ enum HaloStyle: String, CaseIterable {
         // while it is running. Since the halving the direction has been one
         // way, so multiply **this** number for the next ask: do not average the
         // sequence and do not reach back to an earlier entry in it.
+        // **The pt figures above are the square the halo really occupies only
+        // from the last of them.** Until that evening `halo.html` scaled its
+        // canvas by `scale` a second time, on a view `panelFrame` had already
+        // scaled, so the web route drew `max(w, h) × scale²` and every ask
+        // landed **squared** — the ×3 was ×9 on screen. That is most of why it
+        // took five asks to find a size. Sparks went 1500 → 1610 pt when the
+        // second scale went, `scale` is linear from here, and the native engine
+        // had always been linear (`ProjectMHalo` never scaled twice).
         // **"Not centred on the tip of my mouse" was a size complaint, and the
         // composition already is centred** — measured, not argued: the demo on
         // his own screen with the pointer in frame, each halo capture

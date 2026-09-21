@@ -8,10 +8,25 @@
 
   What this page adds to the engine, and why:
 
-  · A SQUARE canvas of side max(screen w, h), CSS-scaled by the preset's
-    `scale` — the page's "cover, not fit". Rendered non-square, every circle
-    in a preset comes out an oval (the preset's coordinates are normalised to
-    the canvas, not the screen); that bug cost the page a round trip.
+  · A SQUARE canvas, sized by the preset's `scale` — the page's "cover, not
+    fit". Rendered non-square, every circle in a preset comes out an oval (the
+    preset's coordinates are normalised to the canvas, not the screen); that
+    bug cost the page a round trip.
+    **The canvas fills the host's view, one canvas pixel per device pixel, and
+    nothing scales it afterwards** (2026-09-21). It used to be CSS-`transform:
+    scale()`d by the preset's `scale` *on top of* a view whose side the host had
+    already multiplied by that same `scale`, and both halves of that were wrong:
+
+    · it asked the compositor to resample a 3220 px canvas into 3000 device px
+      on every frame. Measured with a 1-device-pixel grid pushed through the
+      real panel, the modulation depth of the finest detail the screen can hold
+      was **121 of 255 against 164** at 1:1, and every hairline arrived split
+      across two pixels with a phase that drifted along the line. That is what
+      *"punctele apar un pic blurate"* was;
+    · and it made the halo `max(w, h) × scale²`, so a `scale` ask landed
+      **squared** — a *"×1.3"* arrived as ×1.69 — while `ProjectMHalo`, on the
+      same `scale`, drew `max(w, h) × scale`. The two engines drew the same
+      preset at different sizes and only this one had a dead margin round it.
   · A KEYING pass: butterchurn clears to opaque black. On the page that black
     vanishes under `mix-blend-mode: screen`; over the desktop there is nothing
     to blend with, so a second WebGL canvas samples the engine's canvas and
@@ -30,7 +45,7 @@
 -->
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent !important; }
-  #out { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(var(--k, 1)); display: block; }
+  #out { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: block; }
 </style>
 <body>
 <canvas id="out"></canvas>
@@ -164,16 +179,23 @@
 
   // ---- the API the host calls ---------------------------------------------
   window.halo = {
-    // side: CSS px of the square; k: the preset's scale; screen: {w, h} for the fade ellipse
+    // side: CSS px of the square (the host has already applied the preset's
+    // `scale` to it); k: unused since 2026-09-21, kept so the call keeps its
+    // shape; d: device pixels per CSS px; screen: {w, h} for the fade ellipse
     size(s, k, d, screen) {
       side = s; dpr = d;
+      // **The canvas fills the host's view, one canvas pixel per device
+      // pixel.** `k` is no longer used for anything: the host has already
+      // multiplied the preset's `scale` into the view it hands us (its side IS
+      // `max(screen w, h) × scale`), and scaling it a second time here is what
+      // both of 2026-09-21's faults were — see the note at the top.
       out.style.width = out.style.height = s + 'px';
       out.width = out.height = Math.round(s * d);
       src.width = src.height = Math.round(s * d);
-      document.documentElement.style.setProperty('--k', String(k || 1));
       screenW = screen.w; screenH = screen.h; fadeRx = screen.w / 2; fadeRy = screen.h / 2;
       if (!prog) setupGL();
       if (viz) viz.setRendererSize(src.width, src.height);
+      return s + 'pt canvas, ' + out.width + 'px';
     },
     // opts (2026-09-20, Victor on Tunnel: *"de 2x mai opac/intens … fade out complet
     // la o distanță de 1/2 din width ecran"*, and 2× the rotation):

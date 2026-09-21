@@ -521,6 +521,11 @@ closes. Between the two is the whole transcription — the stretch in which he i
   three of them him homing in by eye on a thing that only exists while it is running; the chain
   lives in full in `HaloStyle.swift` beside the preset. Apply the next ask to the number the app
   draws at **now**, never to the page's 0.75 and never to an earlier link in the chain.
+  **Those pt figures are what the square really occupies only since the fix below**: until
+  2026-09-21 evening the web route drew `max(w, h) × scale²`, so every one of those asks landed
+  **squared** — the ×3 was ×9 on screen, the ×0.5 was ×0.25 — which is most of why it took five
+  of them to find the size. Sparks grew 1500 → 1610 pt when the second scale went, and `scale` is
+  linear from here.
   **"Not centred on the tip of my mouse" was a size complaint**, measured that evening:
   `docs/projectm/captures/sparks-on-pointer-2026-09-21.png` — the demo on his own screen with the
   pointer in frame, differenced against a baseline capture — puts the cloud's centre of light
@@ -632,6 +637,27 @@ closes. Between the two is the whole transcription — the stretch in which he i
   presets that exist only as butterchurn JSON, and a texture pack; route C (an engine in
   Swift/Metal) is 5–8 k lines and 10–15 days for a first render that would still not match
   butterchurn. The web views are the route until the cost is felt.
+- **The host multiplies `scale` into the view; the page must NOT do it again** (2026-09-21,
+  *"oare la stelute poti mari rezolutia? apar un pic blurate punctele. animatia din pagina web e
+  mai 'precisa', 'neblurata'"*). `halo.html` used to lay its canvas out at the host view's full
+  side and then `transform: scale(var(--k))` it by the preset's `scale` — on a view whose side
+  `CaretHalo.panelFrame` had **already** multiplied by that same `scale`. Two faults in one line:
+  - **the blur.** It asked the compositor to resample a 3220 px canvas into 3000 device px every
+    frame. Measured with a 1-device-pixel grid pushed through the real panel and read off a
+    `screencapture`: before, a hairline arrives as `39 40 104 176 · 39 39 167 112 · 39 39 230 49`
+    — split across two pixels with a phase that drifts along the line; after, `255 38 38 38 · 255
+    38 38 38`. Modulation depth **121 → 150 of 255** on the same alpha. Nothing was gained for it:
+    the extra 220 px were thrown away in the resample.
+  - **the square.** The halo was `max(w, h) × scale²` while `ProjectMHalo`, on the same number,
+    drew `max(w, h) × scale` — the two engines disagreed about the size of the same preset, and
+    a size ask on the web route landed squared.
+  Both are one deleted CSS transform. The canvas is the view, at the backing scale, 1:1 with the
+  screen; `k` is still in the `halo.size` signature and is ignored. The page reports the geometry
+  it settled on — `MilkDrop 87: ok · 1610pt canvas, 3220px` — because *what size is it actually
+  drawing at* was a question only a patched page could answer until that evening.
+  **The ruler is how to ask it again**: a copy of `assets/milkdrop/` whose `preset()` draws a
+  4-px white grid into `src` and returns, `WT_MILKDROP_DIR` at it, one `screencapture`, and read
+  a column. A 1:1 path gives `255 38 38 38`; anything else is resampling something.
 - **Review**: `WT_HALO_STYLE=<case> WT_HALO_DEMO=11 WT_HALO_DEMO_AUDIO=1` puts one effect on the
   real pointer, capturable; `WT_HALO_CYCLE=1.5` dials through all of them on the live ring. The
   log says `halo page ready: 20 effects, webgl true` and which page entry a style picked, or

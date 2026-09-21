@@ -21,9 +21,14 @@ import WebKit
 ///   the page hands them to the engine as its analyser's byte arrays. No
 ///   `getUserMedia`, no second microphone, no permission prompt, no output
 ///   device.
-/// - **Square, side `max(w, h)` of the screen**, CSS-scaled by the preset's
-///   `scale` — the page's "cover": rendered any other shape the circles come
-///   out as ovals.
+/// - **Square, side `max(w, h)` of the screen × the preset's `scale`** — the
+///   page's "cover": rendered any other shape the circles come out as ovals.
+///   The **page** applies `scale` a second time, to the canvas inside this
+///   view, so what is on screen is `max(w, h) × scale²` and this view carries a
+///   dead margin round it. Since 2026-09-21 the canvas is laid out at exactly
+///   that size in whole device pixels with no transform on it — one canvas
+///   pixel per device pixel, which is what *"punctele apar un pic blurate"*
+///   was. The log line carries the geometry: `ok · 1500pt canvas, 3000px`.
 /// - **Why still this page and not the whole `voice-halo` page** (2026-09-20,
 ///   evening): the hand-written effects run in `HaloPage`, and the same
 ///   engine, fed the same bytes with the same preset, renders **dark** inside
@@ -114,8 +119,11 @@ final class MilkDropHalo: NSView, HaloWebHost {
         let opts = "{fadeRadius: \(preset.fadeRadius.map { "\($0)" } ?? "null"), fadeAtEdge: \(preset.fadeAtEdge), fadeFloor: \(preset.fadeFloor), fadeStart: \(preset.fadeStart), gain: \(preset.gain), rot: \(preset.rot), pinCenter: \(preset.pinCenter), speed: \(preset.speed)}"
         // `WT_HALO_PRESET_OPTS='{"gain": 4}'` overrides fields for one run — the knob for looking.
         let override = Self.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
-        let js = "halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
-               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), Object.assign(\(opts), \(override)))"
+        // The geometry the page settled on rides back with the preset's status,
+        // because *what size is it actually drawing at* was a question only a
+        // patched page could answer until 2026-09-21.
+        let js = "var geom = halo.size(\(side), \(preset.scale), \(dpr), {w: \(screen.width), h: \(screen.height)}); "
+               + "halo.preset(\(Self.jsString(preset.name)), \(preset.fade), Object.assign(\(opts), \(override))) + ' · ' + geom"
         web.evaluateJavaScript(js) { [weak self] result, error in
             // The exception's own message, not WebKit's cover line for it.
             let status = (result as? String) ?? error.map { e in
