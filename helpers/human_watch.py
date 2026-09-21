@@ -85,9 +85,9 @@ class HumanWatch:
     def since_human(self) -> float:
         """Seconds since the last hardware event; `inf` if none has been seen.
 
-        `inf` before the first event is the honest answer and the useful one: a
-        batch that starts on a Mac nobody has touched since boot should not have
-        to wait for a stretch of quiet it can never observe.
+        `inf` only until `start()` seeds it — see `_seed_from_system`. A watch
+        that answered `inf` for its own first minutes would tell a batch the Mac
+        is quiet at the very moment somebody has just launched it.
         """
         with self._lock:
             last = self._last
@@ -127,6 +127,30 @@ class HumanWatch:
             CFRunLoopStop(loop)
         self._thread = None
 
+    def _seed_from_system(self, Quartz):
+        """Start from the system's own idle counter, not from ignorance.
+
+        A tap only sees what arrives after it, so a fresh watch believes the Mac
+        has been quiet for ever — and a batch launched by a man who has just
+        typed its command would start dictating into his keyboard seconds later.
+        Measured 2026-09-22: the run restarted at 02:22:10 was labelling by
+        02:22:23, eleven seconds after Victor sent the message that started it.
+
+        `CGEventSourceSecondsSinceLastEventType` is the counter this module
+        exists to avoid, because it counts our own posted keystrokes — but at
+        this instant nothing has been posted yet, so it is exactly right once:
+        as the seed, and never again. A Mac genuinely untouched since boot is
+        still reported as idle for hours, so the honest case keeps working.
+        """
+        try:
+            idle = Quartz.CGEventSourceSecondsSinceLastEventType(
+                Quartz.kCGEventSourceStateHIDSystemState, Quartz.kCGAnyInputEventType)
+        except Exception:  # noqa: BLE001 — a seed is not worth failing over
+            idle = 0.0
+        with self._lock:
+            if self._last is None:
+                self._last = time.monotonic() - max(0.0, float(idle))
+
     def _run(self, ready):
         try:
             import Quartz
@@ -155,6 +179,7 @@ class HumanWatch:
                     self._last = time.monotonic()
             return event
 
+        self._seed_from_system(Quartz)
         self._tap = Quartz.CGEventTapCreate(
             Quartz.kCGHIDEventTap, Quartz.kCGHeadInsertEventTap,
             Quartz.kCGEventTapOptionListenOnly, mask, callback, None)
