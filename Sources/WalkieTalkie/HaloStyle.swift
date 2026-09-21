@@ -217,45 +217,37 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        // Sparks ×0.7 a second time (Victor, 2026-09-21: *"efectul care apare
-        // când fac gestul de deschidere într-un terminal nou trebuie să fie
-        // mai mic cu treizeci la sută"*) — 0.75 → 0.525 the evening before,
-        // 0.525 → 0.3675 now. Each ask is a factor on what is drawn today, not
-        // on the page's original, so the two compound.
-        // **…and ×3 the same evening**, which is why it is now the biggest
-        // canvas of the six (Victor, 2026-09-21, after a day of Sparks being
-        // the dress a new claude wears: *"the stars effect … should be three
-        // times larger than it is right now. It is very similar to what I
-        // want"*): 0.3675 → 1.1025. The two shrinks above were asked of it
-        // while the destinations were still being sorted out; this one was
-        // asked of it wearing the destination it keeps.
-        // **The same sentence said it was *not centred on the tip of my
-        // mouse*, and it already is** — measured, not argued: the demo on his
-        // own screen with the pointer in frame, the halo differenced against a
-        // baseline capture, gives the cloud's centre of light within ~10 pt of
-        // the tip over four frames
+        // **Sparks' size is a chain of factors, each one applied to what was
+        // drawn at the time** — never to the page's `FORMULAS` 0.75 (Victor,
+        // 2026-09-20/21):
+        //   0.75 ×0.7 ×0.7 → 0.3675  two *"mai mic cu treizeci la sută"*, asked
+        //                            while the destinations were still moving
+        //   ×3   → 1.1025            *"the stars effect … should be three times
+        //                            larger … very similar to what I want"*,
+        //                            asked of it wearing the destination it
+        //                            keeps; 1905 pt, wider than the screen
+        //   ×0.5 → 0.55125           *"efectul de stars e prea mare.
+        //                            Micșorează-l cu cincizeci la sută"*
+        //   ×1.3 → 0.716625          *"fa stars mai mare cu 30%"*
+        //   ×1.3 → 0.9316125         the same sentence again, minutes later;
+        //                            1610 pt on the built-in retina
+        // The last three are him homing in by eye on a thing that only exists
+        // while it is running. Since the halving the direction has been one
+        // way, so multiply **this** number for the next ask: do not average the
+        // sequence and do not reach back to an earlier entry in it.
+        // **"Not centred on the tip of my mouse" was a size complaint, and the
+        // composition already is centred** — measured, not argued: the demo on
+        // his own screen with the pointer in frame, each halo capture
+        // differenced against a baseline capture of the same desktop, gives the
+        // cloud's centre of light within ~10 pt of the tip over four frames
         // (`docs/projectm/captures/sparks-on-pointer-2026-09-21.png`, the
-        // crosshair is the tip). What was wrong is the size: a ~160 pt cloud
-        // in a 635 pt canvas leaves the pointer sitting at the edge of the
-        // bright knot rather than inside it, and a knot that wanders frame to
-        // frame reads as off-centre. So the fix for *centred* is the ×3, and
-        // `centerAt`/`offset` stay at their defaults — a static shift on a
+        // crosshair is the tip). What was wrong is the size: a ~160 pt knot in
+        // a 635 pt canvas leaves the pointer sitting at the edge of the bright
+        // part rather than inside it, and a knot that wanders frame to frame
+        // reads as off-centre. So reach for `scale`, and leave
+        // `centerAt`/`offset` at their defaults — a static shift on a
         // composition that is already centred is what made Tunnel *"no longer
         // centred"* in the other direction.
-        // The canvas was 1905 pt on the built-in retina, wider than the
-        // screen, so the edge fade landed past the screen's corners and Sparks
-        // cost about what Water Dream costs. `scale` was named there as the
-        // one knob to walk back if it showed, and **it was walked back the
-        // same evening** (Victor, looking at it running: *"efectul de stars e
-        // prea mare. Micșorează-l cu cincizeci la sută"*): 1.1025 → 0.55125,
-        // a 953 pt canvas — back inside the screen, still ~1.5× the 635 pt it
-        // wore before the ×3, which is the part that put the pointer inside
-        // the bright knot rather than at its edge. **Then ×1.3 straight after**
-        // (*"fa stars mai mare cu 30%"*): 0.55125 → 0.716625, a 1238 pt canvas.
-        // Two corrections in opposite directions inside an hour are him homing
-        // in by eye; the size is converging somewhere around ¾ of the ×3, not
-        // oscillating, so apply the next factor to this number and do not try
-        // to average the sequence.
         // **Sparks is drawn by butterchurn even when the engine is projectM**
         // (`webOnly`, 2026-09-21: *"Stars nu arată cum arată originalul … linia
         // aia e prea lăbărțat"*). chain breaker offsets spark *n* by a smoothed
@@ -272,7 +264,7 @@ enum HaloStyle: String, CaseIterable {
         // Worth knowing before anyone "fixes" this back: real MilkDrop windows
         // its FFT too, so the chain is arguably the preset's intended look and
         // the cloud is butterchurn's deviation. The cloud is the one he picked.
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.716625,
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.9316125,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, webOnly: true)
         // **Mosaic, back from the `−` list for Wispr Flow** (Victor, 2026-09-21:
         // *"când am Wispr Flow, dictare să apară mozaic"*). It was dropped on
