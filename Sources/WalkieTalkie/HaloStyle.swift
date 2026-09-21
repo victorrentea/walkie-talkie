@@ -211,6 +211,17 @@ enum HaloStyle: String, CaseIterable {
         /// compune peste ecranul viu. Cu `fadeFloor` relativ la el: `peak` 0,20 si
         /// `fadeFloor` 0,25 dau exact 20% in mijloc si 5% la margine.
         var peak: CGFloat = 1
+        /// **Unde se termina discul de dinainte**, ca fractiune din raza mastii.
+        /// Sub el masca isi pastreaza profilul intreg — plin pana la `fadeStart`
+        /// din el, apoi o cadere — dar se opreste la `tailTop` in loc de zero, iar
+        /// de acolo incolo se prelungeste stins pana la marginea ecranului
+        /// (Victor, 2026-09-22: *"centrul efectului ... sa ramana opac, ca pana
+        /// acum. Doar periferia ... sa o prelungesti cu transparenta mica pana la
+        /// marginea ecranului"*). 0 = fara coada, masca de dinainte.
+        var core: CGFloat = 0
+        /// Cat de opaca e coada, imediat dincolo de `core`; cade la `fadeFloor`
+        /// la marginea ecranului.
+        var tailTop: CGFloat = 0
     }
     var preset: Preset? {
         switch self {
@@ -252,9 +263,15 @@ enum HaloStyle: String, CaseIterable {
                                          // centred"* after a static offset: the preset's centre WANDERS —
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0.25, gain: 3.2, rot: 1.5,
-                                         fadeStart: 0.30, pinCenter: true, pinnedHorizon: 0.5,
-                                         hole: 0.22, peak: 0.20)
+                                         // Discul de dinainte era 0,588 din latura lunga si panza e acum
+                                         // 1,0, deci marginea lui cade fix la `core` = 0,588 din raza mastii.
+                                         // Inauntru: exact profilul vechi (plin pana la 0,55 din el, apoi
+                                         // caderea). In afara: 0,20 care se stinge la 0,05 pe marginea
+                                         // ecranului. `peak` ramane 1 — opacitatea nu mai e globala, e in
+                                         // profil, fiindca centrul trebuie sa ramana cum era.
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0.05, gain: 3.2, rot: 1.0,
+                                         fadeStart: 0.55, pinCenter: true, pinnedHorizon: 0.5,
+                                         hole: 0.13, core: 0.588, tailTop: 0.20)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was

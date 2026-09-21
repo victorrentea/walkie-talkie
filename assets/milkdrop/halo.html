@@ -72,6 +72,7 @@
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
   let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
   let hole = 0, peak = 1, uHole = null, uPeak = null;
+  let core = 0, tailTop = 0, uCore = null, uTail = null;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -81,7 +82,7 @@
     const vs = compile(gl.VERTEX_SHADER, `attribute vec2 p; varying vec2 uv;
       void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`);
     const fs = compile(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv;
-      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart; uniform float hole; uniform float peak;
+      uniform sampler2D t; uniform float fade; uniform vec2 radii; uniform vec2 res; uniform float floorA; uniform float gain; uniform float fadeStart; uniform float hole; uniform float peak; uniform float core; uniform float tailTop;
       // the page's mask: stops 0→1, .28→.78, .5→.5, .75→.26, 1→floor, constant past 1.
       // floorA is what is left past the fade radius: the page's 0.10, or 0 for a
       // preset that has to be gone entirely at that distance (Tunnel, 2026-09-20).
@@ -89,6 +90,13 @@
       // smooth fall to floorA at the edge — for a preset that has to stay
       // visible across its canvas (Tunnel: "2x more visible", 2026-09-20)
       float mask(float d) {
+        // core > 0: discul de dinainte isi pastreaza profilul, dar se opreste la
+        // tailTop, iar de acolo se prelungeste stins pana la marginea ecranului
+        if (core > 0.0) {
+          if (d >= core) return mix(tailTop, floorA, smoothstep(core, 1.0, d));
+          float t = d / core;
+          return t <= fadeStart ? 1.0 : mix(1.0, tailTop, smoothstep(fadeStart, 1.0, t));
+        }
         if (fadeStart > 0.0) return d <= fadeStart ? 1.0 : mix(1.0, floorA, smoothstep(fadeStart, 1.0, d));
         if (d <= 0.28) return mix(1.0, 0.78, d / 0.28);
         if (d <= 0.50) return mix(0.78, 0.50, (d - 0.28) / 0.22);
@@ -128,6 +136,7 @@
     uFade = gl.getUniformLocation(prog, 'fade'); uRadii = gl.getUniformLocation(prog, 'radii'); uRes = gl.getUniformLocation(prog, 'res');
     uFloor = gl.getUniformLocation(prog, 'floorA'); uGain = gl.getUniformLocation(prog, 'gain'); uStart = gl.getUniformLocation(prog, 'fadeStart');
     uHole = gl.getUniformLocation(prog, 'hole'); uPeak = gl.getUniformLocation(prog, 'peak');
+    uCore = gl.getUniformLocation(prog, 'core'); uTail = gl.getUniformLocation(prog, 'tailTop');
     gl.disable(gl.BLEND);
   }
   function key() {
@@ -142,6 +151,8 @@
     gl.uniform1f(uStart, fadeStart);
     gl.uniform1f(uHole, hole);
     gl.uniform1f(uPeak, peak);
+    gl.uniform1f(uCore, core);
+    gl.uniform1f(uTail, tailTop);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -228,6 +239,8 @@
       fadeStart = opts.fadeStart || 0;
       hole = opts.hole || 0;
       peak = opts.peak == null ? 1 : opts.peak;
+      core = opts.core || 0;
+      tailTop = opts.tailTop || 0;
       rotX = opts.rot || 1;
       pinCenter = !!opts.pinCenter;
       //   speed:      how fast the preset's own clock runs, 1 = real time. See

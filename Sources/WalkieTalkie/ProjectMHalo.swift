@@ -320,7 +320,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         else { rx = screen.width / 2 / side; ry = screen.height / 2 / side }
         let gain = o.gain * (Self.gainScale[preset.number] ?? 1)
         pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start),
-                     Float(preset.hole), Float(preset.peak))
+                     Float(preset.hole), Float(preset.peak), Float(preset.core), Float(preset.tailTop))
         Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
