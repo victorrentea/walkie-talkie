@@ -165,8 +165,19 @@ enum HaloStyle: String, CaseIterable {
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55,
                                          offset: CGPoint(x: 0, y: 50), pinCenter: true)
+        // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
+        // out of the catalogue at the default 1 and nobody had worn it for a
+        // whole dictation until it became Wispr's dress; Victor's report was
+        // *"nu vad nici o animatie"*, and a capture of the real panel
+        // (`WT_HALO_DEMO`, the only path that is screenshottable) showed why —
+        // at 1 it is a smudge a shade off the terminal behind it, at 3 still
+        // nothing, at 6 a cyan bloom that reads. Same knob and same reason as
+        // Tunnel's `gain: 4`: `ProjectMHalo.gainScale` is a *calibration*
+        // between the two engines (0.3 here, measured against the web twin's
+        // luminance) and must not be moved to make a preset brighter — this is
+        // the per-style brightness, and it is applied in both engines.
         case .milkdrop8:   return Preset(number: 8, name: "Geiss - Cauldron - painterly 2 (saturation remix)", scale: 0.525,
-                                         fade: true, fadeAtEdge: true, fadeFloor: 0, pinCenter: true)
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 6, pinCenter: true)
         // Tendrils ×0.7 on sight (Victor, 2026-09-21: *"tendrils să fie .7x
         // mărime (mai mic)"*) — 0.728 → 0.51, the same move Sparks got the
         // evening before. The page's own `FORMULAS` entry still says 0.728;
