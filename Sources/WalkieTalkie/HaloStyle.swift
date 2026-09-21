@@ -489,12 +489,16 @@ enum HaloDestination: String, CaseIterable {
     /// and Water Dream are built but off the list).
     var fallback: HaloStyle {
         switch self {
-        case .caret: return .milkdrop7    // Tunnel
-        // **Cauldron moved here from Wispr's row** (Victor, 2026-09-21, naming
-        // all four in one breath: *"când am dictare legată, să apară
-        // Cauldron"*). Tendrils held this destination for the morning and
-        // stays on the list, a tick away.
-        case .bound: return .milkdrop8    // Cauldron
+        // **Tunnel and the caret parted on 2026-09-21** (*"schimbă între ele
+        // efectul de la dictarea la caret și dictarea legată; inversează-le pe
+        // cele două"*). What was swapped is what he had **running** — Tunnel at
+        // the caret, Tendrils bound, the latter his own pick over the Cauldron
+        // that used to be this line — so both fallbacks are written to the
+        // arrangement after the swap and the two stored preferences with them.
+        // The caret is the destination he sees most, and Tunnel is the preset
+        // that spent the evening needing his voice louder than it is.
+        case .caret: return .milkdrop20   // Tendrils
+        case .bound: return .milkdrop7    // Tunnel
         // **Sparks — and "stars" never meant Snowflake** (Victor, 2026-09-21,
         // correcting the same day's guess: *"la dictarea in terminal nou, sa
         // redai efectul stars, nu snowflake"*). Sparks had held this
