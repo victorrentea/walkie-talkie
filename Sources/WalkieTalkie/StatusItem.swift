@@ -584,19 +584,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// for all three at once (`nil`). `AppDelegate` hands it to the halo.
     var onPickHalo: ((HaloStyle, HaloDestination?) -> Void)?
 
-    /// **Three effects, one per destination, since 2026-09-21** (Victor:
-    /// *"mi-ar plăcea să pot alege separat cele trei efecte … poți să faci cu
-    /// submeniuri toate"*). The submenu therefore has both shapes:
+    /// **Five rows, every one of them a submenu** (Victor, 2026-09-21 evening:
+    /// *"să aibă doar cinci subcopii, care copiii să fie, la rândul lor,
+    /// submeniuri … despre ce efect, în ce moment, și apoi motorul"*): one per
+    /// destination — the *moment* a dictation happens — and `Fx engine` last.
+    /// Each reads out its own pick and carries the one list under its arrow.
     ///
-    /// - **the full list at the top**, which sets all three at once and is
-    ///   ticked only while all three agree — *"să nu apară niciunul selectat …
-    ///   dacă îl selectez precis, atunci toate trei sunt puse pe același"*;
-    /// - **a row per destination under it**, each reading out its own pick and
-    ///   carrying the same list under its own arrow.
+    /// **The flat list of styles that used to sit on top is gone with it.** It
+    /// was the *set all of them at once* shortcut (2026-09-21 morning: *"dacă îl
+    /// selectez precis, atunci toate trei sunt puse pe același"*), and it was
+    /// also the reason this submenu opened onto a dozen rows of effects with
+    /// the four destinations buried under them. Four destinations is four
+    /// picks; the shortcut is not worth the wall.
     ///
-    /// `Fx engine` stays last. Each destination's row is rebuilt on every open
-    /// for `applyEngineRow`'s reason: the tick has to be what is running, and
-    /// a preference can change from the wheel between two opens.
+    /// Each row is rebuilt on every open for `applyEngineRow`'s reason: the
+    /// tick has to be what is running, and a preference can change from the
+    /// wheel between two opens.
     private func applyHaloRow() {
         let picks = HaloDestination.allCases.map { HaloStyle.current(for: $0) }
         let shared = picks.dropFirst().allSatisfy { $0 == picks[0] } ? picks[0] : nil
@@ -605,8 +608,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloItem.title = shared.map { "Halo fx: \($0.menuTitle)" } ?? "Halo fx"
         haloSubmenu.removeAllItems()
         haloSubmenu.autoenablesItems = false
-        fillStyleRows(into: haloSubmenu, ticked: shared, destination: nil)
-        haloSubmenu.addItem(.separator())
         for (destination, pick) in zip(HaloDestination.allCases, picks) {
             let row = NSMenuItem(title: "\(destination.title): \(pick.menuTitle)", action: nil, keyEquivalent: "")
             let list = NSMenu()
