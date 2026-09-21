@@ -57,6 +57,13 @@ enum HaloStyle: String, CaseIterable {
     /// it went. `git show` on this commit brings back the case, the `Preset` row
     /// and the `.milk`.
     case milkdrop7, milkdrop8, milkdrop20, milkdrop85, milkdrop87, milkdrop99, milkdrop103
+    /// **Acelasi preset ca `milkdrop7`, alta incadrare** (Victor, 2026-09-22:
+    /// *"adauga aceasta forma de tunel ca «Tunel faded» si las-o si pe cea
+    /// originala (opaca dar localizata)"*). Tunnel obisnuit ramane discul din
+    /// jurul cursorului; asta e panza cat ecranul, cu discul vechi opac in mijloc
+    /// si o coada stinsa pana in margini. Doua randuri in meniu pentru acelasi
+    /// `.milk`, fiindca ce difera nu e presetul, ci cat din ecran ocupa.
+    case milkdrop7Faded
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -71,6 +78,7 @@ enum HaloStyle: String, CaseIterable {
         case .twoBalls:       return "Gemini"
         case .blockBeads:     return "Beads"
         case .milkdrop7:      return "Tunnel"
+        case .milkdrop7Faded: return "Tunnel faded"
         case .milkdrop8:      return "Cauldron"
         case .milkdrop20:     return "Tendrils"
         case .milkdrop85:     return "Snowflake"
@@ -258,17 +266,25 @@ enum HaloStyle: String, CaseIterable {
         // Marimea structurii: 0,588 → 1,0 din latura lunga, cu mult peste cei
         // +10% ceruti, fiindca intrebarea s-a schimbat intre timp din „cat de mare
         // e haloul" in „cat de mult din ecran acopera".
-        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
+        // Tunnel, asa cum a fost: discul din jurul cursorului, opac. A primit doar
+        // calmarile cerute pe 2026-09-21/22 — `rot` 2 → 1,0 si `gain` 4 → 3,2 —
+        // plus gaura din mijloc, ca liniile sa nu se mai stranga peste cursor.
+        // Marimea: 0,588 × 1,1 = 0,647, cei +10% ceruti.
+        case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647,
                                          // *"appears centred slightly below the mouse"*, then *"no longer
                                          // centred"* after a static offset: the preset's centre WANDERS —
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
-                                         // Discul de dinainte era 0,588 din latura lunga si panza e acum
-                                         // 1,0, deci marginea lui cade fix la `core` = 0,588 din raza mastii.
-                                         // Inauntru: exact profilul vechi (plin pana la 0,55 din el, apoi
-                                         // caderea). In afara: 0,20 care se stinge la 0,05 pe marginea
-                                         // ecranului. `peak` ramane 1 — opacitatea nu mai e globala, e in
-                                         // profil, fiindca centrul trebuie sa ramana cum era.
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
+                                         fadeStart: 0.55, offset: CGPoint(x: 0, y: 50), pinCenter: true,
+                                         hole: 0.22)
+        // Tunnel faded: acelasi preset, panza cat ecranul. Discul de dinainte era
+        // 0,588 din latura lunga, deci marginea lui cade fix la `core` = 0,588 din
+        // raza mastii: inauntru profilul vechi intreg, in afara 0,20 stingandu-se
+        // la 0,05 pe marginea ecranului. `pinnedHorizon` = nu mai urmareste
+        // cursorul, deci nici `offset` nu mai are fata de ce sa fie deasupra.
+        case .milkdrop7Faded:
+                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0.05, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, pinCenter: true, pinnedHorizon: 0.5,
                                          hole: 0.13, core: 0.588, tailTop: 0.20)
