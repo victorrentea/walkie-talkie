@@ -3333,9 +3333,12 @@ def scenario_wispr_alone(ctx) -> Result:
                                  "%s" % (target.get("address") or "—"))
             if up:
                 engine = pf.get(up, "/engine") or {}
-                ctx.result.check(engine.get("wrapMode") == "scratchpad",
-                                 "the wrap came back up in Scratchpad mode",
-                                 "wrapMode=%s" % (engine.get("wrapMode") or "—"))
+                state = pf.get(up, "/test/state") or {}
+                wm, fw = engine.get("wrapMode"), state.get("firewall")
+                ctx.result.check(wm == "off" if fw else wm == "scratchpad",
+                                 "the wrap came back up in its default mode",
+                                 "wrapMode=%s firewall=%s (off is the firewall's mode since 2026-09-22)"
+                                 % (wm or "—", fw))
         elif relay.dry_run:
             print("   · open '/Applications/Walkie Talkie.app', wait for /up, re-bind %s" % tty)
         if victim and not relay.dry_run:
