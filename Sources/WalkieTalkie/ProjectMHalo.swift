@@ -230,14 +230,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// `per_frame_` lines — the page appends the same to the compiled frame
     /// equations (`halo.html`): `rot=rot*k` multiplies the whole per-frame turn,
     /// sine terms included; `cx=cy=0.5` pins a centre the preset wanders.
-    static func amend(_ milk: String, rot: CGFloat, pinCenter: Bool, freshWave: CGFloat) -> String {
-        guard rot != 1 || pinCenter || freshWave != 1 else { return milk }
+    static func amend(_ milk: String, rot: CGFloat, pinCenter: Bool) -> String {
+        guard rot != 1 || pinCenter else { return milk }
         var maxN = 0
-        var baseDecay: CGFloat? = nil
         for line in milk.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
-            if line.hasPrefix("fDecay="), let v = Double(line.dropFirst(7).trimmingCharacters(in: .whitespaces)) {
-                baseDecay = CGFloat(v)
-            }
             guard line.hasPrefix("per_frame_"), let eq = line.firstIndex(of: "=") else { continue }
             let n = Int(line[line.index(line.startIndex, offsetBy: 10)..<eq].trimmingCharacters(in: .whitespaces)) ?? 0
             maxN = max(maxN, n)
@@ -246,25 +242,14 @@ final class ProjectMHalo: NSView, HaloWebHost {
         if !out.hasSuffix("\n") { out += "\n" }
         if rot != 1 { maxN += 1; out += "per_frame_\(maxN)=rot=rot*\(rot);\n" }
         if pinCenter { maxN += 1; out += "per_frame_\(maxN)=cx=0.5;cy=0.5;\n" }
-        // The newest frame scaled, and `decay` moved so the pile it feeds stays
-        // the same brightness: `wave_a/(1-decay)` is the steady state, so
-        // `1-decay` takes the same factor. Without an `fDecay` to read there is
-        // nothing to keep constant, and the amendment is skipped rather than
-        // guessed — dimming the wave alone would dim the whole preset.
-        if freshWave != 1, let d0 = baseDecay {
-            let decay = 1 - (1 - d0) * freshWave
-            maxN += 1
-            out += "per_frame_\(maxN)=wave_a=wave_a*\(freshWave);decay=\(decay);\n"
-        }
         return out
     }
 
     /// Per-run options, as `MilkDropHalo.optionsOverride` / `WT_HALO_PRESET_OPTS` carry them
     /// (`{"gain": 4, "rot": 2, "fadeFloor": 0, "fadeStart": 0.5, "pinCenter": true}`).
-    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?, fresh: CGFloat) {
+    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?) {
         var gain = preset.gain, rot = preset.rot, floor = preset.fadeFloor, start = preset.fadeStart
         var pin = preset.pinCenter, atEdge = preset.fadeAtEdge, radius = preset.fadeRadius
-        var fresh = ProcessInfo.processInfo.environment["WT_PM_FRESH_WAVE"].flatMap { Double($0) }.map { CGFloat($0) } ?? preset.freshWave
         let raw = MilkDropHalo.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
         if let data = raw.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let v = o["gain"] as? Double { gain = CGFloat(v) }
@@ -274,9 +259,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
             if let v = o["pinCenter"] as? Bool { pin = v }
             if let v = o["fadeAtEdge"] as? Bool { atEdge = v }
             if let v = o["fadeRadius"] as? Double { radius = CGFloat(v) }
-            if let v = o["freshWave"] as? Double { fresh = CGFloat(v) }
         }
-        return (gain, rot, floor, start, pin, atEdge, radius, fresh)
+        return (gain, rot, floor, start, pin, atEdge, radius)
     }
 
     private func configure() -> Bool {
@@ -317,7 +301,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         guard let renderer = r else { fail("projectM could not start: \(String(cString: err))"); return false }
         self.renderer = renderer
         let o = options()
-        let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin, freshWave: o.fresh)
+        let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin)
         if pmh_load_preset(renderer, text, &err, 512) != 0 {
             fail("projectM refused preset \(preset.number) (\(file.lastPathComponent)): \(String(cString: err))"); return false
         }
@@ -330,7 +314,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         else { rx = screen.width / 2 / side; ry = screen.height / 2 / side }
         let gain = o.gain * (Self.gainScale[preset.number] ?? 1)
         pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start))
-        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "")\(o.fresh != 1 ? ", fresh wave ×\(o.fresh)" : "") \(CaretHalo.sinceStyleChange)")
+        Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
 

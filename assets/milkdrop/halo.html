@@ -70,8 +70,7 @@
   // ---- the keying pass ----------------------------------------------------
   const gl = out.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
   let prog = null, tex = null, uFade = null, uRadii = null, uRes = null, uFloor = null, uGain = null;
-  let freshWave = 1;
-let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
+  let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCenter = false;
   function compile(type, code) {
     const sh = gl.createShader(type); gl.shaderSource(sh, code); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
@@ -206,9 +205,6 @@ let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCente
     //               both axes (default: the page's ellipse, half the screen each way)
     //   fadeFloor:  what remains past the radius (page: 0.10; 0 = gone entirely)
     //   gain:       colour multiplier before keying (2 = twice as opaque/intense)
-    //   freshWave:  the newest frame's wave_a scaled by this, with `decay` moved
-    //               so the pile it feeds keeps its brightness (1-decay takes the
-    //               same factor). See HaloStyle.Preset.freshWave.
     //   rot:        multiplier on the preset's per-frame rotation, applied by
     //               appending to its compiled frame equations — our copy of the
     //               preset, the vendored pack untouched
@@ -219,7 +215,6 @@ let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCente
       gain = opts.gain || 1;
       fadeStart = opts.fadeStart || 0;
       rotX = opts.rot || 1;
-      freshWave = opts.freshWave === undefined ? 1 : opts.freshWave;
       pinCenter = !!opts.pinCenter;
       //   speed:      how fast the preset's own clock runs, 1 = real time. See
       //               the frame loop for why this and not the frame cap.
@@ -247,24 +242,17 @@ let fadeFloor = 0.10, gain = 1, rotX = 1, fadeStart = 0, uStart = null, pinCente
       }
       if (!presets[name]) return 'no such preset: ' + name;
       let p = presets[name], note = '';
-      if (rotX !== 1 || pinCenter || freshWave !== 1) {
+      if (rotX !== 1 || pinCenter) {
         // our copy: the frame equations are butterchurn's compiled JS over `a`;
         // whatever is appended runs after them every frame. `a.rot*=k` doubles
         // the whole per-frame turn, sine terms included; `a.cx=a.cy=.5` pins a
         // centre the preset wanders (Tunnel, Cauldron: ±0.11 of sines on cx/cy)
         // to the canvas middle, which is what sits on the pointer.
         p = JSON.parse(JSON.stringify(p));
-        // freshWave: the preset's own decay is the one to keep constant against,
-        // so it is read off the preset rather than assumed; with none there is
-        // nothing to hold steady and the amendment is skipped, as in pmhalo.
-        const d0 = p.baseVals && typeof p.baseVals.decay === 'number' ? p.baseVals.decay : null;
-        const wave = freshWave !== 1 && d0 !== null
-          ? 'a.wave_a=a.wave_a*' + freshWave + ';a.decay=' + (1 - (1 - d0) * freshWave) + ';' : '';
         p.frame_eqs_str = (p.frame_eqs_str || '') + ';'
           + (rotX !== 1 ? 'a.rot=a.rot*' + rotX + ';' : '')
-          + (pinCenter ? 'a.cx=0.5;a.cy=0.5;' : '') + wave;
-        note = (rotX !== 1 ? ' rot ×' + rotX : '') + (pinCenter ? ' centre pinned' : '')
-             + (wave ? ' fresh wave ×' + freshWave : '');
+          + (pinCenter ? 'a.cx=0.5;a.cy=0.5;' : '');
+        note = (rotX !== 1 ? ' rot ×' + rotX : '') + (pinCenter ? ' centre pinned' : '');
       }
       viz.loadPreset(p, 0.6);
       return 'ok' + (note ? ' (' + note.trim() + ')' : '');

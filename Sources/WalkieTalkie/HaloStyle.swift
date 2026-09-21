@@ -135,32 +135,6 @@ enum HaloStyle: String, CaseIterable {
         /// Full light out to this fraction of the fade radius, then one smooth
         /// fall to `fadeFloor`; 0 = the page's four-stop mask.
         var fadeStart: CGFloat = 0
-        /// **How much of the preset's *freshly drawn* frame to keep, with its
-        /// `decay` raised to put back exactly what that takes away.** 1 = the
-        /// preset as written.
-        ///
-        /// A feedback preset's picture is two populations: what it draws this
-        /// frame, and what fifty frames of decayed copies have piled up. In
-        /// steady state the pile is `wave_a / (1 - decay)`, so scaling
-        /// `wave_a` by *k* and setting `1 - decay` to *k ×* its own leaves the
-        /// pile **exactly as bright** and makes only the newest frame fainter.
-        /// It is a ratio, not a threshold: it holds at any microphone level.
-        ///
-        /// Tunnel is why it exists. It draws a red circle every frame
-        /// (`nWaveMode=0`, `wave_r=1, g=0, b=0`) that is the *source* of the
-        /// whole effect and cannot be removed — with `wave_a = 0` the preset
-        /// renders black, there is nothing else in it. The circle is faint, but
-        /// it is drawn inside the tunnel's own mouth, on black, where nothing
-        /// hides it, so the 5.4× gain of 2026-09-21 evening lifted it into view
-        /// with everything else: *"un cerc roșu care delimitează exact ceea ce
-        /// pleacă spre exterior … e un artefact, elimină-l"*. At 0.25 the
-        /// circle is gone and the tunnel is the brightness he approved.
-        ///
-        /// **A black level in the key was tried first and reverted** (f936c6d):
-        /// it works against a *known* signal level, and Victor's voice is not
-        /// the demo's — 0.10 was measured clean over the demo captures and he
-        /// still had the circle live.
-        var freshWave: CGFloat = 1
         /// The point of the canvas that sits on the pointer, as fractions of
         /// its side, y down (the preset's own centre of composition — `cx`/`cy`
         /// in its frame equations). Default the middle.
@@ -241,12 +215,6 @@ enum HaloStyle: String, CaseIterable {
                                          // its frame code adds ±0.11 of sine terms to cx/cy every frame —
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 4, rot: 2, fadeStart: 0.55,
-                                         // **0.25**: the newest frame at a quarter, `decay` 0.980 → 0.995 to
-                                         // pay for it. Swept 0.5 / 0.25 / 0.15 and checked at three voice
-                                         // levels (`WT_PM_AUDIO_GAIN` 0.4, 1, 3): 0.5 already hides the
-                                         // circle, 0.25 hides it with margin and reads richer, 0.15 goes
-                                         // dim. See `freshWave`.
-                                         freshWave: 0.25,
                                          offset: CGPoint(x: 0, y: 50), pinCenter: true)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
