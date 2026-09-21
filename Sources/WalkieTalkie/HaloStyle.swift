@@ -230,6 +230,14 @@ enum HaloStyle: String, CaseIterable {
         /// Cat de opaca e coada, imediat dincolo de `core`; cade la `fadeFloor`
         /// la marginea ecranului.
         var tailTop: CGFloat = 0
+        /// **Cat de tare aude motorul acest preset**, 1 = semnalul asa cum vine.
+        /// Forma unui preset ca Tunnel ESTE forma de unda, deci amplitudinea
+        /// semnalului e cat de mult se indoaie linia care o decide — un buton
+        /// separat de `gain` (luminozitate) si de `rot` (rotatie), care nu ating
+        /// forma deloc. Ruta nativa il aplica in `feed`; ruta web primeste
+        /// aceleasi esantioane si nu il vede, deci un preset care il foloseste
+        /// arata diferit in cele doua motoare.
+        var audioGain: CGFloat = 1
     }
     var preset: Preset? {
         switch self {
@@ -277,7 +285,7 @@ enum HaloStyle: String, CaseIterable {
                                          // so the wander is pinned out of our copy (`pinCenter`) instead.
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, offset: CGPoint(x: 0, y: 50), pinCenter: true,
-                                         hole: 0.22)
+                                         hole: 0.22, audioGain: 0.55)
         // Tunnel faded: acelasi preset, panza cat ecranul. Discul de dinainte era
         // 0,588 din latura lunga, deci marginea lui cade fix la `core` = 0,588 din
         // raza mastii: inauntru profilul vechi intreg, in afara 0,20 stingandu-se
@@ -287,7 +295,7 @@ enum HaloStyle: String, CaseIterable {
                            return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0.05, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, pinCenter: true, pinnedHorizon: 0.5,
-                                         hole: 0.13, core: 0.588, tailTop: 0.20)
+                                         hole: 0.13, core: 0.588, tailTop: 0.20, audioGain: 0.55)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was

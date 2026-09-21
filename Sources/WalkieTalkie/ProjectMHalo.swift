@@ -41,6 +41,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
     private var failed = false
     private var frames = 0, totalFrames = 0
     private var engineMs = 0.0, keyMs = 0.0, statAt = CFAbsoluteTimeGetCurrent()
+    /// **Cat trece intre doua intrari in `frame()`, fata de cat se lucreaza in
+    /// ele.** Fara asta, un `engine 2 ms` langa 11 fps masurate nu spune nimic:
+    /// cele ~85 ms lipsa sunt fie inainte de cadru (temporizatorul nu e chemat),
+    /// fie in el, in afara motorului (predarea IOSurface, sincronizarea GL).
+    private var lastFrameAt = 0.0, gapMs = 0.0, insideMs = 0.0
     var onFailure: ((String) -> Void)?
     var onVisible: (() -> Void)?
 
@@ -325,8 +330,24 @@ final class ProjectMHalo: NSView, HaloWebHost {
         return true
     }
 
+    /// **App Nap opreste ceasul cadrelor, si el se vede exact asa cum l-a descris
+    /// Victor** (2026-09-22: *"lagul apare pe la jumatatea animatiei, si se
+    /// amelioreaza daca mut mouse-ul"*). macOS coaleseaza temporizatoarele unui
+    /// proces fara input de la utilizator si il pune in App Nap dupa cateva
+    /// secunde; `DispatchSource` cu `leeway` intra direct sub topor, iar orice
+    /// miscare de mouse il trezeste. Masurat inainte: 46–118 cadre pe aceeasi
+    /// fereastra de 5 s, adica 9–24 fps in loc de 30, la fel in release si in debug
+    /// si la fel pe ambele marimi de panza — ceea ce exclude si compute-ul, si
+    /// optimizarea. `beginActivity` e felul documentat de a spune „nu ma adormi".
+    private var activity: NSObjectProtocol?
+
     func start() {
         guard !failed else { return }
+        if activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+                reason: "halo frame loop")
+        }
         let fresh = !configured
         if fresh {
             configured = true
@@ -346,7 +367,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
         }
     }
 
-    func stop() { stopTimer() }
+    func stop() {
+        stopTimer()
+        if let a = activity { ProcessInfo.processInfo.endActivity(a); activity = nil }
+    }
 
     /// The square follows the pointer as a window; nothing to tell the engine.
     func center(_ p: CGPoint) {}
@@ -363,6 +387,14 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // rămână ce a fost — potrivirea cu ruta web — și nu un al doilea volum
         // peste compresor. Pe `.direct` (implicit) nu atinge nimic.
         VoicePrep.shared.process(&tail)
+        // **Cat de tare aude ACEST preset.** Linia care decide forma lui Tunnel e
+        // chiar forma de unda: cu semnalul la maximum se indoaie in trifoi, cu
+        // adancituri care intra in centru (Victor, 2026-09-22: *"inainte era prea
+        // «inerta», acum e un pic prea «activa» ... ocupa prea mult din centrul
+        // formei"*). Nu e o problema de luminozitate (`gain`) si nici de rotatie
+        // (`rot`) — e amplitudinea semnalului, si ea se dozeaza per preset.
+        let a = preset.audioGain
+        if a != 1 { for i in tail.indices { tail[i] *= Float(a) } }
         if Self.audioGain != 1 { for i in tail.indices { tail[i] *= Self.audioGain } }
         // Resampled to 44.1 kHz in the glue (see `resample`): the engine reads
         // its beat bands off spectrum bins and assumes that rate.
@@ -387,6 +419,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// One frame, on the render queue: the engine and the key pass, the
     /// surface's seed bumped, the layer told on the main thread.
     private func frame() {
+        let entered = CFAbsoluteTimeGetCurrent()
+        if lastFrameAt > 0 { gapMs += (entered - lastFrameAt) * 1000 }
+        lastFrameAt = entered
+        defer { insideMs += (CFAbsoluteTimeGetCurrent() - entered) * 1000 }
         guard let r = renderer, !failed else { return }
         // A CF object out of a C function comes back `Unmanaged`; handed to
         // `contents` as it is, the layer shows nothing and says nothing.
@@ -424,10 +460,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
             }
         }
         if Self.stats, CFAbsoluteTimeGetCurrent() - statAt > 5, frames > 0 {
-            Log.info(String(format: "◯ projectM %d: %d frames, engine %.2f ms + key %.2f ms a frame (CPU submit%@), %u GL errors left by the engine",
-                            preset.number, frames, engineMs / Double(frames), keyMs / Double(frames),
+            Log.info(String(format: "◯ projectM %d: %d frames, %.1f fps, %.1f ms between frames of which %.1f ms inside, engine %.2f ms + key %.2f ms a frame (CPU submit%@), %u GL errors left by the engine",
+                            preset.number, frames, Double(frames) / max(0.001, CFAbsoluteTimeGetCurrent() - statAt),
+                            gapMs / Double(frames), insideMs / Double(frames),
+                            engineMs / Double(frames), keyMs / Double(frames),
                             ProcessInfo.processInfo.environment["WT_PM_FINISH"] != nil ? " + GPU finish" : "", pmh_engine_gl_errors(r)))
-            frames = 0; engineMs = 0; keyMs = 0; statAt = CFAbsoluteTimeGetCurrent()
+            frames = 0; engineMs = 0; keyMs = 0; gapMs = 0; insideMs = 0; statAt = CFAbsoluteTimeGetCurrent()
         }
     }
     static let stats = ProcessInfo.processInfo.environment["WT_PM_STATS"] != nil
