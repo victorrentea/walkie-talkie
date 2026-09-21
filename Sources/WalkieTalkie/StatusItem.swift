@@ -1363,13 +1363,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // comment, and *this engine cannot run right now* belongs in the list he
         // picks from. `$0.40/h` is there because it is the half of the trade a
         // menu can state and a comment cannot make him feel.
+        //
+        // **☁️ at the end of both networked rows, and the sentence that used to
+        // spell it out is gone** (Victor, 2026-09-21: *"pun în dreptul lor un
+        // norișor la final … și scoate băta aia cu «voice leaves computer»"*).
+        // `audio leaves this Mac` was a warning written out in words on a list
+        // read in a second; the cloud is the picture everybody already has for
+        // it, and it says the same thing about Wispr Flow — which never carried
+        // the warning — without a second sentence. The badge is the whole
+        // difference between these two rows and the local one, which is why it
+        // is here and not on `engineShortTitle`: up there the engine stands
+        // alone with nothing to be different from, and ⚠️ already has the spot.
         if id == "eleven" {
             let model = ElevenLabsSource.model
             return elevenReady?() == true
-                ? "ElevenLabs \(model) — \(ElevenLabsSource.rate), audio leaves this Mac"
-                : "ElevenLabs \(model) — no API key"
+                ? "ElevenLabs \(model) — \(ElevenLabsSource.rate) ☁️"
+                : "ElevenLabs \(model) — no API key ☁️"
         }
-        guard id == "whisper" else { return "Wispr Flow" }
+        guard id == "whisper" else { return "Wispr Flow ☁️" }
         let name = whisperModel?() ?? LocalWhisperSource.configuredModel
         if engineLoading { return "\(name) — loading…" }
         if let bytes = whisperFootprint?() {
