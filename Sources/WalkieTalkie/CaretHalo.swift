@@ -1153,10 +1153,21 @@ final class CaretHalo {
     /// stand with nothing in flight the question *which panel, and what did it
     /// believe* is answerable from a desk.
     func windowsReport() -> [String: Any] {
+        // **`styles` is which dress each destination is wearing**, which until
+        // 2026-09-21 could be read nowhere but off a menu he had to open by
+        // hand — and a wrong one there was found by Victor dictating into a new
+        // terminal and seeing the wrong effect, twice. `destination` is the one
+        // this ring is drawn for right now.
         ["ring": ["visible": panel?.isVisible ?? false, "alpha": Double(panel?.alphaValue ?? 0),
                   "live": live, "closing": closing, "small": small, "monitors": monitors.count,
                   "style": style.rawValue],
          "heads": arrow.report,
+         "destination": destination.rawValue,
+         "styles": Dictionary(uniqueKeysWithValues: HaloDestination.allCases.map {
+             ($0.rawValue, ["style": HaloStyle.current(for: $0).rawValue,
+                            "title": HaloStyle.current(for: $0).menuTitle,
+                            "preset": HaloStyle.current(for: $0).preset?.name ?? ""])
+         }),
          "delivering": delivering, "atCaret": atCaret]
     }
 

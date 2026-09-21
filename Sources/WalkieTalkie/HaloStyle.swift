@@ -226,18 +226,19 @@ enum HaloStyle: String, CaseIterable {
     /// **On the list today.** Water Dream is off it *"for the moment"*
     /// (Victor, 2026-09-20 late — the dearest style measured, 0.79 of a GPU
     /// core and 866 MB, and still "too violent"); its hybrid stays built.
-    /// Snowflake was off it too (Victor, 2026-09-20: *"scoate temporar din
-    /// meniu/din efecte Snowflake"*) — **temporarily**, and the temporary
-    /// ended on 2026-09-21, when he made it the dress of a sentence opening a
-    /// new claude (*"dictarea în terminal nou tre să redea efectul de
-    /// stars"*): a destination's effect has to be pickable in the menu beside
-    /// the other three, or its row is the one tick he cannot move.
+    /// Snowflake is off it too (Victor, 2026-09-20: *"scoate temporar din
+    /// meniu/din efecte Snowflake"*). It came back for a few hours on
+    /// 2026-09-21, on the reading that it was the dress of a sentence opening
+    /// a new claude — and that reading was wrong (*"la dictarea in terminal
+    /// nou, sa redai efectul stars, nu snowflake"*), so the row goes with it.
+    /// Nothing wears it now, and a style no destination wears has no claim on
+    /// the menu.
     /// Pulse went the same evening (*"scoate pulse"*), after its fog came back
     /// down to 1×; the page still draws it.
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
     /// Gemini too (2026-09-21, *"scoate gemini din opțiuni"*).
-    var isOffered: Bool { self != .milkdrop103 && self != .waveRing && self != .twoBalls }
+    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.
@@ -357,12 +358,30 @@ enum HaloDestination: String, CaseIterable {
         // Cauldron"*). Tendrils held this destination for the morning and
         // stays on the list, a tick away.
         case .bound: return .milkdrop8    // Cauldron
-        // **Snowflake, since 2026-09-21** (*"dictarea în terminal nou tre să
-        // redea efectul de stars"*) — Zylot's *Star Ornament*, which is the
-        // only star in the catalogue. Sparks held this destination for a few
-        // hours before it; it keeps the 0.7× he asked for that morning and
-        // stays on the list, so the row is one tick away.
-        case .spawn: return .milkdrop85   // Snowflake
+        // **Sparks — and "stars" never meant Snowflake** (Victor, 2026-09-21,
+        // correcting the same day's guess: *"la dictarea in terminal nou, sa
+        // redai efectul stars, nu snowflake"*). Sparks had held this
+        // destination and was taken off it that morning by reading *stars* as
+        // a **name** and matching it to the only preset in the catalogue with
+        // a star in its title — Zylot's *Star Ornament*, which the menu calls
+        // Snowflake. The pictures say why that was wrong, and they were on
+        // disk the whole time (`docs/projectm/captures/`): Star Ornament draws
+        // **one large five-pointed ornament**, a snowflake; chain breaker
+        // draws **a cloud of small bright points**, which is what a man
+        // looking at his pointer calls stars. He was describing a picture, not
+        // naming a row.
+        //
+        // The general rule, since it has now cost two rounds: a destination's
+        // dress is named by what it **looks like**. When his word does not
+        // match a menu title exactly, look at `docs/projectm/captures/` before
+        // matching on the title — `docs/projectm/shoot.sh <outdir> <styles>`
+        // makes the picture for one that has none.
+        //
+        // It keeps the 0.7× of that morning (0.3675); Snowflake goes back off
+        // the offered list, where *"scoate temporar din meniu/din efecte
+        // Snowflake"* had put it — it was only relisted because a destination
+        // wore it, and none does now.
+        case .spawn: return .milkdrop87   // Sparks
         // **Mosaic** (*"când am Wispr Flow, dictare să apară mozaic"*) —
         // brought back from the page's `−` list for this one destination.
         case .wispr: return .milkdrop99   // Mosaic
