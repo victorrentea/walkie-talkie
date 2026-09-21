@@ -311,25 +311,37 @@ texture; noise textures are built in).
    branch's, and the reason the last verification run is the 02:05 one.
 10. The `Halo engine` row has not been seen on screen (no shoot path for the
     status menu); Victor opening the menu is the test.
-11. **Bipolar (`milkdrop1`, added 2026-09-21) has never been seen.** The
-    preset is the original `.milk` — *Geiss - Bipolar 2 Enhanced*, shipped
-    with MilkDrop 2, taken from projectM's `presets_milkdrop_200` and checked
-    field by field against butterchurn's JSON (same `fWaveScale` 0.559671,
-    `fGammaAdj` 1.998, `warp` 0.099892, `rot` −0.01, `fWaveAlpha` 5.9, three
-    `per_frame_` lines, one `per_pixel_`, no waves, no shapes) — but it could
-    not be rendered, because **the screen was locked**
-    (`CGSSessionScreenIsLocked`), and that stops both routes at once: the
-    native engine loads the preset and counts its frames, but the surface
-    reads back pure black, and the web twin never starts
-    (*"the engine's page was not ready 2 s after the ring was asked for"*).
-    **The control is the proof it is the screen and not the preset — Cauldron,
-    0.95 the night before, came back just as black from the same run.** So
-    Bipolar's `scale` (0.75) is a first guess and it has **no `gainScale`
-    entry** (a missing one reads as 1); nothing was iterated against a web
-    twin. Re-shoot at an unlocked screen before trusting either number:
-    `ROUTES="web native1" docs/projectm/shoot.sh /tmp/shoot milkdrop1`.
-    **A locked screen is the first thing to check when a capture run comes
-    back black** — it costs a whole run to rediscover.
+11. **Bipolar (`milkdrop1`, added 2026-09-21) renders, and does not yet look
+    right.** The preset is the original `.milk` — *Geiss - Bipolar 2
+    Enhanced*, shipped with MilkDrop 2, taken from projectM's
+    `presets_milkdrop_200` and checked field by field against butterchurn's
+    JSON (same `fWaveScale` 0.559671, `fGammaAdj` 1.998, `warp` 0.099892,
+    `rot` −0.01, `fWaveAlpha` 5.9, three `per_frame_` lines, one
+    `per_pixel_`, no waves, no shapes). projectM loads and compiles it, its
+    PSVERSION=2 warp and comp shaders included, with no preset-failed
+    callback.
+    **What it draws is a ring of small amber flecks** —
+    `docs/projectm/captures/bipolar.png`, 3…8 s of the demo voice, native
+    1×, lit 0.75–0.89 % of the canvas. That is the circular waveform
+    (`nWaveMode=1`) and **not the bold feedback trails the preset is known
+    for**: its comp shader is a high-pass (`ret = main - GetBlur1(uv);
+    ret *= 4.5`), so if projectM's blur1 sits closer to the main texture than
+    MilkDrop's does, only the sharpest edges survive — which is exactly the
+    speckled ring in the capture. Unconfirmed as a cause; nothing was tuned
+    to chase it.
+    **The comparison it needs could not be made.** The web twin refuses to
+    start in the `.build/debug` binary at all (*"the engine's page was not
+    ready 2 s after the ring was asked for"*, every attempt, this preset and
+    Cauldron alike), so there is **no web/native luminance ratio** and the
+    preset deliberately has **no `gainScale` entry** (a missing one reads
+    as 1). `scale` 0.75 is a first guess.
+    **Two things about that morning's captures are worth keeping**, because
+    each cost a run: with the **screen locked** every native capture comes
+    back pure black and the web route never starts — check
+    `CGSSessionScreenIsLocked` first when a shoot comes back empty. And once
+    unlocked, **Cauldron still came back black** at gain 0.3 while Bipolar
+    rendered, so there is a second, older native-render problem on this
+    branch that has nothing to do with this preset and is not explained here.
 
 ## How to reproduce
 

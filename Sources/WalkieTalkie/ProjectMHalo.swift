@@ -59,16 +59,21 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// overrides a value for a run.
     ///
     /// **Bipolar (1) is deliberately absent — it has never been measured.**
-    /// Added 2026-09-21 with **the screen locked**, and a locked screen is a
-    /// capture stop for both routes: the engine runs and counts frames but the
-    /// surface reads back pure black, and the web twin never starts at all
-    /// (*"the engine's page was not ready 2 s after the ring was asked for"*).
-    /// The control proves it is the screen and not the preset — **Cauldron,
-    /// measured at 0.95 the night before, came back just as black.** So no
-    /// web/native ratio exists for Bipolar. A missing entry reads as 1 — the
-    /// honest value until someone runs
-    /// `ROUTES="web native1" docs/projectm/shoot.sh /tmp/shoot milkdrop1`
-    /// **at an unlocked screen** and puts the measured number here.
+    /// Added 2026-09-21. It renders (`docs/projectm/captures/bipolar.png`) but
+    /// the ratio this table is made of needs a **web twin**, and the web route
+    /// refuses to start in the `.build/debug` binary at all —
+    /// *"the engine's page was not ready 2 s after the ring was asked for"*,
+    /// every attempt, this preset and Cauldron alike. So there is no number to
+    /// put here and a missing entry reads as 1.
+    ///
+    /// Two things that cost a run each, for whoever measures it next.
+    /// **A locked screen is a capture stop**: the engine counts its frames but
+    /// the surface reads back pure black, and the web route never starts —
+    /// check `CGSSessionScreenIsLocked` before believing a black shoot.
+    /// And **Cauldron came back black even unlocked** at its gain of 0.3 while
+    /// Bipolar rendered, so a black control is not by itself proof that the
+    /// screen is the problem; there is a second, older native-render fault on
+    /// this branch that is not understood yet.
     static let gainScale: [Int: CGFloat] = {
         var table: [Int: CGFloat] = [7: 0.12, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
         if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),
