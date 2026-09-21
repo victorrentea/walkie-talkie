@@ -2105,6 +2105,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return box.value
         }
         picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
+        // The About panel from a desk, answering the size it came up at — the
+        // one fact its own snapshot harness could not see. Hops to main: it
+        // builds AppKit views.
+        picker.onTestAbout = { [weak self] in
+            guard self != nil else { return ["shown": false] }
+            var out: [String: Any] = [:]
+            DispatchQueue.main.sync { out = AboutWindow.describe() }
+            return out
+        }
         picker.describeEngine = { [weak self] in
             guard let self else { return [:] }
             var out: [String: Any] = ["source": self.source.name,

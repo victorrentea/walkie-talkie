@@ -475,6 +475,20 @@ final class ElementPicker {
     /// many were listening. Wired to `MusicBridge.reloadExtensions`.
     var onReloadExtension: (() -> Int)?
 
+    /// `POST /test/about` — put the About panel up and **answer its frame**.
+    ///
+    /// It exists because of the way that panel shipped broken on 2026-09-22: it
+    /// was created, it was `onscreen`, it logged its own line, and it was
+    /// **0 × 0**. Nothing inside the process was wrong, and the snapshot harness
+    /// that was supposed to review it forced the document's frame before
+    /// photographing — i.e. it overwrote the one number that was broken and
+    /// rendered a perfect picture of a window that did not exist at that size.
+    ///
+    /// So this route answers the *window server's* view: `w` and `h` of the
+    /// panel's own frame. A panel that is up and unreadable and a panel that is
+    /// correct differ by those two numbers and by nothing a screenshot can show.
+    var onTestAbout: (() -> [String: Any])?
+
     /// `POST /test/gesture` `{"name": "forward-left"}` — post the ⌃⌥⌘F-key chord
     /// Logi Options+ makes for one mouse gesture, so the gesture branch of
     /// `HotkeyTap` runs exactly as it does for Victor's hand.
@@ -858,6 +872,11 @@ final class ElementPicker {
             }
             onTestSpawn?(text)
             respond(conn, 200, ["ok": true, "text": text])
+
+        // The About panel, and the size it actually came up at — see
+        // `onTestAbout`.
+        case ("POST", "/test/about"):
+            respond(conn, 200, ["ok": true].merging(onTestAbout?() ?? [:]) { _, new in new })
 
         // The three seconds of that gesture nothing else can reach — see
         // `onTestSpawnFolders`.

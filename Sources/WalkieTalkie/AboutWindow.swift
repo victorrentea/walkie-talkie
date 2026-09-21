@@ -100,6 +100,8 @@ enum AboutWindow {
         // so the terminal Victor is bound to keeps the caret and the keyboard.
         // `.utilityWindow` gives it the narrow title bar a reference panel wants
         // rather than a document's.
+        // A placeholder rect — `setContentSize` below replaces it once the
+        // stack has been measured. It is not the panel's real size.
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: tableWidth + 68, height: 720),
                         styleMask: [.titled, .closable, .resizable,
                                     .utilityWindow, .nonactivatingPanel],
@@ -112,42 +114,72 @@ enum AboutWindow {
         p.becomesKeyOnlyIfNeeded = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.minSize = NSSize(width: tableWidth + 68, height: 320)
+        p.minSize = NSSize(width: tableWidth + 52, height: 320)
 
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        scroll.autohidesScrollers = true
-
+        // **Everything below is frame-based on purpose, and it is a bug fix.**
+        //
+        // The first version wired the stack to the document view and the
+        // document's width to the clip view with constraints, and let the
+        // window's own `contentRect` stand. On screen the panel came up
+        // **0 × 0** — present, `onscreen: true`, layer 3, alpha 1, and no size
+        // at all (`CGWindowListCopyWindowInfo`, which is how it was found, since
+        // nothing is wrong from inside the process). A scroll view whose
+        // document's width is pinned to its own clip view gives auto layout a
+        // circular width with no anchor, and the window collapsed onto it.
+        //
+        // **And the harness had hidden it**: the panel was being photographed by
+        // forcing `documentView.frame` before `cacheDisplay`, which is exactly
+        // the step that was broken — it rendered beautifully and proved nothing
+        // about the window. The check that catches this is the window server's
+        // own bounds, not a snapshot.
+        //
+        // The content has a fixed width (`tableWidth`) by construction, so
+        // there is nothing for auto layout to solve here: measure the stack,
+        // size the document to it, size the window to that.
         let body = NSStackView(views: content())
         body.orientation = .vertical
         body.alignment = .leading
         body.spacing = 14
         body.edgeInsets = NSEdgeInsets(top: 22, left: 26, bottom: 24, right: 26)
-        body.translatesAutoresizingMaskIntoConstraints = false
+        let fit = body.fittingSize
+        body.setFrameOrigin(.zero)
+        body.setFrameSize(fit)
 
-        // A flipped clip so the content sits at the **top** of the panel and
-        // grows downward; an unflipped NSScrollView hangs it off the bottom and
-        // a short page floats in the middle of the window.
-        let doc = FlippedView()
+        // A flipped document so the content sits at the **top** of the panel and
+        // grows downward; an unflipped one hangs it off the bottom and a short
+        // page floats in the middle of the window.
+        let doc = FlippedView(frame: NSRect(origin: .zero, size: fit))
         doc.addSubview(body)
+
+        let visibleHeight = min(fit.height, 780)
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: fit.width, height: visibleHeight))
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.autohidesScrollers = true
+        scroll.autoresizingMask = [.width, .height]
         scroll.documentView = doc
-        NSLayoutConstraint.activate([
-            body.topAnchor.constraint(equalTo: doc.topAnchor),
-            body.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            body.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
-            body.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
-            doc.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-        ])
 
         p.contentView = scroll
+        p.setContentSize(NSSize(width: fit.width, height: visibleHeight))
         p.center()
         // **`orderFrontRegardless`, never `makeKeyAndOrderFront`.** The second
         // one activates the app, which is the one thing this whole file is
         // arranged not to do.
         p.orderFrontRegardless()
         panel = p
-        Log.info("→ about panel")
+        Log.info("→ about panel \(Int(p.frame.width))×\(Int(p.frame.height))")
+    }
+
+    /// **What the panel actually came up at**, for `POST /test/about`. The
+    /// window server's numbers, not the layout's intent — see `onTestAbout`.
+    static func describe() -> [String: Any] {
+        show()
+        guard let p = panel else { return ["shown": false] }
+        return ["shown": true,
+                "visible": p.isVisible,
+                "w": Int(p.frame.width), "h": Int(p.frame.height),
+                "vocabulary": vocabulary,
+                "gestures": gestures.count]
     }
 
     /// A document view that measures from the top left, so the stack inside the
