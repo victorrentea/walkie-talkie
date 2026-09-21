@@ -217,11 +217,49 @@ artefact of the junk.
 speech typed into whatever was open — a source file, a commit message, a Slack
 thread. Both the probe and the labeller read the front app and **refuse to start**
 unless it is on the allow-list (TextEdit, Notes, Stickies, Wispr Flow, Finder).
-Neither opens a document on somebody's desktop unasked; they stop and say so.
+The probe still stops and says so. The labeller, since 2026-09-22, is allowed to
+*wait* instead — see **the gate** below: it dictates nothing until the Mac is
+quiet, and it brings TextEdit forward itself at that point, so the app in front
+when the run is launched decides nothing. `--ignore-human` puts the old refusal
+back, because with no gate there is nobody to fix it later.
 
-**2 · It synthesises keystrokes, thousands of times.** `teacher_label.py` raises
-the 🔒 **hands-off locks** for the whole run (`~/bin/hands-off`) and drops them on
-the way out — including on Ctrl-C and SIGTERM, because a killed batch that leaves
+### The gate: it gets out of his way, and does not come back until he is gone
+
+Victor, 2026-09-22: *"dacă vezi mouse move sau taste apăsate să auto-suspenzi
+scriptul pe durata activității până la 5 min de inactivitate."*
+
+`helpers/human_watch.py` is a **listen-only** `CGEventTap` that answers one
+question — *how long since a human touched this Mac* — and `teacher_label.Gate`
+acts on it:
+
+* a clip is only ever **started** on a Mac that has been quiet for
+  `--quiet-minutes` (default 5);
+* a clip already playing is **cut short** the moment it stops being quiet: the
+  audio stops, Wispr is sent its own ⌃Escape, the row is waited for briefly and
+  dropped, and the sample stays unlabelled. Half a clip is not a shorter clip —
+  a label made from it would describe audio the corpus does not contain;
+* at a suspension the 🔒 **locks come down** (they say *do not touch your own
+  Mac* to a man already touching it) and go back up at the resume;
+* at the resume the **paste sink is re-established** before anything is
+  dictated, because the front app is now whatever he left there.
+
+**The one measurement the whole thing rests on** (2026-09-22): the obvious call,
+`CGEventSourceSecondsSinceLastEventType(…HIDSystemState…)`, **counts the batch's
+own keystrokes** — it read 0.02 s immediately after two synthetic Shift events —
+so a gate built on it would suspend itself after every clip and never run again.
+What separates them is the source's pid: Victor's own events carry
+`kCGEventSourceUnixProcessID == 0`, and anything posted with `CGEventPost` — ours
+*and* Wispr's ⌘V — carries the poster's. The tap ignores every event with a pid,
+which is why Wispr pasting does not read as Victor working.
+
+`~/.walkie-talkie/teacher-status.json` says `running` / `paused` / `stopped` with
+the clip number and how long it has been waiting, for anything watching from
+outside; the log says `⏸` and `▶️` at the same moments.
+
+**2 · It synthesises keystrokes, thousands of times.** It does that only while
+nobody else is using the keyboard (the gate above). `teacher_label.py` raises
+the 🔒 **hands-off locks** for the stretches it is working (`~/bin/hands-off`)
+and drops them at every suspension and on the way out — including on Ctrl-C and SIGTERM, because a killed batch that leaves
 them up says *do not touch your own Mac* for ever. Locks on screen are the only
 way Victor learns a batch is running; he is not reading the terminal.
 `PushToTalk` is a context manager for the same class of reason: an exception

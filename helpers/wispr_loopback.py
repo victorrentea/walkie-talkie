@@ -119,6 +119,25 @@ LEAD_SEC = float(os.environ.get("WISPR_LEAD_SECONDS", "1.3"))
 # is slower.
 RESULT_TIMEOUT_SEC = float(os.environ.get("WISPR_RESULT_TIMEOUT", "45"))
 
+#: How often `play(abort=…)` asks whether to stop. 50 ms is a twentieth of the
+#: reaction time it exists to beat — the hand arriving at the mouse before the
+#: click that would put Victor's own window under Wispr's paste.
+ABORT_POLL_SEC = 0.05
+
+#: How long an abandoned clip's row is waited for. Short on purpose: nothing is
+#: wanted from it, it is only taken off the table so the NEXT clip cannot be
+#: handed a row that belongs to this one.
+ABORT_ROW_TIMEOUT_SEC = 12.0
+
+
+class PlaybackAborted(Exception):
+    """A clip was cut short on purpose — not a failure, and never a label.
+
+    Raised rather than returned because the one thing that must not happen is a
+    caller mistaking a half-played clip for a labelled one: an exception cannot
+    be ignored by accident, a sentinel can.
+    """
+
 
 # ── the channel ──────────────────────────────────────────────────────────────
 def output_devices():
@@ -205,8 +224,14 @@ def resample(audio, rate, target_rate):
     return np.asarray(out, dtype=np.float32), target_rate
 
 
-def play(audio, rate, device_index, gain=1.0, peak=None):
+def play(audio, rate, device_index, gain=1.0, peak=None, abort=None):
     """Play through to the end, blocking. Real time, by construction.
+
+    Returns True if the clip was played whole, False if `abort` cut it short —
+    `abort` being a predicate polled while the audio runs (Victor's hand landing
+    on the mouse, in the batch that uses it). A cut clip is not a shorter clip:
+    Wispr heard half a sentence, so whatever comes back describes audio the
+    corpus does not contain and the caller must throw it away.
 
     Three things beyond `sd.play`, all learned the hard way on 2026-09-13:
 
@@ -244,7 +269,26 @@ def play(audio, rate, device_index, gain=1.0, peak=None):
 
     if channels > 1:
         signal = np.repeat(signal[:, None], channels, axis=1)
-    sd.play(signal, samplerate=rate, device=device_index, blocking=True)
+    if abort is None:
+        sd.play(signal, samplerate=rate, device=device_index, blocking=True)
+        return True
+
+    sd.play(signal, samplerate=rate, device=device_index, blocking=False)
+    # The deadline is the belt: a stream that ends without saying so must not
+    # leave the key held down for the rest of the night.
+    deadline = time.monotonic() + len(signal) / float(rate) + 1.0
+    while time.monotonic() < deadline:
+        if abort():
+            sd.stop()
+            return False
+        try:
+            if not sd.get_stream().active:
+                break
+        except Exception:  # noqa: BLE001 — no stream is "finished" too
+            break
+        time.sleep(ABORT_POLL_SEC)
+    sd.wait(ignore_errors=True)
+    return True
 
 
 # ── the key ──────────────────────────────────────────────────────────────────
@@ -709,8 +753,30 @@ def _wait_for_text(row_id, deadline, poll) -> Heard | None:
         time.sleep(poll)
 
 
-def dictate(wav_path, device_index, keys=None, timeout=RESULT_TIMEOUT_SEC) -> Heard | None:
-    """One sample, start to finish. Returns what Wispr heard, or `None`."""
+def dictate(wav_path, device_index, keys=None, timeout=RESULT_TIMEOUT_SEC,
+            abort=None, on_abort=None) -> Heard | None:
+    """One sample, start to finish. Returns what Wispr heard, or `None`.
+
+    With `abort`, a predicate polled during the playback, the clip can be given
+    up halfway — `PlaybackAborted` then, and three things happen first, in this
+    order and for separate reasons:
+
+    1. **the audio stops**, so Wispr stops hearing a sentence nobody is saying;
+    2. **⌃Escape**, Wispr's own *discard*, because the alternative is Wispr
+       pasting half a sentence into whatever window the human just clicked
+       into. Best effort: the chord is known to work while Wispr is recording
+       and not to work once it has formatted, and the gap between those two is
+       exactly where this lands. If it misses, the paste goes to the sink that
+       was checked at the start, which is the same place it would have gone
+       anyway;
+    3. **the row is waited for and dropped**, briefly, because a row that
+       arrives late is a row the *next* clip would be handed as its own.
+
+    `on_abort` is called between (2) and (3) — after the keys are out and before
+    the twelve seconds of waiting nobody is watching. The batch uses it to drop
+    the 🔒 locks at once: they say *do not touch your own Mac* and the whole
+    reason this path ran is that somebody already is.
+    """
     audio, rate, _ = read_wav(wav_path)
     db = _open_wispr()
     try:
@@ -718,7 +784,13 @@ def dictate(wav_path, device_index, keys=None, timeout=RESULT_TIMEOUT_SEC) -> He
     finally:
         db.close()
     with PushToTalk(keys):
-        play(audio, rate, device_index)
+        whole = play(audio, rate, device_index, abort=abort)
+    if not whole:
+        post_wispr_dismiss()
+        if on_abort is not None:
+            on_abort()
+        wait_for_new(before, timeout=ABORT_ROW_TIMEOUT_SEC)
+        raise PlaybackAborted(str(wav_path))
     return wait_for_new(before, timeout=timeout)
 
 

@@ -554,6 +554,16 @@ python3 helpers/teacher_label.py --limit 20     # one careful batch
 python3 helpers/teacher_label.py --all          # overnight, real time, resumable
 ```
 
+**The batch gets out of the way by itself** (2026-09-22). A listen-only event tap
+(`helpers/human_watch.py`) watches for real mouse and keyboard input, and the run
+suspends for as long as somebody is using the Mac, resuming after
+`--quiet-minutes` (default 5) of quiet: the locks come down, a clip in flight is
+cut short and thrown away rather than labelled from half its audio, and the paste
+sink is re-established before the next one. It reads real input by the event's
+source pid — Victor's carry **0**, everything posted with `CGEventPost` carries
+the poster's — because the ordinary idle counter counts the batch's own
+keystrokes and would suspend the run against itself.
+
 **Read `docs/teacher-loopback.md` before running any of it.** The probe is a
 genuine go/no-go — if Wispr will not take played-back audio the idea ends there —
 and the batch synthesises keystrokes into an app that pastes wherever the focus

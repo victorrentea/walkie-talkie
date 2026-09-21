@@ -340,6 +340,42 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   (`_put_the_relay_down`), and `MicrophoneAfterACancel` in it is the regression test for the
   swallowed dictation — open, cancel, open, assert the device line both times. It never speaks.
 
+## The labelling batch suspends itself when Victor is at the Mac (2026-09-22)
+
+Rules for `helpers/human_watch.py` and `teacher_label.Gate`. Victor: *"dacă vezi
+mouse move sau taste apăsate să auto-suspenzi scriptul pe durata activității
+până la 5 min de inactivitate."* Full reasoning: `docs/teacher-loopback.md`, *The
+gate*.
+
+- **Never gate on `CGEventSourceSecondsSinceLastEventType`.** Measured
+  2026-09-22: it read **0.02 s** immediately after this process posted two
+  synthetic Shift events, so it counts the batch's own keystrokes as human
+  activity — a run gated on it suspends after its first clip and never resumes.
+- **The discriminator is the source pid**, from the same probe: hardware events
+  carry `kCGEventSourceUnixProcessID == 0`, anything posted with `CGEventPost`
+  carries the poster's pid and `kCGEventSourceStateID == 0`. The tap ignores
+  **every** event with a pid, not only its own — Wispr's ⌘V is not Victor
+  either, and treating it as activity would hold the batch down for ever.
+- **Listen-only, and nothing else** (`kCGEventTapOptionListenOnly`): a bug in a
+  watch that runs all night must not be able to swallow one of his keystrokes.
+  Re-enable the tap on `kCGEventTapDisabledByTimeout` or the night goes deaf.
+- **A cut-short clip is never a label.** `rig.dictate(abort=…)` raises
+  `PlaybackAborted`; Wispr heard half a sentence, so anything it returns
+  describes audio the corpus does not contain. The sample stays unlabelled and
+  the next run takes it.
+- **The locks follow the suspension, in both directions.** 🔒 standing over a
+  batch that has stood down says *do not touch your own Mac* to a man already
+  touching it, and a resume with no locks is the batch taking the keyboard back
+  silently. `HandsOff.acquire()` is idempotent for exactly this.
+- **Re-establish the paste sink before the first clip after a resume** — the
+  front app is whatever he left there, and the alternative is a sentence of his
+  own voice typed into it. `Gate.ensure_sink` waits rather than failing, and
+  that is also why the *initial* front-app check no longer refuses: a gated run
+  is launched from a terminal and walked away from.
+- **`evals/test_human_gate.py`** covers the gate with a fake watch and fake
+  locks; the tap itself is a measurement, not a test — `python3
+  helpers/human_watch.py` is the live readout.
+
 ## Do not
 
 - **`MicRecorder.lock` is not recursive: take it exactly once per public entry point, never again

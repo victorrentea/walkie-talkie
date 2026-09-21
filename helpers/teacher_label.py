@@ -73,6 +73,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import wispr_loopback as rig  # noqa: E402
+from human_watch import HumanWatch  # noqa: E402
 
 CORPUS = Path(
     os.environ.get(
@@ -379,16 +380,28 @@ class HandsOff:
         self.up = False
 
     def __enter__(self):
+        self.acquire()
+        return self
+
+    def acquire(self):
+        """Put the locks up — again, if a suspension took them down.
+
+        Idempotent, because the batch now raises and drops them several times a
+        night: they mean *an agent is driving this Mac right now*, and a set left
+        standing over a batch that has suspended itself for Victor says the one
+        thing that is not true.
+        """
+        if self.up:
+            return
         if not HANDS_OFF.exists():
             log("⚠️  no ~/bin/hands-off — running WITHOUT the on-screen locks")
-            return self
+            return
         try:
             subprocess.run([str(HANDS_OFF), "start", self.what],
                            check=False, capture_output=True, timeout=10)
             self.up = True
         except Exception as exc:  # noqa: BLE001
             log(f"⚠️  could not raise the locks: {exc}")
-        return self
 
     def __exit__(self, *exc):
         self.release()
@@ -403,6 +416,154 @@ class HandsOff:
                            capture_output=True, timeout=10)
         except Exception:
             pass
+
+
+#: How long the Mac has to be quiet before the batch picks the keyboard back up.
+#: Victor's number (2026-09-22): *"daca vezi mouse move sau taste apasate sa
+#: auto-suspenzi scriptul pe durata activitatii pana la 5 min de inactivitate."*
+QUIET_MINUTES = float(os.environ.get("TEACHER_QUIET_MINUTES", "5"))
+
+#: Where the run says what it is doing, for anything waiting on it — an agent, a
+#: `tail`, a status line. Written at every transition and while paused, because a
+#: file that only says `paused` and not *since when* cannot be waited on.
+STATUS_PATH = Path(os.environ.get(
+    "TEACHER_STATUS", os.path.expanduser("~/.walkie-talkie/teacher-status.json")))
+
+
+def human_span(seconds: float) -> str:
+    """`45 s` / `5 min` — a log line that says *0 min* teaches nothing."""
+    return f"{seconds:.0f} s" if seconds < 90 else f"{seconds/60:.0f} min"
+
+
+def write_status(**fields):
+    """One JSON object describing the run right now. Never raises.
+
+    Best effort on purpose: a batch must not die at 3 a.m. because a status file
+    could not be written.
+    """
+    try:
+        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        fields.setdefault("at", datetime.now(timezone.utc).isoformat())
+        fields.setdefault("pid", os.getpid())
+        STATUS_PATH.write_text(json.dumps(fields, ensure_ascii=False, indent=1))
+    except OSError:
+        pass
+
+
+def wake_the_sink() -> str | None:
+    """Put a harmless document back in front, and say what is there now.
+
+    Called only on the way back from a suspension, with the locks already up: by
+    then the Mac has been quiet for minutes, so taking the front is not taking it
+    from anybody. It is still the one focus-stealing thing in this file, which is
+    why it is one function with its own name rather than two lines inline.
+    """
+    try:
+        subprocess.run(
+            ["osascript",
+             "-e", 'tell application "TextEdit" to if (count of documents) = 0 '
+                   'then make new document',
+             "-e", 'tell application "TextEdit" to activate'],
+            check=False, capture_output=True, timeout=15)
+    except Exception:  # noqa: BLE001
+        pass
+    time.sleep(1.0)
+    return rig.paste_sink()
+
+
+class Gate:
+    """Suspends the batch while Victor is using his Mac.
+
+    **The rule, in one line:** a clip is only ever started on a Mac that has been
+    quiet for `quiet` seconds, and a clip already playing is abandoned the moment
+    it stops being quiet.
+
+    Three things happen at a suspension, and each is a separate promise:
+
+    * the **locks come down**, because 🔒 on screen while he is typing says *do
+      not touch your own Mac* to a man already touching it;
+    * the **status file** says `paused`, so whatever is waiting on this run —
+      an agent, a status line — learns it from one read rather than from the log;
+    * on the way back the **paste sink is re-established**, because the front app
+      is now whatever he left in front, and the next clip would type a sentence of
+      his own speech into it.
+
+    The one thing it deliberately does not do is guess at *why* the Mac went
+    quiet. Five minutes of nothing is five minutes of nothing, whether he walked
+    away or fell asleep reading.
+    """
+
+    def __init__(self, watch, locks, quiet_seconds, log_fn):
+        self.watch = watch
+        self.locks = locks
+        self.quiet = quiet_seconds
+        self.log = log_fn
+        self.suspensions = 0
+        self.paused_seconds = 0.0
+
+    def busy(self) -> bool:
+        return self.watch.since_human < self.quiet
+
+    def abort_predicate(self, started: float):
+        """*Has he touched it since this clip began* — for `rig.dictate`."""
+        return lambda: self.watch.active_since(started)
+
+    def wait_for_quiet(self, progress: dict):
+        """Block until the Mac has been quiet long enough. Returns seconds lost."""
+        if not self.busy():
+            self.ensure_sink()
+            return 0.0
+        self.suspensions += 1
+        began = time.monotonic()
+        self.log(f"⏸  suspended — somebody is using this Mac; waiting for "
+                 f"{human_span(self.quiet)} of quiet")
+        self.locks.release()
+        last_status = 0.0
+        while True:
+            since = self.watch.since_human
+            if since >= self.quiet:
+                break
+            now = time.monotonic()
+            if now - last_status > 30:
+                write_status(state="paused", quiet_needed_s=self.quiet,
+                             quiet_for_s=round(since, 1),
+                             paused_for_s=round(now - began, 1), **progress)
+                last_status = now
+            time.sleep(1.0)
+        waited = time.monotonic() - began
+        self.paused_seconds += waited
+        self.locks.acquire()
+        front = self.ensure_sink()
+        self.log(f"▶️  resumed after {human_span(waited)} — sink is {front}")
+        write_status(state="running", quiet_needed_s=self.quiet, **progress)
+        return waited
+
+    def ensure_sink(self) -> str:
+        """Block until a harmless window is in front, and say which.
+
+        Called before **every** clip, not only after a suspension: the front app
+        is the one precondition of this whole batch that another person can
+        change, and the cost of re-reading it is one `osascript` against clips
+        that take fifteen seconds each. A window that will not come forward is
+        not an error — it is another stretch of waiting, because the alternative
+        is typing a sentence of his own voice into whatever he left open.
+        """
+        while True:
+            front = rig.paste_sink()
+            if front in SAFE_SINKS:
+                return front
+            front = wake_the_sink()
+            if front in SAFE_SINKS:
+                return front
+            self.log(f"⏸  the front app is {front!r} and TextEdit would not come "
+                     "forward — staying down")
+            write_status(state="paused", reason="no safe paste sink",
+                         front=front, quiet_needed_s=self.quiet)
+            self.locks.release()
+            self.watch.touch()          # start the quiet stretch again
+            while self.watch.since_human < self.quiet:
+                time.sleep(1.0)
+            self.locks.acquire()
 
 
 AUDIO_PROBE = (
@@ -531,6 +692,13 @@ def main(argv):
         "--source", action="append",
         help="which samples to label (default: addons-mic and whisper-local — "
              "the ones with no teacher reading. 'wispr' rows already have one)")
+    ap.add_argument("--quiet-minutes", type=float, default=QUIET_MINUTES,
+                    metavar="MIN",
+                    help="suspend while somebody is using this Mac and resume "
+                         "after this much quiet (default 5)")
+    ap.add_argument("--ignore-human", action="store_true",
+                    help="dictate whatever he is doing — for a supervised batch "
+                         "he is watching, never for a night")
     args = ap.parse_args(argv)
 
     sources = args.source or ["addons-mic", "whisper-local"]
@@ -586,29 +754,58 @@ def main(argv):
             "Pass-Thru.")
 
     front = rig.paste_sink()
-    if front not in SAFE_SINKS:
+    if front not in SAFE_SINKS and args.ignore_human:
+        # With no gate there is nobody to fix this later, so it is still a
+        # refusal: the run would start dictating into that window immediately.
         raise SystemExit(
             f"the front app is {front!r}, which is not a safe paste target.\n"
             "Wispr types its transcript into whatever has focus, and this batch is\n"
             f"about to do that {len(todo)} times. Open a blank TextEdit document,\n"
             "click into it, and start again. (Safe: " + ", ".join(sorted(SAFE_SINKS)) + ")")
-    log(f"paste sink: {front}")
+    if front in SAFE_SINKS:
+        log(f"paste sink: {front}")
+    else:
+        # Gated runs are started from a terminal and walked away from. The gate
+        # will not dictate a syllable before the Mac is quiet, and it opens the
+        # sink itself when it is — so the front app *now* decides nothing.
+        log(f"paste sink: {front!r} is not safe — TextEdit will be brought "
+            "forward once this Mac goes quiet")
 
     window = open_run_window()
     locks = HandsOff(f"labelling {len(todo)} voice samples with Wispr Flow")
+
+    watch = HumanWatch()
+    if args.ignore_human:
+        log("⚠️  --ignore-human: this batch will keep dictating while you type")
+        gate = None
+    else:
+        if not watch.start():
+            raise SystemExit(
+                "cannot watch for real input — " + (watch.failed or "unknown") +
+                ".\nWithout it a batch started at noon takes the keyboard for the "
+                "afternoon.\n--ignore-human runs anyway, for a batch being watched.")
+        gate = Gate(watch, locks, args.quiet_minutes * 60, log)
+        log(f"suspends while this Mac is in use, resumes after "
+            f"{args.quiet_minutes:g} min of quiet")
+
     # The locks have to come down on Ctrl-C and on a SIGTERM too, not only on a
     # clean exit — a killed batch that leaves them up is the failure this whole
     # wrapper exists to prevent.
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: (close_run_window(window), locks.release(),
+                                       write_status(state="stopped",
+                                                    reason="signal"),
                                        sys.exit(130)))
 
-    done = failed = streak = recoveries = silent = wrong_language = 0
+    done = failed = streak = recoveries = silent = wrong_language = aborted = 0
     misrouted = 0
     #: Every Wispr row this run has taken, so none is taken twice.
     consumed = set()
     gap = gaps()
     started = time.monotonic()
+    write_status(state="running", total=len(todo), clip=0, labelled=0,
+                 quiet_needed_s=None if gate is None else gate.quiet,
+                 log=os.environ.get("TEACHER_LOG", ""))
     with locks:
         for i, s in enumerate(todo, 1):
             if out_of_time(started, args.stop_after):
@@ -619,6 +816,9 @@ def main(argv):
             if not wav.exists():
                 log(f"  {i}/{len(todo)} missing {s['wav']} — skipped")
                 continue
+            if gate is not None:
+                gate.wait_for_quiet({"clip": i, "total": len(todo),
+                                     "labelled": done})
             peak = peak_of(wav)
             if peak < SILENT_PEAK:
                 # Not a failure: nothing was asked of Wispr, so the streak that
@@ -627,7 +827,23 @@ def main(argv):
                 log(f"  {i}/{len(todo)} ⌀ silent ({s['seconds']:.1f}s, peak "
                     f"{peak:.4f}) — not played")
                 continue
-            heard = rig.dictate(wav, idx)
+            clip_started = time.monotonic()
+            try:
+                heard = rig.dictate(
+                    wav, idx,
+                    abort=None if gate is None
+                    else gate.abort_predicate(clip_started),
+                    on_abort=None if gate is None else gate.locks.release)
+            except rig.PlaybackAborted:
+                # Not a failure of the rig and not a label: half a clip was
+                # played, so whatever Wispr made of it describes audio the
+                # corpus does not contain. The sample stays unlabelled and the
+                # next run picks it up.
+                aborted += 1
+                streak = recoveries = 0
+                log(f"  {i}/{len(todo)} ⏸ cut short ({s['seconds']:.1f}s) — "
+                    "somebody started using this Mac")
+                continue
             if heard is None or not heard.asr.strip():
                 failed += 1
                 streak += 1
@@ -701,7 +917,12 @@ def main(argv):
         clear_cooldown()
     log(f"done: {done} labelled, {failed} failed, {silent} silent, "
         f"{wrong_language} wrong language, {misrouted} misrouted, "
-        f"{elapsed:.0f} min")
+        f"{aborted} cut short, {elapsed:.0f} min")
+    if gate is not None and gate.suspensions:
+        log(f"suspended {gate.suspensions}× for "
+            f"{gate.paused_seconds/60:.0f} min of that, waiting for the Mac")
+    write_status(state="stopped", reason="finished", labelled=done,
+                 aborted=aborted, elapsed_min=round(elapsed, 1))
     left = db.execute(
         "SELECT COUNT(*) FROM samples WHERE (teacher_text IS NULL OR teacher_text = '')"
         f" AND source IN ({','.join('?' * len(sources))})", sources).fetchone()[0]
