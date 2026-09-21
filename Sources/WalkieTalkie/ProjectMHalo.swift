@@ -58,7 +58,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// means agree (`REPORT.md`, *Brightness*). `WT_PM_GAIN_SCALE='{"7": 0.7}'`
     /// overrides a value for a run.
     static let gainScale: [Int: CGFloat] = {
-        var table: [Int: CGFloat] = [7: 0.25, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
+        var table: [Int: CGFloat] = [7: 0.12, 8: 0.3, 20: 0.9, 85: 1.05, 87: 1.2, 103: 1.1]
         if let raw = ProcessInfo.processInfo.environment["WT_PM_GAIN_SCALE"], let data = raw.data(using: .utf8),
            let o = try? JSONSerialization.jsonObject(with: data) as? [String: Double] {
             for (k, v) in o { if let n = Int(k) { table[n] = CGFloat(v) } }

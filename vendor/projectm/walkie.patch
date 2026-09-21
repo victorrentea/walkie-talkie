@@ -1,14 +1,27 @@
 --- a/src/libprojectM/ProjectM.cpp
 +++ b/src/libprojectM/ProjectM.cpp
-@@ -20,6 +20,7 @@
+@@ -20,6 +20,9 @@
  */
  
  #include "ProjectM.hpp"
 +#include <cstdlib>
++#include <cstdio>
++#include <cmath>
  
  #include "Preset.hpp"
  #include "PresetFactoryManager.hpp"
-@@ -167,7 +168,8 @@
+@@ -164,10 +167,19 @@
+ 
+ 
+     // ToDo: Call the to-be-implemented render method in Renderer
++    // walkie: PM_AUDIO_LOG=1 prints the per-frame audio statistics the presets read.
++    { static const bool log = getenv("PM_AUDIO_LOG") != nullptr;
++      if (log) fprintf(stderr, "[pmaudio] {\"frame\": %u, \"bass\": %.3f, \"mid\": %.3f, \"treb\": %.3f, \"bass_att\": %.3f, \"mid_att\": %.3f, \"treb_att\": %.3f}\n",
++                       m_frameCount, audioData.bass, audioData.mid, audioData.treb, audioData.bassAtt, audioData.midAtt, audioData.trebAtt);
++      if (log) { double ss = 0, sm = 0, ws = 0, wm = 0; for (auto v : audioData.spectrumLeft) { ss += v; if (v > sm) sm = v; }
++                 for (auto v : audioData.waveformLeft) { ws += std::fabs(v); if (std::fabs(v) > wm) wm = std::fabs(v); }
++                 fprintf(stderr, "[pmspec] {\"frame\": %u, \"spec_sum\": %.2f, \"spec_max\": %.3f, \"wave_abs_mean\": %.3f, \"wave_abs_max\": %.3f}\n",
++                         m_frameCount, ss, sm, ws / audioData.waveformLeft.size(), wm); } }
      m_activePreset->RenderFrame(audioData, renderContext);
  
      // ToDo: Allow external apps to provide a custom target framebuffer.
@@ -18,6 +31,27 @@
      glViewport(0, 0, renderContext.viewportSizeX, renderContext.viewportSizeY);
  
  #ifdef USE_GLES
+--- a/src/libprojectM/Audio/PCM.cpp
++++ b/src/libprojectM/Audio/PCM.cpp
+@@ -1,4 +1,5 @@
+ #include "PCM.hpp"
++#include <cstdlib>
+ 
+ namespace libprojectM {
+ namespace Audio {
+@@ -104,6 +105,12 @@
+     }
+ 
+     m_fft.TimeToFrequencyDomain(waveformSamples, spectrumValues);
++
++    // walkie: the spectrum's scale, matched to butterchurn's (whose FFT output feeds
++    // spectrum waves at a different magnitude). PM_SPECTRUM_SCALE overrides; the
++    // bass/mid/treb ratios are unaffected by a uniform scale.
++    static const float spectrumScale = []() { const char* e = getenv("PM_SPECTRUM_SCALE"); return e ? (float)atof(e) : 5.3f; }();   // 5.3: measured 2026-09-21, the ratio of the two engines' spectrum sums on the same samples
++    for (auto& v : spectrumValues) v *= spectrumScale;
+ 
+     std::copy(spectrumValues.begin(), spectrumValues.end(), spectrumData.begin());
+ }
 --- a/src/libprojectM/MilkdropPreset/CustomShape.cpp
 +++ b/src/libprojectM/MilkdropPreset/CustomShape.cpp
 @@ -235,7 +235,7 @@

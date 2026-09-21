@@ -81,6 +81,17 @@ MB) are the same shape. WindowServer sat at 20–40 % for every row, film
 included; the native rows were re-measured after the render queue went in
 (01:19) and did not move.
 
+Luminance after the gain iteration (mean over 3…8 s of the demo voice, rgb × alpha, web ÷ native; 1.0 = matched; `luminance-2026-09-21.md`):
+
+| preset | native gain scale | web/native luminance (verification 02:05) | web/native in the three iteration rounds |
+|---|---|---|---|
+| Tunnel | 0.12 (was 0.25 at the verification) | 0.17 | 0.19 / 0.33 / 0.46 — not a gain problem, see *Round two* |
+| Cauldron | 0.30 | **0.95** | 0.58 / 0.95 / 0.87 |
+| Tendrils | 0.90 | **0.97** | 0.97 / 0.95 / 1.03 |
+| Snowflake | 1.05 | 1.46 | 2.72 / 0.95 / 1.14 |
+| Sparks | 1.20 | 0.60 | 3.62 / 1.41 / 0.62 |
+| Water Dream | 1.10 | 0.37 | 0.74 / 0.68 / 0.84 |
+
 | preset | route | app CPU % | WebKit CPU % (WebContent + its GPU proc) | app RSS MB | WebContent RSS MB | native frame, CPU ms |
 |---|---|---|---|---|---|---|
 | film (lightning) | — | 0.1 | — | 47 | — | — |
@@ -118,12 +129,98 @@ included; the native rows were re-measured after the render queue went in
 - **Idle**: the native host's timer stops with the ring; between dictations it
   costs 0 %. See the finding above about the web route.
 
+## Round two (01:30–03:00): brightness matched by measurement, the audio path compared number by number
+
+- **Brightness.** The engine-only PNGs carry *straight* alpha (ImageIO and
+  `canvas.toDataURL` both un-premultiply on write), so the first luminance
+  numbers were wrong for both routes; `lum.py` now measures rgb × alpha, what
+  reaches the screen over black, at every second from 3 to 8 s. At native gain
+  = the style's gain, the native route was **3.2× brighter on Tunnel, 2.5× on
+  Cauldron, 1.3× on Tendrils and Sparks, and 0.8× (darker) on Snowflake and
+  0.7× on Water Dream**. `ProjectMHalo.gainScale` is a per-preset multiplier
+  on the native engine's gain; `docs/projectm/iterate-gain.sh` shot both
+  routes, took the ratio of mean luminance and moved the scale by
+  `ratio^0.8`, three rounds (`gain-iteration-2026-09-21.md`). Where it landed
+  (`luminance-2026-09-21.md`, the final verification):
+  Cauldron ×0.3 → web/native **0.95**, Tendrils ×0.9 → **0.97**, Snowflake
+  ×1.05 → **1.1–1.5** (run to run), Water Dream ×1.1 → 0.4–0.8 (its native
+  frames burst to 100+ where the web sits at 12–40; the palette cycles),
+  Sparks ×1.2 → 0.6–1.4. **Tunnel cannot be matched by gain**: its web twin is
+  a faint wash (mean luminance 1–5 out of 255 even at gain 4) while the native
+  one bursts to 30; at scale 0.1 (gain 0.4) the ratio was still 0.46, so the
+  table carries ×0.12 and the rest is the engine — `WT_PM_GAIN_SCALE='{"7": …}'`
+  is the knob. The run-to-run spread is large because the demo voice is
+  random noise under a deterministic envelope and every preset is a feedback
+  system; six seconds per run are averaged, and a ratio within 0.8–1.25 is
+  what "matched" means here.
+- **The audio inputs are the same, measured.** Both engines were instrumented
+  (`halo.levels()` → `WT_MD_LEVELS=1`; `PM_AUDIO_LOG=1` in the patched
+  library) and fed the same demo voice for 14 s: `bass` mean 0.93 vs 0.86,
+  p90 3.4 vs 3.0, silent fraction the same; `mid`/`treb` and the `_att` values
+  alike. projectM only spikes higher at the edges of a burst (max 10 vs 5.8).
+  Waveform amplitudes agree (|max| 0.88×; projectM stores float × 128,
+  butterchurn byte − 128). Both engines use a 48×36 mesh; the two custom-shape
+  polygon routines are the same formula. **Frame rate**: the web page renders
+  ~24.6 fps (344 frames in 14 s; butterchurn's own `fps` reads 19–26) against
+  the native 30 — every per-frame feedback grows ~20 % faster natively.
+- **Snowflake.** Silent, both engines converge: extents 0.39 → 0.58 → 0.74 (web)
+  vs 0.68 → 0.74 → 0.59 (native) over 3/5/7 s — the native pattern reaches its
+  size sooner, then both sit at the same size. With the voice, the size varies
+  from run to run *in both* (web 0.37/0.80/0.75, native 0.41/0.56/0.63 in one
+  run), so the "2–3× larger" of round one was one run, not a systematic
+  difference. Audio gain 0.25×–4×, resampling and 20/25 fps do not move it.
+  Left as is.
+- **Sparks — found.** `martin - chain breaker` derives every spark from a
+  custom wave with `bSpectrum=1`: the *spectrum magnitudes* feed `gmegabuf`,
+  `vol_`, the blob radius and the spread. The spectrum sums differ by
+  **5.5×** (web 1068 mean / 3655 p90 against native 193 / 707 on the same
+  samples; the maxima by 15×, so butterchurn's spectrum is also peakier). A
+  uniform spectrum scale leaves `bass/mid/treb` (ratios) untouched, so the
+  patched library now scales projectM's spectrum by **5.3** (`PCM.cpp`,
+  `PM_SPECTRUM_SCALE` overrides). With it the sparks are **crisp points**, as
+  on the web — but arranged along a chain, where the web's spread into a
+  cloud; the spread terms (`sin(q12·.07)·sin(q11·.13)·q3`) are still smaller
+  natively and that is where the remaining difference lives. Removing the
+  `GetBlur2` term from the comp shader was tried and is not it.
+- **The blackouts in native Tunnel** at 4 s and 8 s of every run are the demo
+  voice's breath pauses (~0.7 s of near-silence every 5 s): silent, both
+  engines' Tunnel is black (alpha ≤ 1.6 on the web, ≤ 0.9 native); the native
+  one just decays to nothing a little faster.
+- **The idle cost of the installed app, quantified read-only**: over 31 s at
+  01:31 its WebContent + WebKit GPU pair sat at **17.6 % + 38.2 %** of a core
+  (391 + 40 MB). `GET /test/state` on its loopback answered `ringUp: true,
+  live: true, style: milkdrop20, visible: true, wisprHearing: true, phase:
+  idle, listening: false` — the Tendrils web halo has been **up on the pointer
+  all night** because the Wispr-microphone witness reads *open* with no
+  dictation in flight. It is not an idle web view burning CPU (a warmed
+  `MilkDropHalo` never calls `halo.start()`); it is a live ring nobody asked
+  for, and the same would happen with the native engine (which would cost
+  ~6 % in-process instead). The witness (`wisprHearing`) is the thing to look
+  at, not the halo. Nothing on the installed process was touched.
+- **The `Halo engine` menu row** — `Halo engine: Web (butterchurn)` /
+  `Native (projectM)`, under `Halo fx`, the shape `Engine` has: a readout, the
+  two under the arrow, the tick from `HaloEngine.current` on every open, a
+  greyed note *For the MilkDrop presets only*. `CaretHalo.setEngine` writes the
+  `haloEngine` default and rebuilds the panel when a preset is drawn. Not
+  photographed (`WT_SHOOT_MENU` shoots the spawn folder menu, not the status
+  menu); the code follows `applyHaloRow` line for line.
+
 ## What it looks like — `docs/projectm/captures/`
 
 Engine-only frames (the keyed output, nothing of the screen in it) at 3, 5
 and 7 s into the same demo voice, web (butterchurn at 2×) on the top row,
-native 1× and 2× below, on a mid-grey ground. Statistics in
-`captures-2026-09-21.md` (lit fraction, mean alpha of the lit part).
+native 1× below, on a mid-grey ground, composited with their straight alpha.
+The verification run of 02:05, with the per-preset gain table in (Tunnel at
+×0.25 there; ×0.12 in the code now) and the spectrum still at ×1 — the 03:00
+run with both baked in was **invalidated by the machine**: `coreaudiod` had
+climbed to 125 % of a core, 167 threads and 68 GB RSS (load average 115–142),
+WebKit missed its 2 s ready window on every web run and the route fell back
+to the film. That daemon is not this branch's; it is reported, not touched.
+Statistics in `captures-2026-09-21.md` (lit fraction, mean alpha of the lit
+part) and `luminance-2026-09-21.md`. Three extra composites:
+`sparks-spectrum-scale.png` (web / native ×1 / ×5.3 / ×10 at 4, 6, 8 s),
+`snowflake-silent.png` (both engines, no audio) and `tunnel-3-6s.png` (the
+breath-pause blackout at 4 s).
 
 | preset | verdict |
 |---|---|
@@ -172,6 +269,17 @@ texture; noise textures are built in).
   hands the samples over raw too (`WT_PM_RESAMPLE=1` resamples), for the same
   spectrum the presets were tuned against.
 
+## What matched and what still differs, in one place
+
+| preset | matched | still differs, and why |
+|---|---|---|
+| Tunnel | composition, palette, 2× turn, pinned centre, blackout in silence | brighter in bursts by 2–6× at any gain — the web engine's Tunnel is a faint wash the ×4 gain barely lifts; the native one is a bright feedback burst. A gain cannot bridge two different dynamics. |
+| Cauldron | luminance (0.95), palette, strokes | native fills the disc where the web leaves dark gaps (the same keying, a fuller engine output) |
+| Tendrils | everything measured (0.97) | — |
+| Snowflake | audio inputs, geometry, size at rest, colour cycle | growth speed of the feedback pattern (native ~20 % more frames a second, plus the engine's own warp); run-to-run variance dwarfs it |
+| Sparks | audio inputs; with the spectrum ×5.3 the sparks are points, not blobs | the 256 instances sit along a chain instead of spreading into a cloud — the preset's spread terms (`sin(q12·.07)·sin(q11·.13)·q3`) come out smaller natively; unresolved |
+| Water Dream | scene, calm sea, stars | native bursts brighter at palette changes; the web goes white for stretches; per-second luminance never agrees because the palettes are not in phase |
+
 ## Remaining work before it can be the default
 
 1. **Victor's eye** on the six, live: `WT_HALO_ENGINE=native WT_HALO_STYLE=<case>
@@ -195,11 +303,14 @@ texture; noise textures are built in).
    `WKWebView`. Either port the comets natively or accept the page for it.
 7. **60 fps** was not measured (the cap is 30 everywhere); the engine's CPU
    part would double, ~10–20 % in the app.
-8. The idle web-view cost of the installed app (the 24 % + 50 % pair, which
-   the census shows is exactly one live web halo's WebContent + GPU process)
-   deserves its own look — that is the web route's bill even before this
-   branch. Nothing on this branch touched or measured the installed app
-   beyond `ps`.
+8. **The installed app's ring has been up all night** (`wisprHearing: true`
+   with nothing in flight — see *Round two*): the witness, not the halo, is
+   what to look at. Nothing on this branch touched the installed app beyond
+   `ps` and one read-only `GET /test/state`.
+9. **`coreaudiod` at 125 % / 68 GB** at 03:00 (load average 115) — not this
+   branch's, and the reason the last verification run is the 02:05 one.
+10. The `Halo engine` row has not been seen on screen (no shoot path for the
+    status menu); Victor opening the menu is the test.
 
 ## How to reproduce
 
