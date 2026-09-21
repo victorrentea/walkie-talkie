@@ -180,13 +180,20 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 6, pinCenter: true)
         // Tendrils ×0.7 on sight (Victor, 2026-09-21: *"tendrils să fie .7x
         // mărime (mai mic)"*) — 0.728 → 0.51, the same move Sparks got the
-        // evening before. The page's own `FORMULAS` entry still says 0.728;
-        // the number the app draws at is this one.
-        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.51,
+        // evening before — and ×0.7 again the same morning, together with
+        // Sparks (*"micșorează la 0.7x și pentru efectul cu dictarea
+        // legată"*): 0.51 → 0.357. The page's own `FORMULAS` entry still says
+        // 0.728; the number the app draws at is this one.
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
-        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.525,
+        // Sparks ×0.7 a second time (Victor, 2026-09-21: *"efectul care apare
+        // când fac gestul de deschidere într-un terminal nou trebuie să fie
+        // mai mic cu treizeci la sută"*) — 0.75 → 0.525 the evening before,
+        // 0.525 → 0.3675 now. Each ask is a factor on what is drawn today, not
+        // on the page's original, so the two compound.
+        case .milkdrop87:  return Preset(number: 87, name: "martin - chain breaker", scale: 0.3675,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
         // locked in the bottom 20% of the screen, but the meteors follow the
@@ -210,14 +217,18 @@ enum HaloStyle: String, CaseIterable {
     /// **On the list today.** Water Dream is off it *"for the moment"*
     /// (Victor, 2026-09-20 late — the dearest style measured, 0.79 of a GPU
     /// core and 866 MB, and still "too violent"); its hybrid stays built.
-    /// Snowflake is off it too, temporarily (Victor, 2026-09-20: *"scoate
-    /// temporar din meniu/din efecte Snowflake"*); the preset stays in place.
+    /// Snowflake was off it too (Victor, 2026-09-20: *"scoate temporar din
+    /// meniu/din efecte Snowflake"*) — **temporarily**, and the temporary
+    /// ended on 2026-09-21, when he made it the dress of a sentence opening a
+    /// new claude (*"dictarea în terminal nou tre să redea efectul de
+    /// stars"*): a destination's effect has to be pickable in the menu beside
+    /// the other three, or its row is the one tick he cannot move.
     /// Pulse went the same evening (*"scoate pulse"*), after its fog came back
     /// down to 1×; the page still draws it.
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
     /// Gemini too (2026-09-21, *"scoate gemini din opțiuni"*).
-    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
+    var isOffered: Bool { self != .milkdrop103 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.
@@ -333,7 +344,12 @@ enum HaloDestination: String, CaseIterable {
         switch self {
         case .caret: return .milkdrop7    // Tunnel
         case .bound: return .milkdrop20   // Tendrils
-        case .spawn: return .milkdrop87   // Sparks
+        // **Snowflake, since 2026-09-21** (*"dictarea în terminal nou tre să
+        // redea efectul de stars"*) — Zylot's *Star Ornament*, which is the
+        // only star in the catalogue. Sparks held this destination for a few
+        // hours before it; it keeps the 0.7× he asked for that morning and
+        // stays on the list, so the row is one tick away.
+        case .spawn: return .milkdrop85   // Snowflake
         case .wispr: return .milkdrop8    // Cauldron
         }
     }

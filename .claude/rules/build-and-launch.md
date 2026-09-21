@@ -25,6 +25,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   isn't — **nobody was claiming the key**. A Resources folder without `walkie-idle.png` dates the
   build older than the icons.
   → journal: *A stale bundle in /Applications is three bugs at once*
+- **A fresh bundle can still be the wrong bundle: there is a second worktree** (2026-09-21).
+  `/Applications/Walkie Talkie.app` was **newer than every commit on master** (installed 10:16,
+  the last halo commit 09:11) and still had none of the halo work — Victor's *"în continuare nu
+  văd efectul … pe dictarea Wispr Flow"*. `git worktree list` says why: `~/workspace/walkie-talkie-projectm`
+  is a live checkout of this repo on `projectm`, six commits behind master, and a `./build-app.sh`
+  run there installs over the same `/Applications` path with no trace of where it came from. One
+  `.app`, two trees that write it, last writer wins.
+  **The test is the binary, not the timestamp:** `strings -a "/Applications/Walkie Talkie.app/Contents/MacOS/Walkie Talkie"
+  | grep "<a string only the new code has>"` — here `Wispr Flow's own`, a menu title — answers *is
+  my change in there* in one line, where the mtime answered *somebody built something*.
+  Then rebuild from the tree the feature is in and say so, because the other session will build again.
 - **Source mtimes lie.** `build-app.sh` copies with `cp`, so every file in the bundle carries the
   *install* time whatever its contents. The build stamp in the menu exists because "am I running
   what I just built?" had no answer anywhere in the app.

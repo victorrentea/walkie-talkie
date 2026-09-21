@@ -505,7 +505,11 @@ closes. Between the two is the whole transcription — the stretch in which he i
   meteors — go back to the MilkDrop variant"*); `Water Dream` (MilkDrop 103) is the water.
 - **The names are Victor's** (the page's `name` field): Pulse, Amethyst, Crown, Prism, Eclipse,
   Atom, Gemini, Beads; ⚡ • Tunnel, ⚡ Cauldron, ⚡ • Tendrils, ⚡ Snowflake, ⚡ ★ Sparks, ⚡ ★ Water
-  Dream. `Eclipse` and `Water Dream` are his own words. A `−` on the page (Petals, Silk, Nova,
+  Dream. **He does not always use them back**: the Wispr dress came back as *"efectul de mozaic"*
+  and Snowflake as *"efectul de stars"* — a dictated ask names what he saw, so read it against the
+  destination it is about (`picks` in `POST /test/halo`) rather than against this list.
+  **A size ask is a factor on what is drawn today**, not on the page's `FORMULAS` number: *"mai mic
+  cu treizeci la sută"* twice over is 0.75 → 0.525 → 0.3675, and the page's entry still says 0.75. `Eclipse` and `Water Dream` are his own words. A `−` on the page (Petals, Silk, Nova,
   Royal, **Mosaic** — *"the bricks look lame"*) is not implemented.
 - **One menu, `Halo fx`** (his spelling; *"there must be ONE menu, not 2: and the MilkDrop ones
   should have a lightning bolt in the name"*): the film first and apart, the hand-written effects,
@@ -515,14 +519,17 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **One effect per destination, not one per app** (2026-09-21). `HaloDestination` — `caret`,
   `bound`, `spawn`, `wispr` — has a preference each (`UserDefaults` `haloStyle.<case>`; the single
   old `haloStyle` key is no longer read) and a default each: **Tunnel** at the caret, **Tendrils**
-  bound, **Sparks** into a new claude, **Cauldron** for Wispr's own. `AppDelegate.syncBorrowedGestures`
+  bound, **Snowflake** into a new claude (**Sparks** held it for the first few hours, until
+  *"dictarea în terminal nou tre să redea efectul de stars"* — Zylot's *Star Ornament* is the only
+  star in the catalogue, and it came back onto the offered list for it), **Cauldron** for Wispr's own. `AppDelegate.syncBorrowedGestures`
   pushes the destination into `CaretHalo.setDestination` **only while the ring is up**, on every
   sync, from the same facts `atCaret` is read from, `foreignMic` tested first.
 - **A foreign Wispr dictation is its own destination** (2026-09-21, later the same day). It wore
   the caret's dress first, on the reading that Wispr types at the caret so the two are one thing;
   Victor split them: *"Wispr-ul este o dictare … la fel de dictare. Folosește un efect MilkDrop
   rămas pentru el"*. Cauldron is the *rămas* — the only offered preset none of the other three had
-  claimed (Snowflake and Water Dream are built but off the menu). It stays deliberately out of
+  claimed (Snowflake was off the menu that morning and is back on it since the afternoon; Water
+  Dream is built but off). It stays deliberately out of
   `atCaret` either way, because that flag arms `DropArrow` and the heads must not promise a
   delivery this app is not making.
 - **Every open Wispr microphone gets a halo, however it was opened** (Victor, 2026-09-21: *"ori
