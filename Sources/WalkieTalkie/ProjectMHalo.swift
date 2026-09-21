@@ -268,6 +268,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // engine's PCM ring is not written from two threads.
         let fresh = min(samples.count, Self.sampleRate / max(1, haloFrameCap > 0 ? haloFrameCap : 30) + 16)
         var tail = Array(samples.suffix(fresh))
+        // Vocea pregătită ÎNAINTE de câștigul global, ca `WT_PM_AUDIO_GAIN` să
+        // rămână ce a fost — potrivirea cu ruta web — și nu un al doilea volum
+        // peste compresor. Pe `.direct` (implicit) nu atinge nimic.
+        VoicePrep.shared.process(&tail)
         if Self.audioGain != 1 { for i in tail.indices { tail[i] *= Self.audioGain } }
         // **Handed over as they are, not resampled** (`WT_PM_RESAMPLE=1` to resample
         // to 44.1 kHz): both engines are MilkDrop's beat detector, which reads

@@ -641,11 +641,47 @@ final class StatusItem: NSObject, NSMenuDelegate {
         }
     }
 
+    /// **`Halo voice`, sub `Halo engine`** (2026-09-21): ce se face cu vocea
+    /// ÎNAINTE să ajungă la motor. Presetele MilkDrop sunt desenate pentru muzică
+    /// și el vorbește — măsurat pe corpusul lui, doar 3,2% din energia vocii stă
+    /// sub 120 Hz, unde o tobă pune 30–50%. Rândul e al rutei NATIVE: acolo se
+    /// așează efectele adevărate, web view-ul e doar previzualizarea din care își
+    /// alege efectul.
+    private let haloVoiceItem = NSMenuItem(title: "Halo voice", action: nil, keyEquivalent: "")
+    private let haloVoiceSubmenu = NSMenu()
+    var onPickHaloVoice: ((HaloVoice) -> Void)?
+
+    private func applyHaloVoiceRow() {
+        let current = HaloVoice.current
+        haloVoiceItem.title = "Halo voice: \(current.title)"
+        haloVoiceSubmenu.removeAllItems()
+        haloVoiceSubmenu.autoenablesItems = false
+        for voice in HaloVoice.allCases {
+            let row = NSMenuItem(title: voice.title, action: #selector(haloVoicePicked(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = voice.rawValue
+            row.image = voice == current ? Self.symbolIcon("checkmark") : Self.blankIcon
+            haloVoiceSubmenu.addItem(row)
+        }
+        haloVoiceSubmenu.addItem(.separator())
+        let note = NSMenuItem(title: "For the native engine only", action: nil, keyEquivalent: "")
+        note.isEnabled = false
+        haloVoiceSubmenu.addItem(note)
+    }
+
+    @objc private func haloVoicePicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let voice = HaloVoice(rawValue: raw),
+              voice != HaloVoice.current else { return }
+        onPickHaloVoice?(voice)
+        applyHaloVoiceRow()
+    }
+
     @objc private func haloEnginePicked(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let engine = HaloEngine(rawValue: raw),
               engine != HaloEngine.current else { return }
         onPickHaloEngine?(engine)
         applyHaloEngineRow()
+        applyHaloVoiceRow()
     }
 
     @objc private func haloPicked(_ sender: NSMenuItem) {
@@ -968,7 +1004,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // **`Halo engine`, under `Halo fx`** — the same question one level down.
         haloEngineItem.submenu = haloEngineSubmenu
         applyHaloEngineRow()
+        applyHaloVoiceRow()
         menu.addItem(haloEngineItem)
+        // **`Halo voice`, sub `Halo engine`** — ce aude motorul, nu ce desenează.
+        haloVoiceItem.submenu = haloVoiceSubmenu
+        applyHaloVoiceRow()
+        menu.addItem(haloVoiceItem)
 
         autosend.action = #selector(autosendClicked)
         autosend.target = self
@@ -1653,6 +1694,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyMicRow()
         applyHaloRow()
         applyHaloEngineRow()
+        applyHaloVoiceRow()
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         // Re-measured, not just re-inked: `applyHeader` and `applyEngineRow`

@@ -1092,6 +1092,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ring and the menu's tick is read off the same preference.
         status.onPickHalo = { [weak self] style in self?.caretHalo.setStyle(style) }
         status.onPickHaloEngine = { [weak self] engine in self?.caretHalo.setEngine(engine) }
+        status.onPickHaloVoice = { voice in
+            UserDefaults.standard.set(voice.rawValue, forKey: HaloVoice.defaultsKey)
+            VoicePrep.shared.refresh()
+            Log.info("🎚️ halo voice: \(voice.rawValue) — \(voice.title)")
+        }
         status.onToggleLogiGestures = { [weak self] on in
             self?.hotkeys.useLogiGestures = on
             Log.info(on ? "🖱️ Logi gestures on — the wheel is the browser's"
