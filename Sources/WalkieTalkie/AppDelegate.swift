@@ -139,6 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the Engine on the local model — the commonest dictation of the day, and
     /// the one the music went on playing over until 2026-09-18.
     private var wisprHearing = false
+    /// **The sentence in flight is being heard by Wispr's microphone** (2026-09-22,
+    /// evening) — set by the `wisprSource` wiring, cleared by the wired engine's.
+    /// Behind the firewall a 🔽 → sentence raises `listening` like any other, so
+    /// `foreignMic` (which needs `!listening`) can no longer tell it from a ⌘⌃D one
+    /// and the ring wore the bound terminal's Tunnel over a Wispr dictation Victor
+    /// had given Mosaic. Whose microphone is open is the fact the ring answers,
+    /// whoever routes the words.
+    private var wisprMicSentence = false
 
     /// **The music is never left paused.** The only thing that lowers
     /// `wisprHearing` is the state machine leaving `listening`, and that is a
@@ -2381,8 +2389,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func wireDictationSource() {
-        source.didMaybeBegin = { [weak self] why in self?.dictationMaybeBeginning(why) }
-        source.didBegin = { [weak self] in self?.dictationBegan() }
+        source.didMaybeBegin = { [weak self] why in self?.wisprMicSentence = false; self?.dictationMaybeBeginning(why) }
+        source.didBegin = { [weak self] in self?.wisprMicSentence = false; self?.dictationBegan() }
         source.didStopListening = { [weak self] in self?.dictationStoppedListening() }
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
@@ -2397,8 +2405,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence follows the binding exactly as a relay-started one, and
         // goes to the caret only when nothing is bound. When Wispr *is* the
         // engine this repeats the generic wiring above, harmlessly.
-        wisprSource.didMaybeBegin = { [weak self] why in self?.dictationMaybeBeginning(why) }
-        wisprSource.didBegin = { [weak self] in self?.dictationBegan() }
+        // Assigned after the generic five, so when Wispr *is* the engine these
+        // win and `wisprMicSentence` reads true for it too — Mosaic is Wispr's
+        // microphone's dress, not the raw chord's.
+        wisprSource.didMaybeBegin = { [weak self] why in self?.wisprMicSentence = true; self?.dictationMaybeBeginning(why) }
+        wisprSource.didBegin = { [weak self] in self?.wisprMicSentence = true; self?.dictationBegan() }
         wisprSource.didStopListening = { [weak self] in self?.dictationStoppedListening() }
         wisprSource.didTranscribe = { [weak self] result in self?.deliver(result) }
         wisprSource.didEnd = { [weak self] end in self?.dictationEnded(end) }
@@ -4219,7 +4230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dress the way it changes the arrow.
         let ringUp = listening || speculative || wisprHearing || coasting
         if ringUp {
-            let destination: HaloDestination = foreignMic ? .wispr
+            let destination: HaloDestination = (foreignMic || wisprMicSentence) ? .wispr
                 : atCaret ? .caret
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret

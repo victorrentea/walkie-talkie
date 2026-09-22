@@ -250,11 +250,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `Cancel` sits between them; a recording has one verb and one gesture, and
     /// two rows of which one is always greyed would be saying *the other thing is
     /// impossible* twice over.
-    private let screenRecording = NSMenuItem(title: "Start Screen Recording",
+    private let screenRecording = NSMenuItem(title: "Record Screen",
                                              action: nil, keyEquivalent: "")
 
     /// The undo of the row above it, and directly under it for that reason.
-    private let recoverDictation = NSMenuItem(title: "Recover Cancelled Dictation",
+    private let recoverDictation = NSMenuItem(title: "Recover Dictation",
                                               action: nil, keyEquivalent: "")
     /// A dictation whose destination is a terminal that does not exist yet — it
     /// opens in `~/workspace`, which the title no longer spells out: the folder
@@ -274,7 +274,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// microphone, exactly like the row above it — the only difference is where
     /// the sentence lands, and a new session is the one destination that does
     /// not exist yet when the words start.
-    private let newSession = NSMenuItem(title: "Start dictation to new claude", action: nil, keyEquivalent: "")
+    private let newSession = NSMenuItem(title: "Dictate to New Claude", action: nil, keyEquivalent: "")
     /// The shutter. Its one route is named: the back button, only while a dictation
     /// is running — which is also the only window in which it stops typing
     /// Return.
@@ -437,7 +437,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// offered all of them would be a device chooser, which System Settings
     /// already is and does better. What it would not be is *readable at a
     /// glance while he is teaching*, which is the one thing this menu is for.
-    private let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+    private let micItem = NSMenuItem(title: "Mic", action: nil, keyEquivalent: "")
 
     private let micSubmenu = NSMenu()
 
@@ -469,7 +469,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// *you asked for the receiver, you are on the built-in* — which is the
     /// sentence he needs when a cable has come out.
     private func applyMicRow() {
-        micItem.title = "Microphone: \(micCurrentLabel?() ?? "—")"
+        micItem.title = "Mic: \(micCurrentLabel?() ?? "—")"
         micSubmenu.removeAllItems()
         let available = micAvailable?() ?? []
 
@@ -667,13 +667,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// arrow, the tick drawn from `HaloEngine.current` on every open, so a
     /// `WT_HALO_ENGINE` run shows what is running. The film and the page
     /// effects are unaffected by it; the row says so.
-    private let haloEngineItem = NSMenuItem(title: "Fx engine", action: nil, keyEquivalent: "")
+    private let haloEngineItem = NSMenuItem(title: "Engine", action: nil, keyEquivalent: "")
     private let haloEngineSubmenu = NSMenu()
     var onPickHaloEngine: ((HaloEngine) -> Void)?
 
     private func applyHaloEngineRow() {
         let current = HaloEngine.current
-        haloEngineItem.title = "Fx engine: \(Self.haloEngineTitle(current))"
+        haloEngineItem.title = "Engine: \(Self.haloEngineShortTitle(current))"
         haloEngineSubmenu.removeAllItems()
         haloEngineSubmenu.autoenablesItems = false
         for engine in [HaloEngine.web, .native] {
@@ -689,10 +689,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloEngineSubmenu.addItem(note)
     }
 
+    /// The readout's word for the same engine — the detail in the parentheses
+    /// belongs to the list, where the two stand side by side (Victor,
+    /// 2026-09-22: *"doar «projectM», că deja știu cine e"*).
+    private static func haloEngineShortTitle(_ e: HaloEngine) -> String {
+        switch e {
+        case .web:    return "Web"
+        case .native: return "projectM"
+        }
+    }
+
     private static func haloEngineTitle(_ e: HaloEngine) -> String {
         switch e {
         case .web:    return "Web (butterchurn)"
-        case .native: return "Native (projectM)"
+        case .native: return "projectM (native)"
         }
     }
 
@@ -702,13 +712,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// sub 120 Hz, unde o tobă pune 30–50%. Rândul e al rutei NATIVE: acolo se
     /// așează efectele adevărate, web view-ul e doar previzualizarea din care își
     /// alege efectul.
-    private let haloVoiceItem = NSMenuItem(title: "Fx voice", action: nil, keyEquivalent: "")
+    private let haloVoiceItem = NSMenuItem(title: "Pre-process", action: nil, keyEquivalent: "")
     private let haloVoiceSubmenu = NSMenu()
     var onPickHaloVoice: ((HaloVoice) -> Void)?
 
     private func applyHaloVoiceRow() {
         let current = HaloVoice.current
-        haloVoiceItem.title = "Fx voice: \(current.title)"
+        haloVoiceItem.title = "Pre-process: \(current.title)"
         haloVoiceSubmenu.removeAllItems()
         haloVoiceSubmenu.autoenablesItems = false
         for voice in HaloVoice.allCases {
@@ -939,7 +949,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // by accident. Without it the only way out of a bad recording was to
         // stop it, watch it transcribe, and cancel the panel — three steps and a
         // model run for something he already knew he did not want.
-        recoverDictation.image = Self.symbolIcon("arrow.uturn.backward")
+        recoverDictation.image = Self.symbolIcon("arrow.up.trash")
         recoverDictation.action = #selector(recoverDictationClicked)
         recoverDictation.target = self
         recoverDictation.isEnabled = false
@@ -1541,7 +1551,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // one, which is why it is here and not on `engineShortTitle`: up there
         // the engine stands alone with nothing to be different from, and ⚠️
         // already has the spot.
-        if id == "wispr" { return "Wispr Flow — its own app, the relay reads its History row" }
+        if id == "wispr" { return "Wispr Flow ☁️" }
         if id == "eleven" {
             let model = ElevenLabsSource.model
             return elevenReady?() == true
@@ -1605,7 +1615,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // so the row never claims a recording is running when none is.
         let filming = isFilming?() ?? false
         screenRecording.isEnabled = recording || filming
-        screenRecording.title = filming ? "Stop Screen Recording" : "Start Screen Recording"
+        screenRecording.title = filming ? "Stop Recording Screen" : "Record Screen"
         // Not while one is running: two transcripts arriving at one panel is an
         // ordering problem there is no reason to create from a menu.
         recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)

@@ -55,17 +55,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Paste last prompt` | 📋 | `⌘⇧P` |
 | — separator — | | |
 | `Start Dictation` | `mic` | `🛞` |
-| `Start dictation to new claude` | ✨ | `🛞🛞` |
+| `Dictate to New Claude` (`Start dictation to new claude` until 2026-09-22) | ✨ | `🛞🛞` |
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
-| `Recover Cancelled Dictation` | `arrow.uturn.backward` | |
+| `Recover Dictation` (`Recover Cancelled Dictation` until 2026-09-22) | `arrow.up.trash` — out of the bin | |
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
 | `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
-| `Microphone: <glyph> <device>` | `mic` | `>` — automatic + the four devices |
+| `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the four devices |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
-| `Halo fx[: <effect>]` | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Fx engine` (2026-09-20; three destinations 2026-09-21) |
+| `Halo fx[: <effect>]` | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
@@ -414,3 +414,15 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 - Do not give `Quit` a ⌘Q key equivalent in the status menu.
 - Do not fetch anything over the network from the Prompt Log page, and do not write it into
   `shots`.
+
+## Renames of 2026-09-22 (evening)
+
+Victor, from the projector: `Recover Dictation` (icon `arrow.up.trash`, *"un coș de gunoi cu capacul
+ridicat"*), `Dictate to New Claude`, `Mic`, `Record Screen` / `Stop Recording Screen`, and in
+`Halo fx`: `Engine: projectM｜Web` (rows `projectM (native)` / `Web (butterchurn)`) and
+`Pre-process: …` with its parentheses cut to two words each. In `Engine` the Wispr row is
+`Wispr Flow ☁️` — a cloud after it like ElevenLabs', nothing else. The `Halo fx` rows are what
+`HaloDestination.title` and `HaloStyle.title` say; the picks he confirmed that evening are
+Tendrils at the caret, Tunnel bound, Sparks into a new claude, **Mosaic for Wispr's microphone —
+whoever routes the words** (`AppDelegate.wisprMicSentence`; behind the firewall `foreignMic`
+alone read a 🔽 → sentence as bound).
