@@ -98,6 +98,11 @@ enum HaloStyle: String, CaseIterable {
     /// mouse-ul stă pe loc. O pânză 2D cu glife, deci locul ei e pagina, nu
     /// motorul MilkDrop.
     case fairyDust
+    /// **liquid-cursor** (Victor, 2026-09-23: *"impl
+    /// https://cravinadventure.github.io/liquid-cursor/"*): acelasi fluid ca
+    /// Fluid cursor, cu reglajul lor — violete, vopsea care atarna in aer,
+    /// vartejuri puternice (`pmh_set_canvas` mod 4).
+    case liquidCursor
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -121,6 +126,7 @@ enum HaloStyle: String, CaseIterable {
         case .milkdrop20Fluid: return "Fluid"
         case .fluidCursor:     return "Fluid cursor"
         case .fairyDust:       return "Fairy dust"
+        case .liquidCursor:    return "Liquid cursor"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
         case .milkdrop99:     return "Mosaic"
@@ -294,6 +300,8 @@ enum HaloStyle: String, CaseIterable {
         var fluid = false
         /// Fluidul singur, fara preset (Cursify's Fluid Cursor). Cere `trail` > 0.
         var pureFluid = false
+        /// Care fluid pur: `false` = Cursify (mod 3), `true` = liquid-cursor (mod 4).
+        var liquid = false
     }
     var preset: Preset? {
         switch self {
@@ -390,6 +398,8 @@ enum HaloStyle: String, CaseIterable {
                                              fade: true, fadeAtEdge: true, fadeFloor: 0, trail: 0.8, lag: 0.05, fluid: true)
         case .fluidCursor: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                          trail: 1, lag: 0, pureFluid: true)
+        case .liquidCursor: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                          trail: 1, lag: 0, pureFluid: true, liquid: true)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Sparks' size is a chain of factors, each one applied to what was

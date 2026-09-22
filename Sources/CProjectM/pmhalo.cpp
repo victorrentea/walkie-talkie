@@ -110,11 +110,11 @@ const char* kAdvectFS = "#version 330 core\n"
 // lit as a surface whose height is its brightness (`SHADING: true`), keyed the
 // way their `TRANSPARENT` canvas is — alpha = the brightest channel.
 const char* kDisplayFS = "#version 330 core\n"
-    "uniform sampler2D dye;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
-    "void main(){vec3 c=texture(dye,uv).rgb;"
-    " float dx=length(texture(dye,uv+vec2(texel.x,0)).rgb)-length(texture(dye,uv-vec2(texel.x,0)).rgb);"
+    "uniform sampler2D dye;uniform vec2 texel;uniform float shading;uniform float ceil_;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec3 c=min(texture(dye,uv).rgb,vec3(ceil_));"
+    " if(shading>0.5){float dx=length(texture(dye,uv+vec2(texel.x,0)).rgb)-length(texture(dye,uv-vec2(texel.x,0)).rgb);"
     " float dy=length(texture(dye,uv+vec2(0,texel.y)).rgb)-length(texture(dye,uv-vec2(0,texel.y)).rgb);"
-    " vec3 n=normalize(vec3(dx,dy,length(texel)));c*=clamp(n.z+0.7,0.7,1.0);"
+    " vec3 n=normalize(vec3(dx,dy,length(texel)));c*=clamp(n.z+0.7,0.7,1.0);}"
     " c=min(c,vec3(1.0));frag=vec4(c,max(c.r,max(c.g,c.b)));}\n";
 const char* kCurlFS = "#version 330 core\n"
     "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
@@ -434,7 +434,7 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
     if (!h->dyeProg) h->dyeProg = link(kDyeFS, log);
     if (mode >= 2) {
         // mode 3 runs Cursify's grid: 128 cells on the short side (SIM_RESOLUTION)
-        if (mode == 3) { int s = 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
+        if (mode >= 3) { int s = mode == 4 ? 140 : 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
         else { h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4); }
         for (Field* f : { &h->vel[0], &h->vel[1] }) if (!make_field(*f, h->vw, h->vh, GL_RG16F, GL_RG)) return bail("velocity field could not be made");
         for (Field* f : { &h->prs[0], &h->prs[1], &h->div, &h->curl }) if (!make_field(*f, h->vw, h->vh, GL_R16F, GL_RED)) return bail("pressure field could not be made");
@@ -443,8 +443,9 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
         h->divProg = link(kDivFS, log); h->scaleProg = link(kScaleFS, log);
         h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
     }
-    if (mode == 3) {
-        h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2);
+    if (mode >= 3) {
+        if (mode == 4) { int d = 512; h->dw = w >= hgt ? (int)std::lround(d * (double)w / hgt) : d; h->dh = w >= hgt ? d : (int)std::lround(d * (double)hgt / w); }
+        else { h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2); }
         for (Field* f : { &h->dye[0], &h->dye[1] }) if (!make_field(*f, h->dw, h->dh, GL_RGBA16F, GL_RGBA)) return bail("dye field could not be made");
         h->displayProg = link(kDisplayFS, log);
     }
@@ -543,8 +544,29 @@ float hue_channel(float hh, float off) { float k = std::fmod(off + hh * 6.f, 6.f
 // 128, DENSITY_DISSIPATION 3.5, VELOCITY_DISSIPATION 2, PRESSURE 0.1, 20
 // iterations, CURL 3, SPLAT_RADIUS 0.2 (/100, ×aspect), SPLAT_FORCE 6000,
 // COLOR_UPDATE_SPEED 10, SHADING on, TRANSPARENT.
-IOSurfaceRef render_pure_fluid(pmh* h) {
-    const float dt = 1.f / h->fps;
+struct Look {
+    float curl, pressureKeep, velFade, dyeFade, force, radius; bool radiusByAspect;
+    bool shading; float ceiling; float dtScale;   // solver dt = dtScale × frame time
+    int palette;                                   // 0: a random hue 10×/s at `gain`; 1: violets per splat
+    float gain;
+};
+// Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
+const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f };
+// **Mode 4: liquid-cursor** (cravinadventure.github.io/liquid-cursor, Victor
+// 2026-09-23: *"impl …"*), the same solver with its own tuning, from
+// liquid-cursor.js v1.0.0 and the demo page's tag (`data-gain="0.15"`): curl 20,
+// pressure kept at 0.8, motionFade 0.55, dyeFade 0.72 — the colour hangs in the
+// air — force 2200, radius 0.24/100 with no aspect correction, five violets
+// picked per splat, the dye ceilinged at 0.72, no shading. It steps a fixed
+// 0.010 s per 60 Hz frame, i.e. 0.6 of real time: at 30 fps, 0.02.
+// Their `drift` (ambient splats at random places) and the 16 opening splats are
+// left out: on a desktop overlay they would be paint appearing away from the pointer.
+const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f };
+const float kViolets[5][3] = { { 0.55f, 0.29f, 0.97f }, { 0.84f, 0.36f, 0.96f }, { 0.31f, 0.39f, 0.94f },
+                               { 0.72f, 0.22f, 0.92f }, { 0.42f, 0.32f, 1.00f } };
+
+IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
+    const float dt = 1.f / h->fps, sdt = dt * L.dtScale;
     Surface& s = h->surf[h->cur];
     glDisable(GL_BLEND); glDisable(GL_DEPTH_TEST); glDisable(GL_SCISSOR_TEST);
     glBindVertexArray(h->vao);
@@ -554,10 +576,13 @@ IOSurfaceRef render_pure_fluid(pmh* h) {
         h->fresh = false;
     }
     h->colorTimer += dt * 10.f;
-    if (h->colorTimer >= 1.f) {
+    if (L.palette == 1) {
+        const float* v = kViolets[std::rand() % 5];
+        h->cr = v[0] * L.gain; h->cg = v[1] * L.gain; h->cb = v[2] * L.gain;
+    } else if (h->colorTimer >= 1.f) {
         h->colorTimer = std::fmod(h->colorTimer, 1.f);
         float hh = (float)std::rand() / RAND_MAX;
-        h->cr = hue_channel(hh, 5) * 0.15f; h->cg = hue_channel(hh, 3) * 0.15f; h->cb = hue_channel(hh, 1) * 0.15f;
+        h->cr = hue_channel(hh, 5) * L.gain; h->cg = hue_channel(hh, 3) * L.gain; h->cb = hue_channel(hh, 1) * L.gain;
     }
     float ax = h->sx, ay = h->sy;
     if (h->havePointer) {
@@ -566,19 +591,19 @@ IOSurfaceRef render_pure_fluid(pmh* h) {
         float dx = (h->sx - ax) / h->ow, dy = (h->sy - ay) / h->oh;
         if (std::fabs(dx) + std::fabs(dy) > 1e-5f) {
             float aspect = (float)h->ow / h->oh;
-            float radius = 0.2f / 100.f * (aspect > 1 ? aspect : 1.f);
+            float radius = L.radius * (L.radiusByAspect && aspect > 1 ? aspect : 1.f);
             float x = h->sx / h->ow, y = h->sy / h->oh;
-            splat(h, h->vel, h->vc, h->vw, h->vh, x, y, dx * 6000.f, dy * 6000.f, 0, radius);
+            splat(h, h->vel, h->vc, h->vw, h->vh, x, y, dx * L.force, dy * L.force, 0, radius);
             splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
         }
     }
-    step_fluid(h, dt, { 3.f, 0.1f, 2.f });
+    step_fluid(h, sdt, { L.curl, L.pressureKeep, L.velFade });
     // the dye rides the velocity and dies at DENSITY_DISSIPATION
     glUseProgram(h->advectProg);
     bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->dye[h->dc].tex);
     glUniform2f(glGetUniformLocation(h->advectProg, "texel"), 1.f / h->vw, 1.f / h->vh);
-    glUniform1f(glGetUniformLocation(h->advectProg, "dt"), dt);
-    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), 3.5f);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dt"), sdt);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), L.dyeFade);
     glBindFramebuffer(GL_FRAMEBUFFER, h->dye[h->dc ^ 1].fbo);
     glViewport(0, 0, h->dw, h->dh);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -587,6 +612,8 @@ IOSurfaceRef render_pure_fluid(pmh* h) {
     glUseProgram(h->displayProg);
     bind2d(h->displayProg, "dye", 0, h->dye[h->dc].tex);
     glUniform2f(glGetUniformLocation(h->displayProg, "texel"), 1.f / h->dw, 1.f / h->dh);
+    glUniform1f(glGetUniformLocation(h->displayProg, "shading"), L.shading ? 1.f : 0.f);
+    glUniform1f(glGetUniformLocation(h->displayProg, "ceil_"), L.ceiling);
     glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
     glViewport(0, 0, h->ow, h->oh);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -604,8 +631,8 @@ IOSurfaceRef pmh_render(pmh* h) {
     CGLContextObj prev = CGLGetCurrentContext();
     CGLSetCurrentContext(h->ctx);
     double t0 = now_ms();
-    if (h->mode == 3) {
-        IOSurfaceRef out = render_pure_fluid(h);
+    if (h->mode >= 3) {
+        IOSurfaceRef out = render_pure_fluid(h, h->mode == 4 ? kLiquid : kCursify);
         h->engineMs = 0; h->keyMs = now_ms() - t0;
         GLenum e = glGetError();
         CGLSetCurrentContext(prev);
