@@ -110,12 +110,44 @@ const char* kAdvectFS = "#version 330 core\n"
 // lit as a surface whose height is its brightness (`SHADING: true`), keyed the
 // way their `TRANSPARENT` canvas is — alpha = the brightest channel.
 const char* kDisplayFS = "#version 330 core\n"
-    "uniform sampler2D dye;uniform vec2 texel;uniform float shading;uniform float ceil_;in vec2 uv;out vec4 frag;\n"
+    "uniform sampler2D dye;uniform sampler2D bloom;uniform sampler2D sunrays;uniform float useBloom;uniform float useSunrays;"
+    "uniform vec2 texel;uniform float shading;uniform float ceil_;uniform float opacity;in vec2 uv;out vec4 frag;\n"
     "void main(){vec3 c=min(texture(dye,uv).rgb,vec3(ceil_));"
     " if(shading>0.5){float dx=length(texture(dye,uv+vec2(texel.x,0)).rgb)-length(texture(dye,uv-vec2(texel.x,0)).rgb);"
     " float dy=length(texture(dye,uv+vec2(0,texel.y)).rgb)-length(texture(dye,uv-vec2(0,texel.y)).rgb);"
     " vec3 n=normalize(vec3(dx,dy,length(texel)));c*=clamp(n.z+0.7,0.7,1.0);}"
-    " c=min(c,vec3(1.0));frag=vec4(c,max(c.r,max(c.g,c.b)));}\n";
+    // ink's bloom and sunrays (Pavel's full display shader)
+    " vec3 b=vec3(0.0); if(useBloom>0.5) b=texture(bloom,uv).rgb;"
+    // Two departures from Pavel, both because the paper here is the desktop and
+    // not #0a0a0a (2026-09-23 captures): the sunrays factor reaches ~8.5 where
+    // there is no ink, which on black lifts nothing and over a desktop lifts the
+    // bloom's faint haze into a wash across the whole screen — so it is capped at
+    // 1.5; and the dithering noise went, which through the gamma curve came out as
+    // a striped grey veil at alpha ~0.05 everywhere.
+    " if(useSunrays>0.5){float s=min(texture(sunrays,uv).r,1.5);c*=s;b*=s;}"
+    " if(useBloom>0.5){b=max(b,vec3(0));b=max(1.055*pow(b,vec3(0.416666667))-0.055,vec3(0));c+=b;}"
+    " c=min(c,vec3(1.0))*opacity;frag=vec4(c,max(c.r,max(c.g,c.b)));}\n";
+const char* kPrefilterFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform vec3 curve;uniform float threshold;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec3 c=texture(src,uv).rgb;float br=max(c.r,max(c.g,c.b));"
+    " float rq=clamp(br-curve.x,0.0,curve.y);rq=curve.z*rq*rq;"
+    " c*=max(rq,br-threshold)/max(br,0.0001);frag=vec4(c,0.0);}\n";
+// the bloom's four-tap blur (and, with `intensity`, its final pass); `texel` is the SOURCE's
+const char* kBloomBlurFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform vec2 texel;uniform float intensity;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec4 s=texture(src,uv-vec2(texel.x,0))+texture(src,uv+vec2(texel.x,0))"
+    "+texture(src,uv+vec2(0,texel.y))+texture(src,uv-vec2(0,texel.y));frag=s*0.25*intensity;}\n";
+const char* kSunMaskFS = "#version 330 core\n"
+    "uniform sampler2D src;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec4 c=texture(src,uv);float br=max(c.r,max(c.g,c.b));c.a=1.0-min(max(br*20.0,0.0),0.8);frag=c;}\n";
+const char* kSunraysFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform float weight;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 coord=uv;vec2 dir=(uv-0.5)*(1.0/16.0*0.3);float decay=1.0;float col=texture(src,uv).a;"
+    " for(int i=0;i<16;i++){coord-=dir;col+=texture(src,coord).a*decay*weight;decay*=0.95;}"
+    " frag=vec4(col*0.7,0.0,0.0,1.0);}\n";
+const char* kGaussFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 o=texel*1.33333333;frag=texture(src,uv)*0.29411764+(texture(src,uv-o)+texture(src,uv+o))*0.35294117;}\n";
 const char* kCurlFS = "#version 330 core\n"
     "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
     "void main(){float L=texture(vel,uv-vec2(texel.x,0)).y;float R=texture(vel,uv+vec2(texel.x,0)).y;"
@@ -172,7 +204,7 @@ GLuint link(const char* fs, std::string& log) {
 
 /// A float texture the fluid keeps its fields in, with its framebuffer.
 struct Field {
-    GLuint tex = 0, fbo = 0;
+    GLuint tex = 0, fbo = 0; int w = 0, h = 0;
 };
 
 struct Surface {
@@ -209,6 +241,9 @@ struct pmh {
     Field vel[2], prs[2], div, curl; int vc = 0, pc = 0;
     // mode 3: the dye is a float field of its own, half the screen's pixels
     Field dye[2]; int dw = 0, dh = 0, dc = 0; GLuint displayProg = 0;
+    // mode 5 (ink): the bloom pyramid and the sunrays
+    Field bloom; std::vector<Field> bloomLevels; Field sun, sunTemp;
+    GLuint prefilterProg = 0, bloomBlurProg = 0, sunMaskProg = 0, sunraysProg = 0, gaussProg = 0;
     float colorTimer = 1.f, cr = 0, cg = 0, cb = 0;
     GLuint splatProg = 0, advectProg = 0, curlProg = 0, vortProg = 0, divProg = 0, scaleProg = 0, jacobiProg = 0, gradProg = 0;
 };
@@ -359,9 +394,12 @@ void pmh_destroy(pmh* h) {
             if (s.tex) glDeleteTextures(1, &s.tex);
             if (s.ios) CFRelease(s.ios);
         }
+        for (Field& f : h->bloomLevels) { if (f.fbo) glDeleteFramebuffers(1, &f.fbo); if (f.tex) glDeleteTextures(1, &f.tex); }
+        for (GLuint p : { h->prefilterProg, h->bloomBlurProg, h->sunMaskProg, h->sunraysProg, h->gaussProg })
+            if (p) glDeleteProgram(p);
         for (GLuint p : { h->prog, h->dyeProg, h->displayProg, h->splatProg, h->advectProg, h->curlProg, h->vortProg, h->divProg, h->scaleProg, h->jacobiProg, h->gradProg })
             if (p) glDeleteProgram(p);
-        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->div, &h->curl, &h->dye[0], &h->dye[1] }) {
+        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->div, &h->curl, &h->dye[0], &h->dye[1], &h->bloom, &h->sun, &h->sunTemp }) {
             if (f->fbo) glDeleteFramebuffers(1, &f->fbo);
             if (f->tex) glDeleteTextures(1, &f->tex);
         }
@@ -403,6 +441,7 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
 
 
 static bool make_field(Field& f, int w, int hgt, GLenum internal, GLenum format) {
+    f.w = w; f.h = hgt;
     glGenTextures(1, &f.tex);
     glBindTexture(GL_TEXTURE_2D, f.tex);
     glTexImage2D(GL_TEXTURE_2D, 0, internal, w, hgt, 0, format, GL_HALF_FLOAT, nullptr);
@@ -434,7 +473,7 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
     if (!h->dyeProg) h->dyeProg = link(kDyeFS, log);
     if (mode >= 2) {
         // mode 3 runs Cursify's grid: 128 cells on the short side (SIM_RESOLUTION)
-        if (mode >= 3) { int s = mode == 4 ? 140 : 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
+        if (mode >= 3) { int s = mode == 4 ? 140 : mode == 5 ? 256 : 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
         else { h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4); }
         for (Field* f : { &h->vel[0], &h->vel[1] }) if (!make_field(*f, h->vw, h->vh, GL_RG16F, GL_RG)) return bail("velocity field could not be made");
         for (Field* f : { &h->prs[0], &h->prs[1], &h->div, &h->curl }) if (!make_field(*f, h->vw, h->vh, GL_R16F, GL_RED)) return bail("pressure field could not be made");
@@ -444,10 +483,26 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
         h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
     }
     if (mode >= 3) {
-        if (mode == 4) { int d = 512; h->dw = w >= hgt ? (int)std::lround(d * (double)w / hgt) : d; h->dh = w >= hgt ? d : (int)std::lround(d * (double)hgt / w); }
+        if (mode == 4 || mode == 5) { int d = mode == 4 ? 512 : 1024; h->dw = w >= hgt ? (int)std::lround(d * (double)w / hgt) : d; h->dh = w >= hgt ? d : (int)std::lround(d * (double)hgt / w); }
         else { h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2); }
         for (Field* f : { &h->dye[0], &h->dye[1] }) if (!make_field(*f, h->dw, h->dh, GL_RGBA16F, GL_RGBA)) return bail("dye field could not be made");
         h->displayProg = link(kDisplayFS, log);
+    }
+    if (mode == 5) {
+        // at `res` cells on the short side, the other side by the aspect — ink's getResolution
+        auto shortSide = [&](int r, int& fw, int& fh) { fw = w >= hgt ? (int)std::lround(r * (double)w / hgt) : r; fh = w >= hgt ? r : (int)std::lround(r * (double)hgt / w); };
+        int bw, bh; shortSide(256, bw, bh);
+        if (!make_field(h->bloom, bw, bh, GL_RGBA16F, GL_RGBA)) return bail("bloom field could not be made");
+        for (int i = 0; i < 8; ++i) {
+            int lw = bw >> (i + 1), lh = bh >> (i + 1);
+            if (lw < 2 || lh < 2) break;
+            Field f; if (!make_field(f, lw, lh, GL_RGBA16F, GL_RGBA)) return bail("bloom level could not be made");
+            h->bloomLevels.push_back(f);
+        }
+        int sw, sh; shortSide(196, sw, sh);
+        if (!make_field(h->sun, sw, sh, GL_RGBA16F, GL_RGBA) || !make_field(h->sunTemp, sw, sh, GL_RGBA16F, GL_RGBA)) return bail("sunrays field could not be made");
+        h->prefilterProg = link(kPrefilterFS, log); h->bloomBlurProg = link(kBloomBlurFS, log);
+        h->sunMaskProg = link(kSunMaskFS, log); h->sunraysProg = link(kSunraysFS, log); h->gaussProg = link(kGaussFS, log);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (!log.empty()) return bail("trail shaders: " + log);
@@ -492,7 +547,7 @@ void splat(pmh* h, Field* f, int& cur, int w, int hgt, float x, float y, float v
     cur ^= 1;
 }
 
-struct FluidParams { float curl, pressureKeep, velDissipation; };
+struct FluidParams { float curl, pressureKeep, velDissipation; int iterations = 20; };
 
 // One step of the fluid, after whatever splats this frame put into it: curl,
 // vorticity, pressure, projection, self-advection.
@@ -513,7 +568,7 @@ void step_fluid(pmh* h, float dt, FluidParams fp) {
     glUniform1f(glGetUniformLocation(h->scaleProg, "k"), fp.pressureKeep);
     pass(h, h->scaleProg, h->prs[h->pc ^ 1]); h->pc ^= 1;
     glUseProgram(h->jacobiProg);
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < fp.iterations; ++i) {
         bind2d(h->jacobiProg, "pressure", 0, h->prs[h->pc].tex); bind2d(h->jacobiProg, "div", 1, h->div.tex);
         pass(h, h->jacobiProg, h->prs[h->pc ^ 1]); h->pc ^= 1;
     }
@@ -549,9 +604,14 @@ struct Look {
     bool shading; float ceiling; float dtScale;   // solver dt = dtScale × frame time
     int palette;                                   // 0: a random hue 10×/s at `gain`; 1: violets per splat
     float gain;
+    int iterations = 20;
+    bool deltaByAspect = false;                    // Pavel's correctDeltaY: dy / aspect on a wide screen
+    bool bloom = false, sunrays = false;
+    float bloomIntensity = 0.3f, bloomThreshold = 0.6f, bloomKnee = 0.7f;
+    float opacity = 1.f;                           // the whole layer, colour and alpha alike
 };
 // Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
-const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f };
+const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
 // **Mode 4: liquid-cursor** (cravinadventure.github.io/liquid-cursor, Victor
 // 2026-09-23: *"impl …"*), the same solver with its own tuning, from
 // liquid-cursor.js v1.0.0 and the demo page's tag (`data-gain="0.15"`): curl 20,
@@ -562,8 +622,82 @@ const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 
 // Their `drift` (ambient splats at random places) and the 16 opening splats are
 // left out: on a desktop overlay they would be paint appearing away from the pointer.
 const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f };
+// **Mode 5: ink** (mkmlman.github.io/ink, Victor 2026-09-23: *"poti si asta?"*) —
+// Pavel's simulation whole, bloom and sunrays included, at the values its dial
+// panel writes over `config` on load (dials.js `def`): radius 0.40, force 12000,
+// brightness 3 (colour ×0.45), curl 4, velocity loss 0, ink persistence 4
+// (DENSITY_DISSIPATION = 1 − 4·0.02 = 0.92), pressure loss 0.08 (PRESSURE =
+// 1 − 2·0.08 = 0.84), 16 pressure steps, glow 0.30; sim 256, dye 1024, bloom
+// 256 × 8 levels (threshold 0.6, knee 0.7), sunrays 196 weight 1. Their paper
+// is opaque #0a0a0a; here it is the desktop, keyed to alpha.
+// Then Victor, the same evening, on sight: *"mai mica dimens si luminozitate. si
+// incearca sa o faci mai transparenta pe ink"* — the splat's radius halved (0.40 →
+// 0.20), the colour 0.45 → 0.22 and the glow 0.30 → 0.15, the ink dying faster
+// (0.92 → 2.0: at theirs, a pointer that keeps moving paints the whole screen
+// within seconds, which on a paper is the point and on a desktop is a curtain),
+// and the layer at 0.55 opacity.
+const Look kInk = { 4.f, 0.84f, 0.f, 2.0f, 12000.f, 0.20f / 100.f, true, true, 10.f, 1.f, 0, 0.22f,
+                    16, true, true, true, 0.15f, 0.6f, 0.7f, 0.55f };
 const float kViolets[5][3] = { { 0.55f, 0.29f, 0.97f }, { 0.84f, 0.36f, 0.96f }, { 0.31f, 0.39f, 0.94f },
                                { 0.72f, 0.22f, 0.92f }, { 0.42f, 0.32f, 1.00f } };
+
+void draw_into(const Field& f) {
+    glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+    glViewport(0, 0, f.w, f.h);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+// Pavel's `applyBloom`: a thresholded copy of the dye, blurred down the pyramid,
+// added back up it, and scaled by the intensity into `bloom`.
+void apply_bloom(pmh* h, const Look& L) {
+    if (h->bloomLevels.size() < 2) return;
+    glDisable(GL_BLEND);
+    glUseProgram(h->prefilterProg);
+    float knee = L.bloomThreshold * L.bloomKnee + 0.0001f;
+    glUniform3f(glGetUniformLocation(h->prefilterProg, "curve"), L.bloomThreshold - knee, knee * 2, 0.25f / knee);
+    glUniform1f(glGetUniformLocation(h->prefilterProg, "threshold"), L.bloomThreshold);
+    bind2d(h->prefilterProg, "src", 0, h->dye[h->dc].tex);
+    draw_into(h->bloom);
+    glUseProgram(h->bloomBlurProg);
+    GLint uTexel = glGetUniformLocation(h->bloomBlurProg, "texel"), uInt = glGetUniformLocation(h->bloomBlurProg, "intensity");
+    glUniform1f(uInt, 1.f);
+    const Field* last = &h->bloom;
+    for (Field& f : h->bloomLevels) {
+        glUniform2f(uTexel, 1.f / last->w, 1.f / last->h);
+        bind2d(h->bloomBlurProg, "src", 0, last->tex);
+        draw_into(f); last = &f;
+    }
+    glEnable(GL_BLEND); glBlendEquation(GL_FUNC_ADD); glBlendFunc(GL_ONE, GL_ONE);
+    for (int i = (int)h->bloomLevels.size() - 2; i >= 0; --i) {
+        Field& base = h->bloomLevels[i];
+        glUniform2f(uTexel, 1.f / last->w, 1.f / last->h);
+        bind2d(h->bloomBlurProg, "src", 0, last->tex);
+        draw_into(base); last = &base;
+    }
+    glDisable(GL_BLEND);
+    glUniform2f(uTexel, 1.f / last->w, 1.f / last->h);
+    glUniform1f(uInt, L.bloomIntensity);
+    bind2d(h->bloomBlurProg, "src", 0, last->tex);
+    draw_into(h->bloom);
+}
+
+// Pavel's `applySunrays` and its one blur: a mask where the dye is (dark) and is
+// not (light), smeared radially from the middle of the screen, then blurred.
+void apply_sunrays(pmh* h) {
+    glDisable(GL_BLEND);
+    Field& mask = h->dye[h->dc ^ 1];              // free until the next frame's advection
+    glUseProgram(h->sunMaskProg);
+    bind2d(h->sunMaskProg, "src", 0, h->dye[h->dc].tex);
+    draw_into(mask);
+    glUseProgram(h->sunraysProg);
+    glUniform1f(glGetUniformLocation(h->sunraysProg, "weight"), 1.f);
+    bind2d(h->sunraysProg, "src", 0, mask.tex);
+    draw_into(h->sun);
+    glUseProgram(h->gaussProg);
+    GLint t = glGetUniformLocation(h->gaussProg, "texel");
+    glUniform2f(t, 1.f / h->sun.w, 0.f); bind2d(h->gaussProg, "src", 0, h->sun.tex); draw_into(h->sunTemp);
+    glUniform2f(t, 0.f, 1.f / h->sun.h); bind2d(h->gaussProg, "src", 0, h->sunTemp.tex); draw_into(h->sun);
+}
 
 IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
     const float dt = 1.f / h->fps, sdt = dt * L.dtScale;
@@ -593,11 +727,12 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
             float aspect = (float)h->ow / h->oh;
             float radius = L.radius * (L.radiusByAspect && aspect > 1 ? aspect : 1.f);
             float x = h->sx / h->ow, y = h->sy / h->oh;
-            splat(h, h->vel, h->vc, h->vw, h->vh, x, y, dx * L.force, dy * L.force, 0, radius);
+            float ddy = L.deltaByAspect && aspect > 1 ? dy / aspect : dy;
+            splat(h, h->vel, h->vc, h->vw, h->vh, x, y, dx * L.force, ddy * L.force, 0, radius);
             splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
         }
     }
-    step_fluid(h, sdt, { L.curl, L.pressureKeep, L.velFade });
+    step_fluid(h, sdt, { L.curl, L.pressureKeep, L.velFade, L.iterations });
     // the dye rides the velocity and dies at DENSITY_DISSIPATION
     glUseProgram(h->advectProg);
     bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->dye[h->dc].tex);
@@ -608,16 +743,24 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
     glViewport(0, 0, h->dw, h->dh);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     h->dc ^= 1;
+    if (L.bloom) apply_bloom(h, L);
+    if (L.sunrays) apply_sunrays(h);
     // shown
     glUseProgram(h->displayProg);
+    bind2d(h->displayProg, "bloom", 1, h->bloom.tex);
+    bind2d(h->displayProg, "sunrays", 2, h->sun.tex);
+    glUniform1f(glGetUniformLocation(h->displayProg, "useBloom"), L.bloom ? 1.f : 0.f);
+    glUniform1f(glGetUniformLocation(h->displayProg, "useSunrays"), L.sunrays ? 1.f : 0.f);
     bind2d(h->displayProg, "dye", 0, h->dye[h->dc].tex);
     glUniform2f(glGetUniformLocation(h->displayProg, "texel"), 1.f / h->dw, 1.f / h->dh);
     glUniform1f(glGetUniformLocation(h->displayProg, "shading"), L.shading ? 1.f : 0.f);
     glUniform1f(glGetUniformLocation(h->displayProg, "ceil_"), L.ceiling);
+    glUniform1f(glGetUniformLocation(h->displayProg, "opacity"), L.opacity);
     glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
     glViewport(0, 0, h->ow, h->oh);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0); glUseProgram(0);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -632,7 +775,7 @@ IOSurfaceRef pmh_render(pmh* h) {
     CGLSetCurrentContext(h->ctx);
     double t0 = now_ms();
     if (h->mode >= 3) {
-        IOSurfaceRef out = render_pure_fluid(h, h->mode == 4 ? kLiquid : kCursify);
+        IOSurfaceRef out = render_pure_fluid(h, h->mode == 5 ? kInk : h->mode == 4 ? kLiquid : kCursify);
         h->engineMs = 0; h->keyMs = now_ms() - t0;
         GLenum e = glGetError();
         CGLSetCurrentContext(prev);

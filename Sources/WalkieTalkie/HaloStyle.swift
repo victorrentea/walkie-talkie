@@ -103,6 +103,10 @@ enum HaloStyle: String, CaseIterable {
     /// Fluid cursor, cu reglajul lor — violete, vopsea care atarna in aer,
     /// vartejuri puternice (`pmh_set_canvas` mod 4).
     case liquidCursor
+    /// **ink** (Victor, 2026-09-23: *"https://mkmlman.github.io/ink/ poti si
+    /// asta?"*): fluidul lui Pavel intreg, cu bloom si sunrays, la valorile
+    /// panoului lor de butoane (`pmh_set_canvas` mod 5).
+    case ink
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -127,6 +131,7 @@ enum HaloStyle: String, CaseIterable {
         case .fluidCursor:     return "Fluid cursor"
         case .fairyDust:       return "Fairy dust"
         case .liquidCursor:    return "Liquid cursor"
+        case .ink:             return "Ink"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
         case .milkdrop99:     return "Mosaic"
@@ -302,6 +307,8 @@ enum HaloStyle: String, CaseIterable {
         var pureFluid = false
         /// Care fluid pur: `false` = Cursify (mod 3), `true` = liquid-cursor (mod 4).
         var liquid = false
+        /// ink (mod 5) — are prioritate fata de `liquid`.
+        var ink = false
     }
     var preset: Preset? {
         switch self {
@@ -400,6 +407,8 @@ enum HaloStyle: String, CaseIterable {
                                          trail: 1, lag: 0, pureFluid: true)
         case .liquidCursor: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                           trail: 1, lag: 0, pureFluid: true, liquid: true)
+        case .ink: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                 trail: 1, lag: 0, pureFluid: true, ink: true)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Sparks' size is a chain of factors, each one applied to what was

@@ -324,7 +324,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
             // The surface becomes the screen, in pixels; the square is stamped
             // into it at the pointer (`center`).
             let w = Int32((screen.width * Self.renderScale).rounded()), h = Int32((screen.height * Self.renderScale).rounded())
-            if pmh_set_canvas(renderer, w, h, preset.pureFluid ? (preset.liquid ? 4 : 3) : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
+            if pmh_set_canvas(renderer, w, h, preset.pureFluid ? (preset.ink ? 5 : preset.liquid ? 4 : 3) : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
                 fail("the trail could not be set up: \(String(cString: err))"); return false
             }
             Log.info("◯ projectM \(preset.number): \(preset.pureFluid ? "pure fluid" : preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
@@ -480,7 +480,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // the screen instead of by the pointer — the only way to capture a trail
         // (`WT_PM_SHOOT`) without taking the mouse.
         if trail, Self.orbit {
-            let t = Double(totalFrames) / Double(haloFrameCap > 0 ? haloFrameCap : 60)
+            var t = Double(totalFrames) / Double(haloFrameCap > 0 ? haloFrameCap : 60)
+            // `WT_PM_ORBIT=bursts`: moving for 1.5 s, still for 1.5 s — a hand, not a motor
+            if ProcessInfo.processInfo.environment["WT_PM_ORBIT"] == "bursts" {
+                let cycle = floor(t / 3), inCycle = t - cycle * 3
+                t = cycle * 1.5 + min(inCycle, 1.5)
+            }
             let w = Double(screen.width * Self.renderScale), h = Double(screen.height * Self.renderScale)
             pmh_set_pointer(r, Float(w / 2 + w * 0.32 * sin(t * 1.3)), Float(h / 2 + h * 0.3 * sin(t * 2.6)))
         }
