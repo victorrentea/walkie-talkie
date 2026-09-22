@@ -77,6 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pulseze în același ritm al discuției"*.
     private let caretHalo = CaretHalo()
 
+    /// **`⌘⇧P`, said once and faintly at the two moments it is the answer** —
+    /// see `PasteHint`. A caret sentence that has just been pasted somewhere he
+    /// did not mean, and a prompt he has just cancelled, are the whole of its
+    /// vocabulary; a cancelled *dictation* is deliberately not one of them,
+    /// because there the key would paste the sentence before last.
+    private let pasteHint = PasteHint()
+
     /// Keeps every dictation's **recording** beside the model's reading of it,
     /// so a recogniser can be measured on Victor's own voice later. It changes
     /// nothing about what the agent receives — see `VoiceCorpus`.
@@ -278,37 +285,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// **The letter the chip wears while that engine is listening** —
-    /// `Listening(E)...` for ElevenLabs, `(L)` the local model. (`(S)`
-    /// Speechmatics and `(G)` Gemini went with their sources on 2026-09-20 —
-    /// Victor: *"renunță la Speechmatics și GeminiSource, scoate-le din cod pt
-    /// moment"*; `(W)` Wispr Flow went with its Engine row on 2026-09-22.)
+    /// **The logo the chip wears while that engine is listening** — ElevenLabs'
+    /// pause-in-a-ring, Wispr Flow's five bars, the Apple mark for the model
+    /// that runs on this Mac. Victor, 2026-09-22: *"în loc de litera care
+    /// urmează, aș vrea să am logo-ul lor stilizat cu gri. Exact culoarea
+    /// fontului."*
     ///
-    /// **`L` and not `W` for Whisper** was the only real choice in this table
-    /// while Wispr was in it: the two recognisers whose names start with the
-    /// same letter were exactly the two he most needed to tell apart. The
-    /// letter stays `L` now that the clash is gone, because the local one is
-    /// better named by *where it runs* than by what it is — which is also the
-    /// fact that matters at the moment this is read.
+    /// **It was a letter from 2026-09-18 to 2026-09-22** — `(E)`, `(L)`, `(W)`,
+    /// and `(S)` / `(G)` while Speechmatics and Gemini were in the code. A
+    /// letter is a thing to decode, and it needed a legend that lived in this
+    /// comment: `L` and not `W` for Whisper, because the two recognisers whose
+    /// names start with the same letter were exactly the two he most needed to
+    /// tell apart. A logo needs no legend, which is the whole of why it changed.
+    ///
+    /// **The characters are `Glyphs.Engine`'s**, private-use scalars the chip
+    /// draws as pictures. They are strings here rather than an enum crossing the
+    /// boundary for `RelayWindow.engineMark`'s standing rule: the chip is handed
+    /// a mark and may not know there is more than one recogniser.
     ///
     /// Beside `engineId` rather than on the sources, because it is a fact about
-    /// this app's vocabulary — the menu's `Engine` row and this letter have to
+    /// this app's vocabulary — the menu's `Engine` row and this mark have to
     /// agree — and a source may not know it is one of two. **A new engine adds
-    /// a row here**; the default is ElevenLabs' letter for the same reason
+    /// a row here**; the default is ElevenLabs' logo for the same reason
     /// `engine(named:)` falls back to ElevenLabs, and an unknown id reaching
     /// this is already a bug somewhere above.
     private static func engineMark(_ id: String) -> String {
         switch id {
-        case "whisper": return "(L)"
-        case "eleven": return "(E)"
-        case "wispr": return "(W)"
-        // The default's letter, like `engine(named:)`'s default source.
-        default: return "(E)"
+        case "whisper": return String(Glyphs.Engine.mac.rawValue)
+        case "eleven": return String(Glyphs.Engine.eleven.rawValue)
+        case "wispr": return String(Glyphs.Engine.wispr.rawValue)
+        // The default's logo, like `engine(named:)`'s default source.
+        default: return String(Glyphs.Engine.eleven.rawValue)
         }
     }
 
     /// **The whole mark: which microphone, then which recogniser** — Victor,
-    /// 2026-09-19: `Listening(🎙️/E)...`, `(💻/E)`, `(🎤/E)`, `(🎧/E)`.
+    /// 2026-09-19: `Listening 🎙️/⬮...`, `💻/⬮`, `🎤/⬮`, `🎧/⬮`, where the
+    /// second half is the engine's logo (`engineMark`).
+    ///
+    /// **No brackets since 2026-09-22** (*"fără paranteză"*). They were doing
+    /// the work of separating the mark from the word while both halves were
+    /// characters; with two pictures in there the shapes separate themselves,
+    /// and a pair of parentheses in the middle of a progress bar is two more
+    /// steps of ramp spent on punctuation. One space stands in for the opening
+    /// bracket, because `Listening🎙️` with nothing between them reads as one
+    /// long word.
     ///
     /// **The separator is a slash.** He asked for it as `⇒` and changed it to
     /// `/` the same evening, which is the right call and worth writing down
@@ -334,10 +355,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// corpus — while the words come from Wispr's own microphone, which is
     /// chosen inside Wispr and is a Loopback device on this Mac. The four
     /// pictures are true for the four engines that record for themselves.
-    private static func mark(engine id: String) -> String {
+    private static func mark(engine id: String) -> String { " via " + engineMark(id) }
+
+    /// **The microphone's half, and the word that makes it a sentence** —
+    /// `Listening to 🎤...`. A device that is none of the four leaves the mark
+    /// empty and the row is the plain `Listening...` every state before
+    /// 2026-09-19 was photographed with: *listening to* with nothing after it
+    /// is worse than not saying it.
+    private static func micMark() -> String {
         let glyph = InputDevice.currentGlyph()
-        guard !glyph.isEmpty else { return engineMark(id) }
-        return "(\(glyph)/\(engineMark(id).dropFirst().dropLast()))"
+        return glyph.isEmpty ? "" : " to " + glyph
     }
 
     /// **Victor picked a microphone from the menu** (2026-09-19).
@@ -359,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         micId = id
         status.setMic(id)
         overlay.setEngineMark(Self.mark(engine: engineId))
+        overlay.setMicMark(Self.micMark())
         let resolved = InputDevice.currentLabel()
         Log.info("🎚️ microphone → \(id == "auto" ? "automatic" : id) — recording through \(resolved)")
         if listening {
@@ -1159,7 +1187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard id != self.micId else { return }
             self.micId = id
             self.status.setMic(id)
-            self.overlay.setEngineMark(Self.mark(engine: self.engineId))
+            self.overlay.setMicMark(Self.micMark())
             Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
         }
         micId = InputDevice.chosenId
@@ -1545,6 +1573,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                          + (hand ? " as though he had pressed it (ring only)" : ""))
                 self?.wisprSource.postStartChord(byHand: hand)
             }
+        }
+        picker.onTestPasteHint = { [weak self] in
+            DispatchQueue.main.async { self?.pasteHint.pulse(reason: "POST /test/paste-hint") }
         }
         picker.onTestCancelDictation = { [weak self] in
             DispatchQueue.main.async {
@@ -2448,6 +2479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // one place in the app that is allowed to know there are three of them;
         // the overlay renders the string and cannot ask what it means.
         overlay.setEngineMark(Self.mark(engine: engineId))
+        overlay.setMicMark(Self.micMark())
         // **The shutter runs on `DispatchQueue.global()`, not the main thread**
         // (`HotkeyTap.onScreenshot`), so `reserveMarker` may not read `source` —
         // `setEngine` reassigns it from the main thread and that is a race on a
@@ -2501,6 +2533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // *this* sentence. `InputDevice.resolve()` is two CoreAudio reads and
         // the chip relayouts only when the string actually changes.
         overlay.setEngineMark(Self.mark(engine: engineId))
+        overlay.setMicMark(Self.micMark())
 
         // **The chip says where these words are going.** A spawn names its
         // folder (armed at the gesture), a caret sentence says so and outranks
@@ -2904,6 +2937,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
             pasteText(line, to: result.focusPid)
+            // **The one delivery this app makes that it cannot check.** A
+            // terminal's words are read back; a caret's go wherever the focus
+            // was, and the focus is the one thing here nobody owns. So the key
+            // that says it again is offered at the instant the ⌘V goes out —
+            // see `PasteHint` for why it is offered at a fifth of an opacity.
+            pasteHint.pulse(reason: "a caret sentence has just landed")
             return
         }
         send(kind: "dictation", text: result.text, app: app)
@@ -4299,6 +4338,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.setActive(ringUp,
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
+        // **A hint about the last sentence has nothing to say over this one.**
+        // The pulse is under two seconds, so this fires rarely — and when it
+        // does (a ⌘⌃D straight after a caret paste) the ring is going up at the
+        // same pointer the hint is hanging under.
+        if ringUp { pasteHint.hide() }
         // **The music pauses for every dictation, and so reads `listening`, not
         // `live`.** It hung off `live` until 2026-09-03, on the argument that an
         // unbound dictation is Victor talking into some other app and none of the
@@ -4794,6 +4838,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The two windows as they are, beside the flags as they claim to be
             // (2026-09-15) — the reading the idle sweep acts on.
             "halo": caretHalo.windowsReport(),
+            "pasteHint": pasteHint.report,
             // **Which microphone the halo is breathing on**, because *the effect
             // looks dead* and *the effect is being fed silence* are the same
             // picture from outside the process and were the same bug for two
@@ -7692,6 +7737,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if m.spawn { clearSpawn() }
             overlay.flash("✕ cancelled", duration: 2.0)
+            // Cancelled is not lost: the words are still `lastDictation`, and
+            // the difference between *I meant that* and *I did not* is often
+            // one second wide. The picks went back in the queue above for the
+            // same reason.
+            pasteHint.pulse(reason: "a prompt was cancelled")
             return
         }
         commit(m)

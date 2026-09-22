@@ -111,6 +111,15 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
     exit(0)
 }
 
+// The `⌘⇧P` hint on a dark ground and a light one, at the opacity it really
+// runs at and at full ink, and quit — the only way to judge a mark whose whole
+// design is a number between nothing and not much. See `PasteHint.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HINT"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    PasteHint.shoot(to: out)
+    exit(0)
+}
+
 // The halo round the pointer for a fixed number of seconds, cycling its swell,
 // and capturable — the only way to *watch* a panel that no screen recording can
 // contain. See `CaretHalo.demo`.

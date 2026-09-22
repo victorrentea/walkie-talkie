@@ -547,22 +547,24 @@ enum OverlayStates {
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil
-        // **Pinned to Wispr's letter, so the page cannot change with a menu
-        // setting** (2026-09-18). `AppDelegate` pushes the live engine's mark
+        // **Pinned to Wispr's logo, so the page cannot change with a menu
+        // setting** (2026-09-18; a letter until 2026-09-22). `AppDelegate` pushes the live engine's mark
         // into the overlay at launch, which would otherwise make every
         // `Listening…` picture on this page depend on which recogniser happened
         // to be selected the day it was shot — the same class of nondeterminism
         // as the 1× / 2× snapshots, and just as hard to explain in a diff. Wispr
-        // is the default engine, so `(W)` is the honest default picture.
+        // is the default engine, so its five bars are the honest default
+        // picture.
         //
         // **And pinned to a microphone too, since 2026-09-19**, when the mark
-        // grew its first half (`Listening(🎤/W)...`). Same argument one level
+        // grew its first half (`Listening to 🎤...`). Same argument one level
         // down: `InputDevice.resolve()` answers with whatever is plugged into
         // this Mac at the moment the shooter runs, so an unpinned page would
         // change its `Listening…` pictures when a cable moved. The receiver is
-        // the picture to pin for the same reason `(W)` is: it is what he teaches
-        // through, and *automatic* means it wins whenever it is there.
-        o.setEngineMark("(🎤/W)")
+        // the picture to pin for the same reason Wispr's mark is: it is what he
+        // teaches through, and *automatic* means it wins whenever it is there.
+        o.setEngineMark(" via \(Glyphs.Engine.wispr.rawValue)")
+        o.setMicMark(" to 🎤")
         // **Settled, unless a shot says otherwise.** `Listening…` ramps from dark
         // grey to full over six seconds (`RelayWindow.listenWarmth`), so without
         // a chosen frame every dictating state on this page would be a picture of

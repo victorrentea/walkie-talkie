@@ -569,6 +569,10 @@ final class WisprFlowSource: DictationSource {
     /// When the row said `formatted`, so the ⌘V that normally follows gets
     /// `pasteGrace` to arrive before the text is taken from the row instead.
     private var historyFormattedAt: CFAbsoluteTime = 0
+    /// When a `raw_transcript` row was first seen **with the words already in
+    /// it**, so `rawTextSettled` can tell a row that has stopped there from one
+    /// that is passing through.
+    private var rawTextSeenAt: CFAbsoluteTime = 0
     private static let historyTick: TimeInterval = 0.15
     private static let pasteGrace: TimeInterval = 1.0
 
@@ -1817,6 +1821,7 @@ final class WisprFlowSource: DictationSource {
         priorRowWasOpen = prior.map { !WisprState.isTerminal($0.status) } ?? false
         historyRow = nil
         historyFormattedAt = 0
+        rawTextSeenAt = 0
         // **The note as it stood before he started talking**, so a Scratchpad
         // that is appended to rather than added to is still recognisable.
         scratchpadWindowHandled = false
@@ -2061,7 +2066,12 @@ final class WisprFlowSource: DictationSource {
         if armedAt >= state.chordAt, !discardOnArrival { state.sawRow(e.rowid, status: e.status) }
 
         let took = (CFAbsoluteTimeGetCurrent() - captureFrom) * 1000
-        switch e.status {
+        // **A `raw_transcript` row that carries the words is read as
+        // `formatted`** (2026-09-22) — see `rawTextSettled`. Only the switch is
+        // told; the status the state machine and the log carry stays Wispr's own
+        // word for it, because the row really did stop at `raw_transcript` and
+        // that is the fact worth keeping in the file.
+        switch rawTextSettled(e, took: took) ? "formatted" : e.status {
         // **Intermediate, and they are progress rather than silence.** `""` is
         // the row as created at the gesture; `raw_transcript` and `processing`
         // were first seen on 2026-09-13 and were unknown to this switch that day,
@@ -2171,6 +2181,58 @@ final class WisprFlowSource: DictationSource {
     /// same number the settle gives up on, so nothing that was going to arrive
     /// is cut off by it.
     private static let silenceCeiling: TimeInterval = 8
+
+    /// **Wispr finished the sentence and never said so** (2026-09-22).
+    ///
+    /// A row that stops at `raw_transcript` with `asrText`, `pastedText`,
+    /// `formattedText` *and* `e2eLatency` all written is a **finished**
+    /// dictation wearing an unfinished label. Wispr never comes back to it:
+    /// 21 such rows in the 30 days to 2026-09-22, the oldest still
+    /// `raw_transcript` months later — and **five of them that one evening**,
+    /// rows 16739/16750/16752/16755 and the 18:29 one, 300–780 characters
+    /// apiece.
+    ///
+    /// Until this, the relay called it progress and waited: the whole 30 s of
+    /// `captureTimeout`, the ring lit the whole time, and then it delivered
+    /// **whatever was on the pasteboard** — *1 character* into a spawned
+    /// session at 18:24 and *25* at the caret at 18:27, for two sentences of
+    /// 779 and 434 characters that were sitting complete in the row. That
+    /// second half is fixed in `captureExpired`; this is the first, and it is
+    /// the one that makes the sentence arrive **on time** rather than at all.
+    ///
+    /// **Why this cannot take an unfinished row's text.** The ordinary path
+    /// never passes through here: measured with `tools/wispr-row-watch.py` on
+    /// the evening it was written, a row goes `∅` → `processing` → `formatted`
+    /// and **all three text columns appear in the same tick as the terminal
+    /// status** — there is no moment when a row that is still working carries
+    /// words. Every `raw_transcript` in the relay's own log arrived *after*
+    /// `processing`, which is to say the status went backwards and stayed
+    /// there. `rawTextGrace` is the belt to that braces: the columns must have
+    /// held still for it, so a Wispr that one day writes them a tick early
+    /// still gets to finish the flip.
+    private func rawTextSettled(_ e: WisprHistory.Entry, took: Double) -> Bool {
+        guard !isRecording, e.status == "raw_transcript",
+              !e.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            rawTextSeenAt = 0
+            return false
+        }
+        if rawTextSeenAt == 0 {
+            rawTextSeenAt = CFAbsoluteTimeGetCurrent()
+            Log.info(String(format: "wispr history: raw_transcript already carries %d chars %.0f ms after the microphone closed — giving the formatting pass %.1f s",
+                            e.text.count, took, Self.rawTextGrace))
+            return false
+        }
+        guard CFAbsoluteTimeGetCurrent() - rawTextSeenAt >= Self.rawTextGrace else { return false }
+        Log.info(String(format: "wispr history: still raw_transcript %.1f s on, and the row is complete (Wispr's own e2e %.0f ms) — Wispr never labelled it; taking it as finished",
+                        (CFAbsoluteTimeGetCurrent() - rawTextSeenAt), e.e2eLatency))
+        return true
+    }
+
+    /// How long the words must sit unchanged in a `raw_transcript` row before it
+    /// is read as finished. Short on purpose: what it is protecting against has
+    /// never been observed, and what it delays is a sentence Victor is waiting
+    /// for — it used to cost him thirty seconds and the wrong text.
+    private static let rawTextGrace: TimeInterval = 0.8
 
     /// **Wispr Flow's own process, matched on the anchored executable path.**
     ///
@@ -2529,9 +2591,35 @@ final class WisprFlowSource: DictationSource {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.copyGrace, execute: again)
             return
         }
-        if NSPasteboard.general.changeCount != clipboardAt {
+        // **The pasteboard is an answer only when the relay asked it one**
+        // (2026-09-22). `changeCount` moving is not evidence of anything: this
+        // is a thirty-second window in which Victor copies things, and with
+        // `copyFallbackEnabled` off — which is the default, and has been since
+        // the day it was written — no ⌘⌃C was ever posted, so nothing on that
+        // board has any claim to be the sentence. It was read all the same, and
+        // labelled `copy_last_text`: **1 character** routed into a spawned
+        // session at 18:24 and **25** pasted at the caret at 18:27, while the
+        // two real sentences (779 and 434 characters) sat finished in Wispr's
+        // row. *A dictation that silently becomes an older one is a sentence he
+        // cannot trust* — the rule the fallback was switched off for — and this
+        // was the same bug with no fallback switched on at all.
+        if askedForCopy, NSPasteboard.general.changeCount != clipboardAt {
             deliver(reason: "copy_last_text", via: "pasteboard",
                     delivery: wrapWispr ? .route : .alreadyInserted)
+            return
+        }
+        // **The row, one last look, before the sentence is called lost.**
+        // `rawTextSettled` catches the stalled row during the capture; this is
+        // the same read for a row that went terminal in a tick the poll missed,
+        // or that was still `processing` when the 30 s ran out and has finished
+        // since. Wispr's own record is the only place the words can be, and
+        // reading it is free.
+        if intercepting, !discardOnArrival, let row = historyRow,
+           let e = WisprHistory.entry(rowid: row),
+           !e.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Log.info("wispr: nothing came back within \(Int(Self.captureTimeout)) s, but row \(row) (\(e.status.isEmpty ? "∅" : e.status)) carries \(e.text.count) chars — delivering it")
+            deliver(reason: "Wispr's History row at the timeout", via: "wispr-history",
+                    delivery: historyIsTheRoute ? .route : .insertedElsewhere, text: e.text)
             return
         }
         if discardOnArrival {

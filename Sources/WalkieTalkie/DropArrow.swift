@@ -127,6 +127,32 @@ final class DropArrow {
     /// The fade when he starts talking again — see the type comment.
     private static let recall: TimeInterval = 0.18
 
+    /// **Twice the size while the words are in flight** — Victor, 2026-09-22:
+    /// *"când o dictare la caret este în procesul de transcriere, săgețile cele
+    /// trei de sus și jos … trebuie să se dubleze ca mărime … Cele care apar
+    /// atunci când fac o pauză în dictare să rămână ca până acum."*
+    ///
+    /// The two states this shape has were drawn identically and mean different
+    /// things. The silence one is a *suggestion* — he has stopped talking, the
+    /// caret could go anywhere, and he may perfectly well go on speaking, in
+    /// which case the heads fade and nothing was owed. `hold` is not a
+    /// suggestion: the microphone is shut, the sentence is coming, and the
+    /// pointer must stay where it is until it lands. Same shape at the same size
+    /// for both leaves the one moment that has a deadline in it looking exactly
+    /// like the one that does not.
+    ///
+    /// **Size and not colour, speed or count**, because size is the only channel
+    /// on this shape that is not already carrying something: the amber is *this
+    /// is the arrow*, the wave's rhythm is *inward*, and three a side is the
+    /// sequence. Doubling it also puts the outermost pair at 88 pt out, past the
+    /// ring's inner hole and into its band, where a bigger shape has to be to
+    /// stay legible at all.
+    ///
+    /// Applied to the container about its own centre — which is the pointer's
+    /// hot spot — so the arrangement stays symmetric about the thing it points
+    /// at, which is the whole of why it is six heads and not one arrow.
+    static let holdScale: CGFloat = 2
+
     /// **Amber, the halo's own ink.** The film that fills the ring is blue and
     /// magenta, so this is the one hue in the app's palette that cannot be
     /// mistaken for part of it at a glance, and it is the colour every drawn
@@ -148,6 +174,13 @@ final class DropArrow {
     }
 
     private var panel: RelayPanel?
+    /// The container the heads hang off, kept so `hold` can double it. Rebuilt
+    /// only with the panel, which is built once for the life of the process.
+    private var heads: CALayer?
+    /// What `heads.transform` is set to, so a 20 Hz `refresh` does not re-assign
+    /// the same transform forty times a second and hand Core Animation forty
+    /// chances to animate it implicitly.
+    private var scale: CGFloat = 1
     /// A `recall` fade is in flight. Without it every 20 Hz tick through a
     /// silence-that-ended would start another one, and the completion handler of
     /// a fade that has since been overruled would order out a visible panel.
@@ -200,6 +233,7 @@ final class DropArrow {
         p.setFrameOrigin(origin)
         guard !holding else { return }
         holding = true
+        setScale(Self.holdScale)
         // A fade already in flight is overruled rather than waited out — its
         // completion handler orders the window out, and this is the one state
         // where the window has to stay.
@@ -232,6 +266,8 @@ final class DropArrow {
         let t = max(0, min(1, (quiet - CaretHalo.patience) / CaretHalo.swell))
         guard t > 0 else { return fadeAway() }
         let p = panel ?? makePanel()
+        // The silence's own size, whatever the last dictation left behind.
+        setScale(1)
         p.setFrameOrigin(origin)
         // Overruling a fade that is still running: the animator owns
         // `alphaValue` until it is told otherwise, so the proxy has to be the one
@@ -275,6 +311,20 @@ final class DropArrow {
         holding = false
         panel?.orderOut(nil)
         panel?.alphaValue = 0
+        setScale(1)
+    }
+
+    /// **Instant, both ways.** Core Animation would animate a transform over a
+    /// quarter of a second on its own, and neither end of this wants that: the
+    /// growth *is* the message that the sentence is now on its way, and a
+    /// shrink is only ever seen on a window that has already been ordered out.
+    private func setScale(_ value: CGFloat) {
+        guard scale != value, let heads else { scale = value; return }
+        scale = value
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        heads.transform = CATransform3DMakeScale(value, value, 1)
+        CATransaction.commit()
     }
 
     private func makePanel() -> RelayPanel {
@@ -299,7 +349,10 @@ final class DropArrow {
         // second thing to get wrong.
         let view = NSView(frame: NSRect(x: 0, y: 0, width: side, height: side))
         view.wantsLayer = true
-        view.layer?.addSublayer(build())
+        let container = build()
+        heads = container
+        scale = 1
+        view.layer?.addSublayer(container)
         p.contentView = view
         panel = p
         return p
@@ -316,7 +369,14 @@ final class DropArrow {
     /// The pose is the wave halfway in — the outer pair already dim again, the
     /// middle pair lit — which is the only frame that shows what the sweep is
     /// doing.
-    static func picture() -> CALayer { DropArrow().build(posed: 1) }
+    /// - Parameter scale: `holdScale` draws the pose the heads wear while the
+    ///   words are in flight, which is otherwise only on screen for the second
+    ///   or two between a stop and a ⌘V.
+    static func picture(scale: CGFloat = 1) -> CALayer {
+        let layer = DropArrow().build(posed: 1)
+        layer.transform = CATransform3DMakeScale(scale, scale, 1)
+        return layer
+    }
 
     /// - Parameter posed: `nil` ships the flash as a repeating animation; an
     ///   index freezes it with that ring of heads lit and the others at `dim`.

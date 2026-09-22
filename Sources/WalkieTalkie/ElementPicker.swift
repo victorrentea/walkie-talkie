@@ -454,6 +454,8 @@ final class ElementPicker {
     /// empty id reports without changing anything.
     var onTestMic: ((String) -> [String: Any])?
 
+    /// One pulse of the `⌘⇧P` hint under the pointer — see `PasteHint`.
+    var onTestPasteHint: (() -> Void)?
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -830,6 +832,14 @@ final class ElementPicker {
             let hand = body?["hand"] as? Bool ?? false
             onTestWisprHandsFree?(hand)
             respond(conn, 200, ["ok": true, "posted": "fn ctrl space", "hand": hand])
+
+        // **The `⌘⇧P` hint, without the loss that summons it.** It is under
+        // two seconds long, at a fifth of an opacity, and it appears only at
+        // the end of a caret dictation or at a cancelled prompt — which is to
+        // say there is no way to look at it twice in a row without talking.
+        case ("POST", "/test/paste-hint"):
+            onTestPasteHint?()
+            respond(conn, 200, ["ok": true])
 
         // The ✕'s cancel, from a desk — see `onTestCancelDictation`.
         case ("POST", "/test/cancel"):

@@ -656,12 +656,38 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// this is read by the ramp tick — fifteen times a second, for the length of
     /// every sentence. Four microphones is the whole domain, so a dictionary is
     /// the whole cache.
-    private static var wordGlyphs: [Character: NSImage] = [:]
+    private static var wordGlyphs: [String: NSImage] = [:]
 
-    private static func wordGlyph(_ ch: Character) -> NSImage {
-        if let cached = wordGlyphs[ch] { return cached }
-        let image = Glyphs.emoji(String(ch), ink: iconInk)
-        wordGlyphs[ch] = image
+    /// **A recogniser's logo is drawn a rung smaller than the emoji beside it**,
+    /// `hqBadge`'s rung and for `hqBadge`'s reason: an emoji is trimmed to its
+    /// ink and fills its square, while these are open line drawings, and at
+    /// equal height the ring would be the largest thing on the row.
+    private static let engineInk: CGFloat = (iconInk * 0.8).rounded()
+
+    /// - Parameter ink: the row's own colour, which the logos are drawn in
+    ///   (*"exact culoarea fontului"*) and the emoji ignore.
+    ///
+    /// **Cached on the colour as it resolves, not as it is named.** The chip's
+    /// ink is `secondaryLabelColor`, a catalog colour that is two different
+    /// greys in the two appearances under one name — so a key built from the
+    /// name would hand back a dark-mode logo after a switch to light, for the
+    /// life of the process. `usingColorSpace` resolves it against the
+    /// appearance in force at the moment it is asked, which is also the
+    /// appearance the drawing is about to happen in.
+    private static func wordGlyph(_ ch: Character, ink: NSColor) -> NSImage {
+        guard Glyphs.Engine(rawValue: ch) != nil else {
+            let key = String(ch)
+            if let cached = wordGlyphs[key] { return cached }
+            let image = Glyphs.emoji(key, ink: iconInk)
+            wordGlyphs[key] = image
+            return image
+        }
+        let ink = ink.usingColorSpace(.deviceRGB) ?? ink
+        let key = "\(ch)|\(ink.redComponent),\(ink.greenComponent),"
+                + "\(ink.blueComponent),\(ink.alphaComponent)"
+        if let cached = wordGlyphs[key] { return cached }
+        let image = Glyphs.engine(ch, ink: engineInk, colour: ink) ?? NSImage()
+        wordGlyphs[key] = image
         return image
     }
 
@@ -879,10 +905,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// step, taking a quarter of the bar with it. Identical on screen, and the
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
-    private var listeningWord: String { "Listening\(engineMark)..." }
+    private var listeningWord: String { "Listening\(micMark)..." }
 
-    /// **Which recogniser is listening, as one letter** (2026-09-18) —
-    /// `Listening(W)...`, `(E)`, `(L)`.
+    /// **Which recogniser is listening, as its own logo** (2026-09-18 as a
+    /// letter, 2026-09-22 as a logo) — `Listening 🎤/⬮...`, where the second
+    /// glyph is ElevenLabs' pause-in-a-ring, Wispr Flow's five bars or the
+    /// Apple mark of the model that runs here. The brackets went with the
+    /// letters: two pictures separate themselves, and the punctuation was two
+    /// more steps of a ramp that is twelve characters long.
     ///
     /// Victor asked for it once there were three engines to tell apart: the
     /// menu's `Engine` row answers *what is configured*, and it is two clicks
@@ -894,11 +924,33 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **It is a string handed in, never a question asked.** The chip may not
     /// know there is more than one recogniser — that is `DictationSource`'s whole
     /// rule, and the reason the Wispr path could rot unnoticed for a month. So
-    /// `AppDelegate` pushes a letter and this renders it; nothing here can branch
-    /// on which engine it means, because nothing here knows.
+    /// `AppDelegate` pushes a mark and this renders it; nothing here can branch
+    /// on which engine it means, because nothing here knows. The logo survives
+    /// that rule because it travels **as a character** (`Glyphs.Engine`, in the
+    /// private-use block): `applyEngineText`'s existing *non-ASCII is a picture*
+    /// branch draws whatever glyph the character names, exactly as it drew
+    /// whatever letter the string used to carry.
     ///
-    /// Empty renders `Listening...` exactly as before, which is what every state
-    /// photographed before today shows.
+    /// Empty renders `Listening...` / `Transcribing...` exactly as before, which
+    /// is what every state photographed before these marks existed shows.
+    ///
+    /// **They are two marks on two rows since 2026-09-22 evening** — Victor:
+    /// *"când fac listening să scrie «listening to» și apoi emoji-ul
+    /// device-ului ascultat. Respectiv, când fac transcribing, să zici
+    /// «transcribing via» și să pui simbolul tool-ului care face transcrierea
+    /// efectivă."* They had ridden together on the first row for three days as
+    /// `Listening 🎤/⬮...`, which says both facts at the one moment only the
+    /// first of them is true: while the microphone is open nothing is
+    /// transcribing yet, and when something is, the microphone is shut. Each
+    /// mark now sits on the row that is about it, and the preposition is what
+    /// makes it a sentence rather than a code — *listening **to** this*,
+    /// *transcribing **via** that*.
+    ///
+    /// `micMark` is the device, `engineMark` the recogniser; both arrive with
+    /// their own leading words, because the words are as much this app's
+    /// vocabulary as the glyph is and the chip must not assemble a sentence it
+    /// cannot read.
+    private(set) var micMark = ""
     private(set) var engineMark = ""
 
     /// The bar's step count is `listeningWord.count`, so the mark lengthens the
@@ -909,6 +961,14 @@ private let frontLabel = NSTextField(labelWithString: "")
     func setEngineMark(_ mark: String) {
         guard engineMark != mark else { return }
         engineMark = mark
+        if transcribing { layoutContent() }
+    }
+
+    /// The microphone's half, on the row it is about. Same relayout rule as
+    /// above, read against the row this one is on.
+    func setMicMark(_ mark: String) {
+        guard micMark != mark else { return }
+        micMark = mark
         if listening { layoutContent() }
     }
 
@@ -2944,7 +3004,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // through the whole ramp, which is the one thing on this row that is
             // a fact rather than a forecast.
             guard ch.isASCII else {
-                out.append(Self.inline(Self.wordGlyph(ch), font: hintFont))
+                out.append(Self.inline(Self.wordGlyph(ch, ink: lit), font: hintFont))
                 continue
             }
             out.append(NSAttributedString(string: String(ch),
@@ -3699,7 +3759,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// **Three full stops, not `…`** — `listeningWord`'s reason, applied to the
     /// row that is the same slot at the next moment: the word fills a character
     /// at a time, and an ellipsis is one glyph that would light in one step.
-    private static let transcribeWord = "Transcribing..."
+    private var transcribeWord: String { "Transcribing\(engineMark)..." }
 
     /// How far through the estimate this decode is, 0…1 — the same reading
     /// `listenWarmth` is, off a different clock. **Full when there is no
@@ -3747,9 +3807,18 @@ private let frontLabel = NSTextField(labelWithString: "")
             out.append(Self.inline(Glyphs.emoji(mark, ink: Self.iconInk), font: hintFont))
             out.append(NSAttributedString(string: " ", attributes: [.font: hintFont]))
         }
-        let word = Array(Self.transcribeWord)
+        let word = Array(transcribeWord)
         let steps = Int((CGFloat(word.count) * transcribeWarmth).rounded())
         for (i, ch) in word.enumerated() {
+            // **The recogniser's logo goes in as a picture**, `applyEngineText`'s
+            // branch and its reason — this row had no such branch until the mark
+            // moved onto it, because until then every character in it was ASCII.
+            // Always lit, never dimmed: the bar is a count of letters that have
+            // filled, and a picture has no unlit state that reads as *not yet*.
+            guard ch.isASCII else {
+                out.append(Self.inline(Self.wordGlyph(ch, ink: lit), font: hintFont))
+                continue
+            }
             out.append(NSAttributedString(string: String(ch),
                                           attributes: [.font: hintFont,
                                                        .foregroundColor: i < steps ? lit : dim]))
@@ -3807,7 +3876,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             // never re-measure every row on the chip sixty times a decode.
             let tick = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
                 guard let self = self, self.transcribing else { return }
-                let steps = Int((CGFloat(Self.transcribeWord.count) * self.transcribeWarmth).rounded())
+                let steps = Int((CGFloat(self.transcribeWord.count) * self.transcribeWarmth).rounded())
                 guard steps != self.transcribeLit else { return }
                 self.transcribeLabel.attributedStringValue = self.transcribeString
             }

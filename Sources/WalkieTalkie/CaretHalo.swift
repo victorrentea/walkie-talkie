@@ -2665,16 +2665,22 @@ extension CaretHalo {
         let grounds: [NSColor] = [NSColor(white: 0.11, alpha: 1), NSColor(white: 0.97, alpha: 1)]
         // Quiet with the arrow up (which is the state that goes together), and
         // full voice at the top of the swell, which is where the 20% lives.
-        let states: [(String, CGFloat, CGFloat, Bool)] = [
-            ("quiet + arrow", rest, 1, true),
-            ("full voice", loud, 1 + swellScale, false),
+        // **Three, since 2026-09-22**: the third is the arrow's *other* size —
+        // `hold`, the seconds between the microphone closing and the ⌘V, when
+        // the heads double. It is the one state of this shape that is on screen
+        // for a fixed short stretch of every caret dictation and can therefore
+        // never be looked at for long enough to judge.
+        let states: [(String, CGFloat, CGFloat, CGFloat)] = [
+            ("quiet + arrow", rest, 1, 1),
+            ("words in flight", rest, 1, DropArrow.holdScale),
+            ("full voice", loud, 1 + swellScale, 0),
         ]
         let sheet = NSImage(size: NSSize(width: cell.width * CGFloat(states.count),
                                          height: cell.height * CGFloat(grounds.count)))
         sheet.lockFocus()
         for (row, ground) in grounds.enumerated() {
             for (col, state) in states.enumerated() {
-                let (name, alpha, scale, arrowUp) = state
+                let (name, alpha, scale, arrowScale) = state
                 let box = NSRect(x: cell.width * CGFloat(col),
                                  y: cell.height * CGFloat(grounds.count - 1 - row),
                                  width: cell.width, height: cell.height)
@@ -2700,10 +2706,10 @@ extension CaretHalo {
                 // **Drawn separately, at its own opacity, because on screen it
                 // is its own window** — compositing it through the ring's would
                 // be the sheet reproducing the bug that gave it one.
-                if arrowUp {
+                if arrowScale > 0 {
                     let arrowHost = NSView(frame: NSRect(origin: .zero, size: cell))
                     arrowHost.wantsLayer = true
-                    arrowHost.layer?.addSublayer(DropArrow.picture())
+                    arrowHost.layer?.addSublayer(DropArrow.picture(scale: arrowScale))
                     if let rep = arrowHost.bitmapImageRepForCachingDisplay(in: arrowHost.bounds) {
                         arrowHost.cacheDisplay(in: arrowHost.bounds, to: rep)
                         NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }

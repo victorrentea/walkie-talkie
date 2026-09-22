@@ -11623,3 +11623,66 @@ evening and it is not the firewall's. The plan's §5 quality test (Scribe+cleanu
 not run: Victor said the objective was the block. ② (Wispr's own extension host, the vendor's
 *hand me the text, do not paste* contract) stays the better endgame if a Wispr update ever
 switches to `CGEventPostToPid`.
+
+## `raw_transcript` is a finished sentence Wispr never labelled (2026-09-22, late)
+
+Five dictations in twenty minutes came back as **nothing**, or worse. Victor caught the last one
+on screen — *"l-am prins în flagrant: aștepta waiting transcribing, dar Wispr deja transcrisese
+textul"* — the chip promising words while the paragraph sat, whole, in Wispr's own History window.
+
+**What the row said.** Wispr's `History` has three text columns and a `status`. The ordinary path,
+watched at 150 ms with `tools/wispr-row-watch.py` the same evening:
+
+```
+row 16759  status=∅            asr=0    pasted=0    formatted=0
+row 16759  status=processing   asr=0    pasted=0    formatted=0     +29.6s
+row 16759  status=formatted    asr=306  pasted=319  formatted=319   +33.7s   e2e=4152
+```
+
+All three columns appear **in the same tick as the terminal status**. There is no moment in which
+a row that is still working carries words. The five failures looked like this instead:
+
+```
+16755|raw_transcript|382|382|382|2868|18:28:31
+16752|raw_transcript|434|434|434| 383|18:25:21
+16750|raw_transcript|779|779|779| 368|18:22:21
+```
+
+Complete — every column and `e2eLatency` written — and stopped at `raw_transcript` for ever. Not a
+new failure, only a loud night: **21 rows in the 30 days to 2026-09-22 carry text and are still
+`raw_transcript`**, the oldest from July, and Wispr has never come back to one of them. In the
+relay's own log every single `raw_transcript` arrives **after** `processing`, which is to say the
+status goes backwards and stays there. `raw_transcript` in `intermediateStatuses` was right for the
+row with *nothing* in it (row 12814, two seconds of digital silence) and wrong for this one.
+
+**What the relay did with it.** Called it progress, waited out the whole 30 s of `captureTimeout`
+with the ring lit — and then delivered **whatever was on the pasteboard**:
+
+```
+18:24:22  🗣️ wispr transcript via copy_last_text —  1 chars → spawn:…/victor-macos-addons
+18:27:01  🗣️ wispr transcript via copy_last_text — 25 chars → caret
+```
+
+One character and twenty-five, routed into an agent as a sentence, for dictations of 779 and 434
+characters sitting finished in the row. The fallback chord was never posted — `copyFallbackEnabled`
+has been off by default since the hour it was written, for exactly this reason (*a dictation that
+silently becomes an older one is a sentence he cannot trust*) — but the branch **below** it read
+`NSPasteboard.changeCount` anyway. A thirty-second window in which Victor copies things is not
+evidence; that branch was the fallback's own bug with the fallback switched off.
+
+**The fix, both halves.**
+
+- `rawTextSettled` — a `raw_transcript` row whose words have held still for `rawTextGrace` (0.8 s)
+  is read as `formatted` **for the switch only**, so every path below it is the one a formatted row
+  takes; `state.sawRow` and the log keep Wispr's own word, because the row really did stop there.
+  The grace is belt to the watcher's braces: nothing has ever been seen writing those columns
+  early, and what it delays is a sentence he is waiting for.
+- The pasteboard at the timeout is an answer **only when the relay asked it one** (`askedForCopy`).
+  And before a sentence is called lost, the row is read once more — a terminal status the poll
+  missed, or a `processing` that finished during the last second, is still the words.
+
+**The tool.** `tools/wispr-row-watch.py` — read-only, 150 ms, prints one line per *change* to
+(status, the three text columns, `e2eLatency`) of the newest rows. It is the only way to see from
+outside Wispr whether a status means *arriving* or *abandoned*, and it is what turned "maybe the
+timeout is too short" into a measurement. Victor asked for it in the same breath as the bug: *"un
+mecanism de capturare din ochi tochi pentru ce face Wispr Flow transcrieri."*

@@ -121,10 +121,16 @@ enum Glyphs {
     ///
     /// Rendered once per glyph at launch — `colorAt` over a 100×100 bitmap is
     /// not something to do while following the cursor.
-    static func emoji(_ character: String, ink: CGFloat) -> NSImage {
+    /// - Parameter colour: ink for a **monochrome** glyph — the Apple mark the
+    ///   local engine wears, which is a character in the system font rather than
+    ///   a colour emoji. Nil leaves the glyph its own colours, which is what
+    ///   every emoji caller means; passing one to a colour emoji would flatten
+    ///   it to a silhouette.
+    static func emoji(_ character: String, ink: CGFloat, colour: NSColor? = nil) -> NSImage {
         let size: CGFloat = 72
         let inset: CGFloat = 8
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size)]
+        var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size)]
+        if let colour { attributes[.foregroundColor] = colour }
         let string = NSAttributedString(string: character, attributes: attributes)
         let drawn = string.size()
         let w = Int(ceil(drawn.width + inset * 2)), h = Int(ceil(drawn.height + inset * 2))
@@ -823,5 +829,138 @@ extension Glyphs {
         (0.844, 0.0483, 0.9540), (0.875, 0.0794, 0.9236), (0.906, 0.1220, 0.8816),
         (0.938, 0.1812, 0.8217), (0.969, 0.2883, 0.7129), (1.000, 0.4669, 0.5344),
     ]
+
+}
+
+// MARK: - The recognisers' own marks
+
+extension Glyphs {
+
+    /// **Which recogniser is listening, as its own logo rather than as a
+    /// letter** — Victor, 2026-09-22: *"în loc de litera care urmează, aș vrea
+    /// să am logo-ul lor stilizat cu gri. Exact culoarea fontului."*
+    ///
+    /// The mark was `(W)` / `(E)` / `(L)` from 2026-09-18, and a letter is a
+    /// thing to *decode*: `E` is ElevenLabs only once somebody has told you, and
+    /// `L` is the local model only after the note explaining why it is not `W`.
+    /// A logo is recognised rather than read, which is the whole difference at
+    /// the place this row is read — beside the cursor, mid-sentence, in
+    /// peripheral vision.
+    ///
+    /// **They travel as characters, not as an enum the chip switches on.**
+    /// `RelayWindow` may not know there is more than one recogniser
+    /// (`DictationSource`'s rule, and the reason the Wispr path could rot for a
+    /// month), so `AppDelegate` puts one of these scalars inside the mark string
+    /// and the chip draws whatever glyph the character names — exactly as it
+    /// drew whatever letter the string carried before. The private-use block is
+    /// what makes that safe: no real text can contain one by accident, and the
+    /// existing `ch.isASCII` test in `applyEngineText` already routes them to a
+    /// picture.
+    enum Engine: Character, CaseIterable {
+        /// **ElevenLabs** — the two bars of its wordmark, in a ring. Victor
+        /// described it as *"acel semn cu o pauză într-o bulină"*, which is the
+        /// mark as it is worn on their icon rather than the bare `11`; the ring
+        /// also keeps it from reading as a second slash beside the one in front
+        /// of it.
+        case eleven = "\u{E011}"
+        /// **Wispr Flow** — the five bars of its app icon, traced below.
+        case wispr = "\u{E012}"
+        /// **The local model** — the Mac it runs on, which is the fact that
+        /// matters about it at the moment this is read: the voice does not
+        /// leave this machine. The other two are logos of somewhere his voice
+        /// is being sent.
+        case mac = "\u{E013}"
+    }
+
+    /// The logo for a character that names one, or nil for anything else — the
+    /// form the chip calls, because the chip is handed a string and never an
+    /// engine.
+    ///
+    /// - Parameter colour: *exactly the ink of the row it sits in* (Victor:
+    ///   *"exact culoarea fontului"*). These are line drawings on a row that is
+    ///   sometimes white on a halo and sometimes `secondaryLabelColor`, so the
+    ///   colour cannot be baked in the way `hqBadge`'s blue is — that badge is a
+    ///   label *on* the row, these are a word *in* it.
+    static func engine(_ character: Character, ink: CGFloat, colour: NSColor) -> NSImage? {
+        guard let mark = Engine(rawValue: character) else { return nil }
+        return engine(mark, ink: ink, colour: colour)
+    }
+
+    static func engine(_ mark: Engine, ink: CGFloat, colour: NSColor) -> NSImage {
+        switch mark {
+        case .eleven: return elevenMark(ink: ink, colour: colour)
+        case .wispr: return wisprMark(ink: ink, colour: colour)
+        // **Typed, not traced.** The Apple mark is a glyph in the system font
+        // (`U+F8FF`) and a monochrome one, so it takes the row's ink like any
+        // other character and needs no tracing to be right at 13pt. Through
+        // `emoji` for that function's own reason: it trims to the ink and
+        // returns a square of exactly the size every other glyph on the row
+        // gets, which is what makes the lot line up.
+        case .mac: return emoji("\u{F8FF}", ink: ink, colour: colour)
+        }
+    }
+
+    /// **A pause in a ring.** Sized off `ink` throughout so the proportions
+    /// survive a change of row size: the ring is stroked a twelfth of the box,
+    /// the two bars are an eighth of it wide, they stand on four tenths of its
+    /// height, and the gap between them is one of their own widths.
+    private static func elevenMark(ink: CGFloat, colour: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: ink, height: ink), flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setStrokeColor(colour.cgColor)
+            ctx.setFillColor(colour.cgColor)
+            let stroke = max(1, (ink / 12).rounded())
+            let ring = rect.insetBy(dx: stroke / 2, dy: stroke / 2)
+            ctx.setLineWidth(stroke)
+            ctx.strokeEllipse(in: ring)
+            let barW = max(1, (ink / 8).rounded())
+            let barH = (ink * 0.40).rounded()
+            let gap = barW
+            let left = (rect.midX - (barW * 2 + gap) / 2).rounded()
+            let bottom = (rect.midY - barH / 2).rounded()
+            for i in 0..<2 {
+                let bar = CGRect(x: left + CGFloat(i) * (barW + gap), y: bottom,
+                                 width: barW, height: barH)
+                ctx.addPath(CGPath(roundedRect: bar, cornerWidth: barW / 2,
+                                   cornerHeight: barW / 2, transform: nil))
+            }
+            ctx.fillPath()
+            return true
+        }
+    }
+
+    /// **Wispr Flow's five bars**, traced off its own icon rather than drawn by
+    /// eye — the alpha box of `electron.icns` at 256 px, measured the way the
+    /// mouse outlines in this file were: bars 18 px wide on a 28 px pitch,
+    /// inside an ink box of 129 × 128.
+    ///
+    /// `v` counts **down** from the top of the box, as in the mouse tables.
+    private static let wisprBars: [(u: CGFloat, top: CGFloat, bottom: CGFloat)] = [
+        (0.000, 0.000, 1.000),
+        (0.209, 0.461, 0.891),
+        (0.426, 0.164, 0.820),
+        (0.643, 0.461, 0.898),
+        (0.860, 0.000, 1.000),
+    ]
+    private static let wisprBarWidth: CGFloat = 0.140
+
+    private static func wisprMark(ink: CGFloat, colour: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: ink, height: ink), flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setFillColor(colour.cgColor)
+            let w = max(1, ink * wisprBarWidth)
+            for bar in wisprBars {
+                // AppKit counts y up; the table counts it down from the top.
+                let top = rect.maxY - bar.top * ink
+                let bottom = rect.maxY - bar.bottom * ink
+                let box = CGRect(x: rect.minX + bar.u * ink, y: bottom,
+                                 width: w, height: top - bottom)
+                ctx.addPath(CGPath(roundedRect: box, cornerWidth: w / 2,
+                                   cornerHeight: w / 2, transform: nil))
+            }
+            ctx.fillPath()
+            return true
+        }
+    }
 
 }

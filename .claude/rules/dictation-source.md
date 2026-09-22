@@ -44,6 +44,20 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   rather than deleted — everything it documents is still true, and it is what the row would come
   back to if the injection can ever be blocked outright.
   → journal: *Wispr Flow leaves the Engine list (2026-09-22)*
+- **`raw_transcript` with the words in it is a finished sentence** (2026-09-22). Wispr fills all
+  three text columns and `e2eLatency` and then never flips the status: 21 such rows in 30 days,
+  five of them in twenty minutes that evening. `rawTextSettled` reads such a row as `formatted`
+  once the words have held still for `rawTextGrace` (0.8 s) — for the switch only, so the state
+  machine and the log keep Wispr's own word for it. The ordinary path never passes through here:
+  measured with `tools/wispr-row-watch.py`, a row's text columns appear **in the same tick** as its
+  terminal status, and every `raw_transcript` in the log arrived *after* `processing`. The row with
+  **nothing** in it is the other case and still belongs to `silenceCeiling`.
+  → journal: *`raw_transcript` is a finished sentence Wispr never labelled*
+- **The pasteboard at the capture's timeout is an answer only when the relay asked it one.** The
+  `changeCount` branch in `captureExpired` fired without `askedForCopy` and delivered whatever
+  Victor had last copied, labelled `copy_last_text` — 1 char into a spawned session, 25 at the
+  caret, for two sentences of 779 and 434 characters. It is gated on `askedForCopy` now, and the
+  History row is read once more before a sentence is called lost. → journal: same
 - **Never open or close a microphone on the main thread.** `MicRecorder.start(to:)` / `.stop()` are
   synchronous CoreAudio device binds; when the audio stack is wedged they never return and the whole
   app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
