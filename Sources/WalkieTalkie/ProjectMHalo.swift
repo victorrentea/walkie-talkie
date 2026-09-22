@@ -324,10 +324,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
             // The surface becomes the screen, in pixels; the square is stamped
             // into it at the pointer (`center`).
             let w = Int32((screen.width * Self.renderScale).rounded()), h = Int32((screen.height * Self.renderScale).rounded())
-            if pmh_set_canvas(renderer, w, h, preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
+            if pmh_set_canvas(renderer, w, h, preset.pureFluid ? 3 : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
                 fail("the trail could not be set up: \(String(cString: err))"); return false
             }
-            Log.info("◯ projectM \(preset.number): \(preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
+            Log.info("◯ projectM \(preset.number): \(preset.pureFluid ? "pure fluid" : preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
         }
         let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin)
         if pmh_load_preset(renderer, text, &err, 512) != 0 {

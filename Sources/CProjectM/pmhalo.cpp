@@ -99,13 +99,23 @@ const char* kDyeFS = "#version 330 core\n"
 // the effect four of the ten searches came back with). Velocity in grid cells
 // per second, on a grid a quarter of the screen's pixels on each side.
 const char* kSplatFS = "#version 330 core\n"
-    "uniform sampler2D src;uniform vec2 point;uniform vec2 force;uniform float radius;uniform float aspect;in vec2 uv;out vec4 frag;\n"
+    "uniform sampler2D src;uniform vec2 point;uniform vec3 value;uniform float radius;uniform float aspect;in vec2 uv;out vec4 frag;\n"
     "void main(){vec2 d=uv-point;d.x*=aspect;float g=exp(-dot(d,d)/radius);"
-    " frag=vec4(texture(src,uv).xy+force*g,0.0,1.0);}\n";
+    " frag=vec4(texture(src,uv).rgb+value*g,1.0);}\n";
 const char* kAdvectFS = "#version 330 core\n"
-    "uniform sampler2D vel;uniform vec2 texel;uniform float dt;uniform float dissipation;in vec2 uv;out vec4 frag;\n"
+    "uniform sampler2D vel;uniform sampler2D src;uniform vec2 texel;uniform float dt;uniform float dissipation;in vec2 uv;out vec4 frag;\n"
     "void main(){vec2 c=uv-dt*texture(vel,uv).xy*texel;"
-    " frag=vec4(texture(vel,c).xy/(1.0+dissipation*dt),0.0,1.0);}\n";
+    " frag=vec4(texture(src,c).rgb/(1.0+dissipation*dt),1.0);}\n";
+// **The display of the pure fluid** (mode 3, Cursify's Fluid Cursor): the dye,
+// lit as a surface whose height is its brightness (`SHADING: true`), keyed the
+// way their `TRANSPARENT` canvas is — alpha = the brightest channel.
+const char* kDisplayFS = "#version 330 core\n"
+    "uniform sampler2D dye;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec3 c=texture(dye,uv).rgb;"
+    " float dx=length(texture(dye,uv+vec2(texel.x,0)).rgb)-length(texture(dye,uv-vec2(texel.x,0)).rgb);"
+    " float dy=length(texture(dye,uv+vec2(0,texel.y)).rgb)-length(texture(dye,uv-vec2(0,texel.y)).rgb);"
+    " vec3 n=normalize(vec3(dx,dy,length(texel)));c*=clamp(n.z+0.7,0.7,1.0);"
+    " c=min(c,vec3(1.0));frag=vec4(c,max(c.r,max(c.g,c.b)));}\n";
 const char* kCurlFS = "#version 330 core\n"
     "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
     "void main(){float L=texture(vel,uv-vec2(texel.x,0)).y;float R=texture(vel,uv+vec2(texel.x,0)).y;"
@@ -197,6 +207,9 @@ struct pmh {
     // fluid
     int vw = 0, vh = 0;
     Field vel[2], prs[2], div, curl; int vc = 0, pc = 0;
+    // mode 3: the dye is a float field of its own, half the screen's pixels
+    Field dye[2]; int dw = 0, dh = 0, dc = 0; GLuint displayProg = 0;
+    float colorTimer = 1.f, cr = 0, cg = 0, cb = 0;
     GLuint splatProg = 0, advectProg = 0, curlProg = 0, vortProg = 0, divProg = 0, scaleProg = 0, jacobiProg = 0, gradProg = 0;
 };
 
@@ -346,9 +359,9 @@ void pmh_destroy(pmh* h) {
             if (s.tex) glDeleteTextures(1, &s.tex);
             if (s.ios) CFRelease(s.ios);
         }
-        for (GLuint p : { h->prog, h->dyeProg, h->splatProg, h->advectProg, h->curlProg, h->vortProg, h->divProg, h->scaleProg, h->jacobiProg, h->gradProg })
+        for (GLuint p : { h->prog, h->dyeProg, h->displayProg, h->splatProg, h->advectProg, h->curlProg, h->vortProg, h->divProg, h->scaleProg, h->jacobiProg, h->gradProg })
             if (p) glDeleteProgram(p);
-        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->div, &h->curl }) {
+        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->div, &h->curl, &h->dye[0], &h->dye[1] }) {
             if (f->fbo) glDeleteFramebuffers(1, &f->fbo);
             if (f->tex) glDeleteTextures(1, &f->tex);
         }
@@ -419,14 +432,21 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
     h->ow = w; h->oh = hgt; h->mode = mode; h->seconds = seconds; h->lag = lag; h->fresh = true;
     std::string log;
     if (!h->dyeProg) h->dyeProg = link(kDyeFS, log);
-    if (mode == 2) {
-        h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4);
+    if (mode >= 2) {
+        // mode 3 runs Cursify's grid: 128 cells on the short side (SIM_RESOLUTION)
+        if (mode == 3) { int s = 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
+        else { h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4); }
         for (Field* f : { &h->vel[0], &h->vel[1] }) if (!make_field(*f, h->vw, h->vh, GL_RG16F, GL_RG)) return bail("velocity field could not be made");
         for (Field* f : { &h->prs[0], &h->prs[1], &h->div, &h->curl }) if (!make_field(*f, h->vw, h->vh, GL_R16F, GL_RED)) return bail("pressure field could not be made");
         h->splatProg = link(kSplatFS, log); h->advectProg = link(kAdvectFS, log);
         h->curlProg = link(kCurlFS, log); h->vortProg = link(kVortFS, log);
         h->divProg = link(kDivFS, log); h->scaleProg = link(kScaleFS, log);
         h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
+    }
+    if (mode == 3) {
+        h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2);
+        for (Field* f : { &h->dye[0], &h->dye[1] }) if (!make_field(*f, h->dw, h->dh, GL_RGBA16F, GL_RGBA)) return bail("dye field could not be made");
+        h->displayProg = link(kDisplayFS, log);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (!log.empty()) return bail("trail shaders: " + log);
@@ -458,39 +478,38 @@ void bind2d(GLuint prog, const char* name, int unit, GLuint tex) {
     glUniform1i(glGetUniformLocation(prog, name), unit);
 }
 
-// Stamp-to-stamp, the fluid is stirred where the square travelled this frame:
-// a velocity splat along the way, as fast as the pointer went.
-void step_fluid(pmh* h, float dt, float ax, float ay, float bx, float by) {
+void splat(pmh* h, Field* f, int& cur, int w, int hgt, float x, float y, float vx, float vy, float vz, float radius) {
+    glUseProgram(h->splatProg);
+    bind2d(h->splatProg, "src", 0, f[cur].tex);
+    glUniform2f(glGetUniformLocation(h->splatProg, "point"), x, y);
+    glUniform3f(glGetUniformLocation(h->splatProg, "value"), vx, vy, vz);
+    glUniform1f(glGetUniformLocation(h->splatProg, "radius"), radius);
+    glUniform1f(glGetUniformLocation(h->splatProg, "aspect"), (float)h->ow / h->oh);
+    glBindFramebuffer(GL_FRAMEBUFFER, f[cur ^ 1].fbo);
+    glViewport(0, 0, w, hgt);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    cur ^= 1;
+}
+
+struct FluidParams { float curl, pressureKeep, velDissipation; };
+
+// One step of the fluid, after whatever splats this frame put into it: curl,
+// vorticity, pressure, projection, self-advection.
+void step_fluid(pmh* h, float dt, FluidParams fp) {
     glDisable(GL_BLEND);
-    // pointer displacement → grid cells per second
-    float fx = (bx - ax) / h->ow * h->vw / dt, fy = (by - ay) / h->oh * h->vh / dt;
-    float speed = std::sqrt(fx * fx + fy * fy);
-    if (speed > 1.f) {
-        float cap = 3000.f;
-        if (speed > cap) { fx *= cap / speed; fy *= cap / speed; }
-        // radius: the square's own size, so the swirl is as wide as the halo
-        float r = (float)h->px / h->ow * 0.35f;
-        glUseProgram(h->splatProg);
-        bind2d(h->splatProg, "src", 0, h->vel[h->vc].tex);
-        glUniform2f(glGetUniformLocation(h->splatProg, "point"), bx / h->ow, by / h->oh);
-        glUniform2f(glGetUniformLocation(h->splatProg, "force"), fx, fy);
-        glUniform1f(glGetUniformLocation(h->splatProg, "radius"), r * r);
-        glUniform1f(glGetUniformLocation(h->splatProg, "aspect"), (float)h->ow / h->oh);
-        pass(h, h->splatProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
-    }
     // curl → vorticity confinement (the curls that make it smoke, not jelly)
     glUseProgram(h->curlProg); bind2d(h->curlProg, "vel", 0, h->vel[h->vc].tex);
     pass(h, h->curlProg, h->curl);
     glUseProgram(h->vortProg);
     bind2d(h->vortProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->vortProg, "curl", 1, h->curl.tex);
-    glUniform1f(glGetUniformLocation(h->vortProg, "strength"), 30.f);
+    glUniform1f(glGetUniformLocation(h->vortProg, "strength"), fp.curl);
     glUniform1f(glGetUniformLocation(h->vortProg, "dt"), dt);
     pass(h, h->vortProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
     // divergence, pressure (warm-started at 0.8 of the last), gradient
     glUseProgram(h->divProg); bind2d(h->divProg, "vel", 0, h->vel[h->vc].tex);
     pass(h, h->divProg, h->div);
     glUseProgram(h->scaleProg); bind2d(h->scaleProg, "src", 0, h->prs[h->pc].tex);
-    glUniform1f(glGetUniformLocation(h->scaleProg, "k"), 0.8f);
+    glUniform1f(glGetUniformLocation(h->scaleProg, "k"), fp.pressureKeep);
     pass(h, h->scaleProg, h->prs[h->pc ^ 1]); h->pc ^= 1;
     glUseProgram(h->jacobiProg);
     for (int i = 0; i < 20; ++i) {
@@ -501,9 +520,9 @@ void step_fluid(pmh* h, float dt, float ax, float ay, float bx, float by) {
     bind2d(h->gradProg, "pressure", 0, h->prs[h->pc].tex); bind2d(h->gradProg, "vel", 1, h->vel[h->vc].tex);
     pass(h, h->gradProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
     // the velocity carries itself, and slowly dies
-    glUseProgram(h->advectProg); bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex);
+    glUseProgram(h->advectProg); bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->vel[h->vc].tex);
     glUniform1f(glGetUniformLocation(h->advectProg, "dt"), dt);
-    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), 0.4f);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), fp.velDissipation);
     pass(h, h->advectProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
 }
 }
@@ -513,10 +532,86 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
     h->hole = hole; h->peak = peak; h->core = core; h->tailTop = tail_top;
 }
 
+namespace {
+float hue_channel(float hh, float off) { float k = std::fmod(off + hh * 6.f, 6.f); return 1.f - std::max(0.f, std::min({ k, 4.f - k, 1.f })); }
+
+// **Mode 3: Cursify's Fluid Cursor** (cursify.ui-layouts.com/components/fluid-cursor,
+// Victor 2026-09-23: *"impl si asta"*). Pavel Dobryakov's fluid in its cursor form,
+// with no MilkDrop preset: every frame the pointer's move splats velocity and dye
+// into the field, the hue is redrawn ten times a second at 0.15 of full
+// brightness, and the dye dies fast. Their constants, verbatim: SIM_RESOLUTION
+// 128, DENSITY_DISSIPATION 3.5, VELOCITY_DISSIPATION 2, PRESSURE 0.1, 20
+// iterations, CURL 3, SPLAT_RADIUS 0.2 (/100, ×aspect), SPLAT_FORCE 6000,
+// COLOR_UPDATE_SPEED 10, SHADING on, TRANSPARENT.
+IOSurfaceRef render_pure_fluid(pmh* h) {
+    const float dt = 1.f / h->fps;
+    Surface& s = h->surf[h->cur];
+    glDisable(GL_BLEND); glDisable(GL_DEPTH_TEST); glDisable(GL_SCISSOR_TEST);
+    glBindVertexArray(h->vao);
+    if (h->fresh) {
+        glClearColor(0, 0, 0, 0);
+        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->dye[0], &h->dye[1] }) { glBindFramebuffer(GL_FRAMEBUFFER, f->fbo); glClear(GL_COLOR_BUFFER_BIT); }
+        h->fresh = false;
+    }
+    h->colorTimer += dt * 10.f;
+    if (h->colorTimer >= 1.f) {
+        h->colorTimer = std::fmod(h->colorTimer, 1.f);
+        float hh = (float)std::rand() / RAND_MAX;
+        h->cr = hue_channel(hh, 5) * 0.15f; h->cg = hue_channel(hh, 3) * 0.15f; h->cb = hue_channel(hh, 1) * 0.15f;
+    }
+    float ax = h->sx, ay = h->sy;
+    if (h->havePointer) {
+        float a = h->lag > 0 ? 1.f - std::exp(-dt / h->lag) : 1.f;
+        h->sx += (h->tx - h->sx) * a; h->sy += (h->ty - h->sy) * a;
+        float dx = (h->sx - ax) / h->ow, dy = (h->sy - ay) / h->oh;
+        if (std::fabs(dx) + std::fabs(dy) > 1e-5f) {
+            float aspect = (float)h->ow / h->oh;
+            float radius = 0.2f / 100.f * (aspect > 1 ? aspect : 1.f);
+            float x = h->sx / h->ow, y = h->sy / h->oh;
+            splat(h, h->vel, h->vc, h->vw, h->vh, x, y, dx * 6000.f, dy * 6000.f, 0, radius);
+            splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
+        }
+    }
+    step_fluid(h, dt, { 3.f, 0.1f, 2.f });
+    // the dye rides the velocity and dies at DENSITY_DISSIPATION
+    glUseProgram(h->advectProg);
+    bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->dye[h->dc].tex);
+    glUniform2f(glGetUniformLocation(h->advectProg, "texel"), 1.f / h->vw, 1.f / h->vh);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dt"), dt);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), 3.5f);
+    glBindFramebuffer(GL_FRAMEBUFFER, h->dye[h->dc ^ 1].fbo);
+    glViewport(0, 0, h->dw, h->dh);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    h->dc ^= 1;
+    // shown
+    glUseProgram(h->displayProg);
+    bind2d(h->displayProg, "dye", 0, h->dye[h->dc].tex);
+    glUniform2f(glGetUniformLocation(h->displayProg, "texel"), 1.f / h->dw, 1.f / h->dh);
+    glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
+    glViewport(0, 0, h->ow, h->oh);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0); glUseProgram(0);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (h->finish) glFinish(); else glFlush();
+    h->cur ^= 1;
+    return s.ios;
+}
+}
+
 IOSurfaceRef pmh_render(pmh* h) {
     CGLContextObj prev = CGLGetCurrentContext();
     CGLSetCurrentContext(h->ctx);
     double t0 = now_ms();
+    if (h->mode == 3) {
+        IOSurfaceRef out = render_pure_fluid(h);
+        h->engineMs = 0; h->keyMs = now_ms() - t0;
+        GLenum e = glGetError();
+        CGLSetCurrentContext(prev);
+        if (e != GL_NO_ERROR) { h->keyErrors++; return nullptr; }
+        return out;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, h->fbo);
     glViewport(0, 0, h->px, h->px);
     projectm_opengl_render_frame(h->pm);
@@ -555,7 +650,17 @@ IOSurfaceRef pmh_render(pmh* h) {
             float a = h->lag > 0 ? 1.f - std::exp(-dt / h->lag) : 1.f;
             h->sx += (h->tx - h->sx) * a; h->sy += (h->ty - h->sy) * a;
         }
-        if (h->mode == 2 && h->havePointer) step_fluid(h, dt, ax, ay, h->sx, h->sy);
+        if (h->mode == 2 && h->havePointer) {
+            // Stamp-to-stamp, the fluid is stirred where the square travelled
+            // this frame, as fast as the pointer went (grid cells per second).
+            glDisable(GL_BLEND);
+            float fx = (h->sx - ax) / h->ow * h->vw / dt, fy = (h->sy - ay) / h->oh * h->vh / dt;
+            float speed = std::sqrt(fx * fx + fy * fy), cap = 3000.f;
+            if (speed > cap) { fx *= cap / speed; fy *= cap / speed; }
+            float r = (float)h->px / h->ow * 0.35f;
+            if (speed > 1.f) splat(h, h->vel, h->vc, h->vw, h->vh, h->sx / h->ow, h->sy / h->oh, fx, fy, 0, r * r);
+            step_fluid(h, dt, { 30.f, 0.8f, 0.4f });
+        }
         glDisable(GL_BLEND);
         glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
         glViewport(0, 0, h->ow, h->oh);

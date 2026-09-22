@@ -1035,6 +1035,53 @@ const FORMULAS = [
   { name: '− Lagoon', desc: 'apă — comete oglindite în apa de jos', water: true },
   // stratul de comete al lui Water Dream: presetul dă apa, acesta cometele (comets.js)
   { name: '− Comets', desc: 'cometele din Lagoon, oglindite în apa presetului de dedesubt', comets: true },
+  // ── Fairy dust (Victor, 2026-09-23: „si asta
+  // https://cursify.ui-layouts.com/components/fairydust-cursor") ─────────────
+  // Portat din componenta lor, cu constantele lor: ✨⭐🌟★* în #D61C59 #E7D84B
+  // #1B8798, 21 px, viteză orizontală 0,5–1,5 în oricare parte, în sus până la
+  // 1,5, gravitație 0,02, viață ×0,98 pe cadru de 60 Hz, mărimea = viața rămasă.
+  // Două abateri, amândouă din cauza locului în care rulează:
+  //  · ei emit o particulă pe eveniment de mouse; aici cadrele vin la 30 Hz, deci
+  //    emitem pe DRUMUL parcurs de la cadrul trecut, câte una la ~8 px, ca
+  //    urma să fie la fel de deasă ca a lor;
+  //  · haloul stă pe ecran cât vorbește el, adesea cu mouse-ul nemișcat, iar
+  //    efectul lor fără mișcare e un ecran gol. Deci și vocea presară praf în
+  //    jurul cursorului, cu atât mai des cu cât vorbește mai tare.
+  { name: 'Fairy dust', desc: 'Cursify — steluțe care cad din urma cursorului', dust: true, draw(t) {
+      const D = this.state || (this.state = { parts: [], lx: null, ly: null, acc: 0 });
+      const CH = ['✨', '⭐', '🌟', '★', '*'], COL = ['#D61C59', '#E7D84B', '#1B8798'];
+      const SIZE = 21, VMIN = 0.5, VMAX = 1.5, G = 0.02, FADE = 0.98, LIFE = 120;
+      const cx = innerWidth / 2 + walkX, cy = innerHeight / 2 + walkY;
+      const emit = (x, y) => D.parts.push({
+        x, y, life: LIFE,
+        vx: (Math.random() < 0.5 ? -1 : 1) * (Math.random() * (VMAX - VMIN) + VMIN),
+        vy: -(Math.random() * VMAX),
+        ch: CH[Math.floor(Math.random() * CH.length)], col: COL[Math.floor(Math.random() * COL.length)] });
+      if (D.lx !== null) {
+        const dx = cx - D.lx, dy = cy - D.ly, n = Math.min(24, Math.floor(Math.hypot(dx, dy) / 8));
+        for (let i = 1; i <= n; i++) emit(D.lx + dx * i / n, D.ly + dy * i / n);
+      }
+      D.lx = cx; D.ly = cy;
+      // vocea: până la ~6 particule pe cadru de 60 Hz la voce plină
+      D.acc += levelNow * 6 * dtF;
+      while (D.acc >= 1) { D.acc -= 1; emit(cx + (Math.random() - 0.5) * 24, cy + (Math.random() - 0.5) * 24); }
+      fullSize();
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.clearRect(0, 0, fullW, fullH);
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fctx.textAlign = 'center'; fctx.textBaseline = 'middle';
+      for (const p of D.parts) {
+        p.x += p.vx * dtF; p.y += p.vy * dtF;
+        p.vy += G * dtF;
+        p.life *= perFrame(FADE);
+        const sc = Math.max(p.life / LIFE, 0);
+        fctx.font = (SIZE * sc).toFixed(1) + 'px serif';
+        fctx.fillStyle = p.col;
+        fctx.fillText(p.ch, p.x, p.y);
+      }
+      // ei le scot la viață < 0,1 din 120 (~6 s); sub 3 % din mărime nu se mai vede nimic
+      D.parts = D.parts.filter(p => p.life / LIFE > 0.03);
+  }},
 ];
 
 
@@ -1404,6 +1451,7 @@ function pick(i) {
   }
   unpin();
   clearTrail();
+  if (F.dust) F.state = null;             // praful propoziției trecute nu revine
   [...chips.children].forEach((c, k) => c.classList.toggle('on', k === i));
   label.textContent = (i + 1) + ' — ' + FORMULAS[i].name +
     (FORMULAS[i].desc ? '  ·  ' + FORMULAS[i].desc : '');

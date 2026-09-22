@@ -85,6 +85,19 @@ enum HaloStyle: String, CaseIterable {
     /// purtata de un fluid pe care cursorul il amesteca (`Preset.fluid`), deci
     /// ramane in urma ca fum, nu ca o dara dreapta.
     case milkdrop20Fluid
+    /// **Fluid Cursor de la Cursify** (Victor, 2026-09-23: *"impl si asta
+    /// https://cursify.ui-layouts.com/components/fluid-cursor"*). Fluidul lui
+    /// Pavel Dobryakov in forma lui de cursor, cu constantele lor: fara preset,
+    /// doar vopsea care isi schimba nuanta de zece ori pe secunda si moare
+    /// repede. Traieste pe ruta nativa (`pmh_set_canvas` mod 3); presetul din
+    /// rand e doar biletul de intrare — motorul nu e randat deloc.
+    case fluidCursor
+    /// Page 22, *Fairy dust* — Cursify's fairydust cursor (Victor, 2026-09-23:
+    /// *"si asta https://cursify.ui-layouts.com/components/fairydust-cursor"*):
+    /// steluțe care cad din urma cursorului, plus praf presărat de voce când
+    /// mouse-ul stă pe loc. O pânză 2D cu glife, deci locul ei e pagina, nu
+    /// motorul MilkDrop.
+    case fairyDust
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -106,6 +119,8 @@ enum HaloStyle: String, CaseIterable {
         case .milkdrop20:     return "Tendrils"
         case .milkdrop20Trail: return "Tendrils 2"
         case .milkdrop20Fluid: return "Fluid"
+        case .fluidCursor:     return "Fluid cursor"
+        case .fairyDust:       return "Fairy dust"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
         case .milkdrop99:     return "Mosaic"
@@ -147,6 +162,7 @@ enum HaloStyle: String, CaseIterable {
         case .blockBeads:     return 18
         // Water Dream's comets (`comets.js`), drawn over the pinned preset
         case .milkdrop103:    return 20
+        case .fairyDust:      return 21
         default:              return nil
         }
     }
@@ -276,6 +292,8 @@ enum HaloStyle: String, CaseIterable {
         /// Urma purtata de un fluid (stable fluids, pe GPU) pe care il amesteca
         /// cursorul. Cere `trail` > 0.
         var fluid = false
+        /// Fluidul singur, fara preset (Cursify's Fluid Cursor). Cere `trail` > 0.
+        var pureFluid = false
     }
     var preset: Preset? {
         switch self {
@@ -370,6 +388,8 @@ enum HaloStyle: String, CaseIterable {
                                              fade: true, fadeAtEdge: true, fadeFloor: 0, trail: 0.45, lag: 0.07)
         case .milkdrop20Fluid: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                              fade: true, fadeAtEdge: true, fadeFloor: 0, trail: 0.8, lag: 0.05, fluid: true)
+        case .fluidCursor: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                         trail: 1, lag: 0, pureFluid: true)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Sparks' size is a chain of factors, each one applied to what was
