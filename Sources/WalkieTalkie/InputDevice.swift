@@ -31,7 +31,8 @@ import CoreAudio
 /// microphone rather than to an error.
 enum InputDevice {
 
-    /// **The four microphones Victor names by their picture** (2026-09-19).
+    /// **The microphones Victor names by their picture** (four on 2026-09-19,
+    /// the Bluetooth transmitter added 2026-09-22).
     ///
     /// He asked for the chip to say which one is open — `Listening(🎙️/E)...` —
     /// and for the menu to let him pick between them, with the ones that are not
@@ -81,7 +82,17 @@ enum InputDevice {
         Known(id: "xlr",  glyph: "🎙️", short: "XLR", label: "Elgato Wave XLR",
               needles: ["wave xlr", "elgato"]),
         Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
-              needles: ["dji", "wireless mic rx"]),
+              needles: ["wireless mic rx", "wireless mic"]),
+        // **The same lavalier with the receiver left in the bag** (2026-09-22):
+        // a Mic Mini transmitter pairs straight to the Mac over Bluetooth and
+        // shows up as `DJI Mic Mini-XXXXXX`, made by `Apple Inc.` — the OS's
+        // own HFP headset driver, so the brand is only in the *name*. One rung
+        // below the receiver: it is the same capsule on the same collar, but the
+        // headset profile hands over 16 kHz mono, and the receiver on USB-C
+        // hands over 48 kHz. `rx` stopped matching on the bare `dji` the day
+        // this arrived, because `dji` is in this name too and `rx` is asked first.
+        Known(id: "tx",   glyph: "📡", short: "DJI BT", label: "DJI Mic Mini (Bluetooth)",
+              needles: ["dji mic"]),
         Known(id: "bose", glyph: "🎧", short: "Bose", label: "Bose",
               needles: ["bose"]),
         Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
@@ -110,7 +121,7 @@ enum InputDevice {
         set { UserDefaults.standard.set(newValue, forKey: preferenceKey) }
     }
 
-    /// Which of the four this Mac can see right now. Asked at every menu open,
+    /// Which of `known` this Mac can see right now. Asked at every menu open,
     /// never cached: a receiver is plugged in *while* the menu is up at least as
     /// often as before it.
     static func availableIds() -> Set<String> {
@@ -118,7 +129,7 @@ enum InputDevice {
         return Set(known.filter { k in devices.contains { matches($0, k) } }.map(\.id))
     }
 
-    /// **The device this recording will actually use, and which of the four it
+    /// **The device this recording will actually use, and which of `known` it
     /// is** — the one answer the chip, the menu and `select` all read, so they
     /// cannot disagree.
     ///
@@ -135,14 +146,14 @@ enum InputDevice {
             return (want, device)
         }
         // **Automatic, and the fallback for a pick that is not plugged in: the
-        // first of the four that is here, in `known`'s order.** It was *the DJI
+        // first of `known` that is here, in its order.** It was *the DJI
         // whenever it is there, otherwise the system default* until 2026-09-19;
         // what that rule could not express is a desk with both the XLR and the
         // receiver on it, which is his ordinary desk.
         for k in known {
             if let device = devices.first(where: { matches($0, k) }) { return (k, device) }
         }
-        // **None of his four — only then the system's own choice**, which is the
+        // **None of his own — only then the system's own choice**, which is the
         // last line of defence and deliberately not a rung on the ladder: macOS
         // points the default input at whatever last claimed it, including the
         // eleven virtual devices on this Mac, and that is the failure this file
@@ -152,12 +163,12 @@ enum InputDevice {
     }
 
     /// **The glyph the chip wears, or empty** — empty for a device that is none
-    /// of the four, which is the honest answer for the day he records through
+    /// of `known`, which is the honest answer for the day he records through
     /// Loopback or a headset nobody has named yet.
     static func currentGlyph() -> String { resolve().known?.glyph ?? "" }
 
     /// What the menu's **top row** says: the glyph and the short name of the
-    /// device that would record right now. A device that is none of the four
+    /// device that would record right now. A device that is none of `known`
     /// gets CoreAudio's own name, which is the only name it has.
     static func currentShortLabel() -> String {
         let r = resolve()
