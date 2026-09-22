@@ -63,7 +63,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
 | `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
-| `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the four devices |
+| `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the six devices; the same six rows Victor Addons shows, and the same shared preference file |
 | `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
 | `Halo fx[: <effect>]` | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |

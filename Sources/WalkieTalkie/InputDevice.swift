@@ -93,6 +93,15 @@ enum InputDevice {
         // this arrived, because `dji` is in this name too and `rx` is asked first.
         Known(id: "tx",   glyph: "📡", short: "DJI BT", label: "DJI Mic Mini (Bluetooth)",
               needles: ["dji mic"]),
+        // **The room's own microphone** (2026-09-22). It was only ever in
+        // Victor Addons' list, which is how the two menus came to disagree:
+        // addons ranked it *second*, above the XLR, because in a hall a
+        // far-field speakerphone with AGC beats a condenser pointed at one
+        // chair. That reasoning survives, the rank does not — Victor's order is
+        // `XLR>DJI>BOSE>MAC` (2026-09-19) and the speakerphone slots in below
+        // the lavaliers, which are on his collar wherever he walks.
+        Known(id: "stage", glyph: "🏛️", short: "Stage", label: "Stage Speakerphone",
+              needles: ["room speakerphone", "speakerphone"]),
         Known(id: "bose", glyph: "🎧", short: "Bose", label: "Bose",
               needles: ["bose"]),
         Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
@@ -116,9 +125,28 @@ enum InputDevice {
     /// the only thing he does is plug it in.
     static let preferenceKey = "micDevice"
 
+    /// **On disk, not in `UserDefaults`, since 2026-09-22** — see `MicChoice`
+    /// for why. `UserDefaults` is still read once, as a migration, so the
+    /// device picked before the file existed survives the upgrade; the file
+    /// wins from the first write.
     static var chosenId: String {
-        get { UserDefaults.standard.string(forKey: preferenceKey) ?? "auto" }
-        set { UserDefaults.standard.set(newValue, forKey: preferenceKey) }
+        get {
+            let ids = known.map(\.id)
+            let onDisk = MicChoice.read(known: ids)
+            if onDisk != MicChoice.automatic { return onDisk }
+            // Nothing published yet: adopt the old preference and publish it,
+            // so the other app sees the same device from this launch on.
+            if let legacy = UserDefaults.standard.string(forKey: preferenceKey),
+               ids.contains(legacy), !FileManager.default.fileExists(atPath: MicChoice.url.path) {
+                MicChoice.write(legacy)
+                return legacy
+            }
+            return MicChoice.automatic
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: preferenceKey)
+            MicChoice.write(newValue)
+        }
     }
 
     /// Which of `known` this Mac can see right now. Asked at every menu open,

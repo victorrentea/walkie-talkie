@@ -205,8 +205,9 @@ a disagreement rate, not an error rate. → journal: *What the local model is ac
 
 ## The microphone (`InputDevice.swift`)
 
-Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave XLR, 💻 the built-in,
-🎤 the DJI receiver, 🎧 Bose — one table (`InputDevice.known`), and one resolver every reader shares.
+Six devices Victor names by their picture — 🎙️ Elgato Wave XLR, 🎤 the DJI receiver, 📡 the DJI
+transmitter over Bluetooth (2026-09-22), 🏛️ the room's Stage Speakerphone (2026-09-22), 🎧 Bose,
+💻 the built-in — one table (`InputDevice.known`), and one resolver every reader shares.
 
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
@@ -215,7 +216,8 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   fallback.** The menu greys those rows, but a receiver can be unplugged *after* it was picked, and
   a dictation that records nothing because a setting outlived a cable is the exact failure this
   file exists to prevent. → journal: same
-- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in** (Victor,
+- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI Rx ▸ 📡 DJI TX ▸ 🏛️ Stage ▸ 🎧 Bose ▸
+  💻 built-in** (Victor,
   2026-09-19: *"the preference of mic to use is: XLR>DJI>BOSE>MAC … order them like this in menu and
   impl autoselection"*). **This supersedes *the DJI receiver is the microphone whenever it is
   plugged in*** — what that rule could not express is a desk with both the XLR and the receiver on
@@ -224,8 +226,15 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   desk with a projector fan in the room. → journal: same
 - **`InputDevice.known` is that order, once.** It is the menu's rows top to bottom *and* the ladder
   `resolve()` walks — a menu whose order disagreed with the automatic pick would teach the wrong
-  thing every time he opened it. The `Automatic` row spells it out (`Automatic — 🎙️ ▸ 🎤 ▸ 🎧 ▸ 💻`)
-  rather than asking him to remember it. → journal: same
+  thing every time he opened it. The `Automatic` row spells it out
+  (`Automatic — 🎙️ ▸ 🎤 ▸ 📡 ▸ 🏛️ ▸ 🎧 ▸ 💻`) rather than asking him to remember it. → journal: same
+- **It is also `victor-macos-addons`' list, row for row** (2026-09-22). That app transcribes the
+  room continuously through the same six microphones and shows the same six rows in its own menu;
+  `🏛️ Stage` is here only because it was there, and it sits *below* the two lavaliers rather than
+  second, where addons used to rank it — a far-field room mic with AGC beats a condenser pointed at
+  one chair in a hall, but the DJI is on his collar wherever he walks, and Victor's stated order
+  wins. Its `MicRosterTests` reads **this file** and fails when the two drift; nothing here reads
+  anything of its, which is the direction the rule requires. → journal: *One microphone, two menus*
 - **The system default is the last line of defence, not a rung.** It is consulted only when none of
   the four is present, because macOS points it at whatever last claimed it — including the eleven
   virtual devices on this Mac. Everything below about the receiver is what *automatic* meant until
@@ -234,9 +243,22 @@ Four devices Victor names by their picture (2026-09-19) — 🎙️ Elgato Wave 
   of the DJI's case: `Wave XLR` is the product and `Elgato Systems` the maker, while `Wave Link
   MicrophoneFX` / `Wave Link Stream` are the virtual devices its driver installs, made by `Corsair
   Memory, Inc.` — so neither needle reaches them. → journal: same
-- **The preference is `micDevice` in `UserDefaults`, and it lives in `InputDevice`** beside the
-  matching table: the thing that resolves a pick into a device is the only thing that can say
-  whether the pick is still possible. → journal: same
+- **The preference is a file, `~/.walkie-talkie/mic/choice`** (`MicChoice`), holding one id —
+  `auto` or one of `known`'s — and **Victor Addons reads and writes the same file**, so a pick made
+  in either menu lands in the other without a restart (*"când o schimb într-una, să se schimbe
+  automat și în cealaltă"*). `UserDefaults`' `micDevice` is still written and is read **once**, as a
+  migration, so a device picked before the file existed survives the upgrade. A file rather than a
+  route, although both apps run an HTTP server the other calls: a route only works while both are
+  up, and the microphone is picked between sessions at least as often as during one. **Its own
+  subfolder** because the change notification is a `DispatchSource` on the *directory* — an atomic
+  write replaces the inode — and `~/.walkie-talkie/` itself has `relay.log` and `outbox.jsonl`
+  appended to constantly. The watcher fires on this app's own writes too, deliberately: the handler
+  only makes the menu agree with the file, and doing that twice is free. **This does not make
+  Walkie depend on addons** — it reads and writes its own home folder and does not care whether
+  anything else on the Mac has heard of it. → journal: *One microphone, two menus*
+- **The resolver still lives in `InputDevice`** beside the matching table: the thing that resolves
+  a pick into a device is the only thing that can say whether the pick is still possible.
+  → journal: same
 
 ## The DJI receiver, second rung of *automatic* (`InputDevice.swift`)
 

@@ -356,6 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// not talking.
     private func setMicrophone(_ id: String) {
         InputDevice.chosenId = id
+        micId = id
         status.setMic(id)
         overlay.setEngineMark(Self.mark(engine: engineId))
         let resolved = InputDevice.currentLabel()
@@ -375,6 +376,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 2026-09-22 that is a total statement rather than a fallback:
     /// `engine(named:)` can only hand back one of these two, and `wisprSource`
     /// is never assigned to `source` at all.
+    /// **The mic id the menu is currently showing.** Not the source of truth —
+    /// `MicChoice` on disk is — only the last value this app applied, so the
+    /// file watcher can tell a pick that arrived from the other app apart from
+    /// the echo of its own write.
+    private var micId = MicChoice.automatic
+
     private var engineId: String {
         if source === whisperSource { return "whisper" }
         if source === wisprSource { return "wispr" }
@@ -1141,6 +1148,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.micCurrentLabel = { InputDevice.currentShortLabel() }
         status.onPickMic = { [weak self] id in self?.setMicrophone(id) }
         status.setMic(InputDevice.chosenId)
+        // **The other app picked a microphone.** Victor Addons writes the same
+        // file (`MicChoice`), and a pick made in its menu has to land here
+        // without a restart — one microphone, two menus, and they must not be
+        // able to disagree. The adopt is silent: no flash, because he is
+        // looking at the *other* app's menu when this fires.
+        MicChoice.watch { [weak self] in
+            guard let self else { return }
+            let id = InputDevice.chosenId
+            guard id != self.micId else { return }
+            self.micId = id
+            self.status.setMic(id)
+            self.overlay.setEngineMark(Self.mark(engine: self.engineId))
+            Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
+        }
+        micId = InputDevice.chosenId
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
         // `Start Dictation`'s reason: the gesture lives in a Logi Options+
