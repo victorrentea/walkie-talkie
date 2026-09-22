@@ -81,7 +81,13 @@ enum InputDevice {
     static let known: [Known] = [
         Known(id: "xlr",  glyph: "🎙️", short: "XLR", label: "Elgato Wave XLR",
               needles: ["wave xlr", "elgato"]),
-        Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
+        // **The dish is the receiver and the microphone is the microphone**
+        // (2026-09-22, Victor: *"use mic icon instead of sattelite"*). They were
+        // the other way round for the few hours the transmitter existed, which
+        // drew the capsule on his collar as a satellite dish and the USB-C
+        // dongle as a microphone — backwards on both counts, and the reason the
+        // two rows were hard to tell apart at a glance.
+        Known(id: "rx",   glyph: "📡", short: "DJI Rx", label: "DJI Wireless Mic Rx",
               needles: ["wireless mic rx", "wireless mic"]),
         // **The same lavalier with the receiver left in the bag** (2026-09-22):
         // a Mic Mini transmitter pairs straight to the Mac over Bluetooth and
@@ -91,7 +97,7 @@ enum InputDevice {
         // headset profile hands over 16 kHz mono, and the receiver on USB-C
         // hands over 48 kHz. `rx` stopped matching on the bare `dji` the day
         // this arrived, because `dji` is in this name too and `rx` is asked first.
-        Known(id: "tx",   glyph: "📡", short: "DJI BT", label: "DJI Mic Mini (Bluetooth)",
+        Known(id: "tx",   glyph: "🎤", short: "DJI TX", label: "DJI Mic Mini (Bluetooth)",
               needles: ["dji mic"]),
         // **The room's own microphone** (2026-09-22). It was only ever in
         // Victor Addons' list, which is how the two menus came to disagree:
