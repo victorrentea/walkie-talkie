@@ -866,6 +866,31 @@ final class TerminalBinding {
     /// to — a TUI that submitted on the first chunk gets an empty submit, a
     /// shell gets an empty command — and both are nothing. The shell case is
     /// mostly unreachable anyway: the guard refuses to deliver at a prompt.
+    ///
+    /// **Since Claude Code 2.1.278 (2026-09-19) a paste can need a third
+    /// Return.** A chunk short enough to be read as keystrokes (`54 b'…\r'`)
+    /// still submits on its own `\r`. A chunk long enough to be read as a
+    /// paste keeps its trailing `\r` *inside* the paste, and on the next Return
+    /// Claude Code strips it — `Removed 1 invisible character · review and
+    /// press Enter to send` — and waits for one more. Every envelope with a
+    /// screenshot footer is long enough, so the whole dictation sat in the
+    /// prompt unsent, which is what Victor reported on 2026-09-22 (he saw it
+    /// with Wispr Flow as the engine, but the engine is not the variable — the
+    /// length is; measured against a Haiku session on `ttys004`: 54 chars
+    /// submit, 203+ chars stall, at every delay from 120 ms to 4 s).
+    ///
+    /// Bracketed paste (`ESC[200~ … ESC[201~` around the text) would make the
+    /// `\r` a keypress and submit in one write — but Claude Code then wraps the
+    /// text in `<pasted_content>` and the model treats it as data, not as what
+    /// Victor said ("I need you to explicitly ask me…"). Tried and rejected the
+    /// same morning.
+    ///
+    /// So the Return is **adaptive**: after the bare `\r`, the tab's contents
+    /// are read back, and if the review hint is on its last lines, one more
+    /// `\r` goes. Read-back rather than a flat third Return, because an Enter
+    /// on an empty Claude Code prompt is not provably nothing (prompt
+    /// suggestions sit there as ghost text), and because a tab that did not
+    /// ask must not be pressed again.
     private static func writeToTerminalApp(_ text: String, tty: String) -> Bool {
         let script = """
         tell application "Terminal"
@@ -876,6 +901,22 @@ final class TerminalBinding {
                             do script "\(escape(text))" in t
                             delay 0.12
                             do script "" in t
+                            delay 0.35
+                            -- Its own try: the text is already in the tab, and a
+                            -- read-back that fails must not turn a delivery into
+                            -- "gone" and drop the binding (it did, once, on
+                            -- `length of` resolving against Terminal instead
+                            -- of the string). `history`, not `contents`: on a
+                            -- loop variable `contents of t` is AppleScript's
+                            -- dereference, and hands back the tab itself.
+                            try
+                                set c to (history of t) as text
+                                if (count c) > 600 then set c to text -600 thru -1 of c
+                                if c contains "press Enter to send" then
+                                    do script "" in t
+                                    return "ok+review"
+                                end if
+                            end try
                             return "ok"
                         end if
                     end try
@@ -884,7 +925,15 @@ final class TerminalBinding {
             return "gone"
         end tell
         """
-        return osascript(script) == "ok"
+        switch osascript(script) {
+        case "ok":
+            return true
+        case "ok+review":
+            Log.info("⌨️ a third Return — Claude Code read the block as a paste and asked to review it")
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - tmux

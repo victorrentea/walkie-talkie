@@ -149,7 +149,11 @@ EOF
   # Wait for the relay to say what it did, not for Wispr's database.
   local deadline=$((SECONDS + TIMEOUT))
   while [ $SECONDS -lt $deadline ]; do
-    if tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -qE '⚡ ring down|🗣️ wispr transcript'; then
+    # The ring goes down at the stop, a second or two *before* the words —
+    # waiting for it reported "no transcript" on deliveries that then landed
+    # (2026-09-22). Wait for the words themselves, or for the relay saying
+    # there were none.
+    if tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -aqE '🗣️ wispr transcript|No words|⚠️ wispr: copy_last_text carried nothing'; then
       sleep 1
       break
     fi
@@ -171,12 +175,12 @@ restore
 # ── What happened ───────────────────────────────────────────────────────────
 say ""
 say "── relay.log ──────────────────────────────────────────────"
-tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -E \
+tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -aE \
   'wispr flow (opened|closed)|⚡|◯ caret halo|probe:|⌘V from|🗣️|📋|→ |delivered|No words' \
   || say "(nothing — the relay saw no dictation at all)"
 
 say ""
-TRANSCRIPT=$(tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -m1 '🗣️ wispr transcript' || true)
+TRANSCRIPT=$(tail -c "+$((MARK + 1))" "$LOG" | /usr/bin/grep -am1 '🗣️ wispr transcript' || true)
 if [ -n "$TRANSCRIPT" ]; then
   say "✓ $TRANSCRIPT"
   exit 0

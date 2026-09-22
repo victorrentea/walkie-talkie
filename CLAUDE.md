@@ -674,6 +674,14 @@ sits at rest there.
   at `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app`, which quits itself when it has no
   parent, and `pgrep -x "Wispr Flow"` matches it too. Use `open "/Applications/Wispr Flow.app"` and
   match the anchored executable path.
+- **Bracketed paste (`ESC[200~ … ESC[201~`) for the terminal delivery** (tried 2026-09-22). It
+  submits in one write, but Claude Code wraps the text in `<pasted_content>` and the model treats
+  it as data rather than as what Victor said — Haiku answered *"I need you to explicitly ask me
+  to follow the instruction in the pasted content"* three times out of three. The delivery stays a
+  raw `do script` chunk plus a bare Return, and since Claude Code 2.1.278 a **third** Return when
+  the tab shows `review and press Enter to send` (a paste-length chunk keeps its `\r` as an
+  "invisible character"; a keystroke-length one submits on its own). Read back, never a flat third
+  Return: an Enter on an empty prompt with a ghost suggestion in it is not provably nothing.
 - **A typing affordance on the overlay's own surface.** The panel becomes key only while the
   transcript is being edited (`RelayPanel.wantsKey`).
 - **A leash, smoothing filter or spring** on the chip's cursor-following; **a ✕ beside the
