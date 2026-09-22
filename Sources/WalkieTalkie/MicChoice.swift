@@ -6,7 +6,7 @@ import Foundation
 /// Addons transcribes the room continuously through the same four devices, and
 /// until 2026-09-22 each app kept its own answer — this one in `UserDefaults`
 /// under `micDevice`, the other in a `.preferred-me-source` file holding a
-/// CoreAudio name fragment. Two menus, the same five rows, and no way to tell
+/// CoreAudio name fragment. Two menus, the same six rows, and no way to tell
 /// from either of them what the other was listening through. Victor's ask is
 /// the obvious one: *"când o schimb într-una, să se schimbe automat și în
 /// cealaltă"*.
@@ -33,11 +33,12 @@ import Foundation
 /// ## Why its own subfolder
 ///
 /// `~/.walkie-talkie/` is a busy directory — `relay.log` and `outbox.jsonl` are
-/// appended to constantly — and the cheapest way to notice a file change on
-/// macOS is a `DispatchSource` on the **directory** holding it, because an
-/// atomic write replaces the inode and a watch on the old file descriptor stops
-/// firing. Watching the busy directory would wake this app on every log line.
-/// One quiet subfolder costs nothing and makes the watch exact.
+/// appended to constantly — and half of noticing a change here is a
+/// `DispatchSource` on the **directory** holding the file, because an atomic
+/// write replaces the inode and a watch on the old descriptor goes deaf.
+/// Watching the busy directory would wake this app on every log line. One quiet
+/// subfolder costs nothing and makes the watch exact. (The other half is a watch
+/// on the file itself — see `watch`.)
 enum MicChoice {
 
     /// The id meaning *let the ladder decide*, and the answer to anything
@@ -71,36 +72,78 @@ enum MicChoice {
 
     // MARK: - Watching
 
-    private static var source: DispatchSourceFileSystemObject?
-    private static var descriptor: CInt = -1
+    private static var folderSource: DispatchSourceFileSystemObject?
+    private static var fileSource: DispatchSourceFileSystemObject?
+    private static var handler: (() -> Void)?
 
     /// **Call `onChange` whenever the other app rewrites the file.**
     ///
-    /// Fires on this app's own writes too, which is deliberate rather than
-    /// filtered: the handler's job is *make the menu and the chip agree with the
-    /// file*, and doing that twice is free. Filtering by "did I write this"
-    /// would need a timestamp comparison that is wrong exactly when two writes
-    /// race, which is the case it would exist for.
+    /// **Two watches, because one misses half the ways a file changes.** Both
+    /// apps publish with `write(to:atomically:true)`, which writes a temp file
+    /// and renames it over the target — that replaces the inode, so a watch on
+    /// the *file* descriptor stops firing after the first change and a watch on
+    /// the *folder* is what sees it. But a plain in-place write (a shell
+    /// `printf > choice`, a test harness, an editor that truncates) touches the
+    /// file and never the directory, and the folder watch sleeps through it.
+    /// Both cases are real — the second one is how this was found — so the
+    /// folder is watched for the replace and the file is watched for the write,
+    /// and the file watch is re-armed every time it is replaced out from under
+    /// itself.
+    ///
+    /// The folder is a dedicated one because `~/.walkie-talkie/` itself has
+    /// `relay.log` and `outbox.jsonl` being appended to constantly, and watching
+    /// it would wake this app on every log line.
+    ///
+    /// Fires on this app's own writes too. That is deliberate rather than
+    /// filtered: the handler's job is *make the menu agree with the file*, and
+    /// doing that twice is free.
     static func watch(_ onChange: @escaping () -> Void) {
         stopWatching()
+        handler = onChange
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
         let fd = open(folder.path, O_EVTONLY)
         guard fd >= 0 else {
             Log.error("mic: cannot watch \(folder.path) — the other app's picks will not arrive")
             return
         }
-        descriptor = fd
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: .main)
-        src.setEventHandler { onChange() }
+        src.setEventHandler {
+            // A replace lands here, and the file watch below is now pointed at
+            // a dead inode — re-aim it before answering.
+            armFileWatch()
+            handler?()
+        }
         src.setCancelHandler { close(fd) }
-        source = src
+        folderSource = src
+        src.resume()
+
+        armFileWatch()
+    }
+
+    /// Watch the `choice` file itself, for writes that do not go through a
+    /// rename. Re-arms itself when the file is replaced or removed.
+    private static func armFileWatch() {
+        fileSource?.cancel()
+        fileSource = nil
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }   // no file yet; the folder watch will catch its creation
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)
+        src.setEventHandler {
+            let gone = src.data.contains(.delete) || src.data.contains(.rename)
+            handler?()
+            if gone { armFileWatch() }
+        }
+        src.setCancelHandler { close(fd) }
+        fileSource = src
         src.resume()
     }
 
     static func stopWatching() {
-        source?.cancel()
-        source = nil
-        descriptor = -1
+        folderSource?.cancel(); folderSource = nil
+        fileSource?.cancel(); fileSource = nil
+        handler = nil
     }
 }
