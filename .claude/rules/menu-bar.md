@@ -247,7 +247,7 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 
 ## Autosend, and the Mouse Gestures row
 
-> **Renamed on 2026-09-22** (Victor's menu pass): `Mouse Gestures` → `Gestures`, `Connect Terminal` → `Bind Terminal`, `Dictate to New Claude` → `Prompt new Claude`, `Pick Element in Chrome` → `Pick from Chrome`, `Mic: 💻 MacBook` → `Mic: 💻 Mac`, `Halo fx` → `Halo 𝓯𝔁`, and `Prompt History` moved up to sit under `Paste last prompt`. The older names below are history.
+> **Renamed on 2026-09-22** (Victor's menu pass): `Mouse Gestures` → `Gestures`, `Connect Terminal` → `Bind Terminal`, `Dictate to New Claude` → `Prompt new Claude`, `Pick Element in Chrome` → `Pick from Chrome`, `Mic: 💻 MacBook` → `Mic: 💻 Mac`, `Halo fx` → `Halo 𝓯𝔁 when…` (no readout; rows `At caret` / `Bounded` / `New Claude` / `Dictate`, `Pre-process` → `Filter`), and `Prompt History` moved up to sit under `Paste last prompt`. The older names below are history.
 
 - **Switch state lives in the icon column — a `checkmark` when on, a blank image of the column's
   exact width when off — never `NSMenuItem.state`.** A ticked row makes AppKit reserve the state

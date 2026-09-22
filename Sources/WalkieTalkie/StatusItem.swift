@@ -620,10 +620,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// wheel between two opens.
     private func applyHaloRow() {
         let picks = HaloDestination.allCases.map { HaloStyle.current(for: $0) }
-        let shared = picks.dropFirst().allSatisfy { $0 == picks[0] } ? picks[0] : nil
-        // No readout while the three differ: the row would have to name one of
-        // them, and naming one is exactly the claim that is not true.
-        haloItem.title = shared.map { "\(Self.haloFx): \($0.menuTitle)" } ?? Self.haloFx
+        // **`Halo 𝓯𝔁 when…`, and the rows finish the sentence** (2026-09-22,
+        // Victor) — `At caret: Tunnel`, `Bounded: Tendrils`. No readout on the
+        // parent any more: the four are four answers, and the one shared answer
+        // it used to print has not been the case since each destination got its own.
+        haloItem.title = "\(Self.haloFx) when…"
         haloSubmenu.removeAllItems()
         haloSubmenu.autoenablesItems = false
         for (destination, pick) in zip(HaloDestination.allCases, picks) {
@@ -718,13 +719,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// sub 120 Hz, unde o tobă pune 30–50%. Rândul e al rutei NATIVE: acolo se
     /// așează efectele adevărate, web view-ul e doar previzualizarea din care își
     /// alege efectul.
-    private let haloVoiceItem = NSMenuItem(title: "Pre-process", action: nil, keyEquivalent: "")
+    private let haloVoiceItem = NSMenuItem(title: "Filter", action: nil, keyEquivalent: "")
     private let haloVoiceSubmenu = NSMenu()
     var onPickHaloVoice: ((HaloVoice) -> Void)?
 
     private func applyHaloVoiceRow() {
         let current = HaloVoice.current
-        haloVoiceItem.title = "Pre-process: \(current.title)"
+        haloVoiceItem.title = "Filter: \(current.title)"
         haloVoiceSubmenu.removeAllItems()
         haloVoiceSubmenu.autoenablesItems = false
         for voice in HaloVoice.allCases {
