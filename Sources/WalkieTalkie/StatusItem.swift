@@ -1360,12 +1360,38 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// and dims it on its own, which is one more thing the move into that column
     /// bought back. A row with no button glyph keeps a plain title and never pays
     /// this at all.
+    /// **The gesture in words, on hover** (2026-09-22) — Victor: *"menu entry
+    /// pot avea tooltip: explică gestul în tooltip scurt"*. The column draws one
+    /// glyph per row, which is a reminder for someone who already knows the
+    /// vocabulary; this is the sentence for someone who does not. Keyed on the
+    /// emoji legend, so the two modes cannot come to explain different gestures
+    /// than the ones the About page prints.
+    private static func gestureTip(_ legend: String) -> String? {
+        [
+            "◀️ + 🔼": "Hold the left button, click Forward",
+            "▶️ + 🛞": "Hold the right button, click the wheel",
+            "🔼 →": "Hold Forward, swipe right",
+            "🔼 ←": "Hold Forward, swipe left",
+            "🔼 ↑": "Hold Forward, swipe up",
+            "🔽 ↑": "Hold Back, swipe up",
+            "🔽 ↓": "Hold Back, swipe down",
+            "🔽": "Click Back while dictating",
+            "🛞": "Click the wheel",
+            "🛞🛞": "Double-click the wheel",
+            "🛞 2s": "Hold the wheel for 2 seconds",
+            "🛞 drag": "Drag with the wheel held, while dictating",
+            "⌘⇧P": "Press ⌘⇧P",
+            "⌘⇧◀️": "Hold ⌘⇧ and click an element in Chrome, while dictating",
+        ][legend]
+    }
+
     private func applyGestureColumn() {
         let font = NSFont.menuFont(ofSize: 0)
         let style = NSMutableParagraphStyle()
         style.tabStops = [NSTextTab(textAlignment: .right, location: gestureTab)]
         for row in gestureRows {
             let chord = logiGesturesOn ? row.logiGlyph : row.wheelGlyph
+            row.item.toolTip = Self.gestureTip(logiGesturesOn ? row.logi : row.wheel)
             row.item.keyEquivalent = chord.key
             row.item.keyEquivalentModifierMask = chord.mask
             guard !chord.head.isEmpty else {
