@@ -1049,7 +1049,19 @@ final class WisprFlowSource: DictationSource {
         // still making a sound. Detaching here also draws the line in the right
         // place: Wispr hears everything up to the stop gesture and nothing after
         // it. Idempotent, so the re-entry below costs nothing.
-        meter.onBuffer = nil
+        //
+        // **Cut at the bridge, never at the recorder** (2026-09-22). This line
+        // was `meter.onBuffer = nil`, and that setter takes `MicRecorder.lock`
+        // — the one `start(to:)` holds across its CoreAudio bind, which is the
+        // freeze *Never open or close a microphone on the main thread* is
+        // about. Measured this morning at 07:37: the recorder was still inside
+        // `start(to:)` (no `mic: recording through …` line for that dictation),
+        // the forward click came here, and the main thread waited on the lock
+        // for good — the chip frozen, the stop chord never posted, Wispr left
+        // recording, Force Quit the only way out. `closeInput` holds a lock
+        // that is only ever taken for an addition. The recorder's own detach
+        // still happens in `stopMeter`, on `meterQueue`, where it belongs.
+        bridge.closeInput()
         let drain = bridgeDrainSeconds
         guard drain <= 0.02 else {
             Log.info(String(format: "🔀 holding the stop for %.0f ms of his voice still in the bridge",

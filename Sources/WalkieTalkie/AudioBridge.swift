@@ -92,6 +92,8 @@ final class AudioBridge {
     private let lock = NSLock()
     private var queued: TimeInterval = 0
     private(set) var isRunning = false
+    /// Whether `schedule` still takes buffers — see `closeInput()`.
+    private var accepting = true
 
     /// **How much of his sentence Wispr has not heard yet.**
     ///
@@ -156,10 +158,26 @@ final class AudioBridge {
             self.engine = engine
             self.player = player
             self.isRunning = true
-            self.lock.lock(); self.queued = 0; self.lock.unlock()
+            self.lock.lock(); self.queued = 0; self.accepting = true; self.lock.unlock()
             Log.info("🔀 audio bridge up — his microphone → \(device.name)")
             return true
         }
+    }
+
+    /// **Stop taking buffers, without touching the recorder** (2026-09-22).
+    ///
+    /// The stop gesture used to cut the feed with `meter.onBuffer = nil`, on the
+    /// main thread — and that setter takes `MicRecorder.lock`, the lock
+    /// `start(to:)` holds across its synchronous CoreAudio bind. The morning's
+    /// freeze was exactly that: a dictation opened three seconds after a cancel,
+    /// its `start(to:)` never returned (no `mic: recording through …` line), and
+    /// the forward click that should have ended it blocked the main thread on
+    /// that lock for ever — chip frozen, no stop chord, Wispr left recording.
+    /// This is the same cut drawn one door later: the recorder keeps calling
+    /// `onBuffer`, and the bridge drops what arrives. `lock` here is only ever
+    /// held for an add, so this cannot wait on anything. `start` reopens it.
+    func closeInput() {
+        lock.lock(); accepting = false; lock.unlock()
     }
 
     /// Hand one buffer on, his or a marker's — they go through the same door in
@@ -168,7 +186,10 @@ final class AudioBridge {
     func schedule(_ buffer: AVAudioPCMBuffer) {
         guard buffer.frameLength > 0 else { return }
         let seconds = Double(buffer.frameLength) / buffer.format.sampleRate
-        lock.lock(); queued += seconds; lock.unlock()
+        lock.lock()
+        guard accepting else { lock.unlock(); return }
+        queued += seconds
+        lock.unlock()
         queue.async { [weak self] in
             guard let self, let player = self.player, self.isRunning,
                   let ready = self.toPlayFormat(buffer) else {
