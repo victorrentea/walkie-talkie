@@ -17,7 +17,9 @@
 #include <projectM-4/parameters.h>
 #include <projectM-4/callbacks.h>
 #include <projectM-4/render_opengl.h>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -71,6 +73,71 @@ const char* kFS = "#version 330 core\n"
     " a*=peak;c.rgb*=peak;"
     " frag=vec4(c.rgb,a);}\n";
 
+// ---- The trail and the fluid (2026-09-23) ---------------------------------
+// Victor: *"un «tendrils2» care sa nu se translateze pe ecran imediat dupa mouse
+// ci sa lase la mutarea mouseului urme in spate unde a fost"*. In these modes the
+// output surface is the size of the SCREEN, not the square: each frame the
+// previous surface is carried over, dimmed (and, for the fluid, advected along a
+// velocity field the pointer stirs), and the keyed square is stamped over it at
+// the pointer. What the square leaves behind is the trail. Everything here is in
+// the surface's own convention: GL row 0 is the IOSurface's top row, so y is
+// measured DOWN from the top — the same as the pointer handed in.
+//
+// The dye pass: the previous surface, sampled `dt·v` upstream (v = 0 for the
+// plain trail), times `k`, minus `eps` so an 8-bit value cannot get stuck at the
+// point where ×k rounds back to itself (below ~7/255 at k = 0.93).
+const char* kDyeFS = "#version 330 core\n"
+    "uniform sampler2DRect dye;uniform sampler2D vel;uniform vec2 size;uniform vec2 pxPerCell;uniform float dt;uniform float k;uniform float eps;uniform float useVel;"
+    "out vec4 frag;\n"
+    "void main(){vec2 p=gl_FragCoord.xy;"
+    " if(useVel>0.5){vec2 v=texture(vel,p/size).xy;p-=dt*v*pxPerCell;}"
+    " vec4 c=texture(dye,p)*k;"
+    " frag=max(c-vec4(eps),vec4(0.0));}\n";
+
+// The fluid itself — Jos Stam's stable fluids as Pavel Dobryakov's
+// WebGL-Fluid-Simulation runs them (paveldogreat.github.io/WebGL-Fluid-Simulation,
+// the effect four of the ten searches came back with). Velocity in grid cells
+// per second, on a grid a quarter of the screen's pixels on each side.
+const char* kSplatFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform vec2 point;uniform vec2 force;uniform float radius;uniform float aspect;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 d=uv-point;d.x*=aspect;float g=exp(-dot(d,d)/radius);"
+    " frag=vec4(texture(src,uv).xy+force*g,0.0,1.0);}\n";
+const char* kAdvectFS = "#version 330 core\n"
+    "uniform sampler2D vel;uniform vec2 texel;uniform float dt;uniform float dissipation;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 c=uv-dt*texture(vel,uv).xy*texel;"
+    " frag=vec4(texture(vel,c).xy/(1.0+dissipation*dt),0.0,1.0);}\n";
+const char* kCurlFS = "#version 330 core\n"
+    "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){float L=texture(vel,uv-vec2(texel.x,0)).y;float R=texture(vel,uv+vec2(texel.x,0)).y;"
+    " float T=texture(vel,uv+vec2(0,texel.y)).x;float B=texture(vel,uv-vec2(0,texel.y)).x;"
+    " frag=vec4(0.5*(R-L-T+B),0,0,1);}\n";
+const char* kVortFS = "#version 330 core\n"
+    "uniform sampler2D vel;uniform sampler2D curl;uniform vec2 texel;uniform float strength;uniform float dt;in vec2 uv;out vec4 frag;\n"
+    "void main(){float L=texture(curl,uv-vec2(texel.x,0)).x;float R=texture(curl,uv+vec2(texel.x,0)).x;"
+    " float T=texture(curl,uv+vec2(0,texel.y)).x;float B=texture(curl,uv-vec2(0,texel.y)).x;float C=texture(curl,uv).x;"
+    " vec2 f=0.5*vec2(abs(T)-abs(B),abs(R)-abs(L));f/=length(f)+0.0001;f*=strength*C;f.y*=-1.0;"
+    " vec2 v=texture(vel,uv).xy+f*dt;frag=vec4(clamp(v,-1000.0,1000.0),0,1);}\n";
+const char* kDivFS = "#version 330 core\n"
+    "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 C=texture(vel,uv).xy;"
+    " float L=texture(vel,uv-vec2(texel.x,0)).x;float R=texture(vel,uv+vec2(texel.x,0)).x;"
+    " float T=texture(vel,uv+vec2(0,texel.y)).y;float B=texture(vel,uv-vec2(0,texel.y)).y;"
+    " if(uv.x-texel.x<0.0)L=-C.x; if(uv.x+texel.x>1.0)R=-C.x; if(uv.y+texel.y>1.0)T=-C.y; if(uv.y-texel.y<0.0)B=-C.y;"
+    " frag=vec4(0.5*(R-L+T-B),0,0,1);}\n";
+const char* kScaleFS = "#version 330 core\n"
+    "uniform sampler2D src;uniform float k;in vec2 uv;out vec4 frag;\n"
+    "void main(){frag=texture(src,uv)*k;}\n";
+const char* kJacobiFS = "#version 330 core\n"
+    "uniform sampler2D pressure;uniform sampler2D div;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){float L=texture(pressure,uv-vec2(texel.x,0)).x;float R=texture(pressure,uv+vec2(texel.x,0)).x;"
+    " float T=texture(pressure,uv+vec2(0,texel.y)).x;float B=texture(pressure,uv-vec2(0,texel.y)).x;"
+    " frag=vec4((L+R+B+T-texture(div,uv).x)*0.25,0,0,1);}\n";
+const char* kGradFS = "#version 330 core\n"
+    "uniform sampler2D pressure;uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "void main(){float L=texture(pressure,uv-vec2(texel.x,0)).x;float R=texture(pressure,uv+vec2(texel.x,0)).x;"
+    " float T=texture(pressure,uv+vec2(0,texel.y)).x;float B=texture(pressure,uv-vec2(0,texel.y)).x;"
+    " frag=vec4(texture(vel,uv).xy-vec2(R-L,T-B),0,1);}\n";
+
 GLuint compile(GLenum type, const char* src, std::string& log) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -83,6 +150,20 @@ GLuint compile(GLenum type, const char* src, std::string& log) {
 void set_err(char* err, int len, const std::string& s) {
     if (err && len > 0) { strncpy(err, s.c_str(), len - 1); err[len - 1] = 0; }
 }
+
+GLuint link(const char* fs, std::string& log) {
+    GLuint v = compile(GL_VERTEX_SHADER, kVS, log), f = compile(GL_FRAGMENT_SHADER, fs, log);
+    GLuint p = glCreateProgram(); glAttachShader(p, v); glAttachShader(p, f); glLinkProgram(p);
+    glDeleteShader(v); glDeleteShader(f);
+    GLint ok = 0; glGetProgramiv(p, GL_LINK_STATUS, &ok);
+    if (!ok) { char l[2048]; glGetProgramInfoLog(p, 2048, nullptr, l); log += l; }
+    return p;
+}
+
+/// A float texture the fluid keeps its fields in, with its framebuffer.
+struct Field {
+    GLuint tex = 0, fbo = 0;
+};
 
 struct Surface {
     IOSurfaceRef ios = nullptr;
@@ -106,6 +187,17 @@ struct pmh {
     std::string loadError;
     std::vector<float> resampled;
     std::vector<std::string> texDirs; std::vector<const char*> texDirPtrs;
+    // The trail and the fluid — see `pmh_set_canvas`. `ow`×`oh` is the output
+    // surface; the square `px` is stamped into it at the (smoothed) pointer.
+    int ow = 0, oh = 0, mode = 0, fps = 30;
+    float seconds = 0.6f, lag = 0.06f;
+    bool havePointer = false, fresh = true;
+    float tx = 0, ty = 0, sx = 0, sy = 0;
+    GLuint dyeProg = 0;
+    // fluid
+    int vw = 0, vh = 0;
+    Field vel[2], prs[2], div, curl; int vc = 0, pc = 0;
+    GLuint splatProg = 0, advectProg = 0, curlProg = 0, vortProg = 0, divProg = 0, scaleProg = 0, jacobiProg = 0, gradProg = 0;
 };
 
 static void on_preset_failed(const char* filename, const char* message, void* user) {
@@ -124,14 +216,14 @@ extern "C" int pmh_honours_time_scale(void) {
 #endif
 }
 
-static bool make_surface(pmh* h, Surface& s) {
+static bool make_surface(pmh* h, Surface& s, int sw, int sh) {
     // Rows aligned the way Metal wants an IOSurface it renders into — a 907 px
     // square (bpr 3628) aborted the process with `isMisalignedIOSurface`.
-    int32_t w = h->px, bpe = 4; uint32_t pf = 'BGRA';
-    int32_t bpr = (int32_t)IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, (size_t)h->px * 4);
-    int32_t asz = (int32_t)IOSurfaceAlignProperty(kIOSurfaceAllocSize, (size_t)bpr * h->px);
+    int32_t w = sw, hh = sh, bpe = 4; uint32_t pf = 'BGRA';
+    int32_t bpr = (int32_t)IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, (size_t)sw * 4);
+    int32_t asz = (int32_t)IOSurfaceAlignProperty(kIOSurfaceAllocSize, (size_t)bpr * sh);
     const void* keys[] = { kIOSurfaceWidth, kIOSurfaceHeight, kIOSurfaceBytesPerElement, kIOSurfaceBytesPerRow, kIOSurfaceAllocSize, kIOSurfacePixelFormat };
-    const void* vals[] = { CFNumberCreate(nullptr, kCFNumberSInt32Type, &w), CFNumberCreate(nullptr, kCFNumberSInt32Type, &w),
+    const void* vals[] = { CFNumberCreate(nullptr, kCFNumberSInt32Type, &w), CFNumberCreate(nullptr, kCFNumberSInt32Type, &hh),
                            CFNumberCreate(nullptr, kCFNumberSInt32Type, &bpe), CFNumberCreate(nullptr, kCFNumberSInt32Type, &bpr),
                            CFNumberCreate(nullptr, kCFNumberSInt32Type, &asz), CFNumberCreate(nullptr, kCFNumberSInt32Type, (int32_t*)&pf) };
     CFDictionaryRef d = CFDictionaryCreate(nullptr, keys, vals, 6, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -154,7 +246,13 @@ static bool make_surface(pmh* h, Surface& s) {
                     CGColorSpaceRelease(cs); } } }
     glGenTextures(1, &s.tex);
     glBindTexture(GL_TEXTURE_RECTANGLE, s.tex);
-    if (CGLTexImageIOSurface2D(h->ctx, GL_TEXTURE_RECTANGLE, GL_RGBA, h->px, h->px, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, s.ios, 0) != kCGLNoError) return false;
+    if (CGLTexImageIOSurface2D(h->ctx, GL_TEXTURE_RECTANGLE, GL_RGBA, sw, sh, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, s.ios, 0) != kCGLNoError) return false;
+    // Read back by the trail's dye pass, between pixel centres once the fluid
+    // moves it — so filtered, and clamped (a rectangle texture cannot repeat).
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glGenFramebuffers(1, &s.fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE, s.tex, 0);
@@ -163,7 +261,7 @@ static bool make_surface(pmh* h, Surface& s) {
 
 pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int err_len) {
     auto* h = new pmh();
-    h->px = px;
+    h->px = px; h->ow = px; h->oh = px; h->fps = fps > 0 ? fps : 30;
     h->finish = getenv("WT_PM_FINISH") != nullptr;
     CGLPixelFormatAttribute attrs[] = {
         kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
@@ -194,7 +292,7 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     for (auto& s : h->surf) {
-        if (!make_surface(h, s)) { set_err(err, err_len, "IOSurface FBO could not be made"); CGLSetCurrentContext(prev); pmh_destroy(h); return nullptr; }
+        if (!make_surface(h, s, px, px)) { set_err(err, err_len, "IOSurface FBO could not be made"); CGLSetCurrentContext(prev); pmh_destroy(h); return nullptr; }
     }
 
     std::string log;
@@ -248,7 +346,12 @@ void pmh_destroy(pmh* h) {
             if (s.tex) glDeleteTextures(1, &s.tex);
             if (s.ios) CFRelease(s.ios);
         }
-        if (h->prog) glDeleteProgram(h->prog);
+        for (GLuint p : { h->prog, h->dyeProg, h->splatProg, h->advectProg, h->curlProg, h->vortProg, h->divProg, h->scaleProg, h->jacobiProg, h->gradProg })
+            if (p) glDeleteProgram(p);
+        for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->div, &h->curl }) {
+            if (f->fbo) glDeleteFramebuffers(1, &f->fbo);
+            if (f->tex) glDeleteTextures(1, &f->tex);
+        }
         if (h->vao) glDeleteVertexArrays(1, &h->vao);
         if (h->fbo) glDeleteFramebuffers(1, &h->fbo);
         if (h->rbo) glDeleteRenderbuffers(1, &h->rbo);
@@ -285,6 +388,126 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
     projectm_pcm_add_float(h->pm, h->resampled.data(), out, PROJECTM_MONO);
 }
 
+
+static bool make_field(Field& f, int w, int hgt, GLenum internal, GLenum format) {
+    glGenTextures(1, &f.tex);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal, w, hgt, 0, format, GL_HALF_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &f.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, f.tex, 0);
+    bool ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT);
+    return ok;
+}
+
+int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, char* err, int err_len) {
+    CGLContextObj prev = CGLGetCurrentContext();
+    CGLSetCurrentContext(h->ctx);
+    auto bail = [&](const std::string& why) { set_err(err, err_len, why); CGLSetCurrentContext(prev); return 1; };
+    for (auto& s : h->surf) {
+        if (s.fbo) glDeleteFramebuffers(1, &s.fbo);
+        if (s.tex) glDeleteTextures(1, &s.tex);
+        if (s.ios) CFRelease(s.ios);
+        s = Surface();
+        if (!make_surface(h, s, w, hgt)) return bail("screen-sized IOSurface FBO could not be made");
+    }
+    h->ow = w; h->oh = hgt; h->mode = mode; h->seconds = seconds; h->lag = lag; h->fresh = true;
+    std::string log;
+    if (!h->dyeProg) h->dyeProg = link(kDyeFS, log);
+    if (mode == 2) {
+        h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4);
+        for (Field* f : { &h->vel[0], &h->vel[1] }) if (!make_field(*f, h->vw, h->vh, GL_RG16F, GL_RG)) return bail("velocity field could not be made");
+        for (Field* f : { &h->prs[0], &h->prs[1], &h->div, &h->curl }) if (!make_field(*f, h->vw, h->vh, GL_R16F, GL_RED)) return bail("pressure field could not be made");
+        h->splatProg = link(kSplatFS, log); h->advectProg = link(kAdvectFS, log);
+        h->curlProg = link(kCurlFS, log); h->vortProg = link(kVortFS, log);
+        h->divProg = link(kDivFS, log); h->scaleProg = link(kScaleFS, log);
+        h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (!log.empty()) return bail("trail shaders: " + log);
+    CGLSetCurrentContext(prev);
+    return 0;
+}
+
+void pmh_set_pointer(pmh* h, float x, float y) {
+    h->tx = x; h->ty = y;
+    if (!h->havePointer) { h->sx = x; h->sy = y; h->havePointer = true; }
+}
+
+void pmh_reset_trail(pmh* h) { h->fresh = true; h->havePointer = false; }
+
+void pmh_output_size(pmh* h, int* w, int* hgt) { *w = h->ow; *hgt = h->oh; }
+
+namespace {
+// One pass of the fluid: `prog` over the whole grid into `dst`.
+void pass(pmh* h, GLuint prog, Field& dst) {
+    glBindFramebuffer(GL_FRAMEBUFFER, dst.fbo);
+    glViewport(0, 0, h->vw, h->vh);
+    glUseProgram(prog);
+    GLint t = glGetUniformLocation(prog, "texel");
+    if (t >= 0) glUniform2f(t, 1.f / h->vw, 1.f / h->vh);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+void bind2d(GLuint prog, const char* name, int unit, GLuint tex) {
+    glActiveTexture(GL_TEXTURE0 + unit); glBindTexture(GL_TEXTURE_2D, tex);
+    glUniform1i(glGetUniformLocation(prog, name), unit);
+}
+
+// Stamp-to-stamp, the fluid is stirred where the square travelled this frame:
+// a velocity splat along the way, as fast as the pointer went.
+void step_fluid(pmh* h, float dt, float ax, float ay, float bx, float by) {
+    glDisable(GL_BLEND);
+    // pointer displacement → grid cells per second
+    float fx = (bx - ax) / h->ow * h->vw / dt, fy = (by - ay) / h->oh * h->vh / dt;
+    float speed = std::sqrt(fx * fx + fy * fy);
+    if (speed > 1.f) {
+        float cap = 3000.f;
+        if (speed > cap) { fx *= cap / speed; fy *= cap / speed; }
+        // radius: the square's own size, so the swirl is as wide as the halo
+        float r = (float)h->px / h->ow * 0.35f;
+        glUseProgram(h->splatProg);
+        bind2d(h->splatProg, "src", 0, h->vel[h->vc].tex);
+        glUniform2f(glGetUniformLocation(h->splatProg, "point"), bx / h->ow, by / h->oh);
+        glUniform2f(glGetUniformLocation(h->splatProg, "force"), fx, fy);
+        glUniform1f(glGetUniformLocation(h->splatProg, "radius"), r * r);
+        glUniform1f(glGetUniformLocation(h->splatProg, "aspect"), (float)h->ow / h->oh);
+        pass(h, h->splatProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
+    }
+    // curl → vorticity confinement (the curls that make it smoke, not jelly)
+    glUseProgram(h->curlProg); bind2d(h->curlProg, "vel", 0, h->vel[h->vc].tex);
+    pass(h, h->curlProg, h->curl);
+    glUseProgram(h->vortProg);
+    bind2d(h->vortProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->vortProg, "curl", 1, h->curl.tex);
+    glUniform1f(glGetUniformLocation(h->vortProg, "strength"), 30.f);
+    glUniform1f(glGetUniformLocation(h->vortProg, "dt"), dt);
+    pass(h, h->vortProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
+    // divergence, pressure (warm-started at 0.8 of the last), gradient
+    glUseProgram(h->divProg); bind2d(h->divProg, "vel", 0, h->vel[h->vc].tex);
+    pass(h, h->divProg, h->div);
+    glUseProgram(h->scaleProg); bind2d(h->scaleProg, "src", 0, h->prs[h->pc].tex);
+    glUniform1f(glGetUniformLocation(h->scaleProg, "k"), 0.8f);
+    pass(h, h->scaleProg, h->prs[h->pc ^ 1]); h->pc ^= 1;
+    glUseProgram(h->jacobiProg);
+    for (int i = 0; i < 20; ++i) {
+        bind2d(h->jacobiProg, "pressure", 0, h->prs[h->pc].tex); bind2d(h->jacobiProg, "div", 1, h->div.tex);
+        pass(h, h->jacobiProg, h->prs[h->pc ^ 1]); h->pc ^= 1;
+    }
+    glUseProgram(h->gradProg);
+    bind2d(h->gradProg, "pressure", 0, h->prs[h->pc].tex); bind2d(h->gradProg, "vel", 1, h->vel[h->vc].tex);
+    pass(h, h->gradProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
+    // the velocity carries itself, and slowly dies
+    glUseProgram(h->advectProg); bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dt"), dt);
+    glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), 0.4f);
+    pass(h, h->advectProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
+}
+}
+
 void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start, float hole, float peak, float core, float tail_top) {
     h->fade = fade; h->rx = rx; h->ry = ry; h->floorA = floor_a; h->gain = gain; h->fadeStart = fade_start;
     h->hole = hole; h->peak = peak; h->core = core; h->tailTop = tail_top;
@@ -305,22 +528,91 @@ IOSurfaceRef pmh_render(pmh* h) {
     while (glGetError() != GL_NO_ERROR) h->engineErrors++;
 
     Surface& s = h->surf[h->cur];
-    glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
-    glViewport(0, 0, h->px, h->px);
     glDisable(GL_BLEND); glDisable(GL_DEPTH_TEST); glDisable(GL_SCISSOR_TEST);
-    glUseProgram(h->prog); glBindVertexArray(h->vao);
+    glBindVertexArray(h->vao);
+    // Where the square goes this frame, and where it went the last: the key pass
+    // is drawn once per stamp, `peak` scaled for the in-between ones.
+    struct Stamp { float x, y, peak; };
+    std::vector<Stamp> stamps;
+    if (h->mode == 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
+        glViewport(0, 0, h->px, h->px);
+        stamps.push_back({ 0, 0, 1 });
+    } else {
+        const float dt = 1.f / h->fps;
+        // per frame, the share of the light that survives: e^(−dt/τ)
+        const float k = std::exp(-dt / std::max(0.05f, h->seconds));
+        Surface& last = h->surf[h->cur ^ 1];
+        if (h->fresh) {
+            for (auto& q : h->surf) { glBindFramebuffer(GL_FRAMEBUFFER, q.fbo); glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT); }
+            if (h->mode == 2) for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1] }) { glBindFramebuffer(GL_FRAMEBUFFER, f->fbo); glClear(GL_COLOR_BUFFER_BIT); }
+            h->fresh = false;
+        }
+        // The square chases the pointer instead of sitting on it: a lag of
+        // `lag` seconds, so a flick is a glide and never a jump.
+        float ax = h->sx, ay = h->sy;
+        if (h->havePointer) {
+            float a = h->lag > 0 ? 1.f - std::exp(-dt / h->lag) : 1.f;
+            h->sx += (h->tx - h->sx) * a; h->sy += (h->ty - h->sy) * a;
+        }
+        if (h->mode == 2 && h->havePointer) step_fluid(h, dt, ax, ay, h->sx, h->sy);
+        glDisable(GL_BLEND);
+        glBindFramebuffer(GL_FRAMEBUFFER, s.fbo);
+        glViewport(0, 0, h->ow, h->oh);
+        glUseProgram(h->dyeProg);
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_RECTANGLE, last.tex);
+        glUniform1i(glGetUniformLocation(h->dyeProg, "dye"), 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, h->mode == 2 ? h->vel[h->vc].tex : 0);
+        glUniform1i(glGetUniformLocation(h->dyeProg, "vel"), 1);
+        glUniform2f(glGetUniformLocation(h->dyeProg, "size"), (float)h->ow, (float)h->oh);
+        glUniform2f(glGetUniformLocation(h->dyeProg, "pxPerCell"), h->vw ? (float)h->ow / h->vw : 1.f, h->vh ? (float)h->oh / h->vh : 1.f);
+        glUniform1f(glGetUniformLocation(h->dyeProg, "dt"), dt);
+        glUniform1f(glGetUniformLocation(h->dyeProg, "k"), k);
+        glUniform1f(glGetUniformLocation(h->dyeProg, "eps"), 1.5f / 255.f);
+        glUniform1f(glGetUniformLocation(h->dyeProg, "useVel"), h->mode == 2 ? 1.f : 0.f);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+        if (h->havePointer) {
+            // In-between stamps every ~6 % of the square, so a fast move is a
+            // smear and not a row of copies; each as dim as it would have become
+            // had it been drawn at its own moment of the frame.
+            float dx = h->sx - ax, dy = h->sy - ay, dist = std::sqrt(dx * dx + dy * dy);
+            int n = std::min(16, std::max(1, (int)std::ceil(dist / std::max(1.f, h->px * 0.06f))));
+            for (int i = 1; i <= n; ++i) {
+                float t = (float)i / n;
+                stamps.push_back({ ax + dx * t, ay + dy * t, i == n ? 1.f : std::pow(k, 1.f - t) });
+            }
+        }
+        // **MAX, not "over"**: laid over one another, thirty stamps a second
+        // saturate into an opaque blob within a few frames (the first captures,
+        // 2026-09-23), and a pointer standing still would do the same on one
+        // spot. Per-channel max keeps the head exactly as bright as the preset
+        // and lets the trail be only its fading past, never a sum of it.
+        // The fluid is the exception, and keeps "over": smoke is exactly the
+        // build-up the trail must not have, and advected at MAX it dies within a
+        // stamp's width of the head.
+        glEnable(GL_BLEND);
+        glBlendEquation(h->mode == 2 ? GL_FUNC_ADD : GL_MAX);
+        if (h->mode == 2) glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); else glBlendFunc(GL_ONE, GL_ONE);
+    }
+    glUseProgram(h->prog);
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, h->tex);
     glUniform1i(h->uSrc, 0);
     glUniform1f(h->uFade, h->fade ? 1.f : 0.f);
     glUniform2f(h->uRadii, h->rx, h->ry);
     glUniform1f(h->uFloor, h->floorA);
     glUniform1f(h->uHole, h->hole);
-    glUniform1f(h->uPeak, h->peak);
     glUniform1f(h->uCore, h->core);
     glUniform1f(h->uTail, h->tailTop);
     glUniform1f(h->uGain, h->gain);
     glUniform1f(h->uStart, h->fadeStart);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    for (const Stamp& st : stamps) {
+        glUniform1f(h->uPeak, h->peak * st.peak);
+        if (h->mode != 0) glViewport((GLint)std::lround(st.x - h->px / 2.0), (GLint)std::lround(st.y - h->px / 2.0), h->px, h->px);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
+    glDisable(GL_BLEND); glBlendEquation(GL_FUNC_ADD);
     glBindVertexArray(0); glUseProgram(0); glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (h->finish) glFinish(); else glFlush();
@@ -366,7 +658,7 @@ int pmh_read_pixels(pmh* h, unsigned char* out) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, s.fbo);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, h->px, h->px, GL_RGBA, GL_UNSIGNED_BYTE, out);
+    glReadPixels(0, 0, h->ow, h->oh, GL_RGBA, GL_UNSIGNED_BYTE, out);
     GLenum e = glGetError();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     CGLSetCurrentContext(prev);

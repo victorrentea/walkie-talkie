@@ -30,6 +30,10 @@ import ImageIO
 final class ProjectMHalo: NSView, HaloWebHost {
     private let preset: HaloStyle.Preset
     private let screen: CGSize
+    /// The square the engine renders, in points. The view is this square — or,
+    /// for a preset that leaves a trail, the whole screen it is stamped into.
+    private let side: CGFloat
+    private var trail: Bool { preset.trail > 0 }
     private var renderer: OpaquePointer?
     private let picture = CALayer()
     /// **The engine renders off the main thread** — its own serial queue, where
@@ -205,13 +209,15 @@ final class ProjectMHalo: NSView, HaloWebHost {
         guard Self.milkFile(for: preset) != nil else { return nil }
         self.preset = preset
         self.screen = screen
-        super.init(frame: NSRect(x: 0, y: 0, width: side, height: side))
+        self.side = side
+        let size = preset.trail > 0 ? screen : CGSize(width: side, height: side)
+        super.init(frame: NSRect(origin: .zero, size: size))
         // **Layer-hosting, not layer-backed**: `layer` set before `wantsLayer`,
         // so the tree is ours from this line — `wantsLayer` alone leaves `layer`
         // nil until AppKit's next display pass, and a sublayer added to nil is
         // a halo that never shows (measured: an empty capture, a rendered surface).
         let root = CALayer()
-        root.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        root.frame = CGRect(origin: .zero, size: size)
         root.isOpaque = false
         layer = root
         wantsLayer = true
@@ -258,7 +264,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
     /// Per-run options, as `MilkDropHalo.optionsOverride` / `WT_HALO_PRESET_OPTS` carry them
     /// (`{"gain": 4, "rot": 2, "fadeFloor": 0, "fadeStart": 0.5, "pinCenter": true}`).
-    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?) {
+    private func options() -> (gain: CGFloat, rot: CGFloat, floor: CGFloat, start: CGFloat, pin: Bool, fadeAtEdge: Bool, fadeRadius: CGFloat?, trail: CGFloat, lag: CGFloat) {
+        var trail = preset.trail, lag = preset.lag
         var gain = preset.gain, rot = preset.rot, floor = preset.fadeFloor, start = preset.fadeStart
         var pin = preset.pinCenter, atEdge = preset.fadeAtEdge, radius = preset.fadeRadius
         let raw = MilkDropHalo.optionsOverride ?? ProcessInfo.processInfo.environment["WT_HALO_PRESET_OPTS"] ?? "{}"
@@ -270,8 +277,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
             if let v = o["pinCenter"] as? Bool { pin = v }
             if let v = o["fadeAtEdge"] as? Bool { atEdge = v }
             if let v = o["fadeRadius"] as? Double { radius = CGFloat(v) }
+            if let v = o["trail"] as? Double, preset.trail > 0 { trail = CGFloat(max(0.05, v)) }
+            if let v = o["lag"] as? Double { lag = CGFloat(max(0, v)) }
         }
-        return (gain, rot, floor, start, pin, atEdge, radius)
+        return (gain, rot, floor, start, pin, atEdge, radius, trail, lag)
     }
 
     private func configure() -> Bool {
@@ -279,7 +288,6 @@ final class ProjectMHalo: NSView, HaloWebHost {
               let milk = try? String(contentsOf: file, encoding: .isoLatin1) else {
             fail("the preset file for \(preset.number) could not be read"); return false
         }
-        let side = bounds.width
         let px = max(64, Int((side * Self.renderScale).rounded()))
         var err = [CChar](repeating: 0, count: 512)
         // `Preset.speed`, honoured the way the web route honours it: the engine's
@@ -312,6 +320,15 @@ final class ProjectMHalo: NSView, HaloWebHost {
         guard let renderer = r else { fail("projectM could not start: \(String(cString: err))"); return false }
         self.renderer = renderer
         let o = options()
+        if trail {
+            // The surface becomes the screen, in pixels; the square is stamped
+            // into it at the pointer (`center`).
+            let w = Int32((screen.width * Self.renderScale).rounded()), h = Int32((screen.height * Self.renderScale).rounded())
+            if pmh_set_canvas(renderer, w, h, preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
+                fail("the trail could not be set up: \(String(cString: err))"); return false
+            }
+            Log.info("◯ projectM \(preset.number): \(preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
+        }
         let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin)
         if pmh_load_preset(renderer, text, &err, 512) != 0 {
             fail("projectM refused preset \(preset.number) (\(file.lastPathComponent)): \(String(cString: err))"); return false
@@ -353,6 +370,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
             configured = true
             guard configure() else { return }
         }
+        // A ring raised again starts its trail clean, at the pointer — not with
+        // the smear of the last sentence, nor gliding in from where it ended.
+        if !fresh, trail, let r = renderer { renderQueue.async { pmh_reset_trail(r) } }
         startTimer()
         if !fresh { onVisible?(); return }
         picture.opacity = 0
@@ -372,8 +392,14 @@ final class ProjectMHalo: NSView, HaloWebHost {
         if let a = activity { ProcessInfo.processInfo.endActivity(a); activity = nil }
     }
 
-    /// The square follows the pointer as a window; nothing to tell the engine.
-    func center(_ p: CGPoint) {}
+    /// The square follows the pointer as a window; nothing to tell the engine —
+    /// unless it leaves a trail, in which case the panel is the screen and the
+    /// pointer (points, y down from its top) is where the next stamp goes.
+    func center(_ p: CGPoint) {
+        guard trail, let r = renderer else { return }
+        let s = Self.renderScale, x = Float(p.x * s), y = Float(p.y * s)
+        renderQueue.async { pmh_set_pointer(r, x, y) }
+    }
 
     /// The microphone's last 2048 samples at 16 kHz, thirty times a second: the
     /// newest 1/30 s of them go to the engine (resampled to 44.1 kHz in the glue).
@@ -450,6 +476,14 @@ final class ProjectMHalo: NSView, HaloWebHost {
         lastFrameAt = entered
         defer { insideMs += (CFAbsoluteTimeGetCurrent() - entered) * 1000 }
         guard let r = renderer, !failed else { return }
+        // `WT_PM_ORBIT=1`: a trail's stamp driven along a figure-eight across
+        // the screen instead of by the pointer — the only way to capture a trail
+        // (`WT_PM_SHOOT`) without taking the mouse.
+        if trail, Self.orbit {
+            let t = Double(totalFrames) / Double(haloFrameCap > 0 ? haloFrameCap : 60)
+            let w = Double(screen.width * Self.renderScale), h = Double(screen.height * Self.renderScale)
+            pmh_set_pointer(r, Float(w / 2 + w * 0.32 * sin(t * 1.3)), Float(h / 2 + h * 0.3 * sin(t * 2.6)))
+        }
         // A CF object out of a C function comes back `Unmanaged`; handed to
         // `contents` as it is, the layer shows nothing and says nothing.
         guard let surface = pmh_render(r)?.takeUnretainedValue() else {
@@ -495,6 +529,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         }
     }
     static let stats = ProcessInfo.processInfo.environment["WT_PM_STATS"] != nil
+    static let orbit = ProcessInfo.processInfo.environment["WT_PM_ORBIT"] != nil
     static let syncMode = ProcessInfo.processInfo.environment["WT_PM_SYNC"] ?? "seed"
 
     /// **The last frame as an image**, read back from the surface — for the
@@ -502,12 +537,14 @@ final class ProjectMHalo: NSView, HaloWebHost {
     func snapshot() -> CGImage? {
         guard let r = renderer else { return nil }
         // From the render queue (the shoot) or from main with the queue drained.
-        let px = Int((bounds.width * Self.renderScale).rounded())
-        var buf = [UInt8](repeating: 0, count: px * px * 4)
+        var w32: Int32 = 0, h32: Int32 = 0
+        pmh_output_size(r, &w32, &h32)
+        let w = Int(w32), h = Int(h32)
+        var buf = [UInt8](repeating: 0, count: w * h * 4)
         guard pmh_read_pixels(r, &buf) == 0 else { return nil }
         let data = Data(buf)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
-        return CGImage(width: px, height: px, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: px * 4,
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
                        space: CGColorSpaceCreateDeviceRGB(),
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)

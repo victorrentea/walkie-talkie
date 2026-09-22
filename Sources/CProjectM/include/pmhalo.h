@@ -32,6 +32,20 @@ void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate);
 /// radii, `floor_a` what remains past them, `gain` a multiplier before keying.
 void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float gain, float fade_start, float hole, float peak, float core, float tail_top);
 
+/// **The trail** (2026-09-23): the output surface becomes `w` × `h` — the screen,
+/// in pixels — and each frame carries the last one over, dimmed with a time
+/// constant of `seconds`, before the keyed square is stamped at the pointer. The
+/// square chases the pointer with a lag of `lag` seconds. `mode` 1 = the plain
+/// trail, 2 = the same trail advected by a fluid the pointer stirs; 0 = the
+/// square as before (the surface is the square). Returns 0 on success.
+int pmh_set_canvas(pmh* h, int w, int h_, int mode, float seconds, float lag, char* err, int err_len);
+/// The pointer, in output pixels, y down from the top. Trail modes only.
+void pmh_set_pointer(pmh* h, float x, float y);
+/// Forget the trail: the next frame starts on a clear surface at the pointer.
+void pmh_reset_trail(pmh* h);
+/// The surface's size in pixels — `px` × `px` unless a trail made it the screen.
+void pmh_output_size(pmh* h, int* w, int* h_);
+
 /// Render one frame and key it. Returns the IOSurface carrying it (owned by the
 /// renderer, valid until the frame after next), or NULL on a GL failure.
 IOSurfaceRef pmh_render(pmh* h);
@@ -52,7 +66,7 @@ unsigned pmh_engine_gl_errors(pmh* h);
 void pmh_debug_alpha(pmh* h);
 
 /// Read the last rendered surface back as RGBA (top row first), for tests.
-/// `out` must hold px*px*4 bytes. Returns 0 on success.
+/// `out` must hold w*h*4 bytes of `pmh_output_size`. Returns 0 on success.
 int pmh_read_pixels(pmh* h, unsigned char* out);
 
 #ifdef __cplusplus

@@ -71,6 +71,20 @@ enum HaloStyle: String, CaseIterable {
     /// Numerele sunt pozițiile lor din răsfoire, singurele nume pe care le are el
     /// pentru ele.
     case milkdrop213, milkdrop179
+    /// **Tendrils care lasa urme** (Victor, 2026-09-23: *"un «tendrils2» care sa
+    /// nu se translateze pe ecran imediat dupa mouse ci sa lase la mutarea
+    /// mouseului urme in spate unde a fost … mutarea instant cu mouseul e un pic
+    /// brutala uneori"*). Acelasi preset si aceeasi marime ca Tendrils; ce difera
+    /// e ca patratul nu mai e o fereastra care sare dupa cursor, ci o stampila pe
+    /// o panza cat ecranul, care il urmareste cu o mica intarziere si lasa in
+    /// urma ce a desenat, stingandu-se — `Preset.trail`.
+    case milkdrop20Trail
+    /// **Fluidul** — top 1 din cautarea aceleiasi zile (10 liste de cate 10
+    /// site-uri cu efecte de mouse): WebGL Fluid Simulation a lui Pavel
+    /// Dobryakov a iesit in patru din ele. Aceeasi urma ca Tendrils 2, dar urma e
+    /// purtata de un fluid pe care cursorul il amesteca (`Preset.fluid`), deci
+    /// ramane in urma ca fum, nu ca o dara dreapta.
+    case milkdrop20Fluid
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -90,6 +104,8 @@ enum HaloStyle: String, CaseIterable {
         case .milkdrop7Faded: return "Tunnel faded"
         case .milkdrop8:      return "Cauldron"
         case .milkdrop20:     return "Tendrils"
+        case .milkdrop20Trail: return "Tendrils 2"
+        case .milkdrop20Fluid: return "Fluid"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
         case .milkdrop99:     return "Mosaic"
@@ -247,6 +263,19 @@ enum HaloStyle: String, CaseIterable {
         /// aceleasi esantioane si nu il vede, deci un preset care il foloseste
         /// arata diferit in cele doua motoare.
         var audioGain: CGFloat = 1
+        /// **Urma** (2026-09-23), in secunde: constanta de timp in care ce a
+        /// ramas in urma cursorului scade la 37 %. 0 = fara urma, patratul e o
+        /// fereastra care urmareste cursorul, ca pana acum. Peste 0, panza e cat
+        /// ecranul si stampila vine la cursor (`pmh_set_canvas`). Doar motorul
+        /// nativ o stie — `isAvailable` il cere.
+        var trail: CGFloat = 0
+        /// Cat intarzie stampila fata de cursor, in secunde (constanta de timp a
+        /// urmaririi). Asta e partea care scoate saritura: un gest brusc devine o
+        /// alunecare de ~3× atat.
+        var lag: CGFloat = 0.06
+        /// Urma purtata de un fluid (stable fluids, pe GPU) pe care il amesteca
+        /// cursorul. Cere `trail` > 0.
+        var fluid = false
     }
     var preset: Preset? {
         switch self {
@@ -334,6 +363,13 @@ enum HaloStyle: String, CaseIterable {
         // 0.728; the number the app draws at is this one.
         case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
+        // Tendrils 2 si Fluid: exact presetul si marimea lui Tendrils, plus urma.
+        // Numerele sunt de pornire, de reglat pe ochi — `WT_HALO_PRESET_OPTS`
+        // accepta `trail`, `lag` (vezi `ProjectMHalo.options`).
+        case .milkdrop20Trail: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                             fade: true, fadeAtEdge: true, fadeFloor: 0, trail: 0.45, lag: 0.07)
+        case .milkdrop20Fluid: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                             fade: true, fadeAtEdge: true, fadeFloor: 0, trail: 0.8, lag: 0.05, fluid: true)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Sparks' size is a chain of factors, each one applied to what was
@@ -482,7 +518,11 @@ enum HaloStyle: String, CaseIterable {
     /// effect. The page lays out from the viewport, several effects run to
     /// its edge by design, and the pointer is handed in as the origin rather
     /// than the window moved (Victor: *nothing may clip; no artificial scaling*).
-    var coversScreen: Bool { pageIndex != nil }
+    var coversScreen: Bool { pageIndex != nil || hasTrail }
+
+    /// A preset that leaves a trail: its panel is the screen, the pointer is
+    /// handed in, and only the native engine can draw it.
+    var hasTrail: Bool { (preset?.trail ?? 0) > 0 }
 
     /// Both web views at once: the pinned preset underneath, the page on top.
     var isHybrid: Bool { pageIndex != nil && preset != nil }
@@ -492,6 +532,7 @@ enum HaloStyle: String, CaseIterable {
     var isAvailable: Bool {
         if pageIndex != nil { return HaloPage.available }
         if let preset = preset {
+            if hasTrail { return HaloEngine.current == .native && ProjectMHalo.available(for: preset) }
             // A `webOnly` preset needs the web engine to exist, whichever engine
             // is picked — see `Preset.webOnly` and `CaretHalo.engineHost`.
             return HaloEngine.current == .native && !preset.webOnly ? ProjectMHalo.available(for: preset) : MilkDropHalo.engineAvailable
@@ -502,6 +543,7 @@ enum HaloStyle: String, CaseIterable {
     /// Why a row is greyed, for the menu.
     var unavailableReason: String? {
         guard !isAvailable else { return nil }
+        if hasTrail && HaloEngine.current != .native { return "native engine only" }
         return isPreset ? "engine not bundled" : "page not bundled"
     }
 

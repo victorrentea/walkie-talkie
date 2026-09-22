@@ -699,6 +699,8 @@ final class CaretHalo {
     /// (`MilkDropHalo`) or projectM natively (`ProjectMHalo`, the `projectm`
     /// branch). Nil when the chosen engine cannot draw this preset.
     static func engineHost(preset: HaloStyle.Preset, side: CGFloat, screen: CGSize) -> HaloWebHost? {
+        // A trail is drawn only by the native glue (`pmh_set_canvas`).
+        if preset.trail > 0 { return ProjectMHalo(preset: preset, side: side, screen: screen) }
         switch HaloEngine.current {
         // **A `webOnly` preset is butterchurn's whichever engine is picked** —
         // the reason lives with the preset (`HaloStyle.Preset.webOnly`), because
@@ -2398,7 +2400,9 @@ final class CaretHalo {
             view.addSubview(page)
             web = page
             Log.info("◯ caret halo: \(drawn.rawValue) — \(drawn.title), the preset pinned in a \(Int(side))pt square under the page's comets")
-        } else if let preset = drawn.preset, let host = Self.engineHost(preset: preset, side: frame.width,
+        } else if let preset = drawn.preset, let host = Self.engineHost(preset: preset,
+                                                              // a trail's panel is the screen; its square is the preset's
+                                                              side: drawn.hasTrail ? (max(frame.width, frame.height) * preset.scale).rounded() : frame.width,
                                                               screen: (NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main)?.frame.size ?? frame.size) {
             // **The engine, in its own page** (`MilkDropHalo`) or natively
             // (`ProjectMHalo`, `HaloEngine.current`). The square follows the
