@@ -244,7 +244,7 @@ final class WisprFlowSource: DictationSource {
     /// presses for something else in the middle of a hands-free sentence, or of
     /// one the relay opened, must not end it. Only a sentence this pair started
     /// is a sentence this pair can finish.
-    private var startedByHeldPair = false
+    private(set) var startedByHeldPair = false
 
     // MARK: - Events
 

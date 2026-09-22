@@ -2457,6 +2457,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wisprSource.didMaybeBegin = { [weak self] why in
             guard let self else { return }
             self.wisprMicSentence = !self.wisprSource.relayStarted
+            // **Held right ⌘⌥ is always the caret** (2026-09-22). Victor: *"daca
+            // apas si tin apasat cmd-opt drept tre sa faca insert at caret fara
+            // alte poze/procesari"* — bound or not, Wispr's clean transcript at
+            // the cursor, no context shot, no ⌘C probe. Raised here and not in
+            // `dictationBegan` because this gesture is unconfident: Wispr's row
+            // confirms it inside the source and `didBegin` never fires, so the
+            // latch in `dictationStoppedListening` never runs either — `deliver`
+            // reads `pasteMode` itself for that reason.
+            if self.wisprSource.startedByHeldPair {
+                self.pasteMode = true
+                Log.info("📍 right ⌘⌥ held — these words go to the caret")
+            }
             self.dictationMaybeBeginning(why)
         }
         wisprSource.didBegin = { [weak self] in
@@ -2867,6 +2879,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastDictation = result.text
         pendingPromptWarning = result.warning
+        // A caret sentence whose microphone close this side never saw — the
+        // held right ⌘⌥, confirmed by Wispr's row — reaches here with the latch
+        // still holding the previous sentence's answer.
+        if pasteMode { latchedAtCaret = true }
 
         // Somebody else already put the words on screen — Wispr Flow with the
         // wrap off, and nothing else today. Filed above, delivered by nobody.
@@ -2952,6 +2968,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case .silent(let why):
             endSettling(reason: why.isEmpty ? "nothing was recorded" : why)
+            // No words, so no `deliver` to consume a caret sentence's flag.
+            pasteMode = false
             if !why.isEmpty { overlay.flash(why, duration: 8) }
             overlay.setTranscribing(false)
             clearSpawn()
