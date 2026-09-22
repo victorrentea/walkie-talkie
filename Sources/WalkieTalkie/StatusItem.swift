@@ -680,7 +680,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     private func applyHaloEngineRow() {
         let current = HaloEngine.current
-        haloEngineItem.title = "Engine: \(Self.haloEngineShortTitle(current))"
+        // **`Engine ⚡: projectM`** (2026-09-22) — the bolt the presets wear,
+        // saying *this is about them* where a disabled `For the MilkDrop presets
+        // only` row under the list used to (*"scoate din submeniu «for the …»"*).
+        let engineTitle = NSMutableAttributedString(attributedString: Self.boltedTitle("Engine"))
+        engineTitle.append(NSAttributedString(string: ": \(Self.haloEngineShortTitle(current))",
+                                              attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+        haloEngineItem.attributedTitle = engineTitle
         haloEngineSubmenu.removeAllItems()
         haloEngineSubmenu.autoenablesItems = false
         for engine in [HaloEngine.web, .native] {
@@ -690,10 +696,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.image = engine == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloEngineSubmenu.addItem(row)
         }
-        haloEngineSubmenu.addItem(.separator())
-        let note = NSMenuItem(title: "For the MilkDrop presets only", action: nil, keyEquivalent: "")
-        note.isEnabled = false
-        haloEngineSubmenu.addItem(note)
     }
 
     /// The readout's word for the same engine — the detail in the parentheses
@@ -735,10 +737,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.image = voice == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloVoiceSubmenu.addItem(row)
         }
-        haloVoiceSubmenu.addItem(.separator())
-        let note = NSMenuItem(title: "For the native engine only", action: nil, keyEquivalent: "")
-        note.isEnabled = false
-        haloVoiceSubmenu.addItem(note)
     }
 
     @objc private func haloVoicePicked(_ sender: NSMenuItem) {
