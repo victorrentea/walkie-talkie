@@ -545,7 +545,12 @@ enum HaloStyle: String, CaseIterable {
     /// The menu, the dial, F7/F9 and `/test/halo` read this list; a saved
     /// preference off it reads as the film.
     /// Gemini too (2026-09-21, *"scoate gemini din opțiuni"*).
-    var isOffered: Bool { self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
+    /// Fairy dust, Fluid cursor and Tendrils 2 went the evening they came
+    /// (Victor, 2026-09-23: *"fairy dust: remove"*, *"remove fluid cursor"*,
+    /// *"remove tendrils2"*), and Magma and Sigil with them (*"remove magma &
+    /// sigil"*). Built and drawable, just not offered — the same standing as
+    /// Snowflake.
+    var isOffered: Bool { self != .milkdrop179 && self != .milkdrop213 && self != .fairyDust && self != .fluidCursor && self != .milkdrop20Trail && self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.

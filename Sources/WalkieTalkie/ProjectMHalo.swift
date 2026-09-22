@@ -232,6 +232,10 @@ final class ProjectMHalo: NSView, HaloWebHost {
     required init?(coder: NSCoder) { fatalError() }
     deinit {
         stopTimer()
+        if preset.pureFluid {
+            let me = ObjectIdentifier(self)
+            DispatchQueue.main.async { FluidTuner.shared.detach(id: me) }
+        }
         if let r = renderer { renderQueue.sync { pmh_destroy(r) } }
     }
 
@@ -327,6 +331,17 @@ final class ProjectMHalo: NSView, HaloWebHost {
             if pmh_set_canvas(renderer, w, h, preset.pureFluid ? (preset.ink ? 5 : preset.liquid ? 4 : 3) : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
                 fail("the trail could not be set up: \(String(cString: err))"); return false
             }
+            if preset.pureFluid {
+                // The sliders' saved values over the mode's constants, then the panel.
+                let mode = preset.ink ? 5 : preset.liquid ? 4 : 3
+                let defaults = FluidTuner.knobs.map { pmh_fluid_param(renderer, $0.id) }
+                for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
+                let title = mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults)
+                }
+            }
             Log.info("◯ projectM \(preset.number): \(preset.pureFluid ? "pure fluid" : preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
         }
         let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin)
@@ -390,6 +405,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
     func stop() {
         stopTimer()
         if let a = activity { ProcessInfo.processInfo.endActivity(a); activity = nil }
+    }
+
+    /// A slider moved (`FluidTuner`): into the engine before its next frame.
+    func setFluid(_ which: Int32, _ value: Float) {
+        guard let r = renderer else { return }
+        renderQueue.async { pmh_set_fluid_param(r, which, value) }
     }
 
     /// The square follows the pointer as a window; nothing to tell the engine —

@@ -46,6 +46,15 @@ void pmh_reset_trail(pmh* h);
 /// The surface's size in pixels — `px` × `px` unless a trail made it the screen.
 void pmh_output_size(pmh* h, int* w, int* h_);
 
+/// **The pure fluid's knobs** (modes 3–5), for the on-screen sliders: read the
+/// mode's value, or set it live — the next frame uses it. Radius is in Pavel's
+/// units (SPLAT_RADIUS / 100), gain the dye's colour multiplier, fade the dye's
+/// dissipation per second, curl the vorticity, force the splat force, opacity the
+/// whole layer's.
+enum { PMH_FLUID_RADIUS = 0, PMH_FLUID_GAIN, PMH_FLUID_FADE, PMH_FLUID_CURL, PMH_FLUID_FORCE, PMH_FLUID_OPACITY };
+void pmh_set_fluid_param(pmh* h, int which, float value);
+float pmh_fluid_param(pmh* h, int which);
+
 /// Render one frame and key it. Returns the IOSurface carrying it (owned by the
 /// renderer, valid until the frame after next), or NULL on a GL failure.
 IOSurfaceRef pmh_render(pmh* h);

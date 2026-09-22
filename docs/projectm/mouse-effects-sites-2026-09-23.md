@@ -106,3 +106,27 @@ fumul de pe CodePen). E implementată nativ în `pmhalo.cpp` ca stilul **Fluid**
 - https://www.christmas.express/en/ · https://ohzi.io/ · https://sabato.studio/
 - https://julieguzal.fr/ · https://rauno.me
 - https://codefronts.com/snippets/css-image-gallery/css-interactive-pointer-trail-gallery/
+
+## Fum — a doua căutare (20, aceeași seară)
+
+Fără cele de mai sus. Nici acestea n-au fost deschise unul câte unul.
+
+- https://faraasat.github.io/react-smokey-fluid-cursor/ — fluid WebGL, sursă: github.com/faraasat/react-smokey-fluid-cursor
+- https://github.com/faraasat/smokey-fluid-cursor — același, fără React
+- https://lightswind.com/components/smokey-cursor — componentă React, fluid WebGL
+- https://www.cssscript.com/smoke-fluid-motion/ — Navier-Stokes cu vorticity confinement
+- https://github.com/Kavithma-Thushal/Smokey-Effect-Cursor — canvas, particule
+- https://github.com/ZeroCipherX/canvas-smoke-mouse-trail — canvas, particule
+- https://codepen.io/jsabutis/pen/MYwXbYy — fum alb pe negru
+- https://codepen.io/ShadiSbaih/pen/LEPBaYd — gradienți radiali care urcă
+- https://codepen.io/Divyang-Pipaliya-the-bashful/pen/LYKwLzK
+- https://codepen.io/ilyanice/pen/MvmJJj
+- https://codepen.io/rachsmith/pen/XKyvWV — câmp de curgere Perlin
+- https://codepen.io/Discordanian/pen/MooYRJ — fum pe zgomot Perlin
+- https://codepen.io/Sphinxxxx/pen/YWJpwx — generator de particule de fum
+- https://codepen.io/SEOmeester/full/rNqYdJb — hartă de căldură „fumurie"
+- https://www.shadertoy.com/view/mtSGDy — dâre care se sting (GLSL)
+- https://code.tutsplus.com/how-to-write-a-smoke-shader--cms-25587t — shader de fum, tutorial
+- https://threejs-journey.com/lessons/particles-cursor-animation-shader — lecție plătită
+- https://tympanus.net/codrops/2019/01/17/interactive-particles-with-three-js/
+- https://tympanus.net/codrops/2019/09/24/crafting-stylised-mouse-trails-with-ogl/

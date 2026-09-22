@@ -1744,8 +1744,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MilkDropHalo.optionsOverride = nil
             let landed = self.caretHalo.cycleStyle(by: step)
             self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
-            self.caretHalo.preview(seconds: 6)
+            // 12 s, not 6 (Victor, 2026-09-23: *"at f7/9 leave the animation 2x longer"*)
+            self.caretHalo.preview(seconds: 12)
         }
+        // The fluid sliders' Preview button: the same look as F7/F9, without stepping.
+        FluidTuner.onPreview = { [weak self] in self?.caretHalo.preview(seconds: 12) }
         // **`POST /test/halo`** — the same two moves from a desk, for him and
         // for an agent alike: `{"style": "milkdrop87"}` or `{"step": 1}`,
         // `"demo": 6` for the preview, `"opts": {"gain": 0.4}` merged over a

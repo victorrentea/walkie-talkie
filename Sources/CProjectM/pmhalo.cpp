@@ -213,6 +213,48 @@ struct Surface {
 };
 }
 
+namespace {
+struct Look {
+    float curl, pressureKeep, velFade, dyeFade, force, radius; bool radiusByAspect;
+    bool shading; float ceiling; float dtScale;   // solver dt = dtScale × frame time
+    int palette;                                   // 0: a random hue 10×/s at `gain`; 1: violets per splat
+    float gain;
+    int iterations = 20;
+    bool deltaByAspect = false;                    // Pavel's correctDeltaY: dy / aspect on a wide screen
+    bool bloom = false, sunrays = false;
+    float bloomIntensity = 0.3f, bloomThreshold = 0.6f, bloomKnee = 0.7f;
+    float opacity = 1.f;                           // the whole layer, colour and alpha alike
+};
+// Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
+const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
+// **Mode 4: liquid-cursor** (cravinadventure.github.io/liquid-cursor, Victor
+// 2026-09-23: *"impl …"*), the same solver with its own tuning, from
+// liquid-cursor.js v1.0.0 and the demo page's tag (`data-gain="0.15"`): curl 20,
+// pressure kept at 0.8, motionFade 0.55, dyeFade 0.72 — the colour hangs in the
+// air — force 2200, radius 0.24/100 with no aspect correction, five violets
+// picked per splat, the dye ceilinged at 0.72, no shading. It steps a fixed
+// 0.010 s per 60 Hz frame, i.e. 0.6 of real time: at 30 fps, 0.02.
+// Their `drift` (ambient splats at random places) and the 16 opening splats are
+// left out: on a desktop overlay they would be paint appearing away from the pointer.
+const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f };
+// **Mode 5: ink** (mkmlman.github.io/ink, Victor 2026-09-23: *"poti si asta?"*) —
+// Pavel's simulation whole, bloom and sunrays included, at the values its dial
+// panel writes over `config` on load (dials.js `def`): radius 0.40, force 12000,
+// brightness 3 (colour ×0.45), curl 4, velocity loss 0, ink persistence 4
+// (DENSITY_DISSIPATION = 1 − 4·0.02 = 0.92), pressure loss 0.08 (PRESSURE =
+// 1 − 2·0.08 = 0.84), 16 pressure steps, glow 0.30; sim 256, dye 1024, bloom
+// 256 × 8 levels (threshold 0.6, knee 0.7), sunrays 196 weight 1. Their paper
+// is opaque #0a0a0a; here it is the desktop, keyed to alpha.
+// Then Victor, the same evening, on sight: *"mai mica dimens si luminozitate. si
+// incearca sa o faci mai transparenta pe ink"* — the splat's radius halved (0.40 →
+// 0.20), the colour 0.45 → 0.22 and the glow 0.30 → 0.15, the ink dying faster
+// (0.92 → 2.0: at theirs, a pointer that keeps moving paints the whole screen
+// within seconds, which on a paper is the point and on a desktop is a curtain),
+// and the layer at 0.55 opacity.
+const Look kInk = { 4.f, 0.84f, 0.f, 2.0f, 12000.f, 0.20f / 100.f, true, true, 10.f, 1.f, 0, 0.22f,
+                    16, true, true, true, 0.15f, 0.6f, 0.7f, 0.55f };
+}
+
 struct pmh {
     int px = 0;
     CGLPixelFormatObj pix = nullptr;
@@ -245,6 +287,9 @@ struct pmh {
     Field bloom; std::vector<Field> bloomLevels; Field sun, sunTemp;
     GLuint prefilterProg = 0, bloomBlurProg = 0, sunMaskProg = 0, sunraysProg = 0, gaussProg = 0;
     float colorTimer = 1.f, cr = 0, cg = 0, cb = 0;
+    // the pure fluid's knobs, live — seeded from the mode's constants, moved by
+    // the on-screen sliders (`pmh_set_fluid_param`)
+    Look look = kCursify;
     GLuint splatProg = 0, advectProg = 0, curlProg = 0, vortProg = 0, divProg = 0, scaleProg = 0, jacobiProg = 0, gradProg = 0;
 };
 
@@ -483,6 +528,7 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
         h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
     }
     if (mode >= 3) {
+        h->look = mode == 5 ? kInk : mode == 4 ? kLiquid : kCursify;
         if (mode == 4 || mode == 5) { int d = mode == 4 ? 512 : 1024; h->dw = w >= hgt ? (int)std::lround(d * (double)w / hgt) : d; h->dh = w >= hgt ? d : (int)std::lround(d * (double)hgt / w); }
         else { h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2); }
         for (Field* f : { &h->dye[0], &h->dye[1] }) if (!make_field(*f, h->dw, h->dh, GL_RGBA16F, GL_RGBA)) return bail("dye field could not be made");
@@ -518,6 +564,20 @@ void pmh_set_pointer(pmh* h, float x, float y) {
 void pmh_reset_trail(pmh* h) { h->fresh = true; h->havePointer = false; }
 
 void pmh_output_size(pmh* h, int* w, int* hgt) { *w = h->ow; *hgt = h->oh; }
+
+static float* fluid_param(pmh* h, int which) {
+    switch (which) {
+    case PMH_FLUID_RADIUS:  return &h->look.radius;
+    case PMH_FLUID_GAIN:    return &h->look.gain;
+    case PMH_FLUID_FADE:    return &h->look.dyeFade;
+    case PMH_FLUID_CURL:    return &h->look.curl;
+    case PMH_FLUID_FORCE:   return &h->look.force;
+    case PMH_FLUID_OPACITY: return &h->look.opacity;
+    default: return nullptr;
+    }
+}
+void pmh_set_fluid_param(pmh* h, int which, float value) { if (float* f = fluid_param(h, which)) *f = value; }
+float pmh_fluid_param(pmh* h, int which) { float* f = fluid_param(h, which); return f ? *f : 0.f; }
 
 namespace {
 // One pass of the fluid: `prog` over the whole grid into `dst`.
@@ -599,45 +659,6 @@ float hue_channel(float hh, float off) { float k = std::fmod(off + hh * 6.f, 6.f
 // 128, DENSITY_DISSIPATION 3.5, VELOCITY_DISSIPATION 2, PRESSURE 0.1, 20
 // iterations, CURL 3, SPLAT_RADIUS 0.2 (/100, ×aspect), SPLAT_FORCE 6000,
 // COLOR_UPDATE_SPEED 10, SHADING on, TRANSPARENT.
-struct Look {
-    float curl, pressureKeep, velFade, dyeFade, force, radius; bool radiusByAspect;
-    bool shading; float ceiling; float dtScale;   // solver dt = dtScale × frame time
-    int palette;                                   // 0: a random hue 10×/s at `gain`; 1: violets per splat
-    float gain;
-    int iterations = 20;
-    bool deltaByAspect = false;                    // Pavel's correctDeltaY: dy / aspect on a wide screen
-    bool bloom = false, sunrays = false;
-    float bloomIntensity = 0.3f, bloomThreshold = 0.6f, bloomKnee = 0.7f;
-    float opacity = 1.f;                           // the whole layer, colour and alpha alike
-};
-// Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
-const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
-// **Mode 4: liquid-cursor** (cravinadventure.github.io/liquid-cursor, Victor
-// 2026-09-23: *"impl …"*), the same solver with its own tuning, from
-// liquid-cursor.js v1.0.0 and the demo page's tag (`data-gain="0.15"`): curl 20,
-// pressure kept at 0.8, motionFade 0.55, dyeFade 0.72 — the colour hangs in the
-// air — force 2200, radius 0.24/100 with no aspect correction, five violets
-// picked per splat, the dye ceilinged at 0.72, no shading. It steps a fixed
-// 0.010 s per 60 Hz frame, i.e. 0.6 of real time: at 30 fps, 0.02.
-// Their `drift` (ambient splats at random places) and the 16 opening splats are
-// left out: on a desktop overlay they would be paint appearing away from the pointer.
-const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f };
-// **Mode 5: ink** (mkmlman.github.io/ink, Victor 2026-09-23: *"poti si asta?"*) —
-// Pavel's simulation whole, bloom and sunrays included, at the values its dial
-// panel writes over `config` on load (dials.js `def`): radius 0.40, force 12000,
-// brightness 3 (colour ×0.45), curl 4, velocity loss 0, ink persistence 4
-// (DENSITY_DISSIPATION = 1 − 4·0.02 = 0.92), pressure loss 0.08 (PRESSURE =
-// 1 − 2·0.08 = 0.84), 16 pressure steps, glow 0.30; sim 256, dye 1024, bloom
-// 256 × 8 levels (threshold 0.6, knee 0.7), sunrays 196 weight 1. Their paper
-// is opaque #0a0a0a; here it is the desktop, keyed to alpha.
-// Then Victor, the same evening, on sight: *"mai mica dimens si luminozitate. si
-// incearca sa o faci mai transparenta pe ink"* — the splat's radius halved (0.40 →
-// 0.20), the colour 0.45 → 0.22 and the glow 0.30 → 0.15, the ink dying faster
-// (0.92 → 2.0: at theirs, a pointer that keeps moving paints the whole screen
-// within seconds, which on a paper is the point and on a desktop is a curtain),
-// and the layer at 0.55 opacity.
-const Look kInk = { 4.f, 0.84f, 0.f, 2.0f, 12000.f, 0.20f / 100.f, true, true, 10.f, 1.f, 0, 0.22f,
-                    16, true, true, true, 0.15f, 0.6f, 0.7f, 0.55f };
 const float kViolets[5][3] = { { 0.55f, 0.29f, 0.97f }, { 0.84f, 0.36f, 0.96f }, { 0.31f, 0.39f, 0.94f },
                                { 0.72f, 0.22f, 0.92f }, { 0.42f, 0.32f, 1.00f } };
 
@@ -775,7 +796,7 @@ IOSurfaceRef pmh_render(pmh* h) {
     CGLSetCurrentContext(h->ctx);
     double t0 = now_ms();
     if (h->mode >= 3) {
-        IOSurfaceRef out = render_pure_fluid(h, h->mode == 5 ? kInk : h->mode == 4 ? kLiquid : kCursify);
+        IOSurfaceRef out = render_pure_fluid(h, h->look);
         h->engineMs = 0; h->keyMs = now_ms() - t0;
         GLenum e = glGetError();
         CGLSetCurrentContext(prev);
