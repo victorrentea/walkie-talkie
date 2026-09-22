@@ -11,3 +11,7 @@ evals/pointing-proof/scene-*.html
 evals/pointing-proof/run.log
 evals/envelope-symbols/shots/
 evals/envelope-symbols/run.log
+# Screen recordings and MilkDrop sweeps from the halo work — scratch output, and
+# ~1.6 GB of it. A broad `git add` swept them in on 2026-09-22 and made master
+# unpushable: git keeps blobs forever, and this is the public repo.
+docs/projectm/captures/
