@@ -18,6 +18,20 @@
 #
 #   tools/halo-record.sh /tmp/sigil milkdrop213 web=web g1=native:1 g05=native:0.5
 #
+# **Vocea e mereu aceeași, și e a lui.** `assets/halo-ref-voice.wav` — 27,9 s,
+# 16 kHz mono Int16, din corpus (21 sep, 14:46). Victor, 2026-09-22: *"putem
+# folosi acel wav ca referință întotdeauna, în experimentele lor, decât să
+# genereze vreun sunet aiurea… mi-a plăcut cum arăta pe ambele efecte pe care le
+# migrez acum."*
+#
+# Alternativa pe care o înlocuiește era `WT_HALO_DEMO_AUDIO=1`, adică `DemoVoice`:
+# zgomot sintetizat din nou la fiecare rulare, deci **două rulări nu sunt
+# comparabile între ele** — exact ce nu vrei când măsori luminanța pe cadru.
+# Clipul e copiat în repo, nu citit din corpus: o măsurătoare trebuie să se poată
+# reface la un commit, iar corpusul e 3,2 GB de audio personal de lângă repo.
+# Transcrierea stă în `assets/halo-ref-voice.txt`, ca să știi ce se aude fără
+# să-l deschizi. Nu se aude nicăieri — intră doar în analizor și în motor.
+#
 # „Pe rând, evident" e lacătul: tot ce e aici trece prin `tools/halo-lock.sh`, deci
 # două campanii pot chema scriptul în același timp fără să-și strice filmele — a
 # doua așteaptă și spune pe cine așteaptă.
@@ -36,7 +50,7 @@ S=${1:?lipsește stilul (ex. milkdrop213)}; shift
 [ $# -gt 0 ] || { echo "nu ai cerut nicio rută (ex. web=web g1=native:1)"; exit 1; }
 
 SECS=${SECS:-11}
-WAV=${WAV:-$HOME/.walkie-talkie/voice-corpus/2026-09-21/14-46-41-11l108.wav}
+WAV=${WAV:-$(cd "$(dirname "$0")/.." && pwd)/assets/halo-ref-voice.wav}   # vezi assets/halo-ref-voice.txt
 NUM=${S#milkdrop}
 mkdir -p "$OUT"
 

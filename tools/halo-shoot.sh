@@ -7,10 +7,14 @@
 # Un singur rig de capturi pe mașină — vezi tools/halo-lock.sh.
 HALO_LOCK_WHO="halo-shoot $2" . "$(dirname "$0")/halo-lock.sh"
 
-OUT=$1; S=$2; M=${3:-direct}; WAV=$4
+OUT=$1; S=$2; M=${3:-direct}
+# **Vocea de referință e implicită, nu opțională** (2026-09-22). Al patrulea
+# argument rămâne, ca să se poată da alt clip; ce se schimbă e ce se întâmplă
+# când nu-l dai. Vezi `assets/halo-ref-voice.txt`.
+WAV=${4:-$(cd "$(dirname "$0")/.." && pwd)/assets/halo-ref-voice.wav}
 NAME=$(/usr/bin/grep -A2 "case .$S:" Sources/WalkieTalkie/HaloStyle.swift | /usr/bin/grep -o 'return "[^"]*"' | head -1 | cut -d'"' -f2)
 mkdir -p "$OUT"
-AUDIO=1; [ -n "$WAV" ] && AUDIO="clip:$WAV"
+AUDIO="clip:$WAV"; [ -f "$WAV" ] || { echo "lipsește clipul de referință: $WAV"; exit 1; }
 # Fără `exec`: el înlocuiește imaginea procesului și cu ea trap-ul care
 # eliberează lacătul (`tools/halo-lock.sh`). Shell-ul ăsta costă nimic și curăță.
 $HOME/bin/hands-off run "halo: $S — ${NAME:-?} · voce: $M" -- \

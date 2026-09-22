@@ -1,0 +1,1 @@
+Am o mătură, o nebunie în fața mea. Cineva mă atacă și în log-ul meu loghez această eroare din cauza lor în mod repetat. Cum pot să previn cu un filtru de logback, parcă era, chestia asta într-un mod minim invaziv? Să nu loghez aceeași eroare identică repetată mai mult de unul pe minut dacă văd că se repetă la foc continuu.
