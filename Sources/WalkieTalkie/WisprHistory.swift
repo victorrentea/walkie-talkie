@@ -79,6 +79,14 @@ enum WisprHistory {
         read("from History order by rowid desc limit 1")
     }
 
+    /// **The microphone Wispr last named** — the newest row that names one.
+    /// A row is created at the gesture with the column empty, so between the
+    /// chord and Wispr filling it in, this is the best guess there is: Wispr
+    /// switches devices far less often than he dictates.
+    static func lastNamedMic() -> String {
+        read("from History where coalesce(micDevice, '') != '' order by rowid desc limit 1")?.micDevice ?? ""
+    }
+
     /// **One row by its rowid**, which `newest()` stops being able to answer the
     /// moment a second dictation starts (2026-09-14).
     ///

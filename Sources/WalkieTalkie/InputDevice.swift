@@ -201,6 +201,32 @@ enum InputDevice {
     /// Loopback or a headset nobody has named yet.
     static func currentGlyph() -> String { resolve().known?.glyph ?? "" }
 
+    /// **Wispr Flow's name for its microphone, read onto this roster**
+    /// (2026-09-22) — Wispr's own `History.micDevice`, so a Wispr sentence says
+    /// what *Wispr* heard it through rather than what the relay's meter is on.
+    /// Victor: *"ar trebui să-i citești microfonul activ al lui Wispr … să
+    /// mapezi ce știe Wispr la ceea ce avem noi, nu invers"*.
+    ///
+    /// Wispr's vocabulary, as it stands in 16 000 rows: a CoreAudio name with a
+    /// transport suffix (`Elgato Wave XLR (USB)`), `Auto-detect (<name>)`, its
+    /// own `Built-in mic (recommended)`, and `🎓 TO Wispr (Virtual)` — the
+    /// `AudioBridge` loopback, whose voice is the relay's own recorder, so that
+    /// one honestly is `currentGlyph()`. Anything else (`krisp`, a Sony headset)
+    /// is none of the six and says nothing, which the chip renders as a plain
+    /// `Listening...`.
+    static func glyph(wisprName name: String) -> String {
+        var n = name.lowercased()
+        if n.contains("to wispr") { return currentGlyph() }
+        if n.hasPrefix("auto-detect (") {
+            n = String(n.dropFirst("auto-detect (".count))
+            if n.hasSuffix(")") { n.removeLast() }
+        }
+        if n.hasPrefix("built-in") || n == "macbook pro" {
+            return known.first { $0.id == "mac" }?.glyph ?? ""
+        }
+        return known.first { k in k.needles.contains { n.contains($0) } }?.glyph ?? ""
+    }
+
     /// What the menu's **top row** says: the glyph and the short name of the
     /// device that would record right now. A device that is none of `known`
     /// gets CoreAudio's own name, which is the only name it has.

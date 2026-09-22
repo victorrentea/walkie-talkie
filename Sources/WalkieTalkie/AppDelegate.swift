@@ -339,12 +339,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// anything else while he is talking: the menu answers both, two clicks away
     /// and behind whatever is in front.
     ///
-    /// **One honest caveat, written here because there is nowhere else it would
-    /// be read:** with the Engine on Wispr Flow `micMark` names the device the
-    /// *relay's* recorder is on — the one feeding the level meter and the voice
-    /// corpus — while the words come from Wispr's own microphone, which is
-    /// chosen inside Wispr and is a Loopback device on this Mac. The four
-    /// pictures are true for the four engines that record for themselves.
+    /// **A Wispr sentence names Wispr's microphone** (2026-09-22). Until then
+    /// this said the device the *relay's* recorder was on — the meter's, the
+    /// corpus's — while the words came from whatever Wispr had picked inside
+    /// its own settings. Victor: *"poate să fie un pic mincinos să zici că
+    /// asculți la microfonul lui Walkie … ar trebui să-i citești microfonul
+    /// activ al lui Wispr"*. See `currentMicMark`.
     private static func mark(engine id: String) -> String { " via " + engineMark(id) }
 
     /// **The microphone's half, and the word that makes it a sentence** —
@@ -356,6 +356,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let glyph = InputDevice.currentGlyph()
         return glyph.isEmpty ? "" : " to " + glyph
     }
+
+    /// **Whose microphone the chip names: whoever is doing the hearing.**
+    /// Wispr is, while it holds a sentence (`isRecording`, or `wisprHearing` for
+    /// one the relay is not running) and whenever it is the Engine at rest; then
+    /// the mark is Wispr's own `History.micDevice` mapped onto the roster
+    /// (`InputDevice.glyph(wisprName:)`) — read from Wispr, never written to it.
+    /// Otherwise it is the relay's recorder, as it always was.
+    private func currentMicMark() -> String {
+        guard wisprSource.isRecording || wisprHearing || source === wisprSource else {
+            return Self.micMark()
+        }
+        let glyph = InputDevice.glyph(wisprName: wisprMicName)
+        return glyph.isEmpty ? "" : " to " + glyph
+    }
+
+    /// Wispr's name for its microphone — the adopted row's once Wispr fills it
+    /// in, until then the last row that named one (`WisprHistory.lastNamedMic`).
+    private lazy var wisprMicName = WisprHistory.lastNamedMic()
 
     /// **Victor picked a microphone from the menu** (2026-09-19).
     ///
@@ -376,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         micId = id
         status.setMic(id)
         overlay.setEngineMark(Self.mark(engine: engineId))
-        overlay.setMicMark(Self.micMark())
+        overlay.setMicMark(currentMicMark())
         let resolved = InputDevice.currentLabel()
         Log.info("🎚️ microphone → \(id == "auto" ? "automatic" : id) — recording through \(resolved)")
         if listening {
@@ -1177,7 +1195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard id != self.micId else { return }
             self.micId = id
             self.status.setMic(id)
-            self.overlay.setMicMark(Self.micMark())
+            self.overlay.setMicMark(self.currentMicMark())
             Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
         }
         micId = InputDevice.chosenId
@@ -1248,6 +1266,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // too, which is the configuration the ⌘⌥ dictations happen in. See
         // `WisprFlowSource.hearingChanged`.
         wisprSource.hearingChanged = { [weak self] on in self?.wisprIsHearing(on) }
+        wisprSource.micNamed = { [weak self] name in
+            guard let self else { return }
+            if name != self.wisprMicName {
+                Log.info("🎚️ Wispr Flow is hearing through \(name)")
+            }
+            self.wisprMicName = name
+            self.overlay.setMicMark(self.currentMicMark())
+        }
         // The ⏳ in the menu bar belongs to whichever source is slow to come up,
         // and only one of them ever is.
         whisperSource.onLoadingChanged = { [weak self] loading in
@@ -2484,7 +2510,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // one place in the app that is allowed to know there are three of them;
         // the overlay renders the string and cannot ask what it means.
         overlay.setEngineMark(Self.mark(engine: engineId))
-        overlay.setMicMark(Self.micMark())
+        overlay.setMicMark(currentMicMark())
         // **The shutter runs on `DispatchQueue.global()`, not the main thread**
         // (`HotkeyTap.onScreenshot`), so `reserveMarker` may not read `source` —
         // `setEngine` reassigns it from the main thread and that is a race on a
@@ -2538,7 +2564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // *this* sentence. `InputDevice.resolve()` is two CoreAudio reads and
         // the chip relayouts only when the string actually changes.
         overlay.setEngineMark(Self.mark(engine: engineId))
-        overlay.setMicMark(Self.micMark())
+        overlay.setMicMark(currentMicMark())
 
         // **The chip says where these words are going.** A spawn names its
         // folder (armed at the gesture), a caret sentence says so and outranks
@@ -4171,6 +4197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the relay's own sentence wears an orange one. The music pause and this
         // are the same fact read twice; see `RelayWindow.walkieWisprGlyph`.
         overlay.setWisprHearing(on)
+        overlay.setMicMark(currentMicMark())
         // **…and the ⚡ ring goes up round the pointer, which is the third
         // reading of the same fact** (2026-09-18) — `syncBorrowedGestures`
         // rather than `syncMusic`, because the halo hangs off that one switch

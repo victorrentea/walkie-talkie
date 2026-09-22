@@ -759,7 +759,18 @@ inserat într-o etapă de postprocesare în transcripție, în locul markerului.
   flickers is worse than one briefly wrong.
 - **Push-to-talk is the one gesture that only raises the beacon.** Two held modifiers (right ⌘ +
   right ⌥) also fire on a ⌘⌥ meant for something else, and a false `didBegin` costs a screenshot
-  and a ⌘C probe posted into whatever he is working in.
+  and a ⌘C probe posted into whatever he is working in. **Once Wispr's row confirms it, it opens
+  the sentence** (2026-09-22, `confirmSpeculative` → `didBegin` for `startedByHeldPair`): the
+  held pair is always a caret dictation (`pasteMode`), so the confirmed `didBegin` takes no
+  picture and posts no probe, and it is what makes the release settle — `Listening`, `at caret`,
+  then the doubled heads while Wispr transcribes. Without it the relay sat `speculative` for the
+  whole hold and `dictationStoppedListening` never ran.
+- **A Wispr sentence names Wispr's microphone** (2026-09-22). The chip's `Listening to <glyph>`
+  reads `History.micDevice` (`WisprFlowSource.micNamed`, seeded from `WisprHistory.lastNamedMic`)
+  mapped onto the roster by `InputDevice.glyph(wisprName:)` — **read from Wispr, never written to
+  it**. Victor: *"poate să fie un pic mincinos să zici că asculți la microfonul lui Walkie"*.
+  `🎓 TO Wispr` maps to the relay's own device (the `AudioBridge` feeds it); a name none of the
+  six match leaves `Listening...` plain.
 
 ## Catching Wispr's transcript
 

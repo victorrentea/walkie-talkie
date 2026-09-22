@@ -251,6 +251,12 @@ final class WisprFlowSource: DictationSource {
     var didMaybeBegin: ((String) -> Void)?
     var didBegin: (() -> Void)?
     var didStopListening: (() -> Void)?
+    /// **Wispr named the microphone this sentence is going through** — its
+    /// `History.micDevice`, the moment it is non-empty and whenever it changes.
+    /// Main thread, like the row poll it comes out of.
+    var micNamed: ((String) -> Void)?
+    /// What `micNamed` last said for the adopted row, so a 100 ms poll says it once.
+    private var namedMic = ""
     var didTranscribe: ((DictationResult) -> Void)?
     var didEnd: ((DictationEnd) -> Void)?
 
@@ -2056,6 +2062,7 @@ final class WisprFlowSource: DictationSource {
             let isNew = e.rowid != priorRow || priorRowWasOpen
             guard isNew, e.startedAt >= openedAt - 2 else { return }
             historyRow = e.rowid
+            namedMic = ""
             Log.info(String(format: "wispr history: row %d is this dictation's — %.0f ms after the chord (%@)",
                             e.rowid, (CFAbsoluteTimeGetCurrent() - armedAt) * 1000,
                             e.micDevice.isEmpty ? "no device named yet" : e.micDevice))
@@ -2064,6 +2071,10 @@ final class WisprFlowSource: DictationSource {
             confirmSpeculative(by: "Wispr's own row")
         }
         guard e.rowid == historyRow else { return }
+        if !e.micDevice.isEmpty, e.micDevice != namedMic {
+            namedMic = e.micDevice
+            micNamed?(e.micDevice)
+        }
         // **Only while this capture is the current chord's.** A capture left
         // standing for the previous sentence (`retireCaptureIfSettled`) goes on
         // polling its own row, and feeding that row's terminal status into a
