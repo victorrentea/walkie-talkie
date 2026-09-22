@@ -1389,6 +1389,16 @@ final class WisprFlowSource: DictationSource {
                         what, (CFAbsoluteTimeGetCurrent() - gestureAt) * 1000))
         isRecording = true
         startMeter()
+        // **The held right ⌘⌥ opens the sentence here** (2026-09-22). It is the
+        // one unconfident gesture, so nothing fired `didBegin` at the chord, and
+        // until now nothing fired it at the confirmation either: the relay sat
+        // `speculative` for the whole hold — no `Listening` row, no `at caret`,
+        // and at the release `dictationStoppedListening` (guarded on
+        // `listening`) never ran, so there was no settle and no doubled heads
+        // while Wispr transcribed. Victor: *"cât am tastele apăsate … trebuie să
+        // se poarte exact ca dictarea la caret"*. Every other gesture that
+        // reaches here already had its `didBegin`, or has none to have.
+        if startedByHeldPair { didBegin?() }
     }
 
     /// **The microphone is shut as far as this app is concerned** — by the
