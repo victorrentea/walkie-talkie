@@ -491,10 +491,15 @@ sits at rest there.
   the listening phase; the edge only confirms. `beginCapture` is armed at the **start** chord, so a
   missing edge costs nothing, and `speculativeGrace` may only retract a ring for a chord that left
   **no row**.
-- **The ⚡ ring is *microphone open*, and the chip carries the wait** (2026-09-13): it goes down on
-  the relay's own stop gesture, the chip shows `Transcribing...` for the settle, `endSettling` logs
-  `✍️ the words landed`, and a 🔼 click during the settle is a **stop or nothing**, never a new
-  dictation.
+- **The ⚡ ring is *microphone open* at full ink, and it coasts through the settle, fading**
+  (2026-09-22, reversing the 09-13 rule *the ring goes down at the stop and the chip carries the
+  wait*). Victor: *"animația să nu se oprească instantaneu la încetarea dictării, ci doar la
+  transcriere completă … scazi opacitatea progresiv cu timpul estimat."* `CaretHalo.setCoasting`
+  fades the ring to 0.15 over the chip's own estimate (`DecodeRate.seconds(for:)`) and holds it
+  there; the collapse is still `endSettling` — `✍️ the words landed`. The 09-13 worry (a ring over
+  a delivered sentence looks like one still listening) is answered by the fade, not by the drop.
+  The chip still shows `Transcribing...` for the settle, and a 🔼 click during it is a **stop or
+  nothing**, never a new dictation.
 - **The recipient is latched when the microphone closes**, and it is the caret when nothing is
   bound. **Wispr's own `History` row says when it is done** (`WisprHistory`, read-only, 2026-09-12
   late): the settle ends on `formatted` / `dismissed` / `empty`, and `pastedText` is delivered as

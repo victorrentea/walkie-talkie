@@ -455,6 +455,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// so the chevrons do not disarm underneath the settle.
     private var settlingAtCaret = false
     private var settlingFrom: CFAbsoluteTime = 0
+    /// How long the words are expected to take, fixed at the close — the
+    /// chip's bar and the ring's fade (`CaretHalo.setCoasting`) read this one
+    /// number, so they cannot count down two different waits.
+    private var settleEstimate: TimeInterval = 0
     private var settleGiveUp: DispatchWorkItem?
     /// **The longest the ring waits for words that may never come — 8 s, the
     /// safety net behind Wispr's own answer** (2026-09-12, evening).
@@ -2567,7 +2571,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // he selects the thing he has just described.
         finalSelectionRead()
         RingDown.note("the microphone closed — the words are in flight")
-        Log.info("⚡ ring down: the microphone closed — the words are in flight")
+        // Still `⚡ ring down:` in the log, for `RingDown` and every grep since
+        // 09-13; what the ring does on screen now is coast (`CaretHalo`).
+        Log.info("⚡ ring down: the microphone closed — the words are in flight (the ring coasts, fading)")
         latchedAtCaret = pasteMode || (!isBound && !spawnPending)
         // **And where he was looking when he stopped talking** — the screen a
         // spawned window opens on (`SpawnTerminal.board(preferring:)`). Latched
@@ -2918,6 +2924,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settling = true
         settlingAtCaret = atCaret
         settlingFrom = CFAbsoluteTimeGetCurrent()
+        stateLock.lock()
+        let spokenFor = dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        stateLock.unlock()
+        settleEstimate = DecodeRate.seconds(for: max(0, spokenFor))
         syncBorrowedGestures()
 
         armSettleGiveUp()
@@ -4178,10 +4188,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Before `setActive`**, because the collapse it triggers is what reads
         // the flag to decide whether the arrow goes with the ring.
         caretHalo.setDelivering(settling && settlingAtCaret)
+        // **The ring stays up through the settle, fading** (2026-09-22) — every
+        // destination, not only the caret: *"lasă animația să-și continue
+        // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
+        // like `setDelivering`, so the ring is told to fade rather than to go.
+        let coasting = settling && !listening && !speculative
+        caretHalo.setCoasting(coasting, estimate: settleEstimate)
         // **The halo dial listens exactly while the ring is up** (2026-09-20)
         // — the same expression, pushed into the tap here so the gesture and
         // the ring cannot come to mean two different things by *dictating*.
-        hotkeys.haloUp = listening || speculative || wisprHearing
+        hotkeys.haloUp = listening || speculative || wisprHearing || coasting
         // **Which effect this sentence wears** (2026-09-21) — Tunnel at the
         // caret, Tendrils bound, Sparks into a new claude, Cauldron for a
         // dictation Wispr Flow is running on its own, each of the four his own
@@ -4201,7 +4217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // said does not quietly pull an F7 preview off the screen; and on
         // every sync while it is up, so a ⌘⌃B made mid-sentence changes the
         // dress the way it changes the arrow.
-        let ringUp = listening || speculative || wisprHearing
+        let ringUp = listening || speculative || wisprHearing || coasting
         if ringUp {
             let destination: HaloDestination = foreignMic ? .wispr
                 : atCaret ? .caret

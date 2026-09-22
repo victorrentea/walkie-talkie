@@ -923,6 +923,53 @@ final class CaretHalo {
     /// caret** (2026-09-15) — see `setDelivering`.
     private(set) var delivering = false
 
+    /// **The microphone is shut and the ring keeps turning while the words are
+    /// transcribed** (2026-09-22) — see `setCoasting`.
+    private(set) var coasting = false
+    private var coastFrom: CFAbsoluteTime = 0
+    private var coastSpan: TimeInterval = 0
+    /// Where the fade stops if the words are later than the estimate: a faint
+    /// ring still turning says *still working*; one that has vanished says
+    /// nothing, and the give-up is what takes it down.
+    private static let coastFloor: CGFloat = 0.15
+
+    /// **The ring does not go down at the stop gesture any more; it fades over
+    /// the time the transcription is expected to take** (2026-09-22).
+    ///
+    /// Victor: *"animația să nu se oprească instantaneu la încetarea dictării,
+    /// ci doar la transcriere completă — lasă animația să-și continue mersul cât
+    /// transcrierea e în curs, eventual scazi opacitatea progresiv cu timpul
+    /// estimat cât mai ia dictarea."* This reverses the 2026-09-13 split (*the
+    /// ⚡ ring is microphone open, and the chip carries the wait*), which was
+    /// made because a ring at full strength over a sentence already delivered
+    /// could not be told from one still listening. The fade is what tells them
+    /// apart now: a ring at full ink is a microphone, a ring going out is words
+    /// on their way, and the collapse at `setActive(false)` is still the words
+    /// landing.
+    ///
+    /// `estimate` is the chip's own number (`DecodeRate.seconds(for:)`, the same
+    /// one the `Transcribing...` bar counts down), so the two never disagree
+    /// about how long *about now* is. Linear to `coastFloor` over the estimate,
+    /// held there past it. Driven from `syncBorrowedGestures`, **before**
+    /// `setActive`, like `setDelivering`.
+    func setCoasting(_ on: Bool, estimate: TimeInterval = 0) {
+        guard coasting != on else { return }
+        coasting = on
+        coastFrom = CFAbsoluteTimeGetCurrent()
+        coastSpan = max(1, estimate)
+        if on {
+            Log.info(String(format: "◯ the ring coasts while the words are transcribed — fading over ~%.0f s", coastSpan))
+        }
+    }
+
+    /// 1 while the microphone is open; then down to `coastFloor` over the
+    /// estimate. Multiplied into whatever the voice would have set.
+    private var coastFactor: CGFloat {
+        guard coasting else { return 1 }
+        let t = (CFAbsoluteTimeGetCurrent() - coastFrom) / coastSpan
+        return max(Self.coastFloor, 1 - CGFloat(t))
+    }
+
     /// On or off, and whether the words have a destination. Idempotent, and
     /// driven from `syncBorrowedGestures` — the one switch every edge of a
     /// dictation already passes through, so this cannot drift out of step with
@@ -1470,12 +1517,15 @@ final class CaretHalo {
         // panel would be the same syllable said twice. Only the arrow's
         // schedule is kept.
         if web != nil {
+            // The page's own alpha is 1 (see `show`); the coast is the one
+            // thing allowed over it, because it is not about the voice.
+            panel.alphaValue = coastFactor
             arrow.refresh(quiet: quietSeconds?() ?? 0, at: Self.origin())
             return
         }
         let loud = CGFloat(max(0, min(1, level?() ?? 0)))
         let floor = Self.opacity(Self.rest), ceiling = Self.opacity(Self.loud)
-        panel.alphaValue = floor + (ceiling - floor) * loud
+        panel.alphaValue = (floor + (ceiling - floor) * loud) * coastFactor
         // The scale is set on `pulse` and nowhere else — `stage` belongs to the
         // collapse and the film to the spin, and a layer whose transform is
         // written from a timer cannot also be the one an animation is holding.
