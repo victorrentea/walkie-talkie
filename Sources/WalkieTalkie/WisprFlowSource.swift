@@ -1570,6 +1570,9 @@ final class WisprFlowSource: DictationSource {
             // No chord was seen for this one — Victor's own, on a build whose
             // tap missed it — so the edge is the only clock there is.
             if gestureAt == 0 || state.chordAt == 0 { gestureAt = CFAbsoluteTimeGetCurrent() }
+            // Nobody's gesture but his: `relayStarted` would otherwise be the
+            // previous sentence's answer, and the dress reads it.
+            relayStarted = false
             beginCapture()
             startMeter()
             didBegin?()

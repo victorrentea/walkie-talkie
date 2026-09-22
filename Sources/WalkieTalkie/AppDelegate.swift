@@ -144,8 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Behind the firewall a 🔽 → sentence raises `listening` like any other, so
     /// `foreignMic` (which needs `!listening`) can no longer tell it from a ⌘⌃D one
     /// and the ring wore the bound terminal's Tunnel over a Wispr dictation Victor
-    /// had given Mosaic. Whose microphone is open is the fact the ring answers,
-    /// whoever routes the words.
+    /// had given Mosaic. **True only for a sentence Wispr's own chord opened**
+    /// (`relayStarted == false`): with Wispr picked as the Engine a relay
+    /// gesture lands on the same wiring, and it wears its destination's dress.
     private var wisprMicSentence = false
 
     /// **The music is never left paused.** The only thing that lowers
@@ -2406,10 +2407,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // goes to the caret only when nothing is bound. When Wispr *is* the
         // engine this repeats the generic wiring above, harmlessly.
         // Assigned after the generic five, so when Wispr *is* the engine these
-        // win and `wisprMicSentence` reads true for it too — Mosaic is Wispr's
-        // microphone's dress, not the raw chord's.
-        wisprSource.didMaybeBegin = { [weak self] why in self?.wisprMicSentence = true; self?.dictationMaybeBeginning(why) }
-        wisprSource.didBegin = { [weak self] in self?.wisprMicSentence = true; self?.dictationBegan() }
+        // win — and `wisprMicSentence` is **whose gesture it was, not whose
+        // microphone** (2026-09-22, an hour after the line above said the
+        // opposite). With Wispr picked as the Engine every ⌘⌃D / 🔼 sentence
+        // came through here and wore Mosaic; the up gesture opened a new claude
+        // under Wispr's dress and Victor said so from the projector (*"am făcut
+        // gestul de sus … Mosaic … trebuie Sparks"*). Mosaic is the raw chord's:
+        // 🔽 → and his own keyboard, `relayStarted == false`. A sentence the
+        // relay started wears its destination's dress whichever recogniser
+        // hears it, the way the chip's `(W)` is the only thing that says which.
+        wisprSource.didMaybeBegin = { [weak self] why in
+            guard let self else { return }
+            self.wisprMicSentence = !self.wisprSource.relayStarted
+            self.dictationMaybeBeginning(why)
+        }
+        wisprSource.didBegin = { [weak self] in
+            guard let self else { return }
+            self.wisprMicSentence = !self.wisprSource.relayStarted
+            self.dictationBegan()
+        }
         wisprSource.didStopListening = { [weak self] in self?.dictationStoppedListening() }
         wisprSource.didTranscribe = { [weak self] result in self?.deliver(result) }
         wisprSource.didEnd = { [weak self] end in self?.dictationEnded(end) }
