@@ -184,7 +184,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// became `◐`, the emoji legend moved to the About page onto a drawing of his
     /// mouse, and the menu kept the alignment. See `applyGestureColumn` for the
     /// measurements behind that, and `AboutWindow` for where the sentence went.
-    private let bind = NSMenuItem(title: "Connect Terminal", action: nil, keyEquivalent: "")
+    private let bind = NSMenuItem(title: "Bind Terminal", action: nil, keyEquivalent: "")
 
     /// **Rebind to** — every destination the relay has spoken to, most recent
     /// first, with how long ago it let go of each.
@@ -274,7 +274,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// microphone, exactly like the row above it — the only difference is where
     /// the sentence lands, and a new session is the one destination that does
     /// not exist yet when the words start.
-    private let newSession = NSMenuItem(title: "Dictate to New Claude", action: nil, keyEquivalent: "")
+    private let newSession = NSMenuItem(title: "Prompt new Claude", action: nil, keyEquivalent: "")
     /// The shutter. Its one route is named: the back button, only while a dictation
     /// is running — which is also the only window in which it stops typing
     /// Return.
@@ -292,7 +292,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// while dictating, and with the chip silent there is nowhere else it could
     /// be said. Permanently disabled, which is the honest rendering of "this is
     /// something you do, not something you pick".
-    private let pickLegend = NSMenuItem(title: "Pick Element in Chrome", action: nil, keyEquivalent: "")
+    private let pickLegend = NSMenuItem(title: "Pick from Chrome", action: nil, keyEquivalent: "")
     /// **Send without asking.** Off at every launch, and deliberately not
     /// remembered: the panel is the thing that catches a transcript the model got
     /// wrong, and a checkbox that survived a restart would quietly take that
@@ -557,7 +557,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// **Defaults to Logi, and that needs saying** because `bool(forKey:)`
     /// answers false for a key that was never written, which would have shipped
     /// the old gestures to a Mac already configured for the new ones.
-    private let logiGestures = NSMenuItem(title: "Mouse Gestures", action: nil, keyEquivalent: "")
+    private let logiGestures = NSMenuItem(title: "Gestures", action: nil, keyEquivalent: "")
 
     /// **The two wirings under the arrow**, rebuilt by `applyLogiGesturesRow`
     /// for `applyEngineRow`'s reason: there are two of them, they are short, and
@@ -589,7 +589,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// MilkDrop ones should have a lightning bolt in the name"*). The film
     /// first and apart, the page's hand-written effects, a line, the presets
     /// with their ⚡ (`HaloStyle.menuTitle`). The row reads out the pick.
-    private let haloItem = NSMenuItem(title: "Halo fx", action: nil, keyEquivalent: "")
+    /// **`fx` in a mathematical script** (2026-09-22) — Victor: *"mi-ar plăcea
+    /// un font matematic mai elegant pt fx"*, picked off six rendered options:
+    /// bold script 𝓯 (U+1D4EF) and bold fraktur 𝔁 (U+1D501). Unicode rather than
+    /// an attributed title, because `title` is rewritten from `applyHaloRow` and
+    /// a font run would have to be rebuilt with it every time.
+    static let haloFx = "Halo 𝓯𝔁"
+    private let haloItem = NSMenuItem(title: StatusItem.haloFx, action: nil, keyEquivalent: "")
     private let haloSubmenu = NSMenu()
 
     /// Victor picked one — for one destination, or, from the top-level list,
@@ -617,7 +623,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let shared = picks.dropFirst().allSatisfy { $0 == picks[0] } ? picks[0] : nil
         // No readout while the three differ: the row would have to name one of
         // them, and naming one is exactly the claim that is not true.
-        haloItem.title = shared.map { "Halo fx: \($0.menuTitle)" } ?? "Halo fx"
+        haloItem.title = shared.map { "\(Self.haloFx): \($0.menuTitle)" } ?? Self.haloFx
         haloSubmenu.removeAllItems()
         haloSubmenu.autoenablesItems = false
         for (destination, pick) in zip(HaloDestination.allCases, picks) {
@@ -995,6 +1001,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         pasteLast.isEnabled = false
         menu.addItem(pasteLast)
 
+        // **Prompt History under Paste last prompt** (2026-09-22, Victor): the
+        // same question one row further back — *the last one* and *the ones
+        // before it* — so they sit together rather than at the foot of the menu.
+        messageLog.image = Self.symbolIcon("scroll")
+        // **The row itself does nothing** — AppKit gives a parent row's click to
+        // its submenu, so `Full Log` inside is the one way to the page. The
+        // submenu is filled on hover; see `menuNeedsUpdate`.
+        messageLog.submenu = promptHistorySubmenu
+        promptHistorySubmenu.delegate = self
+        applyPromptHistoryRow()
+        menu.addItem(messageLog)
+
         shot.image = Self.symbolIcon("camera")
         // **A legend, not a command — permanently disabled** (Victor, 2026-09-04),
         // the same rendering `pickLegend` uses for "this is something you do, not
@@ -1091,14 +1109,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyAutosendIcon()
         menu.addItem(autosend)
 
-        messageLog.image = Self.symbolIcon("scroll")
-        // **The row itself does nothing** — AppKit gives a parent row's click to
-        // its submenu, so `Full Log` inside is the one way to the page. The
-        // submenu is filled on hover; see `menuNeedsUpdate`.
-        messageLog.submenu = promptHistorySubmenu
-        promptHistorySubmenu.delegate = self
-        applyPromptHistoryRow()
-        menu.addItem(messageLog)
 
         menu.addItem(.separator())
 
@@ -1968,7 +1978,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `Mouse Gestures: Logi` or `: Wheel`, and the tick beside whichever of the
     /// two rows is the one wired up. See the note on the row.
     private func applyLogiGesturesRow() {
-        logiGestures.title = "Mouse Gestures: \(logiGesturesOn ? "Logi" : "Wheel")"
+        logiGestures.title = "Gestures: \(logiGesturesOn ? "Logi" : "Wheel")"
         gesturesSubmenu.removeAllItems()
         // **Named by the hardware each one needs**, not by what it does to the
         // wheel: the question this list answers is *which mouse am I on*, and

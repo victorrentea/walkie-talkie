@@ -570,10 +570,10 @@ enum HaloDestination: String, CaseIterable {
     /// The menu row's wording, in the menu's own vocabulary.
     var title: String {
         switch self {
-        case .caret: return "At the caret"
-        case .bound: return "Bound terminal"
-        case .spawn: return "New claude"
-        case .wispr: return "Wispr Flow's own"
+        case .caret: return "Prompt at caret"
+        case .bound: return "Prompt to bounded"
+        case .spawn: return "Prompt to new Claude"
+        case .wispr: return "Plain dictation"
         }
     }
 

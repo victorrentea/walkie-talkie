@@ -56,7 +56,7 @@ enum HaloVoice: String, CaseIterable {
         switch self {
         case .direct:     return "Direct"
         case .normalized: return "Normalized (any distance)"
-        case .bass:       return "Bass (kick per syllable)"
+        case .bass:       return "Syllable beat"
         case .spectrum:   return "Spectrum (band stretched)"
         case .all:        return "Everything"
         }

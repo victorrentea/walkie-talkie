@@ -110,7 +110,7 @@ enum InputDevice {
               needles: ["room speakerphone", "speakerphone"]),
         Known(id: "bose", glyph: "🎧", short: "Bose", label: "Bose",
               needles: ["bose"]),
-        Known(id: "mac",  glyph: "💻", short: "MacBook", label: "MacBook Pro Microphone",
+        Known(id: "mac",  glyph: "💻", short: "Mac", label: "MacBook Pro Microphone",
               needles: ["macbook pro microphone", "built-in microph"]),
     ]
 

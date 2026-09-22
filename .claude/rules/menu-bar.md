@@ -50,22 +50,22 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 | row | icon | shortcut column |
 |---|---|---|
-| `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` |
+| `Bind Terminal` (`Connect Terminal` until 2026-09-22) | `mappin`, in Google Maps red | `⬅️ + 🛞` |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` |
 | `Paste last prompt` | 📋 | `⌘⇧P` — **enabled off the log, not off this run's memory** (2026-09-22) |
 | — separator — | | |
 | `Start Dictation` | `mic` | `🛞` |
-| `Dictate to New Claude` (`Start dictation to new claude` until 2026-09-22) | ✨ | `🛞🛞` |
+| `Prompt new Claude` (`Dictate to New Claude` and before it `Start dictation to new claude`, both until 2026-09-22) | ✨ | `🛞🛞` |
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
 | `Recover Dictation` (`Recover Cancelled Dictation` until 2026-09-22) | `arrow.up.trash` — out of the bin | |
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
-| `Pick Element in Chrome` | ✋ | `⌘⇧ + ⬅️` |
+| `Pick from Chrome` (`Pick Element in Chrome` until 2026-09-22) | ✋ | `⌘⇧ + ⬅️` |
 | `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
 | `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the six devices; the same six rows Victor Addons shows, and the same shared preference file |
-| `Mouse Gestures: Logi` / `: Wheel` | `computermouse` | `>` — a two-row submenu |
-| `Halo fx[: <effect>]` | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
+| `Gestures: Logi` / `: Wheel` (`Mouse Gestures` until 2026-09-22) | `computermouse` | `>` — a two-row submenu |
+| `Halo 𝓯𝔁[: <effect>]` (plain `fx` until 2026-09-22; destination rows `Prompt at caret` / `Prompt to bounded` / `Prompt to new Claude` / `Plain dictation`, pre-process `Bass (kick per syllable)` → `Syllable beat`) | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
@@ -246,6 +246,8 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   fallback and the chip's mark are assertable without photographing a menu.
 
 ## Autosend, and the Mouse Gestures row
+
+> **Renamed on 2026-09-22** (Victor's menu pass): `Mouse Gestures` → `Gestures`, `Connect Terminal` → `Bind Terminal`, `Dictate to New Claude` → `Prompt new Claude`, `Pick Element in Chrome` → `Pick from Chrome`, `Mic: 💻 MacBook` → `Mic: 💻 Mac`, `Halo fx` → `Halo 𝓯𝔁`, and `Prompt History` moved up to sit under `Paste last prompt`. The older names below are history.
 
 - **Switch state lives in the icon column — a `checkmark` when on, a blank image of the column's
   exact width when off — never `NSMenuItem.state`.** A ticked row makes AppKit reserve the state
