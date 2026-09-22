@@ -681,6 +681,7 @@ final class CaretHalo {
     /// than the window moved, so nothing an effect draws to the screen's edge
     /// is ever clipped by a window smaller than the screen.
     private func panelFrame() -> NSRect {
+        if drawn.preset?.anchored == true, let a = anchor { return a }
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
             ?? NSScreen.main ?? NSScreen.screens[0]
@@ -693,6 +694,28 @@ final class CaretHalo {
                           y: (mouse.y - s * (1 - preset.centerAt.y) + preset.offset.y).rounded(), width: s, height: s)
         }
         return NSRect(origin: Self.origin(), size: NSSize(width: Self.side, height: Self.side))
+    }
+
+    /// **Where an `anchored` preset stands for this sentence** — set in `show`,
+    /// read by `panelFrame` and `follow`, so the square never moves after it.
+    private var anchor: NSRect?
+
+    /// The square of an `anchored` preset, placed from the pointer as it is now:
+    /// centred on it, then pushed back so as much of it as possible is on the
+    /// pointer's screen. Along an axis where the square fits, it is wholly inside,
+    /// moved no further than it has to be; along one where it is bigger than the
+    /// screen, the overflow is split by where the pointer is — at the left edge,
+    /// all of it hangs off the right — so the placement still says where he was.
+    private func anchoredFrame() -> NSRect? {
+        guard let preset = drawn.preset else { return nil }
+        let mouse = NSEvent.mouseLocation
+        let f = (NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens[0]).frame
+        let s = (max(f.width, f.height) * preset.scale).rounded()
+        func place(_ p: CGFloat, _ lo: CGFloat, _ len: CGFloat) -> CGFloat {
+            if s <= len { return min(max(p - s / 2, lo), lo + len - s) }
+            return lo - (s - len) * min(max((p - lo) / len, 0), 1)
+        }
+        return NSRect(x: place(mouse.x, f.minX, f.width).rounded(), y: place(mouse.y, f.minY, f.height).rounded(), width: s, height: s)
     }
 
     /// **A preset's host, by `HaloEngine.current`**: butterchurn in a web view
@@ -1184,6 +1207,12 @@ final class CaretHalo {
         // said yet is the same lie a frozen indicator tells. The stage is set
         // to full size or to the pointer's dot, depending on how this one opens.
         small = opening != .whole
+        if drawn.preset?.anchored == true, let a = anchoredFrame() {
+            anchor = a
+            panel.setFrameOrigin(a.origin)
+        } else {
+            anchor = nil
+        }
         aimEffectAtPointer()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1478,6 +1507,11 @@ final class CaretHalo {
         }
         // A preset's square is bigger than the ring's, so the origin is the
         // frame's rather than `Self.origin()`, which the arrow keeps.
+        // An `anchored` preset's square stays where `show` put it; only the arrow rides the pointer.
+        if drawn.preset?.anchored == true, anchor != nil {
+            delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
+            return
+        }
         let wanted = drawn.preset != nil ? panelFrame().origin : Self.origin()
         panel.setFrameOrigin(wanted)
         // **Who moved it?** (2026-09-14). Victor: *"pe retina merge bine, pe

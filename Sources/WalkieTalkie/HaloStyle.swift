@@ -305,6 +305,12 @@ enum HaloStyle: String, CaseIterable {
         var fluid = false
         /// Fluidul singur, fara preset (Cursify's Fluid Cursor). Cere `trail` > 0.
         var pureFluid = false
+        /// **Pus o data, nu urmarit** (Victor, 2026-09-23, pe Mosaic: *"make mosaic
+        /// effect NOT follow cursor, but be placed inspired by the original cursor
+        /// position (still to fit most of it in the screen)"*). Patratul se aseaza
+        /// cand urca inelul, pornind de la cursor, impins inapoi in ecran — vezi
+        /// `CaretHalo.anchoredFrame` — si sta acolo toata propozitia.
+        var anchored = false
         /// Care fluid pur: `false` = Cursify (mod 3), `true` = liquid-cursor (mod 4).
         var liquid = false
         /// ink (mod 5) — are prioritate fata de `liquid`.
@@ -510,7 +516,7 @@ enum HaloStyle: String, CaseIterable {
         // frame cap cannot do (see `Preset.speed`).
         case .milkdrop99:  return Preset(number: 99, name: "martin - reflections on black tiles", scale: 0.75,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 1,
-                                         webOnly: true, speed: 0.6)
+                                         webOnly: true, speed: 0.6, anchored: true)
         // **Water Dream is a hybrid** (Victor, 2026-09-20 late: *"the water stays
         // locked in the bottom 20% of the screen, but the meteors follow the
         // mouse"*): the preset gives the sky and the pool, pinned to the screen
