@@ -4,6 +4,9 @@
 # efect redai si id-ul, sa-ti spun care-mi place"*. Without it the amber on his
 # screen is anonymous and a verdict cannot be attached to anything.
 #   tools/halo-shoot.sh <outdir> <style> [voice-mode] [wav]
+# Un singur rig de capturi pe mașină — vezi tools/halo-lock.sh.
+HALO_LOCK_WHO="halo-shoot $2" . "$(dirname "$0")/halo-lock.sh"
+
 OUT=$1; S=$2; M=${3:-direct}; WAV=$4
 NAME=$(/usr/bin/grep -A2 "case .$S:" Sources/WalkieTalkie/HaloStyle.swift | /usr/bin/grep -o 'return "[^"]*"' | head -1 | cut -d'"' -f2)
 mkdir -p "$OUT"

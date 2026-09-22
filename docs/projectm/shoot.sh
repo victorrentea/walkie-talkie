@@ -6,6 +6,8 @@
 #   docs/projectm/shoot.sh <outdir> [styles...]
 if [ -z "$HANDS_OFF_WRAPPED" ]; then export HANDS_OFF_WRAPPED=1; exec $HOME/bin/hands-off run "halo captures: web vs native projectM" -- "$0" "$@"; fi
 cd "$(dirname "$0")/../.."
+# Un singur rig de capturi pe mașină — vezi tools/halo-lock.sh.
+HALO_LOCK_WHO="shoot.sh $2" . tools/halo-lock.sh
 OUT=$1; shift; mkdir -p "$OUT"
 STYLES="$@"; [ -z "$STYLES" ] && STYLES="milkdrop7 milkdrop8 milkdrop20 milkdrop85 milkdrop87 milkdrop103"
 ROUTES=${ROUTES:-"web native1 native2"}   # ROUTES="web native1" for the gain iteration
