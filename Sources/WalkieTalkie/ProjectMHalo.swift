@@ -405,11 +405,37 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
     // MARK: The frame loop
 
+    /// **The clock is `.strict`, and without that flag it runs at a third of the
+    /// rate asked for** (2026-09-22). A plain `DispatchSource` timer is a
+    /// *coalescing* timer: the kernel is free to slide every fire into whatever
+    /// wake-up window it is already planning, and on this Mac it slides them
+    /// into roughly one in three. Measured on a 40-line program with nothing in
+    /// it but this timer — no halo, no GL, no App Nap to blame, and the handler
+    /// burning a fixed number of milliseconds so the cost is a constant:
+    ///
+    /// | handler | plain timer | `.strict` | `asyncAfter` on a grid |
+    /// |---|---|---|---|
+    /// | 0 ms | **9.2 fps**, 110.0 ms | 29.3 fps, 34.2 ms | 30.3 fps, 32.9 ms |
+    /// | 12 ms | **9.5 fps**, 105.0 ms | 28.7 fps, 35.4 ms | 29.8 fps, 33.4 ms |
+    /// | 20 ms | **9.2 fps**, 109.6 ms | 27.7 fps, 36.1 ms | 29.8 fps, 32.8 ms |
+    ///
+    /// The rate does not depend on the handler at all, which is what says the
+    /// work was never the problem: the frame that was measured taking 4–8 ms
+    /// then waited 80 ms for its turn on an *empty* queue. `leeway` is the knob
+    /// that reads as though it controlled this and does not — at
+    /// `.nanoseconds(0)` the plain timer measured *worse* (9.8 fps), because
+    /// leeway bounds the slide a coalescing timer is asked for and `.strict` is
+    /// the only thing that says do not coalesce at all. It is documented as
+    /// costing power, which is the whole trade: this clock runs only while the
+    /// ring is up, and `stop()` cancels it.
+    ///
+    /// This is also the real answer to the App Nap note above — `beginActivity`
+    /// changed nothing because the app was never asleep.
     private func startTimer() {
         stopTimer()
         let interval = 1.0 / Double(haloFrameCap > 0 ? haloFrameCap : 60)
-        let t = DispatchSource.makeTimerSource(queue: renderQueue)
-        t.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(2))
+        let t = DispatchSource.makeTimerSource(flags: .strict, queue: renderQueue)
+        t.schedule(deadline: .now(), repeating: interval, leeway: .nanoseconds(0))
         t.setEventHandler { [weak self] in self?.frame() }
         t.resume()
         timer = t

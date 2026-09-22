@@ -111,7 +111,7 @@
         if (d <= 1.00) return mix(0.26, floorA, (d - 0.75) / 0.25);
         return floorA;
       }
-      // gaura din mijloc: sub `hole` nu se vede nimic, pana la ea urca lin
+      // gaura din mijloc: sub 'hole' nu se vede nimic, pana la ea urca lin
       float inner(float d) { return hole <= 0.0 ? 1.0 : smoothstep(hole * 0.45, hole, d); }
       void main() {
         vec4 c = texture2D(t, vec2(uv.x, 1.0 - uv.y));
@@ -124,7 +124,7 @@
           a *= m;
           c.rgb *= m;
         }
-        // `peak` e opacitatea stratului: se inmulteste in AMBELE, ca iesirea sa
+        // 'peak' e opacitatea stratului: se inmulteste in AMBELE, ca iesirea sa
         // ramana premultiplicata (fiecare canal <= a). Doar pe alfa ar rupe fix
         // invariantul pe care il promite linia de mai jos.
         a *= peak; c.rgb *= peak;

@@ -483,15 +483,37 @@ final class CaretHalo {
     private static let undoGain = ProcessInfo.processInfo.environment["WT_HALO_UNDO_GAIN"] != "0"
     private static var inputGain: Float = 1
     private static var inputGainReadAt: CFAbsoluteTime = 0
+    /// **Citirea volumului de intrare NU se face pe firul apelantului** (2026-09-22).
+    /// `AudioDevices.inputVolume()` ajunge la `AudioObjectGetPropertyData`, care la
+    /// PRIMUL apel pornește `HALSystem::InitializeDevices` și face sute de `mach_msg`
+    /// prin `coreaudiod`: cronometrat pe Mac-ul ăsta, **3172 ms** prima dată, 1,5–33 ms
+    /// după. Iar primul apel cădea pe firul principal, la fiecare deschidere de halou
+    /// (`show` → `undoInputGain`), unde `sample` l-a prins cu 1697 din 1714 eșantioane.
+    /// Consecința măsurată nu era o încetinire, era o tăcere: în ferestrele afectate
+    /// `feed()` a fost apelat **de 0 ori în 5 secunde** în loc de 150 — adică motorul
+    /// nativ nu primea deloc vocea exact la începutul dictării, când te uiți la el.
+    ///
+    /// E a treia oară când regula din `.claude/rules/dictation-source.md` — *never
+    /// open or close a microphone on the main thread* — se plătește, de data asta pe
+    /// un apel care doar CITEȘTE o proprietate. Deci: valoarea din cache se folosește
+    /// imediat, iar împrospătarea pleacă pe o coadă de fundal. Până la primul răspuns
+    /// câștigul e 1, adică semnalul neatins — o jumătate de secundă de sunet nemodificat
+    /// e nimic pe lângă trei secunde de niciun sunet.
+    private static let gainQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.halo-gain")
+    private static var gainReadInFlight = false
 
     static func undoInputGain(_ samples: [Float]) -> [Float] {
         guard undoGain, !samples.isEmpty else { return samples }
         let now = CFAbsoluteTimeGetCurrent()
-        if now - inputGainReadAt > 0.5 {
+        if now - inputGainReadAt > 0.5, !gainReadInFlight {
             inputGainReadAt = now
-            // No input gain to read is not a failure: several virtual devices
-            // have none, and then there is nothing being taken away either.
-            inputGain = AudioDevices.inputVolume().map { $0 > 0.01 ? min(1 / $0, 4) : 4 } ?? 1
+            gainReadInFlight = true
+            gainQueue.async {
+                // No input gain to read is not a failure: several virtual devices
+                // have none, and then there is nothing being taken away either.
+                let g = AudioDevices.inputVolume().map { $0 > 0.01 ? min(1 / $0, 4) : 4 } ?? 1
+                DispatchQueue.main.async { inputGain = g; gainReadInFlight = false }
+            }
         }
         guard inputGain > 1.01 else { return samples }
         return samples.map { min(max($0 * inputGain, -1), 1) }
