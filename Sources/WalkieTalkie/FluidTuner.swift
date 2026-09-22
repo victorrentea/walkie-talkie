@@ -28,7 +28,7 @@ final class FluidTuner: NSObject {
         Knob(id: Int32(PMH_FLUID_GAIN), key: "gain", title: "Brightness", range: 0.02...0.6),
         Knob(id: Int32(PMH_FLUID_FADE), key: "fade", title: "Fade", range: 0.2...6),
         Knob(id: Int32(PMH_FLUID_CURL), key: "curl", title: "Swirl", range: 0...40),
-        Knob(id: Int32(PMH_FLUID_FORCE), key: "force", title: "Force", range: 500...15000),
+        Knob(id: Int32(PMH_FLUID_FORCE), key: "force", title: "Force", range: 500...20000),
         Knob(id: Int32(PMH_FLUID_OPACITY), key: "opacity", title: "Opacity", range: 0.05...1),
     ]
 

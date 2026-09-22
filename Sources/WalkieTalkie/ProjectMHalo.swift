@@ -328,15 +328,15 @@ final class ProjectMHalo: NSView, HaloWebHost {
             // The surface becomes the screen, in pixels; the square is stamped
             // into it at the pointer (`center`).
             let w = Int32((screen.width * Self.renderScale).rounded()), h = Int32((screen.height * Self.renderScale).rounded())
-            if pmh_set_canvas(renderer, w, h, preset.pureFluid ? (preset.ink ? 5 : preset.liquid ? 4 : 3) : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
+            if pmh_set_canvas(renderer, w, h, preset.pureFluid ? (preset.smoke ? 6 : preset.ink ? 5 : preset.liquid ? 4 : 3) : preset.fluid ? 2 : 1, Float(o.trail), Float(o.lag), &err, 512) != 0 {
                 fail("the trail could not be set up: \(String(cString: err))"); return false
             }
             if preset.pureFluid {
                 // The sliders' saved values over the mode's constants, then the panel.
-                let mode = preset.ink ? 5 : preset.liquid ? 4 : 3
+                let mode = preset.smoke ? 6 : preset.ink ? 5 : preset.liquid ? 4 : 3
                 let defaults = FluidTuner.knobs.map { pmh_fluid_param(renderer, $0.id) }
                 for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
-                let title = mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
+                let title = mode == 6 ? "Smoke" : mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults)

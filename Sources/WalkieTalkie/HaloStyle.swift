@@ -107,6 +107,10 @@ enum HaloStyle: String, CaseIterable {
     /// asta?"*): fluidul lui Pavel intreg, cu bloom si sunrays, la valorile
     /// panoului lor de butoane (`pmh_set_canvas` mod 5).
     case ink
+    /// **Smoke** — cssscript's *Interactive Smoke/Fluid Motion* (Victor,
+    /// 2026-09-23: *"adauga si asta … cu param cat mai apropiati"*): solverul lui
+    /// Pavel din 2017, la parametrii paginii lor (`pmh_set_canvas` mod 6).
+    case smoke
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -132,6 +136,7 @@ enum HaloStyle: String, CaseIterable {
         case .fairyDust:       return "Fairy dust"
         case .liquidCursor:    return "Liquid cursor"
         case .ink:             return "Ink"
+        case .smoke:           return "Smoke"
         case .milkdrop85:     return "Snowflake"
         case .milkdrop87:     return "Sparks"
         case .milkdrop99:     return "Mosaic"
@@ -315,6 +320,8 @@ enum HaloStyle: String, CaseIterable {
         var liquid = false
         /// ink (mod 5) — are prioritate fata de `liquid`.
         var ink = false
+        /// cssscript smoke (mod 6) — are prioritate fata de toate de mai sus.
+        var smoke = false
     }
     var preset: Preset? {
         switch self {
@@ -415,6 +422,8 @@ enum HaloStyle: String, CaseIterable {
                                           trail: 1, lag: 0, pureFluid: true, liquid: true)
         case .ink: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
                                  trail: 1, lag: 0, pureFluid: true, ink: true)
+        case .smoke: return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+                                   trail: 1, lag: 0, pureFluid: true, smoke: true)
         case .milkdrop85:  return Preset(number: 85, name: "Zylot - Star Ornament", scale: 0.69,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // **Sparks' size is a chain of factors, each one applied to what was
@@ -556,7 +565,8 @@ enum HaloStyle: String, CaseIterable {
     /// *"remove tendrils2"*), and Magma and Sigil with them (*"remove magma &
     /// sigil"*). Built and drawable, just not offered — the same standing as
     /// Snowflake.
-    var isOffered: Bool { self != .milkdrop179 && self != .milkdrop213 && self != .fairyDust && self != .fluidCursor && self != .milkdrop20Trail && self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
+    /// And Fluid (*"delete fluid"*).
+    var isOffered: Bool { self != .milkdrop20Fluid && self != .milkdrop179 && self != .milkdrop213 && self != .fairyDust && self != .fluidCursor && self != .milkdrop20Trail && self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.

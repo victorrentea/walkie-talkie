@@ -103,9 +103,10 @@ const char* kSplatFS = "#version 330 core\n"
     "void main(){vec2 d=uv-point;d.x*=aspect;float g=exp(-dot(d,d)/radius);"
     " frag=vec4(texture(src,uv).rgb+value*g,1.0);}\n";
 const char* kAdvectFS = "#version 330 core\n"
-    "uniform sampler2D vel;uniform sampler2D src;uniform vec2 texel;uniform float dt;uniform float dissipation;in vec2 uv;out vec4 frag;\n"
-    "void main(){vec2 c=uv-dt*texture(vel,uv).xy*texel;"
-    " frag=vec4(texture(src,c).rgb/(1.0+dissipation*dt),1.0);}\n";
+    "uniform sampler2D vel;uniform sampler2D src;uniform vec2 texel;uniform float dt;uniform float dissipation;uniform float mulFade;in vec2 uv;out vec4 frag;\n"
+    "void main(){vec2 c=uv-dt*texture(vel,uv).xy*texel;vec3 r=texture(src,c).rgb;"
+    // mulFade > 0: the 2017 solver's fade, a plain factor per frame
+    " frag=vec4(mulFade>0.0?r*mulFade:r/(1.0+dissipation*dt),1.0);}\n";
 // **The display of the pure fluid** (mode 3, Cursify's Fluid Cursor): the dye,
 // lit as a surface whose height is its brightness (`SHADING: true`), keyed the
 // way their `TRANSPARENT` canvas is — alpha = the brightest channel.
@@ -149,15 +150,19 @@ const char* kGaussFS = "#version 330 core\n"
     "uniform sampler2D src;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
     "void main(){vec2 o=texel*1.33333333;frag=texture(src,uv)*0.29411764+(texture(src,uv-o)+texture(src,uv+o))*0.35294117;}\n";
 const char* kCurlFS = "#version 330 core\n"
-    "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
+    "uniform sampler2D vel;uniform vec2 texel;uniform float legacy;in vec2 uv;out vec4 frag;\n"
     "void main(){float L=texture(vel,uv-vec2(texel.x,0)).y;float R=texture(vel,uv+vec2(texel.x,0)).y;"
     " float T=texture(vel,uv+vec2(0,texel.y)).x;float B=texture(vel,uv-vec2(0,texel.y)).x;"
-    " frag=vec4(0.5*(R-L-T+B),0,0,1);}\n";
+    " frag=vec4((legacy>0.5?1.0:0.5)*(R-L-T+B),0,0,1);}\n";
 const char* kVortFS = "#version 330 core\n"
-    "uniform sampler2D vel;uniform sampler2D curl;uniform vec2 texel;uniform float strength;uniform float dt;in vec2 uv;out vec4 frag;\n"
+    "uniform sampler2D vel;uniform sampler2D curl;uniform vec2 texel;uniform float strength;uniform float dt;uniform float legacy;in vec2 uv;out vec4 frag;\n"
     "void main(){float L=texture(curl,uv-vec2(texel.x,0)).x;float R=texture(curl,uv+vec2(texel.x,0)).x;"
     " float T=texture(curl,uv+vec2(0,texel.y)).x;float B=texture(curl,uv-vec2(0,texel.y)).x;float C=texture(curl,uv).x;"
-    " vec2 f=0.5*vec2(abs(T)-abs(B),abs(R)-abs(L));f/=length(f)+0.0001;f*=strength*C;f.y*=-1.0;"
+    // legacy: the 2017 shader as cssscript ships it — L and R read the curl's .y,
+    // which a one-channel curl does not have, so they are 0 and the confinement
+    // pushes sideways only; no 0.5, no flip of y. Kept on purpose: it is their look.
+    " if(legacy>0.5){L=0.0;R=0.0;}"
+    " vec2 f=(legacy>0.5?1.0:0.5)*vec2(abs(T)-abs(B),abs(R)-abs(L));f/=length(f)+0.0001;f*=strength*C;if(legacy<0.5)f.y*=-1.0;"
     " vec2 v=texture(vel,uv).xy+f*dt;frag=vec4(clamp(v,-1000.0,1000.0),0,1);}\n";
 const char* kDivFS = "#version 330 core\n"
     "uniform sampler2D vel;uniform vec2 texel;in vec2 uv;out vec4 frag;\n"
@@ -224,6 +229,8 @@ struct Look {
     bool bloom = false, sunrays = false;
     float bloomIntensity = 0.3f, bloomThreshold = 0.6f, bloomKnee = 0.7f;
     float opacity = 1.f;                           // the whole layer, colour and alpha alike
+    bool legacy = false;                           // the 2017 solver: per-frame fade factors, its vorticity
+    float velFrame = 0.f, dyeFrame = 0.f;          // legacy: fade factor per 60 Hz frame
 };
 // Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
 const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
@@ -253,6 +260,18 @@ const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, f
 // and the layer at 0.55 opacity.
 const Look kInk = { 4.f, 0.84f, 0.f, 2.0f, 12000.f, 0.20f / 100.f, true, true, 10.f, 1.f, 0, 0.22f,
                     16, true, true, true, 0.15f, 0.6f, 0.7f, 0.55f };
+// **Mode 6: cssscript's smoke** (cssscript.com/demo/smoke-fluid-motion, Victor
+// 2026-09-23: *"adauga si asta … cu param cat mai apropiati"*) — Pavel's 2017
+// solver, the one that page ships, at its config: velocity and dye on ONE grid,
+// half the canvas's CSS pixels (TEXTURE_DOWNSAMPLE 1 — a quarter of the device
+// pixels here); DENSITY_DISSIPATION 0.98 and VELOCITY_DISSIPATION 0.99 as plain
+// factors per 60 Hz frame; PRESSURE_DISSIPATION 0.8, 25 iterations; CURL 35 with
+// the shader's sideways-only confinement (`legacy`); SPLAT_RADIUS 0.002, aspect
+// on x only; force = the CSS pixels moved ×10 — `force` here is per canvas
+// width, so it is set to 5·width in `pmh_set_canvas`; colour = three channels of
+// rand + 0.2, ×0.3, redrawn every 25 moves; shown raw, no shading.
+const Look kSmoke = { 35.f, 0.8f, 0.f, 0.f, 0.f, 0.002f, false, false, 1.f, 1.f, 2, 0.3f,
+                      25, false, false, false, 0.3f, 0.6f, 0.7f, 1.f, true, 0.99f, 0.98f };
 }
 
 struct pmh {
@@ -518,7 +537,8 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
     if (!h->dyeProg) h->dyeProg = link(kDyeFS, log);
     if (mode >= 2) {
         // mode 3 runs Cursify's grid: 128 cells on the short side (SIM_RESOLUTION)
-        if (mode >= 3) { int s = mode == 4 ? 140 : mode == 5 ? 256 : 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
+        if (mode == 6) { h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4); }
+        else if (mode >= 3) { int s = mode == 4 ? 140 : mode == 5 ? 256 : 128; h->vw = w >= hgt ? (int)std::lround(s * (double)w / hgt) : s; h->vh = w >= hgt ? s : (int)std::lround(s * (double)hgt / w); }
         else { h->vw = std::max(32, w / 4); h->vh = std::max(32, hgt / 4); }
         for (Field* f : { &h->vel[0], &h->vel[1] }) if (!make_field(*f, h->vw, h->vh, GL_RG16F, GL_RG)) return bail("velocity field could not be made");
         for (Field* f : { &h->prs[0], &h->prs[1], &h->div, &h->curl }) if (!make_field(*f, h->vw, h->vh, GL_R16F, GL_RED)) return bail("pressure field could not be made");
@@ -528,8 +548,10 @@ int pmh_set_canvas(pmh* h, int w, int hgt, int mode, float seconds, float lag, c
         h->jacobiProg = link(kJacobiFS, log); h->gradProg = link(kGradFS, log);
     }
     if (mode >= 3) {
-        h->look = mode == 5 ? kInk : mode == 4 ? kLiquid : kCursify;
+        h->look = mode == 6 ? kSmoke : mode == 5 ? kInk : mode == 4 ? kLiquid : kCursify;
+        if (mode == 6) h->look.force = 5.f * w;
         if (mode == 4 || mode == 5) { int d = mode == 4 ? 512 : 1024; h->dw = w >= hgt ? (int)std::lround(d * (double)w / hgt) : d; h->dh = w >= hgt ? d : (int)std::lround(d * (double)hgt / w); }
+        else if (mode == 6) { h->dw = h->vw; h->dh = h->vh; }
         else { h->dw = std::max(32, w / 2); h->dh = std::max(32, hgt / 2); }
         for (Field* f : { &h->dye[0], &h->dye[1] }) if (!make_field(*f, h->dw, h->dh, GL_RGBA16F, GL_RGBA)) return bail("dye field could not be made");
         h->displayProg = link(kDisplayFS, log);
@@ -576,8 +598,16 @@ static float* fluid_param(pmh* h, int which) {
     default: return nullptr;
     }
 }
-void pmh_set_fluid_param(pmh* h, int which, float value) { if (float* f = fluid_param(h, which)) *f = value; }
-float pmh_fluid_param(pmh* h, int which) { float* f = fluid_param(h, which); return f ? *f : 0.f; }
+// The legacy smoke fades by a factor per 60 Hz frame; the slider speaks the other
+// modes' unit — dissipation per second — so it is converted both ways.
+void pmh_set_fluid_param(pmh* h, int which, float value) {
+    if (which == PMH_FLUID_FADE && h->look.legacy) { h->look.dyeFrame = std::exp(-value / 60.f); return; }
+    if (float* f = fluid_param(h, which)) *f = value;
+}
+float pmh_fluid_param(pmh* h, int which) {
+    if (which == PMH_FLUID_FADE && h->look.legacy) return -std::log(h->look.dyeFrame) * 60.f;
+    float* f = fluid_param(h, which); return f ? *f : 0.f;
+}
 
 namespace {
 // One pass of the fluid: `prog` over the whole grid into `dst`.
@@ -607,7 +637,7 @@ void splat(pmh* h, Field* f, int& cur, int w, int hgt, float x, float y, float v
     cur ^= 1;
 }
 
-struct FluidParams { float curl, pressureKeep, velDissipation; int iterations = 20; };
+struct FluidParams { float curl, pressureKeep, velDissipation; int iterations = 20; bool legacy = false; float velMul = 0.f; };
 
 // One step of the fluid, after whatever splats this frame put into it: curl,
 // vorticity, pressure, projection, self-advection.
@@ -615,10 +645,12 @@ void step_fluid(pmh* h, float dt, FluidParams fp) {
     glDisable(GL_BLEND);
     // curl → vorticity confinement (the curls that make it smoke, not jelly)
     glUseProgram(h->curlProg); bind2d(h->curlProg, "vel", 0, h->vel[h->vc].tex);
+    glUniform1f(glGetUniformLocation(h->curlProg, "legacy"), fp.legacy ? 1.f : 0.f);
     pass(h, h->curlProg, h->curl);
     glUseProgram(h->vortProg);
     bind2d(h->vortProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->vortProg, "curl", 1, h->curl.tex);
     glUniform1f(glGetUniformLocation(h->vortProg, "strength"), fp.curl);
+    glUniform1f(glGetUniformLocation(h->vortProg, "legacy"), fp.legacy ? 1.f : 0.f);
     glUniform1f(glGetUniformLocation(h->vortProg, "dt"), dt);
     pass(h, h->vortProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
     // divergence, pressure (warm-started at 0.8 of the last), gradient
@@ -639,6 +671,7 @@ void step_fluid(pmh* h, float dt, FluidParams fp) {
     glUseProgram(h->advectProg); bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->vel[h->vc].tex);
     glUniform1f(glGetUniformLocation(h->advectProg, "dt"), dt);
     glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), fp.velDissipation);
+    glUniform1f(glGetUniformLocation(h->advectProg, "mulFade"), fp.velMul);
     pass(h, h->advectProg, h->vel[h->vc ^ 1]); h->vc ^= 1;
 }
 }
@@ -730,8 +763,16 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
         for (Field* f : { &h->vel[0], &h->vel[1], &h->prs[0], &h->prs[1], &h->dye[0], &h->dye[1] }) { glBindFramebuffer(GL_FRAMEBUFFER, f->fbo); glClear(GL_COLOR_BUFFER_BIT); }
         h->fresh = false;
     }
-    h->colorTimer += dt * 10.f;
-    if (L.palette == 1) {
+    if (L.palette != 2) h->colorTimer += dt * 10.f;
+    if (L.palette == 2) {
+        // cssscript: three channels of rand + 0.2, a new triple every 25 moves
+        // (at ~60 events a second, ~12 of our frames)
+        if (h->cr == 0 || h->colorTimer >= 12.f) {
+            h->colorTimer = 0;
+            auto r = [] { return (float)std::rand() / RAND_MAX + 0.2f; };
+            h->cr = r() * L.gain; h->cg = r() * L.gain; h->cb = r() * L.gain;
+        }
+    } else if (L.palette == 1) {
         const float* v = kViolets[std::rand() % 5];
         h->cr = v[0] * L.gain; h->cg = v[1] * L.gain; h->cb = v[2] * L.gain;
     } else if (h->colorTimer >= 1.f) {
@@ -745,6 +786,7 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
         h->sx += (h->tx - h->sx) * a; h->sy += (h->ty - h->sy) * a;
         float dx = (h->sx - ax) / h->ow, dy = (h->sy - ay) / h->oh;
         if (std::fabs(dx) + std::fabs(dy) > 1e-5f) {
+            if (L.palette == 2) h->colorTimer += 1.f;
             float aspect = (float)h->ow / h->oh;
             float radius = L.radius * (L.radiusByAspect && aspect > 1 ? aspect : 1.f);
             float x = h->sx / h->ow, y = h->sy / h->oh;
@@ -753,13 +795,17 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
             splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
         }
     }
-    step_fluid(h, sdt, { L.curl, L.pressureKeep, L.velFade, L.iterations });
+    // legacy fades are factors per 60 Hz frame: k^(dt·60) at our frame rate
+    const float velMul = L.legacy ? std::pow(L.velFrame, sdt * 60.f) : 0.f;
+    const float dyeMul = L.legacy ? std::pow(L.dyeFrame, sdt * 60.f) : 0.f;
+    step_fluid(h, sdt, { L.curl, L.pressureKeep, L.velFade, L.iterations, L.legacy, velMul });
     // the dye rides the velocity and dies at DENSITY_DISSIPATION
     glUseProgram(h->advectProg);
     bind2d(h->advectProg, "vel", 0, h->vel[h->vc].tex); bind2d(h->advectProg, "src", 1, h->dye[h->dc].tex);
     glUniform2f(glGetUniformLocation(h->advectProg, "texel"), 1.f / h->vw, 1.f / h->vh);
     glUniform1f(glGetUniformLocation(h->advectProg, "dt"), sdt);
     glUniform1f(glGetUniformLocation(h->advectProg, "dissipation"), L.dyeFade);
+    glUniform1f(glGetUniformLocation(h->advectProg, "mulFade"), dyeMul);
     glBindFramebuffer(GL_FRAMEBUFFER, h->dye[h->dc ^ 1].fbo);
     glViewport(0, 0, h->dw, h->dh);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
