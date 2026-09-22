@@ -11,7 +11,9 @@ OUT=$1; S=$2; M=${3:-direct}; WAV=$4
 NAME=$(/usr/bin/grep -A2 "case .$S:" Sources/WalkieTalkie/HaloStyle.swift | /usr/bin/grep -o 'return "[^"]*"' | head -1 | cut -d'"' -f2)
 mkdir -p "$OUT"
 AUDIO=1; [ -n "$WAV" ] && AUDIO="clip:$WAV"
-exec $HOME/bin/hands-off run "halo: $S — ${NAME:-?} · voce: $M" -- \
+# Fără `exec`: el înlocuiește imaginea procesului și cu ea trap-ul care
+# eliberează lacătul (`tools/halo-lock.sh`). Shell-ul ăsta costă nimic și curăță.
+$HOME/bin/hands-off run "halo: $S — ${NAME:-?} · voce: $M" -- \
   env WT_HALO_ENGINE=native WT_HALO_STYLE=$S WT_PM_SHOOT=$OUT/$S-$M WT_PM_SCALE=1 \
       WT_HALO_VOICE=$M WT_HALO_DEMO=26 WT_HALO_DEMO_AUDIO="$AUDIO" WT_ALLOW_DIRECT=1 \
       ./.build/debug/WalkieTalkie

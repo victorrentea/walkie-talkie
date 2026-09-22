@@ -22,11 +22,28 @@ mkdir -p "$(dirname "$HALO_LOCK")"
 
 halo_lock_holder() { cat "$HALO_LOCK/holder" 2>/dev/null || echo "necunoscut"; }
 
+# **Eliberarea e o funcție fiindcă `trap` e global pe shell, iar cine ne ia cu
+# `source` nu știe asta.** `tools/halo-record.sh` și-a pus propriul `trap … EXIT`
+# (să oprească fundalul negru și să pună cursorul la loc) și l-a **înlocuit** pe
+# al nostru fără să-și dea seama: proba de la 08:25 pe 2026-09-22 a lăsat lacătul
+# în urmă imediat ce s-a terminat. Cine adaugă un `trap … EXIT` după ce ne ia cu
+# `source` cheamă și `halo_lock_release` în el.
+#
+# A doua cale prin care moare un trap e `exec`: înlocuiește imaginea procesului
+# și cu ea tot ce ținea shell-ul, inclusiv trap-urile. De-aia `tools/halo-shoot.sh`
+# **nu** mai face `exec` pe `hands-off`.
+#
+# În niciunul din cele două cazuri serializarea nu s-a stricat — `exec` păstrează
+# pid-ul, iar verificarea `kill -0` de mai jos preia pe loc un lacăt al cărui
+# deținător a murit. Ce se strica era curățenia: un director de lacăt rămas în
+# urmă face `cat holder` mincinos.
+halo_lock_release() { rm -rf "$HALO_LOCK"; }
+
 for _i in $(seq 1 900); do            # 30 de minute, apoi renunțăm zgomotos
   if mkdir "$HALO_LOCK" 2>/dev/null; then
     echo $$ > "$HALO_LOCK/pid"
     printf 'pid %s · %s · %s\n' "$$" "${HALO_LOCK_WHO:-$(basename "$0")}" "$(date '+%H:%M:%S')" > "$HALO_LOCK/holder"
-    trap 'rm -rf "$HALO_LOCK"' EXIT INT TERM
+    trap halo_lock_release EXIT INT TERM
     break
   fi
   # **Deținătorul mort se detectează după proces, nu după ceas.** Laptopul a

@@ -83,7 +83,9 @@ NAME=$(/usr/bin/grep -A2 "case .$S:" Sources/WalkieTalkie/HaloStyle.swift | /usr
 echo "$S — ${NAME:-?} · $SECS s pe rundă · centru $PX,$PY"
 
 "$BLACKBIN" & BLACK=$!
-trap 'kill $BLACK 2>/dev/null; warp $ORIG' EXIT INT TERM
+# `halo_lock_release` e chemat aici pe mână: `trap` e global, deci linia asta îl
+# înlocuiește pe cel pus de `tools/halo-lock.sh`.
+trap 'kill $BLACK 2>/dev/null; warp $ORIG; halo_lock_release' EXIT INT TERM
 sleep 0.8
 
 for spec in "$@"; do
