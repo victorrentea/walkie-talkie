@@ -316,6 +316,17 @@ enum OverlayStates {
                 o.pinTranscribeWarmth(0.45)
             },
 
+            Shot(slug: "transcribing-overdue", group: "Dictating", title: "Waiting, and past the estimate",
+                 when: "Past 150% of the decode `DecodeRate` promised — the bar has been full for half as long again.",
+                 note: "The bar says *past my own estimate* by arriving full and staying there, and that was enough while the only thing past the estimate was a slow decode. It stopped being enough on 2026-09-22, the evening Wispr began leaving finished sentences labelled `raw_transcript` and the row sat out thirty seconds: a full bar and a lost sentence look exactly alike. Said once, at a threshold, rather than counted out — and it is the only thing on this row that is not the bar, which is why it is appended after the word instead of joining it.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setTranscribing(true)
+                o.setShotCount(1)
+                o.pinTranscribeWarmth(1.0)
+                o.pinTranscribeOverdue(true)
+            },
+
             // ---- flashes: the chip becomes a panel for a few seconds -------
             Shot(slug: "flash-sent", group: "Flashes", title: "Flash — sent",
                  when: "Two seconds, the moment a dictation reaches the agent.",

@@ -3822,6 +3822,17 @@ private let frontLabel = NSTextField(labelWithString: "")
                                           attributes: [.font: hintFont,
                                                        .foregroundColor: i < steps ? lit : dim]))
         }
+        // **The overdue note is outside the bar.** It is appended after the
+        // word rather than added to it, so `transcribeWarmth`'s arithmetic —
+        // a count of characters against a fraction — never changes under a row
+        // that is already half lit. Always lit, for the same reason the
+        // recogniser's logo is: it has no *not yet* state to read.
+        if transcribeOverdue {
+            out.append(NSAttributedString(string: "  ", attributes: [.font: hintFont]))
+            out.append(Self.inline(Glyphs.emoji("🤔", ink: Self.iconInk), font: hintFont))
+            out.append(NSAttributedString(string: Self.overdueNote,
+                                          attributes: [.font: hintFont, .foregroundColor: lit]))
+        }
         transcribeLit = steps
         return out
     }
@@ -3836,6 +3847,30 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     private var transcribeDeadline: Date?
     private var transcribeSpan: TimeInterval = 0
+    /// **The bar filled, and then half as long again went by** (2026-09-22) —
+    /// Victor's ask: *"dacă durează > 150% din cât trebuie pe statistic, să
+    /// adauge la tooltip 🤔Taking longer than usual..."*.
+    ///
+    /// The bar already says *past my own estimate* by arriving full and staying
+    /// there, and that was enough while the only thing past the estimate was a
+    /// slow decode. It stopped being enough the evening Wispr started leaving
+    /// finished sentences unlabelled and the row sat out thirty seconds: a full
+    /// bar and a lost sentence look exactly alike, so the row now says which —
+    /// once, in words, at a threshold rather than continuously.
+    ///
+    /// **150 % of `transcribeSpan`**, which is `DecodeRate`'s own promise and
+    /// the very number the bar is drawn from — not a second clock that could
+    /// disagree with the ink beside it.
+    private var transcribeOverdue = false
+    private var transcribeIsOverdue: Bool {
+        guard let deadline = transcribeDeadline, transcribeSpan > 0 else { return false }
+        return -deadline.timeIntervalSinceNow >= transcribeSpan * (Self.overdueFactor - 1)
+    }
+    private static let overdueFactor: Double = 1.5
+    /// English, like every other string the chip renders — the overlay is on a
+    /// projector in front of international rooms. Two spaces in front: it is an
+    /// aside appended to the row, not a second row.
+    private static let overdueNote = "Taking longer than usual..."
     /// How many characters were lit the last time the row was built, so the
     /// ticker can do nothing on the fourteen frames out of fifteen where the
     /// answer has not changed — `startWarmth`'s bargain, for its reason.
@@ -3857,6 +3892,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         transcribeDeadline = nil
         transcribeSpan = 0
         transcribeLit = -1
+        transcribeOverdue = false
         if value, audio > 0 {
             let span = max(1, DecodeRate.seconds(for: audio).rounded())
             transcribeSpan = span
@@ -3875,6 +3911,16 @@ private let frontLabel = NSTextField(labelWithString: "")
             // never re-measure every row on the chip sixty times a decode.
             let tick = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
                 guard let self = self, self.transcribing else { return }
+                // **The one relayout a decode is allowed**, and it happens once:
+                // the note makes the row wider, which is exactly what the ink
+                // ticker is written never to do. It is a single transition, not
+                // a per-frame width, so it goes through `layoutContent` like any
+                // other change of what the chip says.
+                if self.transcribeIsOverdue != self.transcribeOverdue {
+                    self.transcribeOverdue = self.transcribeIsOverdue
+                    self.layoutContent()
+                    return
+                }
                 let steps = Int((CGFloat(self.transcribeWord.count) * self.transcribeWarmth).rounded())
                 guard steps != self.transcribeLit else { return }
                 self.transcribeLabel.attributedStringValue = self.transcribeString
@@ -4088,6 +4134,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     func pinTranscribeWarmth(_ value: Double?) {
         transcribePinned = value.map { CGFloat(max(0, min(1, $0))) }
         if transcribing { transcribeLabel.attributedStringValue = transcribeString }
+    }
+
+    /// **The overdue note, without waiting out 150 % of an estimate** — the
+    /// shots' way into the one row that is defined by a stretch of time having
+    /// passed. `pinTranscribeWarmth`'s reason exactly, one state further on.
+    func pinTranscribeOverdue(_ value: Bool) {
+        guard transcribeOverdue != value else { return }
+        transcribeOverdue = value
+        layoutContent()
     }
 
     /// How many pictures this dictation is carrying, the automatic context capture

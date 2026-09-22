@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 45 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 46 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -401,6 +401,16 @@
         <p class="note">The one row left in which Victor is waiting on the app — <code>preparing</code>, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.</p>
         <code class="slug">transcribing</code>
       </section>
+      <section class="card" id="transcribing-overdue">
+        <header>
+          <h3>Waiting, and past the estimate</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">428×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/transcribing-overdue.png" width="428" height="93" style="opacity:0.8" alt="Waiting, and past the estimate"></div>
+        <p class="when">Past 150% of the decode <code>DecodeRate</code> promised — the bar has been full for half as long again.</p>
+        <p class="note">The bar says <em>past my own estimate</em> by arriving full and staying there, and that was enough while the only thing past the estimate was a slow decode. It stopped being enough on 2026-09-22, the evening Wispr began leaving finished sentences labelled <code>raw_transcript</code> and the row sat out thirty seconds: a full bar and a lost sentence look exactly alike. Said once, at a threshold, rather than counted out — and it is the only thing on this row that is not the bar, which is why it is appended after the word instead of joining it.</p>
+        <code class="slug">transcribing-overdue</code>
+      </section>
     </div>
     <h2 id="Flashes">Flashes</h2>
     <div class="grid">
@@ -560,9 +570,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -599,7 +609,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at bd13cbe · 22 Sep 2026 · built 22 Sep 2026, 18:41
+  Generated from <code>OverlayStates.swift</code> · repo at 2931699 · 22 Sep 2026 · built 22 Sep 2026, 19:16
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

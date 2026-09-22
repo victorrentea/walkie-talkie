@@ -11824,3 +11824,30 @@ run.
 A caret sentence writes no outbox line and so cannot be seen here. That is honest rather than a
 gap: what the fallback restores is the last sentence that was *sent somewhere*, which is exactly
 the set the submenu lists — so the two now agree by construction, which was the complaint.
+
+### The row says *taking longer than usual* (2026-09-22, late)
+
+Victor, minutes after the fix above went in: *"dacă durează > 150% din cât trebuie pe statistic, să
+zică adauge la tooltip «🤔Taking longer than usual...»"*.
+
+The bar already said it, in ink: `Transcribing via ⬮...` fills over `DecodeRate`'s estimate and,
+past it, simply arrives full and stays there — *"what I am past my own estimate looks like when it
+is not a number"*, written on 2026-09-08 when the seconds came off the row. That reading was enough
+while the only thing past the estimate was a slow decode. It stopped being enough the same evening,
+for the reason the section above is about: **a full bar and a lost sentence look exactly alike**,
+and four of them in twenty minutes sat there for thirty seconds each.
+
+- **The threshold is `transcribeSpan`**, which *is* `DecodeRate`'s promise and the very number the
+  ink is drawn from. A second clock would be a second opinion, and the day the two disagreed the
+  words and the ink beside them would be saying different things about the same wait.
+- **The note is outside the bar** — appended after the word, always lit. `transcribeWarmth` is a
+  fraction turned into a count of characters, so adding the note to `transcribeWord` would move the
+  ramp under a row that is already half filled.
+- **Its arrival is a relayout, and the third one a dictation is allowed** (the `HQ` tag and the
+  once-a-minute `(Nm)` are the others). The rule that the 15 Hz ticker never reaches
+  `layoutContent` stands: this is one edge, not a frame.
+- **No estimate, no note.** With `audio == 0` there is no ticker and no deadline — there is no
+  statistic to be 150 % of, and a row that guessed would be inventing one.
+
+`transcribing-overdue` is the 46th shot in `OverlayStates.swift`; `pinTranscribeOverdue` is how a
+state defined by a stretch of elapsed time gets photographed without waiting it out.

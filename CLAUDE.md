@@ -141,7 +141,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 ## The overlay's states are photographed
 
 - **No change to the overlay is finished until `./docs/shoot-overlay-states.sh` has been run.**
-  It shoots all 45 states through `RelayWindow.snapshot` (always 2×) and regenerates
+  It shoots all 46 states through `RelayWindow.snapshot` (always 2×) and regenerates
   `docs/overlay-states.html`. A new state is a new `Shot` in `OverlayStates.swift`; a state that
   goes away is a deleted one. **Never edit `docs/overlay-states.html` by hand.** The script
   stands the installed app down and puts it back.

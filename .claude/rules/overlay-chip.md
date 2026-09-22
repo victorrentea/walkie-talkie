@@ -17,7 +17,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 ## The states page is part of every change
 
 - **No change to the overlay is finished until `docs/overlay-states.html` is rebuilt.**
-  `./docs/shoot-overlay-states.sh` shoots all 45 states and regenerates the HTML. That covers a new
+  `./docs/shoot-overlay-states.sh` shoots all 46 states and regenerates the HTML. That covers a new
   row, a reworded string, a changed glyph, a different colour, a state that starts or stops
   existing. A new state means a new `Shot` in `OverlayStates.swift`; a state that goes away means
   deleting one. **Never edit `docs/overlay-states.html` by hand** — it is overwritten on the next
@@ -41,7 +41,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `flash(_:)`/`flashTitle(_:)` call sites in `AppDelegate.swift`, and `StatusItem.swift`.
   → journal: *UI language: English only*
 - **Freeze frames exist for the catalogue only.** `pinListenWarmth(_:)`, `pinTranscribeWarmth`,
-  `pinListenElapsed`, `pinSelectionSettled`: the shutter fires immediately after `apply`, so
+  `pinListenElapsed`, `pinTranscribeOverdue`, `pinSelectionSettled`: the shutter fires immediately after `apply`, so
   without a chosen frame every dictating state on the page would be a photograph of its own first
   200 ms. `reset` pins the full bar; `listening-cold` and `listening-warming` pin their own;
   `transcribing` pins 0.45 (with no audio behind it `transcribeWarmth` answers a **full** bar, so
@@ -202,6 +202,20 @@ yields to `--label`).
   microphone is shut — so saying both at once meant one of them was always a forecast. The bar's
   step count is `transcribeWord.count`, so the mark lengthens the ramp rather than sitting outside
   it, and the logo is **always lit** for `applyEngineText`'s reason.
+- **Past 150 % of the estimate the row says so in words** (2026-09-22) — `  🤔Taking longer than
+  usual...`, appended after the word, always lit, **outside the bar**: `transcribeWarmth` is a
+  fraction against a character count, and joining the note to `transcribeWord` would move the ramp
+  under a row already half lit. Victor: *"dacă durează > 150% din cât trebuie pe statistic, să
+  adauge la tooltip 🤔Taking longer than usual..."*. The bar already said *past my own estimate* by
+  arriving full and staying there, and that was enough until the evening Wispr began leaving
+  finished sentences labelled `raw_transcript` — a full bar and a lost sentence look exactly alike.
+  The threshold is read off `transcribeSpan`, which **is** `DecodeRate`'s promise and the very
+  number the ink is drawn from, so the words and the bar can never disagree. Its arrival is the
+  **third** relayout a dictation is allowed (the `HQ` tag and the once-a-minute `(Nm)` are the
+  others) — the note makes the row wider, so it cannot be written straight onto the label — and it
+  happens once, on the edge. With no estimate (`audio == 0`) there is no ticker and no note: there
+  is no statistic to be 150 % of. `pinTranscribeOverdue` is the shots' way in.
+  → journal: *`raw_transcript` is a finished sentence Wispr never labelled*
 - **`Transcribing...` fills from `DecodeRate`'s deadline and carries no digits** (2026-09-08).
   `transcribeDeadline`, `transcribeSpan` and the fitted line are what the bar is drawn from; the
   `4s` countdown went the same day (*"e doar stresant. Lasă să se sugereze progressbar-ul prin
@@ -357,7 +371,9 @@ yields to `--label`).
   secundă lag"* (gone 2026-09-07). → journal: *Two shapes: the chip and the panel*
 - **Never edit `docs/overlay-states.html` by hand.** → journal: *The overlay's states are photographed, and the page is part of the change*
 - **The ramp timer and the transcribe timer must never reach `layoutContent`.** The only relayouts
-  a dictation is allowed are the `HQ` tag's arrival and the once-a-minute `(Nm)` tick.
+  a dictation is allowed are the `HQ` tag's arrival, the once-a-minute `(Nm)` tick and the overdue
+  note's one edge (2026-09-22) — three events in a sentence, each of which really does change the
+  row's width, and none of which is per frame.
   → journal: *Two implementation traps, both paid for*
 - **Never put a raw emoji into an attributed string on a label that carries a halo** — go through
   `inline(Glyphs.emoji(…))`. → journal: *Two implementation traps, both paid for*
