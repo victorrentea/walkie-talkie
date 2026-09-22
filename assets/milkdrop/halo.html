@@ -52,6 +52,13 @@
 <script src="butterchurn.min.js"></script>
 <script src="butterchurnPresets.min.js"></script>
 <script src="butterchurnPresetsExtra.min.js"></script>
+<!-- Presetele alese de la răsfoire în pagina de demo (`voice-halo/halo-presets.js`,
+     copiat aici de mână). Ele NU sunt în pachetele oficiale ale lui butterchurn —
+     vin din arhivele mari — deci fără fișierul ăsta ruta web răspunde „no such
+     preset" pentru Sigil, Magma, Smoke, Dusk și tot ce mai alege de acolo. Și
+     contează dublu: geamănul din web e etalonul față de care se calibrează
+     luminozitatea rutei native. -->
+<script src="halo-presets.js"></script>
 <script>
 (function () {
   'use strict';
@@ -256,7 +263,8 @@
       if (!window.butterchurn) { testMode = true; return 'no engine — test pattern'; }
       if (!presets) {
         presets = Object.assign({}, butterchurnPresets.getPresets(),
-          (window.butterchurnPresetsExtra || { getPresets: () => ({}) }).getPresets());
+          (window.butterchurnPresetsExtra || { getPresets: () => ({}) }).getPresets(),
+          window.haloPresets || {});
       }
       if (!viz) {
         // A context is required by the constructor; it is never resumed and

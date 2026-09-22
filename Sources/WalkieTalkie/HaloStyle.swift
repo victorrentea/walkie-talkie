@@ -64,6 +64,13 @@ enum HaloStyle: String, CaseIterable {
     /// si o coada stinsa pana in margini. Doua randuri in meniu pentru acelasi
     /// `.milk`, fiindca ce difera nu e presetul, ci cat din ecran ocupa.
     case milkdrop7Faded
+    /// **Cele alese de el la răsfoirea din pagina de demo** (22 sep 2026). Nu sunt
+    /// în pachetele oficiale ale lui butterchurn, vin din arhivele mari, deci
+    /// `assets/milkdrop/halo-presets.js` trebuie să existe ca ruta web să le vadă —
+    /// iar ruta web e etalonul față de care se calibrează luminozitatea celei native.
+    /// Numerele sunt pozițiile lor din răsfoire, singurele nume pe care le are el
+    /// pentru ele.
+    case milkdrop213, milkdrop179
 
     /// The menu row's wording — Victor's short names.
     var title: String {
@@ -77,6 +84,8 @@ enum HaloStyle: String, CaseIterable {
         case .orbits:         return "Atom"
         case .twoBalls:       return "Gemini"
         case .blockBeads:     return "Beads"
+        case .milkdrop213:    return "Sigil"
+        case .milkdrop179:    return "Magma"
         case .milkdrop7:      return "Tunnel"
         case .milkdrop7Faded: return "Tunnel faded"
         case .milkdrop8:      return "Cauldron"
@@ -278,6 +287,14 @@ enum HaloStyle: String, CaseIterable {
         // calmarile cerute pe 2026-09-21/22 — `rot` 2 → 1,0 si `gain` 4 → 3,2 —
         // plus gaura din mijloc, ca liniile sa nu se mai stranga peste cursor.
         // Marimea: 0,588 × 1,1 = 0,647, cei +10% ceruti.
+        // Traducerea intrărilor din pagină: acolo `scale` e latura pânzei ca
+        // fracțiune din latura LUNGĂ a ecranului, iar `fade: true` fără `fadeAtEdge`
+        // e masca cu patru stopuri și podea 0,10 — adică exact ce dau `Preset`-ului
+        // valorile implicite. Restul butoanelor se măsoară, nu se ghicesc.
+        case .milkdrop213: return Preset(number: 213, name: "martin - shifter - armorial bearings of robotopia",
+                                         scale: 1.0, fade: true)
+        case .milkdrop179: return Preset(number: 179, name: "Pithlit - Deep Vent",
+                                         scale: 1.0, fade: true)
         case .milkdrop7:   return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647,
                                          // *"appears centred slightly below the mouse"*, then *"no longer
                                          // centred"* after a static offset: the preset's centre WANDERS —
