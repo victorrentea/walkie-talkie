@@ -2,6 +2,7 @@
 paths:
   - "Sources/WalkieTalkie/HotkeyTap.swift"
   - "Sources/WalkieTalkie/ScreenCapture.swift"
+  - "Sources/WalkieTalkie/DesktopEffects.swift"
   - "Package.swift"
 ---
 # Area crop: the wheel, dragged
@@ -9,6 +10,11 @@ paths:
 The middle button held and dragged during a dictation selects a rectangle of the screen that joins the pictures (2026-09-10); the selection UI is Victor Addons' crop, shared through `victor-mac-kit`. Full history and reasoning: docs/journal.md — see the sections named after each rule below.
 
 ## The gesture
+
+- **The crop suspends Victor Addons' desktop effects for the length of the drag** (2026-09-22). Victor: *"atunci când fac poză la ecran cu wheel apăsat, oprește temporar, suspendă toate efectele de ecran."* This is the **only** capture in the app that needs it: every other one is over in a millisecond, while a crop is framed over seconds *while he is still talking*, and the room keeps tapping ☕ reactions at him the whole time — they rain into the box between the press and the release. `DesktopEffects.suspendForCrop()` at the press, `DesktopEffects.resume()` in the selection callback (**above** the nil branch, because a cancel and a rectangle are both ends of the drag).
+  - **`GET /effect/suspend/<seconds>` and `/effect/resume` on 55123**, Victor Addons' port — not the effects app's 55124. Addons proxies `/effect/*` verbatim, so this side never needs to know there are two apps over there or which of them is up.
+  - **Fire-and-forget, 1 s timeout, no retry.** A crop must never wait on a socket, and the effects app missing, stopped or mid-redeploy is a normal Tuesday — the shot is still worth taking. Failures go to the log, never to the overlay.
+  - **The far side's hold is a deadline, not a flag** (`EffectsSuspension`), which is what makes a fire-and-forget resume safe: this app killed mid-drag, a redeploy, a crash — the hold expires by itself. That is why nothing here retries, and why the suspend asks for 20 s rather than for "until I say so".
 
 - **A wheel drag while a dictation is running — bound, unbound, or headed for the caret — selects a region, in both gesture modes.** Dimming, box, ⌘ to move it whole, ⌥ to draw it from its middle, Esc to call it off: literally the same code as Victor Addons' crop. It rides `syncBorrowedGestures`' `dictating` like the other borrowed gestures, so it cannot outlive a sentence; unlike them it takes nothing until the hand has moved, and a middle **click** is handed back untouched. → journal: *The wheel, dragged: a region instead of the display (2026-09-10)*
 - **`areaDragThreshold` is 12 pt, measured off the event, not off `NSEvent.mouseLocation`.** Victor's rule: *"ar trebui să ignori click/dublu-click de wheel — doar drag ne interesează."* It was 6 for a day — the right floor for *is this box worth capturing* (the overlay refuses to call a smaller one a selection), too fine for *did he mean to drag at all*; a click is never perfectly still. Nothing is lost by waiting, because the corner was recorded at the press. An event carries the position it was *made* at; the pointer answers where it is by the time the tap asks — they differ by one event, which is everything to a burst of posted events: the arm was silently skipped for a drag delivered faster than the pointer could be read, which is the shape every test of this gesture has. → journal: *The release matches the press, and in Logi mode both go through*

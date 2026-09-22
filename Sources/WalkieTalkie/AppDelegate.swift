@@ -1739,7 +1739,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onGestureSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard !self.listening, !self.recordWhenSourceReady else { return }
+                // **Mid-sentence, the gesture converts instead of doing nothing**
+                // (2026-09-22) — see `convertDictationToSpawn`. At rest it opens a
+                // spawn dictation as it always has.
+                if self.listening || self.recordWhenSourceReady {
+                    self.convertDictationToSpawn()
+                    return
+                }
                 self.startDictation(spawn: true)
             }
         }
@@ -1771,21 +1777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         hotkeys.onWheelDoubleSpawn = { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                // **`recordWhenModelReady` counts as a dictation.** On a cold
-                // model the first click has not opened the microphone yet — it
-                // banked the gesture and is waiting on the weights — and the
-                // second click lands half a second later, long before that. The
-                // resumed start reads `spawnPending`, so setting it here is
-                // exactly how the conversion survives the wait.
-                guard self.listening || self.recordWhenSourceReady else { return }
-                guard !self.spawnPending, !self.pasteMode else { return }
-                self.spawnPending = true
-                self.spawnFolder = nil
-                self.overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
-                self.offerSpawnFolders()
-            }
+            DispatchQueue.main.async { self?.convertDictationToSpawn() }
         }
         // The deferred context shot's cue — see `onWheelDictate`.
         hotkeys.onWheelRelease = { [weak self] in
@@ -3307,6 +3299,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and `send` consumes the destination on its way onto the `Message`. A click
     /// after that belongs to nothing: the words are already in flight, and
     /// silently moving a folder under them would be worse than ignoring it.
+    /// **Turn the dictation already in flight into a spawn.** Same recording, same
+    /// words — only the destination changes: the terminal it lands in does not
+    /// exist yet, so the folder menu is offered exactly as at a fresh spawn press.
+    ///
+    /// Two gestures reach it: the wheel clicked a second time (`onWheelDoubleSpawn`,
+    /// Wheel mode) and **🔼 ↑ made while a sentence is open** (`onGestureSpawn`,
+    /// Logi mode — 2026-09-22). The side button used to be a spawn *only at rest*:
+    /// mid-sentence the guard dropped it on the floor, so the one moment the
+    /// decision is actually made — half a sentence in, realising this belongs in a
+    /// new terminal — was the one moment the gesture did nothing at all. Victor:
+    /// *"atunci când, în timpul unei dictări, mă hotărăsc să pornesc într-un
+    /// terminal nou, să meargă în continuare gestul"*.
+    ///
+    /// Returns false when there is nothing to convert, or when the sentence is
+    /// already a spawn / already headed for the caret.
+    @discardableResult
+    private func convertDictationToSpawn() -> Bool {
+        // `recordWhenSourceReady` counts as a dictation: on a cold engine the start
+        // has not opened the microphone yet — it banked the gesture and is waiting
+        // — and the resumed start reads `spawnPending`, so setting it here is
+        // exactly how the conversion survives that wait.
+        guard listening || recordWhenSourceReady else { return false }
+        guard !spawnPending, !pasteMode else { return false }
+        spawnPending = true
+        spawnFolder = nil
+        overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+        offerSpawnFolders()
+        return true
+    }
+
     private func offerSpawnFolders() {
         SpawnFolderMenu.show(at: NSEvent.mouseLocation) { [weak self] choice in
             guard let self = self, self.spawnPending else { return }
@@ -6636,7 +6658,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // screen and sets window frames; the same mistake made in an
             // `ElementPicker` callback took the whole app down with a `SIGTRAP`
             // inside `NSWMWindowCoordinator`.
+            // **Hold the desktop effects for the length of the drag** (2026-09-22).
+            // A crop is framed over seconds while the room keeps tapping ☕, so
+            // unlike every other capture here it can have reactions rain into it
+            // between the press and the release. Fire-and-forget, and the far
+            // side's hold expires by itself — see `DesktopEffects`.
+            DesktopEffects.suspendForCrop()
             CropSelectionOverlay.begin(button: .middle, from: anchor, style: Self.cropStyle) { selection in
+                // Both ways out of the drag — a rectangle or a cancel — come
+                // through here, which is why the resume sits above the branch.
+                DesktopEffects.resume()
                 guard let selection = selection else {
                     // Esc, a right-click, or a drag that turned out to be a
                     // twitch. Nothing was filed and nothing is said: he called it
