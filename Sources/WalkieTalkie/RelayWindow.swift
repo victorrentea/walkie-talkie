@@ -907,12 +907,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// know it is done.
     private var listeningWord: String { "Listening\(micMark)..." }
 
-    /// **Which recogniser is listening, as its own logo** (2026-09-18 as a
-    /// letter, 2026-09-22 as a logo) — `Listening 🎤/⬮...`, where the second
+    /// **Which recogniser is doing the work, as its own logo** (2026-09-18 as a
+    /// letter on the `Listening` row, 2026-09-22 as a logo, and from that
+    /// evening on the row it is about) — `Transcribing via ⬮...`, where the
     /// glyph is ElevenLabs' pause-in-a-ring, Wispr Flow's five bars or the
-    /// Apple mark of the model that runs here. The brackets went with the
-    /// letters: two pictures separate themselves, and the punctuation was two
-    /// more steps of a ramp that is twelve characters long.
+    /// Apple mark of the model that runs here.
     ///
     /// Victor asked for it once there were three engines to tell apart: the
     /// menu's `Engine` row answers *what is configured*, and it is two clicks

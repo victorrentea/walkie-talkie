@@ -319,38 +319,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// **The whole mark: which microphone, then which recogniser** — Victor,
-    /// 2026-09-19: `Listening 🎙️/⬮...`, `💻/⬮`, `🎤/⬮`, `🎧/⬮`, where the
-    /// second half is the engine's logo (`engineMark`).
+    /// **The recogniser's half: `Transcribing via ⬮...`** — the row that is
+    /// actually about it. Victor, 2026-09-22 evening: *"când fac transcribing,
+    /// să zici «transcribing via» și să pui simbolul tool-ului care face
+    /// transcrierea efectivă."*
     ///
-    /// **No brackets since 2026-09-22** (*"fără paranteză"*). They were doing
-    /// the work of separating the mark from the word while both halves were
-    /// characters; with two pictures in there the shapes separate themselves,
-    /// and a pair of parentheses in the middle of a progress bar is two more
-    /// steps of ramp spent on punctuation. One space stands in for the opening
-    /// bracket, because `Listening🎙️` with nothing between them reads as one
-    /// long word.
+    /// **The two facts rode one row for three days and should not have.** From
+    /// 2026-09-19 this was `Listening(🎙️/E)...` — brackets, then a slash he
+    /// picked over the `⇒` he first asked for (*"the arrow is a wide glyph in
+    /// the middle of a word that is also a progress bar"*), then on 2026-09-22
+    /// the brackets went and the letters became logos. All of it said both facts
+    /// at the one moment only the first is true: while the microphone is open
+    /// nothing has been transcribed yet, and by the time something is, the
+    /// microphone is shut. So each half now waits for its own row, and the
+    /// separator that was the whole design problem is gone with the pairing —
+    /// a preposition does the work instead.
     ///
-    /// **The separator is a slash.** He asked for it as `⇒` and changed it to
-    /// `/` the same evening, which is the right call and worth writing down
-    /// rather than silently obeying: the arrow is a wide glyph in the middle of
-    /// a word that is also a progress bar (`RelayWindow.applyEngineText` lights
-    /// it a character at a time), and it made a four-character mark read as a
-    /// diagram. The slash says the same *this over that* in one narrow glyph,
-    /// which is what a mark read mid-sentence beside the cursor can afford. It is the one
-    /// pair of facts he cannot recover by looking at anything else while he is
-    /// talking — the menu answers both, two clicks away and behind whatever is
-    /// in front.
-    ///
-    /// **The glyph is the device `InputDevice.resolve()` would actually open**,
-    /// not the one the menu is ticking: a receiver unplugged after it was picked
-    /// falls back to automatic, and the chip has to say what he is being heard
-    /// through. A device that is none of the four leaves the glyph out entirely
-    /// and the mark is the plain `(E)` every state before today was photographed
-    /// with.
+    /// It is still the one pair of facts he cannot recover by looking at
+    /// anything else while he is talking: the menu answers both, two clicks away
+    /// and behind whatever is in front.
     ///
     /// **One honest caveat, written here because there is nowhere else it would
-    /// be read:** with the Engine on Wispr Flow this names the device the
+    /// be read:** with the Engine on Wispr Flow `micMark` names the device the
     /// *relay's* recorder is on — the one feeding the level meter and the voice
     /// corpus — while the words come from Wispr's own microphone, which is
     /// chosen inside Wispr and is a Loopback device on this Mac. The four
@@ -1338,7 +1328,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.
         status.isRecording = { [weak self] in self?.listening ?? false }
-        status.hasLastDictation = { [weak self] in self?.lastDictation?.isEmpty == false }
+        // **The same question `⌘⇧P` asks** (2026-09-22) — see
+        // `pastableDictation`. Asking `lastDictation` here is what left the row
+        // greyed out above a submenu full of sentences after every relaunch.
+        status.hasLastDictation = { [weak self] in self?.pastableDictation != nil }
         status.onPasteLast = { [weak self] in self?.pasteLastDictation(fromMenu: true) }
         // Deliberately the *same* call mouse 5 makes rather than a quieter variant:
         // a recording ended from the menu is still a dictation, and it is
@@ -7442,6 +7435,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// words are the ones that were sent.
     private var lastDictation: String?
 
+    /// **The newest sentence in the log, read once and remembered** — the answer
+    /// to *what does `⌘⇧P` paste when this process has not heard one yet*.
+    ///
+    /// Victor, 2026-09-22: *"în prompt history apar elemente, dar «paste last
+    /// prompt» e dezabilitat. Nu prea are sens asta, nu?"* — and it does not:
+    /// `lastDictation` lives in memory and is born nil, so every relaunch (a
+    /// Dock click, `relay-restart.sh`, a rebuild) greyed the row out while the
+    /// submenu three pixels above it listed twelve sentences the key would
+    /// happily have pasted. The row and the list were reading two different
+    /// stores and only one of them survives a restart.
+    ///
+    /// **Read lazily and at most once a run.** `MessageLog.recent()` parses the
+    /// whole outbox — two megabytes today, and it grows forever — and this is
+    /// asked at every menu open. It is only ever consulted while `lastDictation`
+    /// is still nil, which is to say until the first sentence of the run, so the
+    /// parse happens on the first menu open after a launch and never again.
+    ///
+    /// **A caret sentence writes no outbox line** (*When the outbox is
+    /// written*), so this cannot see one — which is honest rather than a gap:
+    /// what it restores is the last sentence that was *sent somewhere*, the same
+    /// set the history submenu lists, and the two now agree by construction.
+    private var loggedDictation: String?
+    private var loggedDictationRead = false
+
+    /// What `⌘⇧P` would paste right now: this run's last sentence, else the
+    /// log's. The one question both the key and the menu row's enabled state
+    /// ask, asked in one place so they cannot disagree again.
+    private var pastableDictation: String? {
+        if let text = lastDictation, !text.isEmpty { return text }
+        if !loggedDictationRead {
+            loggedDictationRead = true
+            loggedDictation = MessageLog.recent()
+                .first { !$0.text.isEmpty }
+                .map { MessageLog.envelope($0) }
+        }
+        return loggedDictation.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     /// **How the last sentence was delivered, and where it went** — the object
     /// `GET /test/state` answers under `lastDelivery`, and the same one written
     /// into the outbox line's `delivery` field.
@@ -7651,7 +7682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// would land in whatever had focus while the menu was still up. Same
     /// hazard the menu-driven screenshot has.
     private func pasteLastDictation(fromMenu: Bool = false) {
-        guard let text = lastDictation, !text.isEmpty else {
+        guard let text = pastableDictation else {
             overlay.flash("⚠️ nothing dictated yet", duration: 3)
             return
         }

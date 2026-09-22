@@ -118,6 +118,26 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   that sibling checkout beside it. Both apps are only ever built on this Mac, from local; that is
   the trade for editing the shared gesture and rebuilding in one step.
 
+## The chip's two rows say what is hearing him and what is reading it (2026-09-22, evening)
+
+- **`Listening to 🎤...`** while the microphone is open, **`Transcribing via ⬮...`** while the
+  words are coming back — each fact on the row that is about it, each with the preposition that
+  makes it a sentence. Victor: *"când fac listening să scrie «listening to» și apoi emoji-ul
+  device-ului ascultat … când fac transcribing, să zici «transcribing via» și să pui simbolul
+  tool-ului care face transcrierea efectivă."*
+- **They rode one row for three days and should not have** — `Listening(🎙️/E)...` from 2026-09-19,
+  the brackets and letters dropped on 2026-09-22. That form said both facts at the one moment only
+  the first is true: while the microphone is open nothing has been transcribed yet, and by the time
+  something is, the microphone is shut. The slash that was the whole design problem went with the
+  pairing.
+- **The recogniser is a logo, not a letter** (2026-09-22) — ElevenLabs' pause-in-a-ring, Wispr
+  Flow's five bars (traced off its own icon), the Apple mark for the model that runs here, all
+  drawn in **exactly the row's ink** (*"logo-ul lor stilizat cu gri. Exact culoarea fontului"*).
+  `Glyphs.Engine` carries them as private-use **characters**, so `AppDelegate` still hands the chip
+  a string and the chip still cannot ask which engine it means — `applyEngineText`'s existing
+  *non-ASCII is a picture* branch draws them, and `transcribeString` grew the same branch the day
+  the mark moved onto its row. A device that is none of the four leaves `Listening...` plain.
+
 ## The overlay's states are photographed
 
 - **No change to the overlay is finished until `./docs/shoot-overlay-states.sh` has been run.**
@@ -127,7 +147,9 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   stands the installed app down and puts it back.
 - Nothing that rides the pointer can be screenshot (`sharingType = .none`; `RELAY_CAPTURABLE=1`
   no longer works on macOS 15). Review with: the states page; `kill -USR1 <pid>` →
-  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HALO` (+ `…-arrow.png`),
+  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HINT` (the `⌘⇧P` hint on both grounds), `WT_SHOOT_HALO` (+
+  `…-arrow.png`, whose middle column is the arrows at **twice** their size — the pose they wear
+  while the words are in flight),
   all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run; `WT_HALO_STYLE=<effect>` picks a
   ported halo, `WT_HALO_CYCLE=<s>` dials through them, `WT_HALO_DEMO_AUDIO=1` gives it a voice);
   `CGWindowListCopyWindowInfo` for geometry. `RELAY_SHOOT` runs skip every transition.
@@ -224,6 +246,16 @@ sits at rest there.
   this one **does** shadow other applications' shortcuts — VS Code's and Cursor's Command
   Palette, Chrome DevTools' command menu — and is swallowed anyway, because Victor asked for the
   chord). All swallowed, autorepeat included. ⌘⌃⌥D is Victor Addons' dark-mode toggle.
+  **⌘⇧P is offered where it is the answer** (2026-09-22): one faint pulse of a `⌘⇧P` keycap
+  under the pointer after a **caret** sentence lands and after a **prompt is cancelled** — the two
+  moments the words exist and may not be where he wanted them. `PasteHint`, peak opacity **0.20**
+  (*"foarte faint … un singur puls"*, `WT_PASTE_HINT_PEAK`), 0.8 s up and 1.2 s down, placed once
+  and never following. **Not after a cancelled dictation** — there the key would paste the sentence
+  before last, which is the `copy_last_text` failure by another door.
+  **And it now works after a restart**: `⌘⇧P` and the menu row fall back to the newest line in the
+  outbox when this process has not heard a sentence yet (`pastableDictation`, read once a run) —
+  the row used to be greyed out above a *Prompt history* submenu listing twelve sentences it would
+  have pasted.
 - **Mouse:** *Mouse Gestures: Logi* is the default (2026-09-09; a submenu of two rows since
   2026-09-14, `Logi` / `Wheel`, the shape `Engine` has) — the side buttons arrive
   from Options+ as ⌃⌥⌘F3…F12 and every mouse button is passed through; the wheel is untouched

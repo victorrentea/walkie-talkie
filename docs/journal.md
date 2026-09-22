@@ -24,7 +24,8 @@ The journal contradicts itself over time, because it was written as things chang
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
-- *`DropArrow`: three dashes and a head, pointing down at the cursor* (2026-09-11) — superseded 2026-09-12 by *Six heads closing in, instead of one arrow hanging above*; the shaft, the dashes and the march are gone
+- *`DropArrow`: three dashes and a head, pointing down at the cursor* (2026-09-11) — superseded 2026-09-12 by *Six heads closing in, instead of one arrow hanging above*; the shaft, the dashes and the march are gone, and since 2026-09-22 the heads are **twice the size** while the words are in flight (*The arrows double while the words are in flight*)
+- *The chip says which microphone, and the menu picks it* (2026-09-19) — the mark `Listening(🎙️/E)...` is superseded 2026-09-22 by *The chip says what is hearing him and what is reading it*: no brackets, no slash, no letter — the device is on `Listening to 🎤...` and the recogniser's **logo** is one row down on `Transcribing via ⬮...`
 - *The wheel is the relay's*, *Double-clicking the wheel turns the dictation into a spawn*, *The right chord…*, *⌘ + the wheel* — live only with *Use Logi Gestures* unticked; the default since 2026-09-09 is *The side buttons speak in function keys*; the ~18 ms side-button measurement in *Double-clicking the wheel* is corrected there
 - *Mouse 4 is the shutter* (LinearMouse / Victor Addons Return) — LinearMouse uninstalled 2026-09-07; in Logi mode the app posts the Return itself (*Use Logi Gestures*)
 - *⌘⌃D is this app's own key* (since 2026-08-26) — the bind key is ⌘⌃B since 2026-09-01 (*⌘⌃B binds, ⌘⌃D dictates*)
@@ -11686,3 +11687,140 @@ evidence; that branch was the fallback's own bug with the fallback switched off.
 outside Wispr whether a status means *arriving* or *abandoned*, and it is what turned "maybe the
 timeout is too short" into a measurement. Victor asked for it in the same breath as the bug: *"un
 mecanism de capturare din ochi tochi pentru ce face Wispr Flow transcrieri."*
+
+## The chip says what is hearing him and what is reading it (2026-09-22, evening)
+
+Three asks in one evening, and they turn out to be one change.
+
+**First, the letter becomes a logo.** The engine mark had been `(W)` / `(E)` / `(L)` since
+2026-09-18 and `Listening(🎙️/E)...` since the microphone joined it on 2026-09-19. Victor:
+*"fără paranteză, să scrie apoi emoji-ul device-ului folosit, apoi slash în continuare, dar în
+loc de litera care urmează, aș vrea să am logo-ul lor stilizat cu gri. Exact culoarea fontului.
+De la Wispr Flow, de la 11 Labs — e acel semn cu o pauză într-o bulină — sau, respectiv, Mac-ul,
+dacă este transcris cu motorul local."*
+
+A letter is a thing to *decode*, and the proof of it is the comment that had to sit over the
+table: `L` and not `W` for Whisper, because the two recognisers whose names begin with the same
+letter were exactly the two he most needed to tell apart. A logo needs no legend.
+
+- **ElevenLabs** is a pause in a ring — the two bars of their wordmark as they are worn on the
+  icon, and the ring keeps the mark from reading as a second slash beside the one in front of it.
+- **Wispr Flow** is five bars, traced off `electron.icns` the way the mouse outlines in `Glyphs`
+  were traced off Logitech's schematic: bars 18 px wide on a 28 px pitch inside an ink box of
+  129 × 128, heights `1.00 / 0.43 / 0.66 / 0.44 / 1.00`.
+- **The local model** is the Apple mark, typed rather than traced — `U+F8FF` is a monochrome glyph
+  in the system font, so it takes the row's ink like any other character. It is also the honest
+  picture: the other two are logos of somewhere his voice is being *sent*, and this one is the
+  machine it does not leave.
+
+**They travel as characters.** `RelayWindow` may not know there is more than one recogniser —
+that is `DictationSource`'s rule and the reason the Wispr path could rot unnoticed for a month —
+so the logos are private-use scalars (`Glyphs.Engine`) inside the mark string, and
+`applyEngineText`'s existing *non-ASCII is a picture* branch draws them. `AppDelegate` still hands
+the chip a string; the chip still cannot branch on what it means. They are cached on the colour
+**as it resolves**, not as it is named: the chip's ink is `secondaryLabelColor`, two different
+greys in the two appearances under one name, so a key built from the name would have handed back a
+dark-mode logo after a switch to light for the life of the process.
+
+**Then, the same evening, the mark came apart.** *"Am răzgândit un pic: când fac listening să
+scrie «listening to» și apoi emoji-ul device-ului ascultat. Respectiv, când fac transcribing, să
+zici «transcribing via» și să pui simbolul tool-ului care face transcrierea efectivă."*
+
+Which is right, and it retires the design problem the slash was the answer to. `Listening 🎤/⬮...`
+says both facts at the one moment only the first of them is true: while the microphone is open
+nothing has been transcribed, and by the time something has, the microphone is shut. So the
+device stays on `Listening to 🎤...` and the recogniser moves one row down to
+`Transcribing via ⬮...`, each with the preposition that makes it a sentence rather than a code.
+The separator is gone with the pairing.
+
+The one thing that had to be added downstream: `transcribeString` never had the *non-ASCII is a
+picture* branch, because until that evening every character in that row was ASCII. A raw glyph in
+an attributed string on a label that carries a halo draws itself and leaves every other glyph
+transparent — the failure this file has warned about since `applyTitleText`, and the one that once
+cost the spawn row its entire word.
+
+## The arrows double while the words are in flight (2026-09-22)
+
+*"Când o dictare la caret este în procesul de transcriere, săgețile cele trei de sus și jos care
+arată spre cursor trebuie să se dubleze ca mărime … Cele care apar atunci când fac o pauză în
+dictare să rămână ca până acum."*
+
+`DropArrow` has had two states since 2026-09-15 and they were drawn identically. The silence one
+is a **suggestion**: he has stopped talking, the caret could still go anywhere, and he may
+perfectly well go on speaking — in which case the heads fade and nothing was owed. `hold` is not a
+suggestion: the microphone is shut, the sentence is coming, and the pointer must not move until it
+lands. One size for both left the moment with a deadline in it looking exactly like the moment
+without one.
+
+**Size, and not colour, speed or count**, because size is the only channel this shape has left —
+the amber is *this is the arrow*, the wave's rhythm is *inward*, three a side is the sequence.
+Doubled, the outermost pair sits 88 pt from the hot spot, past the ring's hole and into its band,
+which is where a bigger shape has to be to stay legible at all. It is a transform on the container
+about its own centre, so the arrangement stays symmetric about the pointer — which is the whole of
+why it is six heads and not one arrow.
+
+**Instant, both ways.** Core Animation animates a transform over a quarter of a second unless told
+otherwise, and neither end wants that: the growth *is* the message, and the shrink is only ever
+seen on a window that has already been ordered out. `refresh` runs at 20 Hz and sets it back to 1
+on every tick, so the assignment is guarded on the value or it is twenty chances a second for an
+implicit animation.
+
+`WT_SHOOT_HALO`'s arrow sheet gained a middle column, `words in flight`. Same argument as the
+sheet itself: this is the one pose of this shape that is on screen for a fixed second or two of
+every caret dictation and can therefore never be looked at for long enough to judge.
+
+## `⌘⇧P`, said once and faintly, where it is the answer (2026-09-22)
+
+*"După ce ai dat cancel la dictare sau după ce s-a încheiat o dictare la caret … ideea că paste-ul
+poate se pierde … să apară foarte transparent, încă un hint, cu tastele pe care le apăs ca să dau
+paste la acel prompt. Și cumva să apară foarte faint, și apoi să crească opacitatea … și apoi să
+dispară. Un singur puls de la transparent la mai opac și apoi din nou transparent."*
+
+`⌘⇧P` is the one gesture in this app that is only ever wanted after something went slightly wrong
+— the ⌘V landed in the window that had the focus rather than the one he meant, or Cancel threw
+away a sentence he then wished he had. Both are moments of mild alarm, and a shortcut recalled at
+leisure is no use at a moment of mild alarm. So it is said **where** the loss happens, at the
+instant it happens, and nowhere else.
+
+**Not after a cancelled dictation**, which is the one reading of his words I did not take. There
+is no sentence there — the ✕ kills the audio before any transcript exists — so `⌘⇧P` would paste
+the sentence *before* last, which is the `copy_last_text` failure under its own standing *never
+reintroduce* rule, arriving by a new door. That case already has `Recover Cancelled Dictation`,
+offered in its own banner.
+
+**The ceiling is his number, twice given, unprompted: ten to twenty per cent.** It ships at 0.20
+with `WT_PASTE_HINT_PEAK` to move it. The arithmetic behind agreeing: this appears after *every*
+caret sentence, dozens of times a day, over the thing he is working in. At full ink that is an
+interruption charged on every success in order to help with the occasional failure. At a fifth it
+is visible to a glance that goes looking and beneath notice to one that does not, which is the only
+setting at which something can be said this often.
+
+**Placed once and it does not follow.** By the time it has faded up he may be reaching for the
+keys, and a hint that walks away from the cursor as he moves is the single dotted arrow `DropArrow`
+threw out in 2026-09-12 — a thing to look at rather than a thing to notice. It takes a window of
+its own for `DropArrow`'s reason: everything else this app draws near the pointer hangs its meaning
+on the window's own alpha, and here the alpha *is* the message.
+
+`WT_SHOOT_HINT` draws it on a dark ground and a light one, at its real opacity and at full ink —
+the only way to judge a mark whose whole design is a number between nothing and not much.
+
+## The row was greyed out above a list of the sentences it would paste (2026-09-22)
+
+*"În prompt history apar elemente, dar «paste last prompt» e dezabilitat. Nu prea are sens asta,
+nu?"*
+
+It does not. `Paste last prompt` was enabled off `lastDictation`, which lives in memory and is born
+nil, so every relaunch — a Dock click, `relay-restart.sh`, a rebuild — greyed the row out while the
+*Prompt history* submenu three pixels above it listed twelve sentences the key would happily have
+pasted. Two rows reading two different stores, and only one of them survives a restart.
+
+`pastableDictation` is now the one question both the key and the row ask: this run's
+`lastDictation`, else the newest line in the outbox, as the envelope `MessageLog` already hands the
+history rows. **Read lazily and at most once a run** — `MessageLog.recent()` parses the whole
+outbox, two megabytes today and growing forever, and this is asked at every menu open; it is only
+ever consulted while `lastDictation` is still nil, which is to say until the first sentence of the
+run.
+
+A caret sentence writes no outbox line and so cannot be seen here. That is honest rather than a
+gap: what the fallback restores is the last sentence that was *sent somewhere*, which is exactly
+the set the submenu lists — so the two now agree by construction, which was the complaint.

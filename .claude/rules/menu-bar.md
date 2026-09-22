@@ -52,7 +52,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 |---|---|---|
 | `Connect Terminal` | `mappin`, in Google Maps red | `⬅️ + 🛞` |
 | `Disconnect` | `mappin.slash` | `➡️ + 🛞` |
-| `Paste last prompt` | 📋 | `⌘⇧P` |
+| `Paste last prompt` | 📋 | `⌘⇧P` — **enabled off the log, not off this run's memory** (2026-09-22) |
 | — separator — | | |
 | `Start Dictation` | `mic` | `🛞` |
 | `Dictate to New Claude` (`Start dictation to new claude` until 2026-09-22) | ✨ | `🛞🛞` |
@@ -71,6 +71,16 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
 
+- **`Paste last prompt` asks the same question `⌘⇧P` does** — `AppDelegate.pastableDictation`:
+  this run's `lastDictation`, else the newest line in the outbox. Victor, 2026-09-22: *"în prompt
+  history apar elemente, dar «paste last prompt» e dezabilitat. Nu prea are sens asta, nu?"* — and
+  it did not: `lastDictation` is born nil, so every relaunch greyed the row out above a
+  *Prompt history* submenu listing twelve sentences the key would have pasted. The two rows were
+  reading different stores and only one of them survives a restart. **Read lazily, at most once a
+  run** — `MessageLog.recent()` parses the whole outbox (two megabytes, and it grows forever) and
+  this is asked at every menu open, so it is only ever consulted while `lastDictation` is still
+  nil. A caret sentence writes no outbox line and so cannot be seen here, which is honest: what is
+  restored is the last sentence that was *sent somewhere*, the same set the submenu lists.
 - **The shortcut column above is the wheel vocabulary — live only with *Mouse Gestures: Wheel*.** Each `gestureRows` entry carries two legends, `(item, label, logi, wheel)`, and
   `restyleGestures` picks one; the Logi set (default since 2026-09-09) is `◀️ + 🔼` bind, `🔽 ↓`
   disconnect, `🔼 →` start/end, `🔼 ↑` new claude, `🔼 ←` cancel, `🔽`

@@ -302,6 +302,59 @@ săgețile care curg până când efectiv se inseră textul la caret … să-mi 
   to be, which is the opposite of what they are up to say.
 - **`GET /test/state.arrowsUp`** is the only way to assert this — nothing that rides the pointer can
   be screenshot.
+- **They are twice the size for that stretch** (2026-09-22) — Victor: *"când o dictare la caret
+  este în procesul de transcriere, săgețile cele trei de sus și jos … trebuie să se dubleze ca
+  mărime … Cele care apar atunci când fac o pauză în dictare să rămână ca până acum."*
+  `DropArrow.holdScale = 2`, a transform on the container about its own centre (the pointer's hot
+  spot), so the arrangement stays symmetric about the thing it points at.
+  - **The two states were drawn identically and mean different things.** The silence one is a
+    *suggestion* — he may perfectly well go on talking, and then the heads fade and nothing was
+    owed. `hold` has a deadline in it: the microphone is shut, the sentence is coming, and the
+    pointer must not move. Same size for both left the one moment that cannot be ignored looking
+    exactly like the one that can.
+  - **Size and not colour, speed or count**, because size is the only channel on this shape not
+    already carrying something — the amber is *this is the arrow*, the wave's rhythm is *inward*,
+    three a side is the sequence. Doubled, the outermost pair sits 88 pt out, past the ring's hole
+    and into its band, which is where a bigger shape has to be to stay legible.
+  - **Instant, both ways** (`setScale`, inside a `CATransaction` with actions off). Core Animation
+    would interpolate a transform over a quarter of a second on its own; the growth *is* the
+    message, and the shrink is only ever seen on a window already ordered out. `refresh` sets it
+    back to 1 on every tick, which is why it is guarded on the value — a 20 Hz assignment is 20
+    chances a second for an implicit animation.
+  - **The contact sheet has a column for it**: `WT_SHOOT_HALO`'s `…-arrow.png`, middle column,
+    `words in flight` — the one pose of this shape that is on screen for a fixed second or two of
+    every caret dictation and can therefore never be looked at for long.
+
+## `PasteHint` — `⌘⇧P`, said once and faintly (2026-09-22)
+
+Victor: *"după ce ai dat cancel la dictare sau după ce s-a încheiat o dictare la caret … să apară
+foarte transparent, încă un hint, cu tastele pe care le apăs ca să dau paste la acel prompt … și
+apoi să crească opacitatea … și apoi să dispară. Un singur puls."*
+
+- **Two moments, and they are the two where the words exist and may not have landed where he
+  meant**: a caret sentence at the instant its ⌘V goes out (the one delivery this app cannot read
+  back — the focus is nobody's to own), and a cancelled **prompt** (the words are still
+  `lastDictation`, and *I meant that* is often one second behind *I did not*).
+- **Never after a cancelled dictation.** There is no sentence there, so `⌘⇧P` would paste the one
+  before last — the `copy_last_text` failure under its own *never reintroduce* rule, arriving by a
+  new door. That case has *Recover Cancelled Dictation*, which is a different offer and already
+  made in the banner.
+- **Peak 0.20, one pulse, 0.8 s up and 1.2 s down** — his number, twice, unprompted
+  (`WT_PASTE_HINT_PEAK` moves it for a run). It appears after *every* caret sentence, which is
+  dozens of times a day over the thing he is working in; at full ink that is an interruption
+  charged on every success to help with the occasional failure.
+- **Placed once, at the pointer, and it does not follow.** By the time it has faded up he may be
+  reaching for the keys, and a hint that walks away as he moves is the single dotted arrow
+  `DropArrow` threw out — a thing to look at rather than a thing to notice. Above the pointer
+  instead when there is no room below, because a box clamped to the screen edge points at nothing.
+- **A window of its own**, `DropArrow`'s reason one door down: everything else near the pointer
+  hangs its meaning on the window's alpha, and this *is* an alpha.
+- **White ink with a dark shadow, outlined as a keycap** — the chip's own answer to an unknown
+  backdrop, and the outline is what makes three symbols read as *press this*.
+- Dropped in a cut when a ring goes up (`syncBorrowedGestures`): a hint about the last sentence has
+  nothing to say over this one. `POST /test/paste-hint` fires one from a desk,
+  `GET /test/state.pasteHint` reads it back, `WT_SHOOT_HINT=<path>` draws it on both grounds at its
+  real opacity and at full ink.
 
 ## The ring is up before anything is opened (2026-09-12)
 
