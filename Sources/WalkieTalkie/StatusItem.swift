@@ -844,7 +844,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// vocabulary has to live somewhere it can be drawn full size; this is the
     /// row that leads there, and the `info.circle` beside it already promised as
     /// much.
-    private let version = NSMenuItem(title: "Version: \(StatusItem.buildStamp)",
+    private let version = NSMenuItem(title: "Built \(StatusItem.buildStamp)",
                                      action: nil, keyEquivalent: "")
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
