@@ -1243,7 +1243,11 @@ final class CaretHalo {
     /// ahead of it (t^0.6) — so the tunnel is there, huge and faint, from the
     /// first frames.
     private var approachScale: (scale: CGFloat, alpha: CGFloat) {
-        let span = max(rewindEstimate - ProjectMHalo.warmup, 1.5)
+        // **Twice the time, at least 3 s** (Victor, after the first look: *"poate
+        // incetineste un pic zoom inul … prelungeste-l"*): slower than the
+        // estimate on purpose, so a quick sentence lands mid-approach and the
+        // fast fade takes it from wherever it has got to.
+        let span = max((rewindEstimate - ProjectMHalo.warmup) * 2, 3)
         let t = min(max((CFAbsoluteTimeGetCurrent() - rewindFrom - ProjectMHalo.warmup) / span, 0), 1)
         let e = t * t * (3 - 2 * t)
         return (pow(Self.approachFrom, CGFloat(1 - e)), CGFloat(pow(t, 0.6)))
