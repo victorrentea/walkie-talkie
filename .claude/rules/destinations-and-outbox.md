@@ -85,6 +85,7 @@ tokens where he made them (2026-09-19)*.
 - **Count from `pendingScreen` + `pendingShotOffsets`, never from `attached`** — the screen travels in its own outbox field, so `attached` prints a total one lower than the `📸 ×N` he watched climb. The `🎙️ sent + N 📸` flash counts the same way. → journal: *The prompt is held, not sent*
 - **Sample offsets at the gesture** (`plusOneShot`'s `takenAt`): `screencapture` returns a subprocess later, and a second of drift is a whole sentence. → journal: *The prompt is held, not sent*
 - **Ordering is preserved**: a second dictation arriving mid-countdown releases the first before displaying itself. → journal: *The prompt is held, not sent*
+- **Under Autosend, the pointer on the panel stops the clock** (2026-09-23, *"să se oprească din trimitere până când iau mouse-ul de pe el"*): `RelayWindow.syncHoverPause`, autosend only, and **leaving restarts the hold whole** — resumed, a hover begun at 0.9 s would send the instant he let go. Read from `panel.frame` vs `NSEvent.mouseLocation` on every hover edge and countdown tick, ignored for the 0.25 s unfold (the panel swells out of the cursor). The hint row says `⏸ Paused — ⏎ to send, ⎋ to cancel`; shot `prompt-autosend-paused`.
 
 ## The send flight
 

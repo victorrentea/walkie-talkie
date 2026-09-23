@@ -418,6 +418,15 @@ enum OverlayStates {
                 o.showSentPrompt(transcript, hold: 6, words: transcript, buttons: false)
             },
 
+            Shot(slug: "prompt-autosend-paused", group: "The held prompt", title: "Under Autosend, with the pointer on it",
+                 when: "Autosend is ticked and he moved the pointer onto the panel before its second ran out (2026-09-23).",
+                 note: "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, buttons: false)
+                o.pinHoverPause()
+            },
+
             Shot(slug: "prompt-shots", group: "The held prompt", title: "The prompt, with its frames",
                  when: "Any dictation carrying screenshots — which is most of them, since one is taken automatically.",
                  note: "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00.",

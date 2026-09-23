@@ -722,7 +722,9 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and the string that is drawn cannot drift apart.
     private static func frontLine(_ front: String) -> String { "🪟 Active window: " + front }
 
-    private var hintText: String? { flashMessage }
+    /// A flash still outranks the paused note: anything the relay has to say
+    /// takes the row, and the note comes back when the flash is done.
+    private var hintText: String? { flashMessage ?? (showsHoverPause ? Self.hoverPauseHint : nil) }
 
     /// The hint rows, in the order they are laid out. `statusLines` fills as many
     /// of them as it has something to say for and the rest stay hidden — which is
@@ -4353,11 +4355,86 @@ private let frontLabel = NSTextField(labelWithString: "")
             unfoldOrigin = NSPoint(x: area.minX + margin, y: area.maxY - margin)
             homeScreen = screen
         }
+        promptHoverPaused = false
+        promptShownAt = Date()
         layoutContent(animated: true)
         refreshOpacity()
 
         startPromptCountdown(hold: hold)
         return true
+    }
+
+    // MARK: - Autosend: the pointer on the panel stops the clock
+
+    /// **The pointer on the panel holds it** (Victor, 2026-09-23: *"dacă pun
+    /// mouse-ul pe acel panel de stânga sus, [să] rămână [și] să se oprească din
+    /// trimitere până când iau mouse-ul de pe el, în modul de auto send"*).
+    ///
+    /// Autosend's panel is a one-second receipt with no buttons, so until now
+    /// the only way to stop a sentence he saw was wrong was to beat that second
+    /// to ⎋. Reaching for the panel is the gesture he already makes when he
+    /// wants to look at something — so the reach itself is what stops the
+    /// clock, and ⏎, ⎋ or a click still answer it while it waits.
+    ///
+    /// **Autosend only.** With Send and Cancel on the panel the hand is on its
+    /// way to one of them, and the clock is what the green button counts down —
+    /// freezing it under the pointer would change what the button says in the
+    /// moment he is aiming at it.
+    ///
+    /// **Leaving restarts the hold whole, it does not resume it.** Resumed, a
+    /// hover that began at 0.9 s would send the instant the pointer left — the
+    /// sentence going out from under the hand that just let go of it. Restarted,
+    /// leaving buys the same one-second receipt the panel opened with: the
+    /// clock-stops-in-the-field rule of the editor, applied to the pointer.
+    ///
+    /// **Read from geometry, not only from `mouseEntered`.** The panel swells out
+    /// of the cursor and slides to the corner (`unfoldOrigin`), so the pointer
+    /// is inside it for the first frames of every prompt and a stationary cursor
+    /// never gets the `mouseExited` for a window that moved away from it. The
+    /// check is `panel.frame` against `NSEvent.mouseLocation`, run on every
+    /// hover edge and on the countdown's tick, and ignored until the unfold has
+    /// landed. Nothing here touches key status: tracking areas report hover to a
+    /// panel that cannot become key, and `.activeAlways` is what lets them.
+    private var promptHoverPaused = false
+    private var promptShownAt: Date?
+    /// `layoutContent`'s unfold is 0.22 s; a hair past it so the first frame
+    /// read is the corner, not the pointer the panel came out of.
+    private static let hoverPauseSettle: TimeInterval = 0.25
+    /// The one sign it is waiting, in the row flashes use — and the keys that
+    /// still answer it, since there are no buttons to show them on.
+    private static let hoverPauseHint = "⏸ Paused — ⏎ to send, ⎋ to cancel"
+
+    private var showsHoverPause: Bool { promptHoverPaused && sentPrompt != nil && !editingPrompt }
+
+    private func syncHoverPause() {
+        guard sentPrompt != nil, !promptButtons, !editingPrompt,
+              let shown = promptShownAt,
+              Date().timeIntervalSince(shown) >= Self.hoverPauseSettle
+        else { return }
+        let over = panel.isVisible && panel.frame.contains(NSEvent.mouseLocation)
+        guard over != promptHoverPaused else { return }
+        promptHoverPaused = over
+        if over {
+            // The deadline goes, the tick stays: it is what notices a pointer
+            // that left without a `mouseExited`.
+            promptTimer?.invalidate(); promptTimer = nil
+            promptDeadline = nil
+            Log.info("autosend held — the pointer is on the panel")
+        } else {
+            startPromptCountdown(hold: promptHold)
+            Log.info("autosend resumed — \(promptHold)s from now")
+        }
+        layoutContent()
+    }
+
+    /// `OverlayStates` shoots in the millisecond it sets a state up, with no
+    /// pointer anywhere near the panel — this is the paused state's way in.
+    func pinHoverPause() {
+        guard sentPrompt != nil, !promptButtons else { return }
+        promptHoverPaused = true
+        promptTimer?.invalidate(); promptTimer = nil
+        promptDeadline = nil
+        layoutContent()
     }
 
     /// **The words on their own** — what Victor actually said, without the
@@ -4510,6 +4587,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         countdownTimer?.invalidate()
         let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.updateCancelTitle()
+            self?.syncHoverPause()
         }
         RunLoop.main.add(tick, forMode: .common)
         countdownTimer = tick
@@ -4645,6 +4723,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             closeButton.needsDisplay = true
         }
         refreshOpacity()
+        syncHoverPause()
     }
 
     /// The frame the panel sat at, taken in `resolvePrompt` the instant a prompt
