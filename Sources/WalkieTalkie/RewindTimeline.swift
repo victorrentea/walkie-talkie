@@ -67,11 +67,18 @@ enum RewindTimeline {
         return Pose(progress: onTime + late, time: 1)
     }
 
-    /// The stamp's scale (× its resting size) and opacity for a pose, starting
-    /// at `from` × — geometric in the scale, so each second shrinks it by the
-    /// same ratio; the opacity rises ahead of it (t^0.6), so the tunnel is
-    /// there, huge and faint, from the first frames.
+    /// **The whole tunnel 30 % smaller** (Victor, 2026-09-23: *"reduce the
+    /// reverse tunnel's default size during transcription by 30%"*) — a factor on
+    /// every size of the run: the huge start, the ~1.2× near the end, the rest.
+    /// Here rather than on the preset's `scale`, which would also change the
+    /// engine's render resolution; `approach` is called for the rewind alone.
+    static let sizeFactor = 0.7
+
+    /// The stamp's scale (× the preset's resting size) and opacity for a pose,
+    /// starting at `from` × `sizeFactor` — geometric in the scale, so each
+    /// second shrinks it by the same ratio; the opacity rises ahead of it
+    /// (t^0.6), so the tunnel is there, huge and faint, from the first frames.
     static func stamp(_ pose: Pose, from: Double) -> (scale: Double, alpha: Double) {
-        (pow(from, 1 - pose.progress), pow(pose.time, 0.6))
+        (sizeFactor * pow(from, 1 - pose.progress), pow(pose.time, 0.6))
     }
 }

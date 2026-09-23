@@ -147,12 +147,15 @@ final class RewindTimelineTests: XCTestCase {
     }
 
     func testStampComesFromHugeAndFaintToNearRest() {
+        // Every size is 0.7 of what it was (2026-09-23, *"reduce … by 30%"*).
+        XCTAssertEqual(RewindTimeline.sizeFactor, 0.7)
         let start = RewindTimeline.stamp(RewindTimeline.Pose(progress: 0, time: 0), from: 7)
-        XCTAssertEqual(start.scale, 7, accuracy: 1e-9)
+        XCTAssertEqual(start.scale, 7 * 0.7, accuracy: 1e-9)
         XCTAssertEqual(start.alpha, 0, accuracy: 1e-9)
         let onTime = RewindTimeline.stamp(RewindTimeline.pose(elapsed: 3, predicted: 3, visibleFrom: visible), from: 7)
         XCTAssertEqual(onTime.alpha, 1, accuracy: 1e-9)
-        XCTAssertGreaterThan(onTime.scale, 1.1)                            // still a little large
-        XCTAssertLessThan(onTime.scale, 1.3)
+        XCTAssertEqual(onTime.scale, 0.7 * pow(7, 0.1), accuracy: 1e-9)   // ~0.85: 1.2× of a 0.7 rest
+        let rest = RewindTimeline.stamp(RewindTimeline.Pose(progress: 1, time: 1), from: 7)
+        XCTAssertEqual(rest.scale, 0.7, accuracy: 1e-9)
     }
 }
