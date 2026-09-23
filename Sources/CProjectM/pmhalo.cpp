@@ -334,7 +334,8 @@ struct pmh {
     float voicePeak = 0, level = 0, levelSlow = 0, levelCeil = 0.02f, puffCool = 0, puffAngle = 0;
     int puffLeft = 0; float puffDx = 0, puffDy = 0, puffStrength = 0, puffAlong = 0;
     // the voice's dust: splats owed and not yet thrown, and how loud a syllable
-    // has to be, against the recent loudest, before it throws any
+    // has to be, against the recent loudest, before it throws any (Smoke's puffs
+    // read the same threshold)
     float dustAcc = 0, voiceThreshold = 0.1f;
     // the pure fluid's knobs, live — seeded from the mode's constants, moved by
     // the on-screen sliders (`pmh_set_fluid_param`)
@@ -813,7 +814,10 @@ void voice_puffs(pmh* h, const Look& L, float dt) {
     h->levelCeil = std::max({ h->level, 0.02f, h->levelCeil * std::exp(-dt / 6.f) });
     h->puffCool -= dt;
     const float I = std::min(1.f, h->level / h->levelCeil);
-    if (h->puffLeft == 0 && h->puffCool <= 0 && h->level > 0.004f && I > 0.2f && h->level > h->levelSlow * 1.25f) {
+    // `voiceThreshold` (the tuner's *Voice threshold*, 2026-09-23) moves both bars
+    // together; at its default 0.1 they are the 0.2 and 1.25× this shipped with.
+    const float t = h->voiceThreshold;
+    if (h->puffLeft == 0 && h->puffCool <= 0 && h->level > 0.004f && I > 2.f * t && h->level > h->levelSlow * (1.f + 2.5f * t)) {
         h->puffAngle += 2.39996f + ((float)std::rand() / RAND_MAX - 0.5f) * 0.6f;
         h->puffDx = std::cos(h->puffAngle); h->puffDy = std::sin(h->puffAngle);
         h->puffStrength = 0.35f + 0.65f * I;

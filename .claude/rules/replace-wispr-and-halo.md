@@ -875,7 +875,9 @@ closes. Between the two is the whole transcription — the stretch in which he i
   top of the tuner panel: *Voice filter* (the one `HaloVoice` preference the menu row also writes)
   and *Voice threshold* (0…0.5, default 0.1, saved as `voiceThreshold.fairyDust` /
   `voiceThreshold.liquidCursor`): below it nothing, above it re-stretched to 0…1 over `0.6 − t`,
-  so a lower threshold is both earlier and stronger. For Fairy dust the filter is run by the page
+  so a lower threshold is both earlier and stronger. **Smoke has the same two rows** (`voiceThreshold.smoke`):
+  there the threshold moves both of `voice_puffs`' bars — `I > 2t` and `level > slow × (1 + 2.5t)`,
+  which at 0.1 are the 0.2 and 1.25× it shipped with. For Fairy dust the filter is run by the page
   host's own `VoicePrep` over the fresh part of each feed (the windows overlap; the chain is
   stateful).
 - **`HaloVoice` only reaches what is fed audio.** The Reverse tunnel at the end of a dictation

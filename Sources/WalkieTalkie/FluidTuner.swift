@@ -16,7 +16,7 @@ import CProjectM
 ///
 /// **And the voice, for the effects that answer it** (Victor, 2026-09-23: *"ambele
 /// sa aiba si un combo cu acele filtre in setari + un threshold care sa seteze
-/// sensibilitatea la voce … ca slider"*). Fairy dust and Liquid cursor get two
+/// sensibilitatea la voce … ca slider"*). Fairy dust, Liquid cursor and Smoke get two
 /// rows on top: *Voice filter* — the same `HaloVoice` chain the menu row picks,
 /// one preference for both — and *Voice threshold*, how loud a syllable has to be
 /// before it stirs the effect, saved per effect (`voiceThreshold.<key>`). Fairy
