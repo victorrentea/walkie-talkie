@@ -74,6 +74,11 @@ enum SpawnFolderMenu {
         let name: String
         let path: String
         var pinned: Bool = false
+        /// **Set on the third half's rows only** — a terminal already open, not a
+        /// folder to open one in. A click on such a row is a rebind to that tty
+        /// (and the window brought forward), not a spawn; `path` is empty. See
+        /// `terminals`.
+        var tty: String? = nil
     }
 
     /// **The rows, in the order they are drawn**: the pinned half first, then
@@ -150,6 +155,17 @@ enum SpawnFolderMenu {
     /// all the first three times it appears.
     private static let header = "Start Claude in…"
 
+    /// **The third half's own header** (2026-09-23). The rows under it do the
+    /// opposite of every row above — they send the sentence somewhere that
+    /// already exists instead of opening something — so they are named as such
+    /// rather than left to be told apart by a line.
+    private static let terminalsHeader = "Or send to an open terminal"
+
+    /// A terminal title is the agent's own sentence and runs as long as it
+    /// likes; past this the row truncates rather than widening the menu across
+    /// the screen.
+    private static let maxNameWidth: CGFloat = 460
+
     // MARK: - State
 
     private static var panel: NSPanel?
@@ -158,6 +174,15 @@ enum SpawnFolderMenu {
     /// and again on every star, so a toggle relays out against what it just
     /// changed rather than re-reading the disk mid-gesture.
     private static var rendered: (pinned: [Choice], recent: [Choice]) = ([], [])
+    /// **The five terminals most recently spoken to that are still open**, under
+    /// the folders (Victor, 2026-09-23: *"încă o listă cu ultimele cinci recent
+    /// deschise … [să pot face] rebind … direct în acel pop-up"*). From
+    /// `RebindHistory.openTerminals`, which needs `TerminalBinding.liveTitles()` —
+    /// an `osascript` round trip — so it is filled **after** the menu is up
+    /// (`fillTerminals`) and never delays it: the menu's clock is his reading
+    /// time and starts at the press. The rows land below the folders, so the
+    /// ones under his hand do not move when they arrive.
+    private static var terminals: [Choice] = []
     /// Where the panel's **top-left** corner is, kept so a rebuild can put it
     /// back there. A menu that grows or shrinks under the hand must not move the
     /// rows the hand is already over, and it hangs *below* the pointer — so the
@@ -189,6 +214,7 @@ enum SpawnFolderMenu {
         // this app never waits on. See `RecentProjects.refreshIfStale`.
         RecentProjects.refreshIfStale()
         rendered = rows()
+        terminals = []
         guard !rendered.pinned.isEmpty || !rendered.recent.isEmpty else { return }
         chosen = pick
 
@@ -223,7 +249,7 @@ enum SpawnFolderMenu {
         p.contentView = root
         let where_ = origin(for: size, at: point)
         p.setFrameOrigin(where_)
-        // The top-left corner, which is what a rebuild puts back — see `rebuild`.
+        // The top-left corner, which is what a rebuild puts back — see `relayout`.
         anchor = NSPoint(x: where_.x, y: where_.y + size.height)
         p.alphaValue = 1
         p.orderFrontRegardless()
@@ -242,6 +268,23 @@ enum SpawnFolderMenu {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        fillTerminals(for: p)
+    }
+
+    /// Ask for the open terminals off the main thread and add their rows to
+    /// **this** menu when the answer comes back — a menu picked from, faded or
+    /// replaced in the meantime is left alone. The clock is not restarted: the
+    /// rows arriving is not him engaging with the menu.
+    private static func fillTerminals(for p: NSPanel) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let open = RebindHistory.shared.openTerminals(live: TerminalBinding.liveTitles())
+            guard !open.isEmpty else { return }
+            DispatchQueue.main.async {
+                guard panel === p else { return }
+                terminals = open.map { Choice(name: $0.name, path: "", tty: $0.tty) }
+                relayout(restartClock: false)
+            }
+        }
     }
 
     /// **The pointer arriving on the menu stops the fade; leaving restarts it.**
@@ -302,17 +345,21 @@ enum SpawnFolderMenu {
     // MARK: - Layout
 
     private static func measure() -> NSSize {
-        let all = rendered.pinned + rendered.recent
-        let widest = all
+        let all = rendered.pinned + rendered.recent + terminals
+        let widest = min(maxNameWidth, all
             .map { ($0.name as NSString).size(withAttributes: [.font: rowFont]).width }
+            .max() ?? 0)
+        let headerWidth = [header, terminalsHeader]
+            .map { ($0 as NSString).size(withAttributes: [.font: headerFont]).width }
             .max() ?? 0
-        let headerWidth = (header as NSString).size(withAttributes: [.font: headerFont]).width
         // The star sits inside every row, so the rows have to be wide enough for
         // the longest name *and* the glyph; the header has no star and is
         // measured on its own.
         let width = max(widest + starGap + starSize, headerWidth) + 2 * (pad + rowInset)
         let divider = (rendered.pinned.isEmpty || rendered.recent.isEmpty) ? 0 : separatorHeight
-        let height = 2 * pad + headerHeight + CGFloat(all.count) * rowHeight + divider
+        // The third half brings its own line and its own header.
+        let tail = terminals.isEmpty ? 0 : separatorHeight + headerHeight
+        let height = 2 * pad + headerHeight + CGFloat(all.count) * rowHeight + divider + tail
         return NSSize(width: ceil(width), height: ceil(height))
     }
 
@@ -334,29 +381,44 @@ enum SpawnFolderMenu {
         // recent half first, then the line, then the pinned half, and the header
         // ends up on top.
         var y = pad
+        // The open terminals are the bottom of the menu, under a line and a
+        // header of their own — see `terminals`.
+        if !terminals.isEmpty {
+            for choice in terminals.reversed() { y = add(choice, at: y, size: size, to: root) }
+            y = addHeader(terminalsHeader, at: y, size: size, to: root)
+            y = addSeparator(at: y, size: size, to: root)
+        }
         for choice in rendered.recent.reversed() { y = add(choice, at: y, size: size, to: root) }
         if !rendered.pinned.isEmpty && !rendered.recent.isEmpty {
-            let line = NSView(frame: NSRect(x: pad + rowInset, y: y + (separatorHeight - 1) / 2,
-                                            width: size.width - 2 * (pad + rowInset), height: 1))
-            line.wantsLayer = true
-            // A hairline in the label's own ink at a tenth of its weight: it has
-            // to be visible over the blur in both appearances and must not read
-            // as a row of its own.
-            line.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.22).cgColor
-            root.addSubview(line)
-            y += separatorHeight
+            y = addSeparator(at: y, size: size, to: root)
         }
         for choice in rendered.pinned.reversed() { y = add(choice, at: y, size: size, to: root) }
+        _ = addHeader(header, at: y, size: size, to: root)
 
-        let label = NSTextField(labelWithString: header)
+        return root
+    }
+
+    private static func addSeparator(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
+        let line = NSView(frame: NSRect(x: pad + rowInset, y: y + (separatorHeight - 1) / 2,
+                                        width: size.width - 2 * (pad + rowInset), height: 1))
+        line.wantsLayer = true
+        // A hairline in the label's own ink at a tenth of its weight: it has
+        // to be visible over the blur in both appearances and must not read
+        // as a row of its own.
+        line.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.22).cgColor
+        root.addSubview(line)
+        return y + separatorHeight
+    }
+
+    private static func addHeader(_ text: String, at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
+        let label = NSTextField(labelWithString: text)
         label.font = headerFont
         label.textColor = .secondaryLabelColor
         label.frame = NSRect(x: pad + rowInset, y: y + (headerHeight - label.intrinsicContentSize.height) / 2,
                              width: size.width - 2 * (pad + rowInset),
                              height: label.intrinsicContentSize.height)
         root.addSubview(label)
-
-        return root
+        return y + headerHeight
     }
 
     private static func add(_ choice: Choice, at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
@@ -384,7 +446,7 @@ enum SpawnFolderMenu {
     private static func starred(_ choice: Choice) {
         PinnedProjects.toggle(choice.path)
         rendered = rows()
-        rebuild()
+        relayout(restartClock: true)
     }
 
     /// Lay the panel out again around the same top-left corner, and give the
@@ -396,13 +458,17 @@ enum SpawnFolderMenu {
     /// about to use it, and taking the menu away three seconds after it opened
     /// would be taking it away mid-gesture. (Hovering already suspends the
     /// clock, so in practice this matters for the moment the pointer leaves.)
-    private static func rebuild() {
+    ///
+    /// `restartClock` is false for the open terminals arriving (`fillTerminals`):
+    /// the rows appearing are not the hand engaging with the menu.
+    private static func relayout(restartClock: Bool) {
         guard let p = panel else { return }
         let size = measure()
         p.contentView = build(size: size)
         p.setFrame(NSRect(x: anchor.x, y: anchor.y - size.height,
                           width: size.width, height: size.height),
                    display: true)
+        guard restartClock else { return }
         // The hand is on the menu, so an in-flight fade has to be reversed as
         // well as re-timed — the same invalidate-then-reverse `setHovered` does.
         generation += 1
@@ -511,6 +577,8 @@ private final class FolderRow: NSView {
         self.choice = choice
         self.font = font
         super.init(frame: frame)
+        // A terminal row has nothing to pin — it is not a folder.
+        guard choice.tty == nil else { return }
         let box = NSRect(x: frame.width - SpawnFolderMenu.rowInset - SpawnFolderMenu.starSize,
                          y: (frame.height - SpawnFolderMenu.starSize) / 2,
                          width: SpawnFolderMenu.starSize, height: SpawnFolderMenu.starSize)
@@ -532,11 +600,19 @@ private final class FolderRow: NSView {
         // White on the selection fill wins in either appearance, the way the ✕
         // does on its red disc.
         let ink = hot ? NSColor.white : NSColor.labelColor
+        // Truncated at the tail rather than drawn past the star column: a
+        // terminal's title can be any length (`SpawnFolderMenu.maxNameWidth`).
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
         let text = NSAttributedString(string: choice.name,
-                                      attributes: [.font: font, .foregroundColor: ink])
+                                      attributes: [.font: font, .foregroundColor: ink,
+                                                   .paragraphStyle: style])
         let size = text.size()
-        text.draw(at: NSPoint(x: SpawnFolderMenu.rowInset,
-                              y: (bounds.height - size.height) / 2))
+        let width = bounds.width - 2 * SpawnFolderMenu.rowInset
+            - (choice.tty == nil ? SpawnFolderMenu.starSize : 0)
+        text.draw(with: NSRect(x: SpawnFolderMenu.rowInset, y: (bounds.height - size.height) / 2,
+                               width: width, height: size.height),
+                  options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     override func updateTrackingAreas() {
@@ -654,6 +730,10 @@ private final class StarButton: NSView {
 extension SpawnFolderMenu {
     static func shoot(to path: String) {
         rendered = rows()
+        // No panel to fill later here, so the open terminals are asked for up
+        // front — the picture is of the menu as it looks once they have landed.
+        terminals = RebindHistory.shared.openTerminals(live: TerminalBinding.liveTitles())
+            .map { Choice(name: $0.name, path: "", tty: $0.tty) }
         let size = measure()
         let root = build(size: size)
         root.wantsLayer = true

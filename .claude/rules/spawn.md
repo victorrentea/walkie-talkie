@@ -157,6 +157,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   often enough) and be restarted five times in an afternoon (the age check stops five rescans).
   The menu that triggers a scan shows yesterday's answer.
   → journal: *Where the bottom half comes from*
+- **Under the folders, the five most recently bound terminals that are still open** (2026-09-23,
+  *"încă o listă cu ultimele cinci recent deschise … rebind … direct în acel pop-up"*), under a
+  line and `Or send to an open terminal`. `RebindHistory.openTerminals(live:)` — the *Rebind to…*
+  log, closed windows left out, the bound one kept (during a spawn picking it takes the sentence
+  back). Filled **after** the menu is up (`fillTerminals`, `liveTitles()` is an `osascript`) and
+  laid out below the folders, so nothing under the hand moves and the clock is not restarted. A
+  click is `AppDelegate.rebindFromMenu`: a deliberate bind mid-sentence, so `showBound` drops the
+  spawn, and the window is brought forward. No star on those rows; `WT_SHOOT_MENU` draws them.
 - **The file holds every qualifying project, not the top five.** The menu takes its five *after*
   removing the pinned ones, and a pin comes off at any moment — a file of five would make an
   unpinned project vanish until tomorrow's scan.
