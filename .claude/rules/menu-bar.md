@@ -219,7 +219,7 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   in that same order**, because `InputDevice.known` is the one list that is both the menu and the
   ladder; a menu ordered differently from the automatic pick would teach the wrong preference every
   time he opened it. → journal: same
-- **An absent device is disabled *and says why*** — `🎤 DJI Wireless Mic Rx — not connected`. A
+- **An absent device is disabled *and says why*** — `🎤 DJI — not connected`. A
   grey row with no explanation is indistinguishable from a broken one, and the explanation is the
   only thing he can act on: it is a cable. → journal: same
 - **Two names per device, `Engine`'s rule applied here** — the top row gets `short`

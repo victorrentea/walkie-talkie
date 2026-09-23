@@ -89,7 +89,7 @@ enum InputDevice {
         // `DJI Mic Mini-B83BBE` and would be pulled straight back in by it. The
         // receiver's brand is only in the manufacturer string
         // (`DJI Technology Co., Ltd.`), which is part of the haystack.
-        Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
+        Known(id: "rx",   glyph: "🎤", short: "DJI", label: "DJI",
               needles: ["wireless mic rx", "wireless mic", "dji technology"]),
         // **The room's own microphone** (2026-09-22). It was only ever in
         // Victor Addons' list, which is how the two menus came to disagree:

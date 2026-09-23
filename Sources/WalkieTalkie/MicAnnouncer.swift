@@ -1,7 +1,7 @@
 import Cocoa
 import CoreAudio
 
-/// **"🎤 Listening to: DJI Wireless Mic Rx"** — a green tab that rises from the
+/// **"🎤 Listening to: DJI"** — a green tab that rises from the
 /// bottom edge of the screen under the mouse when the microphone this app would
 /// record through changes, holds ~2.5 s and falls away (2026-09-23).
 ///
@@ -86,7 +86,7 @@ final class MicAnnouncer {
         return (name, cardText(glyph: "🎙️", label: name))
     }
 
-    /// The exact copy — `🎤 Listening to: DJI Wireless Mic Rx`.
+    /// The exact copy — `🎤 Listening to: DJI`.
     static func cardText(glyph: String, label: String) -> String { "\(glyph) Listening to: \(label)" }
 }
 
