@@ -1529,6 +1529,17 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// and it resizes under it as rows come and go.
     var chipFrame: CGRect { panel.frame }
 
+    /// **Where a new frame flies into** (`CaptureFlash.flyIntoChip`, 2026-09-23):
+    /// the `📸` of the shots row, in screen coordinates — the chip itself when
+    /// that row is not up, nil when the chip is not on screen at all.
+    var shotLanding: CGRect? {
+        guard panel.isVisible, panel.alphaValue > 0.05, !veiled else { return nil }
+        if !recordRow.isHidden, shotGlyph.window === panel {
+            return panel.convertToScreen(shotGlyph.convert(shotGlyph.bounds, to: nil))
+        }
+        return panel.frame
+    }
+
     /// **The chip is pinned to the pointer on every event, full stop.**
     ///
     /// It had a second state until 2026-09-07 — *settled*: 0.25s of stillness

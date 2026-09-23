@@ -204,7 +204,9 @@ enum BindFlight {
     /// — the prompt panel is invisible to screen capture (`sharingType = .none`),
     /// so its own view's drawing was the only picture of it in existence — and
     /// with that flight outlined, nothing was left to hand a picture in. It came
-    /// back on 2026-09-23 carrying something else — see `carrying` below.
+    /// back on the morning of 2026-09-23 carrying the destination terminal's own
+    /// window buffer and went again that evening: *"it should just be a plain
+    /// border because taking screenshots of the screen is not robust."*
     ///
     /// **`picturing` is where the pixels come from, when that is not `source`.**
     /// A bind grabs the window it is leaving, which is why this defaults to
@@ -217,21 +219,10 @@ enum BindFlight {
     /// back is what is on that patch of screen, so a destination window sitting
     /// under something else is photographed with whatever is on top of it.
     ///
-    /// **`carrying` is a picture taken by the caller, used as it is** (Victor,
-    /// 2026-09-23: *"să plece cu poza terminalului până la locația în care e
-    /// terminalul"*). The send flight came back to a picture — of the terminal
-    /// the words went to, not of the panel they left — and it is the one caller
-    /// that cannot use `picturing`: its destination is usually **behind** the
-    /// app he is in, and a grab of that patch of screen would photograph
-    /// whatever covers it. So it asks the window server for that one window's
-    /// own buffer (`windowPicture`), off the main thread, and hands the result
-    /// in here. It beats both `picturing` and `outlined`.
-    ///
     /// `tail` holds it on the destination afterwards while it fades to nothing.
     static func fly(from source: CGRect,
                     to destination: @escaping () -> CGRect = { CGRect(origin: NSEvent.mouseLocation, size: .zero) },
                     picturing: CGRect? = nil,
-                    carrying given: CGImage? = nil,
                     seconds: CFTimeInterval = duration,
                     reversed: Bool = false,
                     outlined: Bool = false,
@@ -246,9 +237,9 @@ enum BindFlight {
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
         // actually on it.
-        let picture = given ?? (outlined ? nil : grab(picturing ?? source))
+        let picture = outlined ? nil : grab(picturing ?? source)
         hasPicture = picture != nil
-        hollow = outlined && given == nil
+        hollow = outlined
 
         panes = NSScreen.screens.map { screen in
             // `RelayPanel`, not `NSPanel`: AppKit's `constrainFrameRect` pulls a
@@ -441,45 +432,6 @@ enum BindFlight {
                              y: primary.frame.maxY - source.maxY,
                              width: source.width, height: source.height)
         return CGWindowListCreateImage(flipped, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
-    }
-
-    /// **One window's own pixels, unobstructed** — the picture the send flight
-    /// carries (2026-09-23). `grab` photographs a patch of screen on purpose,
-    /// because a bind has to show what Victor was looking at; a send has to show
-    /// **which terminal** the words went to, and that terminal is very often
-    /// under the app he dictated from. `CGWindowListCreateImage` with
-    /// `.optionIncludingWindow` answers from the window's own backing store, so
-    /// what comes back is the terminal itself, not what lies on top of it.
-    ///
-    /// The window is found by its frame, because that is all
-    /// `TerminalBinding.terminalWindowFrame` knows: the first window of `owner`
-    /// at layer 0 whose bounds match `frame` to within two points. Cocoa
-    /// coordinates in, converted to the window server's (y down from the top of
-    /// the primary display). Nil — and the caller flies an outline instead —
-    /// when nothing matches or the grab comes back empty (no Screen Recording
-    /// grant, a window on another Space that was never drawn).
-    ///
-    /// Safe off the main thread; `sendFlight` calls it there, next to the
-    /// AppleScript that found the frame, so the first frame of the flight never
-    /// waits on it.
-    static func windowPicture(of frame: CGRect, owner: String) -> CGImage? {
-        guard let primary = NSScreen.screens.first else { return nil }
-        let flipped = CGRect(x: frame.minX, y: primary.frame.maxY - frame.maxY,
-                             width: frame.width, height: frame.height)
-        guard let windows = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements],
-                                                       kCGNullWindowID) as? [[String: Any]]
-        else { return nil }
-        let match = windows.first { info in
-            guard info[kCGWindowOwnerName as String] as? String == owner,
-                  info[kCGWindowLayer as String] as? Int == 0,
-                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
-                  let rect = CGRect(dictionaryRepresentation: bounds) else { return false }
-            return abs(rect.minX - flipped.minX) <= 2 && abs(rect.minY - flipped.minY) <= 2
-                && abs(rect.width - flipped.width) <= 2 && abs(rect.height - flipped.height) <= 2
-        }
-        guard let id = match?[kCGWindowNumber as String] as? CGWindowID else { return nil }
-        return CGWindowListCreateImage(.null, .optionIncludingWindow, id,
-                                       [.boundsIgnoreFraming, .bestResolution])
     }
 
     /// Cubic ease-in-out: it leaves the window unhurriedly enough to be followed

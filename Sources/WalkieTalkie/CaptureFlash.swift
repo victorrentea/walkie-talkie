@@ -1,107 +1,151 @@
 import AppKit
 import QuartzCore
 
-/// Red vignette confirming a screenshot was taken — the same shape as Victor
-/// Addons' capture flash (gradient borders fading inward over the whole screen,
-/// then fading out), in red rather than yellow so the two are never confused:
-/// yellow means "Victor Addons captured it", red means "it went to the agent".
+/// The shutter's receipt: the frame he just took flies into the chip's `📸`,
+/// and a mark blooms where the pointer was.
+///
+/// **The picture goes into the counter, not a border round the screen**
+/// (2026-09-23). It was a yellow vignette — gradient edges fading inward over
+/// the whole display, Victor Addons' capture flash — and it answered *did that
+/// press land* by lighting up everything except the thing that changed. Victor:
+/// *"there's an effect that takes that photo … and zooms it … into the icon that
+/// shows the number of photos. That can avoid you having to draw a yellow border
+/// around the screen … The feeling is much better if you just bring it into the
+/// tooltip."* The frame shrinks from where it was taken — the display, or the
+/// area he dragged — onto the `📸 ×N` it has just incremented, so the receipt
+/// and the total are one motion instead of two places to look.
 ///
 /// Click-through and above everything, so it never interrupts what he is doing.
 enum CaptureFlash {
     private static var activePanels: [NSPanel] = []
 
-    /// **One clock for both halves of the receipt.** The vignette has always run
-    /// 1.2s; the reticle used to run 2s, so the red edges went out and the target
-    /// stayed behind on the desktop for the better part of a second — long enough
-    /// to stop reading as *part of* the shutter and start reading as a mark left
-    /// on the screen, which is exactly what it is not. They are one event and now
-    /// end on one number.
-    ///
-    /// Short is the point: the shot is taken in the first milliseconds and the
-    /// mark exists to be *checked*, not to be lived with — Victor is already
-    /// talking by the time it is gone, and it is drawn over the very thing he is
-    /// talking about.
-    static let receiptDuration: CFTimeInterval = 1.2
+    /// How long a frame takes to shrink into the chip. Short, because it plays
+    /// over his work on every shot; long enough to be *followed* to the chip,
+    /// which is the whole of what it says.
+    static let intoChipDuration: CFTimeInterval = 0.5
 
-    static func flash(on screen: NSScreen,
-                      duration: CFTimeInterval = receiptDuration,
-                      thickness: CGFloat = 30,
-                      color: NSColor = .captureAccent) {
-        let panel = NSPanel(
-            contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
+    /// The white edge the flying frame wears, at its start — Victor's *"several-
+    /// pixel border"*. A full-screen picture lying exactly on the screen it was
+    /// taken of is invisible; the edge is what makes it a *thing* that then
+    /// leaves. It thins as the picture shrinks, or a 4 pt frame round a 16 pt
+    /// thumbnail is all frame.
+    private static let intoChipBorder: CGFloat = 4
+
+    /// **Fly `picture` from `source` into `target`**, both in global Cocoa
+    /// coordinates. `source` is where the pixels were on screen (the display,
+    /// or the dragged area), so the flight starts pixel for pixel on top of what
+    /// it is a picture of; `target` is the chip's `📸` (`RelayWindow.shotLanding`).
+    ///
+    /// It arrives at the glyph's size with the picture's own aspect, under the
+    /// chip (one level below `.statusBar`, like `BindFlight`), so the last thing
+    /// it does is slide beneath the counter rather than cover it.
+    ///
+    /// One panel on the screen the picture came from: the chip rides the pointer,
+    /// and the pointer is on that screen for every shutter path.
+    /// `sharingType = .none`, so a second press a moment later cannot photograph
+    /// the first one's picture in flight.
+    static func flyIntoChip(_ picture: CGImage, from source: CGRect, to target: CGRect) {
+        guard source.width > 1, source.height > 1 else { return }
+        let middle = NSPoint(x: source.midX, y: source.midY)
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(middle, $0.frame, false) })
+                ?? NSScreen.main else { return }
+
+        let panel = RelayPanel(contentRect: screen.frame,
+                               styleMask: [.borderless, .nonactivatingPanel],
+                               backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
-        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        // Never let the confirmation of a screenshot land in the next screenshot.
         panel.sharingType = .none
 
-        let size = screen.frame.size
-        let view = NSView(frame: NSRect(origin: .zero, size: size))
+        let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
         view.wantsLayer = true
+        let local = { (r: CGRect) in r.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY) }
 
-        // Translucent even at full opacity: the vignette tints the screen, it
-        // does not cover it.
-        let solid = color.withAlphaComponent(0.55).cgColor
-        let clear = color.withAlphaComponent(0).cgColor
+        // The picture's own aspect at the glyph's size: a frame squeezed square
+        // on the way in would stop reading as the frame he took.
+        let aspect = source.width / source.height
+        let side = max(12, min(max(target.width, target.height), 28))
+        let landing = aspect >= 1
+            ? CGSize(width: side, height: side / aspect)
+            : CGSize(width: side * aspect, height: side)
+        let from = local(source)
+        let to = CGRect(x: target.midX - landing.width / 2, y: target.midY - landing.height / 2,
+                        width: landing.width, height: landing.height).offsetBy(
+                            dx: -screen.frame.minX, dy: -screen.frame.minY)
 
-        let top = CAGradientLayer()
-        top.frame = CGRect(x: 0, y: size.height - thickness, width: size.width, height: thickness)
-        top.colors = [solid, clear]
-        top.startPoint = CGPoint(x: 0.5, y: 1.0)
-        top.endPoint = CGPoint(x: 0.5, y: 0.0)
-
-        let bottom = CAGradientLayer()
-        bottom.frame = CGRect(x: 0, y: 0, width: size.width, height: thickness)
-        bottom.colors = [solid, clear]
-        bottom.startPoint = CGPoint(x: 0.5, y: 0.0)
-        bottom.endPoint = CGPoint(x: 0.5, y: 1.0)
-
-        let left = CAGradientLayer()
-        left.frame = CGRect(x: 0, y: 0, width: thickness, height: size.height)
-        left.colors = [solid, clear]
-        left.startPoint = CGPoint(x: 0.0, y: 0.5)
-        left.endPoint = CGPoint(x: 1.0, y: 0.5)
-
-        let right = CAGradientLayer()
-        right.frame = CGRect(x: size.width - thickness, y: 0, width: thickness, height: size.height)
-        right.colors = [solid, clear]
-        right.startPoint = CGPoint(x: 1.0, y: 0.5)
-        right.endPoint = CGPoint(x: 0.0, y: 0.5)
-
-        for edge in [top, bottom, left, right] { view.layer?.addSublayer(edge) }
+        let frame = CALayer()
+        frame.contents = picture
+        frame.contentsGravity = .resize
+        frame.masksToBounds = true
+        frame.borderColor = NSColor.white.cgColor
+        frame.cornerRadius = 8
+        frame.borderWidth = intoChipBorder
+        frame.frame = from
+        view.layer?.addSublayer(frame)
 
         panel.contentView = view
         panel.setFrame(screen.frame, display: true)
         panel.orderFrontRegardless()
         activePanels.append(panel)
 
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1.0
-        fade.toValue = 0.0
-        fade.duration = duration
-        fade.timingFunction = CAMediaTimingFunction(name: .linear)
-        fade.fillMode = .forwards
-        fade.isRemovedOnCompletion = false
-        view.layer?.add(fade, forKey: "fade")
+        // Model values first, at the end state, with no implicit animation; the
+        // explicit ones below carry it there.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        frame.bounds = CGRect(origin: .zero, size: to.size)
+        frame.position = CGPoint(x: to.midX, y: to.midY)
+        frame.borderWidth = 1
+        frame.cornerRadius = 2
+        frame.opacity = 0
+        CATransaction.commit()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+        // Slow off the screen, fast into the chip: it leaves unhurriedly enough
+        // to be seen leaving, and is *drawn in* at the end — the counter taking
+        // it, rather than the picture arriving and stopping.
+        let curve = CAMediaTimingFunction(controlPoints: 0.5, 0, 0.8, 0.6)
+        func animate(_ key: String, _ a: Any, _ b: Any) {
+            let anim = CABasicAnimation(keyPath: key)
+            anim.fromValue = a
+            anim.toValue = b
+            anim.duration = intoChipDuration
+            anim.timingFunction = curve
+            frame.add(anim, forKey: key)
+        }
+        animate("bounds", NSValue(rect: CGRect(origin: .zero, size: from.size)),
+                NSValue(rect: CGRect(origin: .zero, size: to.size)))
+        animate("position", NSValue(point: CGPoint(x: from.midX, y: from.midY)),
+                NSValue(point: CGPoint(x: to.midX, y: to.midY)))
+        animate("borderWidth", intoChipBorder, 1)
+        animate("cornerRadius", 8, 2)
+        // Whole until it is at the glyph, then gone into it.
+        let life = CAKeyframeAnimation(keyPath: "opacity")
+        life.values = [1, 1, 0]
+        life.keyTimes = [0, 0.8, 1]
+        life.duration = intoChipDuration
+        frame.add(life, forKey: "life")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + intoChipDuration) {
             panel.orderOut(nil)
             activePanels.removeAll { $0 === panel }
         }
     }
 
-    /// Fire the vignette now, and drop a target on the spot the pointer was
-    /// standing when the shutter went.
+    /// A frame on disk as a `CGImage`, for `flyIntoChip`. Off the main thread —
+    /// it decodes a JPEG.
+    static func loadPicture(_ path: String) -> CGImage? {
+        guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(src, 0, nil)
+    }
+
+    /// Drop a target on the spot the pointer was standing when the shutter went.
+    /// The picture itself goes into the chip once it exists (`flyIntoChip`);
+    /// this is the half that can land at the press.
     ///
-    /// **The border says what was captured; the reticle says where he was
-    /// pointing while he said it.** Every shot the relay takes already carries
+    /// **The reticle says where he was pointing while he said it.** Every shot the relay takes already carries
     /// that reading twice — burned into the picture for Victor, and in the file
     /// name for the agent — and both of those are things you find *afterwards*.
     /// This is the same fact at the only moment it can still be corrected: if
@@ -138,7 +182,6 @@ enum CaptureFlash {
     static func announce(cursor: NSPoint? = nil, cycleMarker: Bool = false) {
         let point = cursor ?? NSEvent.mouseLocation
         let show = {
-            if let screen = screen(containing: point) { flash(on: screen) }
             if cycleMarker, let effect = nextMarkerEffect() {
                 effect.play(at: point)
             } else {
@@ -304,10 +347,6 @@ enum CaptureFlash {
     /// It runs backwards, from −90° to 0, so the resting transform stays the
     /// plain scale it always was.
     private static let markerSpin: CGFloat = .pi / 2
-
-    private static func screen(containing point: NSPoint) -> NSScreen? {
-        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main
-    }
 
     /// The screen the cursor is on — the one that was just captured.
     static func screenUnderCursor() -> NSScreen? {
