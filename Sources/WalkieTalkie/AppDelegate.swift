@@ -757,6 +757,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// When the current dictation opened, i.e. the zero of those offsets.
     private var dictationStartedAt: Date?
     private var dictationInFlight = false
+    /// 🔼 ↓ was made during this sentence: it goes out with `kamikaze` on a
+    /// line of its own, the agent's cue to close its terminal when it is done.
+    /// Main-thread state, like `listening` and `settling` it is gated on.
+    private var kamikaze = false
     private var orphanFlush: DispatchWorkItem?
 
     /// The context shot is promised but `screencapture` has not come back yet.
@@ -1211,6 +1215,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // touches (the film, the overlay, the pending state) is main's.
         hotkeys.onGestureFilm = { [weak self] in
             DispatchQueue.main.async { self?.toggleFilm() }
+        }
+        // 🔼 ↓ — **kamikaze** (2026-09-23): this sentence is a small job, and
+        // the agent should close its own terminal when it has done it. Only
+        // while a sentence is open or still on its way — with nothing in
+        // flight there is no prompt to add the word to. A second flick takes
+        // it back off, because the one reason to repeat it is having changed
+        // your mind.
+        hotkeys.onGestureKamikaze = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard self.listening || self.settling else {
+                    Log.info("💥 kamikaze gesture with no sentence in flight — ignored")
+                    return
+                }
+                self.kamikaze.toggle()
+                Log.info(self.kamikaze ? "💥 kamikaze — this sentence closes its agent when done" : "💥 kamikaze taken back")
+                self.overlay.flash(self.kamikaze ? "💥 kamikaze — closes when done" : "💥 kamikaze off")
+            }
         }
         // **Use Logi Gestures** — pushed into the tap, which is the only thing
         // that acts on it. No flash and no overlay: it is a wiring switch, not
@@ -2558,6 +2580,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// means.
     private func dictationBegan() {
         guard !listening else { return }
+        // A 🔼 ↓ belongs to the sentence it was made in; one whose sentence
+        // came back empty must not ride along on the next.
+        kamikaze = false
         speculative = false
         endSettling(reason: "a new dictation started", quiet: true)
 
@@ -2894,6 +2919,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // place — the words as he actually said them.
         let corpusText = result.markersInAudio
             ? spokenText : resolvingMarkers(spokenText, words: result.words, inline: false)
+        // 🔼 ↓ — after the corpus copy is taken, because he never said it.
+        if kamikaze {
+            kamikaze = false
+            result.text += "\n\nkamikaze"
+        }
 
         // **The corpus first, and before anything can fail.** Filing a recording
         // is not *acting* on a dictation, so nothing that stops a delivery stops
@@ -3542,6 +3572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// behind would attach them to the *next* sentence, timed from a clock that
     /// no longer exists.
     private func clearCancelledDictationState() {
+        kamikaze = false
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
@@ -3935,6 +3966,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// automatic context screen is dropped, since without a transcript there is
     /// nothing for it to be context *for*.
     private func flushOrphaned() {
+        DispatchQueue.main.async { self.kamikaze = false }
         stateLock.lock()
         let shots = pendingShots
         pendingShots = []
@@ -6772,10 +6804,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // between the press and the release. Fire-and-forget, and the far
             // side's hold expires by itself — see `DesktopEffects`.
             DesktopEffects.suspendForCrop()
+            // **And the halo** (2026-09-23): it rides the pointer, which is the
+            // corner of the box he is placing. Back at the release, cancel or not.
+            self.caretHalo.veiled = true
             CropSelectionOverlay.begin(button: .middle, from: anchor, style: Self.cropStyle) { selection in
                 // Both ways out of the drag — a rectangle or a cancel — come
                 // through here, which is why the resume sits above the branch.
                 DesktopEffects.resume()
+                self.caretHalo.veiled = false
                 guard let selection = selection else {
                     // Esc, a right-click, or a drag that turned out to be a
                     // twitch. Nothing was filed and nothing is said: he called it

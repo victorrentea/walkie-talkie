@@ -906,6 +906,8 @@ final class HotkeyTap {
     /// already in the right place, and a separate stop gesture is one more thing
     /// to remember while he is mid-sentence and watching something happen.
     var onGestureFilm: (() -> Void)?
+    /// 🔼 ↓ — mark the sentence in flight as a small job (2026-09-23).
+    var onGestureKamikaze: (() -> Void)?
 
     /// Whether the frontmost app is one `bind` would take. Pushed from
     /// `AppDelegate` on every app switch rather than asked here: the answer needs
@@ -2901,6 +2903,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onGestureFilm?() }
                 return nil
 
+            // 🔼 ↓ — **kamikaze** (2026-09-23). Victor: *"în timp cât dictez,
+            // trag gest cu butonul de forward și trag de mouse în jos. Asta să
+            // adauge automat la promptul respectiv cuvântul «kamikaze», ceea ce
+            // înseamnă că e ceva mic."* The word is the agent's cue to close its
+            // own terminal when done. What it means is `AppDelegate`'s call.
+            case VK_F9:
+                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+                DispatchQueue.global().async { [weak self] in self?.onGestureKamikaze?() }
+                return nil
+
             // ⬇️ on the **back** button — let the binding go. The same call the
             // menu's Disconnect row makes, so the gesture and the row cannot
             // drift apart.
@@ -3710,7 +3722,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
           "start the dictation, or end the one open — with the left button held, bind and dictate"),
          ("forward-left",  VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
          ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
-         ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "free row — assigned in Options+, unclaimed here"),
+         ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "kamikaze — appends the word to the sentence in flight"),
          ("back-click",    VK_F6,  "⌃⌥⌘F6",  "the stop of a 🔽 → dictation, a picture while any other one is dictating, Return otherwise"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
          ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Wispr Flow's raw hands-free chord — and the back click becomes its stop"),

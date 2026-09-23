@@ -173,6 +173,11 @@ final class DropArrow {
         }
     }
 
+    /// Hidden with the ring while a crop is framed — see `CaretHalo.veiled`.
+    var veiled = false {
+        didSet { panel?.contentView?.isHidden = veiled }
+    }
+
     private var panel: RelayPanel?
     /// The container the heads hang off, kept so `hold` can double it. Rebuilt
     /// only with the panel, which is built once for the life of the process.
@@ -354,6 +359,7 @@ final class DropArrow {
         scale = 1
         view.layer?.addSublayer(container)
         p.contentView = view
+        view.isHidden = veiled
         panel = p
         return p
     }

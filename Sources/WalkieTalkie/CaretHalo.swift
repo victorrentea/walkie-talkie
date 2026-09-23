@@ -966,6 +966,26 @@ final class CaretHalo {
     private var atCaret = false
     private let arrow = DropArrow()
 
+    /// **Out of sight while he frames a crop** (2026-09-23). Victor: *"în timpul
+    /// în care trag cu rotița o selecțiune pe ecran … trebuie să fie ascunsă pe
+    /// durata când trag poza, ca să pot să mă concentrez pe ce selectez"*. The
+    /// ring and the heads ride the pointer, which during a wheel drag is the
+    /// corner of the box he is placing — the one spot he is looking at.
+    ///
+    /// A veil, not a `hide`: nothing about the dictation changed, so the
+    /// timers, the page and the follow all keep running and the ring is simply
+    /// back, where the pointer is, the moment the drag ends. Only the content
+    /// view is hidden, because `refresh` rewrites `alphaValue` twenty times a
+    /// second and would undo a fade within one tick.
+    var veiled = false {
+        didSet {
+            guard veiled != oldValue else { return }
+            panel?.contentView?.isHidden = veiled
+            arrow.veiled = veiled
+            Log.info(veiled ? "◯ halo veiled while the crop is framed" : "◯ halo back after the crop")
+        }
+    }
+
     /// **The microphone is shut and the words are still travelling to the
     /// caret** (2026-09-15) — see `setDelivering`.
     private(set) var delivering = false
@@ -2506,6 +2526,7 @@ final class CaretHalo {
         self.stage = stage
         self.pulse = pulse
         p.contentView = view
+        view.isHidden = veiled
 
         panel = p
         return p
