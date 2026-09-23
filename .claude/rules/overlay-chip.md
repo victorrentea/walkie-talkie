@@ -202,8 +202,9 @@ yields to `--label`).
   microphone is shut — so saying both at once meant one of them was always a forecast. The bar's
   step count is `transcribeWord.count`, so the mark lengthens the ramp rather than sitting outside
   it, and the logo is **always lit** for `applyEngineText`'s reason.
-- **Past 150 % of the estimate the row says so in words** (2026-09-22) — `  🤔Taking longer than
-  usual...`, appended after the word, always lit, **outside the bar**: `transcribeWarmth` is a
+- **Past 150 % of the estimate the row says so — in two pictures, `  🤔⏱️`, no words since
+  2026-09-23** (*"să apară doar emojiurile 🤔⏱️, fără textul de după"*; it read `🤔Taking longer
+  than usual...` from 2026-09-22) — appended after the word, always lit, **outside the bar**: `transcribeWarmth` is a
   fraction against a character count, and joining the note to `transcribeWord` would move the ramp
   under a row already half lit. Victor: *"dacă durează > 150% din cât trebuie pe statistic, să
   adauge la tooltip 🤔Taking longer than usual..."*. The bar already said *past my own estimate* by

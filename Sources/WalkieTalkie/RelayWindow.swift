@@ -3864,9 +3864,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         // recogniser's logo is: it has no *not yet* state to read.
         if transcribeOverdue {
             out.append(NSAttributedString(string: "  ", attributes: [.font: hintFont]))
-            out.append(Self.inline(Glyphs.emoji("🤔", ink: Self.iconInk), font: hintFont))
-            out.append(NSAttributedString(string: Self.overdueNote,
-                                          attributes: [.font: hintFont, .foregroundColor: lit]))
+            // **Only the two pictures, no words** (Victor, 2026-09-23: *"când
+            // durează mai mult ca de obicei transcrierea, să apară doar
+            // emojiurile 🤔⏱️, fără textul de după"*).
+            for e in Self.overdueMarks { out.append(Self.inline(Glyphs.emoji(e, ink: Self.iconInk), font: hintFont)) }
         }
         transcribeLit = steps
         return out
@@ -3902,10 +3903,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         return -deadline.timeIntervalSinceNow >= transcribeSpan * (Self.overdueFactor - 1)
     }
     private static let overdueFactor: Double = 1.5
-    /// English, like every other string the chip renders — the overlay is on a
-    /// projector in front of international rooms. Two spaces in front: it is an
-    /// aside appended to the row, not a second row.
-    private static let overdueNote = "Taking longer than usual..."
+    /// Two spaces in front of them: an aside appended to the row, not a second
+    /// row. They were followed by `Taking longer than usual...` until
+    /// 2026-09-23.
+    private static let overdueMarks = ["🤔", "⏱️"]
     /// How many characters were lit the last time the row was built, so the
     /// ticker can do nothing on the fourteen frames out of fifteen where the
     /// answer has not changed — `startWarmth`'s bargain, for its reason.
