@@ -4188,7 +4188,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.publishShotCount()
             guard let path = path else { return }
             Log.info("context screen captured: \((path as NSString).lastPathComponent)")
-            self.flyShotIntoChip(ScreenCapture.handover(for: path), from: Self.screenFrame(at: cursor))
+            // **No flight for picture zero** (2026-09-23, Victor: *"poza
+            // inițială din gesturile de prompting nu o mai anima ca vine spre
+            // mouse. pune doar bulina galbenă"*). He did not press a shutter
+            // for it, so the ripple at the press is its whole receipt; the
+            // frame flying into the chip stays for the shots he takes on
+            // purpose (⌃⌥P, the dragged area).
         }
     }
 
