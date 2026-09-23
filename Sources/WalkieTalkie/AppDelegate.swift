@@ -5327,7 +5327,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The **spawn** used to share it and no longer does — see
     /// `spawnGrowSeconds`: that one is not a receipt, it is the window being
     /// carried to where it now lives, and a thing being carried is watched.
-    private static let sendFlightSeconds: CFTimeInterval = 0.7
+    ///
+    /// **0.55 s since 2026-09-23**, down from 0.7, the day it started carrying
+    /// the terminal's picture: a thing recognisable at a glance needs less of
+    /// the eye's time to be followed, and this one plays on every sentence sent.
+    private static let sendFlightSeconds: CFTimeInterval = 0.55
 
     /// **The second the little terminal spends growing** (Victor, 2026-09-09:
     /// *"slowly move it out of the screen in about … one second"*). Longer than
@@ -7919,6 +7923,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window it came from; this ends **on** a window, at full size, over
     /// whatever he is reading — and a picture there covers the destination it is
     /// pointing at. Same call the spawn flight makes, and for the same reason.
+    ///
+    /// **Since 2026-09-23 it carries the destination's picture** (Victor: *"să
+    /// plece cu poza terminalului până la locația în care e terminalul"*) — not
+    /// the panel's, which is what the 09-07 note above was about: a small copy
+    /// of the bound terminal born under the panel and growing onto the window it
+    /// is a copy of, exactly as the spawn's does. The outline is the fallback
+    /// when no picture comes back.
     private func sendFlight(from frame: CGRect) {
         // **Every exit releases the panel**, because `resolvePrompt` now holds it
         // for this method on every send — see `RelayWindow.resolvePrompt`. A
@@ -7944,10 +7955,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { giveUp() }
                 return
             }
+            // **The terminal's own picture, grabbed here beside the AppleScript**
+            // (Victor, 2026-09-23: *"să plece cu poza terminalului până la
+            // locația în care e terminalul"*) — by window id, so a terminal
+            // sitting behind the app he dictated from comes back as itself and
+            // not as whatever covers it. Off the main thread, after `commit`
+            // has already handed the words to the delivery queue: the picture
+            // can cost a few milliseconds, the sentence never waits on it.
+            let picture = BindFlight.windowPicture(of: destination, owner: "Terminal")
             DispatchQueue.main.async {
-                BindFlight.fly(from: frame, to: { destination },
-                               seconds: Self.sendFlightSeconds,
-                               outlined: true, tail: Self.spawnFlightRest)
+                if let picture = picture {
+                    // **A little copy of that terminal is born under the panel
+                    // and grows into the window it is a picture of** — the
+                    // spawn's grammar (`spawnSeed`), now for a terminal that was
+                    // already open. The 09-07 objection to a picture here was
+                    // that it covers the destination it points at; a picture
+                    // *of* the destination does not, because it arrives on it
+                    // pixel for pixel and dissolves into it. What it adds is
+                    // *which* one: with three terminals on three screens an
+                    // outline says "a window", the picture says "that one".
+                    BindFlight.fly(from: Self.spawnSeed(under: frame, like: destination),
+                                   to: { destination }, carrying: picture,
+                                   seconds: Self.sendFlightSeconds,
+                                   tail: Self.spawnFlightRest)
+                } else {
+                    // No picture (no grant, a window never drawn on this
+                    // Space): the outline it always was.
+                    BindFlight.fly(from: frame, to: { destination },
+                                   seconds: Self.sendFlightSeconds,
+                                   outlined: true, tail: Self.spawnFlightRest)
+                }
                 // **The outline leaves, then the dialog fades** — the same beat
                 // the spawn flight keeps, and for its reason: at t=0 the outline
                 // lies exactly on the panel, so a panel already dissolving under
