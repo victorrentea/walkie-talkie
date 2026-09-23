@@ -53,12 +53,27 @@ This file holds only what every session needs. Everything else moved on 2026-09-
 - **Build and install:** `./build-app.sh` — renders the icon from `assets/walkie-bound.png`,
   writes the plist, `touch`es the bundle, resets the Dock icon cache only when the `.icns`
   checksum changed. Never commit an `.icns`.
-- **Restart the installed app:** `./relay-restart.sh`. It reads `~/.walkie-talkie/bound-tty`
-  first, waits for a dictation in flight to finish *and deliver* (`GET /test/state`, plus six
-  seconds after it goes idle), stands the app down through `SingleInstance`, relaunches, and re-binds the
-  same tty through `POST /bind {"tty": …}` (no toggle, no flight, no flash). **Never restart
-  while a dictation is running** — *"niciodată să nu mai dai restart la Walkie Talkie … în
-  dictare — oprești și aștepți să se termine dictarea, să se livreze, abia apoi faci restart"*.
+- **The app is restarted ONLY through `./relay-restart.sh`** (`./safe-restart.sh` is the same
+  script) — **never by `pkill`, `kill` or `open` by hand**, from any session (2026-09-23). Several
+  agents rebuild it during the day and each restart used to be able to cut a sentence off.
+  Victor: *"Whenever you restart it, make sure it's not currently dictating or transcribing …
+  After the clean insert of the text [and submit], only then restart. Maybe, granted, even 10
+  more seconds in case I routed the prompt to the wrong place, and then only then restart."*
+  (and 2026-09-09: *"niciodată să nu mai dai restart la Walkie Talkie … în dictare"*).
+  `./relay-restart.sh [--build] [--dry-run] [--max-wait 1800] [--quiet 10]`: `--build` runs
+  `build-app.sh` first, ungated; then it polls `GET /test/state.busy` / `busyWhy` (the app's
+  `restartBlockers`: any microphone, the recogniser, a Wispr sentence, the prompt on screen, a
+  sentence held for a bind, a delivery being typed) until idle **and** 10 s quiet since the last
+  delivery (the countdown restarts on anything new — `tools/restart_gate.py`, tested by
+  `evals/test_restart_gate.py`), reads `bound-tty`, quits with SIGTERM, relaunches with
+  `open -g`, and re-binds the tty through `POST /bind {"tty": …}`. Exit 3 at the max wait, with
+  nothing restarted. `--dry-run` waits for the gate and restarts nothing — the way to check it.
+- **A quit mid-sentence waits for the sentence** (2026-09-23, `QuitGate`): SIGTERM goes through
+  `applicationShouldTerminate`, which answers `.terminateCancel` while `restartBlockers` is not
+  empty and quits by itself once the words have landed (`GET /test/state.quitPending`, 10 min
+  ceiling, `↻ quitting after this sentence`); a newer instance's `SingleInstance.enforce()` waits
+  for it instead of force-killing after 2 s. Not `.terminateLater` — that parks the run loop in
+  modal mode and the settle's timers would never fire. SIGKILL / Force Quit bypass all of it.
   A `.keystroke` target has no tty and cannot be restored; the script says so.
 - **A click on the Dock tile restarts it** (2026-09-14) — `applicationShouldHandleReopen` →
   `Relaunch`, not a refocus: there is nothing to come forward to. It keeps both of the script's
@@ -190,7 +205,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
-| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `wrapMode` / `wrapWhy` · `relayStarted` / `startedMode` / `intercepting` · `scratchpadWindowOpen` · `scratchpad` (`{windowOpen, frame, parkedFrame, minimumSize, everBecameKey, lastKeyAt, opens, reopenedElsewhere, screens}`) · `historyRoute` · `ringUp` · `arrowsUp` (the drop arrows held over the pointer while a caret sentence lands — **twice their size** for that stretch since 2026-09-22) · `pasteHint` (`{visible, alpha, pulsing, peak, hold, fall}`) · `halo` (the ring's and the heads' windows as AppKit sees them — `visible`, `alpha` — beside the flags they answer to; what the halo's idle sweep reads) · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `sessionFlags` (the modifiers the window server believes are held) · `keyTrace` · `keyRedirect` (`{armed, pid, seen, redirectedAX, redirectedKey, passed}`, per dictation) · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery` · `backStopsWispr` (is the back click this dictation's stop). ISO-8601 with ms |
+| `GET /test/state` | everything an assertion needs, read-only: `listening` · `settling` · `speculative` · `capturing` (the swallow window) · `isRecording` (the source's microphone) · `phase` / `phaseStatus` (source-agnostic, `DictationPhase`) · `wispr` (`{state, since, status, row, lags:{pollMs, notifyMs}, transitions}`) · `wrapMode` / `wrapWhy` · `relayStarted` / `startedMode` / `intercepting` · `scratchpadWindowOpen` · `scratchpad` (`{windowOpen, frame, parkedFrame, minimumSize, everBecameKey, lastKeyAt, opens, reopenedElsewhere, screens}`) · `historyRoute` · `ringUp` · `arrowsUp` (the drop arrows held over the pointer while a caret sentence lands — **twice their size** for that stretch since 2026-09-22) · `pasteHint` (`{visible, alpha, pulsing, peak, hold, fall}`) · `halo` (the ring's and the heads' windows as AppKit sees them — `visible`, `alpha` — beside the flags they answer to; what the halo's idle sweep reads) · `chip` (the rows as strings) · `pasteMode` / `atCaret` / `spawnPending` / `awaitingBind` / `bound` · `historyRow` · `source` · `wrapWispr` · `sinkOpen` · `scratchpadHeld` · `sessionFlags` (the modifiers the window server believes are held) · `keyTrace` · `keyRedirect` (`{armed, pid, seen, redirectedAX, redirectedKey, passed}`, per dictation) · `lastRingDown` (why the **ring** went) · `lastSettled` (why the **wait** ended) · `lastDelivery` · `backStopsWispr` (is the back click this dictation's stop) · `busy` / `busyWhy` / `quitPending` / `pid` / `dictationStartedAt` (the restart gate, 2026-09-23). ISO-8601 with ms |
 | `POST /test/sink` `{"on": true}` · `GET /test/sink` · `POST /test/sink/clear` | **the relay's own window, as the key window** — `WisprSink`: 40×20, borderless, bottom-left corner, an instrumented `NSTextView` inside. The GET answers *did anything land in it, and by which route*: `paste` (⌘V), `ax:…` (an Accessibility write, with the setter's name), `typed`, `keyDown`, plus `key` and `previousApp` |
 | `POST /test/sink` `{"key": true}` · `{"restore": true}` | take the keyboard (remembering whose it was) / hand it back, window left open. The two calls answered the question they were built for (2026-09-13, 3/3): **Wispr picks its insertion target at the END** — taking key 1–5 ms after the stop chord is enough, and the row's `app` column named the relay although TextEdit was in front the whole dictation |
 | `POST /test/rebind-panel` `{"query": …}` | put the *Rebind to…* panel up mid-screen, field filled in (again to close) |

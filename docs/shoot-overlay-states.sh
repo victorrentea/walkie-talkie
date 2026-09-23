@@ -18,17 +18,17 @@ cd "$(dirname "$0")/.."
 
 was_running=0
 pgrep -f "/Applications/Walkie Talkie.app" >/dev/null 2>&1 && was_running=1
+swift build
 # Both read before anything stands the app down: the file is cleared at launch.
+# After the build, so the gate is not minutes stale by the time the app goes.
 relay_wait_idle
 bound_tty="$(relay_bound_tty)"
-
-swift build
 rm -rf docs/states
 RELAY_SHOOT="$PWD/docs/states" ./.build/debug/WalkieTalkie
 python3 docs/build-overlay-states.py
 
 if [ "$was_running" = 1 ]; then
-  open "/Applications/Walkie Talkie.app"
+  open -g "/Applications/Walkie Talkie.app"
   echo "→ installed app restarted"
   relay_rebind "$bound_tty"
 fi

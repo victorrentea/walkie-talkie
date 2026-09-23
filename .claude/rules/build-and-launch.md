@@ -4,6 +4,10 @@ paths:
   - "Sources/WalkieTalkie/main.swift"
   - "Sources/WalkieTalkie/SingleInstance.swift"
   - "Sources/WalkieTalkie/Relaunch.swift"
+  - "Sources/WalkieTalkie/QuitGate.swift"
+  - "relay-restart.sh"
+  - "safe-restart.sh"
+  - "tools/restart_gate.py"
   - "assets/**"
 ---
 
@@ -222,8 +226,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   (launch clears it): absent unbound, `ttysNNN` bound, `ttysNNN listening` while the microphone is
   open. One `cat`, written from the two switches that own those facts.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
-- **Wait six seconds after the row stops saying `listening`.** The microphone closing is not the
-  end of the sentence: the decode and the held panel deliver the words.
+- **Wait for `busy == false` and then ten quiet seconds after the last delivery** (2026-09-23,
+  superseding *six seconds after the row stops saying `listening`*). `GET /test/state.busy` is
+  `AppDelegate.restartBlockers`; the ten seconds are Victor's, for re-routing a prompt he sent to
+  the wrong place. `tools/restart_gate.py`, tested by `evals/test_restart_gate.py`.
+- **A quit mid-sentence is refused and retried, never `.terminateLater`** (`QuitGate`): SIGTERM is
+  routed through `applicationShouldTerminate`; `SingleInstance.enforce()` waits while the older
+  instance keeps `.quit-deferred` fresh. `RELAY_SHOOT` / `WT_QUIT_NOW=1` quit at once.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
 - **The restore addresses a tty (`POST /bind {"tty"}`), never the front window, never a toggle,
   no flight, no flash.** At the end of a build the frontmost window is whatever the build was
