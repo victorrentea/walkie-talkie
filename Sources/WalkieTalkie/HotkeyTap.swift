@@ -136,6 +136,14 @@ final class HotkeyTap {
     /// anyway, from its own state, exactly as it does for his keyboard.
     var onWisprRawChord: ((Bool) -> Void)?
 
+    /// **🔽 → ended a plain dictation, and the words are to be submitted**
+    /// (2026-09-23). Victor: *"Enter is dispatched if I do a back click and move
+    /// the mouse to my right."* The flick stops the back click's clean sentence
+    /// exactly as a second back click would, and this tells `AppDelegate` to
+    /// press Return once the clean words have landed at the caret — the Return
+    /// cannot go out here, because the words are still a round trip away.
+    var onBackSubmit: (() -> Void)?
+
     /// **Which of Wispr Flow's two start gestures was seen**, and the whole of
     /// what the difference between them costs.
     ///
@@ -2987,13 +2995,30 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     Log.info("🎯 🔽 → F5 re-triggered \(String(format: "%.0f", sinceLastF5 * 1000))ms after the last one — still the same motion, dropped")
                     return nil
                 }
+                // **During a plain dictation it is the stop *and* the submit**
+                // (2026-09-23). Victor: *"Enter is dispatched if I do a back
+                // click and move the mouse to my right."* The same test and the
+                // same chord as the back click's stop below, so the two ways out
+                // of a clean sentence cannot drift; the Return waits for the
+                // words (`onBackSubmit`), because a Return now would land before
+                // them.
+                if backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation) {
+                    lastBackToggleAt = f5Now
+                    Log.info("⌨️ 🔽 → — stopping the plain dictation; Return once its words land")
+                    Self.postWisprHandsFree()
+                    onWisprRawChord?(true)
+                    setWisprArm(0)
+                    DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }
+                    return nil
+                }
                 Log.info("⌨️ 🔽 → — Return")
                 Self.postReturn()
                 return nil
 
             // The back button **clicked** — Wispr Flow's **raw** hands-free
-            // toggle, in both modes: it starts a sentence Wispr owns (the relay
-            // rings for it and routes it by state) and stops any Wispr sentence,
+            // toggle, in both modes: it starts a **plain** sentence — clean words
+            // at the caret, bound or not, nothing added (`AppDelegate.cleanSentence`,
+            // 2026-09-23) — and stops any Wispr sentence,
             // whoever started it. Same chord, same `postWisprHandsFree` as
             // before, when 🔽 → was the start and this click its stop.
             //
@@ -3679,15 +3704,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     }
 
     private var gestureVocabulary: [(name: String, key: CGKeyCode, label: String, what: String)] {
-        [("forward-click", VK_F7,  "⌃⌥⌘F7",  "dictate at the caret — or bind, with the left button held"),
+        [("forward-click", VK_F7,  "⌃⌥⌘F7",
+          "prompt at the caret (screenshot, dictated marker, attachments; submitted in a Claude Code prompt) — or bind, with the left button held"),
          ("forward-right", VK_F10, "⌃⌥⌘F10",
           "start the dictation, or end the one open — with the left button held, bind and dictate"),
          ("forward-left",  VK_F11, "⌃⌥⌘F11", "cancel the dictation in flight"),
          ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
          ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "kamikaze — appends the word to the sentence in flight"),
-         ("back-click",    VK_F6,  "⌃⌥⌘F6",  "start or stop Wispr Flow's dictation — a picture while the relay's own one is dictating"),
+         ("back-click",    VK_F6,  "⌃⌥⌘F6",
+          "start or stop a plain dictation — clean words at the caret; a picture while the relay's own one is dictating"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
-         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Return"),
+         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "Return — during a plain dictation: stop it, insert the words, then Return"),
          ("back-left",     VK_F3,  "⌃⌥⌘F3",  "cancel Wispr Flow's dictation — the relay's own when there is none"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }

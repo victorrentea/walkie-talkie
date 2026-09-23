@@ -1286,6 +1286,47 @@ final class TerminalBinding {
         return out.hasPrefix("/dev/") ? out : "/dev/" + out
     }
 
+    /// **Is the caret in a Claude Code prompt?** (2026-09-23) — the tty of the
+    /// front Terminal.app tab when it is, nil otherwise.
+    ///
+    /// Victor: *"if I am putting my [caret] into a Claude Code terminal prompt,
+    /// it should already submit the prompt as it's actually a prompt."* So a
+    /// forward-click sentence goes in *and is submitted* here, and anywhere else
+    /// it is only pasted. Built from the three questions this file already
+    /// answers, no new heuristic:
+    ///
+    /// 1. **Terminal.app is the app in front** — the one terminal whose caret is
+    ///    unambiguous: the selected tab of the front window (`frontTerminalTab`).
+    ///    An editor cannot say whether the caret is in its terminal pane or in a
+    ///    source file (see `deliver`'s `.keystroke` case), and an Enter in a
+    ///    source file is an edit, so IDEs are deliberately not covered.
+    /// 2. **What runs in front on that tty is not a shell** — the shell guard's
+    ///    own verdict (`foregroundCommand`, `isShell`).
+    /// 3. **A process on that tty owns a fresh `~/.claude/cwd/.last-<pid>`** —
+    ///    the status line's per-session file, newer than the process itself
+    ///    (`publishedDirectory(onTTY:)`), which is how the chip already knows a
+    ///    Claude Code session is sitting there. This is what keeps `ssh`, `vim`
+    ///    or a tmux client — non-shells all — from being handed an Enter.
+    ///
+    /// Runs `osascript` and `ps` — call it off the main thread.
+    static func frontClaudePromptTTY(bundleID: String?) -> String? {
+        guard bundleID == "com.apple.Terminal", let tab = frontTerminalTab() else { return nil }
+        guard let command = foregroundCommand(onTTY: tab.tty), !isShell(command) else { return nil }
+        let device = (tab.tty as NSString).lastPathComponent
+        guard publishedDirectory(onTTY: device) != nil else { return nil }
+        return tab.tty
+    }
+
+    /// Type a prompt into that tab and submit it — the bound terminal's own
+    /// delivery (`writeToTerminalApp`: text, a bare Return, and the third Return
+    /// when Claude Code asks to review a paste), aimed at a tty instead of the
+    /// binding.
+    static func submitPrompt(_ text: String, toTTY tty: String) -> Bool {
+        let line = singleLine(text)
+        guard !line.isEmpty else { return false }
+        return writeToTerminalApp(line, tty: tty)
+    }
+
     /// Would typing here run a command rather than talk to a program?
     ///
     /// Deliberately a **shell** test and not a "is this Claude Code" test. What

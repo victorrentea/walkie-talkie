@@ -924,6 +924,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// destination must not change halfway through.
     private var pasteMode = false
 
+    /// **The two things a sentence can be at the caret** (2026-09-23). Victor:
+    /// *"The forward click should be transcribing, basically prompting, at the
+    /// caret … the screenshot of the screen, the fact that is dictated … Clicking
+    /// the back button on the mouse starts a plain voice transcription with no
+    /// sorts of prompting tweaks around it. It should be just clean voice that I
+    /// had."*
+    ///
+    /// `caretPrompt` — opened by the forward click (`startDictation(paste:)`):
+    /// the context frame at the press, `[Dictated in RO or EN]`, selections,
+    /// picks and pictures, i.e. the terminal's envelope pasted at the caret; and
+    /// **submitted** when the caret is a Claude Code prompt
+    /// (`TerminalBinding.frontClaudePromptTTY`).
+    ///
+    /// `cleanSentence` — opened by the back click (the arm, `backStopsWispr`, is
+    /// up when Wispr's begin callbacks run): the words and nothing else, at the
+    /// caret **even when a terminal is bound** (the delivery to a bound terminal
+    /// always presses Return, and here Return is 🔽 →'s to give), no context
+    /// frame, no probe, no shutter, no kamikaze, no marker splicing.
+    /// `submitAfterClean` is 🔽 → having ended it: Return once the words land.
+    ///
+    /// Anything else reaching the caret — the held right ⌘⌥, a hand-started Wispr
+    /// sentence with nothing bound, `/test` — keeps `caretLine`'s old envelope.
+    /// All three are consumed by `deliver` or cleared by `dictationEnded`.
+    private var caretPrompt = false
+    private var cleanSentence = false
+    private var submitAfterClean = false
+
     /// Somewhere for this dictation to go: a terminal already bound, one it is
     /// about to open for itself, the caret — or, since 2026-09-11, one he has
     /// not pointed at yet (`holdsForBind`).
@@ -2365,6 +2392,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onWisprCancel = { [weak self] in
             DispatchQueue.main.async { self?.overlay.flash("🗑️ Cancelled", duration: 1.5) }
         }
+        // 🔽 → ended the plain dictation: the words go in clean, then Return
+        // (2026-09-23) — see `submitAfterClean`.
+        hotkeys.onBackSubmit = { [weak self] in
+            DispatchQueue.main.async { self?.submitAfterClean = true }
+        }
         // **A chord this app posts for a gesture has to announce itself**
         // (2026-09-18) — the tap filters its own posts out of the keyboard
         // branch, so without this a 🔽 → dictation reaches `WisprState` through
@@ -2522,11 +2554,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.pasteMode = true
                 Log.info("📍 right ⌘⌥ held — these words go to the caret")
             }
+            self.noteCleanStart()
             self.dictationMaybeBeginning(why)
         }
         wisprSource.didBegin = { [weak self] in
             guard let self else { return }
             self.wisprMicSentence = !self.wisprSource.relayStarted
+            self.noteCleanStart()
             self.dictationBegan()
         }
         wisprSource.didStopListening = { [weak self] in self?.dictationStoppedListening() }
@@ -2560,6 +2594,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// device open. Victor sees that gap (2026-09-12: *the ring still comes up
     /// late*), so the ring goes up on the gesture and the source takes it back
     /// if no microphone follows.
+    /// **A Wispr sentence the back click opened is a plain one** (2026-09-23) —
+    /// see `cleanSentence`. Read off the arm, which the tap raises at the click
+    /// before the chord's announcement reaches the main queue, and which is
+    /// retired at the stop click — so it is latched here, at the begin, and
+    /// carried to `deliver` on the flag.
+    private func noteCleanStart() {
+        guard !wisprSource.relayStarted, hotkeys.backStopsWispr else { return }
+        if !cleanSentence { Log.info("🧼 a plain dictation (back click) — clean words at the caret, nothing added") }
+        cleanSentence = true
+        caretPrompt = false
+        pasteMode = true
+    }
+
     private func dictationMaybeBeginning(_ why: String) {
         let t0 = CFAbsoluteTimeGetCurrent()
         guard !listening, !speculative else { return }
@@ -2647,7 +2694,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // selection is never filed there either — only a highlight that
         // *changes* during the sentence, or one he deliberately takes with the
         // shutter, becomes part of the message.
-        if !pasteMode, isBound || spawnPending {
+        //
+        // **The forward click's caret prompt takes the picture too** (2026-09-23,
+        // reversing 2026-09-19's *"if I'm dictating at caret, we still don't do
+        // an initial screenshot"*): Victor, *"The forward click should be …
+        // prompting, at the caret. There will be those metadata, the screenshot
+        // of the screen, the fact that is dictated"*. The ⌘C probe that kept
+        // caret sentences picture-less went on 2026-09-16, so the frame costs
+        // the field he is dictating into nothing. **A plain sentence never
+        // does**, whatever is bound (`cleanSentence`).
+        if !cleanSentence, caretPrompt || (!pasteMode && (isBound || spawnPending)) {
             if contextAtWheelRelease {
                 bookDictation()
             } else {
@@ -2661,7 +2717,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `dictationStartedAt`, which both branches above have just set, and it
         // has to reach `selectionQueue` ahead of `syncSelectionWatch`'s seed or
         // the highlight it files would be read back as one already seen.
-        probeRecentSelection()
+        // Not for a plain sentence: nothing it files would be delivered.
+        if !cleanSentence { probeRecentSelection() }
 
         listening = true
         // **The clock on this sentence starts with the microphone**, not with
@@ -2913,7 +2970,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // honest about a clip with two seconds in it he did not say.
         // → `DictationResult.markersInAudio`
         let spokenText = result.text
-        result.text = resolvingMarkers(result.text, words: result.words)
+        // **A plain sentence is the words he said and nothing else** (2026-09-23)
+        // — taken off the flags here, once, so nothing below can read them twice.
+        let clean = cleanSentence
+        let prompt = caretPrompt
+        let submitClean = clean && submitAfterClean
+        cleanSentence = false
+        caretPrompt = false
+        submitAfterClean = false
+        // No marker rewrite for it either: that is what splices a highlight
+        // into the middle of the words.
+        result.text = clean ? spokenText : resolvingMarkers(result.text, words: result.words)
         // **The corpus gets neither the marker nor the paragraph.** Wispr's
         // recording heard the marker and the relay's did not; *neither* of them
         // heard the text he had highlighted, which this app has just written
@@ -2923,6 +2990,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let corpusText = result.markersInAudio
             ? spokenText : resolvingMarkers(spokenText, words: result.words, inline: false)
         // 🔼 ↓ — after the corpus copy is taken, because he never said it.
+        // Never on a plain sentence: it is a word for an agent.
+        if clean { kamikaze = false }
         if kamikaze {
             kamikaze = false
             result.text += "\n\nkamikaze"
@@ -2944,7 +3013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A caret sentence whose microphone close this side never saw — the
         // held right ⌘⌥, confirmed by Wispr's row — reaches here with the latch
         // still holding the previous sentence's answer.
-        if pasteMode { latchedAtCaret = true }
+        if pasteMode || clean { latchedAtCaret = true }
 
         // Somebody else already put the words on screen — Wispr Flow with the
         // wrap off, and nothing else today. Filed above, delivered by nobody.
@@ -2954,6 +3023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endSettling(reason: "\(source.name) inserted it")
             clearSpawn()
             abandonDictation("the source delivered it itself")
+            if submitClean { submitAfterCleanWords() }
             // Landed all the same, and wherever the focus was — which is the
             // likeliest place of all to be the wrong one (2026-09-23).
             pasteHint.pulse(reason: "\(source.name) inserted a sentence itself")
@@ -2970,6 +3040,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 endSettling(reason: "\(source.name) inserted it at the caret, with no ⌘V")
                 clearSpawn()
                 abandonDictation("the source delivered it itself")
+                if submitClean { submitAfterCleanWords() }
                 pasteHint.pulse(reason: "\(source.name) inserted a caret sentence itself")
                 return
             }
@@ -2998,7 +3069,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // countdown — the words are wanted in the field he is looking at, and
             // a panel between the sentence and the caret is exactly the ceremony
             // this path exists to remove.
-            let line = caretLine(words: result.text)
+            //
+            // **Three envelopes since 2026-09-23** — see `caretPrompt` /
+            // `cleanSentence`: the forward click's is the terminal's whole
+            // envelope, the back click's is the words alone, anything else keeps
+            // the old caret envelope.
+            let line = clean ? cleanLine(words: result.text)
+                             : caretLine(words: result.text, full: prompt)
             // **Addressed, when the source says so.** A recogniser that opens
             // windows of its own can be holding the keyboard at this instant —
             // see `DictationResult.focusPid` — and the pid it remembered is the
@@ -3011,7 +3088,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingDeliveryKind = nil
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
-            pasteText(line, to: result.focusPid)
+            if prompt {
+                deliverCaretPrompt(line, to: result.focusPid)
+            } else {
+                pasteText(line, to: result.focusPid)
+                if submitClean { submitAfterCleanWords() }
+            }
             // **The key that says it again, at the instant the ⌘V goes out.**
             // Until 2026-09-23 this was the only delivery that got it, as the
             // one this app cannot check; now every delivery does (`commit` for
@@ -3028,6 +3110,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // speculative ring 1.5 s after a chord no microphone followed, and the
         // flag it raised lives on this side of the protocol.
         speculative = false
+        // A sentence that never reached `deliver` must not hand its kind to the
+        // next one (`caretPrompt` / `cleanSentence`, 2026-09-23).
+        if case .delivered = end {} else {
+            caretPrompt = false
+            cleanSentence = false
+            submitAfterClean = false
+        }
         switch end {
         case .delivered:
             break
@@ -3304,6 +3393,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // may already have been clicked.
         if !resumed { spawnFolder = nil }
         pasteMode = paste
+        // Every caller that passes `paste` is the forward click (or its route
+        // from a desk) — the caret **prompt** (2026-09-23). A relay-started
+        // sentence is never a plain one.
+        caretPrompt = paste
+        cleanSentence = false
+        submitAfterClean = false
         contextAtWheelRelease = deferContext
         // **Always true since `holdsForBind`**, and kept rather than deleted: it
         // is the gate this path is written under.
@@ -5665,9 +5760,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// **Nothing is appended when he attached nothing**, which is the common case
     /// and is byte-for-byte what this mode did before.
-    private func caretLine(words: String) -> String {
+    ///
+    /// **`full` is the forward click's caret *prompt*** (2026-09-23) — the whole
+    /// terminal envelope, `terminalLine` itself: the context frame as picture
+    /// zero with its leading `auto` token, `[Dictated in RO or EN]`, the
+    /// highlights, the picks, the films. Victor: *"The forward click should be
+    /// transcribing, basically prompting, at the carrot. There will be those
+    /// metadata, the screenshot of the screen, the fact that is dictated, and
+    /// any other feature."* The 2026-09-08 line above — *no context frame, no
+    /// language hint* — now holds only for the caret sentences that are not the
+    /// forward click's (the held right ⌘⌥, a hand-started Wispr sentence with
+    /// nothing bound); the back click's plain one is `cleanLine`.
+    private func caretLine(words: String, full: Bool = false) -> String {
         stateLock.lock()
         let shots = pendingShots
+        // Read before they are cleared — the full envelope stamps each frame
+        // with its offset, context frame first at 0:00, the way `send` does.
+        let screen = full ? pendingScreen : nil
+        let fullOffsets = (screen != nil ? [0] : []) + pendingShotOffsets
+        let markerNumbers = shotMarkerNumbers
         pendingShots = []
         pendingShotOffsets = []
         let sources = shotSources
@@ -5694,8 +5805,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         selectionMarkersInlined = []
         elementMarkersInlined = []
         frozenSelectionInlined = false
-        // **No context frame rides this envelope, and it is cleared rather than
-        // ignored.** None is ever taken in this mode, so `pendingScreen` is nil
+        // **No context frame rides the legacy envelope, and it is cleared rather
+        // than ignored** (the full one read it above). None is taken in that mode, so `pendingScreen` is nil
         // in every real path through here — but `shotsClause` is called with
         // `screen: nil` regardless, so one that *did* arrive (a `/test` route
         // that opened the dictation the terminal way) would survive to be
@@ -5737,6 +5848,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         publishShotCount()
         publishPicks()
 
+        if full {
+            // `send`'s `Message`, field for field, and `terminalLine` to render
+            // it — so the caret prompt and the bound prompt cannot drift apart.
+            let m = Message(kind: "dictation", text: words, selection: selection,
+                            selectionAt: selectionAt, selectionSource: selectionIn,
+                            selectionMarker: selectionMarker,
+                            extraSelections: extraSelections,
+                            inlinedShots: inlinedShots,
+                            inlinedSelections: inlined,
+                            inlinedElements: inlinedElements,
+                            paths: shots, screen: screen, films: takeFilms(),
+                            shotOffsets: fullOffsets,
+                            mice: mice, areas: areas, sizes: sizes, sources: sources,
+                            shotNumbers: markerNumbers,
+                            app: nil, elements: picks, startedAt: since)
+            return Self.terminalLine(m)
+        }
+
         var parts: [String] = [words]
         // **In `terminalLine`'s order and `terminalLine`'s wording**, down to the
         // stamp on the extras: he pastes this into another agent as often as into
@@ -5762,6 +5891,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // shape, for `terminalLine`'s reason: he reads this one too, and more
         // often than he reads that one, since it lands in a field in front of him.
         return words + "\n\n" + parts.dropFirst().joined(separator: "\n")
+    }
+
+    /// **The back click's plain dictation: the words, and nothing else**
+    /// (2026-09-23). Victor: *"a plain voice transcription with no sorts of
+    /// prompting tweaks around it. It should be just clean voice that I had."*
+    /// Whatever the sentence gathered anyway — a shot through ⌃⌥P before the
+    /// shutter refused it, a pick, a highlight the watcher saw — is drained with
+    /// the caret envelope's own bookkeeping and dropped, so it cannot ride the
+    /// next sentence either.
+    private func cleanLine(words: String) -> String {
+        let dropped = caretLine(words: words)
+        if dropped != words {
+            Log.info("🧼 plain dictation — \(dropped.count - words.count) chars of attachments dropped, the words go alone")
+        }
+        return words
+    }
+
+    /// **The forward click's prompt at the caret: pasted, or submitted where the
+    /// caret is a Claude Code prompt** (2026-09-23). Victor: *"Hit Enter to
+    /// trigger. For example, if I am putting my [caret] into a Claude Code
+    /// terminal prompt, it should already submit the prompt as it's actually a
+    /// prompt."*
+    ///
+    /// The detection is `TerminalBinding.frontClaudePromptTTY` — Terminal.app in
+    /// front, a non-shell in front on its selected tab, and a live Claude Code
+    /// session file on that tty — and the delivery is the bound terminal's own
+    /// (`writeToTerminalApp`: text, bare Return, the review Return). Everything
+    /// else is the ⌘V it always was, with no Enter: a browser field, a document,
+    /// an IDE (whose terminal pane cannot be told from its editor). There is no
+    /// cancel window here, as there never was at the caret.
+    ///
+    /// Off the main thread for the `osascript` and the `ps`; a sentence whose
+    /// source remembered a *different* app than the one in front (`focusPid`)
+    /// is not second-guessed and is pasted to that app.
+    private func deliverCaretPrompt(_ line: String, to pid: pid_t?) {
+        let front = NSWorkspace.shared.frontmostApplication
+        let frontIsTarget = pid == nil || pid == front?.processIdentifier
+        let bundle = frontIsTarget ? front?.bundleIdentifier : nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let tty = TerminalBinding.frontClaudePromptTTY(bundleID: bundle)
+            let submitted = tty.map { TerminalBinding.submitPrompt(line, toTTY: $0) } ?? false
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard submitted, let tty else {
+                    self.pasteText(line, to: pid)
+                    return
+                }
+                Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
+                self.lastDictation = line
+                self.endSettling(reason: "submitted into Claude Code at the caret")
+            }
+        }
+    }
+
+    /// 🔽 → ended the plain dictation: Return, after the words (2026-09-23).
+    /// A beat after the ⌘V so the paste lands first; `postReturn` waits out
+    /// Options+'s flags itself and is stamped as this app's.
+    private func submitAfterCleanWords() {
+        Log.info("⏎ plain dictation ended by 🔽 → — Return after the words")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { HotkeyTap.postReturn() }
     }
 
     private static func terminalLine(_ m: Message) -> String {
@@ -6744,6 +6933,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func plusOneShot(cursor: NSPoint) {
         guard hasDestination else { return }
+        // **A plain dictation takes no picture, at the start or at the end**
+        // (2026-09-23, Victor: *"there is no screenshot in a clean dictation"*).
+        // The back click is its stop, not a shutter, already; this closes the
+        // other door, ⌃⌥P. Asked of the tap's arm, which is lock-guarded — this
+        // runs off the main thread, where `cleanSentence` lives.
+        if hotkeys.backStopsWispr {
+            Log.info("📸 refused — a plain dictation (back click) takes no pictures")
+            return
+        }
         // Sampled at the gesture, like the cursor and for the same reason: by the
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
