@@ -3895,6 +3895,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // taking when there is somebody it is being taken *for*. A spawn counts
         // as somebody — the session it is about to open reads the same line.
         guard hasDestination else { return }
+        // **A clean dictation takes no picture** (Victor, 2026-09-23: *"butonul
+        // de Back trebuie să pornească dictarea simplă, fără poze, fără
+        // nimic"*). The back click's sentence is armed (`backStopsWispr`) from
+        // the click on, so it is told apart here without a second flag. The
+        // ring still grows — `grow` is the only thing below that is not a
+        // picture or its receipt.
+        if hotkeys.backStopsWispr {
+            Log.info("context screen skipped — a clean dictation from the back button")
+            DispatchQueue.main.async { [weak self] in self?.caretHalo.grow() }
+            return
+        }
 
         // Where he was pointing when he started talking. Taken here and carried
         // down: by the time the capture actually runs, a clipboard probe and a

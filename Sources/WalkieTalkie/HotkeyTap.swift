@@ -3003,7 +3003,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // button would otherwise do nothing at all.
             case VK_F6:
                 if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
-                if dictating {
+                // **The stop of a clean dictation comes before the shutter**
+                // (2026-09-23, the same afternoon — Victor: *"butonul de Back
+                // trebuie să pornească dictarea simplă, fără poze, fără nimic. Pe
+                // durata acelei dictări nu are sens să fac poze … butonul de Back
+                // oprește dictarea în acel moment"*). A sentence this click
+                // started is Wispr's, but the relay routes it and so goes
+                // `listening` — which made `dictating` true and turned the very
+                // next click, meant as the stop, into a picture. The arm (this
+                // click's own start) or Wispr's microphone open on a sentence the
+                // relay did not start is always a stop; the picture belongs only
+                // to the relay's own dictation, the one the forward button starts.
+                let wisprSentence = backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation)
+                if !wisprSentence, dictating, ownDictation {
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                     return nil
@@ -3022,7 +3034,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // The arm says *a start was posted and has not ended* even
                 // before Wispr's microphone warms up, so it wins over the
                 // microphone reading closed in that gap.
-                let closing = backStopsWispr || wisprMicIsOpen?() == true
+                let closing = wisprSentence
                 // **Never a second microphone over the first** (2026-09-18):
                 // with the Engine on the local model or ElevenLabs the relay's
                 // own may be recording. Only the opening half is refused — a stop
