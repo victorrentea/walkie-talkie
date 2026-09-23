@@ -174,6 +174,38 @@ final class RebindHistory {
         }
     }
 
+    /// **The terminals most recently spoken to that are still open** — the
+    /// second half of the spawn folder menu (Victor, 2026-09-23: *"să-mi ofere în
+    /// listă sub acelea care sunt preselecționate, steluțe, încă o listă cu ultimele
+    /// cinci recent deschise"*).
+    ///
+    /// The same log *Rebind to…* reads, filtered to what a click there can
+    /// actually reach: a tty, and a tab still showing it (`live`, from
+    /// `TerminalBinding.liveTitles()`). A window that has been closed is left out
+    /// rather than greyed — that menu is a rebind list, this one is a way out of
+    /// a spawn, and a row that cannot be taken there is only a row in the way.
+    /// **The bound one stays in**: during a spawn, picking it is not a no-op, it
+    /// takes the sentence back from the new session to the terminal it was
+    /// already going to.
+    func openTerminals(live: [String: String], limit: Int = 5) -> [(tty: String, name: String)] {
+        var out: [(tty: String, name: String)] = []
+        for entry in all {
+            guard let tty = entry.tty else { continue }
+            let short = (tty as NSString).lastPathComponent
+            guard let liveTitle = live[short] else { continue }
+            let title = liveTitle.isEmpty ? entry.title : liveTitle
+            var name = title ?? entry.label
+            // The folder only when the title does not already say it — Claude
+            // Code's titles start with the repo, and saying it twice pushes the
+            // part that tells two sessions apart off the end of the row.
+            let folder = entry.label.components(separatedBy: "@").first ?? entry.label
+            if title != nil, !name.contains(folder) { name += "  —  \(entry.label)" }
+            out.append((tty, name))
+            if out.count == limit { break }
+        }
+        return out
+    }
+
     /// `42s ago`, `7 min ago`, `2 h ago`, `3 d ago`.
     ///
     /// **Seconds are spelled out below a minute** and not rounded away — Victor

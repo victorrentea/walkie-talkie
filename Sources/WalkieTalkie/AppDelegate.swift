@@ -1352,24 +1352,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onResumeSession = { [weak self] session, cwd in
             self?.resumeSession(session, in: cwd)
         }
-        // **The same route the restart takes** (`picker.onBindTTY`), and for the
-        // same reason: this is a binding being *restored*, not a gesture pointing
-        // at the window in front. So no toggle — finding it already bound must not
-        // let go of it — and the bind runs off the main thread, because it spends
-        // itself in `osascript`.
-        status.onRebind = { [weak self] tty in
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let self = self else { return }
-                guard let bound = self.terminal.bind(tty: tty) else {
-                    DispatchQueue.main.async { [weak self] in
-                        self?.overlay.flash("⚠️ no terminal on \(tty)", duration: 3)
-                    }
-                    return
-                }
-                Log.info("📍 re-bound to \(bound.address) from the menu")
-                DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
-            }
-        }
+        // No toggle, off the main thread, and the window brought forward — see
+        // `rebindFromMenu`.
+        status.onRebind = { [weak self] tty in self?.rebindFromMenu(tty: tty) }
         status.whisperFootprint = { [weak self] in self?.whisperSource.footprintBytes }
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment
@@ -3481,6 +3466,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func offerSpawnFolders() {
         SpawnFolderMenu.show(at: NSEvent.mouseLocation) { [weak self] choice in
             guard let self = self, self.spawnPending else { return }
+            // **A row from the open-terminals half is not a folder: it is the
+            // session he wants already existing** (2026-09-23, *"[să pot face]
+            // rebind … direct în acel pop-up"*). A deliberate bind mid-sentence,
+            // so `showBound` takes the spawn back and the words go there — the
+            // same rule as the left-plus-wheel chord during a spawn.
+            if let tty = choice.tty {
+                self.rebindFromMenu(tty: tty, from: "the spawn menu")
+                return
+            }
             self.spawnFolder = choice.path
             // **The folder he picked gets a row of its own, behind Terminal's
             // icon** — the shape a binding has, which is what he asked for:
@@ -3496,6 +3490,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.overlay.setSpawnDestination(choice.name, mark: "✨",
                                              icon: Self.appIcon("com.apple.Terminal", height: 18))
             Log.info("✨ spawn folder chosen — \(choice.path)")
+        }
+    }
+
+    /// **A rebind picked from a list — `Rebind to…`, or the spawn menu's open
+    /// terminals — and the window it names brought forward, focused** (Victor,
+    /// 2026-09-23: *"acel terminal … trebuie să-mi vină din nou în față, focusat,
+    /// ca să văd dacă am trimis cui trebuie"*).
+    ///
+    /// **The same route the restart takes** (`picker.onBindTTY`), and for the
+    /// same reason: this is a binding being *chosen*, not a gesture pointing at
+    /// the window in front. So no toggle — finding it already bound must not let
+    /// go of it — and the bind runs off the main thread, because it spends itself
+    /// in `osascript`. The chip is updated first and the raise follows: the chip
+    /// is where he is looking, and it must not wait on a second round trip.
+    private func rebindFromMenu(tty: String, from origin: String = "the menu") {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let bound = self.terminal.bind(tty: tty) else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.overlay.flash("⚠️ no terminal on \(tty)", duration: 3)
+                }
+                return
+            }
+            Log.info("📍 re-bound to \(bound.address) from \(origin)")
+            DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+            TerminalBinding.bringToFront(bound)
         }
     }
 

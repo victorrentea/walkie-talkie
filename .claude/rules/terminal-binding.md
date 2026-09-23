@@ -93,6 +93,14 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 - **✨ means this app opened the window; passed at `adoptSpawnedWindow` → `bind(tty:spawned: true)` and sticky.** `★` is `SpawnFolderMenu`'s. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **One AppleScript for all titles: `TerminalBinding.liveTitles()`**, ~30 ms for the machine, about one `title(forTTY:)`. It doubles as liveness: a remembered tty missing from the map is greyed, not deleted. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 - **A dispatched pop-up at the pointer, not a submenu.** AppKit reserves the disclosure-arrow gutter on every row once one item has a submenu, which shoved `layOutGestures`' column (*"a fugit toată coloana de meniuri din cauza >"*). Dispatch it: a menu put up inside the closing click lands underneath and takes no clicks. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
+- **A rebind picked from a list brings its window forward, focused** (2026-09-23, *"trebuie să-mi
+  vină din nou în față, focusat, ca să văd dacă am trimis cui trebuie"*) — `Rebind to…` rows, its
+  live search hits, and the spawn menu's open terminals all go through
+  `AppDelegate.rebindFromMenu` → `TerminalBinding.bringToFront`. The tab is selected and its window
+  put at index 1 *inside* Terminal, then `activate(options: [])` (key window only — never an
+  all-windows raise) plus `AXFrontmost`, the pair `putTheFrontBack` measured. tmux also gets
+  `select-window`/`select-pane`. ⌘⌃B, the chord and `POST /bind` do not raise: they bind what he is
+  already looking at, and the restart's restore must not grab the front.
 - **Plain titles, so disabled rows dim** (the bound one, closed windows, IDE panels with no tab). Since 2026-09-12 the list is a panel that draws its own rows, so this is a colour rung rather than AppKit's dimming — but the rule it encodes is the same. → journal: *Rebind to: the destinations already spoken to, most recent first (2026-09-10)*
 
 ## The search field on Rebind to… (2026-09-12)

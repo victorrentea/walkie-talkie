@@ -708,6 +708,91 @@ final class TerminalBinding {
         return clean(osascript(script))
     }
 
+    // MARK: - Bringing a rebound terminal forward
+
+    /// **Put the terminal a menu rebind just pointed at in front of him, focused**
+    /// (Victor, 2026-09-23: *"când fac rebind la un terminal, din meniu mă refer,
+    /// trebuie să-mi vină din nou în față, focusat, ca să văd dacă am trimis cui
+    /// trebuie"*).
+    ///
+    /// A rebind from the menu is a choice made from a *list* — a title, a folder,
+    /// a tty — and the list is exactly the place the question *nu mai știu în ce
+    /// terminal am făcut ce task* was asked. The chip naming the destination
+    /// answers it in words; the window itself coming forward answers it with the
+    /// thing he actually recognises. ⌘⌃B and the left-plus-wheel chord do not
+    /// come through here: they bind the window he is already looking at.
+    ///
+    /// **One window, never the application.** `activate` on Terminal lifts every
+    /// Terminal window on every display (*"toate terminalele sar în față"*, the
+    /// reason `SpawnTerminal` lost its `activate`), so the tab is selected and its
+    /// window put at index 1 *inside* Terminal first, and only then is the app
+    /// brought forward — `activate(options: [])` without `.activateAllWindows`
+    /// brings the key window alone, and that window is now the one he picked.
+    /// `AXFrontmost` rides beside it for the reason `WisprFlowSource.putTheFrontBack`
+    /// measured: a background app asking for someone else to be frontmost is
+    /// declined, and the Accessibility request is the one that is granted.
+    ///
+    /// Off the main thread — it is an `osascript` round trip. Returns whether the
+    /// window was found; a failure costs nothing but the raise, the binding holds.
+    @discardableResult
+    static func bringToFront(_ target: Target) -> Bool {
+        let pid: pid_t?
+        switch target.handle {
+        case .terminalApp(let tty), .tmux(_, let tty):
+            if case .tmux(let pane, _) = target.handle {
+                // The pane he picked, not whichever one the window last had
+                // active — otherwise the window in front shows the wrong pane.
+                _ = tmux(["select-window", "-t", pane])
+                _ = tmux(["select-pane", "-t", pane])
+            }
+            let script = """
+            tell application "Terminal"
+                repeat with w in windows
+                    try
+                        repeat with t in tabs of w
+                            if tty of t is "\(escape(tty))" then
+                                try
+                                    set miniaturized of w to false
+                                end try
+                                set selected of t to true
+                                set index of w to 1
+                                return "ok"
+                            end if
+                        end repeat
+                    end try
+                end repeat
+                return ""
+            end tell
+            """
+            guard osascript(script) == "ok" else {
+                Log.error("🪟 no Terminal window is showing \(target.address) — nothing brought forward")
+                return false
+            }
+            pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal")
+                .first?.processIdentifier
+        case .ide:
+            pid = NSRunningApplication.runningApplications(withBundleIdentifier: target.bundleID)
+                .first?.processIdentifier
+        case .keystroke(let p, _):
+            pid = p
+        }
+        guard let pid, let app = NSRunningApplication(processIdentifier: pid) else { return false }
+        let activated = app.activate(options: [])
+        let element = AXUIElementCreateApplication(pid)
+        let axFront = AXUIElementSetAttributeValue(element, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        // The window as well as the app: an application that comes forward with
+        // no main window leaves him looking at a front with no caret in it.
+        var window: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
+           let window, CFGetTypeID(window) == AXUIElementGetTypeID() {
+            let w = window as! AXUIElement
+            AXUIElementPerformAction(w, kAXRaiseAction as CFString)
+            AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
+        }
+        Log.info("🪟 \(target.address) brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
+        return true
+    }
+
     // MARK: - Where the bound window is
 
     /// The frame of the Terminal.app window showing this tty.
