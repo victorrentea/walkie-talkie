@@ -327,7 +327,7 @@
     "slug" : "transcribing-overdue",
     "title" : "Waiting, and past the estimate",
     "when" : "Past 150% of the decode `DecodeRate` promised — the bar has been full for half as long again.",
-    "width" : 428
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -452,6 +452,18 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
+    "height" : 68,
+    "image" : "prompt-autosend-paused.png",
+    "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
+    "shape" : "panel",
+    "slug" : "prompt-autosend-paused",
+    "title" : "Under Autosend, with the pointer on it",
+    "when" : "Autosend is ticked and he moved the pointer onto the panel before its second ran out (2026-09-23).",
+    "width" : 369
+  },
+  {
+    "alpha" : 1,
+    "group" : "The held prompt",
     "height" : 165,
     "image" : "prompt-shots.png",
     "note" : "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00.",
@@ -519,7 +531,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 576
+    "width" : 640
   },
   {
     "alpha" : 1,
