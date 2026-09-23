@@ -14,7 +14,7 @@ import Foundation
 /// So the preference is a **file**, and the file is the contract:
 ///
 /// ```
-/// ~/.walkie-talkie/mic/choice     # one line: auto | xlr | rx | tx | bose | stage | mac
+/// ~/.walkie-talkie/mic/choice     # one line: auto | xlr | rx | stage | bose | mac   (tx went 2026-09-23; an old one reads as auto)
 /// ```
 ///
 /// ## Why a file and not a port

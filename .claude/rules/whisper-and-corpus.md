@@ -205,9 +205,18 @@ a disagreement rate, not an error rate. → journal: *What the local model is ac
 
 ## The microphone (`InputDevice.swift`)
 
-Six devices Victor names by their picture — 🎙️ Elgato Wave XLR, 🎤 the DJI receiver, 📡 the DJI
-transmitter over Bluetooth (2026-09-22), 🏛️ the room's Stage Speakerphone (2026-09-22), 🎧 Bose,
-💻 the built-in — one table (`InputDevice.known`), and one resolver every reader shares.
+Five devices Victor names by their picture — 🎙️ Elgato Wave XLR, 🎤 the DJI receiver, 🏛️ the
+room's Stage Speakerphone (2026-09-22), 🎧 Bose, 💻 the built-in — one table (`InputDevice.known`),
+and one resolver every reader shares. **The DJI transmitter over Bluetooth (`tx`, 📡/🎤) had a row
+for one day and went on 2026-09-23** (Victor: *"vom scoate DJI mic mini tx din lista. pastram doar
+RX pt moment cu emoji = 🎤"*); an old `tx` in `mic/choice` reads as `auto`. The receiver's needles
+never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B83BBE`).
+
+- **The WH-1000XM3's microphone is never recorded through** (2026-09-23, Victor: *"niciodata nu voi
+  folosi mic de pe WH casti bt"* — *"e f prost"*). `InputDevice.neverRecord` (`wh-1000`) sits
+  beside the ladder; no row matches it, and the system-default fallback skips it too — to any other
+  input, and with none left `select` answers nil and `MicRecorder.start` refuses. The HFP
+  microphone is 16 kHz and opening it drags the headphones' playback down to 16 kHz mono as well.
 
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
@@ -216,7 +225,7 @@ transmitter over Bluetooth (2026-09-22), 🏛️ the room's Stage Speakerphone (
   fallback.** The menu greys those rows, but a receiver can be unplugged *after* it was picked, and
   a dictation that records nothing because a setting outlived a cable is the exact failure this
   file exists to prevent. → journal: same
-- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI Rx ▸ 📡 DJI TX ▸ 🏛️ Stage ▸ 🎧 Bose ▸
+- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI Rx ▸ 🏛️ Stage ▸ 🎧 Bose ▸
   💻 built-in** (Victor,
   2026-09-19: *"the preference of mic to use is: XLR>DJI>BOSE>MAC … order them like this in menu and
   impl autoselection"*). **This supersedes *the DJI receiver is the microphone whenever it is
@@ -227,9 +236,9 @@ transmitter over Bluetooth (2026-09-22), 🏛️ the room's Stage Speakerphone (
 - **`InputDevice.known` is that order, once.** It is the menu's rows top to bottom *and* the ladder
   `resolve()` walks — a menu whose order disagreed with the automatic pick would teach the wrong
   thing every time he opened it. The `Automatic` row spells it out
-  (`Automatic — 🎙️ ▸ 🎤 ▸ 📡 ▸ 🏛️ ▸ 🎧 ▸ 💻`) rather than asking him to remember it. → journal: same
+  (`Automatic — 🎙️ ▸ 🎤 ▸ 🏛️ ▸ 🎧 ▸ 💻`) rather than asking him to remember it. → journal: same
 - **It is also `victor-macos-addons`' list, row for row** (2026-09-22). That app transcribes the
-  room continuously through the same six microphones and shows the same six rows in its own menu;
+  room continuously through the same five microphones and shows the same five rows in its own menu;
   `🏛️ Stage` is here only because it was there, and it sits *below* the two lavaliers rather than
   second, where addons used to rank it — a far-field room mic with AGC beats a condenser pointed at
   one chair in a hall, but the DJI is on his collar wherever he walks, and Victor's stated order

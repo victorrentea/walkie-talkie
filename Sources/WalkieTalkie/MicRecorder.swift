@@ -369,7 +369,9 @@ final class MicRecorder {
         // Point the engine at a device *before* asking what format it speaks —
         // the answer is the device's, and reading it first would describe the
         // one we are about to leave.
-        let device = InputDevice.select(on: input)
+        guard let device = InputDevice.select(on: input) else {
+            return "the only microphone left is one Victor never records through (WH-1000XM3)"
+        }
         // **`inputFormat`, not `outputFormat` — and this is what a tap is checked
         // against.** They are two different questions and they disagree the
         // moment a device is chosen by hand: `outputFormat(forBus: 0)` is the

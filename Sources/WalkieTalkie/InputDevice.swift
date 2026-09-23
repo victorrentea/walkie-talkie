@@ -81,24 +81,16 @@ enum InputDevice {
     static let known: [Known] = [
         Known(id: "xlr",  glyph: "🎙️", short: "XLR", label: "Elgato Wave XLR",
               needles: ["wave xlr", "elgato"]),
-        // **The dish is the receiver and the microphone is the microphone**
-        // (2026-09-22, Victor: *"use mic icon instead of sattelite"*). They were
-        // the other way round for the few hours the transmitter existed, which
-        // drew the capsule on his collar as a satellite dish and the USB-C
-        // dongle as a microphone — backwards on both counts, and the reason the
-        // two rows were hard to tell apart at a glance.
-        Known(id: "rx",   glyph: "📡", short: "DJI Rx", label: "DJI Wireless Mic Rx",
-              needles: ["wireless mic rx", "wireless mic"]),
-        // **The same lavalier with the receiver left in the bag** (2026-09-22):
-        // a Mic Mini transmitter pairs straight to the Mac over Bluetooth and
-        // shows up as `DJI Mic Mini-XXXXXX`, made by `Apple Inc.` — the OS's
-        // own HFP headset driver, so the brand is only in the *name*. One rung
-        // below the receiver: it is the same capsule on the same collar, but the
-        // headset profile hands over 16 kHz mono, and the receiver on USB-C
-        // hands over 48 kHz. `rx` stopped matching on the bare `dji` the day
-        // this arrived, because `dji` is in this name too and `rx` is asked first.
-        Known(id: "tx",   glyph: "🎤", short: "DJI TX", label: "DJI Mic Mini (Bluetooth)",
-              needles: ["dji mic"]),
+        // **One DJI row, and it is the receiver** (2026-09-23, Victor: *"vom
+        // scoate DJI mic mini tx din lista. pastram doar RX pt moment cu emoji =
+        // 🎤"*). The transmitter paired over Bluetooth had its own row for a day
+        // (`tx`, 16 kHz HFP); it is gone, and the receiver took the microphone
+        // glyph. The needles stay off a bare `dji mic`: the transmitter is named
+        // `DJI Mic Mini-B83BBE` and would be pulled straight back in by it. The
+        // receiver's brand is only in the manufacturer string
+        // (`DJI Technology Co., Ltd.`), which is part of the haystack.
+        Known(id: "rx",   glyph: "🎤", short: "DJI Rx", label: "DJI Wireless Mic Rx",
+              needles: ["wireless mic rx", "wireless mic", "dji technology"]),
         // **The room's own microphone** (2026-09-22). It was only ever in
         // Victor Addons' list, which is how the two menus came to disagree:
         // addons ranked it *second*, above the XLR, because in a hall a
@@ -117,6 +109,21 @@ enum InputDevice {
     /// The ladder, spelled with the glyphs, for the `Automatic` row — the menu
     /// says what automatic *does* rather than asking him to remember it.
     static var ladder: String { known.map(\.glyph).joined(separator: " ▸ ") }
+
+    /// **Microphones this app never records through, whatever else happens**
+    /// (2026-09-23, Victor: *"niciodata nu voi folosi mic de pe WH casti bt"* —
+    /// *"e f prost"*). The Sony WH-1000XM3's microphone is a Bluetooth HFP
+    /// capsule at 16 kHz, and opening it also drags the headphones' playback
+    /// down to the same 16 kHz mono. None of `known` matches it, so the ladder
+    /// never picks it; the one door left open was the system default, which
+    /// macOS hands to the headphones the moment they connect. Lowercased
+    /// substrings of the CoreAudio name.
+    static let neverRecord: [String] = ["wh-1000"]
+
+    static func isNeverRecord(_ device: Device) -> Bool {
+        let name = device.name.lowercased()
+        return neverRecord.contains { name.contains($0) }
+    }
 
     // MARK: - Which one he picked
 
@@ -192,7 +199,16 @@ enum InputDevice {
         // points the default input at whatever last claimed it, including the
         // eleven virtual devices on this Mac, and that is the failure this file
         // was written to stop being the normal case.
+        //
+        // **Never the WH-1000XM3, even here** (2026-09-23): when the system
+        // default is a `neverRecord` device, any other input that is not one
+        // records instead, and with nothing else on the Mac there is no device
+        // at all — `select` then refuses the recording rather than open it.
         guard let device = systemDefault() else { return (nil, nil) }
+        if isNeverRecord(device) {
+            guard let other = devices.first(where: { !isNeverRecord($0) }) else { return (nil, nil) }
+            return (known.first { matches(other, $0) }, other)
+        }
         return (known.first { matches(device, $0) }, device)
     }
 
@@ -255,8 +271,17 @@ enum InputDevice {
     /// unit holds whatever device it was last told about, so a recording made
     /// after the receiver was unplugged would otherwise still be aimed at a
     /// device that is gone.
-    static func select(on input: AVAudioInputNode) -> String {
-        guard let chosen = resolve().device else { return "the system input" }
+    ///
+    /// - Returns: nil when the only input left is a `neverRecord` one — the
+    ///   caller refuses to record rather than open it (2026-09-23).
+    static func select(on input: AVAudioInputNode) -> String? {
+        guard let chosen = resolve().device else {
+            if let fallback = systemDefault(), isNeverRecord(fallback) {
+                Log.error("mic: the only input is \(fallback.name), which is never recorded through — refusing")
+                return nil
+            }
+            return "the system input"
+        }
 
         guard let unit = input.audioUnit else { return chosen.name }
         var id = chosen.id
@@ -269,6 +294,7 @@ enum InputDevice {
             // only explanation for a recording that sounds like the built-in
             // microphone with the receiver plugged in.
             Log.error("mic: could not switch to \(chosen.name) — OSStatus \(status)")
+            if let fallback = systemDefault(), isNeverRecord(fallback) { return nil }
             return "the system input"
         }
         return chosen.name
@@ -309,7 +335,7 @@ enum InputDevice {
     @discardableResult
     static func setSystemDefault(matching needle: String) -> String? {
         let wanted = needle.lowercased()
-        guard let device = inputs().first(where: { $0.name.lowercased().contains(wanted) })
+        guard let device = inputs().first(where: { $0.name.lowercased().contains(wanted) && !isNeverRecord($0) })
         else { return nil }
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
                                                  mScope: kAudioObjectPropertyScopeGlobal,
