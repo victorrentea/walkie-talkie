@@ -947,7 +947,7 @@ IOSurfaceRef pmh_render(pmh* h) {
     } else {
         const float dt = 1.f / h->fps;
         // per frame, the share of the light that survives: e^(−dt/τ)
-        const float k = std::exp(-dt / std::max(0.05f, h->seconds));
+        const float k = std::exp(-dt / std::max(0.005f, h->seconds));
         Surface& last = h->surf[h->cur ^ 1];
         if (h->fresh) {
             for (auto& q : h->surf) { glBindFramebuffer(GL_FRAMEBUFFER, q.fbo); glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT); }
@@ -1022,13 +1022,18 @@ IOSurfaceRef pmh_render(pmh* h) {
     glUniform1f(h->uCore, h->core);
     glUniform1f(h->uTail, h->tailTop);
     glUniform1f(h->uInvert, h->invert);
-    glUniform1f(h->uZoom, h->zoom);
+    // On a trail canvas the zoom is the stamp's size instead (below): the
+    // picture itself is drawn whole into it, so it can outgrow the screen.
+    glUniform1f(h->uZoom, h->mode == 0 ? h->zoom : 1.f);
     glUniform1f(h->uFadeIn, h->fadeIn);
     glUniform1f(h->uGain, h->gain);
     glUniform1f(h->uStart, h->fadeStart);
     for (const Stamp& st : stamps) {
         glUniform1f(h->uPeak, h->peak * st.peak);
-        if (h->mode != 0) glViewport((GLint)std::lround(st.x - h->px / 2.0), (GLint)std::lround(st.y - h->px / 2.0), h->px, h->px);
+        if (h->mode != 0) {
+            const double side = h->px * (double)h->zoom;
+            glViewport((GLint)std::lround(st.x - side / 2), (GLint)std::lround(st.y - side / 2), (GLint)std::lround(side), (GLint)std::lround(side));
+        }
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
     glDisable(GL_BLEND); glBlendEquation(GL_FUNC_ADD);

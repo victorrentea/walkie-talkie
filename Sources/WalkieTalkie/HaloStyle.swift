@@ -417,18 +417,27 @@ enum HaloStyle: String, CaseIterable {
         // 30% … sa para ca vine din exterior ecranului, de la transparenta 100%
         // pana la converge in jurul mouseului pe durata transcrierii"*). Panoul e
         // cat latura lunga a ecranului, centrat pe cursor, ca apropierea sa aiba
-        // de unde veni; efectul sta in el la `zoom` 0,453 = 0,647 × 0,7. `peak`
+        // de unde veni; efectul sta in el la `zoom` 0,453 = 0,647 × 0,7.
+        // **Apoi pe panza cat ecranul, si inca 30 % mai mic** (acelasi seara:
+        // *"inca nu vine din exteriorul ecranului … il vreau foarte mare … cat un
+        // ecran [si] jumatate diametru … in timpul dictarii mai mica cu 30%"*).
+        // Panoul cat ecranul nu ajungea: inelul pornea din interiorul lui, iar
+        // o panza mai mare ar fi insemnat un motor de 3456 px. Asa ca Reverse
+        // tunnel e acum o stampila pe panza urmei (`trail` 0,01 = fara urma,
+        // `lag` 0 = pe cursor), iar apropierea mareste stampila, nu motorul:
+        // 548 pt in repaus (0,647 × 0,7 × 0,7 = 0,317 din latura lunga), de ~7×
+        // cand porneste (inelul, la 0,66 din raza, are atunci ~1,5 ecrane). `peak`
         // 0,80: *"transparenta 30%"* a fost citit intai ca 30 % opacitate si a
         // venit indreptat pe loc — *"de opacitate 80%! (e prea transparenta
         // acum)"*. `offset`-ul de 50 pt a
         // plecat: converge *in jurul* mouseului. `renderScale` 1: panza cat
         // ecranul la 2 px/pt ar fi de 2,4× pixelii lui Tunnel.
         case .milkdrop7Reversed:
-                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
+                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647 * 0.7 * 0.7,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
-                                         fadeStart: 0.55, pinCenter: true, renderScale: 1,
-                                         hole: 0.22, peak: 0.80, audioGain: 0.55, nativeOnly: true, invert: 0.9,
-                                         zoom: 0.647 * 0.7)
+                                         fadeStart: 0.55, pinCenter: true,
+                                         hole: 0.22, peak: 0.80, audioGain: 0.55, trail: 0.01, lag: 0,
+                                         nativeOnly: true, invert: 0.9)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was

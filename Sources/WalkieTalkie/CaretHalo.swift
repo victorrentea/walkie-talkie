@@ -1233,13 +1233,29 @@ final class CaretHalo {
     /// the panel is not on screen before that, so a convergence begun at the
     /// close would be half over by the time he could see it. At least a second,
     /// so a short sentence still has an approach and not a jump.
+    ///
+    /// **Shrunk geometrically, faded in early** (the second pass, same evening:
+    /// *"inca nu vine din exteriorul ecranului"*). The first curve eased the
+    /// size out and the opacity with it, so nearly all the travel was spent
+    /// while it was still invisible and what he saw began next to the pointer.
+    /// Now the size goes from `approachFrom` to 1 evenly in *ratio* (each second
+    /// halves it as much as the last), eased in and out, and the opacity rises
+    /// ahead of it (t^0.6) — so the tunnel is there, huge and faint, from the
+    /// first frames.
     private var approachScale: (scale: CGFloat, alpha: CGFloat) {
-        let span = max(rewindEstimate - ProjectMHalo.warmup, 1)
+        let span = max(rewindEstimate - ProjectMHalo.warmup, 1.5)
         let t = min(max((CFAbsoluteTimeGetCurrent() - rewindFrom - ProjectMHalo.warmup) / span, 0), 1)
-        let e = CGFloat(1 - pow(1 - t, 3))
-        return (Self.approachFrom - (Self.approachFrom - 1) * e, e)
+        let e = t * t * (3 - 2 * t)
+        return (pow(Self.approachFrom, CGFloat(1 - e)), CGFloat(pow(t, 0.6)))
     }
-    private static let approachFrom: CGFloat = 3
+    /// The stamp's size at the start, × its resting size: the ring (0.66 of the
+    /// picture's radius) then spans ~1.5 of the screen's long side —
+    /// 1.5 / (0.66 × 0.317) ≈ 7.2.
+    private static let approachFrom: CGFloat = 7
+    /// `WT_HALO_APPROACH=<seconds>`: play the approach on any ring that comes up,
+    /// as if a rewind with that estimate had begun — the only way to film it
+    /// (`WT_HALO_DEMO`) without a real dictation.
+    private static let approachDemo = TimeInterval(ProcessInfo.processInfo.environment["WT_HALO_APPROACH"] ?? "") ?? 0
     private static let rewindStyle: HaloStyle = .milkdrop7Reversed
     private static let rewindOff = ProcessInfo.processInfo.environment["WT_HALO_REWIND"] == "0"
     /// Half a second of audio: under it there is nothing to rewind.
@@ -1389,6 +1405,7 @@ final class CaretHalo {
         if let web = web {
             web.start()
             Self.seedFrom = CFAbsoluteTimeGetCurrent()
+            if Self.approachDemo > 0, !rewinding { rewindFrom = Self.seedFrom; rewindEstimate = Self.approachDemo }
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
@@ -1396,7 +1413,7 @@ final class CaretHalo {
                     ? Self.lift(Self.undoInputGain(self.rewindWindow()))
                     : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
                 web?.feed(samples)
-                if self.rewinding { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
+                if self.rewinding || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
                 self.under?.feed(samples)
                 // The panel being replaced stays on screen until the new one has
                 // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
