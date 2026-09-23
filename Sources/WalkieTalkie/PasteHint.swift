@@ -71,11 +71,15 @@ import AppKit
 /// that has nothing to do with it. This owns its alpha, which is the whole of
 /// what it has to say.
 ///
-/// It is placed **once**, at the pointer where it stood when the sentence
-/// landed, and does not follow: while it is up he may well be reaching for the
-/// keys, and a hint that walks away from the cursor as he
-/// moves is the single dotted arrow `DropArrow` threw out — a thing to look at
-/// rather than a thing to notice.
+/// **It rides the pointer for as long as it is up** (Victor, 2026-09-23: *"după
+/// ce orice dictare se oprește, tastele de apăsat pentru paste să fie în
+/// tooltip-ul de lângă mouse pentru acea durată de timp, nu lipite pe ecran"*).
+/// It used to be placed once, where the pointer stood when the sentence
+/// landed, on the argument that a hint walking with the cursor is a thing to
+/// look at — but the hand that has just finished a sentence moves on at once,
+/// and a hint left behind at the old spot was read as stuck to the screen,
+/// not as belonging to the pointer. Now it hangs under the cursor the way the
+/// chip does, re-placed every frame (`follow`) until it has faded.
 final class PasteHint {
 
     /// **How opaque it is while it is up** — Victor's *"80%"*, 2026-09-23. It
@@ -118,6 +122,8 @@ final class PasteHint {
     /// every `pulse` and `hide`, so a fade scheduled by an earlier showing finds
     /// itself stale and does nothing to the window a later one has put up.
     private var generation = 0
+    /// Keeps the box under the pointer while it is up — see the header.
+    private var follow: Timer?
 
     /// What the window is actually doing, beside what the flag claims — the
     /// reading `DropArrow.report` exists for, and answered in
@@ -150,6 +156,13 @@ final class PasteHint {
         p.alphaValue = Self.peak
         if !p.isVisible { p.orderFrontRegardless() }
         pulsing = true
+        follow?.invalidate()
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak p] _ in
+            guard let p else { return }
+            p.setFrameOrigin(Self.origin(for: p.frame.size))
+        }
+        RunLoop.main.add(t, forMode: .common)
+        follow = t
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.hold) { [weak self] in
             guard let self, self.generation == mine else { return }
             NSAnimationContext.runAnimationGroup({ context in
@@ -159,6 +172,7 @@ final class PasteHint {
             }, completionHandler: { [weak self] in
                 guard let self, self.generation == mine else { return }
                 self.pulsing = false
+                self.follow?.invalidate(); self.follow = nil
                 p.orderOut(nil)
             })
         }
@@ -170,6 +184,7 @@ final class PasteHint {
     func hide() {
         generation += 1
         pulsing = false
+        follow?.invalidate(); follow = nil
         panel?.orderOut(nil)
         panel?.alphaValue = 0
     }

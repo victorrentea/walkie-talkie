@@ -388,9 +388,10 @@ e nou — să afișeze pentru trei secunde, cu opțiunea de 80% pentru două sec
   2.5 s is the stretch it is legible.
 - **A second showing restarts the first**, keyed by a generation counter so the earlier fade cannot
   order out the window the later one put up.
-- **Placed once, at the pointer, and it does not follow.** While it is up he may be
-  reaching for the keys, and a hint that walks away as he moves is the single dotted arrow
-  `DropArrow` threw out — a thing to look at rather than a thing to notice. Above the pointer
+- **It rides the pointer while it is up** (2026-09-23, superseding *placed once and does not
+  follow*): *"tastele de apăsat pentru paste să fie în tooltip-ul de lângă mouse pentru acea durată
+  de timp, nu lipite pe ecran"* — left at the old spot it read as stuck to the screen. Re-placed every
+  frame (`PasteHint.follow`) until the fade ends. Above the pointer
   instead when there is no room below, because a box clamped to the screen edge points at nothing.
 - **A window of its own**, `DropArrow`'s reason one door down: everything else near the pointer
   hangs its meaning on the window's alpha, and this *is* an alpha.
