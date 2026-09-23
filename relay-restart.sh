@@ -1,136 +1,84 @@
 #!/usr/bin/env bash
 #
-# **Restart the installed app without losing what it was pointed at.**
+# **The one way to restart the installed app.** `safe-restart.sh` is an alias.
 #
-# Victor's rule, 2026-09-09, in two halves:
+#   ./relay-restart.sh [--build] [--dry-run] [--max-wait SECONDS] [--quiet SECONDS]
 #
-#   *"Niciodată să nu mai dai restart la Walkie Talkie … în dictare. Oprești și
-#   aștepți să se termine dictarea, să se livreze, abia apoi faci restart."*
-#   *"Legat dar nu în dictare poți să-l restartezi totuși — ideal ar fi să-l
-#   re-legi la același terminal automat."*
+#   --build      run ./build-app.sh first — ungated, a build may happen while he
+#                dictates; only the quit and relaunch wait
+#   --dry-run    wait for the gate and say it would restart; touch nothing
+#   --max-wait   give up after this long (default 1800 s = 30 min), exit 3
+#   --quiet      seconds of quiet required after the last delivery (default 10)
 #
-# So: a dictation in flight is a **stop**, and a binding is a thing to put back.
-# A restart mid-sentence throws away audio he has already spoken, and it is
-# invisible from inside the very session that ordered the restart — which is the
-# session this app types into.
+# Exit: 0 restarted (or gate open on --dry-run), 1 build failed, 3 gave up waiting.
 #
-# The binding is read from `~/.walkie-talkie/bound-tty`, which the app publishes
-# for the status line: absent when nothing is bound, `ttysNNN` when it is. It is
-# one `cat` rather than an HTTP round trip, and it is written from the one switch
-# that owns it, so it cannot disagree with the chip. Whether a sentence is in
-# flight is a different question and is asked of the relay itself.
+# Victor's rule, in three dated halves:
 #
-# Sourced by docs/shoot-overlay-states.sh; run directly to restart by hand.
+#   2026-09-09: *"Niciodată să nu mai dai restart la Walkie Talkie … în dictare.
+#   Oprești și aștepți să se termine dictarea, să se livreze, abia apoi faci
+#   restart."* *"Legat dar nu în dictare poți să-l restartezi totuși — ideal ar fi
+#   să-l re-legi la același terminal automat."*
+#
+#   2026-09-23: *"Whenever you restart it, make sure it's not currently dictating
+#   or transcribing. Make sure it's idle before you restart the app … After the
+#   clean insert of the text [and submit], only then restart. Maybe, granted, even
+#   10 more seconds in case I routed the prompt to the wrong place, and then only
+#   then restart."*
+#
+# So, in order:
+#
+# 1. **Wait for the gate** — `tools/restart_gate.py wait`: `GET /test/state.busy`
+#    false (the app's own `restartBlockers`: every engine's microphone, the
+#    recogniser, a Wispr sentence behind the firewall, the prompt on screen, a
+#    sentence held for a bind, the words being typed), then ten quiet seconds after
+#    the last delivery, the countdown starting over on anything new. Polled every
+#    second; unit-tested by `evals/test_restart_gate.py`.
+# 2. **Read the binding** from `~/.walkie-talkie/bound-tty` (cleared at launch and
+#    quit, so before anything stands the app down).
+# 3. **Quit gracefully: SIGTERM**, which since 2026-09-23 the app routes through
+#    `applicationShouldTerminate` — and if a sentence started in the second
+#    between the gate and the signal, the app refuses the quit and goes when the
+#    words have landed (`quitPending`), and this waits for it. `.replacing` is
+#    kept fresh meanwhile so no `session_end` reaches the watching agent. SIGKILL
+#    only if the app neither exits nor says it is finishing a sentence within 15 s.
+# 4. **Relaunch through LaunchServices**: `open -g "/Applications/Walkie Talkie.app"`.
+#    Never the executable path (TCC files a path launch as a second app), and `-g`
+#    so the relay he gets back is not in front of the terminal he is typing in.
+# 5. **Re-bind** the same tty with `POST /bind {"tty"}` — no toggle, no flight.
+#
+# Sourced by docs/shoot-overlay-states.sh for `relay_wait_idle`, `relay_bound_tty`
+# and `relay_rebind`; run directly to restart.
 set -euo pipefail
 
-RELAY_BOUND_FILE="${WALKIE_HOME:-$HOME/.walkie-talkie}/bound-tty"
+RELAY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELAY_HOME="${WALKIE_HOME:-$HOME/.walkie-talkie}"
+RELAY_BOUND_FILE="$RELAY_HOME/bound-tty"
+RELAY_APP="/Applications/Walkie Talkie.app"
+RELAY_EXEC="$RELAY_APP/Contents/MacOS/Walkie Talkie"
 
-# Does the **source** have a sentence in flight? Asked of the running relay, not
-# of the file. Answers false (idle) only on a clear no; an unreachable relay is
-# not an idle one, so a port that does not answer keeps the caller waiting.
-#
-# **`done` is as idle as `idle` is** — `DictationPhase` sits at `done(<status>)`
-# from the moment a sentence lands until the next chord, so a predicate that
-# wants `phase == "idle"` is false for ever after the first dictation of the
-# session. Only `warming`, `listening` and `transcribing` are a sentence.
-relay_source_is_idle() {
-  local port state
-  for port in 8917 8918 8919; do
-    state=$(curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null) || continue
-    [ -n "$state" ] || continue
-    printf '%s' "$state" | /usr/bin/python3 -c '
-import json, sys
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    sys.exit(1)
-idle = (not d.get("isRecording") and not d.get("settling")
-        and not d.get("speculative") and d.get("phase") in ("idle", "done"))
-sys.exit(0 if idle else 1)'
-    return $?
-  done
-  return 1
-}
+relay_pid() { pgrep -f "$RELAY_EXEC" 2>/dev/null | head -1; }
 
-# **Is a sentence in flight right now?** Asked of the relay, which is the only
-# thing that knows. A **positive** answer only — an unreachable relay is not a
-# busy one here, because a restart of an app that is not answering has no
-# sentence to protect and the caller would otherwise wait for ever. `done` is a
-# finished sentence and is not one of the phases that count — see above.
-relay_is_dictating() {
-  local port state
-  for port in 8917 8918 8919; do
-    state=$(curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null) || continue
-    [ -n "$state" ] || continue
-    printf '%s' "$state" | /usr/bin/python3 -c '
-import json, sys
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    sys.exit(1)
-busy = (d.get("listening") or d.get("isRecording") or d.get("settling")
-        or d.get("speculative")
-        or d.get("phase") in ("warming", "listening", "transcribing"))
-sys.exit(0 if busy else 1)'
-    return $?
-  done
-  return 1
-}
-
-# Block while a dictation is running. Not a timeout to be got past: a sentence
-# ends when Victor ends it, and the decode plus the held panel is a handful of
-# seconds after that.
-#
-# **A stuck flag is not a sentence, and telling them apart is a reading rather
-# than a timeout** (2026-09-14). The relay says `listening` for as long as it
-# believes a dictation is open — and it can believe that with no microphone
-# behind it at all: `/test/dictation/start` opens exactly such a dictation, and so
-# does a recogniser that dies between the chord and the words. This script then
-# waited for a sentence nobody was speaking, for ever, which is how it was found.
-# So the flag is the fast check and the **source** is the arbiter: one that is not
-# recording, not settling and `idle` has no sentence in flight, whatever the flag
-# says.
+# Block until the gate is open (see above). Exit status 3 when --max-wait ran out.
 relay_wait_idle() {
-  local waited=0
-  while relay_is_dictating; do
-    if [ "$waited" -ge 5 ] && relay_source_is_idle; then
-      echo "⚠️  the relay still says listening but its recogniser is idle —"
-      echo "    a dictation flag left standing, not a sentence. Going ahead."
-      return 0
-    fi
-    [ "$waited" = 0 ] && echo "⏳ a dictation is running — waiting for it to be delivered…"
-    sleep 1
-    waited=$((waited + 1))
-  done
-  # The relay goes idle when the microphone closes, which is a few seconds
-  # before the transcript has been delivered. Let the decode and the held panel
-  # finish rather than pulling the app out from under them.
-  [ "$waited" = 0 ] || sleep 6
+  python3 "$RELAY_DIR/tools/restart_gate.py" wait --quiet "${RELAY_QUIET:-10}" \
+    --max-wait "${RELAY_MAX_WAIT:-1800}"
 }
 
 # The tty it was pointed at, or nothing. Read *before* standing the app down —
-# the file is cleared at launch and at quit.
+# the file is cleared at launch and at quit. `ttysNNN listening` → `ttysNNN`.
 relay_bound_tty() {
   [ -f "$RELAY_BOUND_FILE" ] || return 0
-  cat "$RELAY_BOUND_FILE"
+  awk '{print $1; exit}' "$RELAY_BOUND_FILE"
 }
 
-# Put the binding back on the app that has just come up. The frontmost window is
-# whatever the build was watched in, which is exactly not the session that was
-# bound, so this addresses it by tty. The relay takes a few seconds to open its
-# port; a bind that never lands is reported and nothing else — the app is
-# running either way.
+# Put the binding back on the app that has just come up, addressed by tty.
 #
 # **Ten seconds per attempt, not one** (2026-09-09). A bind is one to two
 # `osascript` round trips and the route answers only when it has finished, so
-# `-m 1` timed out on a bind that had *succeeded* — and the loop, seeing a
-# failure, bound again, and again: seven re-binds over 70 seconds after one
-# restart, measured. That is not merely noisy. Each one is a deliberate bind, so
-# one of them stole a binding Victor had made by hand in the meantime and another
-# redirected a caret dictation he had just started (`showBound` takes a paste
-# back when a bind lands mid-sentence). The retry is for a port that is not open
-# yet, which fails in milliseconds; it must never fire against a bind still
-# running.
+# `-m 1` timed out on a bind that had *succeeded* — and the loop bound again and
+# again: seven re-binds over 70 seconds after one restart, one stealing a binding
+# Victor had made by hand, another redirecting a caret dictation. The retry is for
+# a port that is not open yet, which fails in milliseconds.
 relay_rebind() {
   local tty="${1:-}" port
   [ -n "$tty" ] || return 0
@@ -146,14 +94,99 @@ relay_rebind() {
   echo "⚠️ could not re-bind to $tty — bind it by hand (◀️ + 🔼)"
 }
 
+# Is the app refusing a quit while it finishes a sentence? (new builds only)
+relay_quit_pending() {
+  local port
+  for port in 8917 8918 8919; do
+    curl -s -m 2 "http://127.0.0.1:$port/test/state" 2>/dev/null | python3 -c '
+import json, sys
+try: sys.exit(0 if json.load(sys.stdin).get("quitPending") else 1)
+except Exception: sys.exit(1)' && return 0
+  done
+  return 1
+}
+
+# SIGTERM, then wait for the process to go — for as long as it says it is
+# finishing a sentence, up to the max wait; SIGKILL only for an app that neither
+# exits nor answers that it is deferring.
+relay_quit() {
+  local pid="$1" start now said=0 undeferred_since
+  start=$(date +%s); undeferred_since=$start
+  touch "$RELAY_HOME/.replacing"
+  kill -TERM "$pid" 2>/dev/null || return 0
+  while kill -0 "$pid" 2>/dev/null; do
+    now=$(date +%s)
+    touch "$RELAY_HOME/.replacing"
+    if relay_quit_pending; then
+      undeferred_since=$now
+      [ "$said" = 1 ] || { echo "⏳ a sentence started meanwhile — the app quits once it has landed"; said=1; }
+      if [ $((now - start)) -ge "${RELAY_MAX_WAIT:-1800}" ]; then
+        echo "⛔️ still finishing a sentence after ${RELAY_MAX_WAIT:-1800} s — left running"; return 3
+      fi
+    elif [ $((now - undeferred_since)) -ge 15 ]; then
+      echo "⚠️ pid $pid ignored the quit for 15 s — force-killing it"
+      pkill -KILL -f "$RELAY_EXEC" 2>/dev/null || true
+      sleep 0.5
+      break
+    fi
+    sleep 0.5
+  done
+}
+
+relay_launch() {
+  open -g "$RELAY_APP"
+  local waited=0
+  while [ "$waited" -lt 60 ]; do
+    if python3 "$RELAY_DIR/tools/restart_gate.py" once 2>/dev/null | grep -q '"answered": true'; then
+      echo "→ relaunched (pid $(relay_pid))"
+      return 0
+    fi
+    sleep 0.5; waited=$((waited + 1))
+  done
+  echo "⚠️ relaunched, but it has not answered on 8917–8919 after 30 s"
+}
+
 relay_restart() {
-  relay_wait_idle
+  local build=0 dry=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --build) build=1 ;;
+      --dry-run) dry=1 ;;
+      --max-wait) RELAY_MAX_WAIT="$2"; shift ;;
+      --quiet) RELAY_QUIET="$2"; shift ;;
+      -h|--help) sed -n '2,13p' "$RELAY_DIR/relay-restart.sh"; return 0 ;;
+      *) echo "unknown argument: $1" >&2; return 2 ;;
+    esac
+    shift
+  done
+
+  if [ "$build" = 1 ]; then
+    echo "🔨 building (ungated — the running app is not touched)…"
+    (cd "$RELAY_DIR" && ./build-app.sh) || { echo "⛔️ build failed — nothing restarted"; return 1; }
+  fi
+
+  local pid; pid="$(relay_pid)"
+  if [ -z "$pid" ]; then
+    if [ "$dry" = 1 ]; then echo "🧪 dry run: the app is not running — would launch it"; return 0; fi
+    echo "the app is not running — launching it"
+    relay_launch
+    return 0
+  fi
+
+  echo "🔍 waiting until Walkie Talkie (pid $pid) is idle and quiet for ${RELAY_QUIET:-10} s…"
+  relay_wait_idle || return $?
+
   local tty; tty="$(relay_bound_tty)"
-  pkill -f "/Applications/Walkie Talkie.app" 2>/dev/null || true
-  sleep 0.5
-  open "/Applications/Walkie Talkie.app"
+  if [ "$dry" = 1 ]; then
+    echo "🧪 dry run: the gate is open — would quit pid $pid, relaunch, and re-bind ${tty:-nothing}"
+    return 0
+  fi
+  if [ -n "$tty" ]; then echo "↻ restarting — the binding to $tty travels with it"
+  else echo "↻ restarting — nothing bound to put back"; fi
+  relay_quit "$pid" || return $?
+  relay_launch
   relay_rebind "$tty"
 }
 
 # Sourced for the functions, run for the restart.
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then relay_restart; fi
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then relay_restart "$@"; fi

@@ -2295,6 +2295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         startListeningForSnapshots()
+        routeSIGTERMThroughQuit()
 
         // The chip's `Listening...` bar fills on speech, not on elapsed time —
         // see `RelayWindow.listenWarmth`. This is the whole of the wiring: the
@@ -5067,6 +5068,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deliveryLock.lock()
         out["lastDelivery"] = lastDeliveryRecord ?? NSNull()
         deliveryLock.unlock()
+        // **The restart gate** (2026-09-23) — what `relay-restart.sh` polls.
+        let why = restartBlockers
+        out["busy"] = !why.isEmpty
+        out["busyWhy"] = why
+        out["quitPending"] = quitDeferredSince != nil
+        out["pid"] = Int(ProcessInfo.processInfo.processIdentifier)
+        out["dictationStartedAt"] = dictationStartedAt.map { Outbox.iso($0) } ?? NSNull()
         return out
     }
 
@@ -5474,10 +5482,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let line = Self.terminalLine(m)
         guard !line.isEmpty else { return }
 
+        // Counted so a restart waits for the keystrokes to finish (`restartBlockers`).
+        deliveriesInFlight += 1
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let outcome = self.terminal.deliver(line)
-            DispatchQueue.main.async { self.report(outcome) }
+            DispatchQueue.main.async { self.deliveriesInFlight -= 1; self.report(outcome) }
         }
     }
 
@@ -7279,8 +7289,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// are the recogniser still answering — the six seconds the script sleeps
     /// blind after the marker stops saying `listening`, asked properly — and the
     /// held panel is the prompt on screen with a Send button under it.
-    private var sentenceInFlight: Bool {
-        listening || settling || source.phase.isWaitingForWords || (overlay?.isHoldingPrompt ?? false)
+    private var sentenceInFlight: Bool { !restartBlockers.isEmpty }
+
+    /// **Why a restart must wait right now, in words — empty means idle**
+    /// (2026-09-23). The one definition of *busy* behind the Dock tile's restart,
+    /// the deferred quit (`applicationShouldTerminate`) and `GET /test/state.busy`,
+    /// which `relay-restart.sh` polls. Victor: *"make sure it's idle before you
+    /// restart the app … After the clean insert of the text [and submit], only
+    /// then restart."* Every engine's microphone, the recogniser still answering,
+    /// a Wispr sentence the firewall is holding, the prompt on screen, a sentence
+    /// parked for a bind, and the words still on their way into a terminal or the
+    /// caret. The ten quiet seconds after a delivery are the script's, not this.
+    var restartBlockers: [String] {
+        var why: [String] = []
+        if listening || speculative { why.append("dictating") }
+        if source.isRecording { why.append("microphone open") }
+        if wisprHearing || wisprSource.capturing { why.append("Wispr sentence") }
+        if settling || source.phase.isWaitingForWords { why.append("transcribing") }
+        if overlay?.isHoldingPrompt ?? false { why.append("prompt on screen") }
+        if awaitingBind != nil { why.append("held for a bind") }
+        if deliveriesInFlight > 0 || caretHalo.delivering { why.append("delivering") }
+        if film != nil { why.append("filming") }
+        return why
+    }
+
+    /// Terminal deliveries between the hop off the main thread and their report.
+    /// Main thread only.
+    private var deliveriesInFlight = 0
+
+    /// Set when a deferred quit is finally let through; the one way past the gate.
+    private var quitApproved = false
+    private var quitDeferredSince: Date?
+
+    /// **A quit mid-sentence waits for the sentence** — see `QuitGate` for why this
+    /// refuses and retries rather than answering `.terminateLater`.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if quitApproved || QuitGate.disabled { return .terminateNow }
+        let why = restartBlockers
+        guard !why.isEmpty else { return .terminateNow }
+        if quitDeferredSince == nil {
+            quitDeferredSince = Date()
+            Log.info("⏳ quit deferred — \(why.joined(separator: ", ")); it goes once the words have landed")
+            overlay.flash("↻ quitting after this sentence", duration: 3)
+            quitWhenIdle()
+        }
+        return .terminateCancel
+    }
+
+    private func quitWhenIdle() {
+        QuitGate.touchMarker()
+        let why = restartBlockers
+        let waited = Date().timeIntervalSince(quitDeferredSince ?? Date())
+        guard why.isEmpty || waited >= QuitGate.ceiling else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.quitWhenIdle() }
+            return
+        }
+        if !why.isEmpty {
+            Log.error("quit deferred \(Int(waited)) s and still \(why.joined(separator: ", ")) — quitting anyway")
+        } else {
+            Log.info("⏳ the sentence landed after \(Int(waited)) s — quitting now")
+        }
+        quitApproved = true
+        QuitGate.clearMarker()
+        NSApp.terminate(nil)
+    }
+
+    /// **SIGTERM is a quit, not a death** (2026-09-23): a `pkill` from any
+    /// script goes through `applicationShouldTerminate` like ⌘Q, so it too waits
+    /// for a sentence in flight. SIGKILL (Force Quit, `kill -9`) is untouched and
+    /// is the escape hatch for a hung app. Same shape as the SIGUSR1 snapshot.
+    private var terminateSignal: DispatchSourceSignal?
+    private func routeSIGTERMThroughQuit() {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler {
+            Log.info("SIGTERM — treated as Quit")
+            NSApp.terminate(nil)
+        }
+        source.resume()
+        terminateSignal = source
     }
 
     private func restartNow() {

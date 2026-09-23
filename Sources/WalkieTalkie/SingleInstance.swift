@@ -43,8 +43,26 @@ enum SingleInstance {
         // on the main run loop, so blocking it would leave the flag permanently
         // stale and send every shutdown down the force-kill path even when the
         // old instance had already quit politely.
-        let deadline = Date().addingTimeInterval(2.0)
-        while Date() < deadline, others.contains(where: { !$0.isTerminated }) {
+        //
+        // **Unless the older one is finishing a sentence** (2026-09-23): it refused
+        // the quit and keeps `QuitGate`'s marker fresh until the words have landed,
+        // so the two seconds stretch for as long as it does — up to the gate's own
+        // ceiling. Force-killing it there is exactly the lost dictation the gate
+        // exists to prevent. The replacement marker is renewed meanwhile, or its
+        // ten seconds would lapse and the old instance would announce a session_end.
+        var deadline = Date().addingTimeInterval(2.0)
+        let hardStop = Date().addingTimeInterval(QuitGate.ceiling + 30)
+        var saidSo = false
+        while others.contains(where: { !$0.isTerminated }) {
+            if Date() >= deadline {
+                guard QuitGate.someoneIsDeferring(), Date() < hardStop else { break }
+                if !saidSo {
+                    saidSo = true
+                    Log.info("single-instance: the older overlay is finishing a sentence — waiting for it")
+                }
+                markReplacement()
+                deadline = Date().addingTimeInterval(1.0)
+            }
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
         }
         for app in others where !app.isTerminated {
