@@ -121,4 +121,4 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 - **Do not relax that gate without re-reading this** (`bare` on both shutter routes).
 - **Nothing in that file may ever swallow one** (a left or right button event).
 - **`holdsForBind` must never become a menu tick**; Pause is gone (2026-09-01).
-- **The halo is veiled for the length of a wheel-drag crop** (2026-09-23) — `CaretHalo.veiled` hides the ring's and the heads' content views (not `alphaValue`, which `refresh` rewrites at 20 Hz); everything keeps running, and it is back at the release or the cancel. Victor: *"trebuie să fie ascunsă pe durata când trag poza, ca să pot să mă concentrez pe ce selectez"*.
+- **The halo and the chip are veiled for the length of a wheel-drag crop** (2026-09-23; the chip the same day, `RelayWindow.veiled` hides `root`) — `CaretHalo.veiled` hides the ring's and the heads' content views (not `alphaValue`, which `refresh` rewrites at 20 Hz); everything keeps running, and it is back at the release or the cancel. Victor: *"trebuie să fie ascunsă pe durata când trag poza, ca să pot să mă concentrez pe ce selectez"*.

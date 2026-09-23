@@ -6806,14 +6806,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // between the press and the release. Fire-and-forget, and the far
             // side's hold expires by itself — see `DesktopEffects`.
             DesktopEffects.suspendForCrop()
-            // **And the halo** (2026-09-23): it rides the pointer, which is the
-            // corner of the box he is placing. Back at the release, cancel or not.
+            // **And the halo and the chip** (2026-09-23): both ride the pointer,
+            // which is the corner of the box he is placing. Back at the release,
+            // cancel or not.
             self.caretHalo.veiled = true
+            self.overlay.veiled = true
             CropSelectionOverlay.begin(button: .middle, from: anchor, style: Self.cropStyle) { selection in
                 // Both ways out of the drag — a rectangle or a cancel — come
                 // through here, which is why the resume sits above the branch.
                 DesktopEffects.resume()
                 self.caretHalo.veiled = false
+                self.overlay.veiled = false
                 guard let selection = selection else {
                     // Esc, a right-click, or a drag that turned out to be a
                     // twitch. Nothing was filed and nothing is said: he called it

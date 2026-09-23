@@ -3994,6 +3994,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// this changes at most twice a sentence.
     private(set) var wisprHearing = false
 
+    /// **Out of sight while he frames a crop** (2026-09-23) — the halo's
+    /// `veiled`, for the chip. Victor: *"și tooltipul să dispară pe durata
+    /// dragului"*. The content is hidden and nothing else changes, so every
+    /// state that moves meanwhile is already drawn when the drag ends; a few
+    /// seconds of an empty, click-through-sized window under a full-screen
+    /// crop overlay is not the all-day swallow `orderOut` exists to prevent.
+    var veiled = false {
+        didSet { if veiled != oldValue { root.isHidden = veiled } }
+    }
+
     /// The sentence in flight is kamikaze — see `kamikazeBadge`.
     private(set) var kamikaze = false
 
