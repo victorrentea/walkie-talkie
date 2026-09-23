@@ -419,6 +419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// file watcher can tell a pick that arrived from the other app apart from
     /// the echo of its own write.
     private var micId = MicChoice.automatic
+    /// The green *Listening to* tab (2026-09-23) — see `MicAnnouncer`.
+    private let micAnnouncer = MicAnnouncer()
 
     private var engineId: String {
         if source === whisperSource { return "whisper" }
@@ -1204,6 +1206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // looking at the *other* app's menu when this fires.
         MicChoice.watch { [weak self] in
             guard let self else { return }
+            self.micAnnouncer.choiceChanged()
             let id = InputDevice.chosenId
             guard id != self.micId else { return }
             self.micId = id
@@ -1212,6 +1215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
         }
         micId = InputDevice.chosenId
+        micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
         // `Start Dictation`'s reason: the gesture lives in a Logi Options+

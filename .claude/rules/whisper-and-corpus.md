@@ -218,6 +218,11 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   input, and with none left `select` answers nil and `MicRecorder.start` refuses. The HFP
   microphone is 16 kHz and opening it drags the headphones' playback down to 16 kHz mono as well.
 
+- **The green `🎤 Listening to: <label>` tab is this app's** (2026-09-23, Victor: *"pune notificarea
+  verde de jos sa vina de la walkie"*) — `MicAnnouncer`, on a device-list change or a `mic/choice`
+  change, 0.6 s settle, never for the launch baseline, announcing `resolve()` and **not** the system
+  default (addons moves the default off the WH on its own, and that must not raise a second tab).
+  The look is addons' `BottomTabBanner`, reproduced here because this app may not depend on it.
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
   glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*
