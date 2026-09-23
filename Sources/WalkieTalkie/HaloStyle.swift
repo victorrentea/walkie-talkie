@@ -64,6 +64,16 @@ enum HaloStyle: String, CaseIterable {
     /// si o coada stinsa pana in margini. Doua randuri in meniu pentru acelasi
     /// `.milk`, fiindca ce difera nu e presetul, ci cat din ecran ocupa.
     case milkdrop7Faded
+    /// **Tunnel intors pe dos** (Victor, 2026-09-23: *"inversa dinamica
+    /// efectului de tunnel … sa mearga liniile INVERS din periferie-n centru"*).
+    /// Presetul lui Geiss isi naste liniile dintr-un inel de unda mic in centru
+    /// si le impinge in afara. Intors din `.milk` (zoom 1/1,033, inelul mutat la
+    /// margine) s-a stins aproape de tot: fluxul spre centru strange lumina in
+    /// loc s-o intinda in dare, iar din Geiss au ramas cateva fire pe diagonale.
+    /// Asa ca presetul ruleaza neatins si imaginea lui e intoarsa pe dos in
+    /// trecerea de mascare (`Preset.invert`): ce se naste in mijloc apare la
+    /// periferie, ce fuge spre margine ajunge in cursor. Doar ruta nativa.
+    case milkdrop7Reversed
     /// **Cele alese de el la răsfoirea din pagina de demo** (22 sep 2026). Nu sunt
     /// în pachetele oficiale ale lui butterchurn, vin din arhivele mari, deci
     /// `assets/milkdrop/halo-presets.js` trebuie să existe ca ruta web să le vadă —
@@ -128,6 +138,7 @@ enum HaloStyle: String, CaseIterable {
         case .milkdrop179:    return "Magma"
         case .milkdrop7:      return "Tunnel"
         case .milkdrop7Faded: return "Tunnel faded"
+        case .milkdrop7Reversed: return "Reverse tunnel"
         case .milkdrop8:      return "Cauldron"
         case .milkdrop20:     return "Tendrils"
         case .milkdrop20Trail: return "Tendrils 2"
@@ -322,6 +333,12 @@ enum HaloStyle: String, CaseIterable {
         var ink = false
         /// cssscript smoke (mod 6) — are prioritate fata de toate de mai sus.
         var smoke = false
+        /// **Doar motorul nativ il poate desena** — `invert` exista doar in
+        /// trecerea lui de mascare, pagina lui butterchurn nu-l stie.
+        var nativeOnly = false
+        /// **Imaginea intoarsa pe dos** in jurul cursorului: pixelul de la `d` raze
+        /// de masca arata ce a desenat motorul la `invert` − `d`. 0 = nu.
+        var invert: CGFloat = 0
     }
     var preset: Preset? {
         switch self {
@@ -388,6 +405,14 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0.05, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, pinCenter: true, pinnedHorizon: 0.5,
                                          hole: 0.13, core: 0.588, tailTop: 0.20, audioGain: 0.55)
+        // Reverse tunnel: Tunnel-ul de pe cursor, cu toate reglajele lui, intors
+        // pe dos. `invert` 0,9: inelul lui Geiss (~0,24 din raza) ajunge la ~0,66,
+        // unde masca abia incepe sa cada; marginea lui ajunge sub `hole`.
+        case .milkdrop7Reversed:
+                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647,
+                                         fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
+                                         fadeStart: 0.55, offset: CGPoint(x: 0, y: 50), pinCenter: true,
+                                         hole: 0.22, audioGain: 0.55, nativeOnly: true, invert: 0.9)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was
@@ -592,7 +617,7 @@ enum HaloStyle: String, CaseIterable {
     var isAvailable: Bool {
         if pageIndex != nil { return HaloPage.available }
         if let preset = preset {
-            if hasTrail { return HaloEngine.current == .native && ProjectMHalo.available(for: preset) }
+            if hasTrail || preset.nativeOnly { return HaloEngine.current == .native && ProjectMHalo.available(for: preset) }
             // A `webOnly` preset needs the web engine to exist, whichever engine
             // is picked — see `Preset.webOnly` and `CaretHalo.engineHost`.
             return HaloEngine.current == .native && !preset.webOnly ? ProjectMHalo.available(for: preset) : MilkDropHalo.engineAvailable
@@ -603,7 +628,7 @@ enum HaloStyle: String, CaseIterable {
     /// Why a row is greyed, for the menu.
     var unavailableReason: String? {
         guard !isAvailable else { return nil }
-        if hasTrail && HaloEngine.current != .native { return "native engine only" }
+        if (hasTrail || preset?.nativeOnly == true) && HaloEngine.current != .native { return "native engine only" }
         return isPreset ? "engine not bundled" : "page not bundled"
     }
 

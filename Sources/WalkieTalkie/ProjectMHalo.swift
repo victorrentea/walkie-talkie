@@ -342,6 +342,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
                     FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults)
                 }
             }
+            if let p = lastPointer { pmh_set_pointer(renderer, Float(p.x * Self.renderScale), Float(p.y * Self.renderScale)) }
             Log.info("◯ projectM \(preset.number): \(preset.pureFluid ? "pure fluid" : preset.fluid ? "fluid" : "trail") on a \(w)×\(h)px canvas, τ \(o.trail) s, lag \(o.lag) s")
         }
         let text = Self.amend(milk, rot: o.rot, pinCenter: o.pin)
@@ -358,6 +359,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         let gain = o.gain * (Self.gainScale[preset.number] ?? 1)
         pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start),
                      Float(preset.hole), Float(preset.peak), Float(preset.core), Float(preset.tailTop))
+        pmh_set_invert(renderer, Float(preset.invert))
         Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
@@ -417,10 +419,19 @@ final class ProjectMHalo: NSView, HaloWebHost {
     /// unless it leaves a trail, in which case the panel is the screen and the
     /// pointer (points, y down from its top) is where the next stamp goes.
     func center(_ p: CGPoint) {
-        guard trail, let r = renderer else { return }
+        guard trail else { return }
+        lastPointer = p
+        guard let r = renderer else { return }
         let s = Self.renderScale, x = Float(p.x * s), y = Float(p.y * s)
         renderQueue.async { pmh_set_pointer(r, x, y) }
     }
+    /// **The pointer as last handed in, kept for a renderer that did not exist
+    /// yet.** The halo aims itself once when it shows and then only when the
+    /// mouse moves, so a call that lands before `configure` was lost for good —
+    /// and with the hand off the mouse (dictating at the caret) the fluid never
+    /// learnt where the pointer was: Smoke's voice puffs had nowhere to come out
+    /// of (2026-09-23, `havePointer` 0 through a whole demo).
+    private var lastPointer: CGPoint?
 
     /// The microphone's last 2048 samples at 16 kHz, thirty times a second: the
     /// newest 1/30 s of them go to the engine (resampled to 44.1 kHz in the glue).

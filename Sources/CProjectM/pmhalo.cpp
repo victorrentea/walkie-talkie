@@ -41,7 +41,7 @@ const char* kVS = "#version 330 core\n"
 // out to that fraction of the radius and one smooth fall to the floor.
 const char* kFS = "#version 330 core\n"
     "uniform sampler2D src;uniform float fade;uniform vec2 radii;uniform float floorA;uniform float gain;uniform float fadeStart;"
-    "uniform float hole;uniform float peak;uniform float core;uniform float tailTop;"
+    "uniform float hole;uniform float peak;uniform float core;uniform float tailTop;uniform float invert;"
     "in vec2 uv;out vec4 frag;\n"
     // `core` > 0: discul de dinainte isi pastreaza profilul intreg (plin pana la
     // `fadeStart` din el, apoi o cadere), dar se opreste la `tailTop` in loc de
@@ -66,7 +66,15 @@ const char* kFS = "#version 330 core\n"
     "float inner(float d){ return hole<=0.0 ? 1.0 : smoothstep(hole*0.45, hole, d); }\n"
     "void main(){"
     // GL's row 0 is the bottom; the IOSurface's row 0 is the top the layer shows.
-    " vec4 c=texture(src,vec2(uv.x,1.0-uv.y));"
+    // `invert` > 0: the picture turned inside out about the pointer — a pixel at
+    // distance d (in mask radii) shows what the engine drew at `invert` − d, on
+    // the same bearing. What a preset gives birth to in its middle then appears
+    // at the periphery, and everything it pushes outward arrives at the centre
+    // (Reverse tunnel, Victor 2026-09-23). Past `invert` there is nothing.
+    " vec2 s=uv; float fall=1.0;"
+    " if(invert>0.0){vec2 p=(uv-0.5)/radii;float d=length(p);float ds=invert-d;"
+    "  fall=smoothstep(0.0,0.08,ds);s=0.5+(d>0.0?p/d:vec2(0.0))*max(ds,0.0)*radii;}"
+    " vec4 c=texture(src,vec2(s.x,1.0-s.y))*fall;"
     " c.rgb=min(c.rgb*gain,1.0);"
     " float a=max(c.r,max(c.g,c.b));"
     " if(fade>0.5){float d=length((uv-0.5)/radii);float m=mask(d)*inner(d);a*=m;c.rgb*=m;}"
@@ -231,6 +239,7 @@ struct Look {
     float opacity = 1.f;                           // the whole layer, colour and alpha alike
     bool legacy = false;                           // the 2017 solver: per-frame fade factors, its vorticity
     float velFrame = 0.f, dyeFrame = 0.f;          // legacy: fade factor per 60 Hz frame
+    bool puffs = false;                            // the voice blows smoke out of the pointer
 };
 // Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
 const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
@@ -270,8 +279,11 @@ const Look kInk = { 4.f, 0.84f, 0.f, 2.0f, 12000.f, 0.20f / 100.f, true, true, 1
 // on x only; force = the CSS pixels moved ×10 — `force` here is per canvas
 // width, so it is set to 5·width in `pmh_set_canvas`; colour = three channels of
 // rand + 0.2, ×0.3, redrawn every 25 moves; shown raw, no shading.
+// **Plus the voice** (Victor, the same day: *"sa reactioneze si la sunet,
+// aruncand alternativ, in functie de intensitate, in directii diferite, cate un
+// mic gest sa iasa fum"*) — see `voice_puffs`.
 const Look kSmoke = { 35.f, 0.8f, 0.f, 0.f, 0.f, 0.002f, false, false, 1.f, 1.f, 2, 0.3f,
-                      25, false, false, false, 0.3f, 0.6f, 0.7f, 1.f, true, 0.99f, 0.98f };
+                      25, false, false, false, 0.3f, 0.6f, 0.7f, 1.f, true, 0.99f, 0.98f, true };
 }
 
 struct pmh {
@@ -280,9 +292,10 @@ struct pmh {
     CGLContextObj ctx = nullptr;
     GLuint tex = 0, rbo = 0, fbo = 0;        // the engine's target
     GLuint prog = 0, vao = 0;                 // the key pass
-    GLint uFade, uRadii, uFloor, uGain, uStart, uSrc, uHole, uPeak, uCore, uTail;
+    GLint uFade, uRadii, uFloor, uGain, uStart, uSrc, uHole, uPeak, uCore, uTail, uInvert;
     Surface surf[2]; int cur = 0;
     projectm_handle pm = nullptr;
+    float invert = 0.f;
     bool fade = false; float rx = 0.5f, ry = 0.5f, floorA = 0.1f, gain = 1.f, fadeStart = 0.f, hole = 0.f, peak = 1.f, core = 0.f, tailTop = 0.f;
     double engineMs = 0, keyMs = 0;
     unsigned engineErrors = 0, keyErrors = 0;
@@ -306,6 +319,11 @@ struct pmh {
     Field bloom; std::vector<Field> bloomLevels; Field sun, sunTemp;
     GLuint prefilterProg = 0, bloomBlurProg = 0, sunMaskProg = 0, sunraysProg = 0, gaussProg = 0;
     float colorTimer = 1.f, cr = 0, cg = 0, cb = 0;
+    // the voice's puffs: the loudest sample since the last frame, its envelope,
+    // a slow average and a slowly-falling ceiling to judge it against, and the
+    // puff in progress (a few frames of one little gesture)
+    float voicePeak = 0, level = 0, levelSlow = 0, levelCeil = 0.02f, puffCool = 0, puffAngle = 0;
+    int puffLeft = 0; float puffDx = 0, puffDy = 0, puffStrength = 0, puffAlong = 0;
     // the pure fluid's knobs, live — seeded from the mode's constants, moved by
     // the on-screen sliders (`pmh_set_fluid_param`)
     Look look = kCursify;
@@ -421,6 +439,7 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     h->uPeak = glGetUniformLocation(h->prog, "peak");
     h->uCore = glGetUniformLocation(h->prog, "core");
     h->uTail = glGetUniformLocation(h->prog, "tailTop");
+    h->uInvert = glGetUniformLocation(h->prog, "invert");
     h->uGain = glGetUniformLocation(h->prog, "gain");
     h->uStart = glGetUniformLocation(h->prog, "fadeStart");
 
@@ -490,6 +509,10 @@ int pmh_load_preset(pmh* h, const char* milk, char* err, int err_len) {
 
 void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
     if (!count) return;
+    if (h->look.puffs) {
+        double sum = 0; for (unsigned i = 0; i < count; ++i) sum += (double)samples[i] * samples[i];
+        h->voicePeak = std::max(h->voicePeak, (float)std::sqrt(sum / count));
+    }
     if (rate <= 0 || rate == 44100) { projectm_pcm_add_float(h->pm, samples, count, PROJECTM_MONO); return; }
     // Linear resampling to 44.1 kHz: the engine's spectrum bands assume it.
     double step = (double)rate / 44100.0;
@@ -681,6 +704,8 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
     h->hole = hole; h->peak = peak; h->core = core; h->tailTop = tail_top;
 }
 
+void pmh_set_invert(pmh* h, float invert) { h->invert = invert; }
+
 namespace {
 float hue_channel(float hh, float off) { float k = std::fmod(off + hh * 6.f, 6.f); return 1.f - std::max(0.f, std::min({ k, 4.f - k, 1.f })); }
 
@@ -753,6 +778,46 @@ void apply_sunrays(pmh* h) {
     glUniform2f(t, 0.f, 1.f / h->sun.h); bind2d(h->gaussProg, "src", 0, h->sunTemp.tex); draw_into(h->sun);
 }
 
+// **The voice blows smoke** (Smoke, 2026-09-23). Every syllable that stands out
+// of the last second and a half — its level above 1.25× the slow average and
+// above a fifth of the recent loudest — throws one little gesture out of the
+// pointer: four frames of splats walking away from it, velocity and dye, the way
+// a flick of the mouse would. Each gesture turns by the golden angle (137.5°,
+// plus a little jitter) from the last, so consecutive puffs never go the same
+// way and the round fills evenly; how loud it was sets how far, how hard and how
+// thick. Louder speech also puffs more often: the pause between gestures runs
+// from 0.35 s for a murmur down to 0.12 s for a shout. The loudness is judged
+// against a ceiling that falls slowly (−50 % over ~4 s), so it works whatever
+// the microphone's gain.
+void voice_puffs(pmh* h, const Look& L, float dt) {
+    float in = h->voicePeak; h->voicePeak = 0;
+    h->level = std::max(in, h->level * std::exp(-dt / 0.08f));
+    h->levelSlow += (h->level - h->levelSlow) * (1.f - std::exp(-dt / 1.5f));
+    h->levelCeil = std::max({ h->level, 0.02f, h->levelCeil * std::exp(-dt / 6.f) });
+    h->puffCool -= dt;
+    const float I = std::min(1.f, h->level / h->levelCeil);
+    if (h->puffLeft == 0 && h->puffCool <= 0 && h->level > 0.004f && I > 0.2f && h->level > h->levelSlow * 1.25f) {
+        h->puffAngle += 2.39996f + ((float)std::rand() / RAND_MAX - 0.5f) * 0.6f;
+        h->puffDx = std::cos(h->puffAngle); h->puffDy = std::sin(h->puffAngle);
+        h->puffStrength = 0.35f + 0.65f * I;
+        h->puffLeft = 4; h->puffAlong = 0;
+        if (L.palette == 2) h->colorTimer += 1.f;   // a gesture counts as a move for the colour
+        h->puffCool = 0.35f - 0.23f * I;
+    }
+    if (h->puffLeft == 0 || !h->havePointer) return;
+    // one frame of the gesture: a step of up to 1.2 % of the screen's width
+    const float aspect = (float)h->ow / h->oh;
+    const float step = 0.012f * h->puffStrength;
+    h->puffAlong += step;
+    const float x = h->sx / h->ow + h->puffDx * h->puffAlong, y = h->sy / h->oh + h->puffDy * h->puffAlong * aspect;
+    const float radius = L.radius * (0.6f + 1.4f * h->puffStrength);
+    const float v = step * 5.f * h->ow;          // what a mouse flick of that length would splat
+    splat(h, h->vel, h->vc, h->vw, h->vh, x, y, h->puffDx * v, h->puffDy * v, 0, radius);
+    const float k = 0.5f + 0.5f * h->puffStrength;
+    splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr * k, h->cg * k, h->cb * k, radius);
+    h->puffLeft--;
+}
+
 IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
     const float dt = 1.f / h->fps, sdt = dt * L.dtScale;
     Surface& s = h->surf[h->cur];
@@ -795,6 +860,7 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
             splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
         }
     }
+    if (L.puffs) voice_puffs(h, L, dt);
     // legacy fades are factors per 60 Hz frame: k^(dt·60) at our frame rate
     const float velMul = L.legacy ? std::pow(L.velFrame, sdt * 60.f) : 0.f;
     const float dyeMul = L.legacy ? std::pow(L.dyeFrame, sdt * 60.f) : 0.f;
@@ -947,6 +1013,7 @@ IOSurfaceRef pmh_render(pmh* h) {
     glUniform1f(h->uHole, h->hole);
     glUniform1f(h->uCore, h->core);
     glUniform1f(h->uTail, h->tailTop);
+    glUniform1f(h->uInvert, h->invert);
     glUniform1f(h->uGain, h->gain);
     glUniform1f(h->uStart, h->fadeStart);
     for (const Stamp& st : stamps) {

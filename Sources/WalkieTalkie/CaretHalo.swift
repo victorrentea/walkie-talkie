@@ -722,8 +722,9 @@ final class CaretHalo {
     /// (`MilkDropHalo`) or projectM natively (`ProjectMHalo`, the `projectm`
     /// branch). Nil when the chosen engine cannot draw this preset.
     static func engineHost(preset: HaloStyle.Preset, side: CGFloat, screen: CGSize) -> HaloWebHost? {
-        // A trail is drawn only by the native glue (`pmh_set_canvas`).
-        if preset.trail > 0 { return ProjectMHalo(preset: preset, side: side, screen: screen) }
+        // A trail is drawn only by the native glue (`pmh_set_canvas`), and a
+        // `nativeOnly` preset's `.milk` only exists for the native engine.
+        if preset.trail > 0 || preset.nativeOnly { return ProjectMHalo(preset: preset, side: side, screen: screen) }
         switch HaloEngine.current {
         // **A `webOnly` preset is butterchurn's whichever engine is picked** —
         // the reason lives with the preset (`HaloStyle.Preset.webOnly`), because
