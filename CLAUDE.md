@@ -285,6 +285,12 @@ sits at rest there.
   the wheel held** while the ring is up, which dials to the next halo (2026-09-20). The chords are
   duplicated in Options+ and in `HotkeyTap`'s `VK_F3…VK_F12` and must not drift. On *Wheel*, the
   wheel carries the whole vocabulary — `.claude/rules/mouse-gestures.md`.
+- **The side buttons' spec (2026-09-23), locked by `evals/test_gesture_spec.py`:** 🔼 click = a
+  **prompt at the caret** — the terminal's whole envelope (context frame, `[Dictated in RO or EN]`,
+  highlights, picks, pictures), **submitted** when the caret is a Claude Code prompt in Terminal.app;
+  🔽 click = a **plain** dictation, the words alone at the caret even when bound, no picture, ended by
+  another back click; 🔽 → = during a plain dictation stop it, insert the words, then Return — at any
+  other moment just Return.
 - **The forward button's vocabulary (2026-09-12), in both engines:** 🔼 click = dictate **at the caret**,
   whatever is bound; 🔼 → = dictate at the **bound** terminal; 🔼 ← = cancel either; 🔼 ↑ = a new
   session. **With the left button held** the first two bind first: 🔼 click binds the terminal under

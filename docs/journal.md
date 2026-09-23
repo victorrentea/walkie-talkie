@@ -22,6 +22,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *The DJI receiver is the microphone whenever it is plugged in* (2026-09-01) — superseded 2026-09-19: *automatic* is a ladder, 🎙️ XLR ▸ 🎤 DJI ▸ 🎧 Bose ▸ 💻 built-in, and the receiver is its second rung (*The chip says which microphone, and the menu picks it*)
 - *Wispr Flow everywhere (2026-09-12)*, and every later line making Wispr one of the engines — superseded 2026-09-22 by *Wispr Flow leaves the Engine list*: it is not selectable at all any more, and keeps only 🔽 →. The wrap sections are **not** retired — they still describe the mechanism accurately and it is what the row would come back to
 - *`PasteHint` — `⌘⇧P`, said once and faintly* (2026-09-22; recorded in `.claude/rules/replace-wispr-and-halo.md`, not here) — superseded 2026-09-23: the hint follows **every** delivered sentence (caret, bound, spawn, a held sentence's release, Wispr's routed ones) plus a cancelled prompt, at **0.80 for 2.5 s then a 0.5 s fade**, where it was caret and cancelled prompt only, at 0.20, 0.8 s up / 1.2 s down. Victor: *"indiferent prin ce mecanism am închis o dictare … uneori îl plasez greșit, lasă-mă să-mi amintesc constant"*
+- *What a caret dictation carries* (2026-09-08) and 2026-09-19's *no initial screenshot at the caret* — superseded 2026-09-23 for the **forward click**: its caret sentence is the whole terminal envelope (context frame, `[Dictated in RO or EN]`) and is submitted into a Claude Code prompt; the back click's sentence is the words alone, at the caret even when bound (*Forward is a prompt, back is plain words*)
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -257,6 +258,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [The ring says where the sentence is going (2026-09-21)](#the-ring-says-where-the-sentence-is-going-2026-09-21)
 - [Wispr Flow leaves the Engine list (2026-09-22)](#wispr-flow-leaves-the-engine-list-2026-09-22)
 - [The About page becomes a window (2026-09-22)](#the-about-page-becomes-a-window-2026-09-22)
+- [Forward is a prompt, back is plain words (2026-09-23)](#forward-is-a-prompt-back-is-plain-words-2026-09-23)
 
 ---
 
@@ -11874,3 +11876,85 @@ any text in the tooltip."*
   shown right after a caret sentence — the moment he is most likely to be typing past it.
 - The window's two reasons for existing — its own alpha, the keycap outline — were the two things he
   rejected, which is why this is a reversal and not a restyle.
+
+## Forward is a prompt, back is plain words (2026-09-23)
+
+Victor restated the side buttons in one dictation, then added two things (transcribed; "carrot"
+is *caret*):
+
+> "The forward click should be transcribing, basically prompting, at the carrot. There will be
+> those metadata, the screenshot of the screen, the fact that is dictated, and any other feature,
+> including prompting and picking pictures for an agent. Clicking the back button on the mouse
+> starts a plain voice transcription with no sorts of prompting tweaks around it. It should be just
+> clean voice that I had. The bound dictation is activated by forward click and moving the mouse to
+> the right. Forward click and moving the mouse upwards starts a terminal in a new session."
+>
+> "If during a plain transcription, on the back button, the back button ends it, there is no
+> screenshot in a clean dictation. Enter is dispatched if I do a back click and move the mouse to
+> my right."
+>
+> "Make the dictation @. Hit Enter to trigger. For example, if I am putting my @ into a Claude Code
+> terminal prompt, it should already submit the prompt as it's actually a prompt."
+
+### Spec against what the code did that morning
+
+| (button, gesture) | spec | before | changed |
+|---|---|---|---|
+| 🔼 click | caret, **prompt**: context frame, `[Dictated in RO or EN]`, highlights, picks, pictures | caret, `caretLine`: deliberate attachments only, no frame, no hint | **yes** |
+| 🔼 click, caret in a Claude Code prompt | submitted | never an Enter | **yes** |
+| 🔼 → | the bound terminal | `toggleDictation` | no |
+| 🔼 ↑ | a new terminal and session | the spawn | no |
+| 🔽 click | plain words at the caret | Wispr's toggle, **routed by the binding**: bound, it went through `send` → `terminalLine`, so `[Dictated in RO or EN]` leaked in and the terminal delivery pressed Return; marker splicing, the recent-highlight probe and kamikaze all ran | **yes** |
+| 🔽 click, plain dictation open | stop it | stop (fixed at 15:17 the same day) | no |
+| plain dictation | no picture at the start or the end | no context frame, the click not a shutter; ⌃⌥P still shot | **yes** |
+| 🔽 →, plain dictation open | stop, clean words, Return | only Return, the sentence left running | **yes** |
+| 🔽 →, otherwise | Return | Return | no |
+
+**"Bound dictation" needed no interpretation**: the rule file had carried his own vocabulary since
+2026-09-12 — *"🔼 click = caret; 🔼 → = legată"* — and *legată* is the terminal ⌘⌃B points at.
+
+### What changed
+
+- **`caretPrompt` and `cleanSentence` on `AppDelegate`**, the two things a caret sentence can be.
+  `startDictation(paste:)` sets the first (every caller passing `paste` is the forward click);
+  `noteCleanStart`, from both of `wisprSource`'s begin callbacks, sets the second off the back
+  click's arm (`backStopsWispr`), which the tap raises before the chord's announcement reaches the
+  main queue and retires at the stop click — hence latched at the begin and carried to `deliver`.
+  The held right ⌘⌥ and a hand-started Wispr sentence with nothing bound are neither, and keep
+  `caretLine`'s old envelope.
+- **The prompt is `terminalLine`, pasted.** `caretLine(words:full:)` builds `send`'s `Message`
+  field for field and renders it with `terminalLine`, so the caret and the bound prompt cannot
+  drift; `dictationBegan` takes the context frame for it. This reverses 2026-09-19's *"if I'm
+  dictating at caret, we still don't do an initial screenshot"* — the ⌘C probe that was the real
+  reason caret sentences went picture-less left on 2026-09-16, so the frame costs the field he is
+  dictating into nothing.
+- **Submitted where the caret is a Claude Code prompt** — `TerminalBinding.frontClaudePromptTTY`:
+  Terminal.app in front, a non-shell in front on its selected tab (the shell guard's
+  `foregroundCommand`/`isShell`), and a process on that tty owning a fresh
+  `~/.claude/cwd/.last-<pid>` (`publishedDirectory(onTTY:)`, how the chip already knows a session
+  is there). Then the bound terminal's own write (`writeToTerminalApp`: text, bare Return, the
+  review Return). Anything else is the ⌘V with no Enter. **IDE terminals are deliberately not
+  covered**: nothing outside VS Code or IntelliJ can say whether the caret is in the terminal pane
+  or a source file, and an Enter in a source file is an edit. No cancel window — the caret never
+  had one.
+- **Plain means the words.** `cleanLine` drains the caret envelope's bookkeeping (so nothing rides
+  the next sentence) and returns the words; `deliver` skips the marker rewrite and kamikaze for
+  it; `dictationBegan` skips the frame and `probeRecentSelection`; `plusOneShot` refuses ⌃⌥P while
+  the arm is up. **It goes to the caret even when a terminal is bound** — the coordinator's call,
+  on two readings: *"cum ar fi Wispr normal"* (the same afternoon), and a bound delivery always
+  presses Return, which here is 🔽 →'s to give. Victor may override it. A sentence started with
+  **Wispr's own keyboard chord** still follows the binding (the firewall's motivating case).
+- **🔽 → during a plain sentence** posts the back click's own stop chord, drops the arm and raises
+  `onBackSubmit`; `deliver` presses `postReturn` 0.3 s after the paste. At any other moment it is
+  Return, as it was.
+
+### The guard
+
+`evals/test_gesture_spec.py` is the spec as a table — eight (button, gesture) rows, 35 checks —
+each checked against the real `case VK_Fn:` branch, the `AppDelegate` callback it raises and the
+delivery it ends in. `--self-test` applies ten mutations, each one the previous behaviour coming
+back (the old caret envelope, the forward click going to the terminal, the Enter without the
+session-file check, plain text following the binding, ⌃⌥P shooting a plain sentence, the shutter
+before the stop, 🔽 → as only Return, …), and all ten are caught.
+
+Not tested live: nothing here can press a real side button, and the app was not restarted.
