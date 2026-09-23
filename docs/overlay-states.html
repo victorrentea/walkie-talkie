@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 48 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 49 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -474,6 +474,16 @@
         <p class="note">The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.</p>
         <code class="slug">flash-model-failed</code>
       </section>
+      <section class="card" id="paste-again">
+        <header>
+          <h3>Paste again — the keys, after every sentence</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">218×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/paste-again.png" width="218" height="46" style="opacity:0.8" alt="Paste again — the keys, after every sentence"></div>
+        <p class="when">Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence&#x27;s release) and after a cancelled prompt. Never after a cancelled dictation.</p>
+        <p class="note"><strong>An ordinary row</strong>, built like <code>☠️ Kamikaze</code>: 📋, <code>Paste again</code>, then <code>⌘⇧P</code> in the chip&#x27;s own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip&#x27;s only row, which is what puts the chip beside the pointer.</p>
+        <code class="slug">paste-again</code>
+      </section>
       <section class="card" id="flash-nothing-to-paste">
         <header>
           <h3>Flash — nothing to paste yet</h3>
@@ -590,9 +600,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">640×136 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">576×136 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="640" height="136" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="576" height="136" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -629,7 +639,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 245854c · 23 Sep 2026 · built 23 Sep 2026, 13:08
+  Generated from <code>OverlayStates.swift</code> · repo at 6d546b0 · 23 Sep 2026 · built 23 Sep 2026, 19:26
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

@@ -393,6 +393,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "paste-again.png",
+    "note" : "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Paste again`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
+    "shape" : "chip",
+    "slug" : "paste-again",
+    "title" : "Paste again — the keys, after every sentence",
+    "when" : "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
+    "width" : 218
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-nothing-to-paste.png",
     "note" : "The only thing ⌘⇧P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
     "shape" : "flash",
@@ -531,7 +543,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 640
+    "width" : 576
   },
   {
     "alpha" : 1,
