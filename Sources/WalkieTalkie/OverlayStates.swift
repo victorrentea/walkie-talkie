@@ -87,6 +87,16 @@ enum OverlayStates {
                 o.setFilming(true)
             },
 
+            Shot(slug: "listening-kamikaze", group: "Dictating", title: "Kamikaze — the agent closes when done",
+                 when: "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
+                 note: "**The face in a column of its own, top right**, so it covers none of the rows. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(1)
+                o.setKamikaze(true)
+            },
+
             Shot(slug: "bound-wispr-hearing", group: "At rest", title: "Wispr Flow is listening — not us",
                  when: "Bound, with a microphone open that this app is not running: he started Wispr with its own chord, or with 🔽 →, while the Engine is the local model or ElevenLabs.",
                  note: "**A yellow ring where our own sentence wears an orange one.** Since the engines became mutually exclusive there is a third thing this glyph has to be able to say, and it is not *recording* — nothing he says now will be routed, booked or filed here. Same disc, same geometry, one colour changed, so the two read as the same object in two states rather than as two icons. The device is drawn onto a filled circle rather than the orange artwork being tinted, which would yellow the screen and the button with it.",
@@ -555,6 +565,7 @@ enum OverlayStates {
         o.setSpawnDestination(nil)
         o.setBound(label: nil)
         o.setWisprHearing(false)
+        o.setKamikaze(false)
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil

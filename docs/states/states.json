@@ -34,6 +34,18 @@
   },
   {
     "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 69,
+    "image" : "listening-kamikaze.png",
+    "note" : "**The face in a column of its own, top right**, so it covers none of the rows. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
+    "shape" : "chip",
+    "slug" : "listening-kamikaze",
+    "title" : "Kamikaze — the agent closes when done",
+    "when" : "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
+    "width" : 340
+  },
+  {
+    "alpha" : 0.80000000000000004,
     "group" : "At rest",
     "height" : 45,
     "image" : "bound-wispr-hearing.png",

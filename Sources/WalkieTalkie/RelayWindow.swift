@@ -146,6 +146,11 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// layer to animate and re-rasterising it at a new size every frame would put
     /// a relayout in the one loop that must not have one.
     private let listenBadge = NSImageView()
+    /// **💥 kamikaze** (2026-09-23) — the face in the chip's top-right corner
+    /// while the sentence in flight is marked (🔼 ↓). Victor: *"ca să detectez
+    /// faptul că dictarea merge kamikaze"*. Its own column on the right, so
+    /// it covers none of the rows.
+    private let kamikazeBadge = NSImageView()
     /// Whether the badge is currently up, so the pop fires on the edge and not on
     /// every repaint of a full bar.
     private var listenBadgeUp = false
@@ -1423,6 +1428,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         closeButton.isHidden = true          // revealed on hover, like a notification
         closeButton.onClick = { [weak self] in self?.onEndSession?() }
         root.addSubview(closeButton)
+        kamikazeBadge.image = Self.kamikazeFace
+        kamikazeBadge.imageScaling = .scaleProportionallyUpOrDown
+        kamikazeBadge.isHidden = true
+        root.addSubview(kamikazeBadge)
 
         // Not hover-revealed like the ✕: this one is on a clock, so it has to be
         // visible and clickable the instant the prompt appears.
@@ -1883,10 +1892,14 @@ private let frontLabel = NSTextField(labelWithString: "")
                 contextWidth = max(contextWidth, measure(warning, font: warningLabel.font ?? hintFont) + pad * 2)
             }
         }
-        let width = sentPrompt != nil
+        let baseWidth = sentPrompt != nil
             ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3)
             : min(natural, screenWidth / 3)
-        let innerWidth = width - pad * 2
+        // The kamikaze face gets a column of its own rather than a corner of a
+        // row, so nothing it sits beside is covered.
+        let badged = kamikaze && Self.kamikazeFace != nil
+        let width = baseWidth + (badged ? Self.kamikazeSide + Self.kamikazeGap : 0)
+        let innerWidth = baseWidth - pad * 2
 
         var rows: [(view: NSView, height: CGFloat)] = []
 
@@ -2176,7 +2189,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         // row — and he asked for it here instead.
         let gapBelow: (NSView) -> CGFloat = { [quoteLabel, rowGap] in $0 === quoteLabel ? rowGap + 16 : rowGap }
         let contentHeight = rows.reduce(0) { $0 + $1.height }
-        let height = contentHeight + rows.dropLast().reduce(0) { $0 + gapBelow($1.view) } + pad * 2
+        let height = max(contentHeight + rows.dropLast().reduce(0) { $0 + gapBelow($1.view) } + pad * 2,
+                         badged ? Self.kamikazeSide + Self.kamikazeInset * 2 : 0)
 
         // Anchor the TOP edge: the overlay sits in the top-left corner, so it
         // grows downward into empty screen rather than up under the menu bar.
@@ -2227,6 +2241,12 @@ private let frontLabel = NSTextField(labelWithString: "")
 
         closeButton.frame.origin = NSPoint(x: width - closeButton.frame.width - 6,
                                            y: height - closeButton.frame.height - 6)
+        kamikazeBadge.isHidden = !badged
+        if badged {
+            kamikazeBadge.frame = NSRect(x: width - Self.kamikazeInset - Self.kamikazeSide,
+                                         y: height - Self.kamikazeInset - Self.kamikazeSide,
+                                         width: Self.kamikazeSide, height: Self.kamikazeSide)
+        }
         refreshChrome()
         root.needsDisplay = true
         // What the chip is saying, for `GET /test/state` — read off the rows
@@ -2365,6 +2385,12 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// which has no `Resources/`, which is what `walkieURL` walks up to `assets/`
     /// for.
     private static let walkieIdleGlyph = loadWalkie("walkie-idle")
+    /// `assets/kamikaze.png`, found the way the walkie glyphs are; nil hides
+    /// the badge rather than leaving a hole.
+    private static let kamikazeFace: NSImage? = walkieURL("kamikaze").flatMap { NSImage(contentsOf: $0) }
+    private static let kamikazeSide: CGFloat = 28
+    private static let kamikazeInset: CGFloat = 8
+    private static let kamikazeGap: CGFloat = 4
     private static let walkieLiveGlyph = loadWalkie("walkie-bound")
 
     /// **A fifth bigger than everything else in the column** (2026-09-18,
@@ -3967,6 +3993,15 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// rather than a redraw because the glyph is chosen in `layoutContent`, and
     /// this changes at most twice a sentence.
     private(set) var wisprHearing = false
+
+    /// The sentence in flight is kamikaze — see `kamikazeBadge`.
+    private(set) var kamikaze = false
+
+    func setKamikaze(_ on: Bool) {
+        guard kamikaze != on else { return }
+        kamikaze = on
+        layoutContent()
+    }
 
     func setWisprHearing(_ on: Bool) {
         guard wisprHearing != on else { return }

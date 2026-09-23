@@ -760,7 +760,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 🔼 ↓ was made during this sentence: it goes out with `kamikaze` on a
     /// line of its own, the agent's cue to close its terminal when it is done.
     /// Main-thread state, like `listening` and `settling` it is gated on.
-    private var kamikaze = false
+    private var kamikaze = false {
+        didSet { if kamikaze != oldValue { overlay.setKamikaze(kamikaze) } }
+    }
     private var orphanFlush: DispatchWorkItem?
 
     /// The context shot is promised but `screencapture` has not come back yet.
