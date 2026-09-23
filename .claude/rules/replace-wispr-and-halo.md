@@ -387,23 +387,28 @@ e nou — să afișeze pentru trei secunde, cu opțiunea de 80% pentru două sec
   before last — the `copy_last_text` failure under its own *never reintroduce* rule, arriving by a
   new door. That case has *Recover Cancelled Dictation*, which is a different offer and already
   made in the banner.
-- **0.80 at once, held 2.5 s, faded out over 0.5 s** — `PasteHint.peak` / `hold` / `fall`, his
-  numbers (`WT_PASTE_HINT_PEAK` moves the opacity for a run). **Superseded: peak 0.20, 0.8 s up,
-  1.2 s down**, on the argument that a hint shown dozens of times a day had to sit beneath notice.
-  A mark beneath notice is a mark nobody reads, and a reminder nobody reads reminds nobody; at three
-  seconds, click-through and unmoving, it is still not a thing to decide about. No fade-in: the
-  2.5 s is the stretch it is legible.
-- **A second showing restarts the first**, keyed by a generation counter so the earlier fade cannot
-  order out the window the later one put up.
-- **It rides the pointer while it is up** (2026-09-23, superseding *placed once and does not
-  follow*): *"tastele de apăsat pentru paste să fie în tooltip-ul de lângă mouse pentru acea durată
-  de timp, nu lipite pe ecran"* — left at the old spot it read as stuck to the screen. Re-placed every
-  frame (`PasteHint.follow`) until the fade ends. Above the pointer
-  instead when there is no room below, because a box clamped to the screen edge points at nothing.
-- **A window of its own**, `DropArrow`'s reason one door down: everything else near the pointer
-  hangs its meaning on the window's alpha, and this *is* an alpha.
-- **White ink with a dark shadow, outlined as a keycap** — the chip's own answer to an unknown
-  backdrop, and the outline is what makes three symbols read as *press this*.
+- **An ordinary chip row, not a window of its own** (2026-09-23, afternoon, commit `629040b`) —
+  `RelayWindow.pasteRow`, `📋 Paste again  ⌘⇧P`, built by the same `installEmojiRow` as
+  `☠️ Kamikaze`: `hintFont`, `secondaryLabelColor` on a light ground / white with the halo on a
+  dark one, no border. Victor rejected the panel it used to be: *"it has a border around it, with a
+  different font, which is wrong … I just want you to display yet another row in the mouse
+  tooltip … just like any text in the tooltip."* `evals/test_paste_row.py` keeps the two rows
+  twins. `PasteHint` itself now only keeps *when*: `pulse` puts the row up for `hold`, a second
+  pulse restarts the clock, `hide` takes it down at once.
+- **`hold` is 3.0 s, and there is no fade of its own** — `PasteHint.hold`. The old window's
+  **0.80 at once, held 2.5 s, faded out over 0.5 s** (`PasteHint.peak` / `hold` / `fall`,
+  `WT_PASTE_HINT_PEAK`) went with the window: a chip row has no alpha of its own, so the three
+  seconds his *"trei secunde"* asked for is the whole showing, up at once and dropped at once.
+  **Superseded before that: peak 0.20, 0.8 s up, 1.2 s down**, on the argument that a hint shown
+  dozens of times a day had to sit beneath notice — reversed the same afternoon by his own 80%/2.5s
+  number, which is what the row inherits.
+- **A second showing restarts the first**, keyed by a generation counter so a stale timer from an
+  earlier showing cannot take down the row a later one put up.
+- **It rides the pointer because the chip does** (2026-09-23) — *"tastele de apăsat pentru paste
+  să fie în tooltip-ul de lângă mouse pentru acea durată de timp, nu lipite pe ecran"*; a window of
+  its own used to be re-placed under the pointer every frame, but as a chip row it needs no
+  placement of its own, only `setPasteHint(true)`/`layoutContent()`. When it is the chip's only row
+  it is also what puts the chip on screen at all (`refreshPresence` counts rows).
 - Dropped in a cut when a ring goes up (`syncBorrowedGestures`): a hint about the last sentence has
   nothing to say over this one. `POST /test/paste-hint` fires one from a desk,
   `GET /test/state.pasteHint` reads it back, `WT_SHOOT_HINT=<path>` draws it on both grounds at its

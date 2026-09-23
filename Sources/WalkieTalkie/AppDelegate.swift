@@ -3571,15 +3571,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func offerSpawnFolders() {
-        SpawnFolderMenu.show(at: NSEvent.mouseLocation) { [weak self] choice in
+        SpawnFolderMenu.show(at: NSEvent.mouseLocation,
+                             bound: terminal.target?.handle.tty) { [weak self] choice in
+            // **A late pick is refused, terminal rows included**: `send` clears
+            // `spawnPending` as it takes the words, so a click after that
+            // belongs to a sentence already delivered.
             guard let self = self, self.spawnPending else { return }
-            // **A row from the open-terminals half is not a folder: it is the
-            // session he wants already existing** (2026-09-23, *"[să pot face]
-            // rebind … direct în acel pop-up"*). A deliberate bind mid-sentence,
-            // so `showBound` takes the spawn back and the words go there — the
-            // same rule as the left-plus-wheel chord during a spawn.
+            // **A row from *Active Terminals* is not a folder: it is the session
+            // he wants, already running** (2026-09-23, *"a submenu opens that
+            // lets me bind this prompt to that terminal"*).
             if let tty = choice.tty {
-                self.rebindFromMenu(tty: tty, from: "the spawn menu")
+                self.redirectSpawn(toTTY: tty)
                 return
             }
             self.spawnFolder = choice.path
@@ -3599,6 +3601,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("✨ spawn folder chosen — \(choice.path)")
         }
     }
+
+    /// **The spawn's sentence goes to a session that is already running** — a
+    /// pick from the spawn menu's *Active Terminals* submenu (2026-09-23).
+    ///
+    /// Same effect as ⌘⌃B on that terminal, and the words then leave through
+    /// the ordinary bound-terminal delivery (`deliverToTerminal` →
+    /// `writeToTerminalApp`, its Return and its review-paste Return) — there is
+    /// no second delivery path for this.
+    ///
+    /// **The spawn is taken back here, synchronously, not in `showBound`.**
+    /// `showBound` drops a spawn only while the microphone is open (`listening`),
+    /// and the menu is still answering for a second or two after it closes —
+    /// the settle. A pick made there would bind the terminal and let the words
+    /// open a new session anyway. Cleared at the click, `send` can no longer
+    /// read the sentence as a spawn whenever it arrives.
+    ///
+    /// **And the words wait for the bind** (`spawnPickInFlight`): the bind is an
+    /// `osascript` off the main thread, and words arriving inside it would
+    /// otherwise go to whatever was bound *before* — a terminal he did not pick.
+    /// `commit` holds them exactly as it holds an unbound sentence, and
+    /// `showBound` releases them once the pick lands. One sentence, one
+    /// destination: nothing is dropped, nothing is sent twice.
+    private func redirectSpawn(toTTY tty: String) {
+        Log.info("🖥️ spawn → \(tty), picked from Active Terminals (\(listening ? "mid-sentence" : "during the settle"))")
+        clearSpawn()
+        spawnPickInFlight = tty
+        DispatchQueue.global(qos: .userInitiated).async {
+            let bound = self.terminal.bind(tty: tty)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if self.spawnPickInFlight == tty { self.spawnPickInFlight = nil }
+                guard let bound = bound else {
+                    // A sentence already waiting stays held (five minutes, a
+                    // bind releases it); one still being spoken finds the old
+                    // binding, or is held like any unbound one.
+                    self.overlay.flash(self.awaitingBind != nil
+                                       ? "⚠️ no terminal on \(tty) — held, ⌘⌃B to send"
+                                       : "⚠️ no terminal on \(tty)", duration: 4)
+                    return
+                }
+                Log.info("📍 re-bound to \(bound.address) from Active Terminals")
+                self.showBound(bound)
+                DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.bringToFront(bound) }
+            }
+        }
+    }
+
+    /// The tty an *Active Terminals* pick is binding right now — see
+    /// `redirectSpawn`. Main thread only.
+    private var spawnPickInFlight: String?
 
     /// **A rebind picked from a list — `Rebind to…`, or the spawn menu's open
     /// terminals — and the window it names brought forward, focused** (Victor,
@@ -4576,7 +4628,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **A hint about the last sentence has nothing to say over this one.**
-        // The showing is three seconds (`PasteHint.hold` + `fall`), so this
+        // The showing is three seconds (`PasteHint.hold`), so this
         // fires only when he starts again straight after a delivery — and then
         // the ring is going up at the same pointer the hint is hanging under.
         if ringUp { pasteHint.hide() }

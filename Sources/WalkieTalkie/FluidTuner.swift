@@ -98,6 +98,10 @@ final class FluidTuner: NSObject {
         p.becomesKeyOnlyIfNeeded = true
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // `sharingType = .none`, like every window this app puts on screen — a
+        // tuning panel is exactly the kind of thing that should not show up on
+        // a projector or in a screenshot he takes while previewing.
+        p.sharingType = .none
         let view = NSView(frame: p.contentRect(forFrameRect: p.frame))
         for (i, knob) in Self.knobs.enumerated() {
             let y = h - 10 - CGFloat(i + 1) * rowH

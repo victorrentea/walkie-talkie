@@ -242,7 +242,7 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   fallback.** The menu greys those rows, but a receiver can be unplugged *after* it was picked, and
   a dictation that records nothing because a setting outlived a cable is the exact failure this
   file exists to prevent. → journal: same
-- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI Rx ▸ 🏛️ Stage ▸ 🎧 Bose ▸
+- **`auto` is the default and walks a ladder: 🎙️ XLR ▸ 🎤 DJI ▸ 🏛️ Stage ▸ 🎧 Bose ▸
   💻 built-in** (Victor,
   2026-09-19: *"the preference of mic to use is: XLR>DJI>BOSE>MAC … order them like this in menu and
   impl autoselection"*). **This supersedes *the DJI receiver is the microphone whenever it is

@@ -114,6 +114,10 @@ enum AboutWindow {
         p.becomesKeyOnlyIfNeeded = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
+        // `sharingType = .none`, like every window this app puts on screen — a
+        // reference panel he opened for himself has no more business on a shared
+        // screen or in a screenshot than the halo does.
+        p.sharingType = .none
         p.minSize = NSSize(width: tableWidth + 52, height: 320)
 
         // **Everything below is frame-based on purpose, and it is a bug fix.**

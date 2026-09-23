@@ -128,6 +128,10 @@ private final class BottomTab {
         p.hasShadow = false
         p.ignoresMouseEvents = true
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // Never in a screenshot (`sharingType = .none`), like every other overlay
+        // this app puts on screen — a green tab announcing the microphone is a
+        // decoration, not something that belongs in a captured frame.
+        p.sharingType = .none
 
         let content = NSView(frame: NSRect(origin: .zero, size: rect.size))
         content.wantsLayer = true
