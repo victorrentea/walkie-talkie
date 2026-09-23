@@ -1228,12 +1228,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 guard self.listening || self.settling else {
-                    Log.info("💥 kamikaze gesture with no sentence in flight — ignored")
+                    Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
                     return
                 }
                 self.kamikaze.toggle()
-                Log.info(self.kamikaze ? "💥 kamikaze — this sentence closes its agent when done" : "💥 kamikaze taken back")
-                self.overlay.flash(self.kamikaze ? "💥 kamikaze — closes when done" : "💥 kamikaze off")
+                // No flash either way: the chip's `☠️ Kamikaze` row is the
+                // receipt, and its going away is the whole of *taken back*.
+                Log.info(self.kamikaze ? "☠️ kamikaze — this sentence closes its agent when done" : "☠️ kamikaze taken back")
             }
         }
         // **Use Logi Gestures** — pushed into the tap, which is the only thing

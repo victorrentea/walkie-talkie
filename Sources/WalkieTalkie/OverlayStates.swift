@@ -89,7 +89,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-kamikaze", group: "Dictating", title: "Kamikaze — the agent closes when done",
                  when: "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
-                 note: "**The face in a column of its own, top right**, so it covers none of the rows. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
+                 note: "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
