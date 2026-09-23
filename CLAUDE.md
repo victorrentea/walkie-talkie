@@ -268,7 +268,9 @@ sits at rest there.
   afișeze pentru trei secunde, cu opțiunea de 80% pentru două secunde și jumătate … uneori îl
   plasez greșit, lasă-mă să-mi amintesc constant"*. **It is an ordinary chip row since the
   afternoon of 2026-09-23** — `📋 Paste again  ⌘⇧P`, built by the same `installEmojiRow` as
-  `☠️ Kamikaze`, for **3 s** (`PasteHint.hold`); unbound it is the chip's only row. It was a
+  `☠️ Kamikaze`, for **3 s after the last keystroke** (`PasteHint.hold`; every key restarts it since
+  the evening of 2026-09-23 — *"whatever I press … just in case I need to paste it again"*, the
+  `⌘Z` that undoes a misplaced sentence had run the clock out); unbound it is the chip's only row. It was a
   keycap window of its own (white outline, 15 pt medium, 80%) until Victor: *"it has a border
   around it, with a different font, which is wrong … just like any text in the tooltip"*.
   `evals/test_paste_row.py` keeps the two rows twins. A sentence held for a bind gets it at its release, not at the hold.

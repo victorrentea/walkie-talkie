@@ -12017,3 +12017,16 @@ submenu on hover.
 
 Not tested live: the app was not restarted (restarts go through `./relay-restart.sh`), so the
 hover, the click and the delivery were not driven on the running relay.
+
+## `⌘⇧P` stays up while he presses keys (2026-09-23, evening)
+
+Victor: *"the hint about what keys to press after dictation transcription ends should remain next to
+the mouse, whatever I press. I think I pressed Command-Z, and it disappeared from near the mouse.
+They should stay there just in case I need to paste it again."*
+
+- **Nothing hid the row on a key** — the log shows only the delivery's pulse. The flat 3 s ran out
+  under the undo: the first thing he does on seeing words land wrong is `⌘Z`, and that is exactly
+  the stretch the row exists for.
+- **Every keystroke now restarts `hold`** (`PasteHint.watchKeys`, a passive global `keyDown`
+  monitor installed only while the row is up). The row goes 3 s after the *last* key, or when the
+  next dictation raises the ring (`hide`) — never because of a key.

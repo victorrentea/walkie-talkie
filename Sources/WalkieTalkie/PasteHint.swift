@@ -66,6 +66,19 @@ import AppKit
 ///
 /// This type only keeps *when*: `pulse` puts the row up for `hold`, a second
 /// pulse restarts the clock, `hide` takes it down at once.
+///
+/// ## A keystroke keeps it up (2026-09-23, evening)
+///
+/// Victor: *"the hint … should remain next to the mouse, whatever I press. I
+/// think I pressed Command-Z, and it disappeared … They should stay there just
+/// in case I need to paste it again."* The moment the row is for is the one
+/// where he has just seen the words land wrong — and what he does first is
+/// **undo** them, `⌘Z`, then look for how to get them back. A flat three
+/// seconds ran out under exactly that: the undo spent the clock, and the row
+/// was gone by the time he wanted the keys it names. So every key pressed
+/// while the row is up **restarts** `hold`; it goes three seconds after the
+/// last key, or when the next dictation starts (`hide`), never *because* of a
+/// key.
 final class PasteHint {
 
     /// The keys, as they are written on his keyboard — the row's shortcut.
@@ -81,6 +94,11 @@ final class PasteHint {
     /// and `hide`, so a timer from an earlier showing finds itself stale and
     /// leaves the row a later one put up.
     private var generation = 0
+
+    /// Watches keystrokes only while the row is up — each one restarts the
+    /// clock (see *A keystroke keeps it up*). Passive: it observes, never
+    /// intercepts, on the Accessibility grant the chip's own typing monitor uses.
+    private var keyMonitor: Any?
 
     /// `AppDelegate` builds this before the overlay exists, so it is looked up
     /// at the moment of use.
@@ -98,15 +116,38 @@ final class PasteHint {
     /// question the picture can answer.
     func pulse(reason: String) {
         Log.info("⌨️ paste hint — \(reason)")
-        generation += 1
-        let mine = generation
         pulsing = true
         chip?.setPasteHint(true)
+        watchKeys()
+        armTakeDown()
+    }
+
+    /// (Re)start the `hold` clock; a take-down from an earlier arming finds
+    /// itself stale.
+    private func armTakeDown() {
+        generation += 1
+        let mine = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.hold) { [weak self] in
             guard let self, self.generation == mine else { return }
             self.pulsing = false
+            self.stopWatchingKeys()
             self.chip?.setPasteHint(false)
         }
+    }
+
+    private func watchKeys() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, self.pulsing else { return }
+                self.armTakeDown()
+            }
+        }
+    }
+
+    private func stopWatchingKeys() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
     }
 
     /// The hard stop — a new dictation has started and the hint is about the
@@ -114,6 +155,7 @@ final class PasteHint {
     func hide() {
         generation += 1
         pulsing = false
+        stopWatchingKeys()
         chip?.setPasteHint(false)
     }
 
