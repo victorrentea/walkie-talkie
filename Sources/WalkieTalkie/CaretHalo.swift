@@ -780,7 +780,7 @@ final class CaretHalo {
     /// with it, the same way the arrow stops asking for a place to paste.
     func setDestination(_ new: HaloDestination) {
         destination = new
-        use(HaloStyle.current(for: new))
+        use(rewinding ? Self.rewindStyle : HaloStyle.current(for: new))
     }
 
     /// Pick another halo **for one destination**, and write it down. If that
@@ -1033,7 +1033,9 @@ final class CaretHalo {
     /// 1 while the microphone is open; then down to `coastFloor` over the
     /// estimate. Multiplied into whatever the voice would have set.
     private var coastFactor: CGFloat {
-        guard coasting else { return 1 }
+        // The rewind does not fade: *"cât timp încă lucrează, el curge în
+        // continuare"* — it runs at full ink until the words land.
+        guard coasting, !rewinding else { return 1 }
         let t = (CFAbsoluteTimeGetCurrent() - coastFrom) / coastSpan
         return max(Self.coastFloor, 1 - CGFloat(t))
     }
@@ -1062,7 +1064,7 @@ final class CaretHalo {
         // **`delivering` holds the heads past the microphone's close.** The
         // dictation is over as far as `live` is concerned and the words are not
         // there yet, which is the whole of the state `setDelivering` names.
-        arrow.armed = (on && atCaret) || delivering
+        arrow.armed = (on && atCaret) || (delivering && !rewinding)
         guard live != on else { return }
         live = on
         // Both edges, for the reason the selection watcher logs both: "why did
@@ -1134,7 +1136,8 @@ final class CaretHalo {
     func setDelivering(_ on: Bool) {
         guard delivering != on else { return }
         delivering = on
-        Log.info(on ? "⬇︎ the heads stay up while the words travel to the caret"
+        Log.info(on ? (rewinding ? "⬇︎ the words travel to the caret — the rewind stands in for the heads"
+                                 : "⬇︎ the heads stay up while the words travel to the caret")
                     : "⬇︎ the heads go — the words landed")
         guard on else {
             // `armed` going down hides them; the monitors only outlive the
@@ -1143,11 +1146,105 @@ final class CaretHalo {
             releaseMonitorsIfIdle()
             return
         }
+        // **The rewind replaces them** (2026-09-23) — see `setRewind`.
+        guard !rewinding else { return }
         arrow.armed = true
         // Placed from here as well as from `follow`: the pointer may not move
         // again between the stop gesture and the delivery, and the heads have to
         // be up either way.
         arrow.hold(at: Self.origin())
+    }
+
+    // MARK: - The rewind (2026-09-23)
+
+    /// **While a caret sentence is transcribed, the ring wears Reverse tunnel
+    /// and is fed what he has just said, played backwards** — in place of the
+    /// heads. Victor: *"pe durata transcrierii … să redai efectul de reverse
+    /// tunnel pe baza sunetului la ceea ce ai abia dictat, astfel încât, în loc
+    /// de acele săgeți care se duc spre cursor, să-mi atragă atenția că trebuie
+    /// să las acel cursor într-un câmp text … condensat ca să încapă în timpul
+    /// transcrierii … Dacă ai greu să faci condensarea, poți să iei pur și
+    /// simplu, în sens invers, audio abia înregistrat … Ce face fade out foarte
+    /// repede, după ce dictarea s-a injectat cu succes. În timp cât încă
+    /// lucrează, el curge în continuare."*
+    ///
+    /// - **Condensed**: the take is read backwards at `take / estimate` × speed
+    ///   (the chip's own estimate), between 1× and `rewindMaxSpeed`, by
+    ///   skipping samples — nothing is played aloud, so the only listener is the
+    ///   engine and a pitch shift costs nothing.
+    /// - **Looped**: past the start it comes round again, and the ring stays at
+    ///   full ink (`coastFactor` is 1) for as long as the words are late.
+    /// - **Out fast**: `hide` fades a rewound ring in `rewindFade`, not the
+    ///   half-second collapse.
+    /// - **Instead of the heads**: `setDelivering` and `setActive` leave them
+    ///   unarmed while this runs. If Reverse tunnel cannot be drawn (the web
+    ///   engine is picked, the preset is missing) or the take is too short, it
+    ///   does not start and the heads keep the job — the answer is `false`.
+    ///
+    /// Driven from `syncBorrowedGestures` **before** `setDelivering`, with the
+    /// take snapshotted at the close. `WT_HALO_REWIND=0` turns it off.
+    @discardableResult
+    func setRewind(_ on: Bool, take: @autoclosure () -> [Int16], estimate: TimeInterval) -> Bool {
+        guard on != rewinding else { return rewinding }
+        guard on else {
+            rewinding = false
+            rewindEndedAt = CFAbsoluteTimeGetCurrent()
+            rewindTake = []
+            Log.info("⏪ the rewind ends")
+            // The dress goes back once the ring is out of sight — changing it
+            // now would rebuild the panel under the fade.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapse + 0.1) { [weak self] in
+                guard let self, !self.live, !self.rewinding else { return }
+                self.use(HaloStyle.current(for: self.destination))
+            }
+            return false
+        }
+        guard !Self.rewindOff, Self.rewindStyle.isAvailable, !delivering else { return false }
+        let samples = take()
+        guard samples.count >= Self.rewindMinSamples else {
+            Log.info("⏪ no rewind — only \(samples.count) samples in the take; the heads keep the job")
+            return false
+        }
+        rewindTake = samples.map { Float($0) / 32768 }
+        let seconds = Double(samples.count) / 16000
+        rewindSpeed = min(max(seconds / max(estimate, 0.5), 1), Self.rewindMaxSpeed)
+        rewindFrom = CFAbsoluteTimeGetCurrent()
+        rewinding = true
+        arrow.armed = false
+        Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f× (estimate %.1f s), on %@",
+                        seconds, rewindSpeed, estimate, Self.rewindStyle.rawValue))
+        use(Self.rewindStyle)
+        return true
+    }
+
+    private(set) var rewinding = false
+    private var rewindTake: [Float] = []
+    private var rewindFrom: CFAbsoluteTime = 0
+    private var rewindSpeed: Double = 1
+    private var rewindEndedAt: CFAbsoluteTime = 0
+    private static let rewindStyle: HaloStyle = .milkdrop7Reversed
+    private static let rewindOff = ProcessInfo.processInfo.environment["WT_HALO_REWIND"] == "0"
+    /// Half a second of audio: under it there is nothing to rewind.
+    private static let rewindMinSamples = 8000
+    /// Faster than this and a syllable is shorter than one frame of the engine.
+    private static let rewindMaxSpeed: Double = 8
+    /// *"fade out foarte repede"*.
+    private static let rewindFade: TimeInterval = 0.15
+
+    /// The engine's next window of the take, backwards: `count` samples ending
+    /// at the output clock's now, each `rewindSpeed` samples of the take apart,
+    /// wrapping at the start so it loops.
+    private func rewindWindow(count: Int = 1024) -> [Float] {
+        let n = rewindTake.count
+        guard n > 0 else { return [Float](repeating: 0, count: count) }
+        let now = (CFAbsoluteTimeGetCurrent() - rewindFrom) * 16000
+        var out = [Float](repeating: 0, count: count)
+        for i in 0..<count {
+            let k = now - Double(count - 1 - i)
+            let back = Int((max(k, 0) * rewindSpeed).rounded(.down)) % n
+            out[i] = rewindTake[n - 1 - back]
+        }
+        return out
     }
 
     /// **The bubble is on screen — let the ring out.** Called where
@@ -1277,9 +1374,15 @@ final class CaretHalo {
             renderTimer?.invalidate()
             let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
                 guard let self = self else { return }
-                let samples = Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
+                let samples = self.rewinding
+                    ? Self.lift(Self.undoInputGain(self.rewindWindow()))
+                    : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
                 web?.feed(samples)
                 self.under?.feed(samples)
+                // The panel being replaced stays on screen until the new one has
+                // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
+                // switch into the rewind does not freeze the picture.
+                self.retiring?.web?.feed(samples)
             }
             renderTimer = r
             RunLoop.main.add(r, forMode: .common)
@@ -1337,8 +1440,10 @@ final class CaretHalo {
         // stage the collapse scales, and a fade is the one thing a window can
         // do to a view it does not draw. The engine's loop stops at the end.
         if let web = web, let panel = panel {
+            // A rewound ring goes out fast — the words have just landed.
+            let fast = CFAbsoluteTimeGetCurrent() - rewindEndedAt < 1
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = Self.collapse
+                ctx.duration = fast ? Self.rewindFade : Self.collapse
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in web.stop(); self?.under?.stop() }
         }
@@ -1523,14 +1628,14 @@ final class CaretHalo {
             }
             if frame.origin != panel.frame.origin { panel.setFrameOrigin(frame.origin) }
             aimEffectAtPointer()
-            delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
+            delivering && !rewinding ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
             return
         }
         // A preset's square is bigger than the ring's, so the origin is the
         // frame's rather than `Self.origin()`, which the arrow keeps.
         // An `anchored` preset's square stays where `show` put it; only the arrow rides the pointer.
         if drawn.preset?.anchored == true, anchor != nil {
-            delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
+            delivering && !rewinding ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
             return
         }
         let wanted = drawn.preset != nil ? panelFrame().origin : Self.origin()
@@ -1565,7 +1670,7 @@ final class CaretHalo {
         // `hold` while the words are in flight rather than `place`: it is
         // idempotent after the first call and it is also what raises them again
         // if the pointer's first move is what wakes this.
-        delivering ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
+        delivering && !rewinding ? arrow.hold(at: Self.origin()) : arrow.place(at: Self.origin())
     }
 
     /// Where a panel the size of this one has to sit for its centre to be the

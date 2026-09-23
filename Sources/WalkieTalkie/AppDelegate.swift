@@ -511,6 +511,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// chip's bar and the ring's fade (`CaretHalo.setCoasting`) read this one
     /// number, so they cannot count down two different waits.
     private var settleEstimate: TimeInterval = 0
+    /// **What he has just said, kept for the halo's rewind** (2026-09-23) —
+    /// taken at the close, played backwards round the pointer while a caret
+    /// sentence is transcribed (`CaretHalo.setRewind`). Emptied when the
+    /// settle ends.
+    private var settleTake: [Int16] = []
     private var settleGiveUp: DispatchWorkItem?
     /// **The longest the ring waits for words that may never come — 8 s, the
     /// safety net behind Wispr's own answer** (2026-09-12, evening).
@@ -2711,6 +2716,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 09-13; what the ring does on screen now is coast (`CaretHalo`).
         Log.info("⚡ ring down: the microphone closed — the words are in flight (the ring coasts, fading)")
         latchedAtCaret = pasteMode || (!isBound && !spawnPending)
+        settleTake = latchedAtCaret ? lastTake() : []
         // **And where he was looking when he stopped talking** — the screen a
         // spawned window opens on (`SpawnTerminal.board(preferring:)`). Latched
         // here with the destination and for the same reason: the window is
@@ -3073,6 +3079,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - Parameter atCaret: what the ring was saying about the destination when
     ///   the microphone closed, kept so the chevrons do not disarm underneath the
     ///   settle.
+    /// **The recording that just closed, from whichever recorder held it** —
+    /// the relay's own, or the meter beside a Wispr sentence (the only recorder
+    /// open for one Wispr's chord started, or for Wispr as the Engine).
+    private func lastTake() -> [Int16] {
+        if let live = liveMeter { return live.lastTake }
+        return (wisprMicSentence ? wisprSource.meter : source.meter).lastTake
+    }
+
     private func beginSettling(atCaret: Bool) {
         settling = true
         settlingAtCaret = atCaret
@@ -3121,6 +3135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard settling else { return }
         settling = false
         settlingAtCaret = false
+        settleTake = []
         settleGiveUp?.cancel()
         settleGiveUp = nil
         // The promise is kept (or given up on), so the row goes with it —
@@ -4373,6 +4388,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // **Before `setActive`**, because the collapse it triggers is what reads
         // the flag to decide whether the arrow goes with the ring.
+        // **Unless the rewind takes their place** (2026-09-23): the sentence he
+        // has just said, backwards, on Reverse tunnel — *"în loc de acele
+        // săgeți care se duc spre cursor"*. Before `setDelivering`, which asks
+        // it whether the heads are still wanted.
+        caretHalo.setRewind(settling && settlingAtCaret && !listening && !speculative,
+                            take: settleTake, estimate: settleEstimate)
         caretHalo.setDelivering(settling && settlingAtCaret)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue

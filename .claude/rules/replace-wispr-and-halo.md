@@ -325,6 +325,37 @@ săgețile care curg până când efectiv se inseră textul la caret … să-mi 
     `words in flight` — the one pose of this shape that is on screen for a fixed second or two of
     every caret dictation and can therefore never be looked at for long.
 
+## The rewind replaces the heads while a caret sentence is transcribed (2026-09-23)
+
+Victor: *"pe durata transcrierii … să redai efectul de reverse tunnel pe baza sunetului la ceea ce
+ai abia dictat, astfel încât, în loc de acele săgeți care se duc spre cursor, să-mi atragă atenția
+că trebuie să las acel cursor într-un câmp text … condensat ca să încapă în timpul transcrierii …
+fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât încă lucrează, el curge
+în continuare."*
+
+- **`CaretHalo.setRewind`**, from `syncBorrowedGestures` **before** `setDelivering`, on
+  `settling && settlingAtCaret && !listening && !speculative`. The ring changes dress to
+  **Reverse tunnel** (`milkdrop7Reversed`, native only) with `use`, never `setStyle` — nothing is
+  written down — and `setDestination` keeps answering the rewind's dress while it runs. The
+  destination's own dress comes back after the fade (`collapse` + 0.1 s, only if no ring is up).
+- **Fed the take, backwards.** `MicRecorder.lastTake` is the whole recording in memory (Int16, last
+  120 s, reset at `start`, its **own `takeLock`** — `lock` is held across the teardown, which is
+  exactly when the take is read: a `try` on it came back empty on a desk run). `AppDelegate`
+  snapshots it at the close into `settleTake`. `rewindWindow` reads it back to front at
+  `take / estimate` speed (the chip's estimate), clamped **1×…8×**, by skipping samples — the engine
+  is the only listener — and **loops** past the start. `lift` + `undoInputGain` still apply;
+  `seeded`/`tailed` do not.
+- **Full ink for as long as it runs** (`coastFactor` is 1 while rewinding) and **out in 0.15 s**
+  (`rewindFade`) when the words land, instead of the half-second collapse.
+- **Instead of the heads, not beside them**: `arrow.armed` stays down while rewinding. It refuses —
+  and the heads keep the job exactly as before — when the take is under 0.5 s, when Reverse tunnel
+  cannot be drawn (web engine picked) or with `WT_HALO_REWIND=0`; the log says `⏪ no rewind — …`.
+- **The switch costs projectM's 1.7 s warm-up**; the outgoing panel stays up meanwhile (`retiring`)
+  and is fed the same reversed samples so it does not freeze.
+- Log: `⏪ the rewind: <s> s of his voice, backwards at <k>× (estimate <e> s)` … `⏪ the rewind ends`.
+  Measured at the desk 2026-09-23: 4/4 caret dictations (DJI 16 kHz and the built-in 48 kHz mic),
+  2.3–2.6 s takes at 1.5–1.6×.
+
 ## `PasteHint` — `⌘⇧P`, said once and faintly (2026-09-22)
 
 Victor: *"după ce ai dat cancel la dictare sau după ce s-a încheiat o dictare la caret … să apară

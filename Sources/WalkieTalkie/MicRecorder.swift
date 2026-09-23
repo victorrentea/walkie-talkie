@@ -215,6 +215,28 @@ final class MicRecorder {
         return out
     }
     static let recentCount = 2048
+
+    /// **The whole of this recording, kept in memory as well** (2026-09-23),
+    /// for the halo's rewind: while a caret sentence is being transcribed the
+    /// ring plays back what he has just said, backwards (`CaretHalo.setRewind`).
+    /// Victor: *"pe durata transcrierii … să redai efectul de reverse tunnel pe
+    /// baza sunetului la ceea ce ai abia dictat"*. The file is on its own queue
+    /// and may be mid-upload, so the halo is handed a copy instead of a path.
+    /// Int16, 32 kB a second; only the last `takeCap` seconds are kept, because
+    /// a ten-minute monologue replayed at speed is noise either way. Reset at
+    /// `start`, so it outlives `stop` — the rewind begins *after* the close.
+    ///
+    /// **Its own lock, not `lock`.** `lock` is held across a device open and a
+    /// teardown — exactly when the settle asks for this, at the close — and a
+    /// `try` on it came back empty-handed on the second desk run. `takeLock` is
+    /// only ever held for an append or a copy.
+    var lastTake: [Int16] {
+        takeLock.lock(); defer { takeLock.unlock() }
+        return take
+    }
+    private var take: [Int16] = []
+    private let takeLock = NSLock()
+    private static let takeCap = 16000 * 120
     private var recent = [Float](repeating: 0, count: MicRecorder.recentCount)
     private var recentHead = 0
     private var recentCopy = [Float](repeating: 0, count: MicRecorder.recentCount)
@@ -420,6 +442,7 @@ final class MicRecorder {
         // commit that added the meter and found on the forward button the same
         // afternoon (2026-09-07); the button was innocent.
         voiced = 0
+        takeLock.lock(); take.removeAll(keepingCapacity: true); takeLock.unlock()
         quiet = 0
         live = 0
         noiseFloor = -1
@@ -700,6 +723,11 @@ final class MicRecorder {
             recent[recentHead] = Float(samples[i]) / 32768
             recentHead = (recentHead + 1) % Self.recentCount
         }
+        takeLock.lock()
+        take.append(contentsOf: UnsafeBufferPointer(start: samples, count: count))
+        // Trimmed in chunks of a quarter of the cap, so the shift is paid rarely.
+        if take.count > Self.takeCap + Self.takeCap / 4 { take.removeFirst(take.count - Self.takeCap) }
+        takeLock.unlock()
         lock.unlock()
     }
 }
