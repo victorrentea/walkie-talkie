@@ -1097,6 +1097,7 @@ final class CaretHalo {
             Log.error("◯ halo preview: no halo-voice.wav bundled — noise instead")
         }
         if !live { setActive(true, atCaret: false, opening: .fromPointer) }
+        FluidTuner.shared.previewing = true
         Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on the clip")
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             guard let self = self, self.previewGeneration == generation else { return }
@@ -1105,6 +1106,7 @@ final class CaretHalo {
             if let saved = self.savedClosures { self.samples = saved.samples; self.level = saved.level; self.quietSeconds = saved.quiet }
             self.savedClosures = nil
             self.previewGeneration = 0
+            FluidTuner.shared.previewing = false
         }
     }
 

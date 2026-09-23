@@ -4,9 +4,9 @@ import CProjectM
 /// **Sliders for the pure fluid, on screen for as long as it is the halo**
 /// (Victor, 2026-09-23: *"can you provide some sliders for a few params on
 /// screen permanent when using this animation?"*). A small panel in the bottom
-/// right corner of the screen, there while a `ProjectMHalo` in modes 3–5
-/// (Fluid cursor, Liquid cursor, Ink) exists — which is from the moment the
-/// style is picked until another replaces it, dictating or not.
+/// right corner of the screen, attached while a `ProjectMHalo` in modes 3–6
+/// (Fluid cursor, Liquid cursor, Ink, Smoke) exists, and **shown only during
+/// the F7/F9 preview** since 2026-09-23 — see `previewing`.
 ///
 /// Every slider moves the live engine (`pmh_set_fluid_param`) and is saved per
 /// mode (`fluidTune.mode<n>.<key>` in `UserDefaults`), so the next launch starts
@@ -40,6 +40,19 @@ final class FluidTuner: NSObject {
     private var mode = 0
     private var defaults: [Float] = []
 
+    /// **Only while previewing** (Victor, 2026-09-23: *"smoke sliders shouldn't
+    /// display unless in F7/F9 iteration through effects, not in real use"*).
+    /// The panel is attached whenever a fluid host exists, as before, but shown
+    /// only between `CaretHalo.preview`'s start and end — over a real dictation
+    /// it was a stray window in the corner of whatever he was working on.
+    var previewing = false {
+        didSet {
+            guard previewing != oldValue else { return }
+            if previewing, host != nil { place(); panel?.orderFrontRegardless() }
+            if !previewing { panel?.orderOut(nil) }
+        }
+    }
+
     static func savedKey(_ mode: Int, _ knob: Knob) -> String { "fluidTune.mode\(mode).\(knob.key)" }
 
     /// The value to start the engine at: the saved one, else the mode's own.
@@ -57,6 +70,7 @@ final class FluidTuner: NSObject {
             sliders[i].doubleValue = v
             readouts[i].stringValue = Self.format(v, knob)
         }
+        guard previewing else { return }
         place()
         panel?.orderFrontRegardless()
     }
