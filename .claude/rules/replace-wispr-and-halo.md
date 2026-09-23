@@ -346,7 +346,14 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   is the only listener — and **loops** past the start. `lift` + `undoInputGain` still apply;
   `seeded`/`tailed` do not.
 - **Full ink for as long as it runs** (`coastFactor` is 1 while rewinding) and **out in 0.15 s**
-  (`rewindFade`) when the words land, instead of the half-second collapse.
+  (`rewindFade` = `RewindTimeline.collapse`) when the words land, instead of the half-second collapse.
+- **Timed to the engine's typical round trip, not to twice the chip's ceiling** (2026-09-23, late:
+  *"the transcription finishes earlier than the animation completes"*). `RewindTimeline.pose`
+  runs the approach from Reverse tunnel's own warm-up (`Preset.warmup`, **0.6 s**,
+  `WT_REWIND_WARMUP`; every other preset keeps 1.5 s) to `DecodeRate.predict` — 90 % there on
+  time, creeping toward 97 % and never at rest when late, C¹ at the seam — and the delivery never
+  waits on it. The old span, `max((estimate − 1.5) × 2, 3)` against the local model's ceiling,
+  left a 3 s Scribe sentence a third of the way in. `swift test` covers early / on time / late.
 - **Instead of the heads, not beside them**: `arrow.armed` stays down while rewinding. It refuses —
   and the heads keep the job exactly as before — when the take is under 0.5 s, when Reverse tunnel
   cannot be drawn (web engine picked) or with `WT_HALO_REWIND=0`; the log says `⏪ no rewind — …`.

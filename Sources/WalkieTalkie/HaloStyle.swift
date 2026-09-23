@@ -343,6 +343,12 @@ enum HaloStyle: String, CaseIterable {
         /// panoul e mai mare decat efectul, ca sa aiba loc sa vina din afara lui
         /// (`HaloWebHost.approach`). Doar ruta nativa.
         var zoom: CGFloat = 1
+        /// **Cat sta ascuns motorul la pornire**, cand difera de `warmup`-ul
+        /// comun (1,5 s). Doar Reverse tunnel (2026-09-23): intra de la ~7× si
+        /// transparenta ~0, deci primele cadre goale ale presetului sunt oricum
+        /// in afara ecranului si aproape invizibile, iar 1,5 s ascuns mancau
+        /// jumatate dintr-o transcriere Scribe. `WT_REWIND_WARMUP` il muta.
+        var warmup: TimeInterval? = nil
     }
     var preset: Preset? {
         switch self {
@@ -437,7 +443,8 @@ enum HaloStyle: String, CaseIterable {
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, pinCenter: true,
                                          hole: 0.22, peak: 0.80, audioGain: 0.55, trail: 0.01, lag: 0,
-                                         nativeOnly: true, invert: 0.9)
+                                         nativeOnly: true, invert: 0.9,
+                                         warmup: TimeInterval(ProcessInfo.processInfo.environment["WT_REWIND_WARMUP"] ?? "") ?? 0.6)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was

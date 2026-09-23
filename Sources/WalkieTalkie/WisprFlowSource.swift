@@ -416,6 +416,10 @@ final class WisprFlowSource: DictationSource {
     /// not the microphone's close.
     private var armedAt: CFAbsoluteTime = 0
     private var captureFrom: CFAbsoluteTime = 0
+    /// How long the sentence being transcribed was spoken for — the audio
+    /// `DecodeRate` files Wispr's round trip against. 0 once filed, and for a
+    /// cancel, so nothing is filed twice or for a sentence nobody wanted.
+    private var spokenFor: CFAbsoluteTime = 0
     private var captureDeadline: DispatchWorkItem?
     private var clipboardWatch: Timer?
     private var clipboardAt = 0
@@ -1440,6 +1444,7 @@ final class WisprFlowSource: DictationSource {
         speculative = false
         stopMeter(keep: !cancelling)
         captureFrom = CFAbsoluteTimeGetCurrent()
+        spokenFor = cancelling ? 0 : captureFrom - gestureAt
         Log.info(String(format: "🎙️ the microphone is closed — %@ (%.0f ms of speech)",
                         why, (captureFrom - gestureAt) * 1000))
         // The sentence is over, so the window may go — and the ten seconds the
@@ -1455,6 +1460,10 @@ final class WisprFlowSource: DictationSource {
             scratchpadWindowHandled = true
             hotkeys.startKeyRedirectCountdown()
         }
+        // Before the relay hears the close — see `DecodeRate.activeEngine`.
+        // Whichever engine is picked: a sentence Wispr's own chord opened is
+        // Wispr's to transcribe (2026-09-23).
+        DecodeRate.activeEngine = DecodeRate.wisprFlow
         didStopListening?()
         if cancelling {
             cancelling = false
@@ -1737,6 +1746,8 @@ final class WisprFlowSource: DictationSource {
     private func beginCapture() {
         guard !capturing else { return }
         capturing = true
+        // A new sentence: nothing of the last one's length may be filed against it.
+        spokenFor = 0
         // **A dictation Victor started is watched and never taken.** The row
         // poll still runs — the chip and the ring want to know when Wispr is
         // done — but nothing is swallowed, nothing is read off the pasteboard
@@ -2696,6 +2707,12 @@ final class WisprFlowSource: DictationSource {
         }
         Log.info(String(format: "🗣️ wispr transcript via %@ — %d chars, %.0f ms after the microphone closed",
                         reason, text.count, took * 1000))
+        // **Wispr's round trip is learnt too** (2026-09-23): it never was, so the
+        // relay promised a 0.7 s Wispr sentence the local model's 2.7 s.
+        if spokenFor > 0 {
+            DecodeRate.record(audio: spokenFor, decode: took, engine: DecodeRate.wisprFlow, chars: text.count)
+            spokenFor = 0
+        }
         meterQueue.async { [weak self] in
             guard let self else { return }
             let taken = self.recording

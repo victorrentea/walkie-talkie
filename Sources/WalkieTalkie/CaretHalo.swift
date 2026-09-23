@@ -1209,13 +1209,19 @@ final class CaretHalo {
         }
         rewindTake = samples.map { Float($0) / 32768 }
         let seconds = Double(samples.count) / 16000
-        rewindSpeed = min(max(seconds / max(estimate, 0.5), 1), Self.rewindMaxSpeed)
+        // **Fitted to this engine's typical round trip, not the chip's ceiling**
+        // (2026-09-23) — see `RewindTimeline`. `estimate` (the chip's number,
+        // `DecodeRate.seconds`) is the near-worst case, and an approach timed to
+        // it was still a third of the way in when the words landed.
+        let predicted = DecodeRate.predict(audio: seconds)
+        rewindSpeed = min(max(seconds / max(predicted, 0.5), 1), Self.rewindMaxSpeed)
         rewindFrom = CFAbsoluteTimeGetCurrent()
-        rewindEstimate = estimate
+        rewindEstimate = predicted
         rewinding = true
         arrow.armed = false
-        Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f× (estimate %.1f s), on %@",
-                        seconds, rewindSpeed, estimate, Self.rewindStyle.rawValue))
+        Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@",
+                        seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
+                        Self.rewindVisibleFrom, Self.rewindStyle.rawValue))
         use(Self.rewindStyle)
         return true
     }
@@ -1229,30 +1235,33 @@ final class CaretHalo {
 
     /// **The tunnel comes in from outside the screen** (Victor, 2026-09-23:
     /// *"sa para ca vine din exterior ecranului, de la transparenta 100% pana la
-    /// converge in jurul mouseului pe durata transcrierii"*): from 3× its size
-    /// and invisible to its resting size at full (its 80 %) opacity, eased out,
-    /// over what is left of the chip's estimate once the engine has warmed up —
-    /// the panel is not on screen before that, so a convergence begun at the
-    /// close would be half over by the time he could see it. At least a second,
-    /// so a short sentence still has an approach and not a jump.
+    /// converge in jurul mouseului pe durata transcrierii"*), shrunk
+    /// geometrically from `approachFrom` × with the opacity rising ahead of it
+    /// (the second pass, same evening: *"inca nu vine din exteriorul
+    /// ecranului"*) — the shape is `RewindTimeline.stamp`.
     ///
-    /// **Shrunk geometrically, faded in early** (the second pass, same evening:
-    /// *"inca nu vine din exteriorul ecranului"*). The first curve eased the
-    /// size out and the opacity with it, so nearly all the travel was spent
-    /// while it was still invisible and what he saw began next to the pointer.
-    /// Now the size goes from `approachFrom` to 1 evenly in *ratio* (each second
-    /// halves it as much as the last), eased in and out, and the opacity rises
-    /// ahead of it (t^0.6) — so the tunnel is there, huge and faint, from the
-    /// first frames.
+    /// **Timed to the transcription, not to twice it** (2026-09-23, late:
+    /// *"sometimes takes too long, and the transcription finishes earlier than
+    /// the animation completes"*). It ran over `max((estimate − warm-up) × 2, 3)`
+    /// — slowed on purpose after *"prelungeste-l"*, against an estimate that was
+    /// the local model's ceiling whatever engine was live — so a 3 s Scribe
+    /// sentence landed a third of the way in and a Wispr one before it was
+    /// visible at all. Now it runs from the moment the picture can be seen to
+    /// the engine's typical round trip (`DecodeRate.predict`), reaches 90 % there,
+    /// and creeps toward 97 % for as long as the words are late — never at rest,
+    /// never *done* before they are. An early answer is `hide`'s: out in
+    /// `RewindTimeline.collapse`, from wherever it got to.
     private var approachScale: (scale: CGFloat, alpha: CGFloat) {
-        // **Twice the time, at least 3 s** (Victor, after the first look: *"poate
-        // incetineste un pic zoom inul … prelungeste-l"*): slower than the
-        // estimate on purpose, so a quick sentence lands mid-approach and the
-        // fast fade takes it from wherever it has got to.
-        let span = max((rewindEstimate - ProjectMHalo.warmup) * 2, 3)
-        let t = min(max((CFAbsoluteTimeGetCurrent() - rewindFrom - ProjectMHalo.warmup) / span, 0), 1)
-        let e = t * t * (3 - 2 * t)
-        return (pow(Self.approachFrom, CGFloat(1 - e)), CGFloat(pow(t, 0.6)))
+        let pose = RewindTimeline.pose(elapsed: CFAbsoluteTimeGetCurrent() - rewindFrom,
+                                       predicted: rewindEstimate, visibleFrom: Self.rewindVisibleFrom)
+        let s = RewindTimeline.stamp(pose, from: Double(Self.approachFrom))
+        return (CGFloat(s.scale), CGFloat(s.alpha))
+    }
+    /// When Reverse tunnel can first be seen after the close: its own warm-up
+    /// (`HaloStyle.Preset.warmup`, shorter than the other presets') — the engine
+    /// renders hidden before that.
+    static var rewindVisibleFrom: TimeInterval {
+        rewindStyle.preset?.warmup ?? ProjectMHalo.warmup
     }
     /// The stamp's size at the start, × its resting size: the ring (0.66 of the
     /// picture's radius) then spans ~1.5 of the screen's long side —
@@ -1268,8 +1277,8 @@ final class CaretHalo {
     private static let rewindMinSamples = 8000
     /// Faster than this and a syllable is shorter than one frame of the engine.
     private static let rewindMaxSpeed: Double = 8
-    /// *"fade out foarte repede"*.
-    private static let rewindFade: TimeInterval = 0.15
+    /// *"fade out foarte repede"* — `RewindTimeline.collapse`, ≤ 150 ms.
+    private static let rewindFade: TimeInterval = RewindTimeline.collapse
 
     /// The engine's next window of the take, backwards: `count` samples ending
     /// at the output clock's now, each `rewindSpeed` samples of the take apart,

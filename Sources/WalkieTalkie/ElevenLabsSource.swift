@@ -291,10 +291,19 @@ final class ElevenLabsSource: DictationSource {
         return nil
     }
 
+    /// When the microphone closed — what the round trip filed with `DecodeRate`
+    /// is measured from.
+    private var stoppedAt: Date?
+
     func stop() {
         guard isRecording else { return }
         isRecording = false
         phase = .transcribing("uploading")
+        // Before the relay hears the close — see `DecodeRate.activeEngine` — and
+        // the clock the round trip is filed against starts here, at the close,
+        // because that is the wait the relay shows (2026-09-23).
+        DecodeRate.activeEngine = DecodeRate.elevenLabs
+        stoppedAt = Date()
         didStopListening?()
         // **Closed on the same queue it was opened on** — `MicRecorder.stop()`
         // tears the same audio engine down and can block for the same reason,
@@ -344,6 +353,13 @@ final class ElevenLabsSource: DictationSource {
                     Log.info(String(format: "elevenlabs: %@ (%.2f) — %d chars in %.2fs (%.2f× audio)",
                                     r.language ?? "?", r.languageProbability, r.text.count,
                                     elapsed, elapsed / max(duration, 0.01)))
+                    // **Scribe learns its own round trip** (2026-09-23) — it never
+                    // did: `DecodeRate` had been timing every Scribe sentence
+                    // against the local model's curve since the day it became the
+                    // engine. From the close, not from the upload: the stop's
+                    // audio-queue hop is part of the wait he watches.
+                    DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(self.stoppedAt ?? startedAt),
+                                      engine: DecodeRate.elevenLabs, chars: r.text.count)
                     self.didTranscribe?(DictationResult(
                         text: r.text, language: r.language, audio: wav, duration: duration,
                         engine: "elevenlabs", warning: Self.warning(for: r), delivery: .route,

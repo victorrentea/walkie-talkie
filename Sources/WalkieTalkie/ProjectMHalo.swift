@@ -394,7 +394,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         startTimer()
         if !fresh { onVisible?(); return }
         picture.opacity = 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmup) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + (preset.warmup ?? Self.warmup)) { [weak self] in
             guard let self = self else { return }
             CATransaction.begin()
             let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.25

@@ -59,6 +59,18 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 ## The decode-time estimate (`DecodeRate.swift`)
 
+- **One line per engine since 2026-09-23** — `Sample.engine` (`whisper-local` · `elevenlabs` ·
+  `wispr-flow`; a line without it is the local model's). Until then only `LocalWhisperSource` ever
+  called `record`: the file's last line was 2026-09-18, and every Scribe and Wispr sentence since
+  had been timed against the local model's curve (2.7 s promised for a 0.7 s Wispr sentence). Each
+  source files its own round trip **from its own close** and sets `DecodeRate.activeEngine`
+  *before* `didStopListening`, so every `seconds(for:)` reader is asking about the right engine
+  without naming one. Under eight samples the engine's `prior` is rescaled by the median
+  measured/prior ratio (a ratio through the origin cannot describe a hosted engine's fixed round
+  trip). `typical(for:)` is the line without headroom — what an animation that should end when the
+  words land is fitted to; `seconds(for:)` stays the chip's near-worst case. Every filed sample
+  logs `decode rate [engine]: …`, and one the rewind predicted logs `⏱️ transcription [engine]:
+  predicted X (ceiling Y) … took Z — ±N%`. `swift test` covers it (`Tests/WalkieTalkieTests`).
 - **The estimate is a line fitted to the last fifty decodes**, `intercept + slope × audio`; a decode
   is a fixed round trip (JSON out, ffmpeg, the answer back) *plus* a cost per second of audio, and
   one ratio can fit one of those or the other. It drives the filling `Transcribing...` word (no

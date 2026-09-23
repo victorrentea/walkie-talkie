@@ -166,6 +166,9 @@ final class LocalWhisperSource: DictationSource {
         guard isRecording else { return }
         isRecording = false
         phase = .transcribing("")
+        // Before the relay hears the close: everything that times the wait from
+        // here on asks `DecodeRate` about this engine (2026-09-23).
+        DecodeRate.activeEngine = DecodeRate.whisperLocal
         didStopListening?()
 
         guard let (wav, duration) = meter.stop() else {

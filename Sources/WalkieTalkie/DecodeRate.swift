@@ -95,6 +95,55 @@ enum DecodeRate {
     static let fallbackSlope = 0.045
     static let fallbackIntercept = 0.3
 
+    // MARK: - Per engine (2026-09-23)
+
+    /// **One line per recogniser, not one line for all of them.** Until
+    /// 2026-09-23 only `LocalWhisperSource` ever called `record`, so the file
+    /// stopped learning on 2026-09-18 — the day before ElevenLabs became the
+    /// engine — and every Scribe and Wispr sentence since was timed against the
+    /// local model's curve: 2.7 s promised for a Wispr sentence that landed in
+    /// 0.7 s, 1.8 s for a Scribe one that took 3. Each source now files its own
+    /// round trip under its own key, and the fit reads only that key's samples.
+    /// A line written before the key existed is the local model's — nothing
+    /// else recorded then.
+    static let whisperLocal = "whisper-local"
+    static let elevenLabs = "elevenlabs"
+    static let wisprFlow = "wispr-flow"
+
+    /// What an engine costs before it has taught this file anything. The local
+    /// model's is the old fallback; the other two are read off `relay.log`
+    /// (2026-09-21/23): Scribe ~0.9 s + 0.08 × audio (24.6 s in 3.05 s, 41.2 s
+    /// in 4.3 s, 10.8 s in 1.6 s), Wispr a flat ~0.6 s (row `formatted` 458–700
+    /// ms after the close, whatever the length).
+    struct Prior {
+        let intercept: Double
+        let slope: Double
+    }
+
+    static func prior(for engine: String) -> Prior {
+        switch engine {
+        case elevenLabs: return Prior(intercept: 0.9, slope: 0.08)
+        case wisprFlow:  return Prior(intercept: 0.6, slope: 0.004)
+        default:         return Prior(intercept: fallbackIntercept, slope: fallbackSlope)
+        }
+    }
+
+    /// **The recogniser whose words are in flight** — set by the source at its
+    /// own stop, *before* it tells the relay the microphone closed, so every
+    /// reader that asks `seconds(for:)` from then on (the chip's bar, the ring's
+    /// fade, the rewind) is asking about the right engine without knowing there
+    /// is more than one.
+    static var activeEngine: String {
+        get { lock.lock(); defer { lock.unlock() }; return active }
+        set { lock.lock(); active = newValue; lock.unlock() }
+    }
+    private static var active = whisperLocal
+
+    /// The prediction the rewind was fitted to, kept until that engine files its
+    /// answer, so `record` can put *predicted vs actual* on one line of
+    /// `relay.log` — the only way to check from the file that the learning takes.
+    private static var pending: (engine: String, audio: Double, typical: Double, ceiling: Double, at: CFAbsoluteTime)?
+
     /// How many decodes the estimate is drawn from.
     private static let window = 50
 
@@ -121,7 +170,7 @@ enum DecodeRate {
     /// The slope and intercept a *fit* is allowed to produce. A line is fitted
     /// to real points and can still come out absurd when they are clustered;
     /// these are the same guard the ratio bounds are, one level up.
-    private static let slopeBounds = 0.005...0.60
+    private static let slopeBounds = 0.0...0.60
     private static let interceptBounds = 0.0...5.0
 
     /// **Where on the distribution the estimate sits.** 0.80 of the residual
@@ -168,6 +217,11 @@ enum DecodeRate {
         let cold: Bool
         var chars: Int?
         var compression: Double?
+        /// Which recogniser — absent on every line written before 2026-09-23,
+        /// all of which were the local model's.
+        var engine: String? = nil
+
+        var engineKey: String { engine ?? DecodeRate.whisperLocal }
     }
 
     /// **Every sample, appended forever, one JSON object per line.** The window
@@ -197,18 +251,46 @@ enum DecodeRate {
         func seconds(for audio: TimeInterval) -> TimeInterval {
             max(0.5, (intercept + slope * audio) * headroom)
         }
+
+        /// **The middle, not the near-worst** — the line without its headroom.
+        /// What an animation that should *end when the words land* is fitted to
+        /// (`CaretHalo`'s rewind): fitted to the 0.80 quantile it finished early
+        /// on four sentences out of five, which is the complaint of 2026-09-23 in
+        /// one sentence. A late answer is the animation's to absorb
+        /// (`RewindTimeline`), not the estimate's.
+        func typical(for audio: TimeInterval) -> TimeInterval {
+            max(0.3, intercept + slope * audio)
+        }
     }
 
-    /// How long the next decode of `audio` seconds is expected to take. Read
-    /// once per dictation, at the moment the row opens.
-    static func seconds(for audio: TimeInterval) -> TimeInterval {
-        fit(usableWindow()).seconds(for: audio)
+    /// How long the next decode of `audio` seconds is expected to take, for the
+    /// engine whose words are in flight unless another is named. Read once per
+    /// dictation, at the moment the row opens.
+    static func seconds(for audio: TimeInterval, engine: String? = nil) -> TimeInterval {
+        let e = engine ?? activeEngine
+        return fit(usableWindow(e), prior: prior(for: e)).seconds(for: audio)
     }
 
-    private static func usableWindow() -> [Sample] {
+    /// The typical round trip, and remembered as this sentence's prediction.
+    static func predict(audio: TimeInterval, engine: String? = nil) -> TimeInterval {
+        let e = engine ?? activeEngine
+        let f = fit(usableWindow(e), prior: prior(for: e))
+        let typical = f.typical(for: audio), ceiling = f.seconds(for: audio)
+        lock.lock()
+        pending = (e, audio, typical, ceiling, CFAbsoluteTimeGetCurrent())
+        lock.unlock()
+        return typical
+    }
+
+    private static func usableWindow(_ engine: String) -> [Sample] {
         lock.lock()
         defer { lock.unlock() }
-        return Array(samples.filter { !$0.cold }.suffix(window))
+        return fitWindow(of: samples, engine: engine)
+    }
+
+    /// The fit's input for one engine: its warm samples, newest `window`.
+    static func fitWindow(of all: [Sample], engine: String) -> [Sample] {
+        Array(all.filter { !$0.cold && $0.engineKey == engine }.suffix(window))
     }
 
     /// The line the window gives, and the headroom measured on it.
@@ -218,14 +300,24 @@ enum DecodeRate {
     /// the origin is the answer while there are too few points to have a slope
     /// worth the name; it is the *same* quantile, so the estimate does not jump
     /// the moment the eighth sample lands.
-    static func fit(_ window: [Sample]) -> Fit {
+    static func fit(_ window: [Sample], prior: Prior = Prior(intercept: fallbackIntercept, slope: fallbackSlope)) -> Fit {
         guard !window.isEmpty else {
-            return Fit(intercept: fallbackIntercept, slope: fallbackSlope, headroom: 1)
+            return Fit(intercept: prior.intercept, slope: prior.slope, headroom: 1)
         }
-        let ratios = window.map { $0.decode / $0.audio }
-        let throughOrigin = Fit(intercept: 0,
-                                slope: clamp(quantile(ratios, headroomQuantile), to: slopeBounds),
-                                headroom: 1)
+        // **Too few for a slope: the engine's prior, rescaled to what it has
+        // measured** (2026-09-23). The old answer was a ratio through the origin,
+        // which cannot describe a recogniser whose cost is mostly a fixed round
+        // trip — Scribe's upload, Wispr's formatting pass — and would have
+        // promised a two-second sentence almost nothing. The prior keeps the
+        // shape and the median measured/prior ratio moves it.
+        let scale = clamp(quantile(window.map { $0.decode / max(0.05, prior.intercept + prior.slope * $0.audio) }, 0.5),
+                          to: 0.33...3.0)
+        let scaledPrior = Fit(intercept: prior.intercept * scale, slope: prior.slope * scale,
+                              headroom: window.count >= 3
+                                ? clamp(quantile(window.map { $0.decode / max(0.05, (prior.intercept + prior.slope * $0.audio) * scale) },
+                                                 headroomQuantile), to: headroomBounds)
+                                : 1)
+        let throughOrigin = scaledPrior
         guard window.count >= minimumSamples else { return throughOrigin }
 
         var slopes: [Double] = []
@@ -278,33 +370,56 @@ enum DecodeRate {
     /// dictations afterwards. **It is still written to the file**, marked,
     /// because "the answer came back in 40ms" is a fact worth having when the
     /// next fault is diagnosed from this file rather than from the log.
-    static func record(audio: TimeInterval, decode: TimeInterval,
+    static func record(audio: TimeInterval, decode: TimeInterval, engine: String = whisperLocal,
                        chars: Int? = nil, compression: Double? = nil) {
         guard audio > 0, decode > 0 else { return }
+        // The first decode after the helper starts is the *local model's* cold
+        // start; a hosted recogniser has no weights to page in.
+        var cold = false
         lock.lock()
-        decodesThisRun += 1
-        let cold = decodesThisRun == 1
+        if engine == whisperLocal {
+            decodesThisRun += 1
+            cold = decodesThisRun == 1
+        }
+        let predicted = pending.flatMap { p in
+            p.engine == engine && CFAbsoluteTimeGetCurrent() - p.at < 120 ? p : nil
+        }
+        pending = nil
         lock.unlock()
 
         let ratio = decode / audio
-        let usable = bounds.contains(ratio) && !cold
+        // A hosted recogniser's short clip costs more than its own length — a
+        // round trip is a round trip — and that is a real sample, not a loop.
+        let usable = (engine == whisperLocal ? bounds : hostedBounds).contains(ratio) && !cold
         let sample = Sample(at: ISO8601DateFormatter().string(from: Date()),
                             audio: audio, decode: decode, load: machineLoad(),
-                            cold: !usable, chars: chars, compression: compression)
+                            cold: !usable, chars: chars, compression: compression,
+                            engine: engine)
         append(sample)
 
         lock.lock()
         samples.append(sample)
-        samples = Array(samples.suffix(window * 2))
+        samples = Array(samples.suffix(kept))
         lock.unlock()
 
-        let kept = usableWindow()
-        let f = fit(kept)
-        Log.info(String(format: "decode rate: %.1fs audio → %.1fs decode (%.3f×, load %.2f)%@ — %d samples, estimating (%.2fs + %.3f×) × %.2f",
-                        audio, decode, ratio, sample.load,
-                        usable ? "" : (cold ? " — cold, not fitted" : " — outside \(bounds), not fitted"),
-                        kept.count, f.intercept, f.slope, f.headroom))
+        let fitted = usableWindow(engine)
+        let f = fit(fitted, prior: prior(for: engine))
+        Log.info(String(format: "decode rate [%@]: %.1fs audio → %.2fs (%.3f×, load %.2f)%@ — %d samples, typical %.2fs + %.3f×, ceiling × %.2f",
+                        engine, audio, decode, ratio, sample.load,
+                        usable ? "" : (cold ? " — cold, not fitted" : " — outside bounds, not fitted"),
+                        fitted.count, f.intercept, f.slope, f.headroom))
+        if let p = predicted {
+            Log.info(String(format: "⏱️ transcription [%@]: predicted %.2fs (ceiling %.2fs) for %.1fs of audio, took %.2fs — %@%.0f%%",
+                            engine, p.typical, p.ceiling, p.audio, decode,
+                            decode >= p.typical ? "+" : "", (decode / max(p.typical, 0.01) - 1) * 100))
+        }
     }
+
+    /// `bounds` for a recogniser across a network.
+    private static let hostedBounds = 0.002...5.0
+    /// Samples kept in memory, across every engine — enough for each one's
+    /// `window` even when they interleave.
+    private static let kept = 600
 
     /// The helper went away; the next decode is cold again.
     static func engineStopped() {
@@ -335,24 +450,26 @@ enum DecodeRate {
     private static func load() -> [Sample] {
         guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return [] }
         let decoder = JSONDecoder()
-        let lines = text.split(separator: "\n").suffix(window * 4)
+        let lines = text.split(separator: "\n").suffix(kept * 2)
         return lines.compactMap { line in
             guard let data = line.data(using: .utf8) else { return nil }
             return try? decoder.decode(Sample.self, from: data)
-        }.suffix(window * 2).map { $0 }
+        }.suffix(kept).map { $0 }
     }
 
+    /// **One `write(2)` on an `O_APPEND` descriptor per sample** (2026-09-23):
+    /// the kernel places the whole line at the end in one step, so a crash or a
+    /// second writer can cost at most the line being written, never a
+    /// half-line glued to the next — and `load` already skips a torn tail.
+    /// It was seek-then-write, which is two steps with a gap between them.
     private static func append(_ sample: Sample) {
         guard let data = try? JSONEncoder().encode(sample) else { return }
         var line = data
         line.append(0x0A)
         try? FileManager.default.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: line)
-        } else {
-            try? line.write(to: fileURL, options: .atomic)
-        }
+        let fd = open(fileURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
     }
 }
