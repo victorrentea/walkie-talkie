@@ -112,8 +112,8 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
 }
 
 // The `⌘⇧P` hint on a dark ground and a light one, at the opacity it really
-// runs at and at full ink, and quit — the only way to judge a mark whose whole
-// design is a number between nothing and not much. See `PasteHint.shoot`.
+// stands at (80% since 2026-09-23) and at full ink, and quit — the panel cannot
+// be captured, so this is the only way to see it. See `PasteHint.shoot`.
 if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HINT"] {
     NSApplication.shared.setActivationPolicy(.accessory)
     PasteHint.shoot(to: out)
