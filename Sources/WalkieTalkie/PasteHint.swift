@@ -76,7 +76,7 @@ import AppKit
 /// **undo** them, `⌘Z`, then look for how to get them back. A flat three
 /// seconds ran out under exactly that: the undo spent the clock, and the row
 /// was gone by the time he wanted the keys it names. So every key pressed
-/// while the row is up **restarts** `hold`; it goes three seconds after the
+/// while the row is up **restarts** `hold`; it goes five seconds after the
 /// last key, or when the next dictation starts (`hide`), never *because* of a
 /// key.
 final class PasteHint {
@@ -84,9 +84,11 @@ final class PasteHint {
     /// The keys, as they are written on his keyboard — the row's shortcut.
     static let keys = "⌘⇧P"
 
-    /// **Up for this long** — his *"trei secunde"* (2.5 s held + 0.5 s fade
-    /// on the old window; a row has no fade of its own, so it is the whole 3).
-    static let hold: TimeInterval = 3.0
+    /// **Up for this long, counted from the last keystroke.** His *"trei
+    /// secunde"* of the morning, raised to 5 the same evening: *"let it be 5
+    /// seconds"* — once a key restarts the clock, the stretch that matters is
+    /// the pause between the undo and reaching for `⌘⇧P`.
+    static let hold: TimeInterval = 5.0
 
     /// A showing is in flight.
     private var pulsing = false

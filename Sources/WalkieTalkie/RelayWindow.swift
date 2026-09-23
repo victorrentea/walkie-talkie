@@ -269,7 +269,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let kamikazeRow = NSView()
     private let kamikazeGlyph = NSImageView()
     private let kamikazeInfo = NSTextField(labelWithString: "Kamikaze")
-    /// **`📋 Paste again ⌘⇧P`** (2026-09-23) — for three seconds after every
+    /// **`📋 Paste again ⌘⇧P`** (2026-09-23) — for five seconds after every
     /// delivered sentence (and a cancelled prompt), the keys that bring the
     /// last text back, whether it went out as a prompt or as a clean dictation.
     /// `PasteHint` decides when; this is only the row.

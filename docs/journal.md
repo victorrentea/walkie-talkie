@@ -12030,3 +12030,5 @@ They should stay there just in case I need to paste it again."*
 - **Every keystroke now restarts `hold`** (`PasteHint.watchKeys`, a passive global `keyDown`
   monitor installed only while the row is up). The row goes 3 s after the *last* key, or when the
   next dictation raises the ring (`hide`) — never because of a key.
+- **Then 5 s, not 3** — Victor, the same evening: *"let it be 5 seconds."* `PasteHint.hold = 5`,
+  still counted from the last key.

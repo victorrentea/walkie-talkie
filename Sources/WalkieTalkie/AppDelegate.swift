@@ -77,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pulseze în același ritm al discuției"*.
     private let caretHalo = CaretHalo()
 
-    /// **`⌘⇧P`, shown for three seconds after every delivered sentence** — see
+    /// **`⌘⇧P`, shown for five seconds after every delivered sentence** — see
     /// `PasteHint`. Until 2026-09-23 it was faint and said only after a caret
     /// sentence and a cancelled prompt; now it follows every delivery (caret,
     /// bound terminal, spawn, a held sentence's release, Wispr's routed ones),
@@ -4668,7 +4668,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **A hint about the last sentence has nothing to say over this one.**
-        // The showing is three seconds (`PasteHint.hold`), so this
+        // The showing is five seconds (`PasteHint.hold`), so this
         // fires only when he starts again straight after a delivery — and then
         // the ring is going up at the same pointer the hint is hanging under.
         if ringUp { pasteHint.hide() }
