@@ -360,6 +360,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         pmh_set_mask(renderer, preset.fade, Float(rx), Float(ry), Float(o.floor), Float(gain), Float(o.start),
                      Float(preset.hole), Float(preset.peak), Float(preset.core), Float(preset.tailTop))
         pmh_set_invert(renderer, Float(preset.invert))
+        pmh_set_zoom(renderer, Float(preset.zoom), 1)
         Log.info("◯ projectM \(preset.number): \(file.lastPathComponent) at \(px)px (\(Self.renderScale)× of \(Int(side))pt), gain \(o.gain) × \(Self.gainScale[preset.number] ?? 1) = \(gain), rot ×\(o.rot)\(o.pin ? ", centre pinned" : "") \(CaretHalo.sinceStyleChange)")
         return true
     }
@@ -425,6 +426,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
         let s = Self.renderScale, x = Float(p.x * s), y = Float(p.y * s)
         renderQueue.async { pmh_set_pointer(r, x, y) }
     }
+    func approach(scale: CGFloat, alpha: CGFloat) {
+        guard let r = renderer else { return }
+        let z = Float(preset.zoom * scale), a = Float(alpha)
+        renderQueue.async { pmh_set_zoom(r, z, a) }
+    }
+
     /// **The pointer as last handed in, kept for a renderer that did not exist
     /// yet.** The halo aims itself once when it shows and then only when the
     /// mouse moves, so a call that lands before `configure` was lost for good —

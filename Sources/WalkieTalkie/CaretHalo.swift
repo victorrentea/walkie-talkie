@@ -1209,6 +1209,7 @@ final class CaretHalo {
         let seconds = Double(samples.count) / 16000
         rewindSpeed = min(max(seconds / max(estimate, 0.5), 1), Self.rewindMaxSpeed)
         rewindFrom = CFAbsoluteTimeGetCurrent()
+        rewindEstimate = estimate
         rewinding = true
         arrow.armed = false
         Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f× (estimate %.1f s), on %@",
@@ -1222,6 +1223,23 @@ final class CaretHalo {
     private var rewindFrom: CFAbsoluteTime = 0
     private var rewindSpeed: Double = 1
     private var rewindEndedAt: CFAbsoluteTime = 0
+    private var rewindEstimate: TimeInterval = 0
+
+    /// **The tunnel comes in from outside the screen** (Victor, 2026-09-23:
+    /// *"sa para ca vine din exterior ecranului, de la transparenta 100% pana la
+    /// converge in jurul mouseului pe durata transcrierii"*): from 3× its size
+    /// and invisible to its resting size at full (its 80 %) opacity, eased out,
+    /// over what is left of the chip's estimate once the engine has warmed up —
+    /// the panel is not on screen before that, so a convergence begun at the
+    /// close would be half over by the time he could see it. At least a second,
+    /// so a short sentence still has an approach and not a jump.
+    private var approachScale: (scale: CGFloat, alpha: CGFloat) {
+        let span = max(rewindEstimate - ProjectMHalo.warmup, 1)
+        let t = min(max((CFAbsoluteTimeGetCurrent() - rewindFrom - ProjectMHalo.warmup) / span, 0), 1)
+        let e = CGFloat(1 - pow(1 - t, 3))
+        return (Self.approachFrom - (Self.approachFrom - 1) * e, e)
+    }
+    private static let approachFrom: CGFloat = 3
     private static let rewindStyle: HaloStyle = .milkdrop7Reversed
     private static let rewindOff = ProcessInfo.processInfo.environment["WT_HALO_REWIND"] == "0"
     /// Half a second of audio: under it there is nothing to rewind.
@@ -1378,6 +1396,7 @@ final class CaretHalo {
                     ? Self.lift(Self.undoInputGain(self.rewindWindow()))
                     : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
                 web?.feed(samples)
+                if self.rewinding { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
                 self.under?.feed(samples)
                 // The panel being replaced stays on screen until the new one has
                 // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the

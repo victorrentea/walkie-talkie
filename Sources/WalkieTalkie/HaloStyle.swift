@@ -339,6 +339,10 @@ enum HaloStyle: String, CaseIterable {
         /// **Imaginea intoarsa pe dos** in jurul cursorului: pixelul de la `d` raze
         /// de masca arata ce a desenat motorul la `invert` − `d`. 0 = nu.
         var invert: CGFloat = 0
+        /// **Cat din panou ocupa imaginea**, in repaus — 1 = tot patratul. Sub 1
+        /// panoul e mai mare decat efectul, ca sa aiba loc sa vina din afara lui
+        /// (`HaloWebHost.approach`). Doar ruta nativa.
+        var zoom: CGFloat = 1
     }
     var preset: Preset? {
         switch self {
@@ -408,11 +412,23 @@ enum HaloStyle: String, CaseIterable {
         // Reverse tunnel: Tunnel-ul de pe cursor, cu toate reglajele lui, intors
         // pe dos. `invert` 0,9: inelul lui Geiss (~0,24 din raza) ajunge la ~0,66,
         // unde masca abia incepe sa cada; marginea lui ajunge sub `hole`.
+        // **Mai mic cu 30 % si la 30 % opacitate, venind din afara ecranului**
+        // (Victor, 2026-09-23: *"tunelul sa fie mai mic cu 30% si de transparenta
+        // 30% … sa para ca vine din exterior ecranului, de la transparenta 100%
+        // pana la converge in jurul mouseului pe durata transcrierii"*). Panoul e
+        // cat latura lunga a ecranului, centrat pe cursor, ca apropierea sa aiba
+        // de unde veni; efectul sta in el la `zoom` 0,453 = 0,647 × 0,7. `peak`
+        // 0,80: *"transparenta 30%"* a fost citit intai ca 30 % opacitate si a
+        // venit indreptat pe loc — *"de opacitate 80%! (e prea transparenta
+        // acum)"*. `offset`-ul de 50 pt a
+        // plecat: converge *in jurul* mouseului. `renderScale` 1: panza cat
+        // ecranul la 2 px/pt ar fi de 2,4× pixelii lui Tunnel.
         case .milkdrop7Reversed:
-                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647,
+                           return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 1.0,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
-                                         fadeStart: 0.55, offset: CGPoint(x: 0, y: 50), pinCenter: true,
-                                         hole: 0.22, audioGain: 0.55, nativeOnly: true, invert: 0.9)
+                                         fadeStart: 0.55, pinCenter: true, renderScale: 1,
+                                         hole: 0.22, peak: 0.80, audioGain: 0.55, nativeOnly: true, invert: 0.9,
+                                         zoom: 0.647 * 0.7)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
         // out of the catalogue at the default 1 and nobody had worn it for a
         // whole dictation until it became Wispr's dress; Victor's report was
@@ -775,4 +791,11 @@ protocol HaloWebHost: AppKit.NSView {
     func stop()
     func feed(_ samples: [Float])
     func center(_ p: CGPoint)
+    /// **Reverse tunnel's approach** (2026-09-23): the picture at `scale` × its
+    /// resting size and `alpha` × its opacity — (3, 0) far outside the panel and
+    /// invisible, (1, 1) at rest. A host that cannot do it ignores it.
+    func approach(scale: CGFloat, alpha: CGFloat)
+}
+extension HaloWebHost {
+    func approach(scale: CGFloat, alpha: CGFloat) {}
 }

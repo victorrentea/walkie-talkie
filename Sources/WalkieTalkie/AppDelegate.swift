@@ -4392,7 +4392,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // has just said, backwards, on Reverse tunnel — *"în loc de acele
         // săgeți care se duc spre cursor"*. Before `setDelivering`, which asks
         // it whether the heads are still wanted.
-        caretHalo.setRewind(settling && settlingAtCaret && !listening && !speculative,
+        // **Every destination since the same evening** (*"sa apara la finalul
+        // dictarii indiferent de tipul dictarii: la caret, bound, unbound"*) —
+        // only the heads it replaces are the caret's alone.
+        caretHalo.setRewind(settling && !listening && !speculative,
                             take: settleTake, estimate: settleEstimate)
         caretHalo.setDelivering(settling && settlingAtCaret)
         // **The ring stays up through the settle, fading** (2026-09-22) — every

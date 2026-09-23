@@ -36,6 +36,10 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
 /// shows the engine's pixel at `invert` − `d`. 0 = off.
 void pmh_set_invert(pmh* h, float invert);
 
+/// The picture's size as a fraction of the square (1 = fills it; over 1 it
+/// overflows), and a multiplier on the whole layer's opacity.
+void pmh_set_zoom(pmh* h, float zoom, float fade_in);
+
 /// **The trail** (2026-09-23): the output surface becomes `w` × `h` — the screen,
 /// in pixels — and each frame carries the last one over, dimmed with a time
 /// constant of `seconds`, before the keyed square is stamped at the pointer. The
