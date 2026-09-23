@@ -2766,7 +2766,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Still `⚡ ring down:` in the log, for `RingDown` and every grep since
         // 09-13; what the ring does on screen now is coast (`CaretHalo`).
         Log.info("⚡ ring down: the microphone closed — the words are in flight (the ring coasts, fading)")
-        latchedAtCaret = pasteMode || (!isBound && !spawnPending)
+        // An *Active Terminals* pick whose bind has not landed yet is a
+        // terminal destination already (`redirectSpawn`), not the caret.
+        latchedAtCaret = pasteMode || (!isBound && !spawnPending && spawnPickInFlight == nil)
         settleTake = latchedAtCaret ? lastTake() : []
         // **And where he was looking when he stopped talking** — the screen a
         // spawned window opens on (`SpawnTerminal.board(preferring:)`). Latched
@@ -3623,22 +3625,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `commit` holds them exactly as it holds an unbound sentence, and
     /// `showBound` releases them once the pick lands. One sentence, one
     /// destination: nothing is dropped, nothing is sent twice.
+    ///
+    /// **A pick that cannot bind leaves the spawn standing.** The terminal can
+    /// close between the listing and the click; then the sentence goes where it
+    /// was going before he touched the submenu — a new session, in the folder
+    /// he had picked if he had — rather than into the terminal bound before, or
+    /// into a five-minute hold whose release the 10 s poll would aim there.
     private func redirectSpawn(toTTY tty: String) {
         Log.info("🖥️ spawn → \(tty), picked from Active Terminals (\(listening ? "mid-sentence" : "during the settle"))")
+        let folder = spawnFolder
         clearSpawn()
         spawnPickInFlight = tty
+        pickHeld = false
         DispatchQueue.global(qos: .userInitiated).async {
             let bound = self.terminal.bind(tty: tty)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                if self.spawnPickInFlight == tty { self.spawnPickInFlight = nil }
+                let held = self.pickHeld
+                if self.spawnPickInFlight == tty { self.spawnPickInFlight = nil; self.pickHeld = false }
                 guard let bound = bound else {
-                    // A sentence already waiting stays held (five minutes, a
-                    // bind releases it); one still being spoken finds the old
-                    // binding, or is held like any unbound one.
-                    self.overlay.flash(self.awaitingBind != nil
-                                       ? "⚠️ no terminal on \(tty) — held, ⌘⌃B to send"
-                                       : "⚠️ no terminal on \(tty)", duration: 4)
+                    self.spawnAfterFailedPick(tty: tty, folder: folder, held: held)
                     return
                 }
                 Log.info("📍 re-bound to \(bound.address) from Active Terminals")
@@ -3648,9 +3654,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The fallback `redirectSpawn` promises: the spawn back, however far the
+    /// sentence has got — held (its words arrived during the pick), still being
+    /// spoken or being transcribed, or already gone somewhere (nothing to do).
+    private func spawnAfterFailedPick(tty: String, folder: String?, held: Bool) {
+        Log.error("🖥️ \(tty) could not be bound — the sentence stays a new session")
+        if held, var m = awaitingBind {
+            awaitingBind = nil
+            awaitingBindExpiry?.cancel()
+            awaitingBindExpiry = nil
+            m.spawn = true
+            m.directory = folder ?? Self.spawnDirectory
+            overlay.flash("⚠️ no terminal on \(tty) — opened a new session", duration: 4)
+            commit(m)
+            return
+        }
+        guard listening || settling else {
+            overlay.flash("⚠️ no terminal on \(tty)", duration: 3)
+            return
+        }
+        spawnPending = true
+        spawnFolder = folder
+        if let folder = folder {
+            overlay.setSpawnDestination((folder as NSString).lastPathComponent, mark: "✨",
+                                        icon: Self.appIcon("com.apple.Terminal", height: 18))
+        } else {
+            overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
+        }
+        overlay.flash("⚠️ no terminal on \(tty) — still a new session", duration: 4)
+    }
+
     /// The tty an *Active Terminals* pick is binding right now — see
     /// `redirectSpawn`. Main thread only.
     private var spawnPickInFlight: String?
+    /// Whether `commit` held this pick's sentence for it — the one held message
+    /// a failed pick may turn back into a spawn (a hold from before the spawn
+    /// began is not this sentence).
+    private var pickHeld = false
 
     /// **A rebind picked from a list — `Rebind to…`, or the spawn menu's open
     /// terminals — and the window it names brought forward, focused** (Victor,
@@ -8043,13 +8083,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // decision — see `holdsForBind`: the words wait, the log does not fill
         // up with them. ⌘⇧P still has them, because `lastDictation` is set
         // above: he said it, so he can paste it, bound or not.
-        if m.kind == "dictation", !m.spawn, !isBound {
+        // **Held too while an *Active Terminals* pick is still binding**
+        // (`spawnPickInFlight`): the terminal bound right now is the one he
+        // just turned away from, and the pick's `showBound` releases this.
+        if m.kind == "dictation", !m.spawn, !isBound || spawnPickInFlight != nil {
             // **Recorded even though nothing is written** — that is the point of
             // the record. A held sentence lives in memory and nowhere else
             // (*When the outbox is written*), so `held` is the one destination
             // the file could never name.
             recordDelivery(via: m.via, kind: m.deliveryKind, to: "held")
-            return holdForBind(m)
+            if spawnPickInFlight != nil { pickHeld = true }
+            return holdForBind(m, quietly: spawnPickInFlight != nil)
         }
         let delivery = m.kind == "dictation"
             ? recordDelivery(via: m.via, kind: m.deliveryKind,
@@ -8125,7 +8169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var awaitingBindExpiry: DispatchWorkItem?
     private static let bindWait: TimeInterval = 5 * 60
 
-    private func holdForBind(_ m: Message) {
+    /// `quietly`: the bind is already on its way (an *Active Terminals* pick),
+    /// so *bind a terminal to send it* would be asking for what he just did.
+    private func holdForBind(_ m: Message, quietly: Bool = false) {
         // The words have left the dictation, so the row that named where they
         // were going has nothing left to say — the flash below says the rest,
         // and after it the chip goes back to being a chip with nothing bound.
@@ -8144,7 +8190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         awaitingBindExpiry = expiry
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
-        overlay.flash("⏳ held — bind a terminal to send it", duration: 3)
+        if !quietly { overlay.flash("⏳ held — bind a terminal to send it", duration: 3) }
     }
 
     /// Called from `showBound`, which is the one place every route into a

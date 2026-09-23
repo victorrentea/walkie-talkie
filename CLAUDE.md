@@ -30,7 +30,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `DecodeRate`, `InputDevice`, `VoiceCorpus`, `helpers/`, `evals/` |
   | `dictation-source.md` | `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`, `ShotMarker`, `tools/wispr-test.sh`, `tools/eleven-test.sh`, `tools/wispr-row-watch.py` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, the halo asset |
-  | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ProjectList`, `helpers/recent_projects.py` |
+  | `spawn.md` | `SpawnTerminal`, `SpawnFolderMenu`, `ActiveTerminals`, `ProjectList`, `helpers/recent_projects.py` |
   | `menu-bar.md` | `StatusItem`, `MenuBarMirror`, `MessageLog`, `AboutPage` |
   | `build-and-launch.md` | `build-app.sh`, `main.swift`, `SingleInstance`, `assets/` |
 

@@ -689,6 +689,39 @@ final class TerminalBinding {
         return titles
     }
 
+    /// **Every Terminal.app tab with a Claude Code session in it** — the spawn
+    /// menu's *Active Terminals* submenu (2026-09-23, `ActiveTerminals`).
+    ///
+    /// Three reads for the whole machine, never one per tab: `liveTitles()` (one
+    /// `osascript`, ~30 ms with sixteen windows), one `ps -ax` for which pids sit
+    /// on which tty, and a `stat` per pid on those ttys. A tab is kept when one of
+    /// its processes owns a fresh `~/.claude/cwd/.last-<pid>` —
+    /// `publishedDirectory(ownedBy:)`, the same two guards the chip's folder
+    /// label runs on (the file postdates the process, the path is a directory),
+    /// so a recycled pid or a session that has since quit is not offered. A plain
+    /// shell, `ssh` or `vim` owns no such file and is left out: this list is
+    /// *where an agent is waiting*, not *every tab*.
+    ///
+    /// Off the main thread — it is an `osascript` and a `ps`.
+    static func activeAgentSessions() -> [ActiveTerminals.Session] {
+        let titles = liveTitles()
+        guard !titles.isEmpty, let out = run("/bin/ps", ["-ax", "-o", "pid=,tty="]) else { return [] }
+        var pids: [String: [Int32]] = [:]
+        for line in out.components(separatedBy: "\n") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard parts.count == 2, let pid = Int32(parts[0]) else { continue }
+            let tty = String(parts[1])
+            guard titles[tty] != nil else { continue }
+            pids[tty, default: []].append(pid)
+        }
+        return titles.keys.sorted().compactMap { tty in
+            guard let dir = pids[tty]?.lazy.compactMap({ publishedDirectory(ownedBy: $0) }).first
+            else { return nil }
+            let title = titles[tty].flatMap { $0.isEmpty ? nil : $0 }
+            return ActiveTerminals.Session(tty: tty, directory: dir, title: title)
+        }
+    }
+
     /// The title of whichever tab is showing this tty — the refresh counterpart
     /// of `frontTerminalTab`, which cannot be reused because by then the tab is
     /// very often not the one in front.

@@ -23,6 +23,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Wispr Flow everywhere (2026-09-12)*, and every later line making Wispr one of the engines — superseded 2026-09-22 by *Wispr Flow leaves the Engine list*: it is not selectable at all any more, and keeps only 🔽 →. The wrap sections are **not** retired — they still describe the mechanism accurately and it is what the row would come back to
 - *`PasteHint` — `⌘⇧P`, said once and faintly* (2026-09-22; recorded in `.claude/rules/replace-wispr-and-halo.md`, not here) — superseded 2026-09-23: the hint follows **every** delivered sentence (caret, bound, spawn, a held sentence's release, Wispr's routed ones) plus a cancelled prompt, at **0.80 for 2.5 s then a 0.5 s fade**, where it was caret and cancelled prompt only, at 0.20, 0.8 s up / 1.2 s down. Victor: *"indiferent prin ce mecanism am închis o dictare … uneori îl plasez greșit, lasă-mă să-mi amintesc constant"*
 - *What a caret dictation carries* (2026-09-08) and 2026-09-19's *no initial screenshot at the caret* — superseded 2026-09-23 for the **forward click**: its caret sentence is the whole terminal envelope (context frame, `[Dictated in RO or EN]`) and is submitted into a Claude Code prompt; the back click's sentence is the words alone, at the caret even when bound (*Forward is a prompt, back is plain words*)
+- *The spawn menu offers five open terminals* (2026-09-23, morning; recorded in `.claude/rules/spawn.md`, not here) — superseded the same evening by *Active Terminals: the spawn menu's first row*: the terminals moved from a third half under the folders to a hover submenu on the menu's first row, filled from the Claude Code sessions running on the machine rather than from the bind log
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -259,6 +260,7 @@ The journal contradicts itself over time, because it was written as things chang
 - [Wispr Flow leaves the Engine list (2026-09-22)](#wispr-flow-leaves-the-engine-list-2026-09-22)
 - [The About page becomes a window (2026-09-22)](#the-about-page-becomes-a-window-2026-09-22)
 - [Forward is a prompt, back is plain words (2026-09-23)](#forward-is-a-prompt-back-is-plain-words-2026-09-23)
+- [Active Terminals: the spawn menu's first row (2026-09-23)](#active-terminals-the-spawn-menus-first-row-2026-09-23)
 
 ---
 
@@ -11958,3 +11960,60 @@ session-file check, plain text following the binding, ⌃⌥P shooting a plain s
 before the stop, 🔽 → as only Return, …), and all ten are caught.
 
 Not tested live: nothing here can press a real side button, and the app was not restarted.
+
+## Active Terminals: the spawn menu's first row (2026-09-23)
+
+Victor, dictated that evening: *"In the project pop-up, the project selection one, when I open a
+new terminal, I want the first option to be a menu that says 'Recent', or 'Active Terminals', and
+then when I hover over it, a submenu opens that lets me bind this prompt to that terminal."*
+
+That morning the same menu had grown a third half — *Or send to an open terminal*, the five
+terminals most recently bound that were still open, under the folders
+(`RebindHistory.openTerminals`). His *"Recent"* is that list; what he asked for is where it lives
+and how it opens. It is now the first row, `Active Terminals ›`, and its rows hang off it in a
+submenu on hover.
+
+- **Found by looking, not remembered.** The morning's list came from the bind log, so a session
+  he had never spoken to was not in it. The submenu lists every Terminal.app tab on whose tty a
+  process owns a fresh `~/.claude/cwd/.last-<pid>` — `TerminalBinding.activeAgentSessions()`:
+  `liveTitles()` (one `osascript`), one `ps -ax -o pid=,tty=`, and `publishedDirectory(ownedBy:)`
+  per pid on those ttys, the same two guards the chip's folder label runs on. A plain shell,
+  `ssh`, `vim` or a closed window is not offered.
+- **What a row says** (`ActiveTerminals.items`, pure, `swift test`): the folder name alone when it
+  is unique; when two sessions share a folder, the task out of the tab title
+  (`✳ human-review — Pe CodeCity…` → `human-review — Pe CodeCity…`), else the tty
+  (`human-review · ttys013`), and the tty on top of a task two sessions share. Alphabetical, the
+  menu's own rule. The terminal bound now is ticked `✓` in `NSMenu`'s state column.
+- **Empty is drawn, not hidden** — `Active Terminals — none`, dimmed, no chevron, no submenu. A
+  row that comes and goes moves every folder under it between two openings. The row is measured
+  for its longer label up front, so the answer landing (~100 ms after the menu, off the main
+  thread) restyles it in place; nothing under the hand moves and the clock is not restarted.
+  Hovered before the answer: one dimmed `Looking…`.
+- **A pick is a bind, and the words leave by the bound terminal's own delivery**
+  (`AppDelegate.redirectSpawn`): the spawn is cleared **at the click**, the tty bound off the main
+  thread, `showBound` then the window brought forward (the morning's *menu rebinds bring the
+  terminal forward*). `deliverToTerminal` → `writeToTerminalApp`, its Return and its review
+  Return — no second path.
+- **Three ways it could have lost or doubled the sentence, closed.** *The settle*: `showBound`
+  drops a spawn only while `listening`, and the menu still answers for a second or two after the
+  microphone closes — the morning's rows, picked there, bound the terminal **and** opened a new
+  session. Clearing the spawn at the click fixes it for whichever moment. *The bind in flight*: it
+  is an `osascript`, and words landing inside it would have gone to the terminal bound before;
+  `commit` holds them (`spawnPickInFlight`, quietly) and the pick's `showBound` releases them —
+  and `dictationStoppedListening` does not latch the caret for a pick still binding. *The terminal
+  gone*: a pick that cannot bind puts the spawn back (`spawnAfterFailedPick`) — re-armed if the
+  sentence is still being spoken or transcribed, the held message sent as a spawn if it already
+  arrived — rather than a hold the 10 s poll would release into the old binding. A pick after
+  `send` took the words is refused, as a late folder always was.
+- **The submenu is a second panel, not an `NSMenu`**, for the menu's own reasons. Hovering it
+  suspends the fade exactly as the menu does (`hoveredMain || hoveredSub`); a folder row entered
+  takes it away after 0.3 s (`submenuGrace`) unless the hand reaches it — the diagonal every
+  cascading menu has to forgive.
+- **`WT_SHOOT_MENU` draws it open**, with this Mac's real sessions (`WT_SHOOT_BOUND=ttysNNN` for the
+  tick). `evals/test_active_terminals.py` holds the row to being the last one `build` adds (the
+  first on screen — the layout is bottom-up), unconditional, `emptyLabel` when empty, the pick
+  routed to `redirectSpawn` and `commit`'s hold; `--self-test` moves it, hides it and drops the
+  hold, and all three are caught.
+
+Not tested live: the app was not restarted (restarts go through `./relay-restart.sh`), so the
+hover, the click and the delivery were not driven on the running relay.

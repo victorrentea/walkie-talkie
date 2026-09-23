@@ -2,6 +2,7 @@
 paths:
   - "Sources/WalkieTalkie/SpawnTerminal.swift"
   - "Sources/WalkieTalkie/SpawnFolderMenu.swift"
+  - "Sources/WalkieTalkie/ActiveTerminals.swift"
   - "Sources/WalkieTalkie/ProjectList.swift"
   - "helpers/recent_projects.py"
 ---
@@ -119,6 +120,39 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `$HOME` on a failed `cd`, the one destination nobody meant.
   → journal: *The folder menu (2026-09-04)*
 
+## Active Terminals — the first row (2026-09-23)
+
+Victor: *"when I open a new terminal, I want the first option to be a menu that says 'Recent', or
+'Active Terminals', and then when I hover over it, a submenu opens that lets me bind this prompt
+to that terminal."* It **replaces** the morning's third half (*Or send to an open terminal*, five
+recently bound terminals under the folders, `RebindHistory.openTerminals` — deleted).
+
+- **First row, always drawn.** `Active Terminals ›`, a line, then `Start Claude in…` and the
+  folders. With nothing running it reads `Active Terminals — none`, dimmed, no chevron — never
+  hidden, so the folders do not move between openings. `build` is bottom-up, so *first* means
+  *added last*; `evals/test_active_terminals.py` holds that, and that it is unconditional.
+- **Found by looking** (`TerminalBinding.activeAgentSessions`): every Terminal.app tab whose tty
+  has a process owning a fresh `~/.claude/cwd/.last-<pid>` (`publishedDirectory(ownedBy:)`).
+  `liveTitles()` + one `ps -ax` + a `stat` per pid — never one `osascript` per tab. Off the main
+  thread, **after** the menu is up (`fillActive`); the row is measured for its longer label so the
+  answer restyles it in place and the clock is not restarted.
+- **The rows are a pure function** (`ActiveTerminals.items`, `swift test`): folder alone when
+  unique; shared folder → the task from the tab title, else the tty, plus the tty when two tasks
+  match; alphabetical; the bound tty ticked `✓` (either spelling of the tty).
+- **A pick binds and the ordinary delivery sends** (`AppDelegate.redirectSpawn`). The spawn is
+  cleared **at the click** — `showBound` only drops a spawn while `listening`, and the menu still
+  answers during the settle. While the bind (`osascript`) is in flight `commit` **holds** the
+  sentence (`spawnPickInFlight`, no flash) and the pick's `showBound` releases it; the caret is
+  not latched for a pick in flight. **A pick that cannot bind puts the spawn back**
+  (`spawnAfterFailedPick`), never a hold the 10 s poll would release into the old binding. A pick
+  after `send` is refused (`spawnPending` guard), as a late folder is.
+- **The submenu is a second non-activating panel**, not an `NSMenu`, same level and
+  `sharingType = .none`; right of the menu, its first row level with *Active Terminals*, flipped
+  left and clamped at the screen edge. Hovering it suspends the fade like the menu
+  (`hoveredMain || hoveredSub`); another row entered closes it after `submenuGrace` = 0.3 s unless
+  the hand reaches it. It fades and hides with the menu.
+- **`WT_SHOOT_MENU` draws it open** with the real sessions; `WT_SHOOT_BOUND=ttysNNN` ticks one.
+
 ## Pinned + recent (`ProjectList`, `helpers/recent_projects.py`)
 
 - **The list is pinned projects, a separator, then the five most-worked repos of the last
@@ -157,14 +191,6 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   often enough) and be restarted five times in an afternoon (the age check stops five rescans).
   The menu that triggers a scan shows yesterday's answer.
   → journal: *Where the bottom half comes from*
-- **Under the folders, the five most recently bound terminals that are still open** (2026-09-23,
-  *"încă o listă cu ultimele cinci recent deschise … rebind … direct în acel pop-up"*), under a
-  line and `Or send to an open terminal`. `RebindHistory.openTerminals(live:)` — the *Rebind to…*
-  log, closed windows left out, the bound one kept (during a spawn picking it takes the sentence
-  back). Filled **after** the menu is up (`fillTerminals`, `liveTitles()` is an `osascript`) and
-  laid out below the folders, so nothing under the hand moves and the clock is not restarted. A
-  click is `AppDelegate.rebindFromMenu`: a deliberate bind mid-sentence, so `showBound` drops the
-  spawn, and the window is brought forward. No star on those rows; `WT_SHOOT_MENU` draws them.
 - **The file holds every qualifying project, not the top five.** The menu takes its five *after*
   removing the pinned ones, and a pin comes off at any moment — a file of five would make an
   unpinned project vanish until tomorrow's scan.
@@ -325,3 +351,5 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - Do not reintroduce `activate` in `SpawnTerminal`, `reversed:` in a spawn flight, or a picture on
   the send flight to an existing terminal.
 - Do not cache or offset-read in `recent_projects.py`, and do not trim its output file to five.
+- Do not hide *Active Terminals* when nothing is running, move it off the first row, or let a
+  pick's words out before its bind lands.
