@@ -356,25 +356,39 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   Measured at the desk 2026-09-23: 4/4 caret dictations (DJI 16 kHz and the built-in 48 kHz mic),
   2.3–2.6 s takes at 1.5–1.6×.
 
-## `PasteHint` — `⌘⇧P`, said once and faintly (2026-09-22)
+## `PasteHint` — `⌘⇧P`, after every delivered sentence (2026-09-22, widened 2026-09-23)
 
-Victor: *"după ce ai dat cancel la dictare sau după ce s-a încheiat o dictare la caret … să apară
-foarte transparent, încă un hint, cu tastele pe care le apăs ca să dau paste la acel prompt … și
-apoi să crească opacitatea … și apoi să dispară. Un singur puls."*
+Victor, 2026-09-22: *"după ce ai dat cancel la dictare sau după ce s-a încheiat o dictare la caret
+… să apară foarte transparent, încă un hint, cu tastele pe care le apăs ca să dau paste la acel
+prompt … și apoi să crească opacitatea … și apoi să dispară. Un singur puls."* And 2026-09-23,
+superseding it: *"indiferent prin ce mecanism am închis o dictare — că e la caret, că e bound, că
+e nou — să afișeze pentru trei secunde, cu opțiunea de 80% pentru două secunde și jumătate … Uneori
+îl plasez greșit, lasă-mă să-mi amintesc constant ce este asta."*
 
-- **Two moments, and they are the two where the words exist and may not have landed where he
-  meant**: a caret sentence at the instant its ⌘V goes out (the one delivery this app cannot read
-  back — the focus is nobody's to own), and a cancelled **prompt** (the words are still
-  `lastDictation`, and *I meant that* is often one second behind *I did not*).
+- **Every delivery, whatever the destination** (2026-09-23): the caret (`deliver`, as the ⌘V goes
+  out), a bound terminal and a new session (`commit`, after `deliverToTerminal` / `spawnClaude`),
+  a sentence held for a bind **when it is released** (it comes back through `commit`; the hold
+  itself gets nothing — it has landed nowhere yet), and Wispr Flow's dictations routed by the
+  relay (they reach `deliver` like any other, plus its two *inserted it itself* branches). And a
+  cancelled **prompt**, as before. **Superseded: *two moments only*.** That was reasoned as *the
+  caret is the one delivery the app cannot read back* — but reading a terminal back answers *did it
+  arrive*, never *was it the terminal he meant*, and he says the bound and spawned ones get misaimed
+  too; a hint shown only sometimes also cannot teach a shortcut, which is what *"constant"* asks for.
+  `commit` pulses only for a message with words in it (`pastable`), because for one without, `⌘⇧P`
+  would paste the sentence before.
 - **Never after a cancelled dictation.** There is no sentence there, so `⌘⇧P` would paste the one
   before last — the `copy_last_text` failure under its own *never reintroduce* rule, arriving by a
   new door. That case has *Recover Cancelled Dictation*, which is a different offer and already
   made in the banner.
-- **Peak 0.20, one pulse, 0.8 s up and 1.2 s down** — his number, twice, unprompted
-  (`WT_PASTE_HINT_PEAK` moves it for a run). It appears after *every* caret sentence, which is
-  dozens of times a day over the thing he is working in; at full ink that is an interruption
-  charged on every success to help with the occasional failure.
-- **Placed once, at the pointer, and it does not follow.** By the time it has faded up he may be
+- **0.80 at once, held 2.5 s, faded out over 0.5 s** — `PasteHint.peak` / `hold` / `fall`, his
+  numbers (`WT_PASTE_HINT_PEAK` moves the opacity for a run). **Superseded: peak 0.20, 0.8 s up,
+  1.2 s down**, on the argument that a hint shown dozens of times a day had to sit beneath notice.
+  A mark beneath notice is a mark nobody reads, and a reminder nobody reads reminds nobody; at three
+  seconds, click-through and unmoving, it is still not a thing to decide about. No fade-in: the
+  2.5 s is the stretch it is legible.
+- **A second showing restarts the first**, keyed by a generation counter so the earlier fade cannot
+  order out the window the later one put up.
+- **Placed once, at the pointer, and it does not follow.** While it is up he may be
   reaching for the keys, and a hint that walks away as he moves is the single dotted arrow
   `DropArrow` threw out — a thing to look at rather than a thing to notice. Above the pointer
   instead when there is no room below, because a box clamped to the screen edge points at nothing.

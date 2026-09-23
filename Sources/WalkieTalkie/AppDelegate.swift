@@ -77,11 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pulseze în același ritm al discuției"*.
     private let caretHalo = CaretHalo()
 
-    /// **`⌘⇧P`, said once and faintly at the two moments it is the answer** —
-    /// see `PasteHint`. A caret sentence that has just been pasted somewhere he
-    /// did not mean, and a prompt he has just cancelled, are the whole of its
-    /// vocabulary; a cancelled *dictation* is deliberately not one of them,
-    /// because there the key would paste the sentence before last.
+    /// **`⌘⇧P`, shown for three seconds after every delivered sentence** — see
+    /// `PasteHint`. Until 2026-09-23 it was faint and said only after a caret
+    /// sentence and a cancelled prompt; now it follows every delivery (caret,
+    /// bound terminal, spawn, a held sentence's release, Wispr's routed ones),
+    /// because *"uneori îl plasez greșit"* is true of every destination. A
+    /// cancelled prompt keeps it; a cancelled *dictation* is still not one of
+    /// them, because there the key would paste the sentence before last.
     private let pasteHint = PasteHint()
 
     /// Keeps every dictation's **recording** beside the model's reading of it,
@@ -2099,6 +2101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // came from nowhere.
                     self.recordDelivery(via: "test", kind: .route, to: "caret")
                     self.pasteText(line)
+                    // As the spoken caret path does, so the desk sees it too.
+                    self.pasteHint.pulse(reason: "a caret sentence has just landed (test)")
                 }
                 return
             }
@@ -2960,6 +2964,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endSettling(reason: "\(source.name) inserted it")
             clearSpawn()
             abandonDictation("the source delivered it itself")
+            // Landed all the same, and wherever the focus was — which is the
+            // likeliest place of all to be the wrong one (2026-09-23).
+            pasteHint.pulse(reason: "\(source.name) inserted a sentence itself")
             return
         }
         // **Inserted where the focus was, by a route the tap never saw**
@@ -2973,6 +2980,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 endSettling(reason: "\(source.name) inserted it at the caret, with no ⌘V")
                 clearSpawn()
                 abandonDictation("the source delivered it itself")
+                pasteHint.pulse(reason: "\(source.name) inserted a caret sentence itself")
                 return
             }
             Log.info("⚠️ \(source.name) inserted the words at the focus on its own — routing them to the terminal as well; the copy at the focus stays")
@@ -3014,11 +3022,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setSpawnDestination(nil)
             overlay.clearSelection()
             pasteText(line, to: result.focusPid)
-            // **The one delivery this app makes that it cannot check.** A
-            // terminal's words are read back; a caret's go wherever the focus
-            // was, and the focus is the one thing here nobody owns. So the key
-            // that says it again is offered at the instant the ⌘V goes out —
-            // see `PasteHint` for why it is offered at a fifth of an opacity.
+            // **The key that says it again, at the instant the ⌘V goes out.**
+            // Until 2026-09-23 this was the only delivery that got it, as the
+            // one this app cannot check; now every delivery does (`commit` for
+            // the terminal and the spawn) — see `PasteHint`.
             pasteHint.pulse(reason: "a caret sentence has just landed")
             return
         }
@@ -4436,9 +4443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             atCaret: atCaret,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **A hint about the last sentence has nothing to say over this one.**
-        // The pulse is under two seconds, so this fires rarely — and when it
-        // does (a ⌘⌃D straight after a caret paste) the ring is going up at the
-        // same pointer the hint is hanging under.
+        // The showing is three seconds (`PasteHint.hold` + `fall`), so this
+        // fires only when he starts again straight after a delivery — and then
+        // the ring is going up at the same pointer the hint is hanging under.
         if ringUp { pasteHint.hide() }
         // **The music pauses for every dictation, and so reads `listening`, not
         // `live`.** It hung off `live` until 2026-09-03, on the argument that an
@@ -7642,9 +7649,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // what the Message Log's Copy puts on the clipboard, via the outbox's
         // `line`) is byte for byte what the session received.
         let line = Self.terminalLine(m)
+        // Also what decides the `⌘⇧P` hint below: a hint offered for a message
+        // with no words would paste the sentence before it.
+        var pastable = false
         if m.kind == "dictation", let text = m.text?.trimmingCharacters(in: .whitespacesAndNewlines),
            !text.isEmpty {
             lastDictation = line
+            pastable = true
         }
         // **Nothing is written before there is somewhere to write it to.** A
         // dictation spoken with nothing bound goes to `awaitingBind` and comes
@@ -7694,8 +7705,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     app: m.app, elements: m.elements.map { $0.json(since: m.startedAt) },
                     line: line, delivery: delivery)
         guard m.kind != "session_end" else { return }
-        guard !m.spawn else { return spawnClaude(m) }
-        deliverToTerminal(m)
+        if m.spawn { spawnClaude(m) } else { deliverToTerminal(m) }
+        // **Every sentence that leaves gets the `⌘⇧P` reminder** (2026-09-23) —
+        // a bound terminal, a new session, a sentence released by the bind it
+        // was held for, Wispr's own routed through here. Victor: *"indiferent
+        // prin ce mecanism am închis o dictare … uneori îl plasez greșit"*. A
+        // held sentence returned above and gets it when it is released, since
+        // until then it has landed nowhere to be wrong about. Hopped to main
+        // because this is reached from the quit path too.
+        if pastable {
+            DispatchQueue.main.async { [weak self] in
+                self?.pasteHint.pulse(reason: m.spawn ? "a sentence went to a new session"
+                                                      : "a sentence went to the bound terminal")
+            }
+        }
     }
 
     // MARK: - Said now, bound later
@@ -7882,7 +7905,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Cancelled is not lost: the words are still `lastDictation`, and
             // the difference between *I meant that* and *I did not* is often
             // one second wide. The picks went back in the queue above for the
-            // same reason.
+            // same reason. The same three-second showing every delivery gets
+            // since 2026-09-23.
             pasteHint.pulse(reason: "a prompt was cancelled")
             return
         }

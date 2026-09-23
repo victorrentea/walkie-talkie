@@ -1,48 +1,67 @@
 import AppKit
 
-/// **One faint pulse under the pointer, saying which keys bring the sentence
-/// back** — `⌘⇧P`.
+/// **A reminder under the pointer, after every sentence, of which keys bring
+/// it back** — `⌘⇧P`.
 ///
-/// Victor's ask, 2026-09-22: *"după ce ai dat cancel la dictare sau după ce s-a
-/// încheiat o dictare la caret … ideea că paste-ul poate [se] pierde … să apară
-/// foarte transparent, încă un hint, cu tastele pe care le apăs ca să dau paste
-/// la acel prompt. Și cumva să apară foarte faint, și apoi să crească
+/// Victor's first ask, 2026-09-22: *"după ce ai dat cancel la dictare sau după
+/// ce s-a încheiat o dictare la caret … ideea că paste-ul poate [se] pierde …
+/// să apară foarte transparent, încă un hint, cu tastele pe care le apăs ca să
+/// dau paste la acel prompt. Și cumva să apară foarte faint, și apoi să crească
 /// opacitatea … și apoi să dispară. Un singur puls de la transparent la mai
 /// opac și apoi din nou transparent."*
 ///
-/// ## Why it exists at exactly these two moments
+/// And the one that supersedes it, 2026-09-23: *"indiferent prin ce mecanism am
+/// închis o dictare — că e la caret, că e bound, că e nou — să afișeze pentru
+/// trei secunde, cu opțiunea de 80% pentru două secunde și jumătate, scurtătura
+/// cu care pot să fac paste la ultimul prompt … Uneori îl plasez greșit, lasă-mă
+/// să-mi amintesc constant ce este asta."*
 ///
-/// `⌘⇧P` has been in the app since the day the clipboard stopped being restored
-/// after a caret paste, and it is the one gesture in it that is *only* ever
-/// wanted after something went slightly wrong: the ⌘V landed in the window that
-/// had the focus rather than the one he meant, or the panel's Cancel threw a
-/// sentence away he then wished he had. Both are moments of mild alarm, and a
-/// shortcut recalled at leisure is no use at a moment of mild alarm — which is
-/// why it has lived in a menu two clicks away and been forgotten.
+/// ## After every delivered sentence, whatever the destination (2026-09-23)
 ///
-/// So it is said where the loss happens, at the instant it happens, and nowhere
-/// else. It is **not** offered after a cancelled *dictation* (the ✕ mid-flight):
-/// that sentence never became words, so `⌘⇧P` there would paste the *previous*
-/// one — the exact failure `copy_last_text` is under a standing *never
-/// reintroduce* rule for. What that case has is *Recover Cancelled Dictation*,
-/// which is a different offer and already made in the banner.
+/// `⌘⇧P` is the one gesture in the app that is *only* ever wanted after
+/// something went slightly wrong: the words landed in the window that had the
+/// focus rather than the one he meant, went to the bound terminal while he
+/// meant another, or the panel's Cancel threw away a sentence he then wished
+/// he had. A shortcut recalled at leisure is no use at a moment of mild alarm —
+/// which is why it lived in a menu two clicks away and was forgotten.
 ///
-/// ## Why it is nearly invisible, and why that is the point
+/// On 2026-09-22 that reasoning put the hint at exactly two moments: a caret
+/// sentence, as the one delivery this app cannot read back, and a cancelled
+/// prompt. **That is superseded.** A terminal delivery *is* read back — but
+/// only for *did it arrive*, never for *was that the terminal he meant*, which
+/// only he can answer; *"uneori îl plasez greșit"* is him saying the bound and
+/// spawned destinations get misaimed too. And a hint that appears only
+/// sometimes cannot teach a shortcut — *"lasă-mă să-mi amintesc constant"* asks
+/// for the repetition itself. So it follows **every** delivery: the caret, a
+/// bound terminal, a new session, a sentence released by the bind it was held
+/// for, and Wispr Flow's own dictations routed by the relay. The cancelled
+/// prompt keeps its showing. A sentence held for a bind gets its hint when it
+/// is **delivered**, not when it is parked — until then it has landed nowhere
+/// it could be wrong about.
 ///
-/// He asked for `10`–`20%`, twice, unprompted — and the ceiling here is his
-/// number rather than a designer's. A hint that appears after *every* caret
-/// sentence is a hint that appears dozens of times a day over the thing he is
-/// working in; at full ink that is an interruption charged on every success in
-/// order to help with the occasional failure. At a fifth of full ink it is
-/// visible to a glance that goes looking and beneath notice to one that does
-/// not, which is the only setting at which something can be said this often.
+/// It is **still not** offered after a cancelled *dictation* (the ✕
+/// mid-flight): that sentence never became words, so `⌘⇧P` there would paste
+/// the *previous* one — the exact failure `copy_last_text` is under a standing
+/// *never reintroduce* rule for. What that case has is *Recover Cancelled
+/// Dictation*, which is a different offer and already made in the banner.
 ///
-/// **One pulse, and then it is gone for good** (*"un singur puls"*). Nothing
-/// here repeats, breathes or waits to be dismissed: a mark that lingers is one
-/// more thing on screen to decide about.
+/// ## Plainly visible, and why the fifth of an opacity went (2026-09-23)
 ///
-/// `WT_PASTE_HINT_PEAK` moves the ceiling for a run, because the one number in
-/// here that is a matter of taste is the one that cannot be judged from code.
+/// It was `0.20` at its peak, 0.8 s up and 1.2 s down — his number from
+/// 2026-09-22 (*"10–20%"*), on the argument that a hint repeated dozens of
+/// times a day over his work had to sit beneath notice or become an
+/// interruption charged on every success. **Superseded by his own number**:
+/// 80%, held 2.5 s, gone by 3 s. A mark beneath notice is a mark nobody reads,
+/// and a reminder nobody reads reminds nobody. At 80% it is read at a glance;
+/// at three seconds, beside the pointer, unmoving and click-through, it is still
+/// not a thing he has to decide about.
+///
+/// **One showing, then gone for good.** Nothing here repeats, breathes or waits
+/// to be dismissed. It arrives already at `peak` rather than fading up: the
+/// 2.5 s he asked for is the stretch it is *legible*, and a rise would spend
+/// the start of it too faint to read.
+///
+/// `WT_PASTE_HINT_PEAK` still moves the opacity for a run.
 ///
 /// ## A window of its own
 ///
@@ -53,27 +72,29 @@ import AppKit
 /// what it has to say.
 ///
 /// It is placed **once**, at the pointer where it stood when the sentence
-/// landed, and does not follow: by the time it has faded up he may well be
-/// reaching for the keys, and a hint that walks away from the cursor as he
+/// landed, and does not follow: while it is up he may well be reaching for the
+/// keys, and a hint that walks away from the cursor as he
 /// moves is the single dotted arrow `DropArrow` threw out — a thing to look at
 /// rather than a thing to notice.
 final class PasteHint {
 
-    /// **The most opaque this ever gets** — Victor's *"până la [zece] la sută …
-    /// până la [două]zeci la sută"*, taken at the top of the range he named
-    /// because the bottom of it is invisible over a photograph.
+    /// **How opaque it is while it is up** — Victor's *"80%"*, 2026-09-23. It
+    /// was 0.20 until then (*"până la [două]zeci la sută"*); see above for why
+    /// that went.
     static let peak: CGFloat = {
         guard let raw = ProcessInfo.processInfo.environment["WT_PASTE_HINT_PEAK"],
-              let value = Double(raw), value > 0, value <= 1 else { return 0.20 }
+              let value = Double(raw), value > 0, value <= 1 else { return 0.80 }
         return CGFloat(value)
     }()
 
-    /// Up, then down, and nothing in between: the pause is what would make it a
-    /// notice rather than a breath. Together they are the two seconds he asked
-    /// for, split so the fade out is the longer half — an arrival wants to be
-    /// noticed, a departure does not.
-    private static let rise: TimeInterval = 0.8
-    private static let fall: TimeInterval = 1.2
+    /// **Held at `peak` for this long** from the instant it appears — his
+    /// *"două secunde și jumătate"*.
+    static let hold: TimeInterval = 2.5
+
+    /// **Then faded out over this**, so the whole showing is `hold + fall`, his
+    /// *"trei secunde"*. A fade rather than a cut, so its going does not read
+    /// as an event of its own.
+    static let fall: TimeInterval = 0.5
 
     /// How far below the pointer's hot spot the box's top edge sits. Clear of
     /// the macOS arrow cursor, whose body hangs below the hot spot, and clear of
@@ -88,11 +109,15 @@ final class PasteHint {
     private static let keys = "⌘⇧P"
 
     private var panel: RelayPanel?
-    /// A pulse is in flight. A second one restarts rather than overlapping: two
-    /// animations racing on one `alphaValue` is a flicker, and the case that
-    /// produces it — a cancel immediately after a paste — is one where only the
-    /// later reason is still true.
+    /// A showing is in flight. A second one restarts rather than overlapping:
+    /// two timers racing on one `alphaValue` is a flicker, and the case that
+    /// produces it — a cancel immediately after a delivery — is one where only
+    /// the later reason is still true.
     private var pulsing = false
+    /// Which showing the pending fade and its completion belong to. Bumped by
+    /// every `pulse` and `hide`, so a fade scheduled by an earlier showing finds
+    /// itself stale and does nothing to the window a later one has put up.
+    private var generation = 0
 
     /// What the window is actually doing, beside what the flag claims — the
     /// reading `DropArrow.report` exists for, and answered in
@@ -100,46 +125,50 @@ final class PasteHint {
     var report: [String: Any] {
         ["visible": panel?.isVisible ?? false,
          "alpha": Double(panel?.alphaValue ?? 0),
-         "pulsing": pulsing, "peak": Double(Self.peak)]
+         "pulsing": pulsing, "peak": Double(Self.peak),
+         "hold": Self.hold, "fall": Self.fall]
     }
 
-    /// **Say it once, under the pointer, and be gone.** `reason` is for the log
-    /// only — the two callers are far apart and *why is this on screen* is not
-    /// a question the picture can answer.
+    /// **Say it once, under the pointer, and be gone** — `peak` at once, for
+    /// `hold`, then faded out over `fall`. `reason` is for the log only: the
+    /// callers are far apart and *why is this on screen* is not a question the
+    /// picture can answer.
     func pulse(reason: String) {
         let p = panel ?? makePanel()
         p.setFrameOrigin(Self.origin(for: p.frame.size))
         Log.info("⌨️ paste hint — \(reason)")
-        // Overrule anything still running: the animator owns `alphaValue` until
-        // it is told otherwise, and `pulsing` going down is what stops the old
-        // fade's completion handler ordering out a window this call has just put
-        // back up.
-        pulsing = false
-        p.alphaValue = 0
+        generation += 1
+        let mine = generation
+        // Overrule anything still running: a zero-length group takes
+        // `alphaValue` back from an animator mid-fade, and the new generation is
+        // what stops the old fade's completion ordering out a window this call
+        // has just put back up.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            p.animator().alphaValue = Self.peak
+        }
+        p.alphaValue = Self.peak
         if !p.isVisible { p.orderFrontRegardless() }
         pulsing = true
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = Self.rise
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            p.animator().alphaValue = Self.peak
-        }, completionHandler: { [weak self] in
-            guard let self, self.pulsing else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hold) { [weak self] in
+            guard let self, self.generation == mine else { return }
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = Self.fall
                 context.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 p.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
-                guard let self, self.pulsing else { return }
+                guard let self, self.generation == mine else { return }
                 self.pulsing = false
                 p.orderOut(nil)
             })
-        })
+        }
     }
 
     /// The hard stop — the app is going away, or a new dictation has started and
     /// the hint is about the last one. A cut rather than a fade: what replaces
     /// it is the ring going up, which is its own event.
     func hide() {
+        generation += 1
         pulsing = false
         panel?.orderOut(nil)
         panel?.alphaValue = 0
@@ -185,12 +214,12 @@ final class PasteHint {
     /// **Draw it onto a dark ground and a light one, and quit** —
     /// `WT_SHOOT_HINT=/tmp/hint.png`, `CaretHalo.shoot`'s route and its reason:
     /// the panel is `sharingType = .none`, so no screen capture can contain it,
-    /// and *is it there* is not the question being asked of a hint whose whole
-    /// design is a number between nothing and not much.
+    /// and *how does it read over his work* is the question being asked of a
+    /// hint whose design is mostly one opacity.
     ///
-    /// **Three columns**: the peak he asked for, over each ground, and then the
-    /// same drawing at full ink — which is the only column in which the shape
-    /// itself can be judged at all.
+    /// **Two columns**: `peak` — the 80% it stands at for 2.5 s — over each
+    /// ground, and then the same drawing at full ink, which is where the shape
+    /// itself is judged.
     static func shoot(to path: String) {
         let view = KeycapView(keys: keys)
         let cell = view.intrinsicContentSize
@@ -238,10 +267,11 @@ final class PasteHint {
 /// Drawn rather than set in a label for `Glyphs`' standing reason — these rows
 /// carry a halo, in which an inline glyph turns every other character
 /// transparent — and because the one thing this has to survive is being drawn
-/// at a fifth of an opacity over an unknown background. **White ink with a dark
-/// shadow under it**, the chip's own answer: the ink carries it over a terminal,
-/// the shadow carries it over a page, and at 20% both fade together so neither
-/// can win over the other and leave a smear.
+/// through a window alpha over an unknown background (a fifth until
+/// 2026-09-23, 80% since). **White ink with a dark shadow under it**, the
+/// chip's own answer: the ink carries it over a terminal, the shadow carries it
+/// over a page, and at any alpha both fade together so neither can win over the
+/// other and leave a smear.
 final class KeycapView: NSView {
 
     private let text: NSAttributedString
