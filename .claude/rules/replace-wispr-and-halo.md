@@ -863,3 +863,21 @@ closes. Between the two is the whole transcription — the stretch in which he i
 - **Do not breathe the ring on a timer.** A ring breathing on a clock proves a clock is running,
   the substitution that took the beacon's own free-running blink out. → journal: *It is the beacon now, and it breathes on his voice (2026-09-11)*
 - **Do not post a context shot or a ⌘C probe in Replace Wispr.** → journal: *Replace Wispr: the relay as a way to type*
+
+## The voice in the F7/F9 preview, and the voice rows (2026-09-23)
+
+- **The preview listens to the microphone** (`CaretHalo.previewMic`, metered only — `startMetering`,
+  nothing written), opened and closed on its own queue; the bundled clip stands in until it opens
+  or if it will not. It was the clip alone, played silently — an effect moving to a voice nobody
+  in the room could hear. Victor: *"sa iei in seama si vocea, exact ca atunci cand e live dictarea"*.
+- **Fairy dust and Liquid cursor answer the voice the same way**: the louder, the more is
+  sprinkled round the pointer (the page's `D.acc`, the glue's `voice_dust`). Both get two rows on
+  top of the tuner panel: *Voice filter* (the one `HaloVoice` preference the menu row also writes)
+  and *Voice threshold* (0…0.5, default 0.1, saved as `voiceThreshold.fairyDust` /
+  `voiceThreshold.liquidCursor`): below it nothing, above it re-stretched to 0…1 over `0.6 − t`,
+  so a lower threshold is both earlier and stronger. For Fairy dust the filter is run by the page
+  host's own `VoicePrep` over the fresh part of each feed (the windows overlap; the chain is
+  stateful).
+- **`HaloVoice` only reaches what is fed audio.** The Reverse tunnel at the end of a dictation
+  is fed the sentence's replay (`rewindWindow`), so a filter shows there only as much as the
+  preset's `audioGain` lets it (0.55 → 0.8 the same evening).

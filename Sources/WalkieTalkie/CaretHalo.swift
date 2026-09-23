@@ -1077,11 +1077,22 @@ final class CaretHalo {
 
     /// **A few seconds of the ring, on his own voice, with no dictation** —
     /// what F7/F9 and `POST /test/halo` show after a change (Victor: *"ca să
-    /// văd ce aleg"*). The clip's samples stand in for the meter for the
+    /// văd ce aleg"*). The meter's samples stand in for the dictation's for the
     /// length of the preview and the app's closures are put back after; a
     /// real dictation opening meanwhile takes the ring over (`live` is
     /// already true, `setActive` is a no-op) and the preview's end is
     /// ignored (`previewGeneration`). Nothing is played aloud.
+    ///
+    /// **The microphone, live, since 2026-09-23** (Victor: *"la efectul dust din
+    /// preview f7/f9 sa iei in seama si vocea, exact ca atunci cand e live
+    /// dictarea"*). It was a bundled clip played silently, so the effect moved to
+    /// a voice nobody could hear and ignored the one in the room — no way to
+    /// judge a *Voice threshold* by talking at it. `previewMic` is metered only
+    /// (`startMetering`: nothing written, nothing kept), opened and closed off
+    /// the main thread like every microphone here; until it is open, and if it
+    /// will not open, the clip stands in.
+    var previewMic: MicRecorder?
+    private static let previewMicQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.preview-mic")
     private var previewGeneration = 0
     private var savedClosures: (samples: (() -> [Float]?)?, level: (() -> Float)?, quiet: (() -> TimeInterval)?)?
     func preview(seconds: TimeInterval) {
@@ -1089,7 +1100,16 @@ final class CaretHalo {
         previewGeneration &+= 1
         let generation = previewGeneration
         if savedClosures == nil { savedClosures = (samples, level, quietSeconds) }
-        if let voice = ClipVoice.load() {
+        if let mic = previewMic {
+            let clip = ClipVoice.load()
+            Self.previewMicQueue.async {
+                guard !mic.isRecording else { return }
+                if let why = mic.startMetering() { Log.error("◯ halo preview: no microphone — \(why); the clip instead") }
+            }
+            samples = { mic.isRecording ? mic.recentSamples : clip?.samples() }
+            level = { mic.isRecording ? mic.level : clip?.level ?? 0 }
+            quietSeconds = { mic.isRecording ? mic.quietSeconds : clip?.quietSeconds ?? 0 }
+        } else if let voice = ClipVoice.load() {
             samples = { voice.samples() }; level = { voice.level }; quietSeconds = { voice.quietSeconds }
         } else {
             let voice = DemoVoice()
@@ -1098,7 +1118,7 @@ final class CaretHalo {
         }
         if !live { setActive(true, atCaret: false, opening: .fromPointer) }
         FluidTuner.shared.previewing = true
-        Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on the clip")
+        Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on \(previewMic != nil ? "the microphone" : "the clip")")
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             guard let self = self, self.previewGeneration == generation else { return }
             self.setActive(false)
@@ -1107,6 +1127,7 @@ final class CaretHalo {
             self.savedClosures = nil
             self.previewGeneration = 0
             FluidTuner.shared.previewing = false
+            if let mic = self.previewMic { Self.previewMicQueue.async { if mic.isRecording { mic.stopMetering() } } }
         }
     }
 

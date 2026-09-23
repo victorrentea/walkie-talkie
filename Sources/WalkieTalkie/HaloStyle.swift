@@ -442,7 +442,9 @@ enum HaloStyle: String, CaseIterable {
                            return Preset(number: 7, name: "Geiss - 3 layers (Tunnel Mix)", scale: 0.647 * 0.7 * 0.7,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0, gain: 3.2, rot: 1.0,
                                          fadeStart: 0.55, pinCenter: true,
-                                         hole: 0.22, peak: 0.80, audioGain: 0.55, trail: 0.01, lag: 0,
+                                         // audioGain 0,55 → 0,8 (Victor, 2026-09-23: *"poate vrei sa
+                                         // maresti sensibilitatea tunelului"*)
+                                         hole: 0.22, peak: 0.80, audioGain: 0.8, trail: 0.01, lag: 0,
                                          nativeOnly: true, invert: 0.9,
                                          warmup: TimeInterval(ProcessInfo.processInfo.environment["WT_REWIND_WARMUP"] ?? "") ?? 0.6)
         // **Cauldron needs `gain: 6` to be seen at all** (2026-09-21). It came
@@ -623,7 +625,10 @@ enum HaloStyle: String, CaseIterable {
     /// sigil"*). Built and drawable, just not offered — the same standing as
     /// Snowflake.
     /// And Fluid (*"delete fluid"*).
-    var isOffered: Bool { self != .milkdrop20Fluid && self != .milkdrop179 && self != .milkdrop213 && self != .fairyDust && self != .fluidCursor && self != .milkdrop20Trail && self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
+    /// **Fairy dust came back the same evening** (*"la efectul dust din preview
+    /// f7/f9 sa iei in seama si vocea"*): asked for in the preview, with the
+    /// voice rows on the tuner, it is on the list again.
+    var isOffered: Bool { self != .milkdrop20Fluid && self != .milkdrop179 && self != .milkdrop213 && self != .fluidCursor && self != .milkdrop20Trail && self != .milkdrop103 && self != .milkdrop85 && self != .waveRing && self != .twoBalls }
     static var offered: [HaloStyle] { allCases.filter { $0.isOffered } }
 
     /// A page effect drawn on an opaque canvas the page keys to alpha in WebGL.

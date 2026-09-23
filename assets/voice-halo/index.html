@@ -374,6 +374,7 @@ const peak   = new Float32Array(NB).fill(60);
 const floorA = new Float32Array(NB).fill(6);
 const band   = new Float32Array(NB);
 let levelNow = 0;                    // cât de tare se vorbește acum, 0…1
+let voiceThreshold = 0.1;            // pragul vocii pentru Fairy dust (`halo.voice`), 0…0.5
 function updateBands() {
   let sum = 0;
   for (let i = 0; i < NB; i++) {
@@ -1062,8 +1063,12 @@ const FORMULAS = [
         for (let i = 1; i <= n; i++) emit(D.lx + dx * i / n, D.ly + dy * i / n);
       }
       D.lx = cx; D.ly = cy;
-      // vocea: până la ~6 particule pe cadru de 60 Hz la voce plină
-      D.acc += levelNow * 6 * dtF;
+      // vocea: până la ~6 particule pe cadru de 60 Hz la voce plină. **Pragul**
+      // (Victor, 2026-09-23 — slider-ul *Voice threshold* din tuner, `halo.voice`):
+      // sub el vocea nu presară nimic, peste el e întinsă din nou pe 0…1, deci un
+      // prag mai mic înseamnă și că se stârnește mai ușor, nu doar mai devreme.
+      const lv = Math.min(1, Math.max(0, (levelNow - voiceThreshold) / Math.max(0.05, 0.6 - voiceThreshold)));
+      D.acc += lv * 6 * dtF;
       while (D.acc >= 1) { D.acc -= 1; emit(cx + (Math.random() - 0.5) * 24, cy + (Math.random() - 0.5) * 24); }
       fullSize();
       fctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1676,6 +1681,7 @@ if (EMBED) {
   window.halo = {
     pick(i) { pick(i); return FORMULAS[i] ? FORMULAS[i].name : 'no such effect: ' + i; },
     center(x, y) { embedCX = x; embedCY = y; },
+    voice(t) { voiceThreshold = t; },
     audio(b64) { emuAudio(b64); },
     start() { calls.start++; clearTrail(); lastFrameAt = 0; start(); },
     stop() { running = false; },

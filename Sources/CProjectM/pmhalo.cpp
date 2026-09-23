@@ -245,6 +245,7 @@ struct Look {
     bool legacy = false;                           // the 2017 solver: per-frame fade factors, its vorticity
     float velFrame = 0.f, dyeFrame = 0.f;          // legacy: fade factor per 60 Hz frame
     bool puffs = false;                            // the voice blows smoke out of the pointer
+    bool dust = false;                             // the voice sprinkles paint round the pointer
 };
 // Cursify's constants (above). dt = the frame's time, as Pavel's loop does.
 const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 1.f, 1.f, 0, 0.15f, 20, true };
@@ -257,7 +258,10 @@ const Look kCursify = { 3.f, 0.1f, 2.f, 3.5f, 6000.f, 0.2f / 100.f, true, true, 
 // 0.010 s per 60 Hz frame, i.e. 0.6 of real time: at 30 fps, 0.02.
 // Their `drift` (ambient splats at random places) and the 16 opening splats are
 // left out: on a desktop overlay they would be paint appearing away from the pointer.
-const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f };
+// **Plus the voice, the way Fairy dust has it** (Victor, the same evening: *"vreau
+// vocea si la liquid cursor (in acelasi stil ca la dust)"*) — see `voice_dust`.
+const Look kLiquid = { 20.f, 0.8f, 0.55f, 0.72f, 2200.f, 0.24f / 100.f, false, false, 0.72f, 0.6f, 1, 0.15f,
+                       20, false, false, false, 0.3f, 0.6f, 0.7f, 1.f, false, 0.f, 0.f, false, true };
 // **Mode 5: ink** (mkmlman.github.io/ink, Victor 2026-09-23: *"poti si asta?"*) —
 // Pavel's simulation whole, bloom and sunrays included, at the values its dial
 // panel writes over `config` on load (dials.js `def`): radius 0.40, force 12000,
@@ -329,6 +333,9 @@ struct pmh {
     // puff in progress (a few frames of one little gesture)
     float voicePeak = 0, level = 0, levelSlow = 0, levelCeil = 0.02f, puffCool = 0, puffAngle = 0;
     int puffLeft = 0; float puffDx = 0, puffDy = 0, puffStrength = 0, puffAlong = 0;
+    // the voice's dust: splats owed and not yet thrown, and how loud a syllable
+    // has to be, against the recent loudest, before it throws any
+    float dustAcc = 0, voiceThreshold = 0.1f;
     // the pure fluid's knobs, live — seeded from the mode's constants, moved by
     // the on-screen sliders (`pmh_set_fluid_param`)
     Look look = kCursify;
@@ -516,7 +523,7 @@ int pmh_load_preset(pmh* h, const char* milk, char* err, int err_len) {
 
 void pmh_add_pcm(pmh* h, const float* samples, unsigned count, int rate) {
     if (!count) return;
-    if (h->look.puffs) {
+    if (h->look.puffs || h->look.dust) {
         double sum = 0; for (unsigned i = 0; i < count; ++i) sum += (double)samples[i] * samples[i];
         h->voicePeak = std::max(h->voicePeak, (float)std::sqrt(sum / count));
     }
@@ -712,6 +719,8 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
 }
 
 void pmh_set_invert(pmh* h, float invert) { h->invert = invert; }
+
+void pmh_set_voice_threshold(pmh* h, float threshold) { h->voiceThreshold = threshold; }
 void pmh_set_zoom(pmh* h, float zoom, float fade_in) { h->zoom = std::max(0.01f, zoom); h->fadeIn = fade_in; }
 
 namespace {
@@ -826,6 +835,39 @@ void voice_puffs(pmh* h, const Look& L, float dt) {
     h->puffLeft--;
 }
 
+// **The voice sprinkles paint round the pointer** (Liquid cursor, 2026-09-23) —
+// Fairy dust's rule in fluid: the louder he speaks, the more small splats land
+// within a couple of percent of the pointer, each pushed off in a random
+// direction, so with the mouse still the effect is not an empty screen. Loudness
+// is judged against a slowly falling ceiling, like `voice_puffs`, so it works at
+// any microphone gain; `voiceThreshold` (the tuner's *Voice threshold*) is how
+// much of that ceiling a syllable must reach before it sprinkles anything —
+// lower is easier to stir.
+void voice_dust(pmh* h, const Look& L, float dt) {
+    float in = h->voicePeak; h->voicePeak = 0;
+    h->level = std::max(in, h->level * std::exp(-dt / 0.08f));
+    h->levelCeil = std::max({ h->level, 0.02f, h->levelCeil * std::exp(-dt / 6.f) });
+    const float I = h->level > 0.004f ? std::min(1.f, h->level / h->levelCeil) : 0.f;
+    const float t = h->voiceThreshold;
+    const float v = std::min(1.f, std::max(0.f, (I - t) / std::max(0.05f, 0.6f - t)));
+    if (!h->havePointer) { h->dustAcc = 0; return; }
+    // up to three splats per 60 Hz frame at full voice, Fairy dust's six halved:
+    // a splat of fluid is a much bigger thing than a star
+    h->dustAcc = std::min(6.f, h->dustAcc + v * 3.f * dt * 60.f);
+    const float aspect = (float)h->ow / h->oh;
+    auto rnd = [] { return (float)std::rand() / RAND_MAX; };
+    while (h->dustAcc >= 1.f) {
+        h->dustAcc -= 1.f;
+        const float a = rnd() * 6.2832f, r = rnd() * 0.018f;
+        const float x = h->sx / h->ow + std::cos(a) * r, y = h->sy / h->oh + std::sin(a) * r * aspect;
+        const float d = rnd() * 6.2832f, push = (0.002f + 0.006f * v) * L.force;
+        const float radius = L.radius * (0.5f + 0.8f * v);
+        splat(h, h->vel, h->vc, h->vw, h->vh, x, y, std::cos(d) * push, std::sin(d) * push, 0, radius);
+        if (L.palette == 1) { const float* c = kViolets[std::rand() % 5]; h->cr = c[0] * L.gain; h->cg = c[1] * L.gain; h->cb = c[2] * L.gain; }
+        splat(h, h->dye, h->dc, h->dw, h->dh, x, y, h->cr, h->cg, h->cb, radius);
+    }
+}
+
 IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
     const float dt = 1.f / h->fps, sdt = dt * L.dtScale;
     Surface& s = h->surf[h->cur];
@@ -869,6 +911,7 @@ IOSurfaceRef render_pure_fluid(pmh* h, const Look& L) {
         }
     }
     if (L.puffs) voice_puffs(h, L, dt);
+    if (L.dust) voice_dust(h, L, dt);
     // legacy fades are factors per 60 Hz frame: k^(dt·60) at our frame rate
     const float velMul = L.legacy ? std::pow(L.velFrame, sdt * 60.f) : 0.f;
     const float dyeMul = L.legacy ? std::pow(L.dyeFrame, sdt * 60.f) : 0.f;

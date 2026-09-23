@@ -2351,6 +2351,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `/test/dictation/start` opens no microphone — so the effect idles on
         // its own wave rather than on a stale buffer.
         caretHalo.samples = { [weak self] in self?.liveMeter?.recentSamples }
+        // The F7/F9 preview listens to the room rather than to a clip — a meter
+        // of its own, so it never touches a dictation's recorder.
+        caretHalo.previewMic = MicRecorder()
 
         // **The ring covers Wispr Flow's dictations too, since 2026-09-11.**
         // Replace Wispr is off most days, and with it off Wispr Flow is what he

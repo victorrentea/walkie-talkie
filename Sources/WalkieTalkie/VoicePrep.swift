@@ -136,7 +136,9 @@ final class VoicePrep {
     private var gain: Float = 1
     private var rmsPole: Float = 0, attack: Float = 0, release: Float = 0
 
-    private init() { configure(for: .direct, sampleRate: Double(ProjectMHalo.sampleRate)) }
+    /// `shared` is the native engine's; the page keeps one of its own for Fairy
+    /// dust, because the chain's filters carry state between chunks.
+    init() { configure(for: .direct, sampleRate: Double(ProjectMHalo.sampleRate)) }
 
     private func configure(for m: HaloVoice, sampleRate sr: Double) {
         mode = m

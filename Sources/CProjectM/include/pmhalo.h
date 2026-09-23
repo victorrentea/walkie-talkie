@@ -36,6 +36,10 @@ void pmh_set_mask(pmh* h, bool fade, float rx, float ry, float floor_a, float ga
 /// shows the engine's pixel at `invert` − `d`. 0 = off.
 void pmh_set_invert(pmh* h, float invert);
 
+/// How much of the recent loudest a syllable must reach before the voice stirs a
+/// pure fluid (Liquid cursor's dust), 0…0.5. Lower is easier to stir.
+void pmh_set_voice_threshold(pmh* h, float threshold);
+
 /// The picture's size as a fraction of the square (1 = fills it; over 1 it
 /// overflows), and a multiplier on the whole layer's opacity.
 void pmh_set_zoom(pmh* h, float zoom, float fade_in);

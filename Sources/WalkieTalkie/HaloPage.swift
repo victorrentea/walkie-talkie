@@ -36,6 +36,14 @@ final class HaloPage: NSView, HaloWebHost {
     private(set) var ready = false
     private var pendingStart = false
     private var pendingPick: HaloStyle?
+    /// **The voice chain, for Fairy dust only** (2026-09-23): the tuner's *Voice
+    /// filter* is the same `HaloVoice` the native presets hear, run over the
+    /// fresh part of each feed and kept in a rolling window of its own —
+    /// `prepped` — because the chain's filters carry state from one chunk to the
+    /// next and the feed's windows overlap. Nil for every other page effect,
+    /// which keep hearing the microphone as they always have.
+    private var voicePrep: VoicePrep?
+    private var prepped = [Float](repeating: 0, count: 1024)
     private var pendingCenter: CGPoint?
     private var readyWatchdog: Timer?
     private var failed = false
@@ -137,7 +145,11 @@ final class HaloPage: NSView, HaloWebHost {
         web.loadFileURL(parts.url!, allowingReadAccessTo: readable)
     }
     required init?(coder: NSCoder) { fatalError() }
-    deinit { web.configuration.userContentController.removeScriptMessageHandler(forName: "halo") }
+    deinit {
+        web.configuration.userContentController.removeScriptMessageHandler(forName: "halo")
+        let me = ObjectIdentifier(self)
+        DispatchQueue.main.async { FluidTuner.shared.detach(id: me) }
+    }
 
     /// `NSView` is not flipped; the page's coordinates are handed in already
     /// converted (`center`).
@@ -154,6 +166,24 @@ final class HaloPage: NSView, HaloWebHost {
             if let error = error { Log.error("◯ halo page: pick(\(i)) failed: \(error.localizedDescription)") }
             else { Log.info("◯ halo page: \(style.rawValue) → page \(i + 1) — \((result as? String) ?? "?") \(CaretHalo.sinceStyleChange)") }
         }
+        // **Fairy dust answers the tuner's voice rows** (Victor, 2026-09-23).
+        let me = ObjectIdentifier(self)
+        if style == .fairyDust {
+            voicePrep = VoicePrep()
+            setVoiceThreshold(FluidTuner.threshold("fairyDust"))
+            FluidTuner.shared.attachVoice(owner: self, title: style.title,
+                                          voice: .init(key: "fairyDust") { [weak self] t in self?.setVoiceThreshold(t) })
+        } else {
+            voicePrep = nil
+            FluidTuner.shared.detach(id: me)
+        }
+    }
+
+    /// How loud a syllable has to be before it sprinkles dust — the page's
+    /// `halo.voice(t)`, 0…0.5.
+    func setVoiceThreshold(_ t: Float) {
+        guard ready else { return }
+        web.evaluateJavaScript(String(format: "halo.voice(%.3f)", t), completionHandler: nil)
     }
 
     /// The pointer, in the page's coordinates: CSS px from the panel's
@@ -168,7 +198,15 @@ final class HaloPage: NSView, HaloWebHost {
     /// data flows one way, app → page.
     func feed(_ samples: [Float]) {
         guard ready else { return }
-        let tail = Array(samples.suffix(1024))
+        var tail = Array(samples.suffix(1024))
+        if let prep = voicePrep {
+            // Only what is new since the last feed goes through the chain (the
+            // 30 Hz timer's worth, as `ProjectMHalo.feed` takes it).
+            var fresh = Array(samples.suffix(min(samples.count, ProjectMHalo.sampleRate / 30 + 16)))
+            prep.process(&fresh)
+            prepped = Array((prepped + fresh).suffix(1024))
+            tail = prepped
+        }
         let data = tail.withUnsafeBufferPointer { Data(buffer: $0) }
         web.evaluateJavaScript("halo.audio('\(data.base64EncodedString())')", completionHandler: nil)
     }

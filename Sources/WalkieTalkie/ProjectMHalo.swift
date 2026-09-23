@@ -337,9 +337,16 @@ final class ProjectMHalo: NSView, HaloWebHost {
                 let defaults = FluidTuner.knobs.map { pmh_fluid_param(renderer, $0.id) }
                 for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
                 let title = mode == 6 ? "Smoke" : mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
+                // Liquid cursor's voice dust answers a threshold of its own
+                // (`pmh_set_voice_threshold`), saved per effect like Fairy dust's.
+                let voiceKey = mode == 4 ? "liquidCursor" : nil
+                if let key = voiceKey { pmh_set_voice_threshold(renderer, FluidTuner.threshold(key)) }
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
-                    FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults)
+                    let hook = voiceKey.map { key in
+                        FluidTuner.VoiceHook(key: key) { [weak self] t in self?.setVoiceThreshold(t) }
+                    }
+                    FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults, voice: hook)
                 }
             }
             if let p = lastPointer { pmh_set_pointer(renderer, Float(p.x * Self.renderScale), Float(p.y * Self.renderScale)) }
@@ -408,6 +415,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
     func stop() {
         stopTimer()
         if let a = activity { ProcessInfo.processInfo.endActivity(a); activity = nil }
+    }
+
+    /// The tuner's *Voice threshold* moved: into the engine before its next frame.
+    func setVoiceThreshold(_ t: Float) {
+        guard let r = renderer else { return }
+        renderQueue.async { pmh_set_voice_threshold(r, t) }
     }
 
     /// A slider moved (`FluidTuner`): into the engine before its next frame.
