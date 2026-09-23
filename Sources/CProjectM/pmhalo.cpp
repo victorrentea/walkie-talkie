@@ -337,6 +337,9 @@ struct pmh {
     // has to be, against the recent loudest, before it throws any (Smoke's puffs
     // read the same threshold)
     float dustAcc = 0, voiceThreshold = 0.1f;
+    // the room's own hiss, tracked the way `MicRecorder` tracks it: down at once,
+    // up slowly — the voice has to stand above it before it moves anything
+    float noiseFloor = -1;
     // the pure fluid's knobs, live — seeded from the mode's constants, moved by
     // the on-screen sliders (`pmh_set_fluid_param`)
     Look look = kCursify;
@@ -807,8 +810,23 @@ void apply_sunrays(pmh* h) {
 // from 0.35 s for a murmur down to 0.12 s for a shout. The loudness is judged
 // against a ceiling that falls slowly (−50 % over ~4 s), so it works whatever
 // the microphone's gain.
+//
+// **Silence is silence** (Victor, 2026-09-23: *"smoke e foarte activ chiar cu mouse
+// pe loc si liniste perfecta"*). The falling ceiling makes the level relative to
+// the loudest recent sound, and in a quiet room that sound is the hiss itself —
+// the ceiling sank to its 0.02 floor, the 0.004 bar sat inside the noise, and
+// every flicker of it cleared "1.25× the slow average". So nothing counts unless
+// it is voice by the app's own test (`MicRecorder.meter`): 9 dB over the tracked
+// noise floor and over 180/32768 absolute. → `voice_gate`
+static float voice_gate(pmh* h, float in, float dt) {
+    if (h->noiseFloor < 0 || in < h->noiseFloor) h->noiseFloor = in;
+    else h->noiseFloor += (in - h->noiseFloor) * (1.f - std::exp(-dt / 1.f));
+    return std::max(180.f / 32768.f, h->noiseFloor * 2.818f);   // 10^(9/20)
+}
+
 void voice_puffs(pmh* h, const Look& L, float dt) {
     float in = h->voicePeak; h->voicePeak = 0;
+    const float bar = voice_gate(h, in, dt);
     h->level = std::max(in, h->level * std::exp(-dt / 0.08f));
     h->levelSlow += (h->level - h->levelSlow) * (1.f - std::exp(-dt / 1.5f));
     h->levelCeil = std::max({ h->level, 0.02f, h->levelCeil * std::exp(-dt / 6.f) });
@@ -817,7 +835,7 @@ void voice_puffs(pmh* h, const Look& L, float dt) {
     // `voiceThreshold` (the tuner's *Voice threshold*, 2026-09-23) moves both bars
     // together; at its default 0.1 they are the 0.2 and 1.25× this shipped with.
     const float t = h->voiceThreshold;
-    if (h->puffLeft == 0 && h->puffCool <= 0 && h->level > 0.004f && I > 2.f * t && h->level > h->levelSlow * (1.f + 2.5f * t)) {
+    if (h->puffLeft == 0 && h->puffCool <= 0 && in > bar && I > 2.f * t && h->level > h->levelSlow * (1.f + 2.5f * t)) {
         h->puffAngle += 2.39996f + ((float)std::rand() / RAND_MAX - 0.5f) * 0.6f;
         h->puffDx = std::cos(h->puffAngle); h->puffDy = std::sin(h->puffAngle);
         h->puffStrength = 0.35f + 0.65f * I;
@@ -849,9 +867,10 @@ void voice_puffs(pmh* h, const Look& L, float dt) {
 // lower is easier to stir.
 void voice_dust(pmh* h, const Look& L, float dt) {
     float in = h->voicePeak; h->voicePeak = 0;
+    const float bar = voice_gate(h, in, dt);
     h->level = std::max(in, h->level * std::exp(-dt / 0.08f));
     h->levelCeil = std::max({ h->level, 0.02f, h->levelCeil * std::exp(-dt / 6.f) });
-    const float I = h->level > 0.004f ? std::min(1.f, h->level / h->levelCeil) : 0.f;
+    const float I = h->level > bar ? std::min(1.f, h->level / h->levelCeil) : 0.f;
     const float t = h->voiceThreshold;
     const float v = std::min(1.f, std::max(0.f, (I - t) / std::max(0.05f, 0.6f - t)));
     if (!h->havePointer) { h->dustAcc = 0; return; }
