@@ -11852,3 +11852,25 @@ and four of them in twenty minutes sat there for thirty seconds each.
 
 `transcribing-overdue` is the 46th shot in `OverlayStates.swift`; `pinTranscribeOverdue` is how a
 state defined by a stretch of elapsed time gets photographed without waiting it out.
+
+## `⌘⇧P` becomes a row of the chip (2026-09-23, afternoon)
+
+Victor, on the keycap that had followed the pointer since the morning: *"It looks like now it has a
+border around it, with a different font, which is wrong. I just want you to display yet another row
+in the mouse tooltip. Technically, it's just like, for example, transcribing Kamikaze … It should
+have the icon of the paste … the text should say 'Paste again', and then the shortcuts, just like
+any text in the tooltip."*
+
+- **`KeycapView` and its window are gone.** `PasteHint` keeps only *when* (`pulse` for `hold` = 3 s,
+  a second pulse restarts, `hide` cuts); the drawing is `RelayWindow.pasteRow` — `📋 Paste again  ⌘⇧P`.
+- **One constructor for both rows**, `installEmojiRow`, so the face (`hintFont`), the ink, the glyph
+  (`Glyphs.emoji` at `iconInk`) cannot drift between `☠️ Kamikaze` and it. Layout, height, the halo
+  on the bare chip — every line that touches a Kamikaze view has a paste twin, and
+  `evals/test_paste_row.py` checks exactly that (with a `--self-test` of four mutations).
+- **The chip's width now asks both emoji rows.** Kamikaze had never been measured into `natural` and
+  got away with it under longer rows; the paste row is often the only row, and unmeasured it is a
+  chip 0 wide.
+- **It survives typing**, like a flash: the chip fades to zero while he types, and the paste row is
+  shown right after a caret sentence — the moment he is most likely to be typing past it.
+- The window's two reasons for existing — its own alpha, the keycap outline — were the two things he
+  rejected, which is why this is a reversal and not a restyle.

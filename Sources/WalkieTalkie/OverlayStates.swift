@@ -378,6 +378,13 @@ enum OverlayStates {
                 o.flash("⚠️ Whisper unavailable — no module named mlx_whisper", duration: 60)
             },
 
+            Shot(slug: "paste-again", group: "Flashes", title: "Paste again — the keys, after every sentence",
+                 when: "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
+                 note: "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Paste again`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setPasteHint(true)
+            },
+
             Shot(slug: "flash-nothing-to-paste", group: "Flashes", title: "Flash — nothing to paste yet",
                  when: "⌘⇧P, or the menu row, before anything has been dictated this session.",
                  note: "The only thing ⌘⇧P ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
@@ -575,6 +582,7 @@ enum OverlayStates {
         o.setBound(label: nil)
         o.setWisprHearing(false)
         o.setKamikaze(false)
+        o.setPasteHint(false)
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil

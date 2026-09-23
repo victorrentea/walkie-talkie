@@ -269,6 +269,21 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let kamikazeRow = NSView()
     private let kamikazeGlyph = NSImageView()
     private let kamikazeInfo = NSTextField(labelWithString: "Kamikaze")
+    /// **`📋 Paste again ⌘⇧P`** (2026-09-23) — for three seconds after every
+    /// delivered sentence (and a cancelled prompt), the keys that bring the
+    /// last text back, whether it went out as a prompt or as a clean dictation.
+    /// `PasteHint` decides when; this is only the row.
+    ///
+    /// **An ordinary row, built exactly like `kamikazeRow`** (`installEmojiRow`,
+    /// `layoutGlyphRow`, the same halo branch). It was a window of its own that
+    /// morning — a white keycap outline round `⌘⇧P` in a 15 pt medium face —
+    /// and Victor read it as a foreign object: *"it has a border around it, with
+    /// a different font, which is wrong. I just want you to display yet another
+    /// row in the mouse tooltip … just like any text in the tooltip."*
+    /// `evals/test_paste_row.py` keeps it that way.
+    private let pasteRow = NSView()
+    private let pasteGlyph = NSImageView()
+    private let pasteInfo = NSTextField(labelWithString: "Paste again  \(PasteHint.keys)")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
@@ -1193,6 +1208,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         (panel.screen ?? NSScreen.main)?.frame.width.rounded() ?? 1440
     }
 
+    /// The app's one chip, for `PasteHint`, which `AppDelegate` builds before the
+    /// overlay exists. Weak: the chip belongs to `AppDelegate`, not to this.
+    static weak var current: RelayWindow?
+
     override init() {
         panel = RelayPanel(
             // Placeholder — `layoutContent()` sizes the panel to its content
@@ -1204,6 +1223,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         )
         root = RelayView(frame: panel.contentLayoutRect)
         super.init()
+        Self.current = self
 
         configurePanel()
         configureViews()
@@ -1370,14 +1390,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         filmRow.addSubview(filmInfo)
         filmRow.isHidden = true
         root.addSubview(filmRow)
-        kamikazeGlyph.image = Glyphs.emoji("☠️", ink: iconInk)
-        kamikazeGlyph.imageScaling = .scaleProportionallyUpOrDown
-        kamikazeInfo.font = hintFont
-        kamikazeInfo.textColor = .secondaryLabelColor
-        kamikazeRow.addSubview(kamikazeGlyph)
-        kamikazeRow.addSubview(kamikazeInfo)
-        kamikazeRow.isHidden = true
-        root.addSubview(kamikazeRow)
+        installEmojiRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, emoji: "☠️")
+        installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
 
         // Same face as every other row (see `titleFont`): it carries a CSS
         // selector, which was the argument for monospace here, and that argument
@@ -1798,6 +1812,14 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordWidth = glyphColumn + recordDotGap + ceil(recordInfo.frame.width)
         }
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
+        // The emoji rows (`☠️ Kamikaze`, `📋 Paste again ⌘⇧P`) ask for their
+        // width like the recording row does. The paste row is often the only
+        // row on the chip, and a chip measured without it is a chip 0 wide.
+        var emojiRowsWidth: CGFloat = 0
+        for (on, label) in [(kamikaze, kamikazeInfo), (pasteHint, pasteInfo)] where on {
+            label.sizeToFit()
+            emojiRowsWidth = max(emojiRowsWidth, glyphColumn + recordDotGap + ceil(label.frame.width))
+        }
         // **Written here, not with the rows below.** The row is measured into the
         // chip now, and a label measured before it is written reports the
         // previous dictation's highlight.
@@ -1863,7 +1885,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
-                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(pickWidth, selectionWidth)))))))) + pad * 2
+                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(emojiRowsWidth, max(pickWidth, selectionWidth))))))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -2030,6 +2052,16 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((kamikazeRow, recordRowHeight))
         } else {
             kamikazeRow.isHidden = true
+        }
+
+        // The paste row, the same way — see `pasteRow`.
+        if pasteHint {
+            pasteInfo.sizeToFit()
+            layoutGlyphRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, width: innerWidth)
+            pasteRow.isHidden = false
+            rows.append((pasteRow, recordRowHeight))
+        } else {
+            pasteRow.isHidden = true
         }
 
         // **The quotation, and then Chrome under it.** They were the other way
@@ -2533,6 +2565,21 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Each is now given exactly the height it needs and placed around the row's
     /// midline. Nothing is clipped, and neither half has to know anything about
     /// the other's font.
+    /// **The plain row: an emoji in the icon column and words beside it** —
+    /// `☠️ Kamikaze`, `📋 Paste again ⌘⇧P`. One constructor so the rows cannot
+    /// drift apart in face, size, ink or glyph.
+    private func installEmojiRow(_ row: NSView, glyph: NSImageView, label: NSTextField,
+                                 emoji: String) {
+        glyph.image = Glyphs.emoji(emoji, ink: iconInk)
+        glyph.imageScaling = .scaleProportionallyUpOrDown
+        label.font = hintFont
+        label.textColor = .secondaryLabelColor
+        row.addSubview(glyph)
+        row.addSubview(label)
+        row.isHidden = true
+        root.addSubview(row)
+    }
+
     private func layoutGlyphRow(_ row: NSView, glyph: NSView, label: NSTextField,
                                 width: CGFloat, height: CGFloat? = nil) {
         let h = height ?? recordRowHeight
@@ -2848,6 +2895,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         filmGlyph.wantsLayer = true
         kamikazeInfo.wantsLayer = true
         kamikazeGlyph.wantsLayer = true
+        pasteInfo.wantsLayer = true
+        pasteGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
         // it, `labelColor` is the same invisible dark grey the selection row was.
         hintLabel.wantsLayer = true
@@ -2870,6 +2919,9 @@ private let frontLabel = NSTextField(labelWithString: "")
             kamikazeInfo.shadow = Self.halo()
             kamikazeInfo.textColor = .white
             kamikazeGlyph.shadow = Self.halo()
+            pasteInfo.shadow = Self.halo()
+            pasteInfo.textColor = .white
+            pasteGlyph.shadow = Self.halo()
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
             elapsedLabel.shadow = Self.halo()
@@ -2911,6 +2963,9 @@ private let frontLabel = NSTextField(labelWithString: "")
             kamikazeInfo.shadow = nil
             kamikazeInfo.textColor = .secondaryLabelColor
             kamikazeGlyph.shadow = nil
+            pasteInfo.shadow = nil
+            pasteInfo.textColor = .secondaryLabelColor
+            pasteGlyph.shadow = nil
             engineInfo.shadow = nil
             engineInfo.textColor = .secondaryLabelColor
             elapsedLabel.shadow = nil
@@ -3547,7 +3602,9 @@ private let frontLabel = NSTextField(labelWithString: "")
         // hidden and this rule had faded the chip to nothing exactly when the
         // effect's name was on it. A flash is something said *to* him, not a
         // label about the pointer; it shows where the pointer is, drawn or not.
-        let target: CGFloat = (anchored && typing && !listening && flashMessage == nil) ? 0.0
+        // The paste row is the same kind of thing: said *to* him, for three
+        // seconds, right after a caret sentence he may already be typing past.
+        let target: CGFloat = (anchored && typing && !listening && flashMessage == nil && !pasteHint) ? 0.0
                             : (anchored ? 0.80 : 1.00)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
@@ -4021,6 +4078,16 @@ private let frontLabel = NSTextField(labelWithString: "")
         guard kamikaze != on else { return }
         kamikaze = on
         layoutContent()
+    }
+
+    /// The `📋 Paste again ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
+    private(set) var pasteHint = false
+
+    func setPasteHint(_ on: Bool) {
+        guard pasteHint != on else { return }
+        pasteHint = on
+        layoutContent()
+        refreshOpacity()
     }
 
     func setWisprHearing(_ on: Bool) {

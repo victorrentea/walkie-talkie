@@ -111,9 +111,9 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
     exit(0)
 }
 
-// The `⌘⇧P` hint on a dark ground and a light one, at the opacity it really
-// stands at (80% since 2026-09-23) and at full ink, and quit — the panel cannot
-// be captured, so this is the only way to see it. See `PasteHint.shoot`.
+// The chip's `📋 Paste again ⌘⇧P` row on a dark ground and a light one — alone,
+// and under `☠️ Kamikaze` for comparison — and quit. The chip cannot be
+// captured, so this is the only way to see it. See `PasteHint.shoot`.
 if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HINT"] {
     NSApplication.shared.setActivationPolicy(.accessory)
     PasteHint.shoot(to: out)
