@@ -1458,6 +1458,14 @@ final class HotkeyTap {
     /// cursor. Measured on 2026-09-10, seven hours after the crop that caused
     /// it, with an editor tab stuck to the pointer.
     private var areaPressPassed = false
+    /// **The ⇧-locked box is parked, waiting for its destination** — pushed in
+    /// from `CropSelectionOverlay.onAwaitingDestination` on the main thread,
+    /// read here on the tap thread.
+    var areaAwaitingDestination: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return areaAwaitingFlag }
+        set { stateLock.lock(); areaAwaitingFlag = newValue; stateLock.unlock() }
+    }
+    private var areaAwaitingFlag = false
 
     /// **How far the hand has to travel before a middle click stops being one.**
     ///
@@ -1547,6 +1555,19 @@ final class HotkeyTap {
             areaAnchor = nil
             areaCropping = false
             haloDialed = false
+            // **The source is locked and parked: this press is the destination's**
+            // (2026-09-24) — claimed on sight, no threshold, ⇧/⌘/⌥ allowed (they
+            // are the gesture now, not a spawn's modifier). Swallowed with its
+            // release: the overlay covers the screen, there is no tab under it
+            // to close.
+            if areaAwaitingDestination {
+                areaCropping = true
+                areaPressPassed = false
+                let at = event.location
+                Log.info("✂️ wheel down again — drawing where the locked box goes")
+                DispatchQueue.main.async { CropSelectionOverlay.destinationPressed(atCG: at) }
+                return true
+            }
             // **Bare, and with no chord underneath it.** ⌘ and ⌥ mean something
             // *inside* the selection — move the box, draw it from its middle —
             // but at the press they are the spawn's modifier and would be two

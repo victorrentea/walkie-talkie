@@ -1840,6 +1840,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Main, because it touches the overlay's own state; and `async`, because
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
+        CropSelectionOverlay.onAwaitingDestination = { [weak self] parked in
+            self?.hotkeys.areaAwaitingDestination = parked
+        }
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async { self?.toggleDictation() }
         }
@@ -4540,6 +4543,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The window is the same narrow one — `listening`, not the mode — so
         // outside it LinearMouse and Victor Addons go on typing Return with it.
         hotkeys.dictating = live
+        // A ⇧-locked box parked waiting for its destination belongs to this
+        // sentence; with the sentence over there is nothing left to attach it to.
+        if !live { CropSelectionOverlay.cancelIfParked() }
         // **The wider question, for the engine exclusion** — see
         // `HotkeyTap.ownDictation`. `live` is `hasDestination && listening` and
         // answers *is mouse 4 ours*; this one answers *would a second recogniser
