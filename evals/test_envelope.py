@@ -543,6 +543,67 @@ class AreaFrame(unittest.TestCase):
 
 
 @unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
+class MovedArea(unittest.TestCase):
+    """**The ⇧-drag: this box, moved to that one** (2026-09-24).
+
+    Victor: *"the old shape will remain there, locked … and then an arrow
+    should lay from the center of it to wherever the new shape … is."* One
+    clean frame, the first box cut out, and both boxes in the token and the
+    row — `POST /test/area` with a `to` box, below the overlay as `AreaFrame`.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        state = _get(BASE, "/test/state")
+        if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
+            raise unittest.SkipTest("a real dictation is in flight — not touching it")
+        target = _get(BASE, "/target")
+        cls.previous = target.get("address") if target.get("bound") else None
+        _post(BASE, "/bind", {"tty": NOWHERE})
+        # A wall clock and word timings, so the token lands in the words (the
+        # footer's key alone would not carry the corners).
+        _post(BASE, "/test/dictation/start", {"clock": True})
+        time.sleep(1)
+        cls.area = _post(BASE, "/test/area", {"x": 200, "y": 300, "w": 300, "h": 150,
+                                              "to": {"x": 700, "y": 400, "w": 200, "h": 100}})
+        assert cls.area.get("ok"), cls.area
+        time.sleep(1)
+        words = [("mută", 0.1, 0.4), (" ", 0.4, 0.5), ("asta", 0.5, 0.8), (" ", 0.8, 1.6),
+                 ("acolo", 1.6, 2.0)]
+        _post(BASE, "/test/dictation", {"text": "mută asta acolo", "words": [
+            {"text": t, "start": a, "end": b, "type": "spacing" if t == " " else "word"}
+            for t, a, b in words]})
+        for _ in range(10):
+            time.sleep(1)
+            entry = _last_line()
+            if "acolo" in (entry.get("text") or "") and "mută" in (entry.get("text") or ""):
+                cls.line = entry["line"]
+                return
+            _post(BASE, "/bind", {"tty": NOWHERE})
+        _never_arrived()
+
+    @classmethod
+    def tearDownClass(cls):
+        AreaFrame.tearDownClass.__func__(cls)
+
+    def test_the_token_carries_both_boxes(self):
+        self.assertRegex(self.line, r"📸\d+✂️\d+,\d+→\d+,\d+ moved to \d+,\d+→\d+,\d+\]")
+
+    def test_the_row_says_which_way(self):
+        row = [r for r in self.line.splitlines() if "MOVE" in r][-1]
+        self.assertIn("should go to the box", row)
+        self.assertRegex(row, r"the first box cut out at 📁/screenshot-\d+(-\d+)?\.jpg;")
+
+    def test_the_cut_out_is_the_first_box(self):
+        row = [r for r in self.line.splitlines() if "MOVE" in r][-1]
+        x1, y1, x2, y2 = (int(g) for g in re.search(r"\((\d+),(\d+)\)→\((\d+),(\d+)\)", row).groups())
+        self.assertEqual(AreaFrame._size(self.area["zoom"]), (x2 - x1, y2 - y1))
+        # The source sits left of the destination on screen, so its x is smaller.
+        to = re.search(r"should go to the box \((\d+),", row)
+        self.assertLess(x1, int(to.group(1)))
+
+
+@unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
 class FoldedFrameRows(unittest.TestCase):
     """**Three plain frames, one legend row** (2026-09-20).
 

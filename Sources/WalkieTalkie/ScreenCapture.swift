@@ -130,8 +130,14 @@ enum ScreenCapture {
     /// shutter's is, and the rectangle travels as four numbers in the name —
     /// where the cursor's position already travels, and for the same reason
     /// (nothing is drawn into the picture; see `grab`).
+    ///
+    /// **`movedTo`: the second box of a ⇧-drag** (2026-09-24) — *the thing in
+    /// `rect` should go there*. Measured into the same pixels and remembered by
+    /// path (`moveTarget(for:)`); the frame is still the one clean display and
+    /// the cut-out is still `rect`'s, because that is the thing being moved.
     static func grabArea(_ rect: NSRect, on screen: NSScreen, offset: TimeInterval?,
-                         index: Int? = nil, into folder: URL? = nil) -> Frame? {
+                         index: Int? = nil, into folder: URL? = nil,
+                         movedTo: NSRect? = nil) -> Frame? {
         let dir = folder ?? Outbox.shotsDir
         let file = dir
             .appendingPathComponent(uniqueBase(stem(offset, index), in: dir) + "-original.jpg")
@@ -161,6 +167,10 @@ enum ScreenCapture {
         // in every count that matters (the chip, `prune`, `paths`); this file is a
         // sibling found by name, exactly like `-small`.
         if let px = px { writeRegionCopy(of: file, px: px) }
+        if let movedTo, let to = areaPixels(movedTo, on: screen, of: file) {
+            movesLock.lock(); moves[file.path] = to; movesLock.unlock()
+            Log.info("✂️ ⇧ move: \(Int(px?.minX ?? 0)),\(Int(px?.minY ?? 0)) → \(Int(to.minX)),\(Int(to.minY)) (\(Int(to.width))x\(Int(to.height))px)")
+        }
         prune()
         return Frame(path: file.path, mouse: nil, area: px, size: pixelSize(of: file))
     }
@@ -224,6 +234,17 @@ enum ScreenCapture {
         Log.info("✂️ region cut out unscaled — \(cut.width)x\(cut.height)px (\(dst.lastPathComponent))")
         return dst
     }
+
+    /// Where a ⇧-drag said the framed thing should go, in the frame's pixels —
+    /// nil for every picture that is not a move. In memory, not in the name:
+    /// the envelope that reads it is written by this same process, minutes at
+    /// most after the drag.
+    static func moveTarget(for path: String) -> CGRect? {
+        movesLock.lock(); defer { movesLock.unlock() }
+        return moves[path]
+    }
+    private static var moves: [String: CGRect] = [:]
+    private static let movesLock = NSLock()
 
     /// The unscaled cut-out beside an area frame, if one was written —
     /// `screenshot-3.jpg` beside `screenshot-3-original.jpg`. Nil for every

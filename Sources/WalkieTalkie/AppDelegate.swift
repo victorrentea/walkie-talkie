@@ -1989,14 +1989,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // thread — the capture is a subprocess either way, and a route that
         // returned before the files existed would be a route nobody can assert
         // against.
-        picker.onTestArea = { [weak self] asked in
+        picker.onTestArea = { [weak self] asked, movedTo in
             guard let self = self else { return ["ok": false, "error": "gone"] }
             guard let main = NSScreen.main else { return ["ok": false, "error": "no screen"] }
             let rect = asked ?? NSRect(x: main.frame.midX - 400, y: main.frame.midY - 120,
                                        width: 800, height: 240)
             let screen = NSScreen.screens.first { $0.frame.intersects(rect) } ?? main
             let source = WindowContext.describe()
-            guard let frame = self.fileArea(rect, on: screen, takenAt: Date(), source: source) else {
+            guard let frame = self.fileArea(rect, on: screen, takenAt: Date(), source: source,
+                                            movedTo: movedTo) else {
                 return ["ok": false, "error": "area capture failed"]
             }
             var answer: [String: Any] = ["ok": true, "frame": frame,
@@ -2839,7 +2840,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for path in ([pendingScreen].compactMap { $0 } + pendingShots) {
             guard let n = ScreenCapture.number(of: path) else { continue }
             if let box = shotAreas[path] {
-                marked[n] = ShotMarker.Token.area(n, box)
+                marked[n] = ShotMarker.Token.area(n, box, movedTo: ScreenCapture.moveTarget(for: path))
             } else {
                 marked[n] = ShotMarker.Token.shot(n, mouse: shotMice[path] ?? nil)
             }
@@ -6364,7 +6365,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 continue
             }
-            if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
+            if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path),
+               let to = ScreenCapture.moveTarget(for: path) {
+                // **The ⇧-drag** (2026-09-24): two boxes on one clean frame,
+                // and the sentence says which way the arrow points.
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
+                    + "user-drawn MOVE: what is in the box between corners (x,y) "
+                    + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
+                    + "should go to the box (\(Int(to.minX)),\(Int(to.minY)))→(\(Int(to.maxX)),\(Int(to.maxY))); "
+                    + "the first box cut out at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
+            } else if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
                 rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
                     + "user-selected area between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
@@ -7162,7 +7172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Named after the keys and always on the readout, lit only while held
         // — see `CropSelectionStyle.movingSuffix`.
         movingSuffix: "⌘ move",
-        centeredSuffix: "⌥ centre")
+        centeredSuffix: "⌥ centre",
+        // **⇧ mid-drag locks the box and draws where its content should go**
+        // (2026-09-24) — see `CropSelectionOverlay.Selection.movedTo`.
+        allowsMove: true,
+        moveToSuffix: "⇧ move to")
 
     /// **The wheel, dragged while he is talking: a region of the screen instead
     /// of the whole display.**
@@ -7230,7 +7244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DispatchQueue.global(qos: .userInitiated).async {
                     self.fileArea(selection.rect, on: selection.screen,
-                                  takenAt: takenAt, source: source)
+                                  takenAt: takenAt, source: source, movedTo: selection.movedTo)
                 }
             }
         }
@@ -7245,7 +7259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// whole of what this needs.
     @discardableResult
     private func fileArea(_ rect: NSRect, on screen: NSScreen,
-                          takenAt: Date, source: String?) -> String? {
+                          takenAt: Date, source: String?, movedTo: NSRect? = nil) -> String? {
         // A dragged rectangle is a picture in the same list and gets the same
         // marker; the gesture it belongs to is the release, which is here.
         let marker = reservePicture(at: takenAt)
@@ -7257,7 +7271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let frame = ScreenCapture.grabArea(rect, on: screen,
                                                  offset: offset, index: marker,
-                                                 into: Outbox.dictationDir(startedAt)) else {
+                                                 into: Outbox.dictationDir(startedAt),
+                                                 movedTo: movedTo) else {
             DispatchQueue.main.async { self.overlay.flash("⚠️ area capture failed") }
             return nil
         }
@@ -7288,7 +7303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The box he framed flies from where he framed it — the display is not
         // what he pointed at, the box is. **Its outline only** (2026-09-24,
         // Victor: *"just the border, the rectangle"*).
-        flyShotIntoChip(path, from: rect, outlineOnly: true)
+        flyShotIntoChip(path, from: movedTo ?? rect, outlineOnly: true)
         return path
     }
 

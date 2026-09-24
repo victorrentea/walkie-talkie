@@ -265,7 +265,8 @@ final class ElementPicker {
     /// unscaled cut-out — were only ever checkable by making the gesture. This
     /// enters at `fileArea`, below the crop UI and above everything that names,
     /// cuts, attaches and counts, which is the part worth asserting.
-    var onTestArea: ((NSRect?) -> [String: Any])?
+    /// The second rect is the ⇧-drag's destination (`"to": {x, y, w, h}`).
+    var onTestArea: ((NSRect?, NSRect?) -> [String: Any])?
 
     /// A fabricated transcript, entering where a real one does.
     /// **A fabricated transcript, optionally with the timings a recogniser
@@ -792,7 +793,12 @@ final class ElementPicker {
                let w = body?["w"] as? Double, let h = body?["h"] as? Double {
                 rect = NSRect(x: x, y: y, width: w, height: h)
             }
-            respond(conn, 200, handler(rect))
+            var to: NSRect?
+            if let t = body?["to"] as? [String: Any], let x = t["x"] as? Double, let y = t["y"] as? Double,
+               let w = t["w"] as? Double, let h = t["h"] as? Double {
+                to = NSRect(x: x, y: y, width: w, height: h)
+            }
+            respond(conn, 200, handler(rect, to))
 
         // Wispr Flow's microphone, faked — see `onTestWispr`.
         case ("POST", "/test/wispr"):

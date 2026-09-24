@@ -765,8 +765,15 @@ enum ShotMarker {
         /// `✂️` is *I dragged a box round this*, and the four numbers are its
         /// corners in the pixels of that frame — the same pair of readings the
         /// file name used to carry.
-        static func area(_ index: Int, _ box: CGRect) -> String {
-            "[📸\(index)✂️\(Int(box.minX)),\(Int(box.minY))→\(Int(box.maxX)),\(Int(box.maxY))]"
+        ///
+        /// **`moved to` a second box** (2026-09-24) is the ⇧-drag: *the thing
+        /// in the first box should go to the second*, both in the same pixels.
+        static func area(_ index: Int, _ box: CGRect, movedTo: CGRect? = nil) -> String {
+            "[📸\(index)✂️\(corners(box))\(movedTo.map { " moved to " + corners($0) } ?? "")]"
+        }
+
+        static func corners(_ box: CGRect) -> String {
+            "\(Int(box.minX)),\(Int(box.minY))→\(Int(box.maxX)),\(Int(box.maxY))"
         }
 
         /// The highlight **is** text, so it goes in whole rather than as a
