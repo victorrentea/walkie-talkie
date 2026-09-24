@@ -175,7 +175,10 @@ final class DropArrow {
 
     /// Hidden with the ring while a crop is framed — see `CaretHalo.veiled`.
     var veiled = false {
-        didSet { panel?.contentView?.isHidden = veiled }
+        didSet {
+            guard veiled != oldValue, let view = panel?.contentView else { return }
+            CaretHalo.veil(view, veiled)
+        }
     }
 
     private var panel: RelayPanel?

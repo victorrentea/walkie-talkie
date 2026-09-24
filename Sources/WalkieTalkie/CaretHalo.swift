@@ -978,12 +978,32 @@ final class CaretHalo {
     /// back, where the pointer is, the moment the drag ends. Only the content
     /// view is hidden, because `refresh` rewrites `alphaValue` twenty times a
     /// second and would undo a fade within one tick.
+    ///
+    /// **It comes back in a 0.5 s fade, not a cut** (2026-09-24) — Victor:
+    /// *"after screen cut in walkie, the halo effect appears too brutal. fade it
+    /// in over 0.5s"*. The fade is on the content view's own alpha, the one
+    /// thing `refresh` never writes, so the voice keeps riding the panel's.
+    static let unveilFade: TimeInterval = 0.5
+
     var veiled = false {
         didSet {
             guard veiled != oldValue else { return }
-            panel?.contentView?.isHidden = veiled
+            if let view = panel?.contentView { Self.veil(view, veiled) }
             arrow.veiled = veiled
             Log.info(veiled ? "◯ halo veiled while the crop is framed" : "◯ halo back after the crop")
+        }
+    }
+
+    /// Hides at once; shows from alpha 0 up to 1 over `unveilFade`. Shared with
+    /// `DropArrow`, so the heads and the ring come back on one curve.
+    static func veil(_ view: NSView, _ on: Bool) {
+        if on { view.isHidden = true; return }
+        view.alphaValue = 0
+        view.isHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = unveilFade
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            view.animator().alphaValue = 1
         }
     }
 
