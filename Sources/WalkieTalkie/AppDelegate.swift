@@ -4204,8 +4204,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// laid out with the new count. No chip on screen, no flight: the ripple at
     /// the pointer is the receipt that never depends on the chip.
     /// → `CaptureFlash.flyIntoChip`
-    private func flyShotIntoChip(_ path: String, from source: CGRect?) {
-        guard let source = source, let picture = CaptureFlash.loadPicture(path) else { return }
+    /// `outlineOnly` — the dragged area (2026-09-24): the box's white edge
+    /// flies without the pixels inside it, and nothing is decoded.
+    private func flyShotIntoChip(_ path: String, from source: CGRect?, outlineOnly: Bool = false) {
+        guard let source = source else { return }
+        let picture = outlineOnly ? nil : CaptureFlash.loadPicture(path)
+        guard outlineOnly || picture != nil else { return }
         DispatchQueue.main.async { [weak self] in
             guard let target = self?.overlay.shotLanding else { return }
             CaptureFlash.flyIntoChip(picture, from: source, to: target)
@@ -7285,9 +7289,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         armOrphanFlush()
         Log.info("✂️ area attached to in-flight dictation (\(count) picture(s) so far)")
         publishShotCount()
-        // The region he framed, cut out, flies from where he framed it — the
-        // display is not what he pointed at, the box is.
-        flyShotIntoChip(ScreenCapture.zoom(for: path) ?? ScreenCapture.handover(for: path), from: rect)
+        // The box he framed flies from where he framed it — the display is not
+        // what he pointed at, the box is. **Its outline only** (2026-09-24,
+        // Victor: *"just the border, the rectangle"*).
+        flyShotIntoChip(path, from: rect, outlineOnly: true)
         return path
     }
 

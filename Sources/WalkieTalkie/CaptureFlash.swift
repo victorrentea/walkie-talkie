@@ -44,7 +44,14 @@ enum CaptureFlash {
     /// and the pointer is on that screen for every shutter path.
     /// `sharingType = .none`, so a second press a moment later cannot photograph
     /// the first one's picture in flight.
-    static func flyIntoChip(_ picture: CGImage, from source: CGRect, to target: CGRect) {
+    ///
+    /// **`picture` nil flies the outline alone** (2026-09-24) — the dragged
+    /// area's receipt. Victor: *"it's a bit distracting to see the image zooming
+    /// in and collapsing inside, so just the border, the rectangle."* He has
+    /// just looked at that box while framing it; its pixels shrinking over his
+    /// work say nothing he did not already see, and the white edge alone still
+    /// says *that box went into the count*.
+    static func flyIntoChip(_ picture: CGImage?, from source: CGRect, to target: CGRect) {
         guard source.width > 1, source.height > 1 else { return }
         let middle = NSPoint(x: source.midX, y: source.midY)
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(middle, $0.frame, false) })
@@ -78,9 +85,11 @@ enum CaptureFlash {
                             dx: -screen.frame.minX, dy: -screen.frame.minY)
 
         let frame = CALayer()
-        frame.contents = picture
-        frame.contentsGravity = .resize
-        frame.masksToBounds = true
+        if let picture = picture {
+            frame.contents = picture
+            frame.contentsGravity = .resize
+            frame.masksToBounds = true
+        }
         frame.borderColor = NSColor.white.cgColor
         frame.cornerRadius = 8
         frame.borderWidth = intoChipBorder
