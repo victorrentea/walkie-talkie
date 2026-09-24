@@ -514,7 +514,7 @@ class AreaFrame(unittest.TestCase):
     def test_the_row_offers_the_cut_out_first_and_the_screen_behind_it(self):
         row = [r for r in self.line.splitlines() if "✂️" in r][-1]
         self.assertRegex(row, r"at 📁/screenshot-\d+(-\d+)?\.jpg;")
-        self.assertIn("also available -800px and -original.jpg", row)
+        self.assertIn("full screen available at -800px and -original.jpg", row)
 
     def test_the_cut_out_matches_the_rectangle_and_is_not_scaled(self):
         zoom = self.area["zoom"]

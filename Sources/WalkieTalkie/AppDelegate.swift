@@ -6234,7 +6234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// [📁=$WALKIE_SHOTS/2026-09-19-17-32-15/17-33-02]
     /// [📸n = 📁/screenshot-n-800px.jpg at 800px width, or -original.jpg at 3456x2234px]
     /// [📸3✂️ = user-selected area between corners (x,y) (900,345)→(2594,574) at
-    ///  📁/screenshot-3.jpg; also available -800px and -original.jpg]
+    ///  📁/screenshot-3.jpg; full screen available at -800px and -original.jpg]
     /// [chrome-selection-1 = div.wrap > h1 at https://…]
     /// ```
     ///
@@ -6381,12 +6381,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + "user-drawn MOVE: the box between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
                     + "should move to the box (\(Int(to.minX)),\(Int(to.minY)))→(\(Int(to.maxX)),\(Int(to.maxY))); "
-                    + "the first box cut out at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
+                    + "the first box cut out at \(name(cut)); full screen available at -800px and -original.jpg at \(size(path))]")
             } else if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
                 rows.append("[\(ShotMarker.Token.key(shot: n, area: true)) = "
                     + "user-selected area between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
-                    + "at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
+                    + "at \(name(cut)); full screen available at -800px and -original.jpg at \(size(path))]")
             } else {
                 rows.append("[\(ShotMarker.Token.key(shot: n, area: false))\(when(n, offset, m.inlinedShots)) = "
                     + "\(handed) at \(ScreenCapture.handoverWidth)px width, "
