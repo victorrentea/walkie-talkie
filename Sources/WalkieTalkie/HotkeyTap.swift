@@ -1900,7 +1900,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkie-talkie/hangs")
         DispatchQueue.global(qos: .utility).async {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
             let out = dir.appendingPathComponent("hang-\(f.string(from: Date())).txt")
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
