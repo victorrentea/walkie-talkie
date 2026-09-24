@@ -111,7 +111,7 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
     exit(0)
 }
 
-// The chip's `📋 Paste again ⌘⇧P` row on a dark ground and a light one — alone,
+// The chip's `📋 Re-paste ⌘⇧P` row on a dark ground and a light one — alone,
 // and under `☠️ Kamikaze` for comparison — and quit. The chip cannot be
 // captured, so this is the only way to see it. See `PasteHint.shoot`.
 if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HINT"] {

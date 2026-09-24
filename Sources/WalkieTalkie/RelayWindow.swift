@@ -269,7 +269,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let kamikazeRow = NSView()
     private let kamikazeGlyph = NSImageView()
     private let kamikazeInfo = NSTextField(labelWithString: "Kamikaze")
-    /// **`📋 Paste again ⌘⇧P`** (2026-09-23) — for five seconds after every
+    /// **`📋 Re-paste ⌘⇧P`** (2026-09-23) — for five seconds after every
     /// delivered sentence (and a cancelled prompt), the keys that bring the
     /// last text back, whether it went out as a prompt or as a clean dictation.
     /// `PasteHint` decides when; this is only the row.
@@ -283,7 +283,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// `evals/test_paste_row.py` keeps it that way.
     private let pasteRow = NSView()
     private let pasteGlyph = NSImageView()
-    private let pasteInfo = NSTextField(labelWithString: "Paste again  \(PasteHint.keys)")
+    private let pasteInfo = NSTextField(labelWithString: "Re-paste  \(PasteHint.keys)")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
@@ -1823,7 +1823,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             recordWidth = glyphColumn + recordDotGap + ceil(recordInfo.frame.width)
         }
         let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
-        // The emoji rows (`☠️ Kamikaze`, `📋 Paste again ⌘⇧P`) ask for their
+        // The emoji rows (`☠️ Kamikaze`, `📋 Re-paste ⌘⇧P`) ask for their
         // width like the recording row does. The paste row is often the only
         // row on the chip, and a chip measured without it is a chip 0 wide.
         var emojiRowsWidth: CGFloat = 0
@@ -2577,7 +2577,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// midline. Nothing is clipped, and neither half has to know anything about
     /// the other's font.
     /// **The plain row: an emoji in the icon column and words beside it** —
-    /// `☠️ Kamikaze`, `📋 Paste again ⌘⇧P`. One constructor so the rows cannot
+    /// `☠️ Kamikaze`, `📋 Re-paste ⌘⇧P`. One constructor so the rows cannot
     /// drift apart in face, size, ink or glyph.
     private func installEmojiRow(_ row: NSView, glyph: NSImageView, label: NSTextField,
                                  emoji: String) {
@@ -4091,7 +4091,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    /// The `📋 Paste again ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
+    /// The `📋 Re-paste ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
     private(set) var pasteHint = false
 
     func setPasteHint(_ on: Bool) {

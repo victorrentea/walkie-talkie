@@ -11,14 +11,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 45,
+    "height" : 46,
     "image" : "bound-idle.png",
     "note" : "A microphone, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. **The same glyph for every destination**: at rest the only thing worth saying is *armed*, and bound has to look different from unbound, where there is no chip at all. Which terminal it is, is a menu away.",
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
     "when" : "From ⌘⌃B (or ◀️ + 🔼, or ◀️ + 🛞 with Logi gestures off) until something happens.",
-    "width" : 48
+    "width" : 121
   },
   {
     "alpha" : 0.80000000000000004,
@@ -176,7 +176,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "listening-overrun-blinking.png",
     "note" : "**The wash is full and now breathes**, about once a second, for the last minute — a state became an event, because there is something to do about it. The words never flicker: what pulses is the ground, so the row stays readable through the minute he is most likely to still be talking into it. **At ten minutes the relay stops the dictation itself** and delivers what it has — the caret, the bound terminal, or the new terminal it was going to spawn — because *\"orice ar fi fost, legată, nelegată, se termină\"*, and because ten minutes of speech is not something to throw away for running out of clock. A stop, therefore, never a cancel. Photographed at the dim end of the breath; at the bright end it is the picture above, full width.",
     "shape" : "chip",
@@ -394,10 +394,10 @@
     "group" : "Flashes",
     "height" : 46,
     "image" : "paste-again.png",
-    "note" : "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Paste again`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
+    "note" : "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Re-paste`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
     "shape" : "chip",
     "slug" : "paste-again",
-    "title" : "Paste again — the keys, after every sentence",
+    "title" : "Re-paste — the keys, after every sentence",
     "when" : "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
     "width" : 218
   },

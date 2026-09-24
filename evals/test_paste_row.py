@@ -12,7 +12,7 @@ rounded outline round `⌘⇧P`, 15 pt medium). The row that replaced it is
 `RelayWindow.pasteRow`, and this test keeps it the Kamikaze row's twin:
 
 * both are built by the one constructor, `installEmojiRow` (face, size, ink,
-  glyph), and the paste one says `📋` / `Paste again` / `PasteHint.keys`;
+  glyph), and the paste one says `📋` / `Re-paste` / `PasteHint.keys`;
 * **every other line that touches a Kamikaze view has a paste twin** — the
   layout through `layoutGlyphRow`, the height, the width, the halo and the
   white ink on the bare chip, the plain ink off it. That is the list a new row
@@ -56,9 +56,9 @@ def check(relay: str, hint: str) -> list[str]:
     if not any(re.search(r'installEmojiRow\(pasteRow, glyph: pasteGlyph, '
                          r'label: pasteInfo, emoji: "📋"\)', l) for l in lines):
         problems.append("the paste row is not built by `installEmojiRow(…, emoji: \"📋\")`")
-    if not any('pasteInfo = NSTextField(labelWithString: "Paste again' in l
+    if not any('pasteInfo = NSTextField(labelWithString: "Re-paste' in l
                and "PasteHint.keys" in l for l in lines):
-        problems.append("the paste row does not say `Paste again` + `PasteHint.keys`")
+        problems.append("the paste row does not say `Re-paste` + `PasteHint.keys`")
 
     install = [l for l in lines if l.startswith("private func installEmojiRow")]
     if not install:
@@ -126,7 +126,7 @@ def main(argv: list[str]) -> int:
         for problem in problems:
             print(f"  ✗ {problem}")
         return 1
-    print("✓ `📋 Paste again ⌘⇧P` is built, laid out and inked exactly like `☠️ Kamikaze`")
+    print("✓ `📋 Re-paste ⌘⇧P` is built, laid out and inked exactly like `☠️ Kamikaze`")
     return 0
 
 

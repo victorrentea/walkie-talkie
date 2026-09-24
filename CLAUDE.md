@@ -162,7 +162,7 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   stands the installed app down and puts it back.
 - Nothing that rides the pointer can be screenshot (`sharingType = .none`; `RELAY_CAPTURABLE=1`
   no longer works on macOS 15). Review with: the states page; `kill -USR1 <pid>` →
-  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HINT` (the chip's `📋 Paste again ⌘⇧P` row on both grounds), `WT_SHOOT_HALO` (+
+  `<home>/snapshot.png`; `WT_SHOOT_MENU`, `WT_SHOOT_HINT` (the chip's `📋 Re-paste ⌘⇧P` row on both grounds), `WT_SHOOT_HALO` (+
   `…-arrow.png`, whose middle column is the arrows at **twice** their size — the pose they wear
   while the words are in flight),
   all `=<path> ./.build/debug/WalkieTalkie`; `WT_HALO_DEMO=<seconds>` (the one capturable run; `WT_HALO_STYLE=<effect>` picks a
@@ -201,7 +201,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/wispr-scratchpad` `{"down": true}` · `{"up": true}` · `{"tap": true}` | Wispr's *Open Scratchpad* chord — **held** between two calls (per Wispr's docs: tap opens/closes the window, hold is push-to-talk **into the Scratchpad**, double-tap is hands-free into it). Read from `prefs.user.shortcuts` by action name at call time; fallback **`79` (F18)** — a single key, because a held ⌘⌥ would hijack every key Victor presses for the length of a sentence — `WISPR_SCRATCHPAD_KEYS` overrides (the same variable `helpers/wispr_loopback.py` reads); modifiers carry their device-dependent right-hand bits; a **120 s dead-man's switch** releases a hold nobody came back for |
 | `POST /test/mic` `{"id": "auto"｜"xlr"｜"mac"｜"rx"｜"bose"}` | **pick the microphone**, the same call the `Microphone` menu row makes — answers `chosen` (what he asked for), `resolved` (what would actually record, after the fallback for a device that is not plugged in), `available` and the chip's `mark`. With no id it only reports; `GET /engine.mic` is the same block |
 | `POST /test/input` `{"name": "…"}` | point the **system's** default input at a device (substring match) and say what it was; with no name it only reports. For `tools/wispr-test.sh` |
-| `POST /test/paste-hint` | one showing of the **`📋 Paste again ⌘⇧P` row** on the chip (2026-09-22; a chip row since 2026-09-23, 5 s after the last key) — without having to deliver a sentence to see it. `GET /test/state.pasteHint` reads it back; `WT_SHOOT_HINT=<path>` draws it on both grounds with no app running |
+| `POST /test/paste-hint` | one showing of the **`📋 Re-paste ⌘⇧P` row** on the chip (2026-09-22; a chip row since 2026-09-23, 5 s after the last key) — without having to deliver a sentence to see it. `GET /test/state.pasteHint` reads it back; `WT_SHOOT_HINT=<path>` draws it on both grounds with no app running |
 | `POST /test/cancel` | the ✕'s cancel: kill the dictation in flight, whichever app is holding the microphone |
 | `POST /test/recover` | recover the cancelled dictation |
 | `POST /test/gesture` `{"name": "forward-left"}` | post the ⌃⌥⌘F-key chord Options+ makes for **one mouse gesture**, so `HotkeyTap`'s gesture branch runs as for his hand. `forward-click/-right/-left/-up/-down`, `back-click/-right/-left/-up/-down`; 400 lists them. The F7 **bind** sub-case needs a real held left button (`leftIsHeld` asks the window server) and is not fakeable — `forward-click` is always the caret dictation |
@@ -267,7 +267,7 @@ sits at rest there.
   after a **prompt is cancelled**. Victor: *"indiferent prin ce mecanism am închis o dictare … să
   afișeze pentru trei secunde, cu opțiunea de 80% pentru două secunde și jumătate … uneori îl
   plasez greșit, lasă-mă să-mi amintesc constant"*. **It is an ordinary chip row since the
-  afternoon of 2026-09-23** — `📋 Paste again  ⌘⇧P`, built by the same `installEmojiRow` as
+  afternoon of 2026-09-23** — `📋 Re-paste  ⌘⇧P`, built by the same `installEmojiRow` as
   `☠️ Kamikaze`, for **5 s after the last keystroke** (`PasteHint.hold`; every key restarts it since
   the evening of 2026-09-23 — *"whatever I press … just in case I need to paste it again"*, the
   `⌘Z` that undoes a misplaced sentence had run the clock out); unbound it is the chip's only row. It was a

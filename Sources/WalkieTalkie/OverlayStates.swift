@@ -378,9 +378,9 @@ enum OverlayStates {
                 o.flash("⚠️ Whisper unavailable — no module named mlx_whisper", duration: 60)
             },
 
-            Shot(slug: "paste-again", group: "Flashes", title: "Paste again — the keys, after every sentence",
+            Shot(slug: "paste-again", group: "Flashes", title: "Re-paste — the keys, after every sentence",
                  when: "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
-                 note: "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Paste again`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
+                 note: "**An ordinary row**, built like `☠️ Kamikaze`: 📋, `Re-paste`, then `⌘⇧P` in the chip's own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip's only row, which is what puts the chip beside the pointer.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setPasteHint(true)
             },

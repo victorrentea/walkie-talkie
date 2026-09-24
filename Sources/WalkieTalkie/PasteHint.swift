@@ -54,9 +54,10 @@ import AppKit
 /// to display yet another row in the mouse tooltip. Technically, it's just
 /// like, for example, transcribing Kamikaze … It should have the icon of the
 /// paste … the text should say 'Paste again', and then the shortcuts, just
-/// like any text in the tooltip."*
+/// like any text in the tooltip."* — `Re-paste` since 2026-09-24 (*"should be
+/// 'Re-paste' instead of 'Paste Again'"*).
 ///
-/// So it is `RelayWindow.pasteRow` — `📋 Paste again  ⌘⇧P`, built by the same
+/// So it is `RelayWindow.pasteRow` — `📋 Re-paste  ⌘⇧P`, built by the same
 /// `installEmojiRow` as `☠️ Kamikaze`, in `hintFont`, white with the halo on the
 /// bare chip, no border. It rides the pointer because the chip does; it is at
 /// the chip's own opacity because it is the chip; and when nothing else is on
@@ -110,7 +111,7 @@ final class PasteHint {
     /// `GET /test/state.pasteHint`.
     var report: [String: Any] {
         ["visible": chip?.pasteHint ?? false,
-         "pulsing": pulsing, "hold": Self.hold, "row": "Paste again  \(Self.keys)"]
+         "pulsing": pulsing, "hold": Self.hold, "row": "Re-paste  \(Self.keys)"]
     }
 
     /// **Put the row up for `hold`, then take it down.** `reason` is for the log

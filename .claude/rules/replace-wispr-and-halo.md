@@ -388,7 +388,7 @@ e nou — să afișeze pentru trei secunde, cu opțiunea de 80% pentru două sec
   new door. That case has *Recover Cancelled Dictation*, which is a different offer and already
   made in the banner.
 - **An ordinary chip row, not a window of its own** (2026-09-23, afternoon, commit `629040b`) —
-  `RelayWindow.pasteRow`, `📋 Paste again  ⌘⇧P`, built by the same `installEmojiRow` as
+  `RelayWindow.pasteRow`, `📋 Re-paste  ⌘⇧P`, built by the same `installEmojiRow` as
   `☠️ Kamikaze`: `hintFont`, `secondaryLabelColor` on a light ground / white with the halo on a
   dark one, no border. Victor rejected the panel it used to be: *"it has a border around it, with a
   different font, which is wrong … I just want you to display yet another row in the mouse
