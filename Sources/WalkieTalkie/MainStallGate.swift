@@ -22,14 +22,16 @@ struct MainStallGate {
     private(set) var isOpen = false
     private var openedAt: CFAbsoluteTime = 0
 
-    mutating func evaluate(now: CFAbsoluteTime, lastBeat: CFAbsoluteTime, buttonsDown: Bool) -> Change {
+    /// `buttonsDown` is asked only while open — it is a window-server read,
+    /// and the tap runs this for every scroll event on the Mac.
+    mutating func evaluate(now: CFAbsoluteTime, lastBeat: CFAbsoluteTime, buttonsDown: @autoclosure () -> Bool) -> Change {
         let stalled = now - lastBeat > Self.threshold
         if !isOpen, stalled {
             isOpen = true
             openedAt = lastBeat
             return .opened
         }
-        if isOpen, !stalled, !buttonsDown {
+        if isOpen, !stalled, !buttonsDown() {
             isOpen = false
             return .closed(after: now - openedAt)
         }

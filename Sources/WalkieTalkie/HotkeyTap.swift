@@ -1875,8 +1875,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private func failingOpen(_ type: CGEventType, _ event: CGEvent) -> Bool {
         beatLock.lock(); let beat = mainBeatAt; beatLock.unlock()
         let now = CFAbsoluteTimeGetCurrent()
-        let buttonsDown = (0...4).contains { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: $0)!) }
-        switch stallGate.evaluate(now: now, lastBeat: beat, buttonsDown: buttonsDown) {
+        let anyButtonDown = { (0...4).contains { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: $0)!) } }
+        switch stallGate.evaluate(now: now, lastBeat: beat, buttonsDown: anyButtonDown()) {
         case .opened:
             Log.error(String(format: "🧊 main thread silent for %.1f s — the tap swallows nothing until it is back; Wispr pastes and dictates on its own", now - beat))
             sampleSelf()
