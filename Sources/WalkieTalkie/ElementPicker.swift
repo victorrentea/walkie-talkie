@@ -1009,6 +1009,20 @@ final class ElementPicker {
             let on = body?["on"] as? Bool ?? true
             respond(conn, 200, ["ok": true].merging(onTestKeyTrace?(on) ?? [:]) { _, new in new })
 
+        // **Freeze the main thread on purpose** (2026-09-24) — the desk route
+        // for `HotkeyTap`'s fail-open: `{"seconds": 6}` blocks main that long,
+        // the tap should log `🧊 main thread silent` after 3 s, sample, and log
+        // `🧊 main thread back` after. Capped at 20 s. Answers at once, before
+        // the freeze starts — this handler is not on the main thread.
+        case ("POST", "/test/stall"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let seconds = min(20, max(0, body?["seconds"] as? Double ?? 6))
+            respond(conn, 200, ["ok": true, "seconds": seconds])
+            DispatchQueue.main.async {
+                Log.info("🧊 /test/stall: blocking the main thread for \(seconds) s")
+                Thread.sleep(forTimeInterval: seconds)
+            }
+
         // Park Wispr's Scratchpad window — see `onTestScratchpadPark`.
         case ("POST", "/test/scratchpad/park"):
             respond(conn, 200, ["ok": true].merging(onTestScratchpadPark?() ?? [:]) { _, new in new })

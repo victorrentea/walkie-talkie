@@ -197,6 +197,7 @@ three; `MusicBridge` is a WebSocket on 8920).
 | `POST /test/wispr-handsfree` | post the **real** chord (fn ⌃ Space) — a real Wispr dictation starts, and the relay's own state machine is driven with it (this app's posts are stamped out of its own tap since 2026-09-13, so the chord no longer comes back as Victor's). The relay **intercepts** it: `relay: true`, so the ⌘V is swallowed and the words are delivered — the transcribe primitive the harness is written against. A second call is the toggle's stop. Installed build only: `.build/debug` has no Accessibility grant and `CGEventPost` fails silently |
 | `POST /test/wispr-handsfree` `{"hand": true}` | the same chord **as though Victor had pressed it** (2026-09-14): `relay: false`, so `intercepting` and `relayStarted` are both false — **ring only**, nothing swallowed, nothing delivered, no outbox line, and Wispr inserts wherever it would have. The control the hand-started contract is asserted against; without the flag the relay re-delivers the sentence itself |
 | `POST /test/key-trace` `{"on": true}` | log every keyboard event and its verdict (`passed` / `SWALLOWED by <branch>`), with keycode and posting pid only — the answer to *who is eating his keystrokes*. Same as `WT_KEY_TRACE=1` |
+| `POST /test/stall` `{"seconds": 6}` | **freeze the main thread on purpose** (≤ 20 s) — the desk proof of the tap's fail-open: `🧊 main thread silent` after 3 s, a `sample` in `~/.walkie-talkie/hangs/`, `🧊 main thread back` after |
 | `POST /test/scratchpad/park` | move Wispr's Scratchpad window to its corner now — smallest size Wispr allows, bottom-right of the second display (the main one's when there is one), all but an 8 pt sliver off the edge; answers the frame it ended up at |
 | `POST /test/wrap-mode` `{"mode": "scratchpad"｜"sink"｜"off"｜"auto"}` | pick how the relay takes Wispr's words for this run; `auto` hands the decision back to the tick and to Wispr's own configuration. The menu tick follows |
 | `POST /test/wispr` `{"historyRoute": true}` | make Wispr's `History` row the **delivery** rather than the late fallback: `formatted` delivers at once with no `pasteGrace`, the text comes from `pastedText` **or `formattedText`**, always as `.route`. Default off; `WT_WISPR_HISTORY_ROUTE=1` |
@@ -382,6 +383,13 @@ sits at rest there.
   `build-app.sh` re-signs on every change. `HotkeyTap.proveAlive` posts a stamped bare V key-up
   at launch and after every wake and asserts the callback saw it (0.9–3.8 ms measured); a miss
   flashes the overlay for 20 s. `POST /test/firewall` runs one on demand.
+- **A frozen app swallows nothing** (2026-09-24, `MainStallGate`). The tap runs on its own thread
+  and outlived a 32-minute main-thread deadlock that afternoon, dropping the ⌘V of a 61-word Wispr
+  sentence (17:13:29) that the frozen relay could never deliver. The main thread now beats every
+  0.5 s; silent for 3 s, the tap hands **every** event straight back until it beats again and no
+  mouse button is down, and samples the stall into `~/.walkie-talkie/hangs/`. Victor: *"No matter
+  what happens with the application, I should always be able to fall back on the Wispr Flow."*
+  Known cost: a stall that clears after Wispr pasted may deliver that sentence twice.
 - **A ⌘V no capture claimed is rescued from the row**, not lost — `rescueFromRow` in
   `WisprFlowSource`. `WT_WISPR_FIREWALL=0` turns the drop off for one run.
 

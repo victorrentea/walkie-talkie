@@ -1835,7 +1835,81 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         thread.name = "WalkieTalkieEventTap"
         thread.start()
+        startMainHeartbeat()
         return true
+    }
+
+    // ── The fail-open: a frozen app swallows nothing ─────────────────────────
+
+    /// **The tap outlives the main thread, and that was the trap** (2026-09-24,
+    /// 17:12–17:44). A lock-order deadlock froze the main thread for half an
+    /// hour; the tap, on its own thread, kept deciding. Wispr formatted a
+    /// 61-word sentence at 17:13:29 on the built-in mic and the firewall dropped
+    /// its ⌘V — the relay that would have delivered the row was the frozen
+    /// thread. Victor: *"No matter what happens with the application, I should
+    /// always be able to fall back on the Wispr Flow to dictate."*
+    ///
+    /// So the main thread proves it is alive every half second (common modes, so
+    /// an open menu still beats), and when it has been silent for
+    /// `MainStallGate.threshold` the tap lets **everything** through: Wispr's
+    /// paste, its hotkeys, every mouse button — this app behaves as if it were
+    /// not running. The beat has its own lock; `stateLock` may be the very lock
+    /// the main thread is stuck holding.
+    private let beatLock = NSLock()
+    private var mainBeatAt = CFAbsoluteTimeGetCurrent()
+    private var beatTimer: Timer?
+    /// Tap thread only.
+    private var stallGate = MainStallGate()
+
+    private func startMainHeartbeat() {
+        guard beatTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.beatLock.lock(); self.mainBeatAt = CFAbsoluteTimeGetCurrent(); self.beatLock.unlock()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        beatTimer = timer
+    }
+
+    /// Tap thread. True while the tap must hand every event straight back.
+    private func failingOpen(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        beatLock.lock(); let beat = mainBeatAt; beatLock.unlock()
+        let now = CFAbsoluteTimeGetCurrent()
+        let buttonsDown = (0...4).contains { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: $0)!) }
+        switch stallGate.evaluate(now: now, lastBeat: beat, buttonsDown: buttonsDown) {
+        case .opened:
+            Log.error(String(format: "🧊 main thread silent for %.1f s — the tap swallows nothing until it is back; Wispr pastes and dictates on its own", now - beat))
+            sampleSelf()
+        case .closed(let after):
+            Log.info(String(format: "🧊 main thread back after %.1f s — the tap takes events again", after))
+        case .unchanged:
+            break
+        }
+        if stallGate.isOpen, Self.keyTrace, type == .keyDown || type == .keyUp {
+            trace("passed (main thread frozen — failing open)", type, event)
+        }
+        return stallGate.isOpen
+    }
+
+    /// **The freeze photographs itself.** The 17:12 one was only understood
+    /// because someone ran `sample` by hand while it lasted; a stall that
+    /// ends before anyone looks leaves nothing. Three seconds of stacks, next
+    /// to the log, named after the moment.
+    private func sampleSelf() {
+        let pid = getpid()
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkie-talkie/hangs")
+        DispatchQueue.global(qos: .utility).async {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+            let out = dir.appendingPathComponent("hang-\(f.string(from: Date())).txt")
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+            p.arguments = [String(pid), "3", "-file", out.path]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do { try p.run(); Log.info("🧊 sampling the stall into \(out.path)") }
+            catch { Log.error("🧊 could not sample the stall: \(error)") }
+        }
     }
 
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -1844,6 +1918,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if let port = tapPort { CGEvent.tapEnable(tap: port, enable: true) }
             return Unmanaged.passUnretained(event)
         }
+        // **A frozen app swallows nothing** — see `MainStallGate`. Before the
+        // canary and before any `stateLock`: a main thread hung while holding
+        // that lock must not be able to hold this answer up too.
+        if failingOpen(type, event) { return Unmanaged.passUnretained(event) }
         // The canary — see `proveAlive`. Ours, harmless, and never let through.
         if event.getIntegerValueField(.eventSourceUserData) == Self.canaryStamp {
             stateLock.lock(); canarySeenAt = CFAbsoluteTimeGetCurrent(); stateLock.unlock()
