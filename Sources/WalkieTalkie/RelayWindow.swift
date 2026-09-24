@@ -3103,7 +3103,11 @@ private let frontLabel = NSTextField(labelWithString: "")
             // opaque grey for exactly that reason). The device stays readable
             // through the whole ramp, which is the one thing on this row that is
             // a fact rather than a forecast.
-            guard ch.isASCII else {
+            //
+            // **The `→` before the recogniser is a letter, not a picture**
+            // (2026-09-24): it is typography, part of the sentence, and fills
+            // with the bar like the words round it.
+            guard ch.isASCII || ch == "→" else {
                 out.append(Self.inline(Self.wordGlyph(ch, ink: lit), font: hintFont))
                 continue
             }

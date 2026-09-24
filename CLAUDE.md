@@ -140,6 +140,11 @@ This file holds only what every session needs. Everything else moved on 2026-09-
   makes it a sentence. Victor: *"când fac listening să scrie «listening to» și apoi emoji-ul
   device-ului ascultat … când fac transcribing, să zici «transcribing via» și să pui simbolul
   tool-ului care face transcrierea efectivă."*
+- **`Listening to 🎤 → ⬮...` since 2026-09-24** — the listening row names the recogniser too,
+  after an arrow (*"place an arrow and then specify as well the transcription engine that is used
+  under the hood"*). Wispr's five bars whenever Wispr holds the microphone, whatever `Engine` says;
+  the device glyph is then Wispr's own `History.micDevice`, not the relay's pick
+  (`AppDelegate.currentMicMark`). The `→` is a letter of the bar, not a picture.
 - **They rode one row for three days and should not have** — `Listening(🎙️/E)...` from 2026-09-19,
   the brackets and letters dropped on 2026-09-22. That form said both facts at the one moment only
   the first is true: while the microphone is open nothing has been transcribed yet, and by the time

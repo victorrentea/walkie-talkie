@@ -349,28 +349,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// activ al lui Wispr"*. See `currentMicMark`.
     private static func mark(engine id: String) -> String { " via " + engineMark(id) }
 
-    /// **The microphone's half, and the word that makes it a sentence** —
-    /// `Listening to 🎤...`. A device that is none of the four leaves the mark
-    /// empty and the row is the plain `Listening...` every state before
-    /// 2026-09-19 was photographed with: *listening to* with nothing after it
-    /// is worse than not saying it.
-    private static func micMark() -> String {
-        let glyph = InputDevice.currentGlyph()
-        return glyph.isEmpty ? "" : " to " + glyph
-    }
-
     /// **Whose microphone the chip names: whoever is doing the hearing.**
     /// Wispr is, while it holds a sentence (`isRecording`, or `wisprHearing` for
     /// one the relay is not running) and whenever it is the Engine at rest; then
     /// the mark is Wispr's own `History.micDevice` mapped onto the roster
     /// (`InputDevice.glyph(wisprName:)`) — read from Wispr, never written to it.
     /// Otherwise it is the relay's recorder, as it always was.
+    ///
+    /// **Then an arrow and the recogniser** (2026-09-24) — `Listening to 🎤 →
+    /// ⬮...`. Victor: *"place an arrow and then specify as well the
+    /// transcription engine that is used under the hood."* It rides the device
+    /// half rather than being a third mark because it is the same question —
+    /// *who is hearing me* — and it names Wispr whenever Wispr is the one
+    /// holding the microphone, whatever the Engine row says.
     private func currentMicMark() -> String {
-        guard wisprSource.isRecording || wisprHearing || source === wisprSource else {
-            return Self.micMark()
-        }
-        let glyph = InputDevice.glyph(wisprName: wisprMicName)
-        return glyph.isEmpty ? "" : " to " + glyph
+        let wispr = wisprSource.isRecording || wisprHearing || source === wisprSource
+        let device = wispr ? InputDevice.glyph(wisprName: wisprMicName) : InputDevice.currentGlyph()
+        let engine = " → " + Self.engineMark(wispr ? "wispr" : engineId)
+        return (device.isEmpty ? "" : " to " + device) + engine
     }
 
     /// Wispr's name for its microphone — the adopted row's once Wispr fills it

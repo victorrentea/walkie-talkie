@@ -11,14 +11,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 46,
+    "height" : 45,
     "image" : "bound-idle.png",
     "note" : "A microphone, and nothing else. The `folder@branch` it used to spell out is the answer to a question only asked at the moment he opens his mouth, and it was being said beside the pointer all day instead — so it now waits for the dictation. **The same glyph for every destination**: at rest the only thing worth saying is *armed*, and bound has to look different from unbound, where there is no chip at all. Which terminal it is, is a menu away.",
     "shape" : "chip",
     "slug" : "bound-idle",
     "title" : "Bound, standing by",
     "when" : "From ⌘⌃B (or ◀️ + 🔼, or ◀️ + 🛞 with Logi gestures off) until something happens.",
-    "width" : 121
+    "width" : 48
   },
   {
     "alpha" : 0.80000000000000004,
@@ -78,7 +78,7 @@
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
     "when" : "🔼 ↑ — the forward button held, mouse moved up (🛞🛞 with Logi gestures off): the dictation goes to a terminal that does not exist yet.",
-    "width" : 227
+    "width" : 263
   },
   {
     "alpha" : 0.80000000000000004,
@@ -90,7 +90,7 @@
     "slug" : "spawn-folder",
     "title" : "…and he picked which folder",
     "when" : "After clicking a row in the folder menu, for the rest of that dictation.",
-    "width" : 227
+    "width" : 263
   },
   {
     "alpha" : 0.80000000000000004,
@@ -102,7 +102,7 @@
     "slug" : "bind-to-send",
     "title" : "Nothing is bound, and he is talking anyway",
     "when" : "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
-    "width" : 206
+    "width" : 243
   },
   {
     "alpha" : 0.80000000000000004,
@@ -114,7 +114,7 @@
     "slug" : "replace-wispr",
     "title" : "Replace Wispr — this one goes to the caret",
     "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-    "width" : 206
+    "width" : 243
   },
   {
     "alpha" : 0.80000000000000004,
@@ -176,7 +176,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "listening-overrun-blinking.png",
     "note" : "**The wash is full and now breathes**, about once a second, for the last minute — a state became an event, because there is something to do about it. The words never flicker: what pulses is the ground, so the row stays readable through the minute he is most likely to still be talking into it. **At ten minutes the relay stops the dictation itself** and delivers what it has — the caret, the bound terminal, or the new terminal it was going to spawn — because *\"orice ar fi fost, legată, nelegată, se termină\"*, and because ten minutes of speech is not something to throw away for running out of clock. A stop, therefore, never a cancel. Photographed at the dim end of the breath; at the bright end it is the picture above, full width.",
     "shape" : "chip",
