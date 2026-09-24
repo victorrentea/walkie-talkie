@@ -354,6 +354,13 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   time, creeping toward 97 % and never at rest when late, C¹ at the seam — and the delivery never
   waits on it. The old span, `max((estimate − 1.5) × 2, 3)` against the local model's ceiling,
   left a 3 s Scribe sentence a third of the way in. `swift test` covers early / on time / late.
+- **Ends at 1.2× the prediction, eased out** (2026-09-25: *"estimate to finish in 120% of the time
+  estimated … so that the animation is interrupted half way by the transcription done rather than
+  having to continue the reverse tunnel effect after scaling down to its final size. also, decrease
+  size more accelerated at start"*). Supersedes the 90 % / 97 % creep above: progress is
+  `RewindTimeline.easeOut(u)` = `1 − (1 − u)^1.5` over warm-up → `end(predicted:)` = 1.2 × predict,
+  then held at rest. On time the words land at u ≈ 0.8, progress ≈ 0.91 (≈ 1.2× rest size), not
+  arrived. The opacity still reaches full at the prediction itself (`Pose.time`).
 - **Instead of the heads, not beside them**: `arrow.armed` stays down while rewinding. It refuses —
   and the heads keep the job exactly as before — when the take is under 0.5 s, when Reverse tunnel
   cannot be drawn (web engine picked) or with `WT_HALO_REWIND=0`; the log says `⏪ no rewind — …`.
