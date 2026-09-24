@@ -41,7 +41,18 @@ final class MicRecorder {
     private var outputFormat: AVAudioFormat?
     private var startedAt: Date?
     private var url: URL?
+    /// The state lock — every field `append` reads on the audio thread.
+    /// **Never held across a call into `AVAudioEngine`** (2026-09-24): the tap
+    /// callback runs *inside* AVFAudio's realtime-messenger mutex and takes this
+    /// lock, so `removeTap` under it is a lock-order inversion. It froze the app
+    /// solid on a cancel — main in `closeLocked → removeTap →
+    /// RealtimeMessenger::_PerformPendingMessages → mutex`, the messenger thread
+    /// in `TapMessage::RealtimeMessenger_Perform → append → lock`, `sample`d.
     private let lock = NSLock()
+    /// Serialises `start` and `stop` against each other, and is what is held
+    /// across the device open and the teardown. `append` never takes it, so it
+    /// can wait on AVFAudio's mutex without closing a cycle.
+    private let lifecycle = NSLock()
 
     private(set) var isRecording = false
 
@@ -65,7 +76,8 @@ final class MicRecorder {
     /// `quietSeconds` below have, and it is not a micro-optimisation: it is the
     /// difference between a stale number and a frozen Mac.
     ///
-    /// `start(to:)` holds `lock` from its first line to its last, and inside it
+    /// `start(to:)` held `lock` from its first line to its last (it holds
+    /// `lifecycle` there since 2026-09-24; the `try` stays), and inside it
     /// is a **synchronous CoreAudio device bind**. When the audio stack is wedged
     /// that bind never returns — measured 2026-09-19, twice, with `sample` — so
     /// the lock is held for ever, and the 15 Hz warmth ramp that reads this
@@ -149,7 +161,7 @@ final class MicRecorder {
     /// is `dt / levelFallSeconds`, so a device delivering 4096-frame buffers and
     /// one delivering 512 fade at the same speed. The old coefficient was per
     /// *buffer* and therefore silently faster or slower on a different device.
-    /// **Never waits for the lock.** `start(to:)` holds it across a synchronous
+    /// **Never waits for the lock.** `start(to:)` held it (until 2026-09-24) across a synchronous
     /// device open — `AVAudioEngine.inputNode`, `InputDevice.select`,
     /// `installTap`, `engine.start()` — which is tens to hundreds of
     /// milliseconds on a good day and, measured 2026-09-12 on a build with no
@@ -226,7 +238,7 @@ final class MicRecorder {
     /// a ten-minute monologue replayed at speed is noise either way. Reset at
     /// `start`, so it outlives `stop` — the rewind begins *after* the close.
     ///
-    /// **Its own lock, not `lock`.** `lock` is held across a device open and a
+    /// **Its own lock, not `lock`.** `lock` was held across a device open and a
     /// teardown — exactly when the settle asks for this, at the close — and a
     /// `try` on it came back empty-handed on the second desk run. `takeLock` is
     /// only ever held for an append or a copy.
@@ -328,7 +340,10 @@ final class MicRecorder {
     /// passes it.
     @discardableResult
     func start(to destination: URL?) -> String? {
-        lock.lock(); defer { lock.unlock() }
+        lifecycle.lock(); defer { lifecycle.unlock() }
+        lock.lock()
+        let wasOpen = isRecording, openURL = url
+        lock.unlock()
         // **A session already open is not a reason to answer *yes* and record
         // nothing** (2026-09-20). This used to be `guard !isRecording else {
         // return nil }`, and nil here means *the microphone is open* — so a
@@ -356,12 +371,12 @@ final class MicRecorder {
         // asking over an open recording is a ring wanting a level, and a ring is
         // never worth a sentence. It reads the meter of the recording that is
         // already open, which is what it wanted anyway.
-        if isRecording {
-            guard let destination, url != destination else { return nil }
-            Log.error("mic: a \(url == nil ? "metering session" : "recording") was still open when a "
+        if wasOpen {
+            guard let destination, openURL != destination else { return nil }
+            Log.error("mic: a \(openURL == nil ? "metering session" : "recording") was still open when a "
                       + "dictation asked for the microphone — closing it and starting fresh, "
                       + "so \(destination.lastPathComponent) is not written in silence")
-            let (orphan, _) = closeLocked()
+            let (orphan, _) = close()
             if let orphan, orphan != destination { try? FileManager.default.removeItem(at: orphan) }
         }
 
@@ -404,19 +419,21 @@ final class MicRecorder {
             return "cannot convert \(Int(inFormat.sampleRate))Hz to 16kHz mono"
         }
 
+        var newFile: AVAudioFile?
         if let destination {
             do {
-                file = try AVAudioFile(forWriting: destination, settings: outFormat.settings,
-                                       commonFormat: .pcmFormatInt16, interleaved: true)
+                newFile = try AVAudioFile(forWriting: destination, settings: outFormat.settings,
+                                          commonFormat: .pcmFormatInt16, interleaved: true)
             } catch {
                 return "cannot write \(destination.lastPathComponent): \(error.localizedDescription)"
             }
-        } else {
-            file = nil
         }
+        lock.lock()
+        file = newFile
         converter = conv
         outputFormat = outFormat
         url = destination
+        lock.unlock()
 
         // Belt and braces: a second tap on one bus is the other way this call
         // throws, and `removeTap` on a bus with none is a no-op.
@@ -427,22 +444,20 @@ final class MicRecorder {
         engine.prepare()
         do { try engine.start() } catch {
             input.removeTap(onBus: 0)
-            file = nil
+            lock.lock(); file = nil; lock.unlock()
             return "microphone unavailable: \(error.localizedDescription)"
         }
 
+        // **One `lock.lock()`, taken here and not before.** `lock` is an
+        // `NSLock` and not recursive: when `start` held it from its first line,
+        // a second `lock()` around the meter reset below deadlocked the main
+        // thread on every dictation (2026-09-07). Since 2026-09-24 `start` holds
+        // `lifecycle` across the device open and `lock` only for field writes.
+        lock.lock()
         startedAt = Date()
         // Per recording, both of them: a floor carried over from the last
         // sentence would be a floor for a room, a microphone and a distance from
         // it that may all have changed since.
-        //
-        // **No `lock.lock()` around this pair.** It is the one place in the file
-        // where that reflex is wrong: `start` has held the lock since its first
-        // line, `lock` is an `NSLock` and NSLock is not recursive, so taking it
-        // again here deadlocked the thread that opened the microphone — the main
-        // thread — and froze the whole app on every dictation. Shipped in the
-        // commit that added the meter and found on the forward button the same
-        // afternoon (2026-09-07); the button was innocent.
         voiced = 0
         takeLock.lock(); take.removeAll(keepingCapacity: true); takeLock.unlock()
         quiet = 0
@@ -451,6 +466,7 @@ final class MicRecorder {
         writtenFrames = 0
         lastAppendAt = nil
         isRecording = true
+        lock.unlock()
         Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
     }
@@ -556,9 +572,10 @@ final class MicRecorder {
     }
 
     func stop() -> (url: URL, duration: TimeInterval)? {
-        lock.lock(); defer { lock.unlock() }
-        guard isRecording else { return nil }
-        let (out, elapsed) = closeLocked()
+        lifecycle.lock(); defer { lifecycle.unlock() }
+        lock.lock(); let wasOpen = isRecording; lock.unlock()
+        guard wasOpen else { return nil }
+        let (out, elapsed) = close()
         guard let out = out else { return nil }
         guard elapsed >= Self.minimumDuration else {
             try? FileManager.default.removeItem(at: out)
@@ -576,14 +593,20 @@ final class MicRecorder {
     /// `minimumDuration` and returns it; the pre-emption deletes it, because a
     /// recording nobody is waiting for is an orphan by definition.
     ///
-    /// **The lock is the caller's.** `lock` is an `NSLock` and NSLock is not
-    /// recursive — the same fact `start(to:)` records at length about `voiced`
-    /// — so this must never take it.
-    private func closeLocked() -> (url: URL?, elapsed: TimeInterval) {
-        isRecording = false
+    /// **The caller holds `lifecycle`, and nobody may hold `lock` here.**
+    /// `removeTap` waits for the buffer in flight, and that buffer's `append`
+    /// is waiting for `lock` — held across it, the two threads wait on each
+    /// other for ever (2026-09-24, see `lock`). So `isRecording` goes false
+    /// first, under the lock, which turns every later buffer away at `append`'s
+    /// guard; the teardown runs with no lock of ours held; the fields are
+    /// cleared under it afterwards.
+    private func close() -> (url: URL?, elapsed: TimeInterval) {
+        lock.lock(); isRecording = false; lock.unlock()
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+
+        lock.lock(); defer { lock.unlock() }
         // `AVAudioFile` finalises the RIFF header when it is released, so the
         // reference has to go before anyone reads the path — a file still held
         // here has a length field of zero and every reader believes it.

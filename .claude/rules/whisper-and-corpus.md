@@ -378,8 +378,9 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   a ring wanting a level, and a ring is not worth a sentence; it reads the meter of the recording
   already open, which is what it wanted. The reverse — a recording over a metering session — is
   exactly the swallow above and is the case the fix exists for.
-- **`closeLocked()` is the teardown `stop()` and the pre-emption share, and it takes no lock** — see
-  *Do not* below; the caller is holding it. Two copies of a close sequence whose order matters is
+- **`close()` is the teardown `stop()` and the pre-emption share.** The caller holds `lifecycle`;
+  `close()` takes `lock` only around field writes and **never across `removeTap` / `engine.stop()`**
+  — see *Do not* below. Two copies of a close sequence whose order matters is
   the drift this repo keeps paying for.
 - **A harness may not leave the relay `listening`.** `startDictation`'s first guard returns on it
   **silently**, so a stuck flag refuses every 🔼→ Victor makes with no log line and no chip change —
@@ -426,8 +427,16 @@ gate*.
 
 ## Do not
 
+- **Never hold `MicRecorder.lock` across a call into `AVAudioEngine`** (2026-09-24). The tap
+  callback runs inside AVFAudio's realtime-messenger mutex and takes `lock` in `append`;
+  `removeTap` waits for that mutex. `stop()` holding `lock` across `removeTap` froze the whole app
+  on a 🔼← cancel — `sample`: main in `cancelDictationInFlight → LocalWhisperSource.cancel →
+  MicRecorder.stop → closeLocked → removeTap → RealtimeMessenger → mutex`, the messenger thread in
+  `TapMessage::RealtimeMessenger_Perform → append → lock`. The log shape: `no rewind …` and then
+  never `caret halo off`, followed by `back click refused — the relay's own engine is mid-sentence`.
+  `lifecycle` (a second lock `append` never takes) serialises `start`/`stop` across the engine calls.
 - **`MicRecorder.lock` is not recursive: take it exactly once per public entry point, never again
-  inside one.** `start(to:)` takes it on its first line and holds it to the `return`. On 2026-09-07
+  inside one.** Until 2026-09-24 `start(to:)` took it on its first line and held it to the `return`. On 2026-09-07
   the voiced-seconds commit reset the meter's two fields halfway down `start` inside a second
   `lock.lock()` — the reflex every CoreAudio-thread write to `voiced`/`noiseFloor` correctly
   follows — and deadlocked the **main thread** on the first dictation of the build, with the tap
