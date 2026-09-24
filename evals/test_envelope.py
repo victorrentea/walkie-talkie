@@ -591,7 +591,7 @@ class MovedArea(unittest.TestCase):
 
     def test_the_row_says_which_way(self):
         row = [r for r in self.line.splitlines() if "MOVE" in r][-1]
-        self.assertIn("should go to the box", row)
+        self.assertIn("should move to the box", row)
         self.assertRegex(row, r"the first box cut out at 📁/screenshot-\d+(-\d+)?\.jpg;")
 
     def test_the_cut_out_is_the_first_box(self):
@@ -599,7 +599,7 @@ class MovedArea(unittest.TestCase):
         x1, y1, x2, y2 = (int(g) for g in re.search(r"\((\d+),(\d+)\)→\((\d+),(\d+)\)", row).groups())
         self.assertEqual(AreaFrame._size(self.area["zoom"]), (x2 - x1, y2 - y1))
         # The source sits left of the destination on screen, so its x is smaller.
-        to = re.search(r"should go to the box \((\d+),", row)
+        to = re.search(r"should move to the box \((\d+),", row)
         self.assertLess(x1, int(to.group(1)))
 
 

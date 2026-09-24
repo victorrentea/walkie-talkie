@@ -6374,14 +6374,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path),
                let to = ScreenCapture.moveTarget(for: path) {
                 // **The ⇧-drag** (2026-09-24): two boxes on one clean frame,
-                // and the sentence says which way the arrow points.
-                rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
-                    + "user-drawn MOVE: what is in the box between corners (x,y) "
+                // and the sentence says which way the arrow points. **No clock
+                // on an area row** (2026-09-24, Victor's edit of the row): the
+                // corners are the address, and `at 0:02` read as noise beside them.
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: true)) = "
+                    + "user-drawn MOVE: the box between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
-                    + "should go to the box (\(Int(to.minX)),\(Int(to.minY)))→(\(Int(to.maxX)),\(Int(to.maxY))); "
+                    + "should move to the box (\(Int(to.minX)),\(Int(to.minY)))→(\(Int(to.maxX)),\(Int(to.maxY))); "
                     + "the first box cut out at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
             } else if let box = m.areas[path] ?? nil, let cut = ScreenCapture.zoom(for: path) {
-                rows.append("[\(ShotMarker.Token.key(shot: n, area: true))\(when(n, offset, m.inlinedShots)) = "
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: true)) = "
                     + "user-selected area between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
                     + "at \(name(cut)); also available -800px and -original.jpg at \(size(path))]")
