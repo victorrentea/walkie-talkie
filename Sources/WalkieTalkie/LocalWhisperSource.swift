@@ -153,14 +153,32 @@ final class LocalWhisperSource: DictationSource {
             return "the local model is still loading"
         }
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
-        if let why = meter.start(to: wav) { return why }
         markersInAudio = false
         isRecording = true
         phase = .listening
         Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
+        // **Opened on `audioQueue`, never on main** (2026-09-24) — the shape
+        // `ElevenLabsSource` has had since 2026-09-19. `MicRecorder.start` and
+        // `.stop` are synchronous CoreAudio calls that wait on the engine's own
+        // mutex; a device change in flight (the DJI receiver dropping out) holds
+        // it, and a cancel on the main thread then froze the whole app.
+        audioQueue.async { [weak self] in
+            guard let self = self, let why = self.meter.start(to: wav) else { return }
+            Log.error("🎙️ local: the microphone would not open — \(why)")
+            DispatchQueue.main.async {
+                guard self.isRecording else { return }
+                self.isRecording = false
+                self.phase = .done("error")
+                self.didEnd?(.failed(why: why, audio: nil, duration: 0))
+            }
+        }
         didBegin?()
         return nil
     }
+
+    /// Open, stop and cancel all go through it, in order — a close queued
+    /// behind an open cannot overtake it.
+    private let audioQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.local-mic")
 
     func stop() {
         guard isRecording else { return }
@@ -170,8 +188,16 @@ final class LocalWhisperSource: DictationSource {
         // here on asks `DecodeRate` about this engine (2026-09-23).
         DecodeRate.activeEngine = DecodeRate.whisperLocal
         didStopListening?()
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            let closed = self.meter.stop()
+            DispatchQueue.main.async { self.finishRecording(closed) }
+        }
+    }
 
-        guard let (wav, duration) = meter.stop() else {
+    /// The tail of `stop()`, on the main queue, exactly as it always ran.
+    private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?) {
+        guard let (wav, duration) = closed else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
             phase = .done("empty")
             didEnd?(.silent(""))
@@ -221,8 +247,13 @@ final class LocalWhisperSource: DictationSource {
         isRecording = false
         phase = .done("dismissed")
         didStopListening?()
-        let taken = meter.stop()
-        didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+            let taken = self.meter.stop()
+            DispatchQueue.main.async {
+                self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+            }
+        }
     }
 
     // MARK: - The model

@@ -63,9 +63,10 @@ Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-0
   app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
   crash and no log line. `WisprFlowSource` has had `meterQueue` for this since its meter went in;
   `ElevenLabsSource` got `audioQueue` (open, stop and cancel) the day it became the default.
-  `LocalWhisperSource` still calls it inline, and
-  `RelayWindow.startWarmth`'s timer reaches the meter from the main thread too — both are the same
-  bug waiting for the same wedge. → journal: same
+  `LocalWhisperSource` got its own `audioQueue` on 2026-09-24, after a 🔼← cancel froze the app
+  (`MicRecorder.stop → removeTap` on main). `RelayWindow.startWarmth`'s timer reaching the meter is
+  safe now: the meter's readers take only `MicRecorder.lock`, which is never held across an engine
+  call. → journal: same
 - **More than one engine means a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both
   the launch pick and the menu pick — two chains that had to agree on the same spellings is another
   engine's worth of ways to be wrong. **Anything unrecognised is the default**, which is ElevenLabs

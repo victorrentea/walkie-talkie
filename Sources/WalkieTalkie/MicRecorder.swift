@@ -428,32 +428,18 @@ final class MicRecorder {
                 return "cannot write \(destination.lastPathComponent): \(error.localizedDescription)"
             }
         }
+        // **One `lock.lock()`, and the session is marked open before the tap
+        // goes in** (2026-09-24). `lock` is an `NSLock` and not recursive: when
+        // `start` held it from its first line, a second `lock()` around the
+        // meter reset below deadlocked the main thread on every dictation
+        // (2026-09-07). `start` holds `lifecycle` across the device open now and
+        // `lock` only here. `isRecording` goes true *before* `engine.start()` so
+        // the first buffer is not turned away at `append`'s guard.
         lock.lock()
         file = newFile
         converter = conv
         outputFormat = outFormat
         url = destination
-        lock.unlock()
-
-        // Belt and braces: a second tap on one bus is the other way this call
-        // throws, and `removeTap` on a bus with none is a no-op.
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.append(buffer)
-        }
-        engine.prepare()
-        do { try engine.start() } catch {
-            input.removeTap(onBus: 0)
-            lock.lock(); file = nil; lock.unlock()
-            return "microphone unavailable: \(error.localizedDescription)"
-        }
-
-        // **One `lock.lock()`, taken here and not before.** `lock` is an
-        // `NSLock` and not recursive: when `start` held it from its first line,
-        // a second `lock()` around the meter reset below deadlocked the main
-        // thread on every dictation (2026-09-07). Since 2026-09-24 `start` holds
-        // `lifecycle` across the device open and `lock` only for field writes.
-        lock.lock()
         startedAt = Date()
         // Per recording, both of them: a floor carried over from the last
         // sentence would be a floor for a room, a microphone and a distance from
@@ -467,6 +453,24 @@ final class MicRecorder {
         lastAppendAt = nil
         isRecording = true
         lock.unlock()
+
+        // Belt and braces: a second tap on one bus is the other way this call
+        // throws, and `removeTap` on a bus with none is a no-op.
+        input.removeTap(onBus: 0)
+        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
+            self?.append(buffer)
+        }
+        engine.prepare()
+        do { try engine.start() } catch {
+            input.removeTap(onBus: 0)
+            lock.lock()
+            isRecording = false
+            let failed = file
+            file = nil; converter = nil; outputFormat = nil; url = nil; startedAt = nil
+            lock.unlock()
+            withExtendedLifetime(failed) {}   // released here, outside the lock
+            return "microphone unavailable: \(error.localizedDescription)"
+        }
         Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
         return nil
     }
@@ -606,10 +610,13 @@ final class MicRecorder {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
 
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
         // `AVAudioFile` finalises the RIFF header when it is released, so the
         // reference has to go before anyone reads the path — a file still held
         // here has a length field of zero and every reader believes it.
+        // **Released after the unlock**, not under it: the finalise is disk
+        // work, and `insert` / `offset` / the meter's readers would wait on it.
+        let closing = file
         file = nil
         converter = nil
         outputFormat = nil
@@ -623,6 +630,8 @@ final class MicRecorder {
         pendingInserts = []
         let out = url
         url = nil
+        lock.unlock()
+        withExtendedLifetime(closing) {}   // the header is written here
         return (out, elapsed)
     }
 
