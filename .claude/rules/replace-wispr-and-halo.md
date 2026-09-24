@@ -880,6 +880,20 @@ closes. Between the two is the whole transcription — the stretch in which he i
   which at 0.1 are the 0.2 and 1.25× it shipped with. **Both `voice_puffs` and `voice_dust` sit behind `voice_gate`** (2026-09-23, *"smoke e foarte activ … liniste perfecta"*): the ceiling-relative level turned room hiss into voice once the ceiling sank to 0.02, so nothing counts below `MicRecorder.meter`'s own voiced bar — 9 dB over a tracked noise floor, and over 180/32768. For Fairy dust the filter is run by the page
   host's own `VoicePrep` over the fresh part of each feed (the windows overlap; the chain is
   stateful).
+- **The voice rows are global since 2026-09-24, and the panel shows for every effect** (Victor:
+  *"for the tunnel, also have the settings in the bottom right, but the settings for the voice
+  processing and the thresholds should apply to all the effects … the effects themselves might have
+  an additional threshold"*). *Voice filter* (`HaloVoice`) and *Voice threshold* (`haloVoiceGate`,
+  0…0.5, **default 0 = off**) sit on top of the panel for every effect; the threshold is a gate at
+  the end of `VoicePrep` — `voice_gate`'s noise-floor test plus *level ≥ t × the falling ceiling*,
+  5 ms up / 150 ms down — so the native presets, the fluids and **every** page effect hear the same
+  gated voice (the page skips the chain only when it is `Direct` with the gate off). Below them an
+  optional *Effect threshold* for an effect with a sensitivity of its own on top of the gate:
+  Liquid cursor and Smoke (`voiceThreshold.liquidCursor` / `.smoke`). **Fairy dust lost its own
+  threshold** (`voiceThreshold.fairyDust`, the page's `halo.voice`) — the gate does that job
+  now. An effect nothing attached rows for (Tunnel, every preset) gets the global rows alone under
+  its own name (`FluidTuner.effectTitle`, set by `CaretHalo.preview`). *Reset* leaves the two
+  global rows alone.
 - **`HaloVoice` only reaches what is fed audio.** The Reverse tunnel at the end of a dictation
   is fed the sentence's replay (`rewindWindow`), so a filter shows there only as much as the
   preset's `audioGain` lets it (0.55 → 0.8 the same evening).

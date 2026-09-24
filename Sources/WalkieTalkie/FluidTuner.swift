@@ -14,14 +14,18 @@ import CProjectM
 /// the ring for 12 s on the voice clip, the F7/F9 preview, so the sliders can be
 /// judged without dictating.
 ///
-/// **And the voice, for the effects that answer it** (Victor, 2026-09-23: *"ambele
-/// sa aiba si un combo cu acele filtre in setari + un threshold care sa seteze
-/// sensibilitatea la voce … ca slider"*). Fairy dust, Liquid cursor and Smoke get two
-/// rows on top: *Voice filter* — the same `HaloVoice` chain the menu row picks,
-/// one preference for both — and *Voice threshold*, how loud a syllable has to be
-/// before it stirs the effect, saved per effect (`voiceThreshold.<key>`). Fairy
-/// dust is a page effect with no fluid knobs, so for it the panel is those two
-/// rows alone (`attachVoice`).
+/// **And the voice, for every effect** (2026-09-23 for three of them; for all of
+/// them since 2026-09-24 — Victor: *"the settings for the voice processing and
+/// the thresholds should apply to all the effects, not only to one of them …
+/// the effects themselves might have an additional threshold"*). Two rows on
+/// top, **global**: *Voice filter* — the same `HaloVoice` chain the menu row
+/// picks — and *Voice threshold*, the gate at the end of that chain
+/// (`VoicePrep.gateThreshold`, 0 = off), so every effect hears the same
+/// processed voice. Below them, an optional third row, *Effect threshold*, for
+/// an effect with a sensitivity of its own on top of the gate (Liquid cursor's
+/// dust, Smoke's puffs — `voiceThreshold.<key>`). The panel shows for **every**
+/// effect during the F7/F9 preview, Tunnel included; an effect nothing attached
+/// for gets the global rows alone (`effectTitle`).
 ///
 /// A non-activating panel: clicking a slider never takes focus from the window he
 /// is dictating into.
@@ -41,8 +45,8 @@ final class FluidTuner: NSObject {
         Knob(id: Int32(PMH_FLUID_OPACITY), key: "opacity", title: "Opacity", range: 0.05...1),
     ]
 
-    /// What the voice rows move: `key` names the saved threshold, `apply` hands a
-    /// new one to whatever is drawing.
+    /// What the *Effect threshold* row moves: `key` names the saved threshold,
+    /// `apply` hands a new one to whatever is drawing.
     struct VoiceHook { let key: String; let apply: (Float) -> Void }
     static let thresholdRange: ClosedRange<Double> = 0...0.5
     static let defaultThreshold: Float = 0.1
@@ -57,6 +61,8 @@ final class FluidTuner: NSObject {
     private var readouts: [NSTextField] = []
     private var voiceSlider: NSSlider?
     private var voiceReadout: NSTextField?
+    private var gateSlider: NSSlider?
+    private var gateReadout: NSTextField?
     private var voiceMenu: NSPopUpButton?
     private var voice: VoiceHook?
     private weak var host: ProjectMHalo?
@@ -72,9 +78,26 @@ final class FluidTuner: NSObject {
     var previewing = false {
         didSet {
             guard previewing != oldValue else { return }
-            if previewing, hostID != nil { place(); panel?.orderFrontRegardless() }
+            if previewing {
+                if hostID == nil { buildGlobalOnly() }
+                place(); panel?.orderFrontRegardless()
+            }
             if !previewing { panel?.orderOut(nil) }
         }
+    }
+
+    /// **The effect being previewed**, set by `CaretHalo.preview` before
+    /// `previewing`: the title of the panel when no host attached rows of its
+    /// own — Tunnel and every other preset get the global voice rows under
+    /// their own name.
+    var effectTitle = "Halo voice" {
+        didSet { if hostID == nil { panel?.title = effectTitle } }
+    }
+
+    private func buildGlobalOnly() {
+        voice = nil
+        build(knobs: false)
+        panel?.title = effectTitle
     }
 
     static func savedKey(_ mode: Int, _ knob: Knob) -> String { "fluidTune.mode\(mode).\(knob.key)" }
@@ -100,23 +123,13 @@ final class FluidTuner: NSObject {
         panel?.orderFrontRegardless()
     }
 
-    /// **The voice rows alone**, for an effect with no fluid behind it (Fairy
-    /// dust, drawn by the page). `owner` is what `detach` is later called with.
-    func attachVoice(owner: AnyObject, title: String, voice: VoiceHook) {
-        host = nil; hostID = ObjectIdentifier(owner); self.voice = voice
-        build(knobs: false)
-        panel?.title = title
-        guard previewing else { return }
-        place()
-        panel?.orderFrontRegardless()
-    }
-
     /// Called when the host goes away. Another fluid host may already have
     /// attached (a style change builds the new one first), so only its own leaves.
+    /// Mid-preview the panel stays, down to the global rows.
     func detach(id: ObjectIdentifier) {
         guard hostID == id else { return }
         host = nil; hostID = nil; voice = nil
-        panel?.orderOut(nil)
+        if previewing { buildGlobalOnly() } else { panel?.orderOut(nil) }
     }
 
     private static func format(_ v: Double, _ k: Knob) -> String {
@@ -125,8 +138,8 @@ final class FluidTuner: NSObject {
 
     /// Rebuilt on every attach: which rows exist depends on what is drawing.
     private func build(knobs: Bool) {
-        let w: CGFloat = 300, rowH: CGFloat = 26
-        let voiceRows = voice == nil ? 0 : 2
+        let w: CGFloat = 320, rowH: CGFloat = 26
+        let voiceRows = 2 + (voice == nil ? 0 : 1)
         let knobRows = knobs ? Self.knobs.count : 0
         let h = CGFloat(voiceRows + knobRows) * rowH + 44
         let p = panel ?? {
@@ -146,52 +159,57 @@ final class FluidTuner: NSObject {
         }()
         p.setContentSize(NSSize(width: w, height: h))
         sliders = []; readouts = []; voiceSlider = nil; voiceReadout = nil; voiceMenu = nil
+        gateSlider = nil; gateReadout = nil
         let view = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
         var row = 0
         func y() -> CGFloat { h - 10 - CGFloat(row + 1) * rowH }
         func label(_ title: String) {
             let label = NSTextField(labelWithString: title)
-            label.frame = NSRect(x: 10, y: y(), width: 72, height: 18)
+            label.frame = NSRect(x: 10, y: y(), width: 100, height: 18)
             label.textColor = .white
             view.addSubview(label)
         }
-        if let voice = voice {
-            label("Voice filter")
-            let menu = NSPopUpButton(frame: NSRect(x: 82, y: y() - 3, width: 208, height: 24), pullsDown: false)
-            menu.controlSize = .small
-            for v in HaloVoice.allCases {
-                menu.addItem(withTitle: v.title)
-                menu.lastItem?.representedObject = v.rawValue
-            }
-            menu.selectItem(at: HaloVoice.allCases.firstIndex(of: HaloVoice.current) ?? 0)
-            menu.target = self; menu.action = #selector(pickedVoice(_:))
-            view.addSubview(menu)
-            voiceMenu = menu
-            row += 1
-            label("Threshold")
-            let t = Double(Self.threshold(voice.key))
-            let slider = NSSlider(value: t, minValue: Self.thresholdRange.lowerBound,
-                                  maxValue: Self.thresholdRange.upperBound, target: self, action: #selector(movedThreshold(_:)))
-            slider.frame = NSRect(x: 82, y: y(), width: 150, height: 20)
+        // The two global rows: every effect hears the voice through them.
+        label("Voice filter")
+        let menu = NSPopUpButton(frame: NSRect(x: 110, y: y() - 3, width: 200, height: 24), pullsDown: false)
+        menu.controlSize = .small
+        for v in HaloVoice.allCases {
+            menu.addItem(withTitle: v.title)
+            menu.lastItem?.representedObject = v.rawValue
+        }
+        menu.selectItem(at: HaloVoice.allCases.firstIndex(of: HaloVoice.current) ?? 0)
+        menu.target = self; menu.action = #selector(pickedVoice(_:))
+        view.addSubview(menu)
+        voiceMenu = menu
+        row += 1
+        func thresholdRow(_ title: String, _ value: Float, _ action: Selector) -> (NSSlider, NSTextField) {
+            label(title)
+            let slider = NSSlider(value: Double(value), minValue: Self.thresholdRange.lowerBound,
+                                  maxValue: Self.thresholdRange.upperBound, target: self, action: action)
+            slider.frame = NSRect(x: 110, y: y(), width: 142, height: 20)
             slider.isContinuous = true
-            let readout = NSTextField(labelWithString: String(format: "%.2f", t))
-            readout.frame = NSRect(x: 236, y: y(), width: 58, height: 18)
+            let readout = NSTextField(labelWithString: String(format: "%.2f", value))
+            readout.frame = NSRect(x: 256, y: y(), width: 58, height: 18)
             readout.textColor = .secondaryLabelColor
             readout.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
             view.addSubview(slider); view.addSubview(readout)
-            voiceSlider = slider; voiceReadout = readout
             row += 1
+            return (slider, readout)
+        }
+        (gateSlider, gateReadout) = thresholdRow("Voice threshold", VoicePrep.gateThreshold, #selector(movedGate(_:)))
+        if let voice = voice {
+            (voiceSlider, voiceReadout) = thresholdRow("Effect threshold", Self.threshold(voice.key), #selector(movedThreshold(_:)))
         }
         if knobs {
             for (i, knob) in Self.knobs.enumerated() {
                 label(knob.title)
                 let slider = NSSlider(value: knob.range.lowerBound, minValue: knob.range.lowerBound,
                                       maxValue: knob.range.upperBound, target: self, action: #selector(moved(_:)))
-                slider.frame = NSRect(x: 82, y: y(), width: 150, height: 20)
+                slider.frame = NSRect(x: 110, y: y(), width: 142, height: 20)
                 slider.tag = i
                 slider.isContinuous = true
                 let readout = NSTextField(labelWithString: "")
-                readout.frame = NSRect(x: 236, y: y(), width: 58, height: 18)
+                readout.frame = NSRect(x: 256, y: y(), width: 58, height: 18)
                 readout.textColor = .secondaryLabelColor
                 readout.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
                 view.addSubview(slider); view.addSubview(readout)
@@ -231,6 +249,12 @@ final class FluidTuner: NSObject {
         Log.info("🎚️ halo voice: \(v.rawValue) — \(v.title) (tuner)")
     }
 
+    /// The global gate: saved, and read by every `VoicePrep` at its next chunk.
+    @objc private func movedGate(_ slider: NSSlider) {
+        gateReadout?.stringValue = String(format: "%.2f", slider.doubleValue)
+        UserDefaults.standard.set(slider.doubleValue, forKey: VoicePrep.gateKey)
+    }
+
     @objc private func movedThreshold(_ slider: NSSlider) {
         guard let voice = voice else { return }
         voiceReadout?.stringValue = String(format: "%.2f", slider.doubleValue)
@@ -238,6 +262,10 @@ final class FluidTuner: NSObject {
         voice.apply(Float(slider.doubleValue))
     }
 
+    /// Puts back what this panel shows for the effect — the fluid's constants
+    /// and its own threshold. The two global rows are left alone: they belong
+    /// to every effect, and a reset while previewing one must not undo them
+    /// for all the others.
     @objc private func reset() {
         if let voice = voice {
             UserDefaults.standard.removeObject(forKey: Self.thresholdKey(voice.key))

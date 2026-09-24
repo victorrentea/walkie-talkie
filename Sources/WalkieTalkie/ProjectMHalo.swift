@@ -338,8 +338,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
                 for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
                 let title = mode == 6 ? "Smoke" : mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
                 // Liquid cursor's voice dust and Smoke's puffs answer a threshold
-                // of their own (`pmh_set_voice_threshold`), saved per effect like
-                // Fairy dust's.
+                // of their own (`pmh_set_voice_threshold`, the tuner's *Effect
+                // threshold*), on top of the global gate every effect hears
+                // through `VoicePrep`.
                 let voiceKey = mode == 4 ? "liquidCursor" : mode == 6 ? "smoke" : nil
                 if let key = voiceKey { pmh_set_voice_threshold(renderer, FluidTuner.threshold(key)) }
                 DispatchQueue.main.async { [weak self] in

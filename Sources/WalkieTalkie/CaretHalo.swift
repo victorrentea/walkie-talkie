@@ -1117,6 +1117,7 @@ final class CaretHalo {
             Log.error("◯ halo preview: no halo-voice.wav bundled — noise instead")
         }
         if !live { setActive(true, atCaret: false, opening: .fromPointer) }
+        FluidTuner.shared.effectTitle = style.title
         FluidTuner.shared.previewing = true
         Log.info("◯ halo preview: \(style.rawValue) for \(Int(seconds)) s on \(previewMic != nil ? "the microphone" : "the clip")")
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in

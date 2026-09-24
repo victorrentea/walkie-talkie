@@ -136,8 +136,8 @@ final class VoicePrep {
     private var gain: Float = 1
     private var rmsPole: Float = 0, attack: Float = 0, release: Float = 0
 
-    /// `shared` is the native engine's; the page keeps one of its own for Fairy
-    /// dust, because the chain's filters carry state between chunks.
+    /// `shared` is the native engine's; the page keeps one of its own, because
+    /// the chain's filters (and the gate) carry state between chunks.
     init() { configure(for: .direct, sampleRate: Double(ProjectMHalo.sampleRate)) }
 
     private func configure(for m: HaloVoice, sampleRate sr: Double) {
@@ -160,12 +160,67 @@ final class VoicePrep {
     func refresh() {
         let m = HaloVoice.current
         if m != mode { configure(for: m, sampleRate: Double(ProjectMHalo.sampleRate)) }
+        gate = Self.gateThreshold
+    }
+
+    // MARK: The voice gate — one threshold for every effect (2026-09-24)
+
+    /// **How loud a syllable has to be before any effect hears it**, 0…0.5 —
+    /// the tuner's *Voice threshold*, one value for every halo. Victor: *"the
+    /// settings for the voice processing and the thresholds should apply to all
+    /// the effects … How to process the voice should be the same, no matter the
+    /// effect used, but the effects themselves might have an additional
+    /// threshold"*. It is the last stage of this chain, so the native presets,
+    /// the fluids and the page's effects all hear the same gated voice; the
+    /// per-effect rows (`FluidTuner.VoiceHook`) sit on top of it.
+    ///
+    /// **0 is off, and the default** — the chain is then exactly what it was
+    /// before the gate existed, so no effect changes until he moves the slider.
+    static let gateKey = "haloVoiceGate"
+    static var gateThreshold: Float {
+        (UserDefaults.standard.object(forKey: gateKey) as? Double).map(Float.init) ?? 0
+    }
+    /// Nothing to do: the filter is `direct` and the gate is off. The page
+    /// takes its raw path then, as it did before the chain reached it.
+    static var isPassThrough: Bool { HaloVoice.current == .direct && gateThreshold <= 0 }
+
+    private var gate: Float = 0
+    private var gateGain: Float = 0
+    /// `voice_gate`'s test in `pmhalo.cpp`, which is `MicRecorder.meter`'s: a
+    /// tracked noise floor, and the level judged against a slowly falling
+    /// ceiling so the threshold means the same at any microphone gain.
+    private var noiseFloor: Float = -1, level: Float = 0, levelCeil: Float = 0.02
+
+    /// Open when the chunk is voice (9 dB over the noise floor and over
+    /// 180/32768) **and** reaches `gate` of the recent loudest; the gain then
+    /// ramps per sample — 5 ms up, 150 ms down — so a syllable is not clipped
+    /// at its edges and the gate never clicks.
+    private func runGate(_ raw: [Float], _ x: inout [Float]) {
+        guard gate > 0, !x.isEmpty else { gateGain = 1; return }
+        let sr = Float(ProjectMHalo.sampleRate)
+        let dt = Float(raw.count) / sr
+        let peak = raw.reduce(Float(0)) { max($0, abs($1)) }
+        if noiseFloor < 0 || peak < noiseFloor { noiseFloor = peak }
+        else { noiseFloor += (peak - noiseFloor) * (1 - expf(-dt / 1)) }
+        let bar = max(180 / 32768, noiseFloor * 2.818)
+        level = max(peak, level * expf(-dt / 0.08))
+        levelCeil = max(level, 0.02, levelCeil * expf(-dt / 6))
+        let open = level > bar && level / levelCeil >= gate
+        let target: Float = open ? 1 : 0
+        let up = expf(-1 / (0.005 * sr)), down = expf(-1 / (0.150 * sr))
+        for i in x.indices {
+            gateGain = target + (gateGain - target) * (target > gateGain ? up : down)
+            x[i] *= gateGain
+        }
     }
 
     /// Trece o bucată de semnal prin lanțul ales. Bucata e modificată pe loc.
     func process(_ x: inout [Float]) {
         refresh()
-        guard mode != .direct, !x.isEmpty else { return }
+        guard !x.isEmpty else { return }
+        let raw = gate > 0 ? x : []
+        defer { runGate(raw, &x) }
+        guard mode != .direct else { return }
         let sr = Double(ProjectMHalo.sampleRate)
 
         // anvelopa se citește din semnalul BRUT, înainte ca vreun compresor să-l
