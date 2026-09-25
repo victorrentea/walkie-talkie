@@ -102,12 +102,17 @@ final class ElevenLabsSource: DictationSource {
         ProcessInfo.processInfo.environment["WT_ELEVEN_LANG"] ?? config["WT_ELEVEN_LANG"]
     }
 
-    /// Generous, and still bounded. A minute of 16 kHz mono is 1.9 MB and
-    /// uploads in under a second on anything he teaches from; the ceiling is
-    /// here for the hotel Wi-Fi that accepts the connection and then stops,
-    /// which is the failure that would otherwise hang the settle until
-    /// `AppDelegate.settleTimeout` gives up without ever saying why.
-    private static let requestTimeout: TimeInterval = 45
+    /// Bounded, for the hotel Wi-Fi that accepts the connection and then stops.
+    /// A minute of 16 kHz mono is 1.9 MB and uploads in under a second on
+    /// anything he teaches from. **20 s since 2026-09-25, down from 45**: a
+    /// failure now falls back to the local model, and every second spent
+    /// waiting on a dead connection is a second added to that sentence — a
+    /// timeout is also no longer retried (below), so this is the whole wait.
+    private static let requestTimeout: TimeInterval = 20
+
+    /// **This source records its own WAV**, so a sentence it cannot transcribe
+    /// can still be transcribed by the local model (`AppDelegate.fallBackToLocal`).
+    var recordsOwnAudio: Bool { true }
 
     /// **What this engine costs per hour of audio, per model.**
     ///
@@ -274,10 +279,12 @@ final class ElevenLabsSource: DictationSource {
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
-        guard apiKey != nil else {
-            // Said in full, because the fix is a file he has to create and the
-            // relay is the only thing that knows where.
-            return "no ElevenLabs API key — see \(Self.configURL.lastPathComponent)"
+        // **No key is no longer a refusal** (2026-09-25): the sentence is
+        // recorded anyway and `finishRecording` fails it with the WAV in hand,
+        // which `AppDelegate` hands to the local model — Victor: *"fallback to
+        // the local model, rather than giving up on the transcription"*.
+        if apiKey == nil {
+            Log.error("🎙️ ElevenLabs: no API key — recording anyway, the local model will transcribe it")
         }
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
         markersInAudio = false
@@ -541,7 +548,11 @@ final class ElevenLabsSource: DictationSource {
 
         URLSession.shared.dataTask(with: req) { data, response, error in
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let retriable = error != nil || code == 429 || (500...599).contains(code)
+            // **A timeout is not retried** (2026-09-25): a connection that hung
+            // for `requestTimeout` will not answer 0.8 s later, and the local
+            // model is waiting behind this call.
+            let timedOut = (error as? URLError)?.code == .timedOut
+            let retriable = (error != nil && !timedOut) || code == 429 || (500...599).contains(code)
             if retriable, attempt == 0 {
                 Log.error("ElevenLabs attempt 1 failed (\(error?.localizedDescription ?? "HTTP \(code)")) — retrying")
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {

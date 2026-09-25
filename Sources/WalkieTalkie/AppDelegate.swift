@@ -492,7 +492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !source.isReady, let keyless {
             overlay.flash("⚠️ \(source.name) has no API key — put \(keyless.variable) in "
-                            + "\(keyless.file)", duration: 12)
+                            + "\(keyless.file); until then this Mac transcribes", duration: 12)
         } else {
             overlay.flash("🎙️ \(source.name)", duration: 2.5)
         }
@@ -548,6 +548,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is working** — the capture's own window, because past it nothing is
     /// listening for the words either.
     private static let settleCeiling: TimeInterval = 30
+
+    /// **The same extension while the local model stands in for a cloud engine
+    /// that failed** (2026-09-25): a cold model load is seconds, and a long
+    /// sentence decodes at a fraction of its length — both on top of the time
+    /// the cloud call already took to fail.
+    private static let fallbackCeiling: TimeInterval = 180
+    /// A local transcription is standing in for the engine that failed.
+    private var fallingBack = false
 
     /// **The gesture that opens a microphone has been seen and the microphone
     /// has not.** Only a source whose recorder lives in another process has a
@@ -1647,6 +1655,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestPasteHint = { [weak self] in
             DispatchQueue.main.async { self?.pasteHint.pulse(reason: "POST /test/paste-hint") }
+        }
+        picker.onTestLocalFallback = { [weak self] wav in
+            let done = DispatchSemaphore(value: 0)
+            var answer: [String: Any] = ["ok": false, "error": "no words"]
+            DispatchQueue.main.async {
+                guard let self else { done.signal(); return }
+                let url = URL(fileURLWithPath: wav)
+                let seconds = Double((try? FileManager.default.attributesOfItem(atPath: wav)[.size] as? Int) ?? 0) / 32000
+                let t0 = Date()
+                self.transcribeLocally(wav: url, duration: seconds, standingInFor: "a test") { r in
+                    if let r {
+                        answer = ["ok": true, "text": r.text, "via": r.via, "engine": r.engine,
+                                  "warning": r.warning ?? "", "seconds": Date().timeIntervalSince(t0)]
+                    }
+                    done.signal()
+                }
+            }
+            _ = done.wait(timeout: .now() + 180)
+            return answer
         }
         picker.onTestLiveCaption = { [weak self] body in
             DispatchQueue.main.async {
@@ -3194,6 +3221,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The session is over, whichever way it ended.
     private func dictationEnded(_ end: DictationEnd) {
+        // **A cloud engine that failed with the recording in hand is not the
+        // end of the sentence** (2026-09-25) — the local model gets the WAV.
+        if case .failed(let why, let audio?, let duration) = end,
+           fallBackToLocal(why: why, wav: audio, duration: duration) { return }
+        dictationEndedForGood(end)
+    }
+
+    /// **The local model transcribes what the selected engine could not.**
+    /// Victor: *"in case the transcription model selected is unavailable,
+    /// fallback to the local model, rather than giving up on the
+    /// transcription"*. Only for a source whose WAV is ours
+    /// (`recordsOwnAudio`) — Wispr's audio never reaches this app. Nothing is
+    /// torn down while it runs: the settle, the destination and the sentence's
+    /// flags are the ones the failed engine left, so `deliver` sends the words
+    /// exactly where they would have gone. If the local model fails too, the
+    /// failure goes on as before: WAV staged for *Recover Cancelled Dictation*.
+    private func fallBackToLocal(why: String, wav: URL, duration: TimeInterval) -> Bool {
+        guard source.recordsOwnAudio, source !== whisperSource, !fallingBack,
+              FileManager.default.fileExists(atPath: wav.path) else { return false }
+        let failed = source.name
+        fallingBack = true
+        Log.error("↪️ \(why) — transcribing the \(String(format: "%.1f", duration))s recording on this Mac instead")
+        DecodeRate.activeEngine = DecodeRate.whisperLocal
+        overlay.setEngineMark(Self.mark(engine: "whisper"))
+        overlay.setTranscribing(false)
+        overlay.setTranscribing(true, audio: duration)
+        transcribeLocally(wav: wav, duration: duration, standingInFor: failed) { [weak self] result in
+            guard let self else { return }
+            self.fallingBack = false
+            self.overlay.setEngineMark(Self.mark(engine: self.engineId))
+            guard let result else {
+                self.dictationEndedForGood(.failed(why: "\(why); the local model could not transcribe it either",
+                                                   audio: wav, duration: duration))
+                return
+            }
+            self.deliver(result)
+            self.dictationEndedForGood(.delivered)
+        }
+        return true
+    }
+
+    /// **The WAV through the local model, as the result the failed engine
+    /// would have handed over** — brings the weights up if they are down
+    /// (polled, as `bringUpSource` does; 90 s, then nil). On the main queue.
+    /// `POST /test/local-fallback` calls it with a corpus WAV, delivering nothing.
+    private func transcribeLocally(wav: URL, duration: TimeInterval, standingInFor failed: String,
+                                   _ done: @escaping (DictationResult?) -> Void) {
+        whisperSource.bringUpModel()
+        let asked = Date()
+        func decode() {
+            guard whisperSource.isReady else {
+                guard Date().timeIntervalSince(asked) < 90 else {
+                    Log.error("↪️ the local model did not come up in 90 s")
+                    return done(nil)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { decode() }
+                return
+            }
+            let started = Date()
+            whisperSource.transcribe(wav: wav.path) { r in
+                DispatchQueue.main.async {
+                    guard let r, !r.text.isEmpty else {
+                        Log.error("↪️ the local model heard no words in it")
+                        return done(nil)
+                    }
+                    DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(started),
+                                      chars: r.text.count, compression: r.compressionRatio)
+                    Log.info("↪️ transcribed on this Mac instead of \(failed) — \(r.text.count) chars")
+                    done(DictationResult(
+                        text: r.text, language: r.language, audio: wav, duration: duration,
+                        engine: "whisper-local",
+                        warning: "⚠️ \(failed) was unavailable — transcribed on this Mac",
+                        delivery: .route, via: "local-fallback",
+                        // The failed engine spliced its markers into this very file.
+                        markersInAudio: true,
+                        engineLabel: LocalWhisperSource.modelLabel))
+                }
+            }
+        }
+        decode()
+    }
+
+    private func dictationEndedForGood(_ end: DictationEnd) {
         // **A guess that was never confirmed ends here too.** The source drops a
         // speculative ring 1.5 s after a chord no microphone followed, and the
         // flag it raised lives on this side of the protocol.
@@ -3290,6 +3400,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let giveUp = DispatchWorkItem { [weak self] in
             guard let self, self.settling else { return }
             let waited = CFAbsoluteTimeGetCurrent() - self.settlingFrom
+            if self.fallingBack, waited < Self.fallbackCeiling {
+                Log.info(String(format: "the settle waits: the local model is standing in — %.0f s in", waited))
+                return self.armSettleGiveUp()
+            }
             if self.source.phase.isWaitingForWords, waited < Self.settleCeiling {
                 Log.info(String(format: "the settle waits: %@ is still %@ — %.0f s in",
                                 self.source.name,
@@ -3510,7 +3624,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !resumed { offerSpawnFolders() }
         }
 
-        guard source.isReady else {
+        // A source that records its own WAV can open the microphone unready (no
+        // key): the local model transcribes what it cannot (`fallBackToLocal`).
+        guard source.isReady || source.recordsOwnAudio else {
             // **The gesture is kept.** Telling him to say it again made him watch
             // for a banner and then remember to repeat a gesture he had already
             // made. The intention is unambiguous, so it is banked and honoured

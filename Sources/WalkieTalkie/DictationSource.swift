@@ -151,6 +151,12 @@ protocol DictationSource: AnyObject {
     /// rather than popping in under the pointer with the first word.
     var streamsLive: Bool { get }
 
+    /// **Whether the WAV this source transcribes is the relay's own** — true for
+    /// the cloud engine. When it fails with that WAV in hand, the local model
+    /// transcribes it instead of the sentence being given up (2026-09-25); and
+    /// it may record while not `isReady` (no key), for the same reason.
+    var recordsOwnAudio: Bool { get }
+
     /// **The words heard so far, as the live recogniser has them right now** —
     /// the whole sentence, not a delta; a later call may revise the tail of an
     /// earlier one. A caption only: what is *delivered* still arrives through
@@ -342,6 +348,8 @@ extension DictationSource {
     func audioOffset(of moment: Date) -> TimeInterval? { nil }
 
     var streamsLive: Bool { false }
+
+    var recordsOwnAudio: Bool { false }
 
     /// Nobody to call: a source that does not stream has no live words.
     var didHearLive: ((String) -> Void)? {

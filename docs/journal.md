@@ -12057,3 +12057,21 @@ live-transcribed>, entering from right, exiting left: to show me what I'm talkin
 - **The row's width is reserved for the whole sentence** so the chip does not grow word by word;
   the words move inside a fixed window instead (`overlay-chip.md`).
 
+## A failed cloud transcription falls back to the local model (2026-09-25)
+
+Victor: *"implement a fallback: in case the transcription model selected is unavailable,
+fallback to the local model, rather than giving up on the transcription."*
+
+- **Where:** the top of `AppDelegate.dictationEnded`, before the failure branch clears the
+  sentence's flags — the fallback needs the settle, the destination and `cleanSentence` exactly as
+  the cloud engine left them, so the words land where they would have.
+- **What counts as unavailable:** whatever ends in `.failed` with the WAV in hand — transport
+  error, HTTP 4xx/5xx after the one retry, and (new) **no API key**, which used to refuse the
+  gesture and now records and fails at the upload instead. Wispr is out of scope: its audio is
+  never this app's.
+- **The wait before the fallback was shortened**: `requestTimeout` 45 → 20 s and no retry after a
+  timeout, since the retry of a hung connection only delayed the local model.
+- **Tested:** the local half on a corpus WAV through `POST /test/local-fallback` — model cold,
+  6.0 s for a 3.5 s clip, text correct. **Not yet tested end to end** with a real failed upload
+  and a delivery (that needs a real sentence and a destination).
+

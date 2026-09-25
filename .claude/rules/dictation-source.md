@@ -36,6 +36,16 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   websocket (`commit_strategy=vad`) for the chip's `💬` caption only. Every stream failure is a
   log line, never a `DictationEnd`. Costs both: batch + $0.39/h. Probe measured 2026-09-25: first
   partial ~1 s after speech, then ~1/s, revising the last word's punctuation.
+- **A cloud engine that fails keeps the sentence: the local model transcribes the same WAV**
+  (2026-09-25, `AppDelegate.fallBackToLocal` → `transcribeLocally`). Any `.failed` carrying audio
+  from a source with `recordsOwnAudio` (both ElevenLabs rows) is intercepted at the top of
+  `dictationEnded` before anything is torn down, so `deliver` sends it where the sentence was
+  going; the result says `via: local-fallback` and warns *X was unavailable*. Only if the local
+  model fails too (90 s to come up, or no words) does the old path run (WAV staged for *Recover*).
+  **No key records anyway** (the start gate is `isReady || recordsOwnAudio`). The settle waits up
+  to `fallbackCeiling` 180 s while `fallingBack`. ElevenLabs' `requestTimeout` is 20 s (was 45)
+  and a timeout is not retried. Measured: cold model + 3.5 s clip = 6.0 s
+  (`POST /test/local-fallback {"wav"}`, which answers the result and delivers nothing).
 - **`engine(named:)` is one table read by the launch pick and the menu pick; anything unrecognised is
   the default**, never a named engine, so a typo cannot pick a recogniser.
 - **`setEngine`** nils the old source's callbacks, assigns `source`, writes `dictationSource`, re-runs

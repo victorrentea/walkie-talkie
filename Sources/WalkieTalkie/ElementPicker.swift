@@ -460,6 +460,9 @@ final class ElementPicker {
     /// `POST /test/live-caption` `{"text": "…"}` — the `💬` row's words as if
     /// the live recogniser had just heard them; `{"on": false}` closes the row.
     var onTestLiveCaption: (([String: Any]) -> Void)?
+    /// `POST /test/local-fallback {"wav": path}` — the local model standing in
+    /// for a failed engine, on that file; answers the result, delivers nothing.
+    var onTestLocalFallback: ((String) -> [String: Any])?
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -852,6 +855,13 @@ final class ElementPicker {
 
         // **The `💬` caption without a microphone or a bill** — the ticker is
         // only reviewable if its words can be pushed from a desk, one at a time.
+        case ("POST", "/test/local-fallback"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let wav = body?["wav"] as? String else {
+                return respond(conn, 400, ["ok": false, "error": "wav required"])
+            }
+            respond(conn, 200, onTestLocalFallback?(wav) ?? ["ok": false])
+
         case ("POST", "/test/live-caption"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             onTestLiveCaption?(body)
