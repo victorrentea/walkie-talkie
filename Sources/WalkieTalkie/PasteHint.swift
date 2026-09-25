@@ -90,6 +90,8 @@ final class PasteHint {
     /// seconds"* — once a key restarts the clock, the stretch that matters is
     /// the pause between the undo and reaching for `⌘⇧P`.
     static let hold: TimeInterval = 5.0
+    /// Then half a second fading out (2026-09-25) — see `fadeOutPasteHint`.
+    static let fade: TimeInterval = 0.5
 
     /// A showing is in flight.
     private var pulsing = false
@@ -134,7 +136,12 @@ final class PasteHint {
             guard let self, self.generation == mine else { return }
             self.pulsing = false
             self.stopWatchingKeys()
-            self.chip?.setPasteHint(false)
+            // `fade` more on top of `hold`, the row going out rather than off.
+            // A pulse or a `hide` meanwhile moves `generation` on and keeps it.
+            self.chip?.fadeOutPasteHint(seconds: Self.fade) { [weak self] in
+                guard let self, self.generation == mine else { return }
+                self.chip?.setPasteHint(false)
+            }
         }
     }
 

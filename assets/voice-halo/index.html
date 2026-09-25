@@ -389,7 +389,17 @@ function updateBands() {
   }
   const l = Math.min(1, (sum / NB) * 2.4);
   levelNow += (l - levelNow) * inertia(l > levelNow ? 0.35 : 0.06);   // urcă repede, coboară lent
+  // Pornirea: o secundă de „voce” din oficiu, ca efectul să se joace puțin
+  // chiar dacă el tace și ține mouse-ul nemișcat (Victor, 2026-09-25: „when a
+  // dictation begins … you should play a bit the effect, for example, the
+  // dust”). Praful, de exemplu, fără voce și fără mișcare e un ecran gol.
+  // Cosinus în jos de la BURST_PEAK; vocea lui, dacă e mai tare, câștigă.
+  const bAge = (performance.now() - burstFrom) / 1000;
+  if (bAge >= 0 && bAge < BURST_S)
+    levelNow = Math.max(levelNow, BURST_PEAK * (Math.cos(bAge / BURST_S * Math.PI) + 1) / 2);
 }
+const BURST_S = 1.0, BURST_PEAK = 0.8;
+let burstFrom = -1e9;              // halo.start() îl pune pe acum
 const e = i => band[Math.min(NB - 1, Math.max(0, i | 0))] || 0;
 const eAt = u => e(u * (NB - 1));
 
@@ -1677,7 +1687,7 @@ if (EMBED) {
     pick(i) { pick(i); return FORMULAS[i] ? FORMULAS[i].name : 'no such effect: ' + i; },
     center(x, y) { embedCX = x; embedCY = y; },
     audio(b64) { emuAudio(b64); },
-    start() { calls.start++; clearTrail(); lastFrameAt = 0; start(); },
+    start() { calls.start++; clearTrail(); lastFrameAt = 0; burstFrom = performance.now(); start(); },
     stop() { running = false; },
     fps(n) { frameInterval = n > 0 ? 1000 / n : 0; },     // plafonul de cadre al gazdei (0 = liber)
     names() { return FORMULAS.map(f => f.name); },

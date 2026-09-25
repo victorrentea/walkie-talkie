@@ -295,7 +295,9 @@ class FrameList(unittest.TestCase):
         `auto` on the token since 2026-09-20 — the frame he did not press for
         says so rather than being inferred from its position.
         """
-        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)? auto\] ")
+        # A blank line after it since 2026-09-25 — the token is the frame's
+        # caption, not the first word of the sentence.
+        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)? auto\]\n\n\S")
         self.assertRegex(self.line, r"\[📸0 = 📁/screenshot-0(-\d+)?-800px\.jpg")
         self.assertNotIn("[and shot", self.line)
         self.assertNotIn("[the screen when I started talking", self.line)

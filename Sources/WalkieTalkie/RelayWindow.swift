@@ -930,7 +930,18 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// step, taking a quarter of the bar with it. Identical on screen, and the
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
-    private var listeningWord: String { "Listening\(micMark)..." }
+    private var listeningWord: String { "\(prompting ? "Prompting" : "Listening")\(micMark)..." }
+
+    /// **`Prompting...` for a sentence to an agent, `Listening...` for a clean
+    /// one** (2026-09-25, Victor: *"The clean dictation should have the label
+    /// listening. The other three modes, such as prompting at caret, prompting
+    /// bound, and prompting to new should be prompting"*). The menu's names for
+    /// the four (`HaloDestination.title`), said on the chip. Nine letters
+    /// either way, so the warmth bar keeps its step count. `AppDelegate`
+    /// writes it with the destination, before the row goes up.
+    var prompting = true {
+        didSet { if prompting != oldValue { applyEngineText() } }
+    }
 
     /// **Which recogniser is doing the work, as its own logo** (2026-09-18 as a
     /// letter on the `Listening` row, 2026-09-22 as a logo, and from that
@@ -4099,10 +4110,30 @@ private let frontLabel = NSTextField(labelWithString: "")
     private(set) var pasteHint = false
 
     func setPasteHint(_ on: Bool) {
+        // A fade cut short (a new pulse, or `hide`) leaves the row at full
+        // opacity for whatever comes next.
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            pasteRow.animator().alphaValue = 1
+        }
         guard pasteHint != on else { return }
         pasteHint = on
         layoutContent()
         refreshOpacity()
+    }
+
+    /// **The row fades when its time is up** (2026-09-25, Victor: *"when the
+    /// time expires for the paste again in the tooltip … it should fade for
+    /// another half a second"*). Only the row: the chip is bare, so the row
+    /// fading is what he sees go, and any other row on it stays put.
+    /// `done` runs at the end; `PasteHint` drops the row there unless a new
+    /// pulse came in meanwhile.
+    func fadeOutPasteHint(seconds: TimeInterval, done: @escaping () -> Void) {
+        guard pasteHint else { return done() }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = seconds
+            pasteRow.animator().alphaValue = 0
+        }, completionHandler: done)
     }
 
     func setWisprHearing(_ on: Bool) {

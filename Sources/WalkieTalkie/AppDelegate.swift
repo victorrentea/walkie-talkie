@@ -4768,11 +4768,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dress the way it changes the arrow.
         let ringUp = listening || speculative || wisprHearing || coasting
         if ringUp {
-            let destination: HaloDestination = (foreignMic || wisprMicSentence) ? .wispr
+            // **`cleanSentence` wears the clean dictation's dress too** (2026-09-25,
+            // Victor: *"you did not preserve the effect that happened when it's a
+            // clean dictation"*). On Wispr the back click's sentence was Wispr's
+            // own microphone, so `wisprMicSentence` put it here; on the Engine
+            // (`6a34a48`, `c3411de`) it is this app's microphone typing at the
+            // caret, and it fell through to `.caret` — the prompt's effect.
+            let destination: HaloDestination = (foreignMic || wisprMicSentence || cleanSentence) ? .wispr
                 : atCaret ? .caret
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
             caretHalo.setDestination(destination)
+            overlay.prompting = destination != .wispr
         }
         caretHalo.setActive(ringUp,
                             atCaret: atCaret,
@@ -6352,7 +6359,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               !m.inlinedShots.contains(n) else { return "" }
         // `auto:` is true here and nowhere else — this *is* the frame he did not
         // press for, and this is the one place that knows it. See `Token.shot`.
-        return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil, auto: true) + " "
+        // **A blank line after it** (2026-09-25, Victor, correcting a sent
+        // prompt by hand to `[📸0🖱️@1072:2033 auto]`, empty line, then his
+        // words): the token is a caption for the frame, not the start of the
+        // sentence, and on one line with it the first words read as its label.
+        return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil, auto: true) + "\n\n"
     }
 
     private static func artifactsClause(_ m: Message) -> [String] {

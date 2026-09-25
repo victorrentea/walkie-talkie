@@ -732,12 +732,18 @@ enum HaloDestination: String, CaseIterable {
     case wispr
 
     /// The menu row's wording, in the menu's own vocabulary.
+    ///
+    /// **Listening vs Prompting** (2026-09-25, Victor: *"The clean dictation
+    /// should have the label listening. The other three modes … should be
+    /// prompting, not dictating"*). The same two words the chip says while the
+    /// sentence is open (`RelayWindow.prompting`): a clean sentence is only
+    /// words at the caret; the other three are prompts to an agent.
     var title: String {
         switch self {
-        case .caret: return "At caret"
-        case .bound: return "Bounded"
-        case .spawn: return "New Claude"
-        case .wispr: return "Dictate"
+        case .caret: return "Prompting at caret"
+        case .bound: return "Prompting bound"
+        case .spawn: return "Prompting to new"
+        case .wispr: return "Listening"
         }
     }
 
