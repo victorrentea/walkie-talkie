@@ -135,6 +135,13 @@ yields to `--label`).
 
 ## `Listening...` and `Transcribing...`
 
+- **`Listening to 🎤 → ⬮...` since 2026-09-24** — the listening row names the recogniser too, after an
+  arrow (*"place an arrow and then specify as well the transcription engine"*). Wispr's five bars
+  whenever Wispr holds the mic, whatever `Engine` says, and the device glyph is then Wispr's own
+  `History.micDevice` (`AppDelegate.currentMicMark`). The `→` is a letter, not a picture. The two
+  facts rode one row as `Listening(🎙️/E)...` from 2026-09-19 to 09-22 and should not have: while
+  the mic is open nothing is transcribed yet.
+
 - **`Listening...` is a progress bar drawn one character at a time** — twelve steps
   (`RelayWindow.listeningWord`), **three full stops rather than `…`** so the tail is three steps,
   not one glyph taking a quarter of the bar. Binary per character, not a gradient — a gradient

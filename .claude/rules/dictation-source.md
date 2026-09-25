@@ -1,965 +1,251 @@
+---
+paths:
+  - "Sources/WalkieTalkie/DictationSource.swift"
+  - "Sources/WalkieTalkie/WisprFlowSource.swift"
+  - "Sources/WalkieTalkie/LocalWhisperSource.swift"
+  - "Sources/WalkieTalkie/ElevenLabsSource.swift"
+  - "Sources/WalkieTalkie/ShotMarker.swift"
+  - "Sources/WalkieTalkie/WisprHistory.swift"
+  - "Sources/WalkieTalkie/WisprNotes.swift"
+  - "Sources/WalkieTalkie/WisprSink.swift"
+  - "Sources/WalkieTalkie/WisprState.swift"
+  - "Sources/WalkieTalkie/WisprWatch.swift"
+  - "tools/wispr-*"
+  - "tools/eleven-test.sh"
+---
 # The dictation source
 
-Rules for `DictationSource`, `WisprFlowSource`, `LocalWhisperSource`, `ElevenLabsSource`,
-`ShotMarker`, `tools/wispr-test.sh` and `tools/eleven-test.sh`.
+Rules for the recognisers and everything that catches Wispr Flow's words. History and reasoning:
+`docs/journal.md` (*Wispr Flow everywhere*, *The firewall*, *ElevenLabs is the engine…*); the later
+dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20 (sources, tools,
+`DictationVocabulary`, menu rows, corpus tags, env switches); `git show` on that commit brings them back.
 
-**Speechmatics and Gemini were removed on 2026-09-20**, whole — the two sources, their two test
-tools, `DictationVocabulary` (which existed only for them), their menu rows, their corpus tags and
-their env switches. Victor: *"renunță la Speechmatics și GeminiSource. Scoate-le din cod pt
-moment."* Everything measured about them is still in the journal, and `git show` on that commit is
-the whole of what it takes to bring either back.
-Full history and reasoning: `docs/journal.md` — *Wispr Flow everywhere (2026-09-12)*.
+## One interface, nothing downstream looks behind it
 
-## One interface, and nothing downstream may look behind it
-
-- **`AppDelegate` holds a `DictationSource` and never names an implementation.** The chip, the
-  halo, the settle, the corpus and the destination routing read the protocol only. The one place
-  a concrete class appears is `wireDictationSource()`, `engine(named:)` and the `/test/wispr*`
-  routes, which are named after Wispr on purpose. → journal: *One interface, because a second branch
-  is how the first one rots*
-- **The interest that rule pays, measured** (2026-09-18): adding `ElevenLabsSource` as a third
-  recogniser cost **one new file** plus a case in `engine(named:)`, a row in the Engine submenu, a
-  line in `/engine` and a tag in `VoiceCorpus`. Nothing in the chip, the halo, the settle, the
-  routing, the envelope or the outbox was touched, because none of them can tell.
-- **ElevenLabs is the default engine since 2026-09-19**, Wispr Flow is what 🔽 → still posts raw,
-  and `engine(named:)`'s fallback follows the default instead of naming Wispr. The old rule —
-  *anything unrecognised is Wispr, the one engine that uploads must not be reachable by a typo* —
-  is spent rather than repealed: he chose the upload, for the word timings the envelope's tokens
-  need. → journal: *ElevenLabs is the engine, and the freeze that found (2026-09-19)*
-- **The Wispr firewall (2026-09-22, evening).** Wispr's ⌘V is dropped at the session tap for every
-  sentence (`HotkeyTap`, stateless), every Wispr sentence is the relay's (`intercepting = wrapWispr`,
-  whoever pressed the chord), the words come from the `History` row at `formatted` and never from
-  the pasteboard, and `AppDelegate.wireDictationSource` wires `wisprSource` whichever engine is
-  picked so a hand-started sentence follows the binding. **Never a focus move, never the
-  Scratchpad** — both were tried and Victor rules them out. `wrapMode` answers `.off` while the
-  firewall is up; `POST /test/wrap-mode` overrides still work for the old scenarios.
-  → CLAUDE.md *The Wispr firewall*; journal *The firewall (2026-09-22, evening)*
-- **Wispr Flow was not a selectable engine for one day, 2026-09-22** (back that evening) — *"scoate wisprflow ca sursă
-  de dictare din lista de Engine — n-am reușit niciodată să-l integrăm ca lumea în fluxul nostru
-  să-i preluăm ce text injectează."* There are **two** rows in the Engine submenu now, no `wispr`
-  case in `engine(named:)`, no `(W)` in `engineMark`, and `engineId` answers `eleven` for anything
-  that is not the local model. **`WisprFlowSource` is still built and still a `DictationSource`**:
-  the raw-chord gesture, the meter, `hearingChanged`, the ⚡ ring and the back button's stop all
-  hang off `wisprSource`, and only `source` can no longer *be* it. The wrap below is left standing
-  rather than deleted — everything it documents is still true, and it is what the row would come
-  back to if the injection can ever be blocked outright.
-  → journal: *Wispr Flow leaves the Engine list (2026-09-22)*
-- **`raw_transcript` with the words in it is a finished sentence** (2026-09-22). Wispr fills all
-  three text columns and `e2eLatency` and then never flips the status: 21 such rows in 30 days,
-  five of them in twenty minutes that evening. `rawTextSettled` reads such a row as `formatted`
-  once the words have held still for `rawTextGrace` (0.8 s) — for the switch only, so the state
-  machine and the log keep Wispr's own word for it. The ordinary path never passes through here:
-  measured with `tools/wispr-row-watch.py`, a row's text columns appear **in the same tick** as its
-  terminal status, and every `raw_transcript` in the log arrived *after* `processing`. The row with
-  **nothing** in it is the other case and still belongs to `silenceCeiling`.
-  → journal: *`raw_transcript` is a finished sentence Wispr never labelled*
-- **The pasteboard at the capture's timeout is an answer only when the relay asked it one.** The
-  `changeCount` branch in `captureExpired` fired without `askedForCopy` and delivered whatever
-  Victor had last copied, labelled `copy_last_text` — 1 char into a spawned session, 25 at the
-  caret, for two sentences of 779 and 434 characters. It is gated on `askedForCopy` now, and the
-  History row is read once more before a sentence is called lost. → journal: same
-- **Never open or close a microphone on the main thread.** `MicRecorder.start(to:)` / `.stop()` are
-  synchronous CoreAudio device binds; when the audio stack is wedged they never return and the whole
-  app goes with them — measured twice on 2026-09-19 with `sample`, the relay frozen solid with no
-  crash and no log line. `WisprFlowSource` has had `meterQueue` for this since its meter went in;
-  `ElevenLabsSource` got `audioQueue` (open, stop and cancel) the day it became the default.
-  `LocalWhisperSource` got its own `audioQueue` on 2026-09-24, after a 🔼← cancel froze the app
-  (`MicRecorder.stop → removeTap` on main). `RelayWindow.startWarmth`'s timer reaching the meter is
-  safe now: the meter's readers take only `MicRecorder.lock`, which is never held across an engine
-  call. → journal: same
-- **More than one engine means a table, not a `?:`.** `AppDelegate.engine(named:)` is read by both
-  the launch pick and the menu pick — two chains that had to agree on the same spellings is another
-  engine's worth of ways to be wrong. **Anything unrecognised is the default**, which is ElevenLabs
-  since 2026-09-19; the older rule here said *anything unrecognised is Wispr*, and both it and the
-  `wispr` case itself are gone (2026-09-22).
-- **Every callback lands on the main queue.** The two sources produce their edges on three
-  different threads between them (CoreAudio's listener queue, a transcription callback, the event
-  tap), and what the callbacks drive is AppKit. One rule at the boundary, not a hop per call site.
-- **`phase` is the source's answer to *how far along*, and it is source-agnostic**
-  (`DictationPhase`, 2026-09-13): `idle` · `warming` · `listening` · `transcribing(status)` ·
-  `done(status)`. `isRecording` only ever answered the middle one, so a cold Electron's warm-up
-  and Wispr's formatting pass both reached the relay as the same undivided *not recording* — and
-  a settle written against that cannot tell *the words are late* from *the words are lost*. The
-  status string is the recogniser's own vocabulary and nothing outside the source may branch on
-  it. → journal: *Three witnesses instead of one (2026-09-13, evening)*
-- **Which source is live is a menu row since 2026-09-14** — `Engine`, replacing `Replace
-  WisprFlow`; two rows since 2026-09-22, when Wispr Flow left it. `AppDelegate.setEngine` nils the old source's five callbacks, assigns `source`, writes
-  `dictationSource` and re-runs `wireDictationSource()`; that is the whole switch, because nothing
-  downstream knows there is more than one answer. It **refuses while a sentence is in flight** and
-  tells the menu what is actually running either way. `WT_SOURCE=whisper` still wins for one run.
-  → `.claude/rules/menu-bar.md`, *The Engine row*
-- **`isRecording` is the source's; `listening` is the relay's.** The first answers *is a microphone
-  open*, the second *does this app have a sentence in flight*. They are not the same instant and
+- **`AppDelegate` holds a `DictationSource` and never names an implementation.** Chip, halo, settle,
+  corpus and routing read the protocol only. Concrete classes appear only in `wireDictationSource()`,
+  `engine(named:)` and the `/test/wispr*` routes. Payoff measured 2026-09-18: ElevenLabs cost one new
+  file plus a case, a menu row, a line in `/engine` and a corpus tag.
+- **Engines:** ElevenLabs Scribe (**default since 2026-09-19**, for its word timings), the local
+  model, and Wispr Flow (third row, behind the firewall since 2026-09-22 evening; out of the list only
+  that morning). `WisprFlowSource` is wired **whichever engine is picked** — the raw 🔽 → chord, the
+  meter, `hearingChanged`, the ⚡ ring and the back button's stop hang off `wisprSource`.
+- **`engine(named:)` is one table read by the launch pick and the menu pick; anything unrecognised is
+  the default**, never a named engine, so a typo cannot pick a recogniser.
+- **`setEngine`** nils the old source's callbacks, assigns `source`, writes `dictationSource`, re-runs
+  `wireDictationSource()`; **refuses while a sentence is in flight**. `WT_SOURCE` wins for a run.
+- **Every callback lands on the main queue** — one rule at the boundary, not a hop per call site.
+- **`phase` (`DictationPhase`: `idle`·`warming`·`listening`·`transcribing(status)`·`done(status)`)
+  is source-agnostic**; the status string is the recogniser's and nothing outside may branch on it.
+  `isRecording` = *a microphone is open* (source); `listening` = *a sentence is in flight* (relay);
   every gate in `AppDelegate` means the second.
-- **`hearingChanged` is the one event that arrives whether or not this source is the engine**
-  (2026-09-18) — `WisprFlowSource` only, wired once at launch beside `wrapWispr`, never in
-  `wireDictationSource`. The five above reach the app only for the *wired* source, so with the
-  Engine on the local model a ⌘⌥ push-to-talk dictation happens with the relay silent about it;
-  this publishes the edges of `WisprState.listening` so the music can pause for it. It is
-  deliberately **not** a sixth `DictationSource` event: a dictation Victor starts himself stays
-  Wispr's — no screenshot, no ⌘C probe, no route — and this claims only *a microphone is open*.
-  → journal: *The music also pauses for a dictation the relay did not start*
-- **A chord this app posts for a gesture must announce itself** (2026-09-18) —
-  `HotkeyTap.onWisprRawChord` → `WisprFlowSource.noteRawChord(closing:)`, wired at launch to
-  `wisprSource` whichever engine is live. The keyboard branch that raises `onWisprMaybeStarting`
-  **filters this app's own posts out** (`backButtonStamp`, 2026-09-13, so `postWisprHandsFree` does
-  not hand the source its own start back as a stop). The consequence nobody had noticed until
-  Victor asked for the ring: 🔽 → reached `WisprState` through **no witness at all** — no chord,
-  so no row poll, so never `listening`, so no `hearingChanged` and **no ⚡ ring** — and with the
-  Engine on anything but Wispr there is no second witness either, because this source's `watch` is
-  only started by `prepare()`. `relay: false` and `confident: true`: this app posted the chord, so
-  there is no gesture to have misread, and the sentence is still Wispr's own. The toggle's halves
-  are told apart by `gestureSeen` from its own state, exactly as they are for his keyboard.
-  → journal: *The ring comes back for the dictations he starts himself (2026-09-18)*
-- **A push-to-talk sentence ends when the pair goes back up, and the keyboard is the only witness
-  that says so on time** (2026-09-18). `HotkeyTap.onWisprPushToTalkReleased` →
-  `WisprFlowSource.pushToTalkReleased` → the ordinary `closeListening`. Gated twice:
-  `startedByHeldPair` (a ⌘⌥ pressed for something else mid-sentence is ordinary and must not end
-  it) and `isRecording` (a tap too short for a row leaves it `speculative`, and *that was not a
-  dictation* belongs to `speculativeGrace`). No hold-time floor — `ptt` is `54+61` and the
-  hands-free toggle is `49+59+63`, so this release is never a toggle in disguise.
-  → journal: *The release of ⌘⌥ is the end of the sentence*
-- **`onWisprMaybeStarting` carries a `WisprStart`, not a `why` string and a `confident` bool.**
-  Both were derivable from the gesture, and the release has to be paired with *its own* press.
+- **Never open or close a microphone on the main thread.** `MicRecorder.start/stop` are synchronous
+  CoreAudio binds; a wedged audio stack froze the app solid twice (2026-09-19, `sample` →
+  `BindToDeviceInternal → mach_msg`). Wispr: `meterQueue`; ElevenLabs and local: `audioQueue` (open,
+  stop, cancel — local since a 🔼← froze it 2026-09-24). Meter readers take only `MicRecorder.lock`,
+  never held across an engine call.
+- **`hearingChanged` arrives whether or not Wispr is the engine** (wired once at launch, not in
+  `wireDictationSource`) and claims only *a microphone is open* — pause the music, raise the ring.
+  Deliberately not a sixth `DictationSource` event: a dictation Victor starts himself stays Wispr's.
+- **A chord this app posts must announce itself** — `HotkeyTap.onWisprRawChord` →
+  `noteRawChord(closing:)`. The keyboard branch filters our own posts (`backButtonStamp`), so without
+  this 🔽 → reached `WisprState` through no witness at all: no row poll, no ring.
+- **Push-to-talk ends when the ⌘⌥ pair goes up** — `onWisprPushToTalkReleased` → `closeListening`,
+  gated on `startedByHeldPair` and `isRecording`. `onWisprMaybeStarting` carries a `WisprStart` so
+  the release pairs with its own press. Once Wispr's row confirms a held-pair dictation it opens the
+  sentence (`confirmSpeculative` → `didBegin`, caret mode: no picture, no probe).
+- **A Wispr sentence names Wispr's microphone** — `History.micDevice` → `InputDevice.glyph(wisprName:)`,
+  read from Wispr, never written; `🎓 TO Wispr` maps to the relay's own device.
 
-## The wrap, end to end (2026-09-14)
+## The Wispr firewall (2026-09-22, evening)
 
-**The wrap** (`wrapWispr`) is **on** and is no longer a menu row — *Wrap Wispr Flow* went on
-2026-09-14 as redundant beside `Engine`, and its stored preference went with it; `off` is the
-harness's control, through `WT_WRAP_WISPR=0` or `POST /test/wrap-mode`. It chooses between three
-*relationships with another app*. `/engine` and `GET /test/state` answer `wrapMode` **and `wrapWhy`**, because a
-wrap that quietly fell back to the emergency path is exactly what nobody notices.
+Victor: *"vreau wisprflow să NU mai fie lăsat să insereze text el … îi luăm transcrierea din DB, cât
+Walkie e pornit."* Case: app1 in front, relay bound to terminal 2 → nothing in app1, words in terminal 2.
+He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-attack-plan.md` ①+③.
 
-| mode | Wispr is told | the words come from | what it costs |
-|---|---|---|---|
-| **`scratchpad`** (default) | *Open Scratchpad*, **held** for the sentence | the `History` row at `formatted`, `via: "wispr-history"`; the note is a cross-check | nothing — Wispr inserts nowhere |
-| `sink` (emergency) | the hands-free chord | the relay's own key window, taken at the **stop**, `via: "wispr-sink"` | his keyboard, for a moment, every dictation |
-| `off` (tick down) | the hands-free chord | nobody — Wispr inserts where the focus is | the wrap |
+- **Three parts:** `HotkeyTap` drops Wispr's ⌘V **statelessly** (posting pid is Wispr — no arm, no
+  window); every Wispr sentence is the relay's (`intercepting` whoever pressed the chord) and is
+  delivered from the `History` row at `formatted` (`historyIsTheRoute` default; pasteboard never
+  read); `wisprSource` wired whichever engine is picked. There is no AX dictation path in Wispr —
+  every dictation ends in a plain session-visible ⌘V. `wrapMode` answers `.off` while it is up.
+- **Measured (`tools/wispr-loop.sh`):** row `formatted` 458–540 ms after mic close, ⌘V dropped
+  407–506 ms after, words landed 5–10 ms after the row; hand-started-bound 195 chars in the tty, 0 in front.
+- **Identity is signed:** `isWispr` answers from the process name (fail closed), demotes off the tap
+  thread unless signed by Team ID `C9VQZ78H85`; cache keyed on `(pid, start time)`.
+- **The canary is not optional** — a re-signed tap can report enabled and be inert, and
+  `build-app.sh` re-signs every build. `HotkeyTap.proveAlive` posts a stamped bare V key-up at launch
+  and after wake (0.9–3.8 ms); a miss flashes for 20 s. `POST /test/firewall` runs one.
+- **A frozen app swallows nothing** (`MainStallGate`, 2026-09-24, after a 32-min deadlock ate a
+  61-word sentence): main thread beats every 0.5 s; silent 3 s → the tap passes every event until it
+  beats and no mouse button is down, and samples into `~/.walkie-talkie/hangs/`. Known cost: a
+  stall clearing after Wispr pasted may deliver twice.
+- **An unclaimed ⌘V is rescued from the row** (`rescueFromRow`). `WT_WISPR_FIREWALL=0` for one run.
 
-`WT_WRAP_MODE=sink` for one run; `POST /test/wrap-mode {"mode": …}` for the loop (`auto` hands the
-decision back). It falls back to `sink` **automatically** when Wispr has no `open_scratchpad`
-shortcut, and when the Scratchpad window will not close — both said out loud in `wrapWhy`.
+## Catching Wispr's words
 
-### Scratchpad mode, in order
+- **Delivery is a synthetic ⌘V**: keycode 9, flags `0x20100000`, Wispr's pid. The `probe:` log line
+  measures it on every dictation. Swallow the `keyUp` with the `keyDown`; leave ⌘ alone.
+- **`History` row = completion signal** (`WisprHistory`, `flow.sqlite`, read-only, `mode=ro`, one
+  query). One row per dictation, created at the gesture (357 ms) with `status = ''`. `beginCapture`
+  takes the newest row **only if its `startedAt` is this dictation's**; polls every 150 ms. Text:
+  `pastedText` or `formattedText`. `e2eLatency` p50 2.2 s / p99 7.1 s / max 13.7 s.
+- **Statuses live in one place:** `WisprState.intermediateStatuses` (`""`, `recording`,
+  `raw_transcript`, `processing`) / `terminalStatuses` (`formatted`, `extension_paste`,
+  `extension_other`, `dismissed`, `empty`, `no_audio`, `error`). Unknown → terminal + `Log.error`.
+- **`raw_transcript` with words in it is finished** — Wispr never flips it (21 rows / 30 days).
+  `rawTextSettled` reads it as `formatted` after `rawTextGrace` 0.8 s of stillness, for the switch
+  only. Text columns normally appear in the same tick as the terminal status (`tools/wispr-row-watch.py`).
+- **A row with nothing in it stops being progress after 8 s** (`silenceCeiling`) → *"No speech was
+  heard"*; `asrText` exists to tell *thinking* from *heard nothing*.
+- **Timeouts:** `captureTimeout` 30 s (an 81 s dictation was lost at 6 s); `settleTimeout` 8 s; both
+  only nets behind the row. The settle steps aside while `phase.isWaitingForWords` (≤ 30 s).
+- **The pasteboard is an answer only when the relay asked it one** (`askedForCopy`) — otherwise it
+  delivered whatever Victor had last copied. Wispr restores the clipboard after its ⌘V: arm at the
+  start chord, refuse a pasteboard identical to the pre-dictation one, read the string the instant it
+  changes (three sentences became a Word rental contract, 2026-09-13).
+- **A Wispr that quit is not slow:** `pollHistory` checks the main process by the anchored path
+  `/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow` (two absences, 300 ms) **and** compares
+  the pid read at the chord (`wisprPidAtChord`) — the harness relaunches Wispr in 200 ms.
+- **A new dictation retires a standing capture only if its row is terminal**
+  (`retireCaptureIfSettled`); otherwise it throws away the sentence in flight.
 
-1. **Start from CLOSED.** A held chord writes a note **only while the Scratchpad window is
-   closed** — four runs. With it open Wispr transcribes normally (`History` says `formatted`) and
-   writes **no note at all**; the sentence is lost and closing the window afterwards does not
-   commit it. Wispr opens that window during the dictation, so the thing that breaks a sentence is
-   the **previous** one. `holdScratchpad` checks and closes before it holds.
-2. **Hold the chord** — `open_scratchpad`, read from `prefs.user.shortcuts` by **action name** at
-   call time, fallback `79` (F18), `WISPR_SCRATCHPAD_KEYS` overrides. A single key on purpose: a
-   chord held for a whole sentence must not be one that hijacks every key he presses.
-3. **Park it on sight.** A 25 ms watcher from the **chord** (the window appears at the *start* of
-   the hold and lives for the whole sentence). Parked to the smallest size Wispr allows, at the
-   bottom-right of the second display when one is attached, all but an 8 pt sliver past the edge.
-4. **Release at the stop**, and ask the close **exactly once** — see *Never reintroduce*.
-5. **Deliver from the row at `formatted`**, with an **addressed ⌘V**.
-6. **Cross-check the note** 3.5 s later, and log only a material disagreement.
+## Witnesses and phases (`WisprState`, 2026-09-13)
 
-### The numbers behind it (all measured, 2026-09-13/14)
-
-| | |
-|---|---|
-| Wispr's own round trip (`e2e`) | 320–420 ms |
-| row `formatted`, after the microphone closed | **~400–530 ms** |
-| words landed (addressed paste, no longer gated on the close) | **~410–490 ms** |
-| the note readable | 2627 ms — **why the note is not the delivery** |
-| the Scratchpad visible on the main display | **17–40 ms** (the poll's own latency) |
-| the Scratchpad closed, after the close was asked | **417–445 ms** |
-| its window level / subrole / minimum size | **layer 3** / `AXStandardWindow` / **300×300** |
-| does Wispr remember the parked frame | **no** — it reopens at its own origin, so it is parked on every open |
-
-### The delivery is the row; the note is the second opinion
-
-- **The note is where Wispr *pastes*; the row is where Wispr writes *what it heard*.** Waiting for
-  the note made the mode 2.8 s slower for a copy of the same sentence.
-  `WT_SCRATCHPAD_DELIVER=note` goes back to waiting, because the day the two disagree somebody
-  will want the other one.
-- **`formattedText` first in this mode**, where every other path prefers `pastedText`: an append
-  into Wispr's own note arrives lowercased and run on (`commit and push the fix.` against
-  `Commit and push the fix.`).
-- **The cross-check normalises case and punctuation away** and compares only the **new portion** of
-  the note — Wispr does not reliably start a new note, it appends with `source = typed` whose
-  content is the whole accumulated notepad. Only a disagreement about the *words* is worth a line.
-- **The ⌘V is swallowed in every mode.** It was let through in Scratchpad mode for one build, on
-  the reasoning that Wispr's paste belongs to Wispr's own note — true while the note was the
-  delivery, false once the window is closed at the release: the paste then arrives with nowhere of
-  its own to go and lands in **his document**, lowercased, beside the relay's proper copy.
-
-### The addressed paste
-
-- **`DictationResult.focusPid`** carries the pid of the app he was looking at **at the chord** —
-  the last unambiguous moment, because the window that takes the keyboard never becomes frontmost.
-  `pasteText(_:to:)` → `TerminalBinding.pressPaste(to:)` posts the ⌘V with **`postToPid`**,
-  straight into that application's event queue, bypassing the session and therefore whoever holds
-  the key focus. Who holds it is a **log line, not a gate**.
-- **Nil for every other delivery**, which means *whatever has the caret*: the fabricated
-  `/test/dictation`, the five-minute recovery of a cancelled sentence, ⌘⇧P. Bound-terminal and
-  spawn deliveries never went through the focus at all.
-- **No modifier cleanup on the addressed paste.** The stale-⌘ bug `tap(key:command:)` is written
-  around is about `CGEventSource.flagsState`, which is *session* state; events posted to a pid
-  never enter it. The `flagsChanged` pair still goes to the same pid, because a Cocoa app builds
-  ⌘V out of a modifier it believes is down.
-
-### The keyboard, while Wispr's window is up
-
-- **The Scratchpad becomes KEY without its app becoming frontmost.** Measured: a `z` typed 1.5 s
-  after the stop went into the note and was delivered *inside the sentence*, with
-  `frontmostApplication` reading TextEdit throughout. **Never test key focus with
-  `frontmostApplication`** — use the system-wide focused element's owner
-  (`AXUIElementCreateSystemWide` + `kAXFocusedUIElementAttribute` + `AXUIElementGetPid`).
-- **Real keys are re-posted to the app he was looking at**, decided **per key**:
-  anything carrying **⌘ or ⌃ passes** (⌘Tab and ⌘Space stay the system's), the focus owner is
-  checked at the keystroke, and only a key whose owner is Wispr is handed on. Armed at the chord,
-  disarmed when the window is confirmed gone, **10 s ceiling from the release**, below the app's
-  own chords so ⌘⌃B and ⌘⌃D keep working, logged **by keycode only**.
-  `WT_SCRATCHPAD_REDIRECT_KEYS=0` turns it off.
-- **`keyRedirect`'s counters are this dictation's, zeroed at the chord** whether or not the guard
-  then arms — the loop read `keys = 5` on runs where nothing had been redirected at all, because
-  only a successful arm reset them and a run that never armed inherited the previous one's numbers
-  wholesale. A failure to arm now says so in the log instead of leaving stale evidence behind.
-- **The focus-owner check does not use the system-wide element.** Measured 2026-09-14:
-  `AXUIElementCreateSystemWide` + `kAXFocusedUIElementAttribute` returns **`kAXErrorCannotComplete`**
-  on this Mac, so a check written on it silently answers *no* for ever. It is still asked first —
-  where it works it is the most direct reading there is — and a failure is logged once, after which
-  the question goes to **Wispr's own application**: is the Scratchpad the window it considers
-  focused, and does that window say it is.
-- **The ⌘C selection probe must leave the modifier state clean, and until
-  2026-09-14 it did not.** `KeySimulator.simulateKeyPress` stamped `.maskCommand` on the C
-  `keyDown` **and `keyUp`** and posted nothing after — and `CGEventSource.flagsState` reports
-  whatever the last event's flags said, so the session believed **⌘ was held** until Victor's next
-  real key. It is the stale-⌘ bug of `area-crop.md` a fourth time, and it matters more here than it
-  did in `TerminalBinding.tap`: the window server **merges live modifier state back into a posted
-  key**, so a letter arriving afterwards is delivered as **⌘ + that letter**. At the time this was
-  found the probe ran **only for a bound or spawned dictation** (`captureContext` → `stashSelection`
-  → `SelectionCapture.read`, and only when Accessibility returned nothing) and **never for a caret
-  one**, which is exactly the axis along which the loop's probe letters survive or vanish — and
-  `q z j k w y v` against TextEdit are *quit*, *close the document*, *undo* and four edits.
-  The trailing `flagsChanged` is now posted; the leading one deliberately is not, because asserting
-  ⌘-down is the window being closed. **`stashSelection` and the whole start-of-gesture probe are
-  gone since 2026-09-16** (see `screenshots-and-selection.md`, *The selection: frozen*) — the fix
-  lives in `SelectionCapture.read()` itself, so it still protects every caller left: the drag-release
-  probe and the shutter's fallback, neither gated on caret vs. bound.
-- **The probe is stamped.** `keyboardEventSource: nil` gave it pid 0 and no `userData`, so this
-  app's own ⌘C reached its own tap looking exactly like a key Victor had pressed.
-- **`WT_KEY_TRACE=1` / `POST /test/key-trace {"on": true}`** logs every keyboard event the tap sees
-  and the verdict it reached — `passed`, or `SWALLOWED by <branch>` — with the **keycode and the
-  posting pid only, never a character**. An event that reached the end of `handle` untouched says
-  `passed` explicitly, so a missing verdict means a branch that has not been instrumented rather
-  than a key that vanished.
-- **A printable character goes in through Accessibility, not as a key** (2026-09-14). An
-  application that is frontmost with **no key window has no first responder**, so a character
-  delivered to it by any key route is dropped — measured twice, once with a dead target and once
-  with a live one, and the letters vanished both times. ⌘V survives the same trip only because
-  `performKeyEquivalent` needs no first responder. So the guard sets **`AXSelectedText`** on the
-  victim's focused element, which needs no key window at all: at a caret the selection is empty, so
-  setting it *is* typing. **Return, Tab, the arrows and Delete** have no text to insert and go by
-  `postToPid`, logged as best effort.
-- **The focused element is read fresh at the keystroke**, not remembered from the chord: he may
-  have clicked into another field since, and inserting into the field he has left is worse than
-  dropping the key.
-- **The target pid is resolved at the keystroke too.** The remembered one can be **dead** — the
-  loop force-quits its victim between scenarios, and the guard spent a whole run posting into a
-  corpse — so `kill(pid, 0)` checks it and a dead target falls back to whoever is frontmost now,
-  said out loud once. The tap never asks AppKit on its own thread; `HotkeyTap.noteFrontmost` is
-  pushed in by the workspace observer.
-- **The swallow gate is strict: `WisprScratchpad.scratchpadHasFocus()`, and nothing else.** Only
-  while the window itself reports `AXFocused == true`. Anything short of a yes passes the key
-  through, because the loop sampled TextEdit's `AXTextArea` as focused at every probe of a run in
-  which the guard swallowed all seven letters — and a swallow while the victim holds the focus is
-  pure loss.
-- **`keyRedirect` counts four things**: `seen`, `redirectedAX`, `redirectedKey`, `passed`, and the
-  last three add up to the first.
-
-### The keyboard guard is ON, and it works (2026-09-14)
-
-**`WT_SCRATCHPAD_REDIRECT_KEYS` and `WT_SCRATCHPAD_AX_INSERT` both default on.**
-While Wispr's Scratchpad window is up, a real keystroke is taken by the tap and
-inserted into the app he was looking at through `AXSelectedText`, on a serial
-queue off the tap thread.
-
-Measured by the suite run **alone under its own lock**:
-
-| | result |
-|---|---|
-| `wrap-caret` / `wrap-bound` / `wrap-spawn` | **7/7 letters into the victim, every offset** |
-| letters typed while the clip played | landed |
-| letters in Wispr's note | none |
-| letters inside the delivered sentence | none |
-| `redirectedAX` | 5 |
-| delivery | 12–18 ms |
-
-**Every earlier reading that said otherwise was contaminated.** Two harness
-instances were typing probe letters into the same victim document at once — the
-runner proved it by finding its own three-letter sweep arriving from another
-process's pid — and that is also what produced the doubled letters and the
-two-pid traces that took a night to explain. The loop takes a lock file now
-(`~/.walkie-talkie/wispr-loop.lock`, a second instance exits 2), and no
-measurement of this is worth anything without it.
-
-- **The insertion is on `HotkeyTap.axQueue`**, serial and `.userInteractive`,
-  **200 ms per character** through `AXUIElementSetMessagingTimeout`, a character
-  that misses the deadline **said to be lost** rather than queued behind the
-  next. The tap only decides, translates the keycode through the cached layout,
-  swallows and hands it on — an AX round trip inside the tap's callback stalls
-  every keystroke on the Mac.
-- **Non-printables** — Return, Tab, the arrows, Delete — go by `postToPid` on the
-  same queue, keeping their place, and are logged as best effort.
-- **⌘ and ⌃ always pass**, so ⌘Tab and ⌘Space stay the system's.
-- **The gate is the Scratchpad window's existence**, cached by the 25 ms watcher;
-  no focus reading is true (see below).
-- **The note is never the delivered text in Scratchpad mode** (`noteMayDeliver`,
-  off). Two runs once delivered `added 'qz'` — a pair of probe *keystrokes* — as
-  though they were the sentence. On a timeout with no row the answer is
-  **"No words came back"**, never the note.
-- **The swallow does not leak.** Where a letter appeared twice, it had been
-  *posted* twice from two different pids, each copy with its own `SWALLOWED`
-  line; `noteDuplicate` says so in the log now.
-- **Wispr's own ⌘V leaves ⌘ down in the session, and only this app puts it back**
-  (the sixth stale ⌘, 2026-09-14). Its paste is `keycode 9, flags 0x20100000` —
-  ⌘ stamped on the key *and on its release* — and it posts no `flagsChanged`
-  after it, so `flagsState` reports ⌘ held until Victor's next real keystroke:
-  every gesture gated on `bare` refuses and every *wait for a bare wire* loop
-  spins its full allowance. It shows only with the **wrap off**, which is the
-  tell that found it — wrapped, the swallow eats both halves and the session
-  never sees the release. The tap posts the clearing `flagsChanged` on ⌘'s own
-  keycode for any Wispr ⌘V key-up it is **letting through**, stamped, off the tap
-  thread, and says so in the log.
-- **The seventh stale ⌘ is the sixth one with no tap running, and it is healed at
-  launch** (2026-09-14). `wispr-alone` — relay stopped, Wispr pastes for itself,
-  relay relaunched — came back with `/test/state.sessionFlags == ["command"]`:
-  Wispr's ⌘V key-up carries ⌘ and posts no `flagsChanged` behind it, and with no
-  tap alive there is nobody to put it back, so the session was already holding a
-  modifier before the relay's first line of log. It is the first occurrence this
-  app did not cause and the only one it can fix from outside a keystroke. So
-  `HotkeyTap.clearStaleModifiersAtLaunch()` runs from
-  `applicationDidFinishLaunching` **after `SingleInstance.enforce`** (the instance
-  just stood down is the likeliest poster of the last event): for each of ⌘ ⌥ ⌃ ⇧
-  fn it compares `CGEventSource.flagsState(.combinedSessionState)` against
-  `keyState` on **both** of that modifier's keycodes, and a flag no key is holding
-  down gets a stamped `flagsChanged` **on the modifier's own keycode**, carrying
-  the state the keyboard is left in rather than `[]` — a modifier he really is
-  holding survives the clearing of one he is not. `⌨️ a stale <modifier> from
-  before the relay started was put back down`, and silence when there is nothing
-  to say.
-- **A cancel during the settle must NOT disarm the swallow** (adversarial run,
-  2026-09-14 03:04). `forward-left` posted 200 ms after the stop tore the capture
-  down while Wispr's ⌘V was still 300 ms away, and the trace shows what that
-  costs: `↓ key 9 pid 81316 flags 0x20100000 — passed`. Wispr's text went into
-  TextEdit — the one promise the whole wrap exists to keep — and its ⌘-stamped
-  key-up left `sessionFlags ['command']` behind. **Never disarm while Wispr may
-  still paste.** The cancel now sets `discardOnArrival`: Victor is told it is
-  cancelled at once, Wispr is told to dismiss, everything stays armed, and
-  whatever still arrives — a ⌘V, a row going terminal, a note, or nothing by
-  `captureTimeout` — is swallowed and **dropped**. The Scratchpad closes with the
-  capture, which is to say after Wispr has finished with it. `capturing` stays
-  true for that stretch, which is honest: the swallow really is armed.
-- **…but a cancelled capture may not outlive the gesture that supersedes it**
-  (the regression that fix left behind, measured on `3b4be96` by
-  `wrap-cancel-in-settle --settle-delay-ms=100,200,500,1000`). `capturing` stayed
-  true for up to the full **30 s** of `captureTimeout` and the **next** relay
-  dictation never opened — `never listening (8.1 s)` — because two different
-  things refused it. `retireCaptureIfSettled` saw a row that was not terminal and
-  kept the capture, so `beginCapture` returned early and the new sentence had no
-  swallow, no row poll and no delivery; and the **phase** stayed `transcribing`,
-  which is what `onPasteToggle` and `startDictation` read as *words in flight*, so
-  the click was answered with *nothing to start, nothing to stop*. Both are fixed
-  in `WisprFlowSource`. `cancel()` calls `state.reset`: the swallow is armed but
-  nothing is **awaited**, which are two claims and only the first was ever true
-  after a cancel — and `pollHistory` no longer feeds `state.sawRow` while
-  `discardOnArrival`, or the next tick would put the phase straight back.
-  `retireCaptureIfSettled` sends a discarded capture to `retireDiscardedCapture`,
-  which lets `endCapture` release everything it holds — the Scratchpad, the
-  keyboard guard, the sink, the deadline — and opens the new dictation's own
-  capture in the same call. What survives is only the swallow, **keyed by
-  `retiredDiscardRow`**: `WisprHistory.entry(rowid:)` watches that row (`newest()`
-  cannot answer about it any more — by then the new dictation is on top) and the
-  claim is let go when the row is terminal plus `pasteGrace`, when its ⌘V arrives
-  and is dropped, or at a **5 s** ceiling. `injected(from:)` checks the retired
-  row **before** `capturing`, because the capture running by then belongs to the
-  next sentence and that key is not its delivery.
-- **After a cancel the Scratchpad closes when Wispr is finished with it, not when
-  the capture is** (measured **3.2 s** on `3b4be96`; target < 1.5 s). The close
-  asked at `closeListening` works — what nobody was watching for is that Wispr
-  **reopens** the window ~2 s later when it writes its note, and a cancelled
-  sentence does not reach `endCapture` until Wispr has finished transcribing words
-  nobody wants, so the second window stood over his work taking his keystrokes for
-  the whole difference. `armDiscardClose` polls at `historyTick` from the dismiss
-  and re-arms the close as soon as either the row for **that** dictation is
-  terminal (`dismissed` / `empty` / …, read by rowid) or `pasteGrace` has passed
-  since the ⌃Escape went out, whichever comes first. The **ask-exactly-once** rule
-  is unchanged and now has a reader: `WisprScratchpad.closeIsInFlight` exposes
-  `closeASAP`, `armCloseOnSight` guards on it as it always did, and `endCapture`
-  consults it before starting a second close of its own.
-- **A chord that goes out after its dictation is over opens a window nobody owns**
-  (adversarial round 2, Finding 1). `postScratchpad` moves the bookkeeping now and
-  hands the keys to `scratchpadQueue`, which waits `settleForOptionsPlus` and then
-  for a bare wire — so on an 18 ms dictation the hold `holdScratchpad` asked for
-  landed **after** the cancel had ended everything. Wispr read the down/up pair as
-  a *tap*, opened its Scratchpad, and the window stood for **57 s** with the
-  keyboard guard already disarmed (`scratchpadWindowOpen:true`,
-  `keyRedirect.armed:false`, AX `['Status', 'Scratchpad']`, reproduced at 100, 200
-  and 500 ms). A queued **hold** is therefore stamped with
-  `HotkeyTap.dictationEpoch` and dropped at post time when that epoch has moved
-  on — the epoch is retired in `gestureSeen` and in `closeListening`, *after* the
-  release, because the release is the one chord that must still go out. A
-  **release** is never dropped for a stale epoch (a key stuck down is the worse
-  failure by a wide margin) but is dropped when the hold it releases never went
-  out, so the pair leaves the wire untouched. `tapWisprScratchpad` carries no
-  epoch: it belongs to the window, not to a sentence.
-- **…and the close that was *itself* opening the window** (the same finding, one
-  build later: the epoch fix was necessary and not sufficient). Every cancel row
-  still left an orphan at +3 s and +15 s, and the log said why —
-  `the Scratchpad window appeared — closing it on sight`, then `chord DOWN/UP`,
-  and no `orphan Scratchpad closed` anywhere. **After a dismissed dictation Wispr
-  closes its own Scratchpad**, and the close asked while the window was up is
-  *emitted* a moment later, after the wire has gone bare, into a world with
-  nothing to close — so the toggle **opened** one. The 25 ms watcher had already
-  finished (it saw the window go), and the sweep was looking for a window that
-  did not exist yet.
-  **`WisprScratchpad.ensureClosed(reason:)` is now the only way this app closes
-  that window** — close-on-sight, after a delivery, after a cancel, the hold's
-  precondition, the sweep and the menu row all go through it, and `closeWindow`
-  is a one-line alias so every existing caller does too. It re-reads the window's
-  existence **at post time, riding with the keys**
-  (`HotkeyTap.tapWisprScratchpad(if:)`, checked on the posting queue immediately
-  before they go out, a skipped press taking its own release with it), and
-  afterwards looks once more, `recheckAfterClose` = 0.6 s — longer than the tap's
-  own 250 ms hold plus the queue's settle — so a window that is there now is one
-  **this app** put there: `🗒️ the close opened it — toggled back`, up to
-  `closeAttempts`. `closingNow` keeps two callers from overlapping, and
-  `closeIsInFlight` covers it as well as `armCloseOnSight`'s `closeASAP`.
-  The one deliberate exception is `POST /test/wispr-scratchpad {"tap": true}`,
-  which is the raw toggle the harness opens a window *with*.
-- **The orphan sweep runs continuously while idle, and does not care what ended.**
-  `WisprScratchpad.startIdleSweep(isIdle:)` from `WisprFlowSource.prepare()`: one
-  AX existence read every 0.5 s, and any window that has stood for more than
-  **1 s** while `phase == idle` with no capture, no microphone and no speculation
-  is closed through `ensureClosed` and logged `🗒️ orphan Scratchpad closed`.
-  Arming it *for twelve seconds after a capture* was exactly wrong: the orphan is
-  made by a toggle that lands late, so it does not exist yet while such a sweep
-  is looking, and by the +3 s and +15 s where the runner found the window
-  standing, nothing was watching at all. Verified from a desk with no dictation
-  at all — `POST /test/wispr-scratchpad {"tap": true}` to open one, then
-  `a Scratchpad window has stood for 1.0 s with no dictation in flight`,
-  `the Scratchpad closed on attempt 1`, `orphan Scratchpad closed`, **2.6 s** from
-  open to closed.
-- **A late *open* edge is the last sentence's, not the next one's** (Finding 2,
-  `notifyMs = 4109`). The notification's OPEN arrived after the relay's own stop —
-  in Attack 7 *before* the delivery, in Attack 10 with no Scratchpad involved at
-  all — and was read as a dictation Victor had started by hand: `dictation
-  abandoned (a new dictation started)`, the ring back up, the halo, the selection
-  watcher and the recorder all restarted, the ring down again 500 ms later. This
-  is the symmetric half of the close-edge rule, and it is asked **before**
-  `state.notify`, because `notify(true)` takes an `idle` machine into `listening`
-  and would put the phase back into a sentence that is over. `lateOpenEdge()`
-  needs the relay's own stop to be the last thing that happened
-  (`lastStopAt >= gestureAt`, within **12 s**) and then either the stopped
-  sentence's capture still open, or **no newer `History` row** — Wispr writes the
-  row at the gesture (357 ms), so a dictation that has really started has one of
-  its own and a late notification about the old one does not.
-- **`POST /test/wispr-handsfree` intercepts, and `{"hand": true}` does not**
-  (Finding 3). The route called `gestureSeen(relay: true)`, so `intercepting` was
-  true: the relay swallowed Wispr's ⌘V and re-delivered the sentence itself —
-  `lastDelivery={via:wispr-cmdv,kind:route,to:caret}` on a run whose whole point
-  was that it would only watch. The old behaviour is kept (it is the transcribe
-  primitive the harness is built on) and the promise it was breaking gets its own
-  flag: `{"hand": true}` posts the same chord with `relay: false`, which is ring
-  only — nothing swallowed, nothing delivered, `relayStarted` and `intercepting`
-  both false.
-- **A recogniser that has quit is not a recogniser that is slow** (Finding 5).
-  Wispr killed mid-settle left the relay holding `Transcribing...` for the whole
-  **30 s** of `captureTimeout` before `No words came back`. `pollHistory` now asks
-  whether Wispr's **main** process is there — `NSWorkspace` filtered on the
-  anchored executable path `/Applications/Wispr Flow.app/Contents/MacOS/Wispr
-  Flow`, never the bundle id or the name, both of which match the nested
-  Accessibility helper — and two consecutive absences (300 ms;
-  `runningApplications` is KVO-updated and one blank reading during Wispr's own
-  relaunch is not a death) end it with `⚠️ Wispr Flow quit — the sentence is
-  lost`. `closeListening` releases the chord and asks the Scratchpad close,
-  `endCapture` disarms the guard and takes the window down, and `ensureClosed`
-  is asked for any window the dead instance left — nothing else is going to.
-  **Absence is not the only way it dies, and on this rig not the likely one**:
-  the harness relaunches Wispr **200 ms** after the kill, so two absences 300 ms
-  apart never see it, which is why `wispr-dies-mid-settle` still waited out its
-  30 s on the build that was supposed to have fixed it. The pid of Wispr's main
-  process is therefore read at the chord (`wisprPidAtChord`) and a **different**
-  pid is the same fact and cannot be missed: the process this sentence was
-  dictated into is gone, and whatever is running now has never heard of it.
-- **A row with nothing in it stops being progress after 8 s** (Attack 12). Two
-  seconds of digital silence left row 12814 in `raw_transcript` with `asrText`,
-  `formattedText` and `pastedText` all empty **for ever** — Wispr never made it
-  terminal — and the relay sat out its full 30 s. `silenceCeiling` is 8 s from the
-  microphone's close, the same number the settle gives up on and Wispr's own p99,
-  so nothing that was going to arrive is cut off; the answer is **"No speech was
-  heard"**, which is a different sentence to show him than *no words came back*.
-  `WisprHistory.Entry.asrText` was added for it: `status` alone cannot tell
-  *still thinking* from *heard nothing*.
-- **A gesture during the settle that is not a cancel was already safe** — the same
-  run's `forward-click` 100 ms after the stop is a no-op (`nothing to start,
-  nothing to stop`), the ⌘V is swallowed and the sentence delivers normally.
-- **A dictation that came back with nothing owes the window and the keyboard back
-  most, not least.** `endCapture` claimed `scratchpadWindowHandled` at the
-  *release*, so a timeout left the Scratchpad standing — the runner watched it for
-  three seconds after `No words came back`, with his keystrokes going into the
-  note throughout. It now disarms the guard and closes the window on **every**
-  exit from a Scratchpad capture, whatever ended it.
-
-### The measured truth about his keystrokes, and what is accepted
-
-Wispr's Scratchpad panel takes the keyboard for a stretch of every dictation, and **what he types
-in that stretch is lost**. This is what three nights of measurement actually establish:
-
-- **The window is up for the whole sentence**, from the chord to the close. It is not dangerous for
-  all of it: keys typed *during the recording* are re-posted and land in the app he is in.
-- **The dangerous stretch is the tail** — from Wispr's own paste into its note until the relay's
-  close takes the window down, roughly **0.5–2 s after the stop gesture**. In that window no
-  *key-posting* route reaches him: an application that is frontmost with **no key window has no first
-  responder**, and `postToPid` to a *verified-live* victim drops the character exactly as the
-  session post does. ⌘V survives only because `performKeyEquivalent` needs no first responder,
-  which is why the **delivery** works and the letters do not.
-- **Accessibility is the route that works, and it works off the tap thread.** `AXSelectedText`
-  needs no key window, which is the whole point; the call is a synchronous round trip into another
-  application, so it happens on `HotkeyTap.axQueue` — serial, `.userInteractive`, **200 ms per
-  character** through `AXUIElementSetMessagingTimeout`, and a character that misses the deadline is
-  **said to be lost** rather than queued behind the next. The tap does only what a tap can do
-  quickly: decide, translate the keycode through the layout, swallow, hand it on. Measured
-  2026-09-14 02:10 — `seen=7 redirectedAX=5 redirectedKey=2 passed=0`, **all seven probe letters in
-  the victim document**. Ships on; `WT_SCRATCHPAD_AX_INSERT=0` turns it off.
-- **`TISGetInputSourceProperty` asserts the main thread, and the tap is not it.** Three runs died
-  on this and every one of them looked like something else — a dictation that simply stopped, a
-  relay that was dead when I looked, an AX insertion that seemed to be the culprit. The crash
-  report is unambiguous: `_dispatch_assert_queue_fail` → `TSMGetInputSourceProperty` →
-  `HotkeyTap.translate`, `SIGTRAP`. The layout is read once on the main thread
-  (`refreshKeyboardLayout`, re-read when the input source changes) and the tap touches only a
-  `Data`. **Never call a TIS function from the event tap.**
-- **And no focus reading is true**, in either direction: the Scratchpad reports `AXFocused == false`
-  while it is taking the keystrokes, and the victim reports its own `AXTextArea` as focused while
-  receiving none of them. The gate is the window's **existence**, because that is the only thing
-  that correlates.
-
-**So the accepted cost is a second or two of the keyboard, once per dictation** — the same trade
-Victor made knowingly for the sink, and the reason he rejected the sink as the *primary* path was
-its cost being paid on *his focus*, not on a second of typing he was not doing anyway. A dictation
-is a thing he is speaking, not typing, through.
-- **The theft cannot be undone.** Re-activating the victim does nothing (`activate` says *be
-  frontmost* and it already is); `AXMain` / `AXFocused` on the window he was typing in logs
-  `the focus owner is still Wispr`.
-- **The FRONT is a different loss and it is given back** (2026-09-14). The bullet above is about
-  the *key window*, which cannot be recovered because the victim never stopped being frontmost.
-  The **close chord** posted at the stop is another matter: Wispr answers it by activating
-  `com.electron.wispr-flow`, so the victim really goes behind — measured on two caret dictations
-  Victor lost out of Terminal, `the front app changed since the chord — his keys go to pid 92966,
-  not 46446`, in the same second as `scratchpad chord DOWN/UP`. Every close now funnels through
-  `WisprScratchpad.onCloseFinished` and `WisprFlowSource.putTheFrontBack` hands the front back:
-  only when Wispr is frontmost at that moment, to `frontBeforeLast` (the app he was in when it was
-  taken, not the one from the chord), `activate` plus `AXRaise`/`AXMain`/`AXFocused`, at +0.45 s
-  and +1.5 s, five per minute at most, logged under `🪟`. **Never on
-  `didActivateApplication` during the sentence** — handing the front back while Wispr is still
-  writing its note aims Wispr's own insertion at his document.
-- **`activate` does not take a front back; `AXFrontmost` does** (measured 2026-09-14, 06:13 vs
-  06:14, theft provoked on purpose). A background app asking for *another* app to be frontmost is
-  declined by macOS — the first build logged `it would not go back to Terminal` twice.
-  `AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute, true)` is
-  granted, because it is asked with the Accessibility trust. Both calls are made and both results
-  are in the log line.
-- **`frontmost_app()` in the rig cannot see a stolen front.** It asks System Events for the first
-  process whose `frontmost` is true, and that answered **`Terminal` while
-  `NSWorkspace.frontmostApplication` answered `Wispr Flow`** — so `focus never moved off the
-  victim` stayed green through the very loss Victor reported. Read the front with `NSWorkspace`
-  before trusting that assertion about a Wispr window.
-
-### The sink, and everything the wrap is not
-
-- **The sink is the emergency mode and a test instrument, never the default.** It works — 3/3,
-  Wispr picks its insertion target at the **end**, so a window taking the keyboard 1–5 ms after the
-  stop chord receives the text — and Victor rejected it as the primary path because it takes the
-  focus off a man who may be clicking or typing.
-- **It may not take the key window during a Scratchpad dictation.** `POST /test/sink {"key": true}`
-  is **refused with a 409** while one is in flight: the `bound` scenario did it and the row never
-  went terminal for the whole 30 s capture. Wispr appears to choose its target from the key window.
-- **A dictation Victor starts himself is Wispr's** — his own keyboard chord, or 🔽→ which posts
-  Wispr's chord raw. Ring only: no swallow, no Scratchpad, no pasteboard watch, nothing delivered;
-  it ends on Wispr's row with `.silent("")`. `relayStarted` is that distinction and `deliver`
-  carries the guard as well as its callers.
-- **`startedMode` and `intercepting` are two different questions.** The first says *how the chord
-  was posted*, so it says what `stop()` must undo — a dictation opened by holding a key is ended by
-  releasing that key. The second says *does the relay deliver these words*. They come apart on
-  `POST /test/wispr-handsfree`, which posts Wispr's own chord (nothing held, no sink) while the
-  wrap is on and the ⌘V is still the relay's to swallow.
-
-## Shot markers — a spoken index injected into the recogniser's ear (2026-09-14)
-
-Rules for `ShotMarker`. The problem: every frame carries the second it was taken at
-(`shot-00:56…`) and an agent handed five of those has to guess which clause each belongs to.
-Victor: *"e mult mai util dacă le-aș referi după index … că, după timp, e greu să estimezi."*
-
-- **The mechanism is two microphones, one voice.** Wispr is pinned to the Loopback device
-  `🎓 TO Wispr`; the relay's `MicRecorder` opens the **physical** device. So a sound played into
-  the Loopback device's output side reaches **Wispr and nothing else** — not the speakers, not
-  the corpus. Measured: the corpus WAV recorded in parallel with a marker run is `-91.0 dB`.
-- **Both halves live in `ShotMarker`** — `play(index:whenQuiet:)` says it, `resolve(text:available:)`
-  reads it back. One vocabulary (the phrase, the number words, the digit forms); split over two
-  files it drifts the first time somebody rewords one end.
-- **The source is asked `acceptsAudioMarkers`, never *are you Wispr*.** Default `false` on the
-  protocol; only `WisprFlowSource` says yes. The local model opens the physical microphone
-  itself and would need the marker spliced into its own buffer — a different mechanism, not built.
-
-### What was measured the day it was built
-
-| | |
-|---|---|
-| markers in `asrText`, spliced into a 20 s clip of his voice | both, in position |
-| the same in `formattedText` | both, **promoted to their own paragraphs** |
-| three markers into a **silent** dictation | `Screenshot one. Screenshot two. Screenshot three.` |
-| one marker 6 s into an **unbroken** 12 s sentence | **no trace at all** |
-| marker level against the voice | −15.7 dB mean against −26.8 — the marker is the *louder* one |
-| a marker landing mid-word | cuts it: `pus sub un strat` → `pus sub un-` / `Strat` |
-
-- **Masking is not a level problem and cannot be turned up.** The marker already wins on level
-  and still vanished: a recogniser handed two voices at once transcribes the one that makes a
-  sentence. Hence the gate — `MicRecorder.quietSeconds ≥ 0.12 s`, polled every 40 ms on
-  `ShotMarker`'s own queue, ceiling **1.5 s** and then spoken anyway, because a marker lost
-  costs nothing and a marker never said costs the picture its place in the sentence. The wait is
-  in the log: `(1540 ms for a gap)` is the ceiling being reached.
-- **Overlapping is his gesture, not an edge case** — *"De exemplu, ăsta acum"*, pressed
-  mid-clause. A marker that only worked in a pause he happened to leave would mostly not work.
-
-### The rules that cost something
-
-- **The number is reserved at the shutter, before `screencapture` runs**, and stored **by path**
-  (`shotMarkerNumbers`, carried on the `Message` beside `sources`). Two presses a third of a
-  second apart can finish in the other order, and a number read off the list's position would
-  then name the wrong frame — the one failure that makes the feature untrustworthy.
-- **The safety net is a set of real pictures, not a count.** A capture that failed leaves a
-  number spoken with nothing behind it, and a count would renumber every marker after it onto
-  the wrong frame. A marker outside the set is taken out of the words and logged.
-- **The words are rewritten before the corpus is filed** (`resolvingShotMarkers`, at the top of
-  `deliver`). The relay's own recording never heard the marker, so filing `Screenshot one.`
-  against it would put a pair in the corpus whose transcript says words its audio does not.
-- **`onTestDictation` calls the same helper**, because that route's claim is that a fabricated
-  transcript enters where a real one does — and it enters *below* `deliver`.
-- **The shutter is not on the main thread** (`HotkeyTap.onScreenshot` → `DispatchQueue.global()`),
-  so `reserveMarker` may not read `source`: `setEngine` reassigns it from the main thread.
-  `wireDictationSource` publishes `markerMeter` under `stateLock` instead, and nil is the whole
-  of *do not speak markers*.
-- **`POST /test/shot-marker` is the unit test**, both halves and both kinds, for
-  `wispr-state/simulate`'s reason — `{"kind": "selection"}` on `play`/`splice`, `{"selections":
-  {"1": "…"}}` on the rewrite.
-- `WT_SHOT_MARKERS=0` off for a run; `WT_MARKER_DEVICE` points it elsewhere. With no matching
-  device it says so **once** and stays quiet — a Mac where Wispr has been moved back to the
-  built-in microphone is one where a marker reaches nobody.
-
-### The second kind: `selected text N` (2026-09-14)
-
-Victor, the same day: *"Vreau același lucru și pentru selecție. Doar că textul selectat trebuie
-inserat într-o etapă de postprocesare în transcripție, în locul markerului."*
-
-- **One mechanism, two vocabularies, one file.** `ShotMarker.Kind` is `shot` | `selection`;
-  everything else — the clips, the gap gate, the Loopback device, the number words, the single
-  regex that reads both back — is shared. The phrase is **two words** (`selected text one`), because
-  `selection one` is a thing a recogniser hears in ordinary speech and `selected text one` is not.
-- **A shot marker becomes a reference, a selection marker becomes the words.** `[shot 2]` points at
-  a file listed under the sentence — there is no way to put a picture inside a line of text. The
-  highlight *is* text, so it is spliced in where he said it, quoted and clamped at the 400
-  characters `selectionsClause` already clamps at. The full text is still in the outbox.
-- **A highlight that got inlined is dropped from the list under the words** (`inlinedSelections`,
-  `Message.inlinedSelections`); one that did not keeps its `- 00:08 in '…': "…"` line exactly as
-  before. That absence *is* the fallback Victor asked for, and it is the whole of it.
-- **The counters are separate per kind and the numbers restart at one.** `screenshot three` and
-  `selected text three` cannot be confused for each other, so a shared counter would only make the
-  third picture `screenshot five` for no reason a listener can reconstruct.
-- **The number is reserved under the same lock that decided the highlight is new**
-  (`reserveMarkerLocked`, called from inside `fileSelection`'s critical section) and **spoken after
-  the lock is released** — `mark` waits for a gap in his speech on `ShotMarker`'s own queue, and
-  holding `stateLock` across a silence that is his to break would stall the chip.
-- **There is no more "highlight he was already holding," and so no more no-marker case for it.**
-  `stashSelection` — the probe that grabbed whatever was already selected at the gesture and wrote
-  it straight into `pendingSelection`, bypassing `fileSelection` and the marker entirely — is gone
-  since 2026-09-16 (see `screenshots-and-selection.md`, *The selection: frozen*). Every highlight
-  that fills the empty frozen slot now arrives the same way the mid-sentence case always did
-  (`fillsTheBlank`, through `fileSelection`) and gets a marker like any other novel selection —
-  **including the one he made in the five seconds before he started talking** (2026-09-18,
-  `probeRecentSelection`), which is a highlight held at the gesture and is nonetheless filed
-  through `fileSelection` at offset `00:00`. That is the point of the rule above: the return of
-  a start-of-gesture probe cost nothing here, because nothing bypasses `fileSelection` any more.
-- **The corpus gets neither the marker nor the paragraph** (`resolve(inlineSelections: false)`).
-  Wispr's recording heard the marker and the relay's did not; *neither* heard the text he had
-  highlighted. So the pair filed beside the audio is the sentence with the selection markers taken
-  out and nothing put in their place.
-- **A marker spoken by the final read is a marker nobody hears.** `finalSelectionRead` files a
-  highlight *after* the microphone closed, so its number is said into a device Wispr is no longer
-  listening to and the fallback list is where that highlight lands. It costs a number out of ten and
-  nothing else; gating it on `listening` would mean reading a main-thread flag from the shutter's
-  thread, which is the race `markMarker` exists to avoid.
-
-## Three witnesses, and none of them alone (2026-09-13)
-
-`WisprState` is five phases — `idle` · `warming` · `listening` · `transcribing(status)` ·
-`done(status)` — joined from four inputs, none authoritative alone. Measured on one real dictation:
-
-| witness | what it proves | when it spoke |
+| witness | proves | measured |
 |---|---|---|
-| the chord this app posts | a dictation was **asked for** | it is the clock |
-| Wispr's `History` row appearing | Wispr **took the chord** | **357 ms** |
-| the **100 ms poll** of `kAudioProcessPropertyIsRunningInput` | a microphone **is** open | **607 ms** |
-| `WisprWatch`'s CoreAudio notification | the same fact, pushed | **5590 ms** |
+| the chord this app posts | a dictation was asked for | the clock |
+| `History` row appears | Wispr took the chord | 357 ms |
+| 100 ms poll of `IsRunningInput` | a mic is open | 607 ms |
+| `WisprWatch` notification | same, pushed | 5590 ms — 0–6 s late, often silent |
 
-- **The notification is 0–6 s late and sometimes silent altogether.** It publishes only when the
-  value it re-reads *differs*, so a dictation shorter than its own lag has neither edge — and with
-  Wispr pinned to `🎓 TO Wispr`, whose physical source keeps the stream warm, it produced **no edge
-  at all** in five successful runs. It is a *second* source and never the only one.
-- **Both lags are logged on the `listening` transition**, and they stay two inputs on purpose: the
-  gap between pull and push is the measurement the replay buffer will need.
-- **A witness that never saw the microphone open cannot report it closing.** A close belonging to
-  the previous sentence arrived six seconds later, 600 ms into the next one, and ended it. Both the
-  notification and the poll now need `notifyMs` / `pollMs` for *this* dictation.
-- **The machine owns nothing** — no timers, no CoreAudio, no SQLite, no AppKit — which is what
-  makes `POST /test/wispr-state/simulate` a unit test: a fresh machine with a fake clock, a
-  scripted sequence, its transitions back, in under a millisecond. It is a route and not an XCTest
-  target because the package is one `executableTarget` with a `main.swift` in it. It earned its
-  keep in its first minute by finding `chordAt > 0` standing in for *a chord has been seen*, which
-  a clock starting at zero makes two different questions.
-- **The relay's own stop closes the listening phase**, not the edge: `stop()`, `cancel()`, ⌃Escape,
-  the second hands-free chord and `POST /test/wispr-handsfree` all call `closeListening`, which is
-  also the one place the machine is told and the one place a held chord is released.
-- **`speculativeGrace` may only retract a ring for a chord that left no row.** Wispr creates the row
-  at the gesture, so its absence is the honest test for *Wispr ignored the chord*.
+- **Arm the capture at the start chord, never from the CoreAudio edge** (a 2.5 s dictation went into
+  Word with the relay blind). A witness that never saw the mic open may not report it closing.
+- **The gesture opens the dictation; the mic edge only confirms, never re-opens** (warm 324–674 ms,
+  cold 5–6 s). `speculativeGrace` 12 s, and may only retract a ring for a chord that left **no row**.
+- **The relay's own stop closes listening** (`closeListening` — also releases any held chord).
+- **A late OPEN edge belongs to the last sentence** (`lateOpenEdge()`, asked before `state.notify`):
+  our stop is the latest event (≤ 12 s) and either its capture is open or no newer row exists.
+- **The machine owns nothing** (no timers, CoreAudio, SQLite, AppKit) — hence
+  `POST /test/wispr-state/simulate` as its unit test.
+- **A 🔼 click while words are in flight is a stop or nothing**, never a new dictation.
+- **A dictation Victor starts himself** (his chord, or 🔽 →) is ring-only in the pre-firewall model:
+  `relayStarted` false. Under the firewall the words are still the relay's to deliver.
 
-## The ring is *microphone open*; the chip carries the wait (2026-09-13)
+## Cancel during the settle
 
-- **The ring goes down at the microphone's close**, not at the words' landing —
-  `caretHalo.setActive(listening || speculative)`, with `settling` deliberately not in it. A ring
-  standing twelve seconds over a sentence already pasted into Word is indistinguishable from one
-  still hearing him.
-- **The chip shows `Transcribing...` for the whole settle** — the same claim the ring used to make
-  by standing, without the lie.
-- **`endSettling` logs `✍️ the words landed`, not `⚡ ring down`**, and notes into
-  `RingDown.lastSettled`; the ring's own note is written at the close. `/test/state` answers both.
-- **The settle's 8 s steps aside for a recogniser that is still answering** (`armSettleGiveUp`
-  re-arms while `phase.isWaitingForWords`, bounded by 30 s). Eight seconds is right for *nothing
-  came back* and wrong for a row that says `processing`.
-- **A 🔼 click while the words are in flight is a stop, or nothing — never a new dictation.**
-  `onPasteToggle` asks `listening || isRecording` first, then `settling || phase.isWaitingForWords`
-  and does nothing; `startDictation` carries `!settling`; and `retireCaptureIfSettled` replaces the
-  unconditional `endCapture` in `gestureSeen` — a capture whose row is not terminal belongs to a
-  sentence still in flight.
+- **Never disarm while Wispr may still paste.** A cancel sets `discardOnArrival`: whatever arrives
+  (⌘V, row, note, or nothing by `captureTimeout`) is swallowed and dropped. `cancel()` calls
+  `state.reset`; `pollHistory` does not feed `sawRow` while discarding.
+- **…but it may not block the next gesture:** `retireDiscardedCapture` releases everything except the
+  swallow, keyed by `retiredDiscardRow` (`WisprHistory.entry(rowid:)`), let go at terminal +
+  `pasteGrace`, on its ⌘V, or at 5 s. `injected(from:)` checks the retired row before `capturing`.
 
-## The gesture opens the dictation, the microphone confirms it
+## The Scratchpad wrap — dormant, kept
 
-- **`didBegin` fires on the chord, not on the CoreAudio edge.** Measured 2026-09-12: 324, 478, 528,
-  634, 674 ms warm — and **5.0 s and 6.0 s** cold. Everything a dictation opens with (the ring, the
-  chip, the context shot, the ⌘C probe, the music pause) fires there, or he watches them arrive in
-  two instalments. → journal: *The ring shrank away and came back*
-- **The microphone edge must never re-open.** It cancels the retraction, logs `⚡ mic edge confirms
-  the ring N ms after the gesture`, and returns. A second `didBegin` takes the halo down and puts it
-  back, which is the flicker this whole section exists to remove.
-- **`speculativeGrace` is 12 s** — the worst measured open × 2, never under three. A retraction is
-  for a chord Wispr *ignored*; that is rare enough to be worth the patience, and a beacon that
-  flickers is worse than one briefly wrong.
-- **Push-to-talk is the one gesture that only raises the beacon.** Two held modifiers (right ⌘ +
-  right ⌥) also fire on a ⌘⌥ meant for something else, and a false `didBegin` costs a screenshot
-  and a ⌘C probe posted into whatever he is working in. **Once Wispr's row confirms it, it opens
-  the sentence** (2026-09-22, `confirmSpeculative` → `didBegin` for `startedByHeldPair`): the
-  held pair is always a caret dictation (`pasteMode`), so the confirmed `didBegin` takes no
-  picture and posts no probe, and it is what makes the release settle — `Listening`, `at caret`,
-  then the doubled heads while Wispr transcribes. Without it the relay sat `speculative` for the
-  whole hold and `dictationStoppedListening` never ran.
-- **A Wispr sentence names Wispr's microphone** (2026-09-22). The chip's `Listening to <glyph>`
-  reads `History.micDevice` (`WisprFlowSource.micNamed`, seeded from `WisprHistory.lastNamedMic`)
-  mapped onto the roster by `InputDevice.glyph(wisprName:)` — **read from Wispr, never written to
-  it**. Victor: *"poate să fie un pic mincinos să zici că asculți la microfonul lui Walkie"*.
-  `🎓 TO Wispr` maps to the relay's own device (the `AudioBridge` feeds it); a name none of the
-  six match leaves `Listening...` plain.
+Superseded as the delivery by the firewall; the code stands (`wrapMode` · `wrapWhy`, `POST
+/test/wrap-mode`). Modes: `scratchpad` (hold *Open Scratchpad*, deliver from the row), `sink`
+(emergency, takes the key window at the stop), `off`. Falls back to `sink` when Wispr has no
+`open_scratchpad` shortcut or the window will not close. Order: **start from CLOSED** (open window →
+no note, sentence lost) → hold the chord (`open_scratchpad` by action name, fallback `79`/F18,
+`WISPR_SCRATCHPAD_KEYS`) → park on sight (25 ms watcher; smallest size, bottom-right of the second
+display, 8 pt sliver; re-park every open) → release, ask the close **exactly once** → deliver from
+the row → cross-check the note 3.5 s later (new portion only, case/punctuation normalised).
+Numbers: row 400–530 ms, words 410–490 ms, note readable 2627 ms, close 417–445 ms, window layer 3,
+min 300×300. Traps, all paid for:
 
-## Catching Wispr's transcript
+- **The close is a toggle.** Only `WisprScratchpad.ensureClosed(reason:)` closes it; it re-checks
+  existence at post time (`tapWisprScratchpad(if:)`) and 0.6 s after (`the close opened it —
+  toggled back`). A queued **hold** carries `dictationEpoch` and is dropped if stale; a release is
+  never dropped for a stale epoch. Chord presses are **250 ms** (60 ms does not toggle), on a serial
+  queue, onto a bare wire, 120 s dead-man's switch.
+- **Idle orphan sweep** (`startIdleSweep`): any window standing > 1 s while idle is closed.
+- **Never minimize or hide the Scratchpad mid-dictation** — the sentence never comes back.
+- **The Scratchpad becomes KEY without its app becoming frontmost** — never test focus with
+  `frontmostApplication`; no AX focus reading is true either way; the system-wide focused element
+  returns `kAXErrorCannotComplete` here. The gate is the window's **existence**.
+- **Keys while it is up are redirected** (`armKeyRedirect`, ⌘/⌃ pass, per-key target resolved and
+  `kill(pid,0)`-checked at the keystroke, 10 s ceiling): printables via **`AXSelectedText`** on
+  `HotkeyTap.axQueue` (200 ms/char; a frontmost app with no key window drops posted characters),
+  non-printables by `postToPid`. 7/7 letters measured — **only under the loop's lock**; two harness
+  instances once contaminated a night of readings. Counters `seen`/`redirectedAX`/`redirectedKey`/
+  `passed`, zeroed at the chord.
+- **Never call a TIS function from the tap** — `TISGetInputSourceProperty` asserts main and traps;
+  `refreshKeyboardLayout` caches a `Data`.
+- **Wispr's close activates Wispr** → `putTheFrontBack` via `AXFrontmost` (plain `activate` is
+  declined for a background app), only when Wispr is frontmost, never during the sentence. The rig's
+  `frontmost_app()` (System Events) cannot see a stolen front; read `NSWorkspace`.
+- **The addressed paste:** `DictationResult.focusPid` (the app at the chord) → `pressPaste(to:)` via
+  `postToPid`; nil for every other delivery.
+- **The sink** (`WisprSink`) is a test instrument / emergency mode; refused (409) as key window during
+  a Scratchpad dictation. Victor rejected focus-stealing as the primary path. A correct run leaves it empty.
 
-- **Its delivery is a synthetic ⌘V — measured, not assumed** (2026-09-12): keycode 9, flags
-  `0x20100000`, from pid 4904 `Wispr Flow`, 1.6 s and 5.9 s after the microphone closed on the two
-  sentences that proved it. The `probe:` line in `relay.log` is that measurement and it is armed on
-  every dictation, so the day it stops being a ⌘V the log says so. → journal: *The probe*
-- **The swallow is narrow: V + ⌘, from a process whose name says Wispr, inside the capture
-  window.** Victor's own ⌘V carries pid 0 and can never match; this app's own carries
-  `backButtonStamp`.
-- **Swallow the `keyUp` with the `keyDown`, and leave the ⌘ alone.** Passing a release whose press
-  was swallowed hands the app underneath an orphan; the modifier goes out and comes back balanced.
-- **`captureTimeout` is 30 s and is not the ring's timeout.** Wispr's round trip: avg 2.6 s, max
-  22.8 s. Six seconds lost an 81-second dictation on the evening the wrap shipped. The capture costs
-  one flag and can afford to wait; the ring is on screen and stops at `settleTimeout` (8 s, Wispr's
-  p99) — and both are only the net, since 2026-09-12 (late): the settle normally ends on Wispr's own
-  `History` row.
-- **Wispr's `History` row is the completion signal** (`WisprHistory`, read-only, 2026-09-12): one row
-  per dictation, created at the gesture with `status = ''`, filled at the end — `formatted` (+
-  `pastedText`, the exact text inserted), `dismissed`, `empty`, `no_audio`, `error`; `e2eLatency` p50
-  2.2 s / p90 3.5 s / p99 7.1 s / max 13.7 s over 30 days. `beginCapture` takes the newest row **only
-  if its `startedAt` is this dictation's** (a chord Wispr ignored leaves the previous finished row on
-  top) and polls it every 150 ms. `formatted` gives the ⌘V `pasteGrace` (1 s) — the ordinary paths
-  deliver and close the capture underneath — then delivers `pastedText` as `.insertedElsewhere`: at
-  the caret that was the destination; at a terminal the words go on to it and the copy at the focus
-  is a stray the log names. Why: two dictations on 2026-09-12 were inserted with **no ⌘V and no
-  pasteboard change** (an Accessibility insertion), and every other signal is dead — Wispr's unified
-  log is silent, its pill's frame and AX tree never change, `config.json` has no insertion-method
-  setting. → journal: *Wispr's own row says when it is done (2026-09-12)*
-- **Intermediate statuses are progress, not silence** (2026-09-13). The vocabulary lives in one
-  place: `WisprState.intermediateStatuses` = `""`, `recording`, `raw_transcript`, `processing`;
-  `terminalStatuses` = `formatted`, `extension_paste`, `extension_other`, `dismissed`, `empty`,
-  `no_audio`, `error`. An unknown status is treated as terminal — today's behaviour, kept — but
-  `Log.error`s, because reading an unknown as progress would turn one new Wispr status into every
-  sentence waiting out thirty seconds.
-- **Wispr restores the clipboard after its own ⌘V, and that cost three sentences** (2026-09-13).
-  With the baseline `changeCount` taken at the microphone's close — after Wispr's write — the only
-  move the relay saw was the restore, and `the pasteboard moved but no ⌘V was seen` delivered it:
-  163 characters of a Word rental contract filed in `corpus.jsonl` three times beside audio of
-  *"Commit and push the fix"*. Arming at the start chord fixes the ordering; `deliver` also
-  **refuses a pasteboard identical to the pre-dictation one** (keeping the capture, because the
-  row usually answers a beat later) and reads the string at the instant the change is seen rather
-  than 250 ms afterwards, because the restore lands inside that gap.
-- **`historyIsTheRoute` makes the row the delivery rather than the late fallback** (2026-09-13,
-  `WT_WISPR_HISTORY_ROUTE=1` / `POST /test/wispr {"historyRoute": true}`, default off).
-  `formatted` then delivers immediately with no `pasteGrace`, the text comes from `pastedText`
-  **or `formattedText`** (a Wispr that inserted nothing fills the second), and the delivery is
-  always `.route` — nobody but the relay is going to put that sentence anywhere. The ⌘V swallow
-  stays armed behind it as the safety net.
-- **A new dictation closes a capture still standing** *only if its row is terminal* — see
-  `retireCaptureIfSettled` above. Left armed on a terminal row it would take the next sentence's
-  ⌘V as this one's answer; disarmed on a live one it throws away the sentence in flight, which is
-  the 09-13 phantom-dictation failure.
+## Stale ⌘ (the bug of `area-crop.md`, occurrences 3–7)
 
-## Testing
+Any post of a key with modifier flags must be followed by a `flagsChanged`: `POST /test/gesture`
+clears its own flags; `SelectionCapture.read()`'s ⌘C posts the trailing `flagsChanged` and is stamped;
+Wispr's own let-through ⌘V leaves ⌘ down, so the tap posts the clearing event;
+`clearStaleModifiersAtLaunch()` (after `SingleInstance.enforce`) heals one left before launch,
+per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py` guards the source.
 
-- **The loopback is the whole control surface**, and every route is in CLAUDE.md's *Testing at a
-  desk* table. `POST /test/gesture {"name": …}` posts the ⌃⌥⌘F-key chord Options+ makes for a mouse
-  gesture, so the tap's gesture branch runs as it does for his hand (the F7 *bind* sub-case needs a
-  real held left button and is not fakeable). `GET /test/state` answers everything an assertion
-  needs in one read. `DictationResult.via` names the delivery route and lands in `outbox.jsonl`'s
-  `delivery` field.
-- **`POST /test/gesture` clears its own modifier flags.** It posted `⌃⌥⌘F-key` down and up and
-  nothing else, so `CGEventSource` went on reporting three held modifiers until the next real
-  keystroke — and every *wait for a bare wire* loop behind it ran to its ceiling, which is how the
-  Scratchpad chord went out as `⌃⌥⌘F18` and Wispr ran an ordinary dictation instead. A real
-  Options+ gesture posts its own trailing flags-cleared event 12–22 ms later; so does this route
-  now. It is the stale-⌘ bug of `area-crop.md` for the third time in this repo.
-- **`WisprSink` is a test instrument and nothing else.** `POST /test/sink` opens it — 40×20,
-  borderless, in a corner — and `GET /test/sink` says what landed in it and by which route. It is
-  **refused with a 409** if asked to take the key window during a Scratchpad dictation.
-- **The sink cross-check only ever sees what leaks.** It disagreed with the row 5/5 on 2026-09-13
-  because the swallow was armed too late and Wispr's ⌘V escaped into it — 24 characters against the
-  row's 23, a match. With the swallow armed at the start chord, a **correct** run leaves the sink
-  empty, so an assertion of *sink text equals row text* fails on every good run.
-- **`POST /test/wispr-state/simulate` is the state machine's unit test** — a fresh `WisprState`
-  with a fake clock, a scripted sequence of inputs, its transitions and both lags back, touching
-  nothing in the running relay.
-- **`POST /test/wispr-scratchpad {"down"|"up"|"tap"}`** drives Wispr's Scratchpad chord by hand;
-  `GET`/`POST /test/wispr-notes` reads its note; `POST /test/scratchpad/park` parks its window;
-  `POST /test/wrap-mode` picks the mode. `POST /test/wispr-handsfree` keeps its old behaviour — it
-  posts Wispr's own chord, so nothing is held and no sink is taken, while the wrap stays on and the
-  ⌘V is still the relay's to swallow.
-- **250 ms, not 60.** A 60 ms press/release does not toggle the Scratchpad window; 250 ms does.
-  Wispr is telling a tap from a hold by duration.
-- **The chord goes out on a serial queue and only onto a bare wire** — `settleForOptionsPlus` then
-  a wait for the modifiers, exactly as `postWisprHandsFree`, `postWisprCancel`, `postWisprCopyLast`
-  and `postReturn` have since 2026-09-09. The bookkeeping (`scratchpadHeld`, the dead-man's switch)
-  stays at the call site because `stop()` reads it milliseconds later; a serial queue rather than
-  `.global()`, because a press and a release that can overtake each other are a key stuck down.
-  **120 s dead-man's switch** behind all of it, and every exit path releases the chord —
-  `closeListening` and the `speculativeGrace` drop separately, because that one does not go through
-  it.
-- **The two failures all of this exists for** (2026-09-13): a 2.5 s caret dictation into Word
-  produced no CoreAudio edge at all, so `beginCapture` never armed and Wispr's ⌘V went straight
-  into Word; and a second 🔼 click landed inside the settle, where `onPasteToggle` asked only about
-  `listening`, and started a phantom dictation whose `gestureSeen` disarmed the first sentence's
-  swallow window. Both are invisible from outside the process, which is what `/test/state` is for.
+## ElevenLabs Scribe (2026-09-18)
 
-## Do not — the ones paid for on the night of 2026-09-13/14
+- **`LocalWhisperSource`'s shape with an HTTPS `POST`** to `api.elevenlabs.io/v1/speech-to-text`
+  (multipart, `xi-api-key`) of one 16 kHz mono WAV the relay recorded. No wrap; corpus audio = the
+  transcribed audio. 3.0% WER Romanian (FLEURS); `scribe_v1` $0.40/h, `scribe_v2` $0.22/h —
+  price in `ElevenLabsSource.rate`, keyed by model.
+- **Key:** `~/.walkie-talkie/elevenlabs.env` (`ELEVENLABS_API_KEY=`), env first, **follows `--home`**
+  (a test relay cannot bill), re-read on every menu open. A file: launchd gives no shell; Keychain prompts.
+- **Language is not pinned** — his Romanian carries English terms. `WT_ELEVEN_LANG=ro` for comparisons.
+- **`DictationEnd.failed`** ≠ `.silent` (drops audio) ≠ `.cancelled` (keeps it quietly): 12 s banner
+  + WAV staged for *Recover Cancelled Dictation*. One retry, only for transport/429/5xx; 45 s ceiling.
+- **Unmeasured:** `languageFloor = 0.5`, `scribe_v1` vs `v2`. `tools/eleven-test.sh [wav | --corpus n]`.
 
-- **Do not make focus-stealing the primary wrap.** The sink works (3/3) and is the **emergency**
-  mode: a dictation helper whose ordinary behaviour is to interrupt a man who may be clicking or
-  typing is one he cannot leave running.
-- **Do not revoke Wispr's Accessibility grant** to stop it inserting. It works, and it breaks Wispr
-  as a standalone tool, which it has to go on being.
-- **Do not try to cancel an insertion Wispr has decided on.** The window between the row saying
-  `formatted` and the ⌘V is **57 ms**, and a ⌃Escape posted *after* `formatted` does not stop the
-  paste at all. There is no *cancel the insertion* — only *do not ask for one*.
-- **Do not minimize or hide the Scratchpad mid-dictation.** `AXMinimized = true` the moment the
-  window appears and the dictation **never comes back**: no `formatted`, no delivery, no ring down.
-  Wispr needs that window live. The precondition is *closed at the start*, not *absent during*.
-- **Do not ask the Scratchpad close twice.** It is a **toggle**: a second tap behind the first
-  closes the window and opens it straight back up. `wrap-cancel` left `['Status', 'Scratchpad']`
-  behind for exactly that reason. `armCloseOnSight` is idempotent and claims
-  `scratchpadWindowHandled`; every other path checks it.
-- **Do not arm a capture from the CoreAudio edge.** It is 0–6 s late and sometimes silent, and
-  everything armed from `edge(false)` — the swallow, the row poll, the settle — simply never ran.
-  Arm at the **start chord**.
-- **Do not test key focus with `frontmostApplication`.** The Scratchpad becomes key without its app
-  becoming frontmost; use the system-wide focused element's owner.
-- **Do not `open -a "Wispr Flow"`.** LaunchServices resolves the name to the nested Accessibility
-  helper at `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app`, which quits itself when it
-  has no parent — and `pgrep -x "Wispr Flow"` matches it too, so a preflight can report Wispr
-  running when only the helper is. `open "/Applications/Wispr Flow.app"`, and match the anchored
-  executable path.
+## Markers: where a picture was taken
 
-## ElevenLabs Scribe, the engine that leaves the Mac (2026-09-18)
+- **Timestamp markers (2026-09-19, current, `ShotMarker.place`, `WT_MARKER_TIMESTAMPS=0` off).**
+  Scribe's `words[]` carry `start`/`end` on the WAV this app recorded; a press measured on the same
+  ruler (`MicRecorder.offset(of:)` — frames written, answered backwards, ≤ 85 ms buffer correction)
+  lands between words. Only for a source with `audioOffset(of:)` (ElevenLabs, local); Wispr answers
+  nil and frames keep their `mm:ss` rows under the words.
+- **Reserved at the gesture, keyed by path** (`shotMarkerNumbers`, before `screencapture` runs); the
+  safety net is a **set** of real pictures, not a count. `ShotMarker.render` is the one vocabulary.
+  Selection numbers are reserved under `fileSelection`'s lock (`reserveMarkerLocked`) and spoken after.
+- **Cues without `words[]` place nothing and never fall back on `resolve`** — every match would be his
+  own words rewritten. The corpus copy is his words untouched (`resolvingMarkers(inline: false)`).
+- **`evals/test_marker_place.py`** — ten seam cases via `POST /test/shot-marker`; safe mid-workshop.
+- **Spoken markers — RETIRED 2026-09-18** (`WT_SHOT_MARKERS=1` revives): a clip played into
+  `🎓 TO Wispr` said `screenshot one`; Scribe heard `Pict element one` and the phrase stayed in the
+  sentence. Fails per engine/language/accent. Mechanism notes (gap gate `quietSeconds ≥ 0.12 s`,
+  1.5 s ceiling; masking is not a level problem) are in the journal.
+- **No live captions:** Scribe realtime gives timings only on committed text from a smaller model.
 
-- **It is `LocalWhisperSource`'s shape with the daemon swapped for an HTTPS `POST`.** The relay
-  opens its own microphone and writes one 16 kHz mono WAV; the recogniser is
-  `api.elevenlabs.io/v1/speech-to-text`, multipart, `xi-api-key`. Everything that follows from *the
-  file is ours* follows here too: markers are **spliced** rather than played
-  (`acceptsAudioMarkers = true`), the audio the corpus files is the audio that was transcribed, and
-  there is no wrap at all — no window to park, no ⌘V to swallow, no focus to hand back.
-- **It is never the default.** `engine(named:)` falls back to Wispr for anything it does not
-  recognise, and the preference has to say `eleven` for this one to be picked.
-- **The key: `~/.walkie-talkie/elevenlabs.env`, `ELEVENLABS_API_KEY=…`**, environment first,
-  **following `--home`** so a test relay cannot bill the real account. A file and not a shell
-  variable because launchd starts the app and it inherits no shell — the same reason `WT_KEY_TRACE`
-  grew a `POST /test/key-trace` twin. A file and not the Keychain because a Keychain item prompts,
-  and the one moment this key is read is the moment a sentence is waiting on it. **Re-read on every
-  menu open** (`reloadKey`, silent; `prepare()` is the one that logs), so pasting the key in is the
-  whole of the setup.
-- **The language is not pinned.** `language_code: "ro"` would tell the recogniser that `git rebase`
-  and `Spring Boot` are Romanian words. `WT_ELEVEN_LANG=ro` forces it for a comparison run.
-- **`DictationEnd.failed` exists because of this engine and is not about it.** A networked
-  recogniser that could not be reached is neither `.silent` (which throws the audio away — right
-  for *nothing was heard*, wrong when the WAV is the only copy of a sentence he has already said)
-  nor `.cancelled` (which keeps it and passes in silence, because he asked for it). `.failed`
-  carries both: a 12 s banner, and the WAV into the same five-minute staging area, where *Recover
-  Cancelled Dictation* re-reads it through whichever engine is live by then.
-- **One retry, and only for what a retry fixes** — a transport error, a 429, a 5xx. A 401 is a
-  wrong key and a 400 a bad request; repeating either costs a second of his settle to arrive at the
-  same answer. 45 s ceiling on the request, for the hotel Wi-Fi that accepts the connection and then
-  stops.
-- **`tools/eleven-test.sh`** is the control surface, on `wispr-test.sh`'s reasoning: a recogniser
-  you can only reach through a dictation is one you cannot debug. One WAV, or `--corpus [n]` to
-  print Scribe's reading beside the transcript already on disk — the A/B on his own voice, at
-  $0.40 an hour of audio.
-- **Not measured yet, and the notes say so:** `languageFloor = 0.5` and the choice of `scribe_v1`
-  over `scribe_v2` are both starting points rather than numbers off the corpus. → `evals/`
+## Every switch the dictation source reads
 
-## Do not — the standing ones
+| variable | effect |
+|---|---|
+| `WT_SOURCE=whisper｜eleven｜wispr` | engine for one run (the menu writes `dictationSource`) |
+| `WT_WISPR_FIREWALL=0` | let Wispr's ⌘V through (`POST /test/firewall {"on": false}`) |
+| `ELEVENLABS_API_KEY` · `WT_ELEVEN_MODEL=scribe_v2` · `WT_ELEVEN_LANG=ro` | key; model (default `scribe_v1`); pinned language (off) |
+| `WT_WRAP_WISPR=0` · `WT_WRAP_MODE=scratchpad｜sink｜off` | wrap off / forced mode (`POST /test/wrap-mode`) |
+| `WT_SCRATCHPAD_DELIVER=note` | deliver from the note (2.8 s slower) |
+| `WT_SCRATCHPAD_REDIRECT_KEYS=0` · `WT_SCRATCHPAD_AX_INSERT=0` | key redirect off / redirect by `postToPid` |
+| `WT_SCRATCHPAD_NOTE_MAY_DELIVER=1` | let the note be delivered as text |
+| `WISPR_SCRATCHPAD_KEYS=79` | *Open Scratchpad* chord override |
+| `WT_WISPR_HISTORY_ROUTE=0` | wait `pasteGrace` for a ⌘V before the row |
+| `WT_KEY_TRACE=1` | log every key event + verdict, keycode/pid only (`POST /test/key-trace`) |
+| `WT_MARKER_TIMESTAMPS=0` · `WT_SHOT_MARKERS=1` · `WT_MARKER_DEVICE` | timestamp markers off / spoken on / device |
+| `WT_WISPR_COPY_FALLBACK=1` | re-enable `copy_last_text` — see below |
 
-- **Do not read Wispr Flow's database as a recogniser or a transcript fallback.** The 2026-08-29
-  rule stands for what it was about: the words come from the pasteboard the ⌘V announces. What
-  `WisprHistory` reads (2026-09-12, Victor: *"ok. build"*) is the **row's status** — is Wispr done —
-  and `pastedText` only for a sentence Wispr has already inserted by a route no tap sees, where the
-  alternative is waiting a timeout for a key that is never coming. Read-only, `mode=ro`, one query;
-  nothing here transcribes, and nothing here may ever start a dictation or replace the pasteboard
-  path while the ⌘V is still possible (`pasteGrace`).
-- **Do not turn `copy_last_text` (⌘⌃C) back on by default.** It hands back *the last text Wispr
-  produced* — after a failed sentence, the previous one — and delivering a five-minute-old
-  paragraph as though he had just said it is worse than losing the sentence. Measured once: the
-  chord went out and `changeCount` never moved. `WT_WISPR_COPY_FALLBACK=1`.
-- **Do not delete `LocalWhisperSource`.** It is the fallback for the day a Wispr update changes how
-  it delivers, the only recogniser that works with no network, and the baseline `evals/` scores the
-  corpus against.
-- **Do not let the corpus stop growing.** The halo's meter writes its WAV so a Wispr dictation has
-  audio to file; `engine` distinguishes `wispr-flow` (through Wispr's formatting pass) from
-  `whisper-local` (raw) and `elevenlabs` (formatted too — Scribe punctuates and capitalises).
-- **Do not give the corpus tag a default branch.** It was
-  `engine == "whisper-local" ? "local" : "wispr"`, and a third engine walked straight into it: an
-  ElevenLabs sample would have been filed under a stem saying Wispr read it, in the one directory
-  that cannot be regenerated. A wrong label there is not a bug that gets fixed later, it is a
-  sample worth nothing to every evaluation from now on. It is a `switch` with `default: tag =
-  engine` — an unknown recogniser keeps its own id rather than borrowing somebody else's.
-- **Do not pin `language_code` for the cloud engine**, and do not "fix" auto-detection to `ro`.
-  His Romanian carries English technical words and pinning the language is what makes them come
-  back spelled as Romanian.
+## Do not
+
+- **Read Wispr's DB as a recogniser or transcript fallback.** `flow.sqlite` is read only by
+  `WisprHistory`, for a row's status and its words; nothing of Wispr's ever transcribes.
+- **Turn `copy_last_text` (⌘⌃C) back on by default** — after a failed sentence it hands back the previous one.
+- **Cancel an insertion Wispr has decided on** — 57 ms between `formatted` and the ⌘V; ⌃Escape after it does nothing.
+- **Revoke Wispr's Accessibility grant** — Wispr must keep working standalone.
+- **`open -a "Wispr Flow"`** — resolves to the nested helper, which quits; `pgrep -x` matches it too.
+  `open "/Applications/Wispr Flow.app"` and match the anchored executable path.
+- **Delete `LocalWhisperSource`** — offline fallback and the evals' baseline.
+- **Give the corpus tag a default branch** — `local` · `wispr` · `11l`, unknown keeps its own id;
+  a mislabelled sample in the corpus is worthless forever.
+- **Pin `language_code`** for the cloud engine.

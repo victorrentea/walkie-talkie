@@ -1,6 +1,6 @@
 # Can Wispr Flow's text injection be blocked? — attack plan
 
-**Status:** research done 2026-09-22; **① + ③ shipped the same evening** (see CLAUDE.md, *The
+**Status:** research done 2026-09-22; **① + ③ shipped the same evening** (see `.claude/rules/dictation-source.md`, *The
 Wispr firewall*, and the journal). §5's quality test was skipped on Victor's word — the objective
 was the block itself. ② (the extension host) and ④ are still open as the fallbacks they were.
 
@@ -8,7 +8,7 @@ was the block itself. ② (the extension host) and ④ are still open as the fal
 cancellation, sandbox/VM, Wispr's own config, wrapper/shim, target hardening, an OS-mechanism
 sweep), each angle adversarially refuted by a second pass, then synthesised. 23 agents.
 
-**Read first:** `CLAUDE.md` → *The dictation source*, *Never reintroduce*;
+**Read first:** `CLAUDE.md` → *Never reintroduce*;
 `.claude/rules/dictation-source.md`; `docs/journal.md` → *Wispr Flow leaves the Engine list
 (2026-09-22)* and the wrap sections.
 
