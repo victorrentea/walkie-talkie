@@ -2505,7 +2505,7 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// run out of `.build` — `CaretHalo.artworkFile`'s arrangement, and it is
     /// here for the same reason: the contact sheet and the states page are both
     /// shot from the debug build.
-    private static func walkieURL(_ name: String) -> URL? {
+    static func walkieURL(_ name: String) -> URL? {
         var candidates: [URL] = []
         if let res = Bundle.main.resourcePath {
             candidates.append(URL(fileURLWithPath: res).appendingPathComponent("\(name).png"))

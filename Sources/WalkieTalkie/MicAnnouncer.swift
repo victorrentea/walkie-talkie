@@ -1,7 +1,7 @@
 import Cocoa
 import CoreAudio
 
-/// **"🎤 Listening to: DJI"** — a green tab that rises from the
+/// **"(walkie) Listening 🎤"** — a green tab that rises from the
 /// bottom edge of the screen under the mouse when the microphone this app would
 /// record through changes, holds ~2.5 s and falls away (2026-09-23).
 ///
@@ -27,6 +27,11 @@ import CoreAudio
 /// on the bottom edge, top corners rounded, click-through, non-activating.
 /// Reproduced rather than shared because this app must not depend on that
 /// private one; the ~100 lines here are the accepted price.
+///
+/// **Same words as addons' pill, behind the app's own icon** (2026-09-26,
+/// Victor: *"walkie talkie sa aiba acelasi mesaj, dar precedat de iconul lui
+/// cu portocaliu in jur"*). Both apps now say `Listening 🎤`; the orange-ringed
+/// `walkie-bound` device in front is what says *which* app is saying it.
 final class MicAnnouncer {
 
     static let settle: TimeInterval = 0.6
@@ -39,7 +44,12 @@ final class MicAnnouncer {
     /// What was last announced (or the baseline): `glyph + label`, or the bare
     /// CoreAudio name for a device none of `known` names. Queue only.
     private var last = ""
-    private let tab = BottomTab()
+    private let tab = BottomTab(icon: MicAnnouncer.icon)
+
+    /// `walkie-bound.png` — the device inside its orange ring, the Dock tile's
+    /// artwork. nil (no file) leaves the tab with the text alone.
+    private static let icon: NSImage? = RelayWindow.walkieURL("walkie-bound")
+        .flatMap { NSImage(contentsOf: $0) }
 
     func start() {
         queue.async { [weak self] in
@@ -81,13 +91,14 @@ final class MicAnnouncer {
     /// The resolved device as a comparable key and the tab's copy.
     private static func current() -> (key: String, text: String) {
         let r = InputDevice.resolve()
-        if let k = r.known { return ("\(k.id) \(r.device?.name ?? "")", cardText(glyph: k.glyph, label: k.label)) }
+        if let k = r.known { return ("\(k.id) \(r.device?.name ?? "")", cardText(glyph: k.glyph)) }
         guard let name = r.device?.name else { return ("", "") }
-        return (name, cardText(glyph: "🎙️", label: name))
+        return (name, cardText(glyph: "🎙️ \(name)"))
     }
 
-    /// The exact copy — `🎤 Listening to: DJI`.
-    static func cardText(glyph: String, label: String) -> String { "\(glyph) Listening to: \(label)" }
+    /// The exact copy — `Listening 🎤`, Victor Addons' wording. A device none
+    /// of `known` names passes `🎙️ <its name>`, the only thing that says which.
+    static func cardText(glyph: String) -> String { "Listening \(glyph)" }
 }
 
 /// Victor Addons' `BottomTabBanner`, cut down to what the announcer uses: one
@@ -98,6 +109,14 @@ private final class BottomTab {
     private static let radius: CGFloat = 18
     private static let padding: CGFloat = 34
     private static let font = NSFont.boldSystemFont(ofSize: 40)
+    private static let iconSide: CGFloat = 56
+    private static let iconGap: CGFloat = 14
+
+    private let icon: NSImage?
+    /// Room the icon takes before the label: 0 without one.
+    private var lead: CGFloat { icon == nil ? 0 : Self.iconSide + Self.iconGap }
+
+    init(icon: NSImage?) { self.icon = icon }
 
     private var panel: NSPanel?
     private var tabView: NSView?
@@ -115,7 +134,7 @@ private final class BottomTab {
             return
         }
         guard let screen = Self.screenUnderMouse() else { return }
-        let width = Self.width(for: text, screen: screen)
+        let width = width(for: text, screen: screen)
         let f = screen.frame
         let rect = NSRect(x: f.minX + ((f.width - width) / 2).rounded(), y: f.minY,
                           width: width, height: Self.height)
@@ -157,8 +176,15 @@ private final class BottomTab {
         l.textColor = .white
         l.alignment = .center
         l.lineBreakMode = .byTruncatingTail
-        l.frame = Self.labelFrame(width: width)
+        l.frame = labelFrame(width: width)
         tab.addSubview(l)
+        if let icon {
+            let iv = NSImageView(frame: NSRect(x: Self.padding, y: ((Self.height - Self.iconSide) / 2).rounded(),
+                                               width: Self.iconSide, height: Self.iconSide))
+            iv.image = icon
+            iv.imageScaling = .scaleProportionallyUpOrDown
+            tab.addSubview(iv)
+        }
         content.addSubview(tab)
         p.contentView = content
         p.alphaValue = 0.92
@@ -170,14 +196,14 @@ private final class BottomTab {
 
     private func resize(panel: NSPanel, tab: NSView, label: NSTextField, text: String) {
         guard let screen = panel.screen ?? Self.screenUnderMouse() else { return }
-        let width = Self.width(for: text, screen: screen)
+        let width = width(for: text, screen: screen)
         let f = screen.frame
         let y = tab.frame.origin.y
         panel.setFrame(NSRect(x: f.minX + ((f.width - width) / 2).rounded(), y: f.minY,
                               width: width, height: Self.height), display: true)
         panel.contentView?.frame = NSRect(x: 0, y: 0, width: width, height: Self.height)
         tab.frame = NSRect(x: 0, y: y, width: width, height: Self.height)
-        label.frame = Self.labelFrame(width: width)
+        label.frame = labelFrame(width: width)
     }
 
     private func startHold(_ hold: TimeInterval) {
@@ -210,24 +236,25 @@ private final class BottomTab {
         t.fire()
     }
 
-    private static func width(for text: String, screen: NSScreen) -> CGFloat {
+    private func width(for text: String, screen: NSScreen) -> CGFloat {
         let probe = NSTextField(labelWithString: text)
-        probe.font = font
+        probe.font = Self.font
         probe.maximumNumberOfLines = 1
         probe.lineBreakMode = .byClipping
         probe.sizeToFit()
-        let hugging = ceil(probe.frame.width) + 8 + 2 * padding
+        let hugging = ceil(probe.frame.width) + 8 + 2 * Self.padding + lead
         return max(220, min(hugging, screen.frame.width * 0.6))
     }
 
-    private static func labelFrame(width: CGFloat) -> NSRect {
+    private func labelFrame(width: CGFloat) -> NSRect {
         let lm = NSLayoutManager()
-        var h = lm.defaultLineHeight(for: font)
-        if let emoji = NSFont(name: "AppleColorEmoji", size: font.pointSize) {
+        var h = lm.defaultLineHeight(for: Self.font)
+        if let emoji = NSFont(name: "AppleColorEmoji", size: Self.font.pointSize) {
             h = max(h, lm.defaultLineHeight(for: emoji))
         }
         h = ceil(h)
-        return NSRect(x: padding, y: (height - h) / 2, width: width - 2 * padding, height: h)
+        return NSRect(x: Self.padding + lead, y: (Self.height - h) / 2,
+                      width: width - 2 * Self.padding - lead, height: h)
     }
 
     private static func screenUnderMouse() -> NSScreen? {
