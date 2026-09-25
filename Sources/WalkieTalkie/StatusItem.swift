@@ -1589,8 +1589,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // right now* belongs in the list he picks from.
         let keyless = elevenReady?() == true ? "" : " ⚠️"
         switch id {
-        case "eleven-live": return "☁️ ElevenLabs + Live" + keyless
-        case "eleven": return "☁️ ElevenLabs" + keyless
+        // **The running bill on both ElevenLabs rows** (2026-09-26) — one
+        // account, one number; the tooltip has the breakdown.
+        case "eleven-live": return "☁️ ElevenLabs + Live" + keyless + "   " + ElevenLabsCost.label
+        case "eleven": return "☁️ ElevenLabs" + keyless + "   " + ElevenLabsCost.label
         case "wispr": return "☁️ Wispr Flow"
         default: return engineLoading ? "💻 Local ⏳" : "💻 Local"
         }
@@ -1604,14 +1606,17 @@ final class StatusItem: NSObject, NSMenuDelegate {
             : "No API key — put ELEVENLABS_API_KEY=… in ~/.walkie-talkie/elevenlabs.env"
         switch id {
         case "eleven-live":
-            return ["Live caption: ElevenLabs \(ElevenLabsLive.model) — \(ElevenLabsLive.rate), "
-                        + "the last 7 words beside the pointer while you talk",
+            return (["Live caption: ElevenLabs \(ElevenLabsLive.model) — \(ElevenLabsLive.rate) (+20 % with keyterms), "
+                        + "the words across the top of the screen while you talk; "
+                        + "after a 3 s pause \(ElevenLabsSource.model) corrects them",
                     "Sent text: ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate), "
                         + "from the recording",
-                    "Audio leaves this Mac", key].compactMap { $0 }.joined(separator: "\n")
+                    "Audio leaves this Mac", key].compactMap { $0 } + ["", "Spent so far:"] + ElevenLabsCost.summary().lines)
+                .joined(separator: "\n")
         case "eleven":
-            return ["ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate)",
-                    "Audio leaves this Mac", key].compactMap { $0 }.joined(separator: "\n")
+            return (["ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate)",
+                    "Audio leaves this Mac", key].compactMap { $0 } + ["", "Spent so far:"] + ElevenLabsCost.summary().lines)
+                .joined(separator: "\n")
         case "wispr":
             return "Wispr Flow — its own microphone; its paste is blocked and the relay delivers the words"
         default:

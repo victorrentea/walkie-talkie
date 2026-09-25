@@ -1681,7 +1681,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let on = body["on"] as? Bool { self.overlay.setLiveCaptionOpen(on) }
                 if let text = body["text"] as? String {
                     self.overlay.setLiveCaptionOpen(true)
-                    self.overlay.setLiveCaption(text)
+                    self.overlay.setLiveCaption(text, partial: (body["partial"] as? String) ?? "",
+                                                gentle: (body["gentle"] as? Bool) ?? false)
                 }
             }
         }
@@ -2623,7 +2624,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didStopListening = { [weak self] in self?.dictationStoppedListening() }
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
-        source.didHearLive = { [weak self] text in self?.overlay.setLiveCaption(text) }
+        source.didHearLive = { [weak self] committed, partial, gentle in
+            self?.overlay.setLiveCaption(committed, partial: partial, gentle: gentle)
+        }
         source.prepare()
         // The back click follows the Engine (2026-09-25) — see
         // `HotkeyTap.onCleanToggle`.

@@ -457,7 +457,7 @@ final class ElementPicker {
 
     /// One pulse of the `⌘⇧P` hint under the pointer — see `PasteHint`.
     var onTestPasteHint: (() -> Void)?
-    /// `POST /test/live-caption` `{"text": "…"}` — the subtitle band's words as if
+    /// `POST /test/live-caption` `{"text": "…", "partial": "…"?}` — the subtitle band's words as if
     /// the live recogniser had just heard them; `{"on": false}` closes the band.
     var onTestLiveCaption: (([String: Any]) -> Void)?
     /// `POST /test/local-fallback {"wav": path}` — the local model standing in

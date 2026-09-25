@@ -34,8 +34,53 @@ final class ElevenLabsLive {
         return raw.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
-    /// The whole sentence heard so far, on the main queue.
-    var onText: ((String) -> Void)?
+    /// What was heard so far, on the main queue: the segments the server has
+    /// committed, and the one still being spoken (revised every partial).
+    /// `gentle` marks a batch correction (below), which the band shows softer.
+    var onText: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)?
+
+    /// **The batch model corrects the live words behind him** (2026-09-26,
+    /// Victor: *"implementează și 5, dar doar după o pauză de 3 sec în
+    /// transcriere … trimite doar bucata care mai apare pe ecran; la final de
+    /// tot oricum trimitem tot"*). After `correctAfter` seconds with nothing
+    /// new from the socket, the audio since the previous cut is uploaded to
+    /// `ElevenLabsSource.transcribe` and its text replaces the live segments
+    /// committed in that span; the cut moves to the end of the span, so every
+    /// second of the sentence is uploaded once here (and once more, whole, at
+    /// the stop — that one is the delivery). A failure leaves the cut where it
+    /// was: the next pause covers the longer span.
+    static let correctAfter: TimeInterval = 3.0
+    private var pcm = Data()
+    private var cutByte = 0
+    private var correctedSegments = 0
+    private var lastTextAt = CACurrentMediaTime()
+    private var correcting = false
+    private var pauseTimer: DispatchSourceTimer?
+    private var key = ""
+    private var keytermCount = 0
+
+    /// **Silence before a segment is committed** (2026-09-26, was the server's
+    /// default). Committed text is frozen; the model only revises the segment
+    /// still open, so a longer pause before the freeze means more context per
+    /// revision — the caption may be provisional a little longer, which the
+    /// band shows as a fade. Docs: "longer values result in fewer commits but
+    /// longer segments".
+    static let vadSilence = 1.5
+
+    /// **Up to 50 `keyterms` to bias the model toward** (2026-09-26): the first
+    /// column of `~/.walkie-talkie/vocab.txt` — the English words that actually
+    /// occur inside his Romanian, ranked by the corpus (the file says how). A 20 %
+    /// premium on $0.39/h. Re-read at every session, so the file is live.
+    static func keyterms() -> [String] {
+        let url = Outbox.home.appendingPathComponent("vocab.txt")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").lazy
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .map { String($0.split(separator: ":", maxSplits: 1)[0]).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(50).map { $0 }
+    }
 
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.eleven-live")
     private var task: URLSessionWebSocketTask?
@@ -45,7 +90,9 @@ final class ElevenLabsLive {
     private var pending: [Data] = []
     private var open = false
     private var closed = false
-    private var committed = ""
+    /// Segments the server committed, in order; a batch correction collapses
+    /// the span it covered into one.
+    private var segments: [String] = []
     private var partial = ""
 
     /// Opens the socket. Called on the main queue at `start()`.
@@ -53,7 +100,12 @@ final class ElevenLabsLive {
         var parts = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")!
         var query = [URLQueryItem(name: "model_id", value: Self.model),
                      URLQueryItem(name: "audio_format", value: "pcm_16000"),
-                     URLQueryItem(name: "commit_strategy", value: "vad")]
+                     URLQueryItem(name: "commit_strategy", value: "vad"),
+                     URLQueryItem(name: "vad_silence_threshold_secs", value: String(Self.vadSilence))]
+        let terms = Self.keyterms()
+        for term in terms { query.append(URLQueryItem(name: "keyterms", value: term)) }
+        self.key = key
+        self.keytermCount = terms.count
         // **The caption is pinned to his two languages** (2026-09-26, after a
         // sentence came back Turkish): `language_code` is the first of
         // `languages`, the rest go as `secondary_languages`, which the docs
@@ -76,8 +128,14 @@ final class ElevenLabsLive {
             self.task = task
             task.resume()
             self.receive(task)
+            self.lastTextAt = CACurrentMediaTime()
+            let timer = DispatchSource.makeTimerSource(queue: self.queue)
+            timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+            timer.setEventHandler { [weak self] in self?.correctIfPaused() }
+            timer.resume()
+            self.pauseTimer = timer
         }
-        Log.info("💬 live caption: connecting to ElevenLabs \(Self.model)")
+        Log.info("💬 live caption: connecting to ElevenLabs \(Self.model), languages \(pinned.joined(separator: "+")), \(terms.count) keyterms, commit after \(Self.vadSilence) s")
     }
 
     /// **On the audio thread** — `MicRecorder.onBuffer`. Copies the samples out
@@ -87,6 +145,7 @@ final class ElevenLabsLive {
         let data = Data(bytes: samples, count: Int(buffer.frameLength) * MemoryLayout<Int16>.size)
         queue.async {
             guard !self.closed else { return }
+            self.pcm.append(data)
             if self.open { self.send(data) } else { self.pending.append(data) }
         }
     }
@@ -97,8 +156,12 @@ final class ElevenLabsLive {
             guard !self.closed else { return }
             self.closed = true
             self.pending.removeAll()
+            self.pauseTimer?.cancel()
+            self.pauseTimer = nil
             self.task?.cancel(with: .normalClosure, reason: nil)
             self.task = nil
+            ElevenLabsCost.addLive(seconds: Double(self.pcm.count) / 32_000, keyterms: self.keytermCount > 0)
+            self.pcm = Data()
         }
     }
 
@@ -141,11 +204,13 @@ final class ElevenLabsLive {
             waiting.forEach(send)
             Log.info("💬 live caption: session open, \(waiting.count) chunk(s) caught up")
         case "partial_transcript":
-            partial = (json["text"] as? String) ?? ""
+            let text = (json["text"] as? String) ?? ""
+            if text != partial { lastTextAt = CACurrentMediaTime() }
+            partial = text
             publish()
         case "committed_transcript", "committed_transcript_with_timestamps":
             let segment = ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
-            if !segment.isEmpty { committed += (committed.isEmpty ? "" : " ") + segment }
+            if !segment.isEmpty { segments.append(segment); lastTextAt = CACurrentMediaTime() }
             partial = ""
             publish()
         default:
@@ -158,9 +223,57 @@ final class ElevenLabsLive {
         }
     }
 
-    private func publish() {
-        let heard = [committed, partial.trimmingCharacters(in: .whitespaces)]
-            .filter { !$0.isEmpty }.joined(separator: " ")
-        DispatchQueue.main.async { [weak self] in self?.onText?(heard) }
+    private func publish(gentle: Bool = false) {
+        let committed = segments.joined(separator: " ")
+        let partial = self.partial.trimmingCharacters(in: .whitespaces)
+        DispatchQueue.main.async { [weak self] in self?.onText?(committed, partial, gentle) }
+    }
+
+    /// On `queue`, every 0.5 s: a pause of `correctAfter` with live segments
+    /// not yet corrected → upload the span since the cut.
+    private func correctIfPaused() {
+        guard !closed, !correcting, partial.isEmpty, segments.count > correctedSegments,
+              CACurrentMediaTime() - lastTextAt >= Self.correctAfter, pcm.count > cutByte + 32_000 else { return }
+        let from = cutByte, to = pcm.count, upTo = segments.count
+        let span = pcm[from..<to]
+        let wav = Outbox.shotsDir.appendingPathComponent("live-correct-\(Int(Date().timeIntervalSince1970)).wav")
+        do { try Self.wav(pcm: span).write(to: wav) } catch {
+            Log.error("💬 live correction: could not stage the audio — \(error.localizedDescription)")
+            return
+        }
+        correcting = true
+        let seconds = Double(to - from) / 32_000
+        Log.info(String(format: "💬 live correction: %.1fs since the last cut, %d live segment(s) → %@", seconds, upTo - correctedSegments, ElevenLabsSource.model))
+        ElevenLabsSource.transcribe(wav: wav, key: key) { [weak self] outcome in
+            try? FileManager.default.removeItem(at: wav)
+            guard let self else { return }
+            self.queue.async {
+                self.correcting = false
+                guard !self.closed else { return }
+                switch outcome {
+                case .failure(let why):
+                    Log.error("💬 live correction failed — \(why); the next pause covers the span again")
+                case .success(let r):
+                    guard !r.text.isEmpty, upTo <= self.segments.count else { return }
+                    let before = self.segments[self.correctedSegments..<upTo].joined(separator: " ")
+                    self.segments.replaceSubrange(self.correctedSegments..<upTo, with: [r.text])
+                    self.correctedSegments += 1
+                    self.cutByte = to
+                    Log.info("💬 live correction: \(before.count) → \(r.text.count) chars" + (before == r.text ? " (identical)" : ""))
+                    self.publish(gentle: true)
+                }
+            }
+        }
+    }
+
+    /// A 16 kHz mono 16-bit RIFF/WAVE around raw PCM.
+    static func wav(pcm: Data) -> Data {
+        var d = Data()
+        func u32(_ v: UInt32) { withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) } }
+        func u16(_ v: UInt16) { withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) } }
+        d.append("RIFF".data(using: .ascii)!); u32(UInt32(36 + pcm.count)); d.append("WAVE".data(using: .ascii)!)
+        d.append("fmt ".data(using: .ascii)!); u32(16); u16(1); u16(1); u32(16_000); u32(32_000); u16(2); u16(16)
+        d.append("data".data(using: .ascii)!); u32(UInt32(pcm.count)); d.append(pcm)
+        return d
     }
 }

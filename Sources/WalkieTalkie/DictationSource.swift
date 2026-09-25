@@ -161,7 +161,7 @@ protocol DictationSource: AnyObject {
     /// the whole sentence, not a delta; a later call may revise the tail of an
     /// earlier one. A caption only: what is *delivered* still arrives through
     /// `didTranscribe`, from the recording.
-    var didHearLive: ((String) -> Void)? { get set }
+    var didHearLive: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)? { get set }
 }
 
 /// **One token of a transcript, with the moment it was said** (2026-09-19).
@@ -352,7 +352,7 @@ extension DictationSource {
     var recordsOwnAudio: Bool { false }
 
     /// Nobody to call: a source that does not stream has no live words.
-    var didHearLive: ((String) -> Void)? {
+    var didHearLive: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)? {
         get { nil }
         set {}
     }

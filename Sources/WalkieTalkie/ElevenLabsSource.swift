@@ -54,7 +54,7 @@ final class ElevenLabsSource: DictationSource {
     /// source like every other and `AppDelegate` never asks which kind it holds.
     let live: Bool
     var streamsLive: Bool { live }
-    var didHearLive: ((String) -> Void)?
+    var didHearLive: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)?
     /// One per sentence — its committed text belongs to that sentence.
     private var stream: ElevenLabsLive?
 
@@ -294,9 +294,9 @@ final class ElevenLabsSource: DictationSource {
         var stream: ElevenLabsLive?
         if live, let key = apiKey {
             let opened = ElevenLabsLive()
-            opened.onText = { [weak self, weak opened] text in
+            opened.onText = { [weak self, weak opened] committed, partial, gentle in
                 guard let self, let opened, self.stream === opened, self.isRecording else { return }
-                self.didHearLive?(text)
+                self.didHearLive?(committed, partial, gentle)
             }
             opened.start(key: key, language: Self.language)
             stream = opened
@@ -568,6 +568,8 @@ final class ElevenLabsSource: DictationSource {
                 let detail = String(data: data.prefix(400), encoding: .utf8) ?? ""
                 return done(.failure("HTTP \(code) \(detail)"))
             }
+            // Billed: 16 kHz mono 16-bit, 32 kB per second, header aside.
+            ElevenLabsCost.addBatch(seconds: Double(max(0, audio.count - 44)) / 32_000, model: model)
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let text = json["text"] as? String else {
                 return done(.failure("unreadable reply from ElevenLabs"))

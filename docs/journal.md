@@ -12111,3 +12111,36 @@ loc, apoi fade in așa încât fadeout+fadein = durata glisare text în noua poz
   of the line glides to the new layout (τ 0.26 s); the new words are invisible for the first half
   and fade in over the second, in the faded yellow, then warm to white over 1.6 s. Verified on six
   frames 0.15–2.5 s after `checkout` → `finalizare a comenzii`.
+
+## The caption after a night of use (2026-09-26, 02:00–02:30)
+
+Victor, dictating on the band: *"live transcribe-ul e mult mai slab ca cel de final. idei?"* — then
+*"1+3+4 (faded progresiv in)"*, *"cuvintele dictate trebuie să și dispară de pe ecran … un fade out
+ce vine din stânga când nu se mai transcrie nimic nou"*, *"implementează și 5, dar doar după o pauză
+de 3 sec … corecțiile intră blând atenuat … trimite doar bucata care mai apare pe ecran … vreau să
+contorizezi costul acumulat în meniu la Engine în dreptul lui ElevenLabs"*.
+
+- **The socket is pinned to `ro` + `secondary_languages=en`** (a caption came back Turkish), gets
+  **50 `keyterms`** from the first column of `~/.walkie-talkie/vocab.txt` (+20 % on $0.39/h) and
+  **`vad_silence_threshold_secs=1.5`** — longer open segments, more context per revision. All
+  three probed on a corpus WAV before they were written (`scratchpad/probe.py`).
+- **The open segment is provisional and looks it**: `partial_transcript` words are drawn from 0.4
+  opacity at the newest up to solid at the committed boundary, each brightening as the boundary
+  reaches it. The chain now carries `(committed, partial, gentle)`; `POST /test/live-caption`
+  takes `partial` and `gentle`.
+- **The eraser**: 2 s without a new word → a soft front (160 pt) sweeps in from the left at
+  260 pt/s and wipes the line; a new word freezes it where it stands (it then rides the line);
+  once the whole line is wiped, the next words are a new line entering from the right. A batch
+  correction does not wake it.
+- **Batch corrects live** (`ElevenLabsLive.correctIfPaused`): 3 s with nothing new from the
+  socket → the audio since the previous cut goes to `ElevenLabsSource.transcribe` and replaces
+  the live segments committed in that span; the cut moves, so each second is uploaded once
+  here and once whole at the stop. Its corrections are `gentle`: a paler yellow, and the eraser
+  keeps sweeping. **Not yet seen live** — the 02:19 probe played the clip into a muted speaker
+  and Scribe heard nothing; Victor: *"nu acum cu difuzor, e târziu, mâine"*.
+- **LCS on case-folded stems**: `world, how` → `world. How` is not a correction (the harness
+  review found the case-sensitive miss).
+- **`ElevenLabsCost`**: seconds by product in `UserDefaults`, at the rows' published rates,
+  `$x.xx` on both ElevenLabs rows, the breakdown on the tooltip. The 02:19 probe counted
+  12.1 s of live audio: the ledger works end to end for the socket; the batch half counts on a
+  200 (it did, with an empty transcript).

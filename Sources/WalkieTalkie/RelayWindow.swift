@@ -4284,8 +4284,8 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Everything heard so far, as the recogniser has it now — revisions
     /// included. A caption only: what is *delivered* still arrives through
     /// `didTranscribe`.
-    func setLiveCaption(_ text: String) {
-        liveCaption.setText(text)
+    func setLiveCaption(_ committed: String, partial: String = "", gentle: Bool = false) {
+        liveCaption.setText(committed: committed, partial: partial, gentle: gentle)
     }
 
 

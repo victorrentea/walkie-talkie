@@ -212,6 +212,7 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
 - **Key:** `~/.walkie-talkie/elevenlabs.env` (`ELEVENLABS_API_KEY=`), env first, **follows `--home`**
   (a test relay cannot bill), re-read on every menu open. A file: launchd gives no shell; Keychain prompts.
 - **Language is not pinned** on the batch transcript — his Romanian carries English terms. `WT_ELEVEN_LANG=ro` for comparisons.
+- **The live socket also sends 50 `keyterms`** (first column of `~/.walkie-talkie/vocab.txt`, re-read per session) and `vad_silence_threshold_secs=1.5`; **after 3 s without new words it uploads the audio since the last cut to the batch model and replaces the live segments** (`ElevenLabsLive.correctIfPaused`, `gentle` corrections on the band). `ElevenLabsCost` keeps the running bill (menu rows). (2026-09-26)
 - **The live caption IS pinned to `ro` + `secondary_languages=en`** (2026-09-26, a caption came back Turkish): `ElevenLabsLive.languages`, `WT_ELEVEN_LIVE_LANGS=ro,en` overrides (first = `language_code`, rest = `secondary_languages`, repeated query keys; probed 2026-09-26 on a corpus WAV, English transcribed fine under it). `WT_ELEVEN_LANG` set wins for both.
 - **`DictationEnd.failed`** ≠ `.silent` (drops audio) ≠ `.cancelled` (keeps it quietly): 12 s banner
   + WAV staged for *Recover Cancelled Dictation*. One retry, only for transport/429/5xx; 45 s ceiling.
