@@ -4,9 +4,9 @@ Written 2026-09-26 from five adversarial read-only reviews (Opus) of the code, t
 `~/.walkie-talkie/relay.log`. Wispr Flow is out of scope. Nothing here has been run yet; every
 "today:" line is what the reviewers read in the code, to be confirmed by the test that names it.
 
-Sections: 1 objective · 2 state machine · 3 what is already broken (fix or test first) · 4 races ·
-5 failure modes · 6 how tests are executed (routes, audio, Codex, gaps) · 7 the suites ·
-8 order of work.
+Sections: 1 objective · 2 state machine (2.5 input alphabet, 2.6 action × state) · 3 what is already
+broken (fix or test first) · 4 races · 5 failure modes · 6 how tests are executed (routes, audio, Codex,
+gaps) · 7 the suites (L lifecycle, D delivery, R regressions, LC band, G gestures) · 8 order of work.
 
 ---
 
@@ -96,6 +96,52 @@ Two invariants every test asserts, whatever else it checks:
 | live socket: VAD commit | 1.5 s silence; batch correction after 3.0 s with nothing new | |
 | restart gate | `busy` false + 10 s quiet; escapes: unreachable 60 s, stale `listening` 30 s; script waits ≤ 1800 s; QuitGate ≤ 600 s | |
 
+### 2.5 The input alphabet (Logi mode, the default; keyDown swallowed, keyUp always passes)
+
+| input | gate | handler | notes |
+|---|---|---|---|
+| ⏎ / ⎋ bare | `promptHeld` | send / cancel the held panel | ⏎ does not check the stamp (catches the app's own `postReturn`); autorepeat after the first ⏎ passes through |
+| **bare F7 / F9** | always | halo style ±1 | swallowed system-wide, undocumented |
+| ⌘⌃B | H2920 | bind toggle (global queue) | no mutual exclusion; two quick presses race |
+| ⌘⌃D | H2941 | `toggleDictation` | no dwell/re-fire guard (F10 has one) |
+| ⌘⇧P | H2960 | paste last | ⇧ released first → ⌘P repeats leak (Print) |
+| ⌃⌥P | H3319 | +1 shot | **no autorepeat guard**; stale ⌘ makes it pass |
+| right ⌘ + right ⌥ (`flagsChanged`) | H2611 | clean hold / Wispr PTT | tap-thread state, no stamp check → the app's own `flagsChanged` posts count as a release |
+| unstamped key while the pair is held | H2644 | `.shortcut` quiet cancel | also fires on Options+ F-keys (unstamped) → **two handlers** |
+| 🔼→ F10 | 0.6 s window, `openSentenceAge < 2 s` refused, ◀️ held → bind+dictate | `toggleDictation` | the one guarded gesture |
+| 🔼← F11 · 🔼↑ F8 · 🔼↓ F9 | none | cancel · spawn/convert · kamikaze toggle | **no re-fire guard** (F9 re-fire untoggles) |
+| 🔼 F7 | ◀️ held ≥ 0.3 s → bind | caret prompt / stop | |
+| 🔽 F6 | arm, `ownDictation`, `ownCleanSentence`, 0.8 s settle, `backUsesOwnEngine` | shutter / clean toggle / Wispr chord | |
+| 🔽→ F5 | 0.6 s window; `ownDictation && ownCleanSentence` | stop + Return / Return | plain Return mid relay-prompt |
+| 🔽← F3 · 🔽↑ F4 · 🔽↓ F12 | none | Wispr cancel or relay cancel · film · unbind | no re-fire guard |
+| middle button (Logi) | `dictating && bare && !promptHeld && !left && !right`, 12 pt | crop drag | press **passes** to the app underneath (dial: a Chrome tab closes) |
+
+Flags the tap decides on arrive from main through `syncBorrowedGestures` (`dictating`, `ownDictation`,
+`ownCleanSentence`, `promptHeld`, `haloUp`, `bound`); only the Wispr arm is set synchronously on the tap
+thread. Every handler hops `global.async` → `main.async` (a concurrent queue: microsecond-spaced inputs
+can swap). `tapDisabledByTimeout` re-enables silently and reconciles nothing (`areaCropping`, PTT
+flags, `leftDownAt`). Fail-open (`MainStallGate`) opens 3 s after the last heartbeat and stays open
+while any button 0–4 is down in the session state.
+
+### 2.6 Action × state (the cells that are wrong or undefined; full matrix in the gesture review)
+
+| gesture | S2 relay prompt | S3 clean (own engine) | S3w adopted Wispr | S4 settle | S5 panel | S8 cold bank |
+|---|---|---|---|---|---|---|
+| 🔼 F7 / 🔼→ F10 | stop | stop / "↪️ to X" flash but words go to caret | Engine≠Wispr: `stop()` no-op | silent no-op / "nothing to start" | new sentence, panel keeps counting | re-bank, overwrites spawn/paste/clean |
+| 🔼← F11 / 🔽← F3 | cancel | cancel | relay-side only, Wispr keeps recording | **"Cancelled" then delivered** | nothing, panel **sends** | nothing, bank survives |
+| 🔼↑ F8 | bound: convert; caret/spawn: silent | silent | | silent | new spawn | convert |
+| 🔼↓ F9 | toggle (re-fire untoggles) | row lights then dropped | | toggle | ignored though uncommitted | ignored |
+| 🔽 F6 | shutter | stop | **shutter** | misleading banner | new clean | re-bank, `clean` dropped |
+| 🔽→ F5 | **live Return mid-dictation** | stop + Return (stray Return inside the sync gap) | **plain Return while Wispr listens** | Return before the words (Wispr) | **sends the panel** (stamped Return → ⏎ branch) | Return |
+| 🔽↑ F4 · wheel drag | film / crop | allowed then dropped at `cleanLine` | | stop only / refused | flash / refused | flash |
+| 🔽↓ F12 | bound → caret at close | nothing | | → `awaitingBind` | commit → `awaitingBind` | caret |
+| ⌘⌃B / ◀️+F7 | bind, redirect | chip lies (caret forced) | | recipient changes | recipient changes | bank continues |
+
+Other states: S6 held-for-bind is released by any bind; S9 crop can outlive the sentence (ceiling, ⌘⌃D);
+S10 rebind panel: 🔽→ activates the selected row; S11 quit pending: gestures still start sentences; S12
+fail-open: ⌘⌃D → dictionary, ⌘⇧P → VS Code palette, F-keys → escape sequences in the Claude prompt.
+
+
 ## 3. Already broken by reading (fix, and keep the test)
 
 Ranked by how a sentence is lost. Each has a test in §7.
@@ -117,7 +163,8 @@ Ranked by how a sentence is lost. Each has a test in §7.
 15. **`MainStallGate` uses wall clock** → `🧊 195 s` on 09-25 was a lid-closed sleep; fail-open for ~0.5 s after every wake. → T-R5.
 16. **`SessionLabel.gitBranch` runs `/usr/bin/git` synchronously on main every 10 s with no timeout** (seen in the 09-25 hang sample). → T-R29.
 17. **projectM SIGSEGV (4 crashes 09-21 19:43) has no recorded fix**; `haloEngine` is `native` again. → T-R16.
-18. Smaller: `pendingPromptWarning` leaks onto the next sentence; key hot-add reloads only `elevenSource`, not `elevenLiveSource`; `ElevenLabsSource.config` static dictionary raced between main and the retry queue; `mic-<epoch>.wav` names collide after a #10 orphan; `start()` guard returns silently (no log line) on a sticky flag.
+18. **Gestures (tap):** cancel in the settle delivers anyway (same as 2, from every cancel path); **a cold local engine cannot be aborted** (`recordWhenSourceReady` ignored by cancel and by the start guard → re-bank overwrites spawn/paste/clean; the resumed start drops `clean`, so a back-click sentence becomes a caret prompt with a context shot); **adopted hand-started Wispr sentences disable every tap branch meant for them** (🔽 = shutter, 🔽→ = bare Return while Wispr listens); **🔽 then 🔽→ inside the main-sync gap types a stray Return** on your own engine (the Wispr arm is synchronous, the engine flags are not); **the panel's ⏎ branch ignores `backButtonStamp`** so the app's own Return sends a held panel; **bare F7/F9 are swallowed system-wide** (IntelliJ Step Into / Resume); **⌃⌥P has no autorepeat guard**; the key trace cannot see the app's own swallows (`return nil`, not `swallow()`); Wheel-mode `onMouse5Double` calls `endDictation` off main. → T-G.
+19. Smaller: `pendingPromptWarning` leaks onto the next sentence; key hot-add reloads only `elevenSource`, not `elevenLiveSource`; `ElevenLabsSource.config` static dictionary raced between main and the retry queue; `mic-<epoch>.wav` names collide after a #10 orphan; `start()` guard returns silently (no log line) on a sticky flag.
 
 ## 4. Race conditions (merged, ranked)
 
@@ -142,6 +189,10 @@ Ranked by how a sentence is lost. Each has a test in §7.
 | R17 | `⌘⇧P` during the panel hold; clipboard restore 0.4 s later | previous sentence pasted; clipboard clobbered | T-D30 |
 | R18 | `do script` + `\r` vs Claude Code input: review read-back fixed 0.35 s; the echo of the dictation itself matches "press Enter to send"; text half-typed by hand merges; modals; alternate screen; control chars not stripped | stray Return, unsent, executed | T-D18..20, T-D17 |
 | R19 | live socket delivering after stop | guarded (`closed`, `stream === opened`) — safe | T-L29 as control |
+| R21 | main-pushed flags vs tap decisions (only the Wispr arm is synchronous) | 🔽→ stray Return; second F10 inside the blind dwell; `openSentenceAge` measures the main edge | T-G6/7 |
+| R22 | two-hop dispatch on a concurrent queue; `bindFrontmostTerminal` unguarded; `unbindTerminal` off main | 🔼+🔼→ reorder; ⌘⌃B×2 both bind; ⌘⌃B then F12 ends **bound** | T-G37 |
+| R23 | blocking work on the tap thread (`Relaunch.stashBackStop` disk I/O, `Log`, CoreAudio reads, `proc_name`) → `tapDisabledByTimeout`, silent re-enable | missed press → ◀️+F7 becomes a caret dictation; crop overlay stuck | T-G25..28 |
+| R24 | fail-open held open by a stuck session button; `/test/stall` holds no lock so it cannot reproduce a lock-holding stall | tap transparent for hours (the 7 h middle-button case) | T-G27 |
 | R20 | batch correction (new, 2026-09-26) finishing after `stop()` or after segments changed | must be dropped (`closed` guard); `upTo <= segments.count` guard | T-LC-B3 |
 
 ## 5. Failure modes (taxonomy)
@@ -403,18 +454,60 @@ in flight → no update after `closed` (log shows the result discarded, no crash
 failure (G3 `fail:500`) → "next pause covers the span again", cut unchanged, next pause uploads the
 longer span; **B5** menu row shows `$x.xx` growing by (live s × 0.39 × 1.2 + batch s × 0.22)/3600.
 
+### 7.5 T-G — gestures and the tap (from `POST /test/gesture` [R], a CGEvent script [S] under `hands-off`, or a device/Codex [D]). Pre/post for each: `/test/key-trace on`, `sessionFlags == []` within 300 ms after every step; `WisprSink` as the front app that records stray keys.
+
+1. [R] F7 idle → caret prompt (`pasteMode`, chip `at caret`); key trace has no `↓ key 98` line (blindness).
+2. [R] F10 re-fire train at 0/300/600/900 ms → one start, three "re-triggered … dropped"; at 1.6 s "only NNN ms old — not stopping"; at 2.3 s stops.
+3. [R] F11 cannot abort a cold bank (Engine whisper cold): no cancel line, mic opens ~10 s later.
+4. [R] Cold back click becomes a prompt (context shot logged); second back click = shutter.
+5. [S] Cold clean hold (right ⌘⌥ 12 s) → `listening:true` after release (never ended).
+6. [R] 🔽 then 🔽→ at +60 ms on ElevenLabs → "🔽 → — Return", sink keycode 36, sentence still open; at +500 ms → correct stop.
+7. [R] Same pair on Engine=wispr → correct at both gaps (asymmetry).
+8. [R+audio] Cancel in the settle still delivers (`lastDelivery.at` > cancel).
+9. [R+audio] Same with a spawn → lands in terminal/caret, not `spawn:`.
+10. [R] F11 does not cancel the panel (outbox written after the hold).
+11. [R] 🔽→ sends the panel (delivery within 1 s; trace "SWALLOWED by the prompt panel's ⏎ (ours)").
+12. [R+audio] Clean-submit Return eaten by another panel → words in the sink, no 36; panel A sent early.
+13. [R+audio] 🔼→ over a bound clean sentence → "↪️ redirected" flash but `lastDelivery.to == caret`.
+14. [R] Kamikaze re-fire at +2.5/+2.8 s → toggled back off.
+15. [R] Film re-fire → start+stop, "caught no frames".
+16. [R] F9 during the panel → "ignored" though uncommitted.
+17. [R] F8 on a caret sentence → silent.
+18. [R+audio] Bind during the upload → chip promised the terminal, `lastDelivery.to == caret`.
+19. [R] Rebind during the panel → delivered to B (docs imply A).
+20. [R+audio] F12 during the settle → `awaitingBind`, then bind delivers (positive control).
+21–24. [R] Adopted Wispr sentence (`/test/wispr-handsfree {"hand":true}`): 🔽← → "nothing to cancel", Wispr keeps listening; 🔽 → shutter; 🔽→ → keycode 36 in the sink while `wisprHearing`; 🔼/🔼→ → nothing.
+25. [R] Stall queued vs leaked: `/test/stall 8`, F10 at +1.0 s (queued) and +4.5 s (leaks, sink sees ⌃⌥⌘F10); don't GET state during the stall.
+26. [R] Canary during fail-open → `alive:false` + a V keyUp in the sink (misdiagnosis).
+27. [S] Fail-open held open by a middle button held to +11 s; ⌘⌃D at +8 s leaks.
+28. [R] Key-trace blindness for all ten gestures (one `↑ (ours) passed`, zero `↓`) — regression guard once swallows use `swallow()`.
+29. [R] Stale-flag guard for every gesture plus `postWisprHandsFree` / `postReturn` / `postWisprCancel`.
+30. [R] Debug-build guard: `/test/gesture` answers 200 with no effect → assert log lines, never the 200.
+31. [S/D] ⌃⌥P autorepeat 1.5 s → many 📸 lines.
+32. [S] ⌘⌃D with ⌃ released first → ⌘D ×5 reach the sink.
+33. [S/D] Bare F7 swallowed globally (IntelliJ does not step).
+34. [S] Left-held bind at 0.4 s → bound; at 0.25 s → caret dictation.
+35. [D/S] Options+ F-key under a held right ⌘⌥ → `.shortcut` quiet cancel **and** a new clean sentence; `/test/gesture` under the same hold takes the release path instead (route/device divergence).
+36. [R] 🔽→ with the rebind panel up → activates the selected row (undefined).
+37. [S] ⌘⌃B ×2 at 150 ms → two binds, still bound (docs: bind then unbind).
+38. [S/D] Halo dial passes the middle click (Chrome tab closes).
+39. [S] Crop across the sentence end (F10 mid-drag) → where do the `area-*` files attach.
+40. [R+audio] F6 in the settle → misleading "finish the sentence" banner.
+41. [R] Engine switch during a bank → accepted; dictation opens on the new engine when the poll fires.
+42. [R] 🔽 click with Wispr quit → does ⌃Space switch the macOS input source (`AppleSelectedInputSources` before/after).
+
 ## 8. Order of work
 
 1. **Close G1 + G3 + G4 + G7** (one afternoon): the mic override, the fault switch, the helper
    kill/hang route + `SIGPIPE`, the missing state fields. These four turn most [AUDIO]/[NET] cases
    into desk tests and make the batch correction observable.
-2. Run **T-L 1–7, 22–24, 26–27** and **T-D 1, 2, 5, 6, 10, 11, 29, 31**, **LC 1–17** — all pure
+2. Run **T-L 1–7, 22–24, 26–27**, **T-D 1, 2, 5, 6, 10, 11, 29, 31**, **T-G 1–4, 6–7, 10–11, 14–17, 19, 25–26, 28–30, 36, 41**, **LC 1–17** — all pure
    HTTP, today, in one script (`evals/plan/run-http.sh`, to write), each case leaving the relay as
    it found it.
 3. Fix the ranked list in §3 as the tests confirm it (1, 2, 6, 7, 8 first — they lose sentences).
 4. **Audio suite** through G1/G2: T-L 8–11, 16, 29–32, T-D 3, 24, 26, 27, T-R 1–2, 9–15, 23–24,
    B1–B5. Not through the speaker.
-5. **Codex GUI**: S1–S6, T-D 28, 30 (under `hands-off run`, `caffeinate`).
+5. **Codex GUI / CGEvent scripts**: S1–S6, T-D 28, 30, T-G 5, 27, 31–35, 37–39 (under `hands-off run`, `caffeinate`).
 6. **Hardware/sleep** with Victor present: T-L 19–20, 28, T-R 3, 5–8, 19, 25–26.
 7. Every case that passes becomes a row in `evals/plan/` with its route script; every one that
    fails becomes a journal entry with the fix commit.
