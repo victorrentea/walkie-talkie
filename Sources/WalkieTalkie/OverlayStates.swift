@@ -179,17 +179,6 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
-            Shot(slug: "listening-live", group: "Dictating", title: "Dictating, with the words live",
-                 when: "Every sentence under `☁️ ElevenLabs + Live`, from the microphone opening to the stop.",
-                 note: "**`💬` and the last seven words the live recogniser has heard**, one row under `Listening...` because they are that row's subject. Victor, 2026-09-25: *\"💬 <the last 7 words of dictation live-transcribed>, entering from right, exiting left: to show me what I'm talking about\"*. The row is a fixed-width window reserved from the first frame of the sentence, so the chip does not grow word by word: each new word is laid out past the right edge and the line eases left until it is flush, and what leaves on the left dissolves through a fade instead of being cut mid-letter. **A caption, not the delivery** — the words sent are still the batch transcript of the recording, which is why this row can revise its last word without anything downstream noticing.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setLiveCaptionOpen(true)
-                o.setListening(true)
-                o.setShotCount(1)
-                o.setLiveCaption("verifică de ce endpointul de checkout întoarce 500 când coșul are un singur produs")
-            },
-
             Shot(slug: "listening-long", group: "Dictating", title: "Two minutes in",
                  when: "Any dictation that has been running for a whole minute — and every one that runs for several.",
                  note: "**`(2m)` is the one fact the rest of the row cannot carry.** `Listening...` fills in the first three voiced seconds and then never changes again, so from that moment on nothing distinguishes a sentence from a monologue — and a monologue costs real seconds at the other end, since the decode is charged per second of audio and the panel he has to read while Cancel is running is as long as he made it. Victor's ask, 2026-09-09: *\"să pui după toată povestea o paranteză rotundă în care treci numărul de minute\"*. **Nothing under a minute**: `(0m)` would be a readout saying only that a clock exists, an inch from what he is reading, for the length of every ordinary dictation — which is the rent the model id was taken off this row for paying.",

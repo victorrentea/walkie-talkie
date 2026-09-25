@@ -1374,26 +1374,6 @@ private let frontLabel = NSTextField(labelWithString: "")
         engineRow.isHidden = true
         root.addSubview(engineRow)
 
-        // **The `💬` row: white with the halo from birth** — it exists only
-        // while dictating, which is only ever the bare chip, so it never joins
-        // `refreshChrome`'s list and can never be the fourth row left off it.
-        liveGlyph.image = Self.liveGlyphImage
-        liveGlyph.imageScaling = .scaleProportionallyUpOrDown
-        liveGlyph.wantsLayer = true
-        liveGlyph.shadow = Self.halo()
-        liveLabel.font = hintFont
-        liveLabel.textColor = .white
-        liveLabel.lineBreakMode = .byClipping
-        liveLabel.wantsLayer = true
-        liveLabel.shadow = Self.halo()
-        liveClip.wantsLayer = true
-        liveClip.layer?.masksToBounds = true
-        liveClip.addSubview(liveLabel)
-        liveRow.addSubview(liveGlyph)
-        liveRow.addSubview(liveClip)
-        liveRow.isHidden = true
-        root.addSubview(liveRow)
-
         // Same treatment as the pulse above it — they are two glyphs in one
         // column and any difference between them reads as a mistake.
         shotGlyph.image = Self.cameraGlyph
@@ -1918,9 +1898,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             selectionWidth = glyphColumn + recordDotGap + ceil(selectionLabel.frame.width)
         }
         // No ✕ at rest means no room kept for one: the chip is exactly its text.
-        // A fixed width, reserved from the first frame of the sentence: the
-        // words scroll *inside* it, so the ticker never reaches this function.
-        let liveRowWidth = liveOpen ? glyphColumn + recordDotGap + Self.liveWidth : 0
         let reserve = anchored ? 0 : closeReserve
         // The two buttons are a row like any other and have to be measured like
         // one. With only Cancel on it that was survivable; Send beside it is
@@ -1930,7 +1907,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
-                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(emojiRowsWidth, max(pickWidth, max(selectionWidth, liveRowWidth)))))))))) + pad * 2
+                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(emojiRowsWidth, max(pickWidth, selectionWidth))))))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -1998,14 +1975,6 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((engineRow, recordRowHeight))
         } else {
             engineRow.isHidden = true
-        }
-        // **Right under `Listening...`**: the words are that row's subject.
-        if liveOpen {
-            layoutLiveRow(width: innerWidth)
-            liveRow.isHidden = false
-            rows.append((liveRow, recordRowHeight))
-        } else {
-            liveRow.isHidden = true
         }
         let hints = statusLines
         for (i, hint) in hintRows.enumerated() {
@@ -4296,119 +4265,29 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// 🎬 at the size of the rest of the icon column.
     private static let filmGlyphImage = Glyphs.emoji("🎥", ink: iconInk)
 
-    // MARK: - The live caption (2026-09-25)
+    // MARK: - The live caption (2026-09-25; a subtitle band since 2026-09-26)
 
-    /// **`💬 <the last seven words>`, entering from the right and leaving on the
-    /// left** — Victor: *"to show me what I'm talking about"*. Only under an
-    /// engine that streams (`DictationSource.streamsLive`, i.e. `☁️ ElevenLabs
-    /// + Live`); a caption of what the live recogniser has heard so far, never
-    /// the text that will be delivered.
-    ///
-    /// The row is a fixed-width window (`liveWidth`) the words slide through: a
-    /// new word is laid out past the right edge and the whole line eases left
-    /// until it is flush, so what was already there moves rather than
-    /// re-draws. Frame animation through the animator proxy — a *position*,
-    /// which Core Animation can interpolate, unlike the ramp's `textColor` —
-    /// and it never calls `layoutContent`: the row's width was reserved when it
-    /// opened, which is the one relayout it costs.
-    private let liveRow = NSView()
-    private let liveGlyph = NSImageView()
-    private let liveClip = NSView()
-    private let liveLabel = NSTextField(labelWithString: "")
-    private var liveOpen = false
-    private var liveWords: [String] = []
-    /// Bumped by every update, so a slide that finishes after a newer one has
-    /// started does not trim the newer one's words.
-    private var liveGeneration = 0
+    /// **The words he is saying, as a film subtitle across the top of the
+    /// screen** — `LiveCaptionBand`. It left the chip on 2026-09-26 (*"îl scoți
+    /// așadar din tooltip"*): a line that has to be *read while it moves* needs
+    /// a fixed place and a uniform glide, and a row riding the pointer had
+    /// neither. The chip only keeps the two entry points so `AppDelegate`'s
+    /// wiring and `POST /test/live-caption` are unchanged; `setListening(false)`
+    /// closes the band like it closed the row.
+    let liveCaption = LiveCaptionBand()
 
-    /// Victor's number.
-    private static let liveWordCount = 7
-    /// Seven words of his Romanian at 17 pt measure 330–400; the far left
-    /// fades (`liveFade`), so a long word leaving is cut soft, not sharp.
-    private static let liveWidth: CGFloat = 360
-    private static let liveFade: CGFloat = 28
-    private static let liveSlide: TimeInterval = 0.28
-    private static let liveGlyphImage = Glyphs.emoji("💬", ink: iconInk)
-
-    /// Opens the row for the sentence (or closes it). `setListening(false)`
-    /// closes it on its own.
+    /// Opens the band for the sentence (or fades it out).
     func setLiveCaptionOpen(_ open: Bool) {
-        guard liveOpen != open else { return }
-        liveOpen = open
-        liveWords = []
-        layoutContent()
+        liveCaption.setOpen(open)
     }
 
     /// Everything heard so far, as the recogniser has it now — revisions
-    /// included. Only the last `liveWordCount` words are ever on screen.
+    /// included. A caption only: what is *delivered* still arrives through
+    /// `didTranscribe`.
     func setLiveCaption(_ text: String) {
-        let words = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard liveOpen, words != liveWords else { return }
-        let old = liveWords
-        liveWords = words
-        liveGeneration += 1
-        let oldStart = max(0, old.count - Self.liveWordCount)
-        let common = zip(old, words).prefix { $0 == $1 }.count
-        // **Slide only when the words on screen are still the same words** —
-        // the line is laid out again from the first of them, so each keeps its
-        // x and only what is new has somewhere to come from. A revision that
-        // reaches further back than the window is a new line, set in place.
-        guard !Self.shooting, !liveRow.isHidden,
-              common >= oldStart, words.count > oldStart else {
-            renderLive()
-            return
-        }
-        // The first words come in from past the right edge like every later
-        // one; the ellipsis they replace is not a word and does not slide.
-        let x = old.isEmpty ? liveClip.frame.width : liveLabel.frame.minX
-        liveLabel.stringValue = words[oldStart...].joined(separator: " ")
-        liveLabel.sizeToFit()
-        liveLabel.frame.origin = NSPoint(x: x, y: liveLabelY)
-        let flush = liveClip.frame.width - liveLabel.frame.width
-        let generation = liveGeneration
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = Self.liveSlide
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            liveLabel.animator().setFrameOrigin(NSPoint(x: flush, y: liveLabelY))
-        }, completionHandler: { [weak self] in
-            // The words that slid off the left are dropped only now, and from
-            // the far side of the fade — the ones that stay do not move.
-            guard let self, self.liveGeneration == generation else { return }
-            self.renderLive()
-        })
+        liveCaption.setText(text)
     }
 
-    /// The last seven words, flush right, no motion.
-    private func renderLive() {
-        let shown = liveWords.suffix(Self.liveWordCount)
-        liveLabel.stringValue = shown.isEmpty ? "…" : shown.joined(separator: " ")
-        liveLabel.sizeToFit()
-        // Nothing heard yet: the ellipsis sits by the glyph, where the first
-        // word will end up once there are enough to fill the row.
-        let x = shown.isEmpty ? 0 : liveClip.frame.width - liveLabel.frame.width
-        liveLabel.frame.origin = NSPoint(x: x, y: liveLabelY)
-    }
-
-    private var liveLabelY: CGFloat {
-        ((liveClip.frame.height - ceil(liveLabel.intrinsicContentSize.height)) / 2).rounded()
-    }
-
-    private func layoutLiveRow(width: CGFloat) {
-        liveRow.frame.size = NSSize(width: width, height: recordRowHeight)
-        centre(liveGlyph, inRowOfHeight: recordRowHeight)
-        let x = glyphColumn + recordDotGap
-        liveClip.frame = NSRect(x: x, y: 0, width: max(0, width - x), height: recordRowHeight)
-        // **A fade, not a cut, on the left** — a word leaving mid-glyph reads
-        // as a rendering fault; one dissolving reads as the line moving on.
-        let fade = CAGradientLayer()
-        fade.frame = liveClip.bounds
-        fade.startPoint = CGPoint(x: 0, y: 0.5)
-        fade.endPoint = CGPoint(x: 1, y: 0.5)
-        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor]
-        fade.locations = [0, NSNumber(value: Double(Self.liveFade / max(1, liveClip.frame.width)))]
-        liveClip.layer?.mask = fade
-        renderLive()
-    }
 
     func setListening(_ value: Bool) {
         guard listening != value else { return }
@@ -4417,7 +4296,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // message is sent means the row never opens showing the last dictation's
         // total for the split second before the first shot lands.
         if value { shotCount = 0 }
-        if !value { liveOpen = false; liveWords = [] }
+        if !value { liveCaption.setOpen(false) }
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
         reposition()             // …and the chip snaps back to the cursor

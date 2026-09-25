@@ -12075,3 +12075,39 @@ fallback to the local model, rather than giving up on the transcription."*
   6.0 s for a 3.5 s clip, text correct. **Not yet tested end to end** with a real failed upload
   and a delivery (that needs a real sentence and a destination).
 
+
+## The live caption is a subtitle band (2026-09-26)
+
+Victor, the morning after the `💬` row shipped: *"pui subtitrarea live pe o bandă de înălțime 80 px
+pe partea de sus a ecranului ca o subtitrare. font alb cu bordură/shadow negru în jur ~ subtitrarea
+de film. ideal textul să se miște uniform smooth de la dr spre stânga, în ciuda cuvintelor din
+transcriere care se modifică live … ochiul să urmărească lin textul … îl scoți așadar din tooltip."*
+Then, watching it: *"o mișcare elastică blândă"*, *"corecțiile din spate să apară cu un galben șters
+și să facă fade înapoi la alb"*, *"când înlocuiești cuvinte din spate să faci elastică
+compresia/extensia a ce rămâne"*, *"textul vechi înlocuit fade out, în timp ce elastic i se face
+loc, apoi fade in așa încât fadeout+fadein = durata glisare text în noua poziție"*.
+
+- **`LiveCaptionBand`**: one borderless non-activating panel, `.statusBar`, click-through, all
+  Spaces, the top 80 pt of the screen under the pointer at the moment the sentence opens, under
+  the menu bar. No backdrop. The recogniser's whole-sentence partials go through the same
+  `RelayWindow.setLiveCaption` entry point, which now only forwards.
+- **Anchor at the first word, move the anchor.** The words are drawn one by one at
+  `anchor + shown[k]`; a revision of the tail changes only the glyphs at the right end, so what is
+  already on screen never jumps. Words fully past the left edge are dropped by advancing the
+  anchor by exactly their width.
+- **The speed is a controller**: `goal = clamp(cruise 40 + 1.2 × overhang, 0, 700)` px/s where
+  `overhang` is how far the line's end hangs past the right margin (48 pt); the velocity approaches
+  the goal exponentially (τ 0.45 s). Measured through `/test/state` at 4 Hz with words posted at
+  0.4 s: 100 → 300 px/s over the first three seconds, then eases to rest 25 pt short of the margin
+  with no step anywhere.
+- **Three drawing passes per line** (shadow, black stroke, white fill) because one attributed
+  string with all three paints the stroke pass and its shadow *over* the fill — the first screenshot
+  was grey text.
+- **A correction is aligned by longest common subsequence**, not by index: "cinci sute" → "500"
+  shifts every later word one place and the index diff painted nine words yellow. Matched words keep
+  their identity — their fade, and their drawn x, which is what the reflow eases from. The last
+  word changing only its trailing punctuation is the same word.
+- **The swap (1.0 s)**: the removed words stay as ghosts fading out over the first half; the rest
+  of the line glides to the new layout (τ 0.26 s); the new words are invisible for the first half
+  and fade in over the second, in the faded yellow, then warm to white over 1.6 s. Verified on six
+  frames 0.15–2.5 s after `checkout` → `finalizare a comenzii`.

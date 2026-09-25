@@ -1,0 +1,420 @@
+import AppKit
+
+/// **The live caption as a film subtitle across the top of the screen**
+/// (2026-09-26). Victor: *"pui subtitrarea live pe o bandă de înălțime 80 px pe
+/// partea de sus a ecranului ca o subtitrare. font alb cu bordură/shadow negru
+/// … ideal textul să se miște uniform smooth de la dreapta spre stânga, în ciuda
+/// cuvintelor din transcriere care se modifică live … ochiul să urmărească lin
+/// textul. Îl scoți așadar din tooltip."*
+///
+/// One borderless, click-through panel, `bandHeight` tall, pinned to the top
+/// of the screen the pointer was on when the sentence began — under the menu
+/// bar, so neither covers the other. No backdrop: white text with a black
+/// outline and a soft shadow reads on a terminal and on a white page alike.
+///
+/// **The motion, not the words, is the design.** The recogniser hands over the
+/// whole sentence as it has it now, about once a second, and the tail keeps
+/// being revised. Anchoring the line at its *first* word and moving that anchor
+/// left at a smooth velocity means a revision only redraws the glyphs at the
+/// right end: everything already on screen keeps sliding without a jump. The
+/// velocity is a controller, not a constant — it chases the amount of text
+/// hanging past the right margin (`overhang`), so speaking faster slides
+/// faster, a pause lets the line coast to rest with its end inside the band,
+/// and every change of speed is rate-limited (`accel`) so the eye never sees a
+/// step. Words that have fully left on the left are dropped by advancing the
+/// anchor by exactly their width — invisible by construction.
+final class LiveCaptionBand {
+
+    static let bandHeight: CGFloat = 80
+    /// Where the line's end wants to be when he pauses: this far from the
+    /// right edge. Inside the band, so the last word is always readable.
+    private static let marginRight: CGFloat = 48
+    /// A new line enters from the right edge and the first drop from the left
+    /// happens this far past it, so nothing is dropped while still fading in.
+    private static let dropSlack: CGFloat = 40
+    private static let fontSize: CGFloat = 38
+
+    /// px/s the line moves at with nothing hanging past the margin: a floor,
+    /// not a target — the controller adds to it per pixel of overhang.
+    private static let cruise: CGFloat = 40
+    /// px/s per px of overhang. 200 px of new words → +240 px/s.
+    private static let gain: CGFloat = 1.2
+    private static let vMax: CGFloat = 700
+    /// **Elastic, not a ramp** (Victor, 2026-09-26: *"o mișcare elastică
+    /// blândă"*): the speed approaches its target exponentially with this time
+    /// constant, so a burst of words is taken up as a gentle pull, never a
+    /// kick, and a pause lets the line ease to rest.
+    private static let ease: CGFloat = 0.45
+    /// **A replacement is a swap in three overlapping beats** (Victor,
+    /// 2026-09-26): the old words fade out over the first half of `swap`, the
+    /// rest of the line glides elastically to make room (`reflow`), and the
+    /// new words fade in over the second half — *"fadeout + fadein = durata
+    /// glisare text în noua poziție"*. Once in, a new word is a faded yellow
+    /// that returns to white over `correctionFade`.
+    static let swap: CFTimeInterval = 1.0
+    static let correctionFade: CFTimeInterval = 1.6
+    /// The glide's time constant: 95 % of the way in three of these ≈ `swap`.
+    static let reflow: CGFloat = 0.26
+
+    private let panel: NSPanel
+    private let view = TickerView()
+    /// `CADisplayLink` from macOS 14; a 60 Hz timer below it.
+    private var displayLink: Any?
+    private var lastTick: CFTimeInterval = 0
+    private(set) var isOpen = false
+
+    init() {
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: Self.bandHeight),
+                        styleMask: [.borderless, .nonactivatingPanel],
+                        backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.contentView = view
+    }
+
+    // MARK: - Open / close
+
+    /// Opens the band across the top of the screen under the pointer, empty,
+    /// or fades it out. `RELAY_SHOOT` never shows it: it is not a chip state.
+    func setOpen(_ open: Bool) {
+        guard open != isOpen else { return }
+        isOpen = open
+        if open {
+            guard !RelayWindow.shooting else { isOpen = false; return }
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+            guard let screen else { isOpen = false; return }
+            let v = screen.visibleFrame
+            panel.setFrame(NSRect(x: v.minX, y: v.maxY - Self.bandHeight, width: v.width, height: Self.bandHeight),
+                           display: false)
+            view.reset()
+            panel.alphaValue = 1
+            panel.orderFrontRegardless()
+            startLink()
+        } else {
+            stopLink()
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.35
+                panel.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                guard let self, !self.isOpen else { return }
+                self.panel.orderOut(nil)
+                self.view.reset()
+            })
+        }
+    }
+
+    /// For `GET /test/state`: `open`, and the ticker's numbers.
+    func describe() -> [String: Any] {
+        var out = view.describe()
+        out["open"] = isOpen
+        return out
+    }
+
+    /// The whole sentence as the recogniser has it now, revisions included.
+    func setText(_ text: String) {
+        guard isOpen else { return }
+        view.setWords(text.split(whereSeparator: { $0.isWhitespace }).map(String.init))
+    }
+
+    // MARK: - The clock
+
+    private func startLink() {
+        guard displayLink == nil else { return }
+        lastTick = 0
+        if #available(macOS 14, *) {
+            let link = view.displayLink(target: self, selector: #selector(tick))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        } else {
+            let timer = Timer(timeInterval: 1.0 / 60, target: self, selector: #selector(tick),
+                              userInfo: nil, repeats: true)
+            RunLoop.main.add(timer, forMode: .common)
+            displayLink = timer
+        }
+    }
+
+    private func stopLink() {
+        if #available(macOS 14, *), let link = displayLink as? CADisplayLink { link.invalidate() }
+        (displayLink as? Timer)?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private func tick() {
+        let now = CACurrentMediaTime()
+        defer { lastTick = now }
+        guard lastTick > 0 else { return }
+        // A frame after a stall (a hidden Space, a debugger) is clamped so the
+        // line does not leap; it merely catches up at `accel`.
+        let dt = CGFloat(min(now - lastTick, 1.0 / 20))
+        view.advance(dt: dt, now: now, cruise: Self.cruise, gain: Self.gain, vMax: Self.vMax, ease: Self.ease,
+                     marginRight: Self.marginRight, dropSlack: Self.dropSlack)
+    }
+
+    // MARK: - The view
+
+    /// Draws one line of subtitle text at a fractional x and moves it.
+    private final class TickerView: NSView {
+        private var words: [String] = []
+        /// Words at the head of `words` that have left through the left edge.
+        private var dropped = 0
+        /// Per visible word (`words[dropped + k]`): where it belongs in the
+        /// new layout, and where it is drawn right now — the second eases
+        /// toward the first (`reflow`), which is the elastic compression or
+        /// extension of the rest of the line when a word behind is replaced.
+        private var target: [CGFloat] = []
+        private var shown: [CGFloat] = []
+        private var widths: [CGFloat] = []
+        /// x of the first drawn word (`words[dropped]`), in view points.
+        private var anchor: CGFloat = 0
+        private var velocity: CGFloat = 0
+        /// **When a word replaced one already on screen**, by absolute index:
+        /// invisible for the first half of `swap`, fading in over the second,
+        /// then a faded yellow returning to white (*"corecțiile din spate să
+        /// apară cu un galben șters și să facă fade înapoi la alb"*). Words
+        /// merely appended, and the tail's punctuation flicker, are not
+        /// corrections.
+        private var bornAt: [Int: CFTimeInterval] = [:]
+        /// The words a correction removed, fading out where they stood while
+        /// the line reflows under them. `x` is relative to `anchor`.
+        private var ghosts: [(word: String, x: CGFloat, since: CFTimeInterval)] = []
+        private var now: CFTimeInterval = CACurrentMediaTime()
+        private var correctionsShown = 0
+
+        override var isFlipped: Bool { false }
+        override var wantsUpdateLayer: Bool { false }
+
+        /// **Three passes, because one is muddy.** A single attributed string
+        /// with fill + stroke + shadow draws the stroke pass *over* the fill,
+        /// shadow included, and the white comes out grey (seen on the first
+        /// screenshot, 2026-09-26). So: the shadow under everything, the black
+        /// outline (a positive `strokeWidth` is stroke only, centred on the
+        /// glyph edge), then the fill on top covering the inner half.
+        private static let font = NSFont.systemFont(ofSize: LiveCaptionBand.fontSize, weight: .bold)
+        private static let shadowAttributes: [NSAttributedString.Key: Any] = {
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.9)
+            shadow.shadowBlurRadius = 6
+            shadow.shadowOffset = NSSize(width: 0, height: -2)
+            return [.font: font, .foregroundColor: NSColor.black, .shadow: shadow]
+        }()
+        private static let strokeAttributes: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: NSColor.black, .strokeColor: NSColor.black, .strokeWidth: 9.0,
+        ]
+        private static let fillAttributes: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: NSColor.white,
+        ]
+        /// The faded yellow a correction starts from.
+        private static let correctionColour = NSColor(calibratedRed: 1.0, green: 0.88, blue: 0.45, alpha: 1)
+        private static let lineHeight = NSAttributedString(string: "Ag", attributes: fillAttributes).size().height
+
+        /// The whole line's width in the layout the words are heading for.
+        private var lineWidth: CGFloat { (target.last ?? 0) + (widths.last ?? 0) }
+        /// …and as drawn this frame.
+        private var shownWidth: CGFloat { (shown.last ?? 0) + (widths.last ?? 0) }
+
+        /// What `GET /test/state` reports, for an assertion at a desk.
+        func describe() -> [String: Any] {
+            ["words": words.count, "dropped": dropped, "anchor": Double(anchor),
+             "lineWidth": Double(lineWidth), "shownWidth": Double(shownWidth), "velocity": Double(velocity),
+             "bandWidth": Double(bounds.width), "reflowing": Double(zip(shown, target).map { abs($0 - $1) }.max() ?? 0),
+             "corrections": correctionsShown, "correcting": bornAt.keys.sorted(), "ghosts": ghosts.map { $0.word }]
+        }
+
+        func reset() {
+            words = []
+            dropped = 0
+            target = []; shown = []; widths = []
+            anchor = 0
+            velocity = 0
+            bornAt = [:]
+            ghosts = []
+            correctionsShown = 0
+            needsDisplay = true
+        }
+
+        func setWords(_ new: [String]) {
+            guard new != words else { return }
+            let old = words
+            let wasEmpty = old.isEmpty
+            // A revision that reaches back past what has already left: a new
+            // line, entering from the right like the first one did.
+            if new.count <= dropped { dropped = 0; anchor = bounds.width; bornAt = [:]; ghosts = []; shown = [] }
+            let stamp = CACurrentMediaTime()
+            // **Aligned, not compared by index**: a recogniser that turns
+            // "cinci sute" into "500" shifts every later word one place, and
+            // an index diff would paint the whole rest of the line yellow. The
+            // longest common subsequence keeps every unchanged word's identity:
+            // its own fade if it was a correction a moment ago, and the x it is
+            // drawn at, which is what makes the reflow a glide and not a jump.
+            let oldVisible = Array(old.dropFirst(min(dropped, old.count)))
+            let newVisible = Array(new.dropFirst(dropped))
+            var pairs = Self.align(oldVisible, newVisible)
+            // The last word changing only its trailing punctuation is the
+            // recogniser making up its mind, about once a second: the same word.
+            if let o = oldVisible.indices.last, let n = newVisible.indices.last,
+               !pairs.contains(where: { $0.0 == o || $0.1 == n }),
+               Self.stem(oldVisible[o]) == Self.stem(newVisible[n]) {
+                pairs.append((o, n))
+            }
+            var carried: [Int: CFTimeInterval] = [:]
+            var carriedX: [Int: CGFloat] = [:]
+            for (o, n) in pairs {
+                if let at = bornAt[dropped + o] { carried[dropped + n] = at }
+                if o < shown.count { carriedX[n] = shown[o] }
+            }
+            let matchedOld = Set(pairs.map { $0.0 })
+            let matchedNew = Set(pairs.map { $0.1 })
+            // Every old word no longer there fades out where it stood.
+            for o in oldVisible.indices where !matchedOld.contains(o) && o < shown.count {
+                ghosts.append((oldVisible[o], shown[o], stamp))
+            }
+            let lastMatchedNew = pairs.last?.1 ?? -1
+            let lastMatchedOld = pairs.last?.0 ?? -1
+            // Past the last aligned pair: words are corrections only if they
+            // *replaced* something — old words were there and are now gone.
+            let tailReplaced = lastMatchedOld < oldVisible.count - 1
+            for n in newVisible.indices where !matchedNew.contains(n) {
+                guard n < lastMatchedNew || tailReplaced else { continue }
+                carried[dropped + n] = stamp
+                correctionsShown += 1
+            }
+            bornAt = carried
+            words = new
+            if wasEmpty { anchor = bounds.width }
+            // The new layout; each word starts where its old self was drawn,
+            // or in place if it is new.
+            widths = newVisible.map { Self.width(of: $0) }
+            var x: CGFloat = 0
+            target = widths.map { w in defer { x += w }; return x }
+            shown = target.indices.map { carriedX[$0] ?? target[$0] }
+            needsDisplay = true
+        }
+
+        /// Longest common subsequence of two short word lists, as index pairs.
+        static func align(_ a: [String], _ b: [String]) -> [(Int, Int)] {
+            guard !a.isEmpty, !b.isEmpty else { return [] }
+            var dp = Array(repeating: Array(repeating: 0, count: b.count + 1), count: a.count + 1)
+            for i in stride(from: a.count - 1, through: 0, by: -1) {
+                for j in stride(from: b.count - 1, through: 0, by: -1) {
+                    dp[i][j] = a[i] == b[j] ? dp[i + 1][j + 1] + 1 : max(dp[i + 1][j], dp[i][j + 1])
+                }
+            }
+            var out: [(Int, Int)] = []
+            var i = 0, j = 0
+            while i < a.count, j < b.count {
+                if a[i] == b[j] { out.append((i, j)); i += 1; j += 1 }
+                else if dp[i + 1][j] >= dp[i][j + 1] { i += 1 } else { j += 1 }
+            }
+            return out
+        }
+
+        private static func stem(_ word: String) -> Substring {
+            var s = Substring(word)
+            while let last = s.last, last.isPunctuation { s = s.dropLast() }
+            return s
+        }
+
+        /// A word's advance, trailing space included.
+        private static func width(of word: String) -> CGFloat {
+            NSAttributedString(string: word + " ", attributes: fillAttributes).size().width
+        }
+
+        func advance(dt: CGFloat, now: CFTimeInterval, cruise: CGFloat, gain: CGFloat, vMax: CGFloat,
+                     ease: CGFloat, marginRight: CGFloat, dropSlack: CGFloat) {
+            self.now = now
+            guard !words.isEmpty, !widths.isEmpty else { return }
+            let end = anchor + lineWidth
+            let overhang = end - (bounds.width - marginRight)
+            // Continuous in `overhang`: rest is reached `cruise / gain` px short
+            // of the margin, never with a step.
+            let goal = max(0, min(vMax, cruise + gain * overhang))
+            // Exponential approach: the same fraction of the gap closed per
+            // `ease` seconds, whatever the gap — the elastic feel.
+            velocity += (goal - velocity) * (1 - exp(-dt / ease))
+            if velocity < 0.5 { velocity = 0 }
+            if velocity > 0 { anchor -= velocity * dt }
+            // The reflow: every word eases toward its place in the new layout.
+            let k = 1 - exp(-dt / LiveCaptionBand.reflow)
+            for i in shown.indices {
+                let d = target[i] - shown[i]
+                shown[i] += abs(d) < 0.3 ? d : d * k
+            }
+            // Drop what has fully gone, advancing the anchor by its own width so
+            // every remaining glyph stays exactly where it was drawn.
+            while widths.count > 1 {
+                let w = widths[0]
+                guard anchor + w < -dropSlack, abs(shown[1] - target[1]) < 0.5 else { break }
+                anchor += w
+                bornAt[dropped] = nil
+                dropped += 1
+                widths.removeFirst(); target.removeFirst(); shown.removeFirst()
+                for i in target.indices { target[i] -= w; shown[i] -= w }
+                for i in ghosts.indices { ghosts[i].x -= w }
+            }
+            let fadeOut = LiveCaptionBand.swap / 2
+            ghosts.removeAll { now - $0.since >= fadeOut }
+            for (i, at) in bornAt where now - at > LiveCaptionBand.swap + LiveCaptionBand.correctionFade { bornAt[i] = nil }
+            needsDisplay = true
+        }
+
+        /// The fill colour and the opacity of a word born at `at`.
+        private func look(bornAt at: CFTimeInterval?) -> (NSColor, CGFloat) {
+            guard let at else { return (.white, 1) }
+            let t = now - at
+            let half = LiveCaptionBand.swap / 2
+            let alpha = CGFloat(min(1, max(0, (t - half) / half)))
+            let warm = CGFloat(min(1, max(0, (t - LiveCaptionBand.swap) / LiveCaptionBand.correctionFade)))
+            return (Self.correctionColour.blended(withFraction: warm, of: .white) ?? .white, alpha)
+        }
+
+        private func drawWord(_ word: String, at: NSPoint, fill: NSColor, alpha: CGFloat) {
+            guard alpha > 0.01, let ctx = NSGraphicsContext.current?.cgContext else { return }
+            let faded = alpha < 0.999
+            if faded { ctx.saveGState(); ctx.setAlpha(alpha); ctx.beginTransparencyLayer(auxiliaryInfo: nil) }
+            NSAttributedString(string: word, attributes: Self.shadowAttributes).draw(at: at)
+            NSAttributedString(string: word, attributes: Self.strokeAttributes).draw(at: at)
+            var attrs = Self.fillAttributes
+            attrs[.foregroundColor] = fill
+            NSAttributedString(string: word, attributes: attrs).draw(at: at)
+            if faded { ctx.endTransparencyLayer(); ctx.restoreGState() }
+        }
+
+        override func draw(_ dirtyRect: NSRect) {
+            guard !words.isEmpty, !widths.isEmpty else { return }
+            let y = ((bounds.height - Self.lineHeight) / 2).rounded()
+            let visible = Array(words[dropped...])
+            // The settled words first, in three passes over the whole line so
+            // a word's fill never sits under its neighbour's shadow; then the
+            // ghosts and the words fading in, each as its own translucent group.
+            var fading: [(String, NSPoint, NSColor, CGFloat)] = []
+            for pass in 0..<3 {
+                for (k, word) in visible.enumerated() where k < shown.count {
+                    let at = NSPoint(x: anchor + shown[k], y: y)
+                    let (fill, alpha) = look(bornAt: bornAt[dropped + k])
+                    if alpha < 0.999 { if pass == 0 { fading.append((word, at, fill, alpha)) }; continue }
+                    switch pass {
+                    case 0: NSAttributedString(string: word, attributes: Self.shadowAttributes).draw(at: at)
+                    case 1: NSAttributedString(string: word, attributes: Self.strokeAttributes).draw(at: at)
+                    default:
+                        var attrs = Self.fillAttributes
+                        attrs[.foregroundColor] = fill
+                        NSAttributedString(string: word, attributes: attrs).draw(at: at)
+                    }
+                }
+            }
+            let fadeOut = LiveCaptionBand.swap / 2
+            for g in ghosts {
+                let alpha = CGFloat(1 - min(1, (now - g.since) / fadeOut))
+                drawWord(g.word, at: NSPoint(x: anchor + g.x, y: y), fill: .white, alpha: alpha)
+            }
+            for (word, at, fill, alpha) in fading { drawWord(word, at: at, fill: fill, alpha: alpha) }
+        }
+    }
+}

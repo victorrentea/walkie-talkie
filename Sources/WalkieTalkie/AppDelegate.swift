@@ -5518,6 +5518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["quitPending"] = quitDeferredSince != nil
         out["pid"] = Int(ProcessInfo.processInfo.processIdentifier)
         out["dictationStartedAt"] = dictationStartedAt.map { Outbox.iso($0) } ?? NSNull()
+        out["liveCaption"] = overlay.liveCaption.describe()
         return out
     }
 
