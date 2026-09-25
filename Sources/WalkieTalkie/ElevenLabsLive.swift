@@ -26,6 +26,13 @@ final class ElevenLabsLive {
 
     static let model = "scribe_v2_realtime"
     static let rate = "$0.39/h"
+    /// The languages the live recogniser may answer in: Romanian first, English
+    /// as the secondary. `WT_ELEVEN_LIVE_LANGS=ro,en` overrides.
+    static var languages: [String] {
+        let raw = ProcessInfo.processInfo.environment["WT_ELEVEN_LIVE_LANGS"]
+            ?? ElevenLabsSource.config["WT_ELEVEN_LIVE_LANGS"] ?? "ro,en"
+        return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
 
     /// The whole sentence heard so far, on the main queue.
     var onText: ((String) -> Void)?
@@ -47,8 +54,19 @@ final class ElevenLabsLive {
         var query = [URLQueryItem(name: "model_id", value: Self.model),
                      URLQueryItem(name: "audio_format", value: "pcm_16000"),
                      URLQueryItem(name: "commit_strategy", value: "vad")]
-        if let language, !language.isEmpty {
-            query.append(URLQueryItem(name: "language_code", value: language))
+        // **The caption is pinned to his two languages** (2026-09-26, after a
+        // sentence came back Turkish): `language_code` is the first of
+        // `languages`, the rest go as `secondary_languages`, which the docs
+        // (read 2026-09-26) say makes identification "only focus on a certain
+        // set of languages". The batch transcript stays auto-detected — see
+        // `ElevenLabsSource.language` for why pinning it costs the English
+        // terms. `WT_ELEVEN_LANG` still wins when set, for a comparison run.
+        let pinned = language.flatMap { $0.isEmpty ? nil : [$0] } ?? Self.languages
+        if let first = pinned.first {
+            query.append(URLQueryItem(name: "language_code", value: first))
+            for extra in pinned.dropFirst() {
+                query.append(URLQueryItem(name: "secondary_languages", value: extra))
+            }
         }
         parts.queryItems = query
         var req = URLRequest(url: parts.url!)

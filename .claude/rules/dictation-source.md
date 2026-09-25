@@ -211,7 +211,8 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
   price in `ElevenLabsSource.rate`, keyed by model.
 - **Key:** `~/.walkie-talkie/elevenlabs.env` (`ELEVENLABS_API_KEY=`), env first, **follows `--home`**
   (a test relay cannot bill), re-read on every menu open. A file: launchd gives no shell; Keychain prompts.
-- **Language is not pinned** — his Romanian carries English terms. `WT_ELEVEN_LANG=ro` for comparisons.
+- **Language is not pinned** on the batch transcript — his Romanian carries English terms. `WT_ELEVEN_LANG=ro` for comparisons.
+- **The live caption IS pinned to `ro` + `secondary_languages=en`** (2026-09-26, a caption came back Turkish): `ElevenLabsLive.languages`, `WT_ELEVEN_LIVE_LANGS=ro,en` overrides (first = `language_code`, rest = `secondary_languages`, repeated query keys; probed 2026-09-26 on a corpus WAV, English transcribed fine under it). `WT_ELEVEN_LANG` set wins for both.
 - **`DictationEnd.failed`** ≠ `.silent` (drops audio) ≠ `.cancelled` (keeps it quietly): 12 s banner
   + WAV staged for *Recover Cancelled Dictation*. One retry, only for transport/429/5xx; 45 s ceiling.
 - **Unmeasured:** `languageFloor = 0.5`, `scribe_v1` vs `v2`. `tools/eleven-test.sh [wav | --corpus n]`.
@@ -241,7 +242,7 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
 |---|---|
 | `WT_SOURCE=whisper｜eleven｜wispr` | engine for one run (the menu writes `dictationSource`) |
 | `WT_WISPR_FIREWALL=0` | let Wispr's ⌘V through (`POST /test/firewall {"on": false}`) |
-| `ELEVENLABS_API_KEY` · `WT_ELEVEN_MODEL=scribe_v2` · `WT_ELEVEN_LANG=ro` | key; model (default `scribe_v1`); pinned language (off) |
+| `ELEVENLABS_API_KEY` · `WT_ELEVEN_MODEL=scribe_v2` · `WT_ELEVEN_LANG=ro` · `WT_ELEVEN_LIVE_LANGS=ro,en` | key; model (default `scribe_v1`); pinned language (off); the live caption's language set (default `ro,en`) |
 | `WT_WRAP_WISPR=0` · `WT_WRAP_MODE=scratchpad｜sink｜off` | wrap off / forced mode (`POST /test/wrap-mode`) |
 | `WT_SCRATCHPAD_DELIVER=note` | deliver from the note (2.8 s slower) |
 | `WT_SCRATCHPAD_REDIRECT_KEYS=0` · `WT_SCRATCHPAD_AX_INSERT=0` | key redirect off / redirect by `postToPid` |
