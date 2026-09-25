@@ -31,7 +31,7 @@ final class ElevenLabsLive {
     static var languages: [String] {
         let raw = ProcessInfo.processInfo.environment["WT_ELEVEN_LIVE_LANGS"]
             ?? ElevenLabsSource.config["WT_ELEVEN_LIVE_LANGS"] ?? "ro,en"
-        return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return raw.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     /// The whole sentence heard so far, on the main queue.

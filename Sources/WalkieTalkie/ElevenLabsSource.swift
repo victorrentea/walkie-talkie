@@ -158,7 +158,7 @@ final class ElevenLabsSource: DictationSource {
     /// Parsed on every `reloadKey()` — the file is three lines and neither the
     /// menu opening nor an engine pick is a hot path, and re-reading is what
     /// lets him paste the key in without restarting the app.
-    private static var config: [String: String] = [:]
+    static var config: [String: String] = [:]
 
     private static func loadConfig() {
         config = [:]
