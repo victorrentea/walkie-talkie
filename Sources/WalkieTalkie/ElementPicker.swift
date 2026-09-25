@@ -457,6 +457,9 @@ final class ElementPicker {
 
     /// One pulse of the `⌘⇧P` hint under the pointer — see `PasteHint`.
     var onTestPasteHint: (() -> Void)?
+    /// `POST /test/live-caption` `{"text": "…"}` — the `💬` row's words as if
+    /// the live recogniser had just heard them; `{"on": false}` closes the row.
+    var onTestLiveCaption: (([String: Any]) -> Void)?
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -555,7 +558,7 @@ final class ElementPicker {
     /// Which recogniser is loaded and whether it is up — for a test that has to
     /// wait out a ten-second model load before it says anything.
     var describeEngine: (() -> [String: Any])?
-    /// `POST /engine` `{"id": "whisper"|"eleven"|"wispr"}` — the menu's pick,
+    /// `POST /engine` `{"id": "whisper"|"eleven"|"eleven-live"|"wispr"}` — the menu's pick,
     /// for a harness that has to run a scenario on a given engine without a
     /// click. Refused mid-sentence exactly as the menu is; the answer is
     /// `/engine` afterwards, so the caller reads what is actually running.
@@ -845,6 +848,13 @@ final class ElementPicker {
         // say there is no way to look at it twice in a row without talking.
         case ("POST", "/test/paste-hint"):
             onTestPasteHint?()
+            respond(conn, 200, ["ok": true])
+
+        // **The `💬` caption without a microphone or a bill** — the ticker is
+        // only reviewable if its words can be pushed from a desk, one at a time.
+        case ("POST", "/test/live-caption"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            onTestLiveCaption?(body)
             respond(conn, 200, ["ok": true])
 
         // The ✕'s cancel, from a desk — see `onTestCancelDictation`.

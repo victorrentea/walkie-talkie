@@ -144,6 +144,18 @@ protocol DictationSource: AnyObject {
     /// and pick is still listed under the words by its offset exactly as before.
     /// → `ShotMarker.place`, `MicRecorder.offset(of:)`
     func audioOffset(of moment: Date) -> TimeInterval?
+
+    /// **Whether this source streams the words while he is still talking**
+    /// (2026-09-25, `☁️ ElevenLabs + Live`). The chip opens its `💬` row for the
+    /// whole sentence when it does, so the row is there from the first frame
+    /// rather than popping in under the pointer with the first word.
+    var streamsLive: Bool { get }
+
+    /// **The words heard so far, as the live recogniser has them right now** —
+    /// the whole sentence, not a delta; a later call may revise the tail of an
+    /// earlier one. A caption only: what is *delivered* still arrives through
+    /// `didTranscribe`, from the recording.
+    var didHearLive: ((String) -> Void)? { get set }
 }
 
 /// **One token of a transcript, with the moment it was said** (2026-09-19).
@@ -328,4 +340,12 @@ extension DictationSource {
     /// **No, for a source that does not own the recording.** The safe answer for
     /// any recogniser added later, and the true one for Wispr Flow.
     func audioOffset(of moment: Date) -> TimeInterval? { nil }
+
+    var streamsLive: Bool { false }
+
+    /// Nobody to call: a source that does not stream has no live words.
+    var didHearLive: ((String) -> Void)? {
+        get { nil }
+        set {}
+    }
 }

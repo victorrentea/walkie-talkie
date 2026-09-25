@@ -157,6 +157,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 
 ## The Engine row: which recogniser is listening (2026-09-14)
 
+- **Since 2026-09-25 the list is `☁️ ElevenLabs + Live`, `☁️ ElevenLabs`, `💻 Local`, in that
+  order, and the model details are on the tooltips** (`StatusItem.engineDetails`): model ids,
+  published prices, the key, the RAM. Victor: *"move the details of what models into the
+  tooltips"*. `⚠️` (no key) and `⏳` (loading) stay on the row — *cannot run now* belongs where he
+  picks. **Wispr Flow is hidden "for the moment"**: its row shows only while it *is* the engine, so
+  the tick is never missing; `POST /engine {"id":"wispr"}` still picks it. Ids: `eleven-live`,
+  `eleven`, `whisper`, `wispr`. → journal: *ElevenLabs + Live: the words beside the pointer (2026-09-25)*
+
 - **It replaced `Replace WisprFlow`, and that row is gone from the menu.** A checkbox named after
   another app reads as *that app: yes or no* (*"nu mai trebuie să fie un checkbox «Wispr» sau nu,
   ci un submeniu din care să aleg modelul de utilizat"*). A tick can only name one of the two

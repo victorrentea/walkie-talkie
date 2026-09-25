@@ -12032,3 +12032,28 @@ They should stay there just in case I need to paste it again."*
   next dictation raises the ring (`hide`) — never because of a key.
 - **Then 5 s, not 3** — Victor, the same evening: *"let it be 5 seconds."* `PasteHint.hold = 5`,
   still counted from the last key.
+
+## ElevenLabs + Live: the words beside the pointer (2026-09-25)
+
+Victor: *"in meniul de engine de transcriere: optiune noua: ☁️ ElevenLabs + Live · ascunde pt
+moment wispr flow · ☁️ ElevenLabs · 💻 Local. move the details of what models into the tooltips.
+the option+streaming will display +1 line in the mouse caption 💬 <the last 7 words of dictation
+live-transcribed>, entering from right, exiting left: to show me what I'm talking about"*.
+
+- **The stream is a caption, not a recogniser.** What is delivered is still the batch transcript
+  of the recording (`scribe_v1`/`v2` per `WT_ELEVEN_MODEL`) — word timings, spliced markers,
+  retry, corpus audio all unchanged. The realtime model (`scribe_v2_realtime`, $0.39/h published
+  2026-09-25 on elevenlabs.io/pricing/api) only feeds the chip, so a dropped socket costs the
+  caption and never a sentence. Using its committed text *as* the delivery (no upload wait) is
+  the obvious next step and was not taken without asking: it would lose the word timings the shot
+  markers are placed by unless `include_timestamps` is proven equivalent.
+- **Protocol probed before it was written** (`wss://api.elevenlabs.io/v1/speech-to-text/realtime`,
+  `xi-api-key`, `audio_format=pcm_16000`, `input_audio_chunk` + base64): 15 s of a corpus WAV
+  in 85 ms chunks → `session_started` at once, partials about once a second, the last word's
+  punctuation revised between partials (`gun.` → `gun,`) — which is why the ticker compares word
+  lists by common prefix and slides only when the words already on screen are still there.
+- **Chunks before `session_started` are held and flushed**, so the first words are not lost to
+  the handshake.
+- **The row's width is reserved for the whole sentence** so the chip does not grow word by word;
+  the words move inside a fixed window instead (`overlay-chip.md`).
+

@@ -1460,11 +1460,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // behind the firewall in `HotkeyTap`: its ⌘V is dropped at the tap and
         // the relay reads the `History` row, so the words it hands over are as
         // sure as the other two engines'.
-        for id in ["whisper", "eleven", "wispr"] {
+        //
+        // **Since 2026-09-25 the order is Victor's, and the names are short** —
+        // *"☁️ ElevenLabs + Live, ☁️ ElevenLabs, 💻 Local … move the details of
+        // what models into the tooltips"*. The row is the choice; the model id,
+        // the price and the RAM are what he hovers for. The order of trust
+        // above gave way to the order of use: the streaming one is the pick.
+        //
+        // **Wispr Flow is hidden "for the moment"** (same day) — the engine and
+        // its firewall stay whole, `POST /engine {"id":"wispr"}` still picks
+        // it, and the row comes back only while it *is* the engine, so the tick
+        // is never missing from the list.
+        let ids = ["eleven-live", "eleven", "whisper"] + (engineId == "wispr" ? ["wispr"] : [])
+        for id in ids {
             let row = NSMenuItem(title: engineTitle(id),
                                  action: #selector(enginePicked(_:)), keyEquivalent: "")
             row.target = self
             row.representedObject = id
+            row.toolTip = engineDetails(id)
             // The tick where every other switch in this menu draws it — never
             // `NSMenuItem.state`, which would reserve a second column.
             row.image = id == engineId ? Self.symbolIcon("checkmark") : Self.blankIcon
@@ -1540,8 +1553,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         Log.info("📋 a prompt from the history is on the clipboard (\(text.count) chars)")
     }
 
-    /// **What one engine is called** — in the list, and in the row above it when
-    /// it is the one running.
+    /// **What one engine is called** in the list: a cloud or a laptop, and a
+    /// name (2026-09-25). Everything below this paragraph describes what the row
+    /// *used* to carry and now lives on its tooltip (`engineDetails`) — the
+    /// reasons still hold there, one hover away.
     ///
     /// **The cost is shown, because the weights are the whole argument** for
     /// starting the helper only when a dictation is coming and letting it go
@@ -1570,35 +1585,44 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// i.e. most of the time this row is read. `LocalWhisperSource` now answers
     /// the configured id instead; see its note.
     private func engineTitle(_ id: String) -> String {
-        // **The cloud engine's cost is its key, the way the local one's is its
-        // weights** — and the row says which is missing for the same reason the
-        // footprint is shown above: a number nobody can check belongs in a
-        // comment, and *this engine cannot run right now* belongs in the list he
-        // picks from. `$0.40/h` is there because it is the half of the trade a
-        // menu can state and a comment cannot make him feel.
-        //
-        // **☁️ at the end of the networked row, and the sentence that used to
-        // spell it out is gone** (Victor, 2026-09-21: *"pun în dreptul lor un
-        // norișor la final … și scoate băta aia cu «voice leaves computer»"*).
-        // `audio leaves this Mac` was a warning written out in words on a list
-        // read in a second; the cloud is the picture everybody already has for
-        // it. The badge is the whole difference between this row and the local
-        // one, which is why it is here and not on `engineShortTitle`: up there
-        // the engine stands alone with nothing to be different from, and ⚠️
-        // already has the spot.
-        if id == "wispr" { return "Wispr Flow ☁️" }
-        if id == "eleven" {
-            let model = ElevenLabsSource.model
-            return elevenReady?() == true
-                ? "ElevenLabs \(model) — \(ElevenLabsSource.rate) ☁️"
-                : "ElevenLabs \(model) — no API key ☁️"
+        // ⚠️ stays on the row, not only in the tooltip: *this engine cannot run
+        // right now* belongs in the list he picks from.
+        let keyless = elevenReady?() == true ? "" : " ⚠️"
+        switch id {
+        case "eleven-live": return "☁️ ElevenLabs + Live" + keyless
+        case "eleven": return "☁️ ElevenLabs" + keyless
+        case "wispr": return "☁️ Wispr Flow"
+        default: return engineLoading ? "💻 Local ⏳" : "💻 Local"
         }
-        let name = whisperModel?() ?? LocalWhisperSource.configuredModel
-        if engineLoading { return "\(name) — loading…" }
-        if let bytes = whisperFootprint?() {
-            return String(format: "%@ — %.1f GB RAM", name, Double(bytes) / 1_073_741_824)
+    }
+
+    /// **The details the row used to carry, on its tooltip** (2026-09-25) —
+    /// every fact `engineTitle` spelled out until then, still read live on every
+    /// open: the model id in full, the published price, the key, the RAM.
+    private func engineDetails(_ id: String) -> String {
+        let key = elevenReady?() == true ? nil
+            : "No API key — put ELEVENLABS_API_KEY=… in ~/.walkie-talkie/elevenlabs.env"
+        switch id {
+        case "eleven-live":
+            return ["Live caption: ElevenLabs \(ElevenLabsLive.model) — \(ElevenLabsLive.rate), "
+                        + "the last 7 words beside the pointer while you talk",
+                    "Sent text: ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate), "
+                        + "from the recording",
+                    "Audio leaves this Mac", key].compactMap { $0 }.joined(separator: "\n")
+        case "eleven":
+            return ["ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate)",
+                    "Audio leaves this Mac", key].compactMap { $0 }.joined(separator: "\n")
+        case "wispr":
+            return "Wispr Flow — its own microphone; its paste is blocked and the relay delivers the words"
+        default:
+            let name = whisperModel?() ?? LocalWhisperSource.configuredModel
+            let memory: String
+            if engineLoading { memory = "loading…" }
+            else if let bytes = whisperFootprint?() {
+                memory = String(format: "%.1f GB RAM", Double(bytes) / 1_073_741_824)
+            } else { memory = "not loaded — comes up for the next sentence" }
+            return "\(name) — \(memory)\nRuns on this Mac, offline"
         }
-        return name
     }
 
     /// **What the top-level row calls the same engine** — `Wispr Flow`, or
@@ -1614,6 +1638,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
         if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
+        if id == "eleven-live" {
+            return elevenReady?() == true ? "ElevenLabs + Live" : "ElevenLabs + Live ⚠️"
+        }
         if id == "wispr" { return "Wispr Flow" }
         if engineLoading { return "Local (loading…)" }
         guard let bytes = whisperFootprint?() else { return "Local" }

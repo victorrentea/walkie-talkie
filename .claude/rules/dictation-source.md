@@ -30,6 +30,12 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   model, and Wispr Flow (third row, behind the firewall since 2026-09-22 evening; out of the list only
   that morning). `WisprFlowSource` is wired **whichever engine is picked** — the raw 🔽 → chord, the
   meter, `hearingChanged`, the ⚡ ring and the back button's stop hang off `wisprSource`.
+- **`☁️ ElevenLabs + Live` (`eleven-live`, 2026-09-25) is a second `ElevenLabsSource(live: true)`**,
+  not a flag: same WAV, same batch transcript **delivered**, plus `ElevenLabsLive` streaming the
+  buffers (`MicRecorder.onBuffer`, set/cleared on `audioQueue`) to `scribe_v2_realtime` over a
+  websocket (`commit_strategy=vad`) for the chip's `💬` caption only. Every stream failure is a
+  log line, never a `DictationEnd`. Costs both: batch + $0.39/h. Probe measured 2026-09-25: first
+  partial ~1 s after speech, then ~1/s, revising the last word's punctuation.
 - **`engine(named:)` is one table read by the launch pick and the menu pick; anything unrecognised is
   the default**, never a named engine, so a typo cannot pick a recogniser.
 - **`setEngine`** nils the old source's callbacks, assigns `source`, writes `dictationSource`, re-runs

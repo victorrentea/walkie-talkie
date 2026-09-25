@@ -135,6 +135,16 @@ yields to `--label`).
 
 ## `Listening...` and `Transcribing...`
 
+- **`💬 <the last 7 words>` under `Listening...`, only while a streaming engine records**
+  (2026-09-25, `DictationSource.streamsLive` → `setLiveCaptionOpen`; words via `didHearLive` →
+  `setLiveCaption`). A **fixed-width window** (`liveWidth` 360) reserved when the row opens — its one
+  relayout — and the words move inside it: a new word is laid out past the right edge and the line
+  eases left (`liveSlide` 0.28 s, frame animation through `animator()`, which *does* interpolate a
+  position), the left edge is a gradient mask (`liveFade`), and words past seven are dropped only
+  when the slide ends. Never reaches `layoutContent`. White + halo from birth, not via
+  `refreshChrome`. `setListening(false)` closes it. `POST /test/live-caption {"text": …}` /
+  `{"on": false}` drives it from a desk; `listening-live` is its shot.
+
 - **`Listening to 🎤 → ⬮...` since 2026-09-24** — the listening row names the recogniser too, after an
   arrow (*"place an arrow and then specify as well the transcription engine"*). Wispr's five bars
   whenever Wispr holds the mic, whatever `Engine` says, and the device glyph is then Wispr's own

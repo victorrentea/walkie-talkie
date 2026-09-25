@@ -109,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// on a wire has to be chosen by hand.
     private let elevenSource = ElevenLabsSource()
 
+    /// **The same engine with the words streamed while he talks** (2026-09-25)
+    /// — `☁️ ElevenLabs + Live`. What it delivers is `elevenSource`'s batch
+    /// transcript; the stream only feeds the chip's `💬` row.
+    private let elevenLiveSource = ElevenLabsSource(live: true)
+
     /// **The screen recording in progress, if there is one** (2026-09-18) — see
     /// `ScreenFilm`. Main-thread only, like every other piece of the dictation's
     /// own state; the gesture hops here before it touches this.
@@ -278,6 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch id {
         case "whisper", "local": return whisperSource
         case "eleven", "elevenlabs": return elevenSource
+        case "eleven-live": return elevenLiveSource
         // **Back on 2026-09-22, the same day it left**, behind the firewall:
         // `HotkeyTap` drops Wispr's ⌘V at the tap whatever the mode, and the
         // words come from the `History` row — the row the menu could not offer
@@ -314,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func engineMark(_ id: String) -> String {
         switch id {
         case "whisper": return String(Glyphs.Engine.mac.rawValue)
-        case "eleven": return String(Glyphs.Engine.eleven.rawValue)
+        case "eleven", "eleven-live": return String(Glyphs.Engine.eleven.rawValue)
         case "wispr": return String(Glyphs.Engine.wispr.rawValue)
         // The default's logo, like `engine(named:)`'s default source.
         default: return String(Glyphs.Engine.eleven.rawValue)
@@ -421,6 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var engineId: String {
         if source === whisperSource { return "whisper" }
         if source === wisprSource { return "wispr" }
+        if source === elevenLiveSource { return "eleven-live" }
         return "eleven"
     }
 
@@ -451,6 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didStopListening = nil
         source.didTranscribe = nil
         source.didEnd = nil
+        source.didHearLive = nil
         source = next
         UserDefaults.standard.set(id, forKey: Self.engineKey)
         wireDictationSource()
@@ -477,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // paragraph exists to prevent.
         let keyless: (variable: String, file: String)?
         switch source {
-        case let s where s === elevenSource:
+        case let s where s === elevenSource || s === elevenLiveSource:
             keyless = ("ELEVENLABS_API_KEY", ElevenLabsSource.configURL.path)
         default:
             keyless = nil
@@ -1640,6 +1648,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestPasteHint = { [weak self] in
             DispatchQueue.main.async { self?.pasteHint.pulse(reason: "POST /test/paste-hint") }
         }
+        picker.onTestLiveCaption = { [weak self] body in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let on = body["on"] as? Bool { self.overlay.setLiveCaptionOpen(on) }
+                if let text = body["text"] as? String {
+                    self.overlay.setLiveCaptionOpen(true)
+                    self.overlay.setLiveCaption(text)
+                }
+            }
+        }
         picker.onTestCancelDictation = { [weak self] in
             DispatchQueue.main.async {
                 _ = self?.cancelDictationInFlight(reason: "POST /test/cancel")
@@ -2288,7 +2306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           // `StatusItem.micRowsForTest`.
                           "rows": self.status.micRowsForTest()]
             out["whisper"] = self.whisperSource.describe()
-            out["elevenlabs"] = self.elevenSource.describe()
+            out["elevenlabs"] = (self.source === self.elevenLiveSource ? self.elevenLiveSource : self.elevenSource).describe()
             return out
         }
 
@@ -2578,6 +2596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didStopListening = { [weak self] in self?.dictationStoppedListening() }
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
+        source.didHearLive = { [weak self] text in self?.overlay.setLiveCaption(text) }
         source.prepare()
         // The back click follows the Engine (2026-09-25) — see
         // `HotkeyTap.onCleanToggle`.
@@ -2784,6 +2803,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !cleanSentence { probeRecentSelection() }
 
         listening = true
+        // **The `💬` row belongs to a sentence the streaming engine is
+        // recording** — not to a Wispr dictation that happens to run while it
+        // is the pick, whose words the stream never hears.
+        overlay.setLiveCaptionOpen(source.streamsLive && source.isRecording)
         // **The clock on this sentence starts with the microphone**, not with
         // the gesture: a Wispr dictation begins when Electron wakes up, and a
         // ceiling armed at the chord would spend that gap counting.

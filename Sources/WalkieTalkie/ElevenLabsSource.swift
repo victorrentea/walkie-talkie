@@ -45,7 +45,20 @@ import Foundation
 /// a lost sentence is the one failure Victor cannot see and correct.
 final class ElevenLabsSource: DictationSource {
 
-    let name = "ElevenLabs Scribe"
+    var name: String { live ? "ElevenLabs Scribe + Live" : "ElevenLabs Scribe" }
+
+    /// **`☁️ ElevenLabs + Live`** (2026-09-25): the same recording, the same
+    /// batch transcript delivered, plus `ElevenLabsLive` streaming the buffers
+    /// so the chip can show the words while he says them. A second instance
+    /// rather than a flag on the one the menu already has, so the pick is a
+    /// source like every other and `AppDelegate` never asks which kind it holds.
+    let live: Bool
+    var streamsLive: Bool { live }
+    var didHearLive: ((String) -> Void)?
+    /// One per sentence — its committed text belongs to that sentence.
+    private var stream: ElevenLabsLive?
+
+    init(live: Bool = false) { self.live = live }
 
     var didMaybeBegin: ((String) -> Void)?
     var didBegin: (() -> Void)?
@@ -271,15 +284,32 @@ final class ElevenLabsSource: DictationSource {
         isRecording = true
         phase = .listening
         Log.info("🎙️ recording started for ElevenLabs — \(wav.lastPathComponent)")
+        var stream: ElevenLabsLive?
+        if live, let key = apiKey {
+            let opened = ElevenLabsLive()
+            opened.onText = { [weak self, weak opened] text in
+                guard let self, let opened, self.stream === opened, self.isRecording else { return }
+                self.didHearLive?(text)
+            }
+            opened.start(key: key, language: Self.language)
+            stream = opened
+        }
+        self.stream = stream
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             self.opening = wav
+            // **Set on this queue, never on main** — the setter takes
+            // `MicRecorder.lock` (*Never open or close a microphone on the main
+            // thread*). Before `start(to:)`, so the first buffer is streamed too.
+            if let stream { self.meter.onBuffer = { [weak stream] in stream?.feed($0) } }
             guard let why = self.meter.start(to: wav) else { return }
             // A device that will not open is a sentence that cannot be spoken,
             // and the ring is already up — so it is said out loud rather than
             // left to the settle's timeout.
             Log.error("🎙️ ElevenLabs: the microphone would not open — \(why)")
             self.opening = nil
+            self.meter.onBuffer = nil
+            stream?.stop()
             DispatchQueue.main.async {
                 guard self.isRecording else { return }
                 self.isRecording = false
@@ -304,6 +334,7 @@ final class ElevenLabsSource: DictationSource {
         // because that is the wait the relay shows (2026-09-23).
         DecodeRate.activeEngine = DecodeRate.elevenLabs
         stoppedAt = Date()
+        closeStream()
         didStopListening?()
         // **Closed on the same queue it was opened on** — `MicRecorder.stop()`
         // tears the same audio engine down and can block for the same reason,
@@ -311,6 +342,7 @@ final class ElevenLabsSource: DictationSource {
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             let closed = self.meter.stop()
+            self.meter.onBuffer = nil
             self.opening = nil
             DispatchQueue.main.async { self.finishRecording(closed) }
         }
@@ -376,6 +408,7 @@ final class ElevenLabsSource: DictationSource {
         guard isRecording else { return }
         isRecording = false
         phase = .done("dismissed")
+        closeStream()
         didStopListening?()
         // On `audioQueue` for `stop()`'s reason: the close is a device
         // teardown, and a cancel is the one path where the app is already
@@ -383,6 +416,7 @@ final class ElevenLabsSource: DictationSource {
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             let taken = self.meter.stop()
+            self.meter.onBuffer = nil
             self.opening = nil
             DispatchQueue.main.async {
                 self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
@@ -405,6 +439,13 @@ final class ElevenLabsSource: DictationSource {
     /// recovery path already existed, already has a menu row, and already knows
     /// how long to hold the file; what it did not have was a way to be reached
     /// by something other than Victor's own cancel.
+    /// The caption ends with the microphone: the words after this point are the
+    /// batch transcript's to say.
+    private func closeStream() {
+        stream?.stop()
+        stream = nil
+    }
+
     private func finishWithFailure(_ wav: URL, _ duration: TimeInterval, _ why: String) {
         Log.error("ElevenLabs: \(why)")
         phase = .done("error")
@@ -541,7 +582,7 @@ final class ElevenLabsSource: DictationSource {
     /// `GET /engine`'s half of the answer, the same shape `LocalWhisperSource`
     /// gives: what is configured and whether it could be used this instant.
     func describe() -> [String: Any] {
-        ["ready": isReady, "model": Self.model,
+        ["ready": isReady, "model": Self.model, "live": live ? ElevenLabsLive.model : "off",
          "language": Self.language ?? "auto",
          "keyFile": Self.configURL.path]
     }
