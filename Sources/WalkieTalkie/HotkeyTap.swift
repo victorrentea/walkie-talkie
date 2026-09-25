@@ -144,6 +144,48 @@ final class HotkeyTap {
     /// cannot go out here, because the words are still a round trip away.
     var onBackSubmit: (() -> Void)?
 
+    /// **The back click's clean sentence on the Engine, when the Engine is not
+    /// Wispr** (2026-09-25). Victor: *"changing the transcription engine from
+    /// wispr to elevenlabs should change it as well for «clean dictation» =
+    /// back button click."* Until today the click posted Wispr's hands-free
+    /// chord whatever the Engine said, so a clean sentence was always Wispr's
+    /// words while every other gesture was ElevenLabs'. Now, with
+    /// `backUsesOwnEngine`, the click starts the relay's own source instead —
+    /// the same clean envelope (`AppDelegate.cleanSentence`) — and a second
+    /// click, or 🔽 →, stops it. Toggles: a start when nothing is open, a stop
+    /// when the open sentence is this one. Hops to main on the other side.
+    var onCleanToggle: (() -> Void)?
+
+    /// **Is the Engine something other than Wispr Flow?** Written by
+    /// `AppDelegate.wireDictationSource` at launch and on every Engine pick;
+    /// read by the back click to choose between Wispr's chord and
+    /// `onCleanToggle`.
+    var backUsesOwnEngine: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return backUsesOwnEngineFlag }
+        set { stateLock.lock(); backUsesOwnEngineFlag = newValue; stateLock.unlock() }
+    }
+    private var backUsesOwnEngineFlag = false
+
+    /// **The relay's own open sentence is a clean one** — raised by
+    /// `AppDelegate` when `onCleanToggle` starts it, lowered when any sentence
+    /// ends or a non-clean one starts. Only meaningful beside `ownDictation`,
+    /// which says whether there is a sentence at all; `cleanSentenceOpen` is the
+    /// pair, for the two refusals (context frame, ⌃⌥P) that used to ask
+    /// `backStopsWispr` alone.
+    var ownCleanSentence: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return ownCleanSentenceFlag }
+        set { stateLock.lock(); ownCleanSentenceFlag = newValue; stateLock.unlock() }
+    }
+    private var ownCleanSentenceFlag = false
+
+    /// A clean sentence is open, whichever engine is hearing it.
+    var cleanSentenceOpen: Bool {
+        stateLock.lock()
+        let own = ownDictationFlag && ownCleanSentenceFlag
+        stateLock.unlock()
+        return own || backStopsWispr
+    }
+
     /// **Which of Wispr Flow's two start gestures was seen**, and the whole of
     /// what the difference between them costs.
     ///
@@ -3101,6 +3143,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // of a clean sentence cannot drift; the Return waits for the
                 // words (`onBackSubmit`), because a Return now would land before
                 // them.
+                // …and the same for a clean sentence on the relay's own engine
+                // (2026-09-25, `onCleanToggle`): Return queued first, then the
+                // stop, both on one hop so the flag is up before the words are.
+                if ownDictation, ownCleanSentence, !backStopsWispr {
+                    lastBackToggleAt = f5Now
+                    Log.info("⌨️ 🔽 → — stopping the plain dictation (own engine); Return once its words land")
+                    DispatchQueue.global().async { [weak self] in
+                        self?.onBackSubmit?()
+                        self?.onCleanToggle?()
+                    }
+                    return nil
+                }
                 if backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation) {
                     lastBackToggleAt = f5Now
                     Log.info("⌨️ 🔽 → — stopping the plain dictation; Return once its words land")
@@ -3139,7 +3193,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // relay did not start is always a stop; the picture belongs only
                 // to the relay's own dictation, the one the forward button starts.
                 let wisprSentence = backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation)
-                if !wisprSentence, dictating, ownDictation {
+                // A clean sentence on the relay's own engine is this click's
+                // too (2026-09-25): its stop, never its shutter.
+                let ownClean = !wisprSentence && ownDictation && ownCleanSentence
+                if !wisprSentence, !ownClean, dictating, ownDictation {
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
                     return nil
@@ -3153,6 +3210,21 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 let f6Now = CACurrentMediaTime()
                 guard f6Now - lastBackToggleAt >= Self.backToggleSettleSeconds else {
                     Log.info("🎯 ⬅️ back click \(String(format: "%.0f", (f6Now - lastBackToggleAt) * 1000))ms after the last toggle — dropped")
+                    return nil
+                }
+                // **With the Engine off Wispr the clean sentence is the
+                // Engine's** (2026-09-25, `onCleanToggle`). A Wispr sentence
+                // already open is still stopped with Wispr's chord below — a
+                // stop must reach whoever is listening.
+                if !wisprSentence, backUsesOwnEngine {
+                    if ownDictation, !ownClean {
+                        Log.error("🎙️ ⬅️ back click refused — the relay's own engine is mid-sentence")
+                        onEngineBusy?("Back click ignored — finish the sentence you are dictating first")
+                        return nil
+                    }
+                    lastBackToggleAt = f6Now
+                    Log.info("🎙️ ⬅️ back click — a clean dictation on the Engine\(ownClean ? " (the stop)" : " (the start)")")
+                    DispatchQueue.global().async { [weak self] in self?.onCleanToggle?() }
                     return nil
                 }
                 // The arm says *a start was posted and has not ended* even

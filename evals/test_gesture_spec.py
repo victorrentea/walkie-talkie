@@ -195,6 +195,32 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-09-25: "changing the transcription engine from wispr to
+            # elevenlabs should change it as well for «clean dictation» = back
+            # button click."
+            "row": ("🔽 back", "click, Engine not Wispr"),
+            "does": "the same CLEAN dictation, heard by the Engine (ElevenLabs / local), not Wispr",
+            "checks": [
+                ("the tap knows which Engine is live", "AppDelegate `wireDictationSource`",
+                 lambda: has(function(src, ad, "wireDictationSource"),
+                             r"hotkeys\.backUsesOwnEngine = source !== wisprSource")),
+                ("F6 toggles the Engine's clean sentence instead of posting Wispr's chord",
+                 "HotkeyTap `case VK_F6`",
+                 lambda: before(gesture_case(src, "VK_F6"), r"if !wisprSentence, backUsesOwnEngine \{.*?onCleanToggle",
+                                r"postWisprHandsFree")),
+                ("the toggle starts a clean caret sentence, and stops only a clean one",
+                 "AppDelegate `hotkeys.onCleanToggle`",
+                 lambda: has(closure(src, "hotkeys.onCleanToggle"),
+                             r"if self\.cleanSentence \{ self\.endDictation\(\) \}.*?startDictation\(paste: true, clean: true\)")),
+                ("startDictation(clean:) makes it clean, not a caret prompt", "AppDelegate `startDictation`",
+                 lambda: has(function(src, ad, "startDictation"),
+                             r"caretPrompt = paste && !clean.*?cleanSentence = clean")),
+                ("🔽 → stops it and submits", "HotkeyTap `case VK_F5`",
+                 lambda: has(gesture_case(src, "VK_F5"),
+                             r"if ownDictation, ownCleanSentence, !backStopsWispr \{.*?onBackSubmit\?\(\).*?onCleanToggle\?\(\)")),
+            ],
+        },
+        {
             "row": ("🔽 back", "click during a plain dictation"),
             "does": "STOP it — never a shutter",
             "checks": [
@@ -202,7 +228,10 @@ def spec(src: dict):
                  lambda: before(gesture_case(src, "VK_F6"), r"let wisprSentence = backStopsWispr",
                                 r"onScreenshot")),
                 ("a Wispr sentence is excluded from the shutter branch", "HotkeyTap `case VK_F6`",
-                 lambda: has(gesture_case(src, "VK_F6"), r"if !wisprSentence, dictating, ownDictation")),
+                 lambda: has(gesture_case(src, "VK_F6"), r"if !wisprSentence, !ownClean, dictating, ownDictation")),
+                ("a clean sentence on the relay's own engine is excluded too", "HotkeyTap `case VK_F6`",
+                 lambda: has(gesture_case(src, "VK_F6"),
+                             r"let ownClean = !wisprSentence && ownDictation && ownCleanSentence")),
             ],
         },
         {
@@ -211,10 +240,14 @@ def spec(src: dict):
             "checks": [
                 ("no context shot at the start", "AppDelegate `dictationBegan`",
                  lambda: has(function(src, ad, "dictationBegan"), r"if !cleanSentence, caretPrompt")),
-                ("captureContext refuses while the arm is up", "AppDelegate `captureContext`",
-                 lambda: has(function(src, ad, "captureContext"), r"if hotkeys\.backStopsWispr \{.*?return")),
+                ("captureContext refuses while a clean sentence is open", "AppDelegate `captureContext`",
+                 lambda: has(function(src, ad, "captureContext"), r"if hotkeys\.cleanSentenceOpen \{.*?return")),
                 ("the ⌃⌥P shutter refuses too", "AppDelegate `plusOneShot`",
-                 lambda: has(function(src, ad, "plusOneShot"), r"if hotkeys\.backStopsWispr \{.*?return")),
+                 lambda: has(function(src, ad, "plusOneShot"), r"if hotkeys\.cleanSentenceOpen \{.*?return")),
+                ("…whichever engine hears it (Wispr's arm, or the relay's own clean sentence)",
+                 "HotkeyTap `cleanSentenceOpen`",
+                 lambda: has(src["HotkeyTap.swift"],
+                             r"var cleanSentenceOpen: Bool \{.*?ownDictationFlag && ownCleanSentenceFlag.*?own \|\| backStopsWispr")),
                 ("no highlight probe either", "AppDelegate `dictationBegan`",
                  lambda: has(function(src, ad, "dictationBegan"), r"if !cleanSentence \{ probeRecentSelection\(\) \}")),
             ],

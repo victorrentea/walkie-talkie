@@ -2400,6 +2400,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onBackSubmit = { [weak self] in
             DispatchQueue.main.async { self?.submitAfterClean = true }
         }
+        // **The back click on the Engine, when the Engine is not Wispr**
+        // (2026-09-25) — see `HotkeyTap.onCleanToggle`. `onPasteToggle`'s shape:
+        // a stop while this clean sentence is open, nothing while its words are
+        // in flight, a start otherwise; never a stop of the forward click's
+        // sentence, which the tap has already refused.
+        hotkeys.onCleanToggle = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if self.listening || self.source.isRecording {
+                    if self.cleanSentence { self.endDictation() }
+                } else if self.settling || self.source.phase.isWaitingForWords {
+                    Log.info("⬅️ back click while the words are still in flight — nothing to start, nothing to stop")
+                } else {
+                    Log.info("🧼 a plain dictation (back click) on \(self.source.name) — clean words at the caret, nothing added")
+                    self.startDictation(paste: true, clean: true)
+                }
+            }
+        }
         // **A chord this app posts for a gesture has to announce itself**
         // (2026-09-18) — the tap filters its own posts out of the keyboard
         // branch, so without this a 🔽 → dictation reaches `WisprState` through
@@ -2522,6 +2540,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didTranscribe = { [weak self] result in self?.deliver(result) }
         source.didEnd = { [weak self] end in self?.dictationEnded(end) }
         source.prepare()
+        // The back click follows the Engine (2026-09-25) — see
+        // `HotkeyTap.onCleanToggle`.
+        hotkeys.backUsesOwnEngine = source !== wisprSource
         // **Wispr Flow is wired whichever engine is picked** (2026-09-22): the
         // firewall in `HotkeyTap` drops its paste for every sentence, including
         // one Victor starts with Wispr's own chord while the engine is
@@ -3122,6 +3143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cleanSentence = false
             submitAfterClean = false
         }
+        hotkeys.ownCleanSentence = false
         switch end {
         case .delivered:
             break
@@ -3357,7 +3379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Gestures* off: its context shot is taken at the **release**, not the
     /// press, so the picture is of the screen his finger left.
     private func startDictation(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
-                                deferContext: Bool = false) {
+                                deferContext: Bool = false, clean: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -3401,8 +3423,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Every caller that passes `paste` is the forward click (or its route
         // from a desk) — the caret **prompt** (2026-09-23). A relay-started
         // sentence is never a plain one.
-        caretPrompt = paste
-        cleanSentence = false
+        caretPrompt = paste && !clean
+        // **Except the back click on an Engine that is not Wispr** (2026-09-25,
+        // `HotkeyTap.onCleanToggle`): the relay's own source, the clean
+        // envelope — words only, at the caret, whatever is bound.
+        cleanSentence = clean
+        hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
         // **Always true since `holdsForBind`**, and kept rather than deleted: it
@@ -3428,6 +3454,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let why = source.start() {
+            cleanSentence = false
+            hotkeys.ownCleanSentence = false
             overlay.flash("⚠️ \(why)", duration: 6)
             Log.error("\(source.name) did not start: \(why)")
             return
@@ -4096,7 +4124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the click on, so it is told apart here without a second flag. The
         // ring still grows — `grow` is the only thing below that is not a
         // picture or its receipt.
-        if hotkeys.backStopsWispr {
+        if hotkeys.cleanSentenceOpen {
             Log.info("context screen skipped — a clean dictation from the back button")
             DispatchQueue.main.async { [weak self] in self?.caretHalo.grow() }
             return
@@ -7079,7 +7107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The back click is its stop, not a shutter, already; this closes the
         // other door, ⌃⌥P. Asked of the tap's arm, which is lock-guarded — this
         // runs off the main thread, where `cleanSentence` lives.
-        if hotkeys.backStopsWispr {
+        if hotkeys.cleanSentenceOpen {
             Log.info("📸 refused — a plain dictation (back click) takes no pictures")
             return
         }
