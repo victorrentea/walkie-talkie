@@ -178,6 +178,38 @@ final class HotkeyTap {
     }
     private var ownCleanSentenceFlag = false
 
+    /// **Held right ⌘⌥ on the Engine, when the Engine is not Wispr** (2026-09-25).
+    /// Victor: *"If I hold down the right command and the right option, that
+    /// should enable the clean dictation for as long as I hold the two
+    /// buttons."* The back click's clean sentence (`onCleanToggle`) as a hold:
+    /// `.press` starts it, `.release` ends it, `.shortcut` — a real key pressed
+    /// while the pair is down — says the ⌘⌥ was a shortcut and the sentence is
+    /// thrown away. With the Engine on Wispr the pair stays Wispr's own
+    /// push-to-talk (`onWisprMaybeStarting(.pushToTalk)`), unchanged. The two
+    /// modifiers are **watched, never taken**: swallowing half a modifier pair
+    /// is the stale-⌘ bug by another door. Hops to main on the other side.
+    enum CleanHold { case press, release, shortcut }
+    var onCleanHold: ((CleanHold) -> Void)?
+
+    /// Whether the held pair went to `onCleanHold` rather than to Wispr, and
+    /// when it came back up — tap thread only, except through
+    /// `heldPairIsTheEngines`.
+    private var enginePairHeld = false
+    private var enginePairReleasedAt: CFAbsoluteTime = 0
+
+    /// **Wispr heard the same pair and must not deliver it** (2026-09-25).
+    /// Wispr Flow listens for `54+61` itself, so with it running a hold the
+    /// Engine took is also a Wispr sentence — two recognisers on one voice,
+    /// which Victor has called absurd. The firewall already drops its ⌘V; this
+    /// is what tells `WisprFlowSource` not to rescue the words from the row or
+    /// open a sentence on the microphone edge. True while the pair is held and
+    /// for `captureTimeout`'s 30 s after, the longest Wispr takes to paste.
+    var heldPairIsTheEngines: Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return enginePairHeld
+            || (enginePairReleasedAt > 0 && CFAbsoluteTimeGetCurrent() - enginePairReleasedAt < 30)
+    }
+
     /// A clean sentence is open, whichever engine is hearing it.
     var cleanSentenceOpen: Bool {
         stateLock.lock()
@@ -2584,6 +2616,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             let ptt = (raw & Self.deviceRightCommand) != 0 && (raw & Self.deviceRightOption) != 0
             if ptt != wisprPTTDown {
                 wisprPTTDown = ptt
+                // **With the Engine off Wispr the hold is the Engine's clean
+                // sentence** (2026-09-25, `onCleanHold`). Decided at the press
+                // and remembered, so an Engine picked mid-hold cannot hand the
+                // release to the other owner.
+                if ptt ? backUsesOwnEngine : enginePairHeld {
+                    stateLock.lock()
+                    enginePairHeld = ptt
+                    if !ptt { enginePairReleasedAt = CFAbsoluteTimeGetCurrent() }
+                    stateLock.unlock()
+                    Log.info("🧼 right ⌘⌥ \(ptt ? "held — a clean dictation on the Engine" : "released — the clean dictation ends")")
+                    DispatchQueue.global().async { [weak self] in self?.onCleanHold?(ptt ? .press : .release) }
+                    return Unmanaged.passUnretained(event)
+                }
                 DispatchQueue.main.async { [weak self] in
                     if ptt { self?.onWisprMaybeStarting?(.pushToTalk) }
                     // **And the release, which is the end of the sentence.** See
@@ -2591,6 +2636,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     else { self?.onWisprPushToTalkReleased?() }
                 }
             }
+        }
+        // **A key under the held pair makes it a shortcut, not a dictation**
+        // (2026-09-25, `onCleanHold`). Right ⌘⌥ + a letter is a chord somebody
+        // else owns; the sentence opened at the press is thrown away and the
+        // key goes on to whoever wanted it.
+        if type == .keyDown, enginePairHeld,
+           event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
+           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+            stateLock.lock(); enginePairHeld = false; enginePairReleasedAt = CFAbsoluteTimeGetCurrent(); stateLock.unlock()
+            Log.info("🧼 a key under right ⌘⌥ — a shortcut, not a dictation; the clean sentence is dropped")
+            DispatchQueue.global().async { [weak self] in self?.onCleanHold?(.shortcut) }
         }
         // **This app's own posts are stamped out of it** (2026-09-13), exactly as
         // the ⌃Escape branch below has always been. It was harmless while the

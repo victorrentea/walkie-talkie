@@ -2418,6 +2418,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        // **Held right ⌘⌥ on the Engine, when the Engine is not Wispr**
+        // (2026-09-25) — see `HotkeyTap.onCleanHold`. The back click's clean
+        // sentence, held: the press starts it (never over another sentence), the
+        // release ends it, and a key under the pair — or a tap too short to
+        // have been speech — throws it away without a word on the chip.
+        hotkeys.onCleanHold = { [weak self] edge in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch edge {
+                case .press:
+                    guard !self.listening, !self.source.isRecording, !self.speculative,
+                          !self.settling, !self.recordWhenSourceReady else {
+                        Log.info("🧼 right ⌘⌥ while another sentence is open or in flight — left alone")
+                        return
+                    }
+                    Log.info("🧼 a plain dictation (right ⌘⌥ held) on \(self.source.name) — clean words at the caret, nothing added")
+                    self.cleanHoldAt = CFAbsoluteTimeGetCurrent()
+                    self.startDictation(paste: true, clean: true)
+                case .release, .shortcut:
+                    guard self.cleanHoldAt > 0 else { return }
+                    let held = CFAbsoluteTimeGetCurrent() - self.cleanHoldAt
+                    self.cleanHoldAt = 0
+                    guard self.cleanSentence else { return }
+                    if self.recordWhenSourceReady, !self.listening {
+                        self.recordWhenSourceReady = false
+                        Log.info("🧼 right ⌘⌥ let go before \(self.source.name) was ready — nothing recorded")
+                        return
+                    }
+                    if edge == .shortcut || held < Self.cleanHoldFloor {
+                        self.cancelDictationInFlight(reason: edge == .shortcut
+                            ? "right ⌘⌥ was a shortcut"
+                            : String(format: "right ⌘⌥ tapped (%.2f s) — too short to be speech", held),
+                                                     quiet: true)
+                    } else {
+                        self.endDictation()
+                    }
+                }
+            }
+        }
         // **A chord this app posts for a gesture has to announce itself**
         // (2026-09-18) — the tap filters its own posts out of the keyboard
         // branch, so without this a 🔽 → dictation reaches `WisprState` through
@@ -3275,6 +3314,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gesture made against a cold one used to cost Victor the sentence *and*
     /// the gesture. It is banked here and honoured when the source reports ready.
     private var recordWhenSourceReady = false
+    /// When the held right ⌘⌥ opened the clean sentence it owns — 0 when it
+    /// owns none (2026-09-25, `HotkeyTap.onCleanHold`).
+    private var cleanHoldAt: CFAbsoluteTime = 0
+    /// A hold shorter than this is a brushed modifier, not a sentence: thrown
+    /// away rather than uploaded.
+    private static let cleanHoldFloor: CFAbsoluteTime = 0.35
 
     /// A note the next panel should carry under its transcript — set by the
     /// source's confidence gate, consumed by the `showSentPrompt` that follows it.
@@ -3781,7 +3826,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - Returns: whether there was anything to cancel — the ✕ falls through to
     ///   ending the session when there was not.
     @discardableResult
-    private func cancelDictationInFlight(reason: String) -> Bool {
+    private func cancelDictationInFlight(reason: String, quiet: Bool = false) -> Bool {
         guard listening || source.isRecording || speculative || settling else { return false }
         Log.info("🗑️ dictation cancelled via \(reason)")
         // **A recogniser with nothing to cancel leaves the relay's own state
@@ -3817,7 +3862,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // after `🗑️ Cancelled`. A cancel takes everything with it.
             clearCancelledDictationState()
         }
-        overlay.flash("🗑️ Cancelled", duration: 1.5)
+        if !quiet { overlay.flash("🗑️ Cancelled", duration: 1.5) }
         return true
     }
 

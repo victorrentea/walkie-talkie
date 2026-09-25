@@ -1582,6 +1582,13 @@ final class WisprFlowSource: DictationSource {
             Log.info("⚡ \(why) — a late confirmation of the sentence that is over, not a new dictation")
             return
         }
+        // **Wispr heard the right ⌘⌥ the Engine took** (2026-09-25,
+        // `HotkeyTap.heldPairIsTheEngines`): its microphone opening is a second
+        // recogniser on the same voice, not a sentence of Victor's to deliver.
+        if on, !speculative, !isRecording, hotkeys.heldPairIsTheEngines {
+            Log.info("⚡ Wispr opened its microphone for the right ⌘⌥ the Engine has — not a sentence of its own")
+            return
+        }
         state.notify(on)
         if on {
             // **The edge confirms; it never re-opens.** A guess that is standing
@@ -2528,7 +2535,12 @@ final class WisprFlowSource: DictationSource {
             // **No capture at all — a sentence this app never saw start**, and
             // the firewall has just eaten its paste. The words are in Wispr's
             // `History` row all the same; that row is delivered, late, rather
-            // than lost.
+            // than lost — **unless it is the right ⌘⌥ the Engine took**
+            // (2026-09-25), whose words the Engine is already delivering.
+            if hotkeys.heldPairIsTheEngines {
+                Log.info("🛡️ ⌘V from \(process) dropped — Wispr's copy of the right ⌘⌥ sentence the Engine has; not rescued")
+                return
+            }
             if hotkeys.wisprFirewallOn { rescueFromRow(after: process) }
             return
         }

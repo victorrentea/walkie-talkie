@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 SOURCES = Path(__file__).resolve().parent.parent / "Sources" / "WalkieTalkie"
-FILES = ("HotkeyTap.swift", "AppDelegate.swift", "TerminalBinding.swift")
+FILES = ("HotkeyTap.swift", "AppDelegate.swift", "TerminalBinding.swift", "WisprFlowSource.swift")
 
 
 class ParseError(Exception):
@@ -221,6 +221,29 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-09-25: "If I hold down the right command and the right
+            # option, that should enable the clean dictation for as long as I hold
+            # the two buttons."
+            "row": ("⌘⌥ right", "held, Engine not Wispr"),
+            "does": "the same CLEAN dictation for as long as the pair is held",
+            "checks": [
+                ("the pair goes to onCleanHold when the Engine is not Wispr, and is never swallowed",
+                 "HotkeyTap flagsChanged branch",
+                 lambda: has(_strip_comments(src["HotkeyTap.swift"]),
+                             r"if ptt \? backUsesOwnEngine : enginePairHeld \{.*?onCleanHold\?\(ptt \? \.press : \.release\).*?return Unmanaged\.passUnretained\(event\)")),
+                ("the press starts a clean caret sentence", "AppDelegate `hotkeys.onCleanHold`",
+                 lambda: has(closure(src, "hotkeys.onCleanHold"), r"case \.press:.*?startDictation\(paste: true, clean: true\)")),
+                ("the release ends it", "AppDelegate `hotkeys.onCleanHold`",
+                 lambda: has(closure(src, "hotkeys.onCleanHold"), r"case \.release, \.shortcut:.*?self\.endDictation\(\)")),
+                ("a key under the pair throws it away", "HotkeyTap keyDown under the pair",
+                 lambda: has(_strip_comments(src["HotkeyTap.swift"]),
+                             r"if type == \.keyDown, enginePairHeld,.*?onCleanHold\?\(\.shortcut\)")),
+                ("Wispr's own copy of that sentence is not rescued", "WisprFlowSource `injected`",
+                 lambda: before(function(src, "WisprFlowSource.swift", "injected"),
+                                r"if hotkeys\.heldPairIsTheEngines \{.*?return", r"rescueFromRow")),
+            ],
+        },
+        {
             "row": ("🔽 back", "click during a plain dictation"),
             "does": "STOP it — never a shutter",
             "checks": [
@@ -336,11 +359,15 @@ MUTATIONS = [
     ("plain text carries the attachments", "AppDelegate.swift",
      "clean ? cleanLine(words: result.text)", "clean ? caretLine(words: result.text)"),
     ("plain dictation takes a ⌃⌥P picture", "AppDelegate.swift",
-     "        if hotkeys.backStopsWispr {\n            Log.info(\"📸 refused", "        if false {\n            Log.info(\"📸 refused"),
+     "        if hotkeys.cleanSentenceOpen {\n            Log.info(\"📸 refused", "        if false {\n            Log.info(\"📸 refused"),
     ("back click is a shutter before it is a stop", "HotkeyTap.swift",
-     "if !wisprSentence, dictating, ownDictation {", "if dictating, ownDictation {"),
+     "if !wisprSentence, !ownClean, dictating, ownDictation {", "if dictating, ownDictation {"),
     ("back + right is only Return again", "HotkeyTap.swift",
      "DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }", ""),
+    ("held right ⌘⌥ goes to Wispr whatever the Engine", "HotkeyTap.swift",
+     "if ptt ? backUsesOwnEngine : enginePairHeld {", "if false {"),
+    ("Wispr's copy of a held-pair sentence is rescued too", "WisprFlowSource.swift",
+     "            if hotkeys.heldPairIsTheEngines {\n                Log.info(\"🛡️", "            if false {\n                Log.info(\"🛡️"),
     ("plain dictation gets the kamikaze word", "AppDelegate.swift",
      "if clean { kamikaze = false }", ""),
 ]
