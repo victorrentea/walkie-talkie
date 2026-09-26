@@ -121,7 +121,9 @@ Flags the tap decides on arrive from main through `syncBorrowedGestures` (`dicta
 thread. Every handler hops `global.async` → `main.async` (a concurrent queue: microsecond-spaced inputs
 can swap). `tapDisabledByTimeout` re-enables silently and reconciles nothing (`areaCropping`, PTT
 flags, `leftDownAt`). Fail-open (`MainStallGate`) opens 3 s after the last heartbeat and stays open
-while any button 0–4 is down in the session state.
+while any button 0–4 is down in the session state. (Batch 4, 2026-09-26: uptime clock, 0.1 s beat,
+a 10 Hz watchdog, the real stall length at the close, the app's own chords dropped while open, every
+swallow traced.)
 
 ### 2.6 Action × state (the cells that are wrong or undefined; full matrix in the gesture review)
 

@@ -1486,7 +1486,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var alive = false
             self.hotkeys.proveAlive("POST /test/firewall") { alive = $0; gate.signal() }
             _ = gate.wait(timeout: .now() + 1.0)
+            // `tap` is the verdict in one word (2026-09-26, TG26): `open` is a
+            // live tap failing open on purpose while main is frozen — not dead.
+            let open = self.hotkeys.lastCanary?.failingOpen ?? false
             return ["firewall": self.hotkeys.wisprFirewallOn, "alive": alive,
+                    "failingOpen": open, "tap": open ? "open" : alive ? "alive" : "dead",
                     "canaryMs": self.hotkeys.lastCanary?.ms ?? -1]
         }
         picker.onTestWrapMode = { [weak self] mode in
@@ -5793,6 +5797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["historyRow"] = wisprSource.historyRow.map { NSNumber(value: $0) } ?? NSNull()
         out["firewall"] = hotkeys.wisprFirewallOn
         out["tapAlive"] = hotkeys.lastCanary.map { $0.alive } ?? NSNull()
+        out["tapFailingOpen"] = hotkeys.lastCanary.map { $0.failingOpen } ?? NSNull()
         // **Where the recogniser is in its own round trip** — source-agnostic
         // (`DictationPhase`), beside the Wispr-specific machine that produced it.
         out["phase"] = source.phase.name

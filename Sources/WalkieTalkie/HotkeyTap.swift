@@ -1863,6 +1863,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private let VK_F10: CGKeyCode = 0x6D
     private let VK_F11: CGKeyCode = 0x67
     private let VK_F12: CGKeyCode = 0x6F
+    /// **What each chord is called in a log line** — the gesture and the key,
+    /// so the key trace, the re-fire guard and the frozen-app drop all say the
+    /// same thing (2026-09-26). Literals because a static cannot read the
+    /// instance constants above; the two lists are one list and must not drift.
+    static let gestureNames: [CGKeyCode: String] = [
+        0x63: "🔽 ← ⌃⌥⌘F3", 0x76: "🔽 ↑ ⌃⌥⌘F4", 0x60: "🔽 → ⌃⌥⌘F5", 0x61: "🔽 ⌃⌥⌘F6",
+        0x62: "🔼 ⌃⌥⌘F7", 0x64: "🔼 ↑ ⌃⌥⌘F8", 0x65: "🔼 ↓ ⌃⌥⌘F9", 0x6D: "🔼 → ⌃⌥⌘F10",
+        0x67: "🔼 ← ⌃⌥⌘F11", 0x6F: "🔽 ↓ ⌃⌥⌘F12",
+    ]
     private let MOUSE_BUTTON_4: Int64 = 3   // 0-indexed "back" side button — LinearMouse types Return with it
     private let MOUSE_BUTTON_5: Int64 = 4   // 0-indexed "forward" side button
     private let MOUSE_BUTTON_MIDDLE: Int64 = 2   // the wheel, pressed
@@ -1924,8 +1933,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         tapPort = tap
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        let thread = Thread {
+        let thread = Thread { [weak self] in
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+            // The stall gate's watchdog — see `watchStall`. On this run loop so
+            // the gate stays a tap-thread-only value.
+            let watchdog = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + 0.1, 0.1, 0, 0) { _ in
+                self?.watchStall()
+            }
+            CFRunLoopAddTimer(CFRunLoopGetCurrent(), watchdog, .commonModes)
             CFRunLoopRun()
         }
         thread.name = "WalkieTalkieEventTap"
@@ -1944,46 +1959,106 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// thread. Victor: *"No matter what happens with the application, I should
     /// always be able to fall back on the Wispr Flow to dictate."*
     ///
-    /// So the main thread proves it is alive every half second (common modes, so
+    /// So the main thread proves it is alive every tenth of a second (common modes, so
     /// an open menu still beats), and when it has been silent for
     /// `MainStallGate.threshold` the tap lets **everything** through: Wispr's
     /// paste, its hotkeys, every mouse button — this app behaves as if it were
     /// not running. The beat has its own lock; `stateLock` may be the very lock
     /// the main thread is stuck holding.
     private let beatLock = NSLock()
-    private var mainBeatAt = CFAbsoluteTimeGetCurrent()
+    private var mainBeatAt = HotkeyTap.uptime()
     private var beatTimer: Timer?
     /// Tap thread only.
     private var stallGate = MainStallGate()
+    /// Events handed straight through while open — said once, at the close,
+    /// instead of a trace line each (2026-09-26: the per-event line was the
+    /// only thing the tap still wrote to disk while the app was frozen).
+    /// Tap thread only.
+    private var passedWhileOpen = 0
+    private var chordsDroppedWhileOpen = 0
+
+    /// **Seconds of uptime** — `CLOCK_UPTIME_RAW`, which `man clock_gettime`
+    /// defines as *"the same manner as CLOCK_MONOTONIC_RAW, but that does not
+    /// increment while the system is asleep … identical to the result of
+    /// mach_absolute_time()"*; `mach_time.h` names `mach_continuous_time` as
+    /// the one that *"advances during sleep"*. The stall gate must not count
+    /// a closed lid as a frozen main thread (the false `🧊 195 s` of
+    /// 2026-09-25), so it uses this one.
+    static func uptime() -> CFTimeInterval {
+        CFTimeInterval(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1_000_000_000
+    }
 
     private func startMainHeartbeat() {
         guard beatTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        // **A tenth of a second** (was half, 2026-09-26): the stall the gate
+        // reports is last beat before to first beat after, so the beat's
+        // period is the report's error — a 6 s `/test/stall` read `6.4 s`
+        // at 0.5. A lock and a clock read ten times a second costs nothing.
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.beatLock.lock(); self.mainBeatAt = CFAbsoluteTimeGetCurrent(); self.beatLock.unlock()
+            self.beatLock.lock(); self.mainBeatAt = HotkeyTap.uptime(); self.beatLock.unlock()
         }
         RunLoop.main.add(timer, forMode: .common)
         beatTimer = timer
     }
 
-    /// Tap thread. True while the tap must hand every event straight back.
-    private func failingOpen(_ type: CGEventType, _ event: CGEvent) -> Bool {
+    /// **The gate is watched, not only consulted** (2026-09-26, TR4). It used
+    /// to be evaluated only when an event reached the tap, so it opened on the
+    /// first event after the three seconds — 3.7 s after the last beat in TR4
+    /// — and closed on the first event after the thaw, which could be minutes.
+    /// A 10 Hz timer on the tap's own run loop opens it within 0.1 s of the
+    /// threshold and closes it within 0.1 s of the thaw, event or no event.
+    /// Tap thread (it is scheduled on the tap's run loop).
+    fileprivate func watchStall() {
+        _ = evaluateStallGate()
+    }
+
+    /// Tap thread. Moves the gate and says so; true while it is open.
+    private func evaluateStallGate() -> Bool {
         beatLock.lock(); let beat = mainBeatAt; beatLock.unlock()
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = HotkeyTap.uptime()
         let anyButtonDown = { (0...4).contains { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: $0)!) } }
         switch stallGate.evaluate(now: now, lastBeat: beat, buttonsDown: anyButtonDown()) {
         case .opened:
-            Log.error(String(format: "🧊 main thread silent for %.1f s — the tap swallows nothing until it is back; Wispr pastes and dictates on its own", now - beat))
+            passedWhileOpen = 0
+            chordsDroppedWhileOpen = 0
+            Log.error(String(format: "🧊 main thread silent for %.1f s — the tap swallows nothing until it is back (its own gesture chords excepted); Wispr pastes and dictates on its own", now - beat))
             sampleSelf()
-        case .closed(let after):
-            Log.info(String(format: "🧊 main thread back after %.1f s — the tap takes events again", after))
+        case .closed(let stall):
+            Log.info(String(format: "🧊 main thread back after %.1f s — the tap takes events again (%d passed through, %d gesture chord(s) dropped while it was frozen)",
+                            stall, passedWhileOpen, chordsDroppedWhileOpen))
         case .unchanged:
             break
         }
-        if stallGate.isOpen, Self.keyTrace, type == .keyDown || type == .keyUp {
-            trace("passed (main thread frozen — failing open)", type, event)
-        }
         return stallGate.isOpen
+    }
+
+    /// Tap thread. True while the tap must hand every event straight back.
+    /// **No line per event** (2026-09-26): the gate's own open and close lines
+    /// say it, with the count.
+    private func failingOpen() -> Bool {
+        let open = evaluateStallGate()
+        if open { passedWhileOpen += 1 }
+        return open
+    }
+
+    /// **This app's own chords are dropped, not handed through, while frozen**
+    /// (2026-09-26, TG25). Handed through, a ⌃⌥⌘F-key reaches the front app as
+    /// an escape sequence typed into the Claude prompt (S12 in the test plan),
+    /// and ⌘⌃D opens the dictionary. Nobody else owns these chords — that is
+    /// why they were picked — so dropping them takes nothing from anyone, and
+    /// it is decided on the event alone: no flag, no `stateLock`, nothing the
+    /// frozen main thread could be holding. The gesture is **not acted on
+    /// later**: a flick made during a freeze has no sentence to belong to by
+    /// the time the thread comes back. ⌘⇧P and bare F7/F9 are chords other
+    /// apps ship, so they go through.
+    private func isOwnChordWhileFrozen(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        guard type == .keyDown else { return false }
+        let flags = event.flags
+        let ctrl = flags.contains(.maskControl), opt = flags.contains(.maskAlternate), cmd = flags.contains(.maskCommand)
+        let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        if ctrl && opt && cmd { return Self.gestureNames[code] != nil }
+        return ctrl && cmd && !opt && (code == VK_B || code == VK_D)
     }
 
     /// **The freeze photographs itself.** The 17:12 one was only understood
@@ -2013,14 +2088,27 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if let port = tapPort { CGEvent.tapEnable(tap: port, enable: true) }
             return Unmanaged.passUnretained(event)
         }
-        // **A frozen app swallows nothing** — see `MainStallGate`. Before the
-        // canary and before any `stateLock`: a main thread hung while holding
-        // that lock must not be able to hold this answer up too.
-        if failingOpen(type, event) { return Unmanaged.passUnretained(event) }
-        // The canary — see `proveAlive`. Ours, harmless, and never let through.
+        // **A frozen app swallows nothing** — see `MainStallGate`. Before any
+        // `stateLock`: a main thread hung while holding that lock must not be
+        // able to hold this answer up too.
+        let frozen = failingOpen()
+        // The canary — see `proveAlive`. Ours, harmless, and never let through
+        // — **also while failing open** (2026-09-26, TG26): handed through, it
+        // read as a dead tap (`alive:false`) at the one moment the tap was
+        // alive and doing what it should, and its V key-up reached the front
+        // app. Its own lock, for the same reason as the gate's.
         if event.getIntegerValueField(.eventSourceUserData) == Self.canaryStamp {
-            stateLock.lock(); canarySeenAt = CFAbsoluteTimeGetCurrent(); stateLock.unlock()
+            canaryLock.lock(); canarySeenAt = HotkeyTap.uptime(); canarySeenFrozen = frozen; canaryLock.unlock()
             return nil
+        }
+        if frozen {
+            if isOwnChordWhileFrozen(type, event) {
+                chordsDroppedWhileOpen += 1
+                let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                Log.info("🧊 \(Self.gestureNames[code] ?? (code == VK_B ? "⌘⌃B" : "⌘⌃D")) dropped — the main thread is frozen; a gesture made now is not acted on, and never reaches the front app")
+                return nil
+            }
+            return Unmanaged.passUnretained(event)
         }
 
         // **The wheel turned: the halo dial, in both modes, or nothing.** Judged
@@ -4141,12 +4229,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// says so. Not seen within the grace → the tap is dead, whatever
     /// `CGEventTapIsEnabled` reports, and `completion(false)` is the alarm.
     static let canaryStamp: Int64 = 0x7774_4341_4E41_5259   // "wtCANARY"
-    private var canarySeenAt: CFAbsoluteTime = 0
-    private(set) var lastCanary: (alive: Bool, ms: Double, at: Date)?
+    /// Under `canaryLock`, never `stateLock` (2026-09-26): the canary is the
+    /// question *is the tap alive* and must be answerable while the main
+    /// thread is frozen holding anything.
+    private let canaryLock = NSLock()
+    private var canarySeenAt: CFTimeInterval = 0
+    private var canarySeenFrozen = false
+    private var lastCanaryRecord: (alive: Bool, ms: Double, at: Date, failingOpen: Bool)?
+    /// `failingOpen`: the tap saw its canary while the main thread was frozen
+    /// — alive, and handing everything else through on purpose.
+    var lastCanary: (alive: Bool, ms: Double, at: Date, failingOpen: Bool)? {
+        canaryLock.lock(); defer { canaryLock.unlock() }; return lastCanaryRecord
+    }
 
     func proveAlive(_ why: String, completion: @escaping (Bool) -> Void) {
-        stateLock.lock(); canarySeenAt = 0; stateLock.unlock()
-        let posted = CFAbsoluteTimeGetCurrent()
+        canaryLock.lock(); canarySeenAt = 0; canarySeenFrozen = false; canaryLock.unlock()
+        let posted = HotkeyTap.uptime()
         let source = CGEventSource(stateID: .privateState)
         source?.userData = Self.canaryStamp
         guard let up = CGEvent(keyboardEventSource: source, virtualKey: Self.VK_V, keyDown: false) else {
@@ -4156,12 +4254,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         up.post(tap: .cghidEventTap)
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self else { return }
-            self.stateLock.lock(); let seen = self.canarySeenAt; self.stateLock.unlock()
+            self.canaryLock.lock(); let seen = self.canarySeenAt; let frozen = self.canarySeenFrozen; self.canaryLock.unlock()
             let alive = seen > 0
             let ms = alive ? (seen - posted) * 1000 : 500
-            self.stateLock.lock(); self.lastCanary = (alive, ms, Date()); self.stateLock.unlock()
+            self.canaryLock.lock(); self.lastCanaryRecord = (alive, ms, Date(), alive && frozen); self.canaryLock.unlock()
             let enabled = self.tapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
-            if alive {
+            if alive, frozen {
+                Log.info(String(format: "🛡️ canary (%@): the tap is alive and failing open — seen after %.1f ms; the main thread is frozen, so everything but this app's own chords is handed through on purpose", why, ms))
+            } else if alive {
                 Log.info(String(format: "🛡️ canary (%@): the tap is alive — seen after %.1f ms", why, ms))
             } else {
                 Log.error("🛡️ canary (\(why)): the tap did NOT see its own event — enabled=\(enabled). The firewall is down: Wispr's ⌘V would reach the front app")

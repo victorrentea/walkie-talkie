@@ -25,6 +25,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *What a caret dictation carries* (2026-09-08) and 2026-09-19's *no initial screenshot at the caret* — superseded 2026-09-23 for the **forward click**: its caret sentence is the whole terminal envelope (context frame, `[Dictated in RO or EN]`) and is submitted into a Claude Code prompt; the back click's sentence is the words alone, at the caret even when bound (*Forward is a prompt, back is plain words*)
 - *The spawn menu offers five open terminals* (2026-09-23, morning; recorded in `.claude/rules/spawn.md`, not here) — superseded the same evening by *Active Terminals: the spawn menu's first row*: the terminals moved from a third half under the folders to a hover submenu on the menu's first row, filled from the Claude Code sessions running on the machine rather than from the bind log
 - *`awaitingBind`: one sentence, five minutes* — superseded 2026-09-26 by Victor's Q3: a queue, every held sentence delivered in order on the next bind, five minutes each (*Fixes to the test plan's findings, batch 1*)
+- *The fail-open* (2026-09-24, `MainStallGate`: wall clock, a 0.5 s beat, judged only when an event came by, a trace line per event, the canary handed through) — superseded 2026-09-26 by *Fixes to the test plan's findings, batch 4* §1: uptime, a 0.1 s beat, a 10 Hz watchdog, the real stall length, the canary seen while open, the app's own chords dropped
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -12706,3 +12707,54 @@ settle had given up).
   without a SIGCONT.
 - **TL5**'s PASS no longer accepts *the route answered `ok:false` before 175 s* on its own: it needs
   the `timed out` line, a control surface that answered, and the next decode in sync.
+
+
+## Fixes to the test plan's findings, batch 4 (2026-09-26)
+
+The fourth batch: the tap (`HotkeyTap.swift`) — what the side-button chords do while the prompt
+panel is held, the flicks that re-fire, the key trace that could not see a gesture, and the
+fail-open that measured a closed lid as a frozen app. Victor's decisions (*Decisions on the test
+plan's findings*) are the spec where they speak — Q6 and Q7 here; the rest is the test plan's own
+findings (§3 item 15 and 18, R10, R21–R24, gap G5). Harness rows after the fix:
+`evals/plan/report-fix4.md` (gestures and stalls, under the hands-off locks) and `report-fix4b.md`
+(TD20).
+
+### 1. The tap fails open on uptime, within 0.1 s of the threshold, and says how long the stall was
+
+The test plan's §3 item 15: *"`MainStallGate` uses wall clock → `🧊 195 s` on 09-25 was a lid-closed
+sleep; fail-open for ~0.5 s after every wake"*; TR4 (*"🧊 within 3.5 s"* — measured 3.7 s, and
+`back after 16.4 s` for a 6 s stall); TG26 (*"the canary during fail-open says the tap is alive"* —
+it said `alive:false`); TG25 (a ⌃⌥⌘F10 made during the stall reached the front app).
+
+- **The clock is uptime.** `HotkeyTap.uptime()` is `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)`. Checked
+  in the docs on this Mac rather than remembered: `man clock_gettime` — *"CLOCK_UPTIME_RAW … does not
+  increment while the system is asleep. The returned value is identical to the result of
+  mach_absolute_time()"*; `mach/mach_time.h` — `mach_continuous_time` is *"like mach_absolute_time,
+  but advances during sleep"*. So the one that excludes sleep is `mach_absolute_time`, and the
+  heartbeat, the gate and the canary's timing all use it.
+- **A 10 Hz watchdog on the tap's own run loop** (`watchStall`, a `CFRunLoopTimer` beside the tap's
+  source, so the gate stays tap-thread-only). The gate used to be evaluated only when an event came
+  by, so it opened on the first event after the threshold (TR4's nudge, 3.7 s after the last beat)
+  and closed on the first event after the thaw. It now opens at 3.0–3.1 s whatever the input, and the
+  sample in `hangs/` is taken even when nobody touches anything.
+- **`back after N s` is the stall** — the last beat before it to the first beat after it
+  (`MainStallGate.thawedAt`), not the time the gate stood open; the heartbeat went from 0.5 s to
+  0.1 s so that the period is not the error (a 6 s `/test/stall` read `6.4 s` at 0.5, `6.1 s` now).
+  Unit-tested (`testStallLengthIsTheFirstBeatAfterNotTheClose`).
+- **No trace line per event while open**; the close line counts what went through.
+- **The canary is seen while failing open.** Checked before the pass-through, under a lock of its
+  own (`canaryLock`, never `stateLock` — the frozen thread may hold that), swallowed as always, and
+  recorded as seen *while frozen*: `POST /test/firewall` answers `alive: true, tap: "open",
+  failingOpen: true` and the log says `the tap is alive and failing open`. It was handed through
+  with everything else, read as a dead tap, and its V key-up reached the front app.
+- **Decided here: the app's own chords are dropped while frozen, not handed through.** ⌃⌥⌘F3–F12,
+  ⌘⌃B and ⌘⌃D — chords nobody else ships, which is why they were picked — reached the front app as
+  escape sequences in the Claude prompt and the dictionary (the plan's S12, TG25). The check reads
+  the event alone (no flag, no lock), one line each (`🧊 🔼 → ⌃⌥⌘F10 dropped — the main thread is
+  frozen …`), and the gesture is **not** queued for later: a flick made during a freeze has no
+  sentence to belong to by the time the thread is back. ⌘⇧P (VS Code's palette) and bare F7/F9
+  (IntelliJ) are other apps' chords too, so they go through.
+- **Not done (R24):** a session button stuck down keeps the gate open for as long as it is stuck —
+  the close waits for no button down so that a press handed through gets its release, and a button
+  the window server believes is held for hours (the 7 h middle button) holds it open for hours.
+  Telling a stuck button from a held one needs a device-level read this batch did not attempt.

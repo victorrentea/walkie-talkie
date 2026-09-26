@@ -26,7 +26,7 @@ timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — n
 | `POST /test/replace-wispr {"on"}` | the mode behind the forward button |
 | `POST /test/wispr {"on"}` · `{"hotkey": true}` · `{"historyRoute"}` | fake Wispr's mic edge · fake its start gesture · row as the delivery |
 | `POST /test/wispr-handsfree` · `{"hand": true}` | post the **real** chord (fn ⌃ Space). Plain: `relay: true`, ⌘V swallowed, words delivered. `hand`: as if Victor pressed it. **Installed build only** (`.build/debug` has no Accessibility, `CGEventPost` fails silently) |
-| `POST /test/firewall` | run the tap canary; `{"on": false}` lets Wispr's ⌘V through |
+| `POST /test/firewall` | run the tap canary; `{"on": false}` lets Wispr's ⌘V through; answers `alive`, `tap` (`alive｜open｜dead` — `open` = failing open on purpose while main is frozen), `failingOpen`, `canaryMs` |
 | `POST /test/key-trace {"on"}` | log every key event + verdict (`passed` / `SWALLOWED by …`), keycode and pid only |
 | `POST /test/stall {"seconds"}` | freeze main (≤ 20 s) — proves the tap's fail-open (`🧊`, sample in `hangs/`) |
 | `POST /test/wrap-mode {"mode"}` | `scratchpad｜sink｜off｜auto` |
