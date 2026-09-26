@@ -13026,3 +13026,25 @@ open and empty the whole sentence, `pending` 0 → 70 and on; the same with no k
   ~1–1.7 s to a first partial, which is above the plan's 1.5 s and below the case's 2.0.
 - **TL30's pass now requires the band never to open** (it passed on *not always open*), and its
   expectation states the fix rather than the prediction.
+
+### Batch 5, measured
+
+| case | before (`report-2026-09-26.md`) | after (`report-fix5.md`, `report-fix5b.md`) |
+|---|---|---|
+| LC2 growth at 0.4 s/word | FAIL — 109 pt off centre while narrow; 212/308 samples past the margin (max 271 pt) | PASS — 0.0 pt off centre; none past the margin; max 634 pt/s |
+| LC7 revision past the dropped words | FAIL — 802 pt off centre on the first sample, 3 corrections | PASS — centred, velocity 0, 0 corrections, no ghosts |
+| LC9 append ×30 | FAIL — slowest 1.39 s to 90 % (a harness timestamp) and 0.65 s | PASS — slowest 0.55 s |
+| LC16 fresh line after a full wipe | FAIL — centred but 109 pt/s | PASS — velocity 0; visible centre ≤ 1 pt off behind the eraser |
+| LC1, 3–8, 10, 14, 15, 17 | PASS | PASS (LC11, 12, 18 SKIP as before) |
+| TD19 a sentence saying *press Enter to send* | BUG — a third Return into `cat` | PASS — none |
+| TD20 5000 chars with `^C` / `ESC[201~` | BUG — both raw in the tty | PASS — `CR=2`, neither raw, literals intact |
+| B1 first caption word | FAIL — 5.31 s (old clock; 39 chunks caught up at a late session open) | PASS — 1.67 s after the speech in the recording (2.52 s by the old clock); 0.93–1.68 s over five runs |
+| TL29 live socket drop | BUG — 72 `send failed` lines | PASS — 0 such lines, one `socket is down; reconnecting once`, `session open again` |
+| TL30 socket never opens | BUG — band open 27/27 samples, `pending` 0 → 70 | PASS — band open 0/26, `pending` capped at 64 |
+| B3 stop during a correction | PASS (re-run) | PASS |
+| LC13 live integration | PASS | PASS — 9 words while recording, closed with `listening` |
+
+**Cases changed, and why:** LC2 and every LC `centre()` measure the *visible* text (`visibleWidth`);
+LC9 stamps each sample with its own time; B1 measures from the speech found in the recording; TL30
+passes only on a band that never opens. `./docs/shoot-overlay-states.sh` re-run (52 states; batch 4
+had changed a flash string without it).
