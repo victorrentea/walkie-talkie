@@ -556,6 +556,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let fallbackCeiling: TimeInterval = 180
     /// A local transcription is standing in for the engine that failed.
     private var fallingBack = false
+    /// The last `.failed` end, for `GET /test/state.lastFailure` (gap G7).
+    private var lastFailure: (why: String, engine: String, at: Date)?
 
     /// **The gesture that opens a microphone has been seen and the microphone
     /// has not.** Only a source whose recorder lives in another process has a
@@ -1665,6 +1667,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         picker.onTestPasteHint = { [weak self] in
             DispatchQueue.main.async { self?.pasteHint.pulse(reason: "POST /test/paste-hint") }
+        }
+        // `POST /test/whisper {"kill"|"stop"|"cont"|"restart": true}` — the
+        // helper on demand: dead, hung, resumed, replaced (test-plan gap G4).
+        picker.onTestWhisper = { [weak self] body in
+            guard let self else { return [:] }
+            var did: [String] = []
+            if body["kill"] as? Bool == true, self.whisperSource.signalHelper(SIGKILL) { did.append("SIGKILL") }
+            if body["stop"] as? Bool == true, self.whisperSource.signalHelper(SIGSTOP) { did.append("SIGSTOP") }
+            if body["cont"] as? Bool == true, self.whisperSource.signalHelper(SIGCONT) { did.append("SIGCONT") }
+            if body["restart"] as? Bool == true {
+                DispatchQueue.main.async { self.whisperSource.restartHelper() }
+                did.append("restart")
+            }
+            if !did.isEmpty { Log.info("🧪 /test/whisper: \(did.joined(separator: ", "))") }
+            Thread.sleep(forTimeInterval: 0.15)
+            var out = self.whisperSource.describe()
+            out["did"] = did
+            return out
+        }
+        // `POST /test/eleven {...}` — the ElevenLabs fault switch (gap G3):
+        // `{"fail":"429|429x2|500|401|422|timeout|transport|unreadable|empty",
+        //   "delayMs":n, "once":true, "scope":"final|correction|any", "lang":{"code":"it","p":0.3},
+        //   "live":"drop|never-open|error:<type>"}` or `{"clear":true}`.
+        picker.onTestEleven = { body in
+            if body["clear"] as? Bool == true {
+                ElevenLabsSource.fault = nil
+                ElevenLabsLive.fault = nil
+            } else {
+                if let fail = body["fail"] as? String {
+                    ElevenLabsSource.fault = ElevenLabsSource.Fault(
+                        spec: fail, delayMs: (body["delayMs"] as? Int) ?? 0,
+                        once: (body["once"] as? Bool) ?? true,
+                        lang: (body["lang"] as? [String: Any]).flatMap { l in
+                            (l["code"] as? String).map { ($0, (l["p"] as? Double) ?? 0.3) } },
+                        scope: (body["scope"] as? String) ?? "final")
+                } else if let l = body["lang"] as? [String: Any], let code = l["code"] as? String {
+                    ElevenLabsSource.fault = ElevenLabsSource.Fault(spec: "lang", delayMs: 0, once: (body["once"] as? Bool) ?? true,
+                                                                    lang: (code, (l["p"] as? Double) ?? 0.3),
+                                                                    scope: (body["scope"] as? String) ?? "final")
+                }
+                if let live = body["live"] as? String { ElevenLabsLive.fault = live }
+            }
+            Log.info("🧪 /test/eleven: batch \(ElevenLabsSource.fault?.describe() ?? "none"), live \(ElevenLabsLive.fault ?? "none")")
+            let batch: Any = ElevenLabsSource.fault?.describe() ?? NSNull()
+            let live: Any = ElevenLabsLive.fault ?? NSNull()
+            return ["fault": batch, "live": live]
         }
         picker.onTestLocalFallback = { [weak self] wav in
             let done = DispatchSemaphore(value: 0)
@@ -3254,6 +3302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func fallBackToLocal(why: String, wav: URL, duration: TimeInterval) -> Bool {
         guard source.recordsOwnAudio, source !== whisperSource, !fallingBack,
               FileManager.default.fileExists(atPath: wav.path) else { return false }
+        lastFailure = (why, engineId, Date())
         let failed = source.name
         fallingBack = true
         Log.error("↪️ \(why) — transcribing the \(String(format: "%.1f", duration))s recording on this Mac instead")
@@ -3347,6 +3396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { Log.info("🗑️ dictation cancelled — nothing had been recorded yet") }
             clearCancelledDictationState()
         case .failed(let why, let audio, let duration):
+            lastFailure = (why, engineId, Date())
             // **Both halves of `DictationEnd.failed`.** The banner is long
             // because the recovery is a menu row he has to go and click, and the
             // staging area holds the WAV for five minutes: a networked
@@ -4246,6 +4296,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a real signal handler. `SIG_IGN` first, or the default action kills us
     /// before the source ever sees it.
     private func startListeningForSnapshots() {
+        // **SIGPIPE is ignored for the life of the process** (2026-09-26): a
+        // write into the dead whisper helper's stdin, or into a socket the
+        // other side closed, then *throws* where the code already catches it,
+        // instead of killing the app with a held sentence in it.
+        signal(SIGPIPE, SIG_IGN)
         signal(SIGUSR1, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         source.setEventHandler { [weak self] in
@@ -5533,6 +5588,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["pid"] = Int(ProcessInfo.processInfo.processIdentifier)
         out["dictationStartedAt"] = dictationStartedAt.map { Outbox.iso($0) } ?? NSNull()
         out["liveCaption"] = overlay.liveCaption.describe()
+        // Gap G7 (2026-09-26): what the plan's assertions could not read.
+        out["fallingBack"] = fallingBack
+        out["autosend"] = autosend
+        out["lastFailure"] = lastFailure.map { ["why": $0.why, "engine": $0.engine, "at": Outbox.iso($0.at)] } ?? NSNull()
+        out["recoverable"] = cancelledAudio.map { ["path": $0.url.path, "duration": $0.duration,
+                                                   "expiresAt": Outbox.iso($0.at.addingTimeInterval(300))] } ?? NSNull()
+        out["live"] = elevenLiveSource.liveDescribe() ?? NSNull()
+        let batchFault: Any = ElevenLabsSource.fault?.describe() ?? NSNull()
+        let liveFault: Any = ElevenLabsLive.fault ?? NSNull()
+        out["elevenFault"] = ["batch": batchFault, "live": liveFault]
+        let cost = ElevenLabsCost.summary()
+        out["elevenCost"] = ["total": cost.total, "label": ElevenLabsCost.label, "lines": cost.lines]
+        out["micOpened"] = MicRecorder.lastOpened.map { ["device": $0.device, "rate": $0.rate, "channels": $0.channels, "at": Outbox.iso($0.at)] } ?? NSNull()
+        out["whisper"] = whisperSource.describe()
         return out
     }
 

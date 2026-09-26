@@ -292,8 +292,18 @@ final class LocalWhisperSource: DictationSource {
 
     /// `GET /engine`, unchanged in shape: which model is loaded and whether it
     /// is ready.
+    /// Gap G4: a signal to the helper, and a replacement of it.
+    @discardableResult
+    func signalHelper(_ sig: Int32) -> Bool { whisper.signalHelper(sig) }
+    func restartHelper() {
+        whisper.stop()
+        loading = false
+        bringUpModel()
+    }
+
     func describe() -> [String: Any] {
-        var out: [String: Any] = ["ready": whisper.ready, "loading": loading]
+        var out: [String: Any] = ["ready": whisper.ready, "loading": loading,
+                                  "alive": whisper.alive, "pid": whisper.pid.map { Int($0) } ?? NSNull()]
         if let m = whisper.modelName { out["model"] = m }
         if let b = whisper.footprintBytes { out["bytes"] = b }
         return out

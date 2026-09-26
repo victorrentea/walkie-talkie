@@ -466,6 +466,10 @@ final class ElementPicker {
     /// `POST /test/local-fallback {"wav": path}` — the local model standing in
     /// for a failed engine, on that file; answers the result, delivers nothing.
     var onTestLocalFallback: ((String) -> [String: Any])?
+    /// `POST /test/whisper {"kill"|"stop"|"cont"|"restart": true}` — gap G4.
+    var onTestWhisper: (([String: Any]) -> [String: Any])?
+    /// `POST /test/eleven {...}` — the ElevenLabs fault switch, gap G3.
+    var onTestEleven: (([String: Any]) -> [String: Any])?
     var onTestCancelDictation: (() -> Void)?
 
     /// `POST /test/recover` — the menu's **Recover Cancelled Dictation**, which
@@ -863,6 +867,14 @@ final class ElementPicker {
 
         // **The `💬` caption without a microphone or a bill** — the ticker is
         // only reviewable if its words can be pushed from a desk, one at a time.
+        case ("POST", "/test/whisper"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            respond(conn, 200, ["ok": true].merging(onTestWhisper?(body) ?? [:]) { _, new in new })
+
+        case ("POST", "/test/eleven"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            respond(conn, 200, ["ok": true].merging(onTestEleven?(body) ?? [:]) { _, new in new })
+
         case ("POST", "/test/local-fallback"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             guard let wav = body?["wav"] as? String else {

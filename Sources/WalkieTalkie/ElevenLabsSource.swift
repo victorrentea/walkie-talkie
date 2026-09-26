@@ -506,7 +506,54 @@ final class ElevenLabsSource: DictationSource {
     /// costs a second of his settle to arrive at the same answer. The backoff is
     /// short for the same reason the timeout is bounded: he is standing there
     /// with the chip saying `Transcribing...`.
-    static func transcribe(wav: URL, key: String, attempt: Int = 0,
+    /// **A fault the harness asked for** (2026-09-26, test-plan gap G3):
+    /// `POST /test/eleven`. Consumed per attempt — `429x2` fails the first
+    /// call and its retry, `429` only the first — and cleared when `once` and
+    /// spent, so a forgotten switch cannot fail a real sentence for long.
+    /// `lang` rewrites the answer's language fields on an otherwise real call.
+    struct Fault {
+        var code: Int?          // HTTP status to fake
+        var kind: String        // timeout | transport | unreadable | empty | http | lang
+        var remaining: Int
+        var delayMs: Int
+        var once: Bool
+        var lang: (String, Double)?
+        /// Which upload it hits: `final` (the delivery, the default),
+        /// `correction` (the live caption's rolling batch), or `any`.
+        var scope: String
+
+        init(spec: String, delayMs: Int, once: Bool, lang: (String, Double)?, scope: String = "final") {
+            self.scope = scope
+            let parts = spec.split(separator: "x")
+            let head = String(parts.first ?? ""), times = parts.count > 1 ? Int(parts[1]) ?? 1 : 1
+            if let n = Int(head) { code = n; kind = "http" } else { code = nil; kind = head }
+            remaining = times; self.delayMs = delayMs; self.once = once; self.lang = lang
+        }
+
+        func describe() -> String {
+            (code.map { "HTTP \($0)" } ?? kind) + (remaining > 1 ? "×\(remaining)" : "")
+                + (delayMs > 0 ? " after \(delayMs) ms" : "") + (lang.map { " lang \($0.0)@\($0.1)" } ?? "")
+                + " on \(scope)" + (once ? "" : ", sticky")
+        }
+    }
+    private static let faultLock = NSLock()
+    private static var _fault: Fault?
+    static var fault: Fault? {
+        get { faultLock.withLock { _fault } }
+        set { faultLock.withLock { _fault = newValue } }
+    }
+    /// Takes one use of the fault for this attempt: the fake to answer with,
+    /// or `nil` for a real call (`lang` is a real call with a rewritten answer).
+    private static func takeFault(purpose: String) -> Fault? {
+        faultLock.withLock {
+            guard var f = _fault, f.kind != "lang", f.remaining > 0, f.scope == "any" || f.scope == purpose else { return nil }
+            f.remaining -= 1
+            _fault = (f.remaining == 0 && f.once) ? nil : f
+            return f
+        }
+    }
+
+    static func transcribe(wav: URL, key: String, attempt: Int = 0, purpose: String = "final",
                            _ done: @escaping (Outcome) -> Void) {
         let boundary = "walkie-\(UUID().uuidString)"
         var body = Data()
@@ -546,7 +593,7 @@ final class ElevenLabsSource: DictationSource {
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
 
-        URLSession.shared.dataTask(with: req) { data, response, error in
+        func settle(_ data: Data?, _ response: URLResponse?, _ error: Error?) {
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             // **A timeout is not retried** (2026-09-25): a connection that hung
             // for `requestTimeout` will not answer 0.8 s later, and the local
@@ -556,7 +603,7 @@ final class ElevenLabsSource: DictationSource {
             if retriable, attempt == 0 {
                 Log.error("ElevenLabs attempt 1 failed (\(error?.localizedDescription ?? "HTTP \(code)")) — retrying")
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-                    transcribe(wav: wav, key: key, attempt: 1, done)
+                    transcribe(wav: wav, key: key, attempt: 1, purpose: purpose, done)
                 }
                 return
             }
@@ -585,18 +632,46 @@ final class ElevenLabsSource: DictationSource {
                 return TimedWord(text: text, start: start, end: end,
                                  isSpacing: (w["type"] as? String) == "spacing")
             }
+            var language = json["language_code"] as? String
+            var probability = json["language_probability"] as? Double ?? 0
+            if let f = fault, f.kind == "lang", let l = f.lang, f.scope == "any" || f.scope == purpose {
+                language = l.0; probability = l.1
+                if f.once { fault = nil }
+                Log.info("🧪 ElevenLabs answer's language rewritten to \(l.0) (\(l.1))")
+            }
             done(.success(Result(text: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                                 language: json["language_code"] as? String,
-                                 languageProbability: json["language_probability"] as? Double ?? 0,
-                                 words: words)))
-        }.resume()
+                                 language: language, languageProbability: probability, words: words)))
+        }
+
+        if let f = takeFault(purpose: purpose) {
+            Log.info("🧪 ElevenLabs attempt \(attempt + 1): injected \(f.describe())")
+            let url = req.url!
+            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(f.delayMs)) {
+                switch f.kind {
+                case "timeout": settle(nil, nil, URLError(.timedOut))
+                case "transport": settle(nil, nil, URLError(.notConnectedToInternet))
+                case "unreadable": settle("<html>not json</html>".data(using: .utf8),
+                                          HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil), nil)
+                case "empty": settle(#"{"text":"","language_code":"ro","language_probability":0.9,"words":[]}"#.data(using: .utf8),
+                                     HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil), nil)
+                default: settle(#"{"detail":{"message":"injected by /test/eleven"}}"#.data(using: .utf8),
+                                HTTPURLResponse(url: url, statusCode: f.code ?? 500, httpVersion: nil, headerFields: nil), nil)
+                }
+            }
+            return
+        }
+        URLSession.shared.dataTask(with: req) { data, response, error in settle(data, response, error) }.resume()
     }
+
+    /// The live socket's own state, for `GET /test/state.live` (gap G7).
+    func liveDescribe() -> [String: Any]? { stream?.describe() }
 
     /// `GET /engine`'s half of the answer, the same shape `LocalWhisperSource`
     /// gives: what is configured and whether it could be used this instant.
     func describe() -> [String: Any] {
         ["ready": isReady, "model": Self.model, "live": live ? ElevenLabsLive.model : "off",
          "language": Self.language ?? "auto",
-         "keyFile": Self.configURL.path]
+         "keyFile": Self.configURL.path,
+         "fault": (Self.fault?.describe() ?? NSNull()) as Any, "liveFault": (ElevenLabsLive.fault ?? NSNull()) as Any]
     }
 }

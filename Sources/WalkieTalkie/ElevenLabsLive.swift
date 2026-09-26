@@ -55,11 +55,39 @@ final class ElevenLabsLive {
     /// 0.5 s timer stays only as the catch-up for a commit that arrived while
     /// an upload was in flight.
     static let minSpan: TimeInterval = 1.0
+
+    /// **A socket fault the harness asked for** (gap G3): `drop` closes the
+    /// socket 1 s after it opened, `never-open` never resumes it, `error:<type>`
+    /// feeds one synthetic `<type>` message once the session is open. One use.
+    private static let faultLock = NSLock()
+    private static var _fault: String?
+    static var fault: String? {
+        get { faultLock.withLock { _fault } }
+        set { faultLock.withLock { _fault = newValue } }
+    }
+    private var chunksSent = 0
+    private var corrections = 0
+
+    /// `GET /test/state.live` (gap G7).
+    func describe() -> [String: Any] {
+        queue.sync {
+            ["socket": closed ? "closed" : (open ? "open" : (task == nil ? "never-opened" : "connecting")),
+             "chunksSent": chunksSent, "pending": pending.count,
+             "seconds": Double(pcm.count) / 32_000, "cutSeconds": Double(cutByte) / 32_000,
+             "segments": segments.count, "correctedSegments": correctedSegments, "corrections": corrections,
+             "correcting": correcting, "committedChars": segments.joined(separator: " ").count,
+             "partialChars": partial.count, "keyterms": keytermCount]
+        }
+    }
     private var pcm = Data()
     private var cutByte = 0
     private var correctedSegments = 0
     private var lastTextAt = CACurrentMediaTime()
     private var correcting = false
+    /// After a failed correction, no retry before this — the 0.5 s timer would
+    /// otherwise hammer a server that is down (seen 2026-09-26 with an
+    /// injected 401: a second upload 0.3 s after the first failed).
+    private var correctionHoldUntil: CFTimeInterval = 0
     private var pauseTimer: DispatchSourceTimer?
     private var key = ""
     private var keytermCount = 0
@@ -131,7 +159,12 @@ final class ElevenLabsLive {
         let task = URLSession.shared.webSocketTask(with: req)
         queue.async {
             self.task = task
-            task.resume()
+            if Self.fault == "never-open" {
+                Self.fault = nil
+                Log.info("🧪 live caption: never-open — the socket is not resumed")
+            } else {
+                task.resume()
+            }
             self.receive(task)
             self.lastTextAt = CACurrentMediaTime()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
@@ -176,6 +209,7 @@ final class ElevenLabsLive {
                                       "sample_rate": 16000]
         guard let json = try? JSONSerialization.data(withJSONObject: message),
               let text = String(data: json, encoding: .utf8) else { return }
+        chunksSent += 1
         task?.send(.string(text)) { error in
             if let error { Log.error("💬 live caption: send failed — \(error.localizedDescription)") }
         }
@@ -208,6 +242,20 @@ final class ElevenLabsLive {
             pending.removeAll()
             waiting.forEach(send)
             Log.info("💬 live caption: session open, \(waiting.count) chunk(s) caught up")
+            if let f = Self.fault {
+                Self.fault = nil
+                if f == "drop" {
+                    queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+                        guard let self, let task = self.task else { return }
+                        Log.info("🧪 live caption: drop — cancelling the socket")
+                        task.cancel(with: .goingAway, reason: nil)
+                    }
+                } else if f.hasPrefix("error:") {
+                    let type = String(f.dropFirst(6))
+                    Log.info("🧪 live caption: injecting a \(type) message")
+                    handle(#"{"message_type":"\#(type)","error":"injected by /test/eleven"}"#)
+                }
+            }
         case "partial_transcript":
             let text = (json["text"] as? String) ?? ""
             if text != partial { lastTextAt = CACurrentMediaTime() }
@@ -240,6 +288,7 @@ final class ElevenLabsLive {
     /// the 0.5 s timer for a commit that arrived while an upload was running.
     private func correctIfDue() {
         guard !closed, !correcting, segments.count > correctedSegments,
+              CACurrentMediaTime() >= correctionHoldUntil,
               pcm.count > cutByte + Int(Self.minSpan * 32_000) else { return }
         let from = cutByte, to = pcm.count, upTo = segments.count
         let span = pcm[from..<to]
@@ -251,7 +300,7 @@ final class ElevenLabsLive {
         correcting = true
         let seconds = Double(to - from) / 32_000
         Log.info(String(format: "💬 live correction: %.1fs since the last cut, %d live segment(s) → %@", seconds, upTo - correctedSegments, ElevenLabsSource.model))
-        ElevenLabsSource.transcribe(wav: wav, key: key) { [weak self] outcome in
+        ElevenLabsSource.transcribe(wav: wav, key: key, purpose: "correction") { [weak self] outcome in
             try? FileManager.default.removeItem(at: wav)
             guard let self else { return }
             self.queue.async {
@@ -259,12 +308,14 @@ final class ElevenLabsLive {
                 guard !self.closed else { return }
                 switch outcome {
                 case .failure(let why):
-                    Log.error("💬 live correction failed — \(why); the next pause covers the span again")
+                    self.correctionHoldUntil = CACurrentMediaTime() + 5
+                    Log.error("💬 live correction failed — \(why); the next commit after 5 s covers the span again")
                 case .success(let r):
                     guard !r.text.isEmpty, upTo <= self.segments.count else { return }
                     let before = self.segments[self.correctedSegments..<upTo].joined(separator: " ")
                     self.segments.replaceSubrange(self.correctedSegments..<upTo, with: [r.text])
                     self.correctedSegments += 1
+                    self.corrections += 1
                     self.cutByte = to
                     Log.info("💬 live correction: \(before.count) → \(r.text.count) chars" + (before == r.text ? " (identical)" : ""))
                     self.publish(gentle: true)

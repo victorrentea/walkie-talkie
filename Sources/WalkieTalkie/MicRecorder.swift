@@ -22,6 +22,13 @@ import CoreAudio
 /// downmixes the receiver's two channels to the one Whisper wants.
 final class MicRecorder {
 
+    /// **The device the last recording actually opened**, for
+    /// `GET /test/state.micOpened` (gap G7) — `resolve()` says what *would* be
+    /// used; this is what was. Written on `audioQueue`, read from main; a tuple
+    /// of values, torn at worst into a stale-but-consistent pair.
+    static var lastOpened: (device: String, rate: Int, channels: Int, at: Date)?
+
+
     /// Shorter than this and it was a misfire — a click he did not mean, or a
     /// button pressed and released while deciding. Sending an empty transcript
     /// costs an agent turn; dropping half a second of silence costs nothing.
@@ -472,6 +479,9 @@ final class MicRecorder {
             return "microphone unavailable: \(error.localizedDescription)"
         }
         Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
+        if destination != nil {
+            Self.lastOpened = (device, Int(inFormat.sampleRate), Int(inFormat.channelCount), Date())
+        }
         return nil
     }
 

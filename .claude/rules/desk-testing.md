@@ -34,6 +34,9 @@ timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — n
 | `POST /test/shot-marker` | the marker unit test: `{text, available, selections}` rewrite; `{words, cues}` placement; `{play, kind}` into Loopback |
 | `POST /test/wispr-state/simulate {"steps"}` | `WisprState` unit test with a fake clock |
 | `POST /test/mic {"id"}` | pick the microphone (`auto｜xlr｜mac｜rx｜bose`); answers `chosen`/`resolved`/`available`/`mark` |
+| `POST /test/mic {"device": "<name substring>"｜null}` | **process-local input override** (2026-09-26, G1): the recorder opens that CoreAudio device (e.g. `"TO Wispr"`, a Loopback), not written to `mic/choice`, gone at relaunch; `/engine.mic.override` shows it. Play a corpus WAV into the Loopback with `sounddevice` (48 kHz, 2 ch) — no speaker |
+| `POST /test/eleven {"fail": "429｜429x2｜500｜401｜422｜timeout｜transport｜unreadable｜empty", "delayMs"?, "once"? (true), "scope"? ("final"｜"correction"｜"any"), "lang": {"code","p"}?, "live": "drop｜never-open｜error:<type>"?}` · `{"clear": true}` | **the ElevenLabs fault switch** (G3): the fake answers the next upload of that scope (`final` = the delivery, `correction` = the caption's rolling batch); `xN` spends N attempts (`429x2` = the call and its retry); `live` hits the socket once; `/engine.elevenlabs.fault` and `state.elevenFault` show what is armed |
+| `POST /test/whisper {"kill"｜"stop"｜"cont"｜"restart": true}` | **the local helper on demand** (G4): SIGKILL/SIGSTOP/SIGCONT to `whisper_helper.py`, or stop + bring up; answers `describe()` (`ready`, `alive`, `pid`). A dead helper now fails the next request instead of killing the app (SIGPIPE ignored; `ready` cleared on EOF/EPIPE) |
 | `POST /test/input {"name"}` | point the **system** default input at a device (for `tools/wispr-test.sh`) |
 | `POST /test/paste-hint` | show the `📋 Re-paste ⌘⇧P` row once |
 | `POST /test/cancel` · `/test/recover` | the ✕'s cancel · recover the cancelled dictation |
@@ -49,7 +52,11 @@ timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — n
 `pasteHint` · `halo` · `chip` (rows as strings) · `pasteMode`/`atCaret`/`spawnPending`/`awaitingBind`/
 `bound` · `historyRow` · `source` · `sinkOpen` · `sessionFlags` (modifiers the window server thinks
 are held — read this, never infer) · `keyTrace` · `keyRedirect` · `lastRingDown` · `lastSettled` ·
-`lastDelivery` · `backStopsWispr` · `busy`/`busyWhy`/`quitPending`/`pid`/`dictationStartedAt`.
+`lastDelivery` · `backStopsWispr` · `busy`/`busyWhy`/`quitPending`/`pid`/`dictationStartedAt` · since 2026-09-26 (G7):
+`liveCaption` (the band's ticker) · `fallingBack` · `autosend` · `lastFailure {why, engine, at}` · `recoverable {path,
+duration, expiresAt}` · `live` (the socket: `socket`, `chunksSent`, `pending`, `seconds`, `cutSeconds`, `segments`,
+`correctedSegments`, `corrections`, `correcting`, `committedChars`, `partialChars`, `keyterms`) · `elevenFault` ·
+`elevenCost {total, label, lines}` · `micOpened {device, rate, channels, at}` (what the recorder really opened) · `whisper`.
 
 - **`delivery`** (outbox line and `lastDelivery`): `{via: wispr-cmdv｜wispr-history｜wispr-notes｜
   pasteboard｜local-whisper｜test, kind: route｜alreadyInserted｜insertedElsewhere, to: terminal:ttysNNN｜

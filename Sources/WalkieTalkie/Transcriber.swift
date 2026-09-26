@@ -85,6 +85,37 @@ final class LocalWhisper {
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.whisper")
     private(set) var ready = false
 
+    /// The helper's pid, from any thread (`nil` when none is running).
+    var pid: pid_t? { pidLock.lock(); defer { pidLock.unlock() }; return helperPID }
+    /// Whether that pid still answers `kill(pid, 0)` — a helper that died
+    /// unnoticed is the one this exists to expose (test-plan gap G4).
+    var alive: Bool { pid.map { Darwin.kill($0, 0) == 0 } ?? false }
+
+    /// `POST /test/whisper {"kill"|"stop"|"cont"}` — a signal to the helper, so
+    /// a dead or hung model can be produced on demand. `true` if there was one.
+    @discardableResult
+    func signalHelper(_ sig: Int32) -> Bool {
+        guard let pid else { return false }
+        return Darwin.kill(pid, sig) == 0
+    }
+
+    /// **The helper is gone: say so and forget it** — `ready` false so the next
+    /// request refuses instead of writing into a closed pipe, `proc` nil so
+    /// `start` may spawn a new one. On `queue`. Before 2026-09-26 an EOF only
+    /// logged, `ready` stayed true, and the next write hit SIGPIPE (which the
+    /// process did not ignore).
+    private func markDead(_ why: String) {
+        Log.error("whisper helper \(why) — it died; the next request brings a new one up")
+        ready = false
+        modelName = nil
+        toHelper = nil
+        fromHelper = nil
+        proc = nil
+        pidLock.lock(); helperPID = nil; pidLock.unlock()
+        buffer = Data()
+        DecodeRate.engineStopped()
+    }
+
     /// Where the helper lives: beside the binary inside the `.app`, and in the
     /// repo when running from `swift build`. Resolved rather than hardcoded so a
     /// developer run and an installed run both work without a switch.
@@ -296,8 +327,7 @@ final class LocalWhisper {
             var line = req
             line.append(0x0A)
             do { try stdin.write(contentsOf: line) } catch {
-                Log.error("whisper helper went away: \(error)")
-                self.ready = false
+                self.markDead("would not take a request (\(error))")
                 done(nil); return
             }
             // Generous, because it scales with the dictation: a three-minute one
@@ -357,7 +387,7 @@ final class LocalWhisper {
             let n = read(handle.fileDescriptor, &scratch, scratch.count)
             if n > 0 { buffer.append(contentsOf: scratch[0..<n]); continue }
             if n == 0 {
-                Log.error("whisper helper closed its pipe — it died")
+                markDead("closed its pipe")
                 return nil
             }
             if errno == EINTR || errno == EAGAIN { continue }
