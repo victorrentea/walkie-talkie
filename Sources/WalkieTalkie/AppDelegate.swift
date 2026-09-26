@@ -544,16 +544,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// beacon standing for half a minute over nothing would stop meaning
     /// anything.
     private static let settleTimeout: TimeInterval = 8
-    /// **How far the settle may be extended by a recogniser that keeps saying it
-    /// is working** — the capture's own window, because past it nothing is
-    /// listening for the words either.
-    private static let settleCeiling: TimeInterval = 30
-
-    /// **The same extension while the local model stands in for a cloud engine
-    /// that failed** (2026-09-25): a cold model load is seconds, and a long
-    /// sentence decodes at a fraction of its length — both on top of the time
-    /// the cloud call already took to fail.
-    private static let fallbackCeiling: TimeInterval = 180
+    // `settleCeiling` (30 s) and `fallbackCeiling` (180 s) went on 2026-09-26:
+    // the settle waits for as long as the recogniser or the fallback says it is
+    // working, and each of those is bounded by its own timeouts now — see
+    // `armSettleGiveUp`.
     /// A local transcription is standing in for the engine that failed.
     private var fallingBack = false
     /// **Which fallback is current, and its recording** (2026-09-26, R2 — TL11).
@@ -3571,18 +3565,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Wispr's own tail runs to 22.8 s, and giving up on a sentence that is
     /// visibly arriving is how an 81-second dictation was lost once already. So
     /// the give-up asks the source first and re-arms while the answer is *still
-    /// working*, bounded by the capture's own 30 s, which is the number that
-    /// means *this is not coming*.
+    /// working*.
+    ///
+    /// **With no ceiling of its own since 2026-09-26** (the test plan's R1:
+    /// TL8, TL15, TR11, TL25). It gave up at 30 s — 180 s for the fallback —
+    /// while an upload or a decode was still running, and a new sentence could
+    /// then start under the old one's late reply, which took the new one's
+    /// flags, pictures and destination. The recognisers bound themselves now:
+    /// Scribe's 20 s request timeout and one retry, the local model's 90 s for
+    /// the weights and 300 s for a decode (after which its helper is killed),
+    /// so *still working* always ends. A cancel still ends it at once.
     private func armSettleGiveUp() {
         settleGiveUp?.cancel()
         let giveUp = DispatchWorkItem { [weak self] in
             guard let self, self.settling else { return }
             let waited = CFAbsoluteTimeGetCurrent() - self.settlingFrom
-            if self.fallingBack, waited < Self.fallbackCeiling {
+            if self.fallingBack {
                 Log.info(String(format: "the settle waits: the local model is standing in — %.0f s in", waited))
                 return self.armSettleGiveUp()
             }
-            if self.source.phase.isWaitingForWords, waited < Self.settleCeiling {
+            if self.source.phase.isWaitingForWords {
                 Log.info(String(format: "the settle waits: %@ is still %@ — %.0f s in",
                                 self.source.name,
                                 self.source.phase.status.isEmpty ? "working" : self.source.phase.status,

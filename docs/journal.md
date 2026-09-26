@@ -12645,3 +12645,26 @@ and `listening` stood until the ten-minute ceiling.
   (`dictationStoppedListening` is the ordinary close and begins a settle for words that are not
   coming). Without it the start that cleared the flag was refused by `settling` a line later, and a
   desk cancel lingered 2 s (TL2 measured the same linger in phase A).
+
+### 5. The settle never gives up while the recogniser is still working
+
+The test plan's §3.1 / R1: *"The settle gives up at ~32 s while the recogniser still works and a new
+start is then allowed (AD:3575 checks `settling`, not `phase`). The late reply consumes the new
+sentence's flags, shots and destination."* Measured before: TL8 (`dictation abandoned (a new
+dictation started)`, S1's outbox line carrying S2's screen, `listening:false` with `isRecording:true`),
+TL15 (the two start gestures disagreed in the orphan window), TR11 (the settle timed out at 32 s,
+before the fallback began at 39 s), TL25 (a 10-minute upload answered at 48.65 s, 16 s after the
+settle had given up).
+
+- **`armSettleGiveUp` re-arms for as long as `phase.isWaitingForWords` or `fallingBack`**, with no
+  ceiling: `settleCeiling` (30 s) and `fallbackCeiling` (180 s) are deleted. The 8 s give-up still
+  ends a settle nothing is working on. Every recogniser bounds itself now — Scribe's 20 s request
+  timeout and one retry, Wispr's 30 s capture, the local model's 90 s for the weights and 300 s per
+  decode (item 3) — so *still working* always ends; a cancel ends it at once.
+- **`startDictation` refuses while `phase.isWaitingForWords`** (in `startBlocker`, item 4), as the
+  side-button paths (`onPasteToggle`, `onCleanToggle`) already did, so a late reply can never land
+  in a new sentence. `onCleanHold`'s press reads it too (item 1).
+- **Not done here:** Victor's larger wish behind Q2 — dictating the next sentence while the previous
+  one transcribes, queued and delivered in order (*"să le bufferizeze cumva ele în spate și să le
+  trimită pe rând"*). That is a separate batch; this one only closes the hole, so a start in the
+  settle is refused (and says so) rather than queued.

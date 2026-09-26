@@ -118,7 +118,13 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
 - **A row with nothing in it stops being progress after 8 s** (`silenceCeiling`) → *"No speech was
   heard"*; `asrText` exists to tell *thinking* from *heard nothing*.
 - **Timeouts:** `captureTimeout` 30 s (an 81 s dictation was lost at 6 s); `settleTimeout` 8 s; both
-  only nets behind the row. The settle steps aside while `phase.isWaitingForWords` (≤ 30 s).
+  only nets behind the row. The settle steps aside while `phase.isWaitingForWords` — **with no
+  ceiling since 2026-09-26** (it gave up at 30 s and a new sentence could start under a late reply:
+  TL8, TL15, TR11, TL25); every recogniser bounds itself (Scribe 20 s + one retry, Wispr's 30 s
+  capture, the local model's 90 s / 300 s). **Every start refuses while the words are in flight**
+  (`startDictation` checks `phase.isWaitingForWords` too, as the side buttons did) and says which
+  flag refused and how old it is; a `listening` with no recorder behind it for > 30 s is put down by
+  the gesture that meets it (TR18). → journal: *Fixes to the test plan's findings, batch 3*
 - **The pasteboard is an answer only when the relay asked it one** (`askedForCopy`) — otherwise it
   delivered whatever Victor had last copied. Wispr restores the clipboard after its ⌘V: arm at the
   start chord, refuse a pasteboard identical to the pre-dictation one, read the string the instant it
