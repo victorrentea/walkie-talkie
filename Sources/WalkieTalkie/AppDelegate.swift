@@ -1052,8 +1052,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bindInFlight = false
 
     /// A dictate gesture that arrived while a bind was still resolving. Banked
-    /// exactly as `recordWhenModelReady` banks one made against a model that is
-    /// still loading, and for that flag's reason: the intention is unambiguous,
+    /// the way a gesture on a cold model used to be (`recordWhenSourceReady`,
+    /// retired 2026-09-26), and for that flag's reason: the intention is unambiguous,
     /// and asking him to make it again means noticing nothing happened first.
     private var recordWhenBound = false
 
@@ -1988,7 +1988,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **Mid-sentence, the gesture converts instead of doing nothing**
                 // (2026-09-22) — see `convertDictationToSpawn`. At rest it opens a
                 // spawn dictation as it always has.
-                if self.listening || self.recordWhenSourceReady {
+                if self.listening {
                     self.convertDictationToSpawn()
                     return
                 }
@@ -2018,7 +2018,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onWheelIdleDoubleSpawn = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard !self.listening, !self.recordWhenSourceReady else { return }
+                guard !self.listening else { return }
                 self.startDictation(spawn: true, deferContext: true)
             }
         }
@@ -2560,7 +2560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch edge {
                 case .press:
                     guard !self.listening, !self.source.isRecording, !self.speculative,
-                          !self.settling, !self.recordWhenSourceReady else {
+                          !self.settling, !self.source.phase.isWaitingForWords else {
                         Log.info("🧼 right ⌘⌥ while another sentence is open or in flight — left alone")
                         return
                     }
@@ -2572,11 +2572,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let held = CFAbsoluteTimeGetCurrent() - self.cleanHoldAt
                     self.cleanHoldAt = 0
                     guard self.cleanSentence else { return }
-                    if self.recordWhenSourceReady, !self.listening {
-                        self.recordWhenSourceReady = false
-                        Log.info("🧼 right ⌘⌥ let go before \(self.source.name) was ready — nothing recorded")
-                        return
-                    }
                     if edge == .shortcut || held < Self.cleanHoldFloor {
                         self.cancelDictationInFlight(reason: edge == .shortcut
                             ? "right ⌘⌥ was a shortcut"
@@ -3419,7 +3414,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// **The WAV through the local model, as the result the failed engine
     /// would have handed over** — brings the weights up if they are down
-    /// (polled, as `bringUpSource` does; 90 s, then nil). On the main queue.
+    /// (polled, as `LocalWhisperSource.whenModelUp` does; 90 s, then nil). On
+    /// the main queue.
     /// `POST /test/local-fallback` calls it with a corpus WAV, delivering nothing.
     private func transcribeLocally(wav: URL, duration: TimeInterval, standingInFor failed: String,
                                    _ done: @escaping (DictationResult?) -> Void) {
@@ -3616,13 +3612,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
 
-    /// **A gesture is waiting on a recogniser that is not up yet.**
-    ///
-    /// Wispr Flow is either running or it is not and there is nothing to wait
-    /// for; the local model takes ten seconds to load 1.5 GB of weights, and a
-    /// gesture made against a cold one used to cost Victor the sentence *and*
-    /// the gesture. It is banked here and honoured when the source reports ready.
-    private var recordWhenSourceReady = false
     /// When the held right ⌘⌥ opened the clean sentence it owns — 0 when it
     /// owns none (2026-09-25, `HotkeyTap.onCleanHold`).
     private var cleanHoldAt: CFAbsoluteTime = 0
@@ -3730,16 +3719,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `spawn` is ⬆️: this dictation carries its own destination, so it is
     /// allowed through the one gate a bare one is not — having a binding.
     ///
-    /// `resumed` is the source-ready continuation, and it exists because a cold
-    /// local model makes this run **twice** for one gesture. The second run must
-    /// not redo the opening ceremony: measured 2026-09-04, it re-offered the
-    /// folder menu ten seconds in — flickering it under the hovering hand,
-    /// restarting its clock, and wiping a folder he had already chosen.
+    /// There is no *resumed* second run any more (2026-09-26): a cold local
+    /// model records at once and its WAV waits for the weights, so one gesture
+    /// is one call.
     ///
     /// `deferContext` is the bare wheel at rest, reachable only with *Use Logi
     /// Gestures* off: its context shot is taken at the **release**, not the
     /// press, so the picture is of the screen his finger left.
-    private func startDictation(spawn: Bool = false, paste: Bool = false, resumed: Bool = false,
+    private func startDictation(spawn: Bool = false, paste: Bool = false,
                                 deferContext: Bool = false, clean: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
@@ -3776,10 +3763,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Set before the gate below and before anything reads `hasDestination`:
         // it *is* the answer for a spawn.
         spawnPending = spawn
-        // A folder chosen for a previous sentence must never ride this one. A
-        // resumed start keeps the choice — its menu was offered at the press and
-        // may already have been clicked.
-        if !resumed { spawnFolder = nil }
+        // A folder chosen for a previous sentence must never ride this one.
+        spawnFolder = nil
         pasteMode = paste
         // Every caller that passes `paste` is the forward click (or its route
         // from a desk) — the caret **prompt** (2026-09-23). A relay-started
@@ -3798,23 +3783,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if spawn {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
             // **As early as the press allows** — Victor's ask, 2026-09-04. Its
-            // clock is his reading time, which starts now. Once per gesture,
-            // though: a resumed start skips it.
-            if !resumed { offerSpawnFolders() }
+            // clock is his reading time, which starts now.
+            offerSpawnFolders()
         }
 
-        // A source that records its own WAV can open the microphone unready (no
-        // key): the local model transcribes what it cannot (`fallBackToLocal`).
-        guard source.isReady || source.recordsOwnAudio else {
-            // **The gesture is kept.** Telling him to say it again made him watch
-            // for a banner and then remember to repeat a gesture he had already
-            // made. The intention is unambiguous, so it is banked and honoured
-            // when the source comes up.
-            Log.info("dictate gesture with \(source.name) not ready — bringing it up")
-            recordWhenSourceReady = true
-            bringUpSource()
-            return
-        }
+        // A source that records its own WAV opens the microphone unready: the
+        // cloud engine with no key (the local model transcribes what it cannot,
+        // `fallBackToLocal`), and the local model with its weights still loading
+        // (the WAV waits for them at the stop — 2026-09-26, *"le bufferizezi
+        // tu"*). Only Wispr Flow can be not-ready here, and its own `start()`
+        // says so (`Wispr Flow is not running`) in the flash below.
 
         if let why = source.start() {
             cleanSentence = false
@@ -3898,31 +3876,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         endDictation()
     }
 
-    /// Bring a source that is not ready up, and honour a gesture that was banked
-    /// against it. Only the local model has anything to do here; Wispr Flow is
-    /// running or it is not, and the relay cannot launch it on his behalf.
-    private func bringUpSource() {
-        guard let local = source as? LocalWhisperSource else {
-            recordWhenSourceReady = false
-            overlay.flash("⚠️ Wispr Flow is not running", duration: 8)
-            return
-        }
-        local.bringUpModel()
-        // Polled rather than pushed: the model's readiness is the source's own
-        // business and a callback for one banked gesture is a second contract
-        // between two objects that already have one.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.recordWhenSourceReady else { return }
-            guard self.source.isReady else { return self.bringUpSource() }
-            self.recordWhenSourceReady = false
-            self.overlay.clearFlash()
-            Log.info("\(self.source.name) up after a gesture that had to wait — opening the microphone")
-            // **The gesture is kept whole, ⇧ included.** `resumed`, so the folder
-            // menu is not re-offered and a folder already clicked is not wiped.
-            self.startDictation(spawn: self.spawnPending, paste: self.pasteMode, resumed: true)
-        }
-    }
-
     /// **Ask which folder, without making it a question he has to answer.**
     ///
     /// The menu appears where the mouse was when he started talking, names the
@@ -3953,11 +3906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// already a spawn / already headed for the caret.
     @discardableResult
     private func convertDictationToSpawn() -> Bool {
-        // `recordWhenSourceReady` counts as a dictation: on a cold engine the start
-        // has not opened the microphone yet — it banked the gesture and is waiting
-        // — and the resumed start reads `spawnPending`, so setting it here is
-        // exactly how the conversion survives that wait.
-        guard listening || recordWhenSourceReady else { return false }
+        guard listening else { return false }
         guard !spawnPending, !pasteMode else { return false }
         spawnPending = true
         spawnFolder = nil

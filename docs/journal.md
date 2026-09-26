@@ -12534,3 +12534,39 @@ measured wrongly:
   bind with a later clock than the row, so a row written *after* the bind (by construction) was
   reported 10 ms *before* it. The outbox is read first now, and both use the sample's clock.
 - **TD31**'s note said real speech is not held (TD3); since item 2 it is.
+
+
+## Fixes to the test plan's findings, batch 3 (2026-09-26)
+
+The third batch: the local model and the clocks that give up on a sentence too early or never at
+all — the cold model, the orphan flush, the helper's budgets, the flags that refuse a gesture in
+silence, and the settle's ceiling. Victor's decisions (*Decisions on the test plan's findings*) are
+the spec. Harness rows after the fix: `evals/plan/report-fix3.md` (routes) and `report-fix3b.md`
+(gestures and real audio, under the hands-off locks).
+
+### 1. A cold local model never delays him: the microphone opens, the audio waits
+
+Victor: *"eu nu trebuie să am nicio întârziere vizibilă în vorbă; trebuie să pot vorbi direct; le
+bufferizezi tu"* — *the microphone opens at the gesture even when the model is cold; the audio waits
+for the model, not the other way round. This replaces the banked gesture (`recordWhenSourceReady`).*
+
+- **`LocalWhisperSource.start` records whether or not `whisper.ready`**, with `bringUpModel()`
+  beside it, and `recordsOwnAudio` is now true for the local source too — the start gate in
+  `AppDelegate` was already `isReady || recordsOwnAudio` for the keyless cloud engine. The
+  fallback still excludes it (`source !== whisperSource`).
+- **At the stop the WAV waits for the weights** (`whenModelUp`): registered as the `Decode` first,
+  so a cancel in the wait disowns it exactly like a decode (batch 1's R2); polled every 0.5 s up to
+  the existing 90 s; a load that ends without the weights is tried once more, then the sentence
+  ends `.failed(audio:)` for *Recover*. The chip says `Transcribing...` throughout; the phase is
+  `transcribing("loading the model")`, so the settle and every start gate see words in flight. The
+  decode's clock (`DecodeRate`) starts after the wait.
+- **The banked gesture is gone whole**: `recordWhenSourceReady`, `bringUpSource` and its poll, the
+  `resumed:` start, and every reader (`onGestureSpawn`, `onWheelIdleDoubleSpawn`, `onCleanHold`'s
+  press and release, `convertDictationToSpawn`). What the bank cost, measured before
+  (`report-B1.md`, `report-B3b.md`): no cancel could reach it (TL22, TG3 — the microphone opened
+  2 s after F11), an engine switch opened the new engine's microphone with no gesture (TL22, TG41,
+  R7), and the resumed start forgot `clean` — a back click became a caret prompt with a context
+  shot and its second click the shutter (TG4). With nothing banked, all four are ordinary
+  sentences: F11 cancels, the switch is refused while it records, the back click stays clean.
+- `onCleanHold`'s press guard, which read the bank, now reads `phase.isWaitingForWords` instead
+  (item 5's rule, one line early).

@@ -48,9 +48,15 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   wheel hold on a model that is not up still call it — they are what retries a launch load that
   failed (no `mlx_whisper`, most likely) instead of leaving the relay deaf until restart.
   `RELAY_SHOOT` is excluded: that run draws the state pages and quits. → journal: *The recogniser*
-- **`recordWhenModelReady` is set only when the hold asked for the load.** A load started by a bind
-  is Victor pointing the relay at a terminal, a different sentence, and must not open the
-  microphone. → journal: *The recogniser*
+- **A cold model never delays the microphone** (2026-09-26, Victor: *"eu nu trebuie să am nicio
+  întârziere vizibilă în vorbă … le bufferizezi tu"*). `LocalWhisperSource.start` records whether or
+  not `ready` (`bringUpModel()` beside it; `recordsOwnAudio` is true), and at the stop the WAV waits
+  for the weights (`whenModelUp`: polled, 90 s, one retry of a failed load, phase
+  `transcribing("loading the model")`, chip `Transcribing...`), then decodes; a cancel in the wait
+  disowns it like a decode. The banked gesture (`recordWhenModelReady` → `recordWhenSourceReady`,
+  `bringUpSource`, the `resumed:` start) is gone: it could not be cancelled (TG3, TL22), survived
+  an engine switch (TG41) and lost the back click's `clean` (TG4). A load started by a bind still
+  opens no microphone. → journal: *Fixes to the test plan's findings, batch 3*
 - **The load shows as ⏳ in the menu bar only** (`⏳🤖`, `<model> — loading…` in its menu); nothing
   on the chip. `AppDelegate.setEngineLoading` is a one-liner into `StatusItem`. → journal: *The recogniser*
 - **`GET /engine` reports which model is loaded and whether it is ready** — enough for a test to

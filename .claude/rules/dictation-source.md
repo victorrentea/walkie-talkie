@@ -44,8 +44,10 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   model fails too (90 s to come up, or no words) does the old path run (WAV staged for *Recover*).
   A helper found dead by the fallback's own request (nil answer, `ready` false after it) is brought
   back up and asked once more (2026-09-26, TR10: it used to give up in 35 ms).
-  **No key records anyway** (the start gate is `isReady || recordsOwnAudio`). The settle waits up
-  to `fallbackCeiling` 180 s while `fallingBack`. ElevenLabs' `requestTimeout` is 20 s (was 45)
+  **No key records anyway** (the start gate is `isReady || recordsOwnAudio`), and **neither do the
+  local model's weights** (2026-09-26 — `recordsOwnAudio` is true for it too; the WAV waits for the
+  model at the stop, see `whisper-and-corpus.md`). The settle waits for as long as `fallingBack`
+  (no ceiling since 2026-09-26 — the fallback is bounded by the model's 90 s and 300 s). ElevenLabs' `requestTimeout` is 20 s (was 45)
   and a timeout is not retried. Measured: cold model + 3.5 s clip = 6.0 s
   (`POST /test/local-fallback {"wav"}`, which answers the result and delivers nothing).
 - **`engine(named:)` is one table read by the launch pick and the menu pick; anything unrecognised is

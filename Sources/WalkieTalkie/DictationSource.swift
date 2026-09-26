@@ -152,9 +152,10 @@ protocol DictationSource: AnyObject {
     var streamsLive: Bool { get }
 
     /// **Whether the WAV this source transcribes is the relay's own** — true for
-    /// the cloud engine. When it fails with that WAV in hand, the local model
-    /// transcribes it instead of the sentence being given up (2026-09-25); and
-    /// it may record while not `isReady` (no key), for the same reason.
+    /// the cloud engine and the local model. When the cloud engine fails with
+    /// that WAV in hand, the local model transcribes it instead of the sentence
+    /// being given up (2026-09-25); and either may record while not `isReady`
+    /// (no key; weights still loading — the WAV waits for them, 2026-09-26).
     var recordsOwnAudio: Bool { get }
 
     /// **The words heard so far, as the live recogniser has them right now** —

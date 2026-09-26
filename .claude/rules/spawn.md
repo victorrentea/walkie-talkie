@@ -67,12 +67,11 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   of `startLocalRecording` because everything below it can `return` and wait seconds for cold
   weights — and the menu was waiting with them, when its clock is his reading time.
   → journal: *The folder menu (2026-09-04)*
-- **Offered once per gesture.** A cold model makes `startLocalRecording` run twice for one press
-  (at the press, then when the weights land); the second run re-did the opening — the menu
-  re-appeared ten seconds in under the hovering hand with its clock restarted, and a folder he had
-  *already clicked* was wiped by the `spawnFolder` reset. The continuation passes `resumed: true`,
-  which keeps the choice and skips the offer (fixed 2026-09-04).
-  → journal: *The folder menu (2026-09-04)*
+- **Offered once per gesture.** A cold model used to make the start run twice for one press (at
+  the press, then when the weights landed), and the second run re-offered the menu and wiped a
+  folder already clicked — fixed 2026-09-04 with `resumed: true`. **Since 2026-09-26 there is no
+  second run at all**: a cold local model records at once and its WAV waits for the weights, so
+  `resumed` is gone. → journal: *The folder menu (2026-09-04)*, *Fixes to the test plan's findings, batch 3*
 - **3.5 s solid, then 1 s of fade (`solidSeconds`, `fadeSeconds`) — unless the hand is on it.**
   Two seconds was tried and is not long enough to read a half-dozen names, decide and travel while
   a sentence is being spoken. **Hovering suspends the clock**: the pointer arriving mid-fade brings

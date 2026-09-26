@@ -47,9 +47,18 @@ final class LocalWhisperSource: DictationSource {
     /// does; what it has not got is a *vocabulary* for what it is doing in the
     /// middle, which is why `DictationPhase`'s payload is a string and not an
     /// enum of Wispr's statuses. `warming` is the load, which is the source's own
-    /// business and is why nothing here is ever `warming`: `start()` refuses on a
-    /// cold model rather than opening a dictation against one.
+    /// business and is why nothing here is ever `warming`: the microphone opens
+    /// on a cold model too (2026-09-26), and the wait for the weights is part of
+    /// `transcribing` — after the stop, where it costs him nothing he can see.
     private(set) var phase: DictationPhase = .idle
+
+    /// **The WAV is ours, so the microphone may open before the weights are up**
+    /// (2026-09-26, Victor: *"eu nu trebuie să am nicio întârziere vizibilă în
+    /// vorbă; trebuie să pot vorbi direct; le bufferizezi tu"*). The same answer
+    /// the cloud engine gives, for the same reason — `AppDelegate`'s start gate
+    /// is `isReady || recordsOwnAudio`. It is never offered to the local
+    /// fallback: that is this model already (`fallBackToLocal`).
+    var recordsOwnAudio: Bool { true }
 
     /// For the menu bar's ⏳ and the About row — asked, never pushed, because
     /// the one moment the answer has to be right is the moment the row is drawn.
@@ -148,9 +157,16 @@ final class LocalWhisperSource: DictationSource {
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
-        guard whisper.ready else {
+        // **A cold model never delays the microphone** (2026-09-26). It used to
+        // refuse here, and `AppDelegate` banked the gesture and opened the
+        // microphone ten seconds later (`recordWhenSourceReady`) — ten seconds
+        // of a sentence he was already saying, a bank no cancel could reach
+        // (TL22, TG3) and a resumed start that forgot what the gesture was
+        // (TG4). Now the weights come up beside the recording and the WAV waits
+        // for them at the stop (`finishRecording`).
+        if !whisper.ready {
             bringUpModel()
-            return "the local model is still loading"
+            Log.info("🎙️ the local model is not up — recording anyway; the audio waits for it at the stop")
         }
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
         markersInAudio = false
@@ -204,15 +220,68 @@ final class LocalWhisperSource: DictationSource {
             return
         }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
+        let decode = Decode(wav: wav, duration: duration)
+        decoding = decode
+        // **The audio waits for the model, not the other way round** — see
+        // `start()`. Registered in `decoding` first, so a cancel in the wait
+        // disowns it exactly as it disowns a decode (batch 1's R2).
+        whenModelUp(decode) { [weak self] in self?.decodeNow(decode) }
+    }
 
+    /// Up to `modelWait`, polled on main (the load's own completion is
+    /// `bringUpModel`'s, and the gesture's start already asked for it). A load
+    /// that ends without the weights is tried once more, then the sentence ends
+    /// `.failed` with the WAV for *Recover*. The chip says `Transcribing...`
+    /// throughout; only the log and `phaseStatus` say what it is waiting on.
+    static let modelWait: TimeInterval = 90
+
+    private func whenModelUp(_ decode: Decode, _ go: @escaping () -> Void) {
+        guard !whisper.ready else { return go() }
+        phase = .transcribing("loading the model")
+        Log.info(String(format: "⏳ the local model is not up yet — the %.1fs recording waits for it (up to %.0f s)",
+                        decode.duration, Self.modelWait))
+        let asked = Date()
+        var retried = false
+        func poll() {
+            guard !decode.cancelled else { return }
+            if whisper.ready {
+                Log.info(String(format: "⏳ the local model came up %.1f s after the stop — decoding", Date().timeIntervalSince(asked)))
+                phase = .transcribing("")
+                return go()
+            }
+            if !loading {
+                // The load ended without the weights (or none was running).
+                guard !retried else {
+                    return fail(decode, lastLoadFailure.map { "the local model could not be loaded — \($0)" }
+                                    ?? "the local model could not be loaded")
+                }
+                retried = true
+                bringUpModel()
+            }
+            guard Date().timeIntervalSince(asked) < Self.modelWait else {
+                return fail(decode, "the local model did not come up in \(Int(Self.modelWait)) s")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
+        }
+        poll()
+    }
+
+    private func fail(_ decode: Decode, _ why: String) {
+        if decoding === decode { decoding = nil }
+        Log.error("local recording not transcribed — \(why); the audio is kept")
+        phase = .done("error")
+        didEnd?(.failed(why: why, audio: decode.wav, duration: decode.duration))
+    }
+
+    private func decodeNow(_ decode: Decode) {
+        guard !decode.cancelled else { return }
+        let wav = decode.wav, duration = decode.duration
         // What this decode actually costs, against the audio it was handed — the
         // pair `DecodeRate` learns the countdown's factor from. Started here
         // rather than inside `LocalWhisper`, because what the row promised covers
         // the whole round trip: the JSON out, the helper's answer, and the queue
-        // hop back.
+        // hop back. **After the wait for the weights**, which is not a decode.
         let decodeStartedAt = Date()
-        let decode = Decode(wav: wav, duration: duration)
-        decoding = decode
         whisper.transcribe(wav: wav.path) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -227,8 +296,13 @@ final class LocalWhisperSource: DictationSource {
                     // the same sentence lost if the file goes — so `.failed` with
                     // the audio, staged for *Recover*, where it used to be
                     // `.silent("No words detected")` and `removeItem`.
-                    let why = result == nil ? "the local model gave no answer" : DictationEnd.heardNothing
+                    let why = result == nil ? (self.whisper.lastFailure ?? "the local model gave no answer")
+                                            : DictationEnd.heardNothing
                     Log.error("local recording produced no transcript — \(why); the audio is kept")
+                    // **A helper that died or overran its budget is replaced now**
+                    // (2026-09-26, TL31), not at the next gesture: `readLine`
+                    // killed it, and the next sentence should find it warming.
+                    if result == nil, !self.whisper.ready { self.bringUpModel() }
                     self.phase = .done("empty")
                     self.didEnd?(.failed(why: why, audio: wav, duration: duration))
                     return
@@ -302,6 +376,10 @@ final class LocalWhisperSource: DictationSource {
         return nil
     }
 
+    /// Why the last load ended without the weights — the banner of a sentence
+    /// that waited for them (`whenModelUp`).
+    private var lastLoadFailure: String?
+
     func bringUpModel() {
         guard !loading, !whisper.ready else { return }
         loading = true
@@ -311,6 +389,7 @@ final class LocalWhisperSource: DictationSource {
                 guard let self else { return }
                 self.loading = false
                 self.onLoadingChanged?(false)
+                self.lastLoadFailure = why
                 if let why { Log.error("local model did not come up — \(why)") }
                 else { Log.info("local model ready — \(self.whisper.modelName ?? "?")") }
             }
