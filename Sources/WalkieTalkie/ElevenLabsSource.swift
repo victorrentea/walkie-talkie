@@ -332,6 +332,33 @@ final class ElevenLabsSource: DictationSource {
     /// is measured from.
     private var stoppedAt: Date?
 
+    /// **One upload in flight, and the way to disown it** (2026-09-26, the test
+    /// plan's R2: TL10, TG8, TG9). A cancel after the microphone closed used to
+    /// cancel nothing — `cancel()` returned on `!isRecording`, the reply landed
+    /// seconds later and was delivered after `🗑️ Cancelled`. Now the cancel marks
+    /// this handle, cancels the `URLSessionDataTask` (and any retry not yet
+    /// started), and ends the sentence `.cancelled` with the WAV, so *Recover
+    /// Cancelled Dictation* has it exactly as after a mid-recording cancel.
+    /// Whatever still answers is dropped on sight.
+    final class Upload {
+        let wav: URL
+        let duration: TimeInterval
+        private let lock = NSLock()
+        private var _cancelled = false
+        private var task: URLSessionDataTask?
+        init(wav: URL, duration: TimeInterval) { self.wav = wav; self.duration = duration }
+        var isCancelled: Bool { lock.withLock { _cancelled } }
+        func cancel() {
+            let t: URLSessionDataTask? = lock.withLock { _cancelled = true; return task }
+            t?.cancel()
+        }
+        /// Registers the attempt's task; false when the upload was cancelled first.
+        func adopt(_ t: URLSessionDataTask) -> Bool {
+            lock.withLock { task = t; return !_cancelled }
+        }
+    }
+    private var upload: Upload?
+
     func stop() {
         guard isRecording else { return }
         isRecording = false
@@ -372,9 +399,16 @@ final class ElevenLabsSource: DictationSource {
         Log.info(String(format: "🎙️ recording stopped — %.1fs, uploading to ElevenLabs", duration))
 
         let startedAt = Date()
-        Self.transcribe(wav: wav, key: key) { [weak self] outcome in
+        let upload = Upload(wav: wav, duration: duration)
+        self.upload = upload
+        Self.transcribe(wav: wav, key: key, upload: upload) { [weak self] outcome in
             DispatchQueue.main.async {
                 guard let self else { return }
+                if self.upload === upload { self.upload = nil }
+                guard !upload.isCancelled else {
+                    Log.info("🗑️ ElevenLabs answered a cancelled upload — dropped")
+                    return
+                }
                 let elapsed = Date().timeIntervalSince(startedAt)
                 switch outcome {
                 case .failure(let why):
@@ -412,6 +446,15 @@ final class ElevenLabsSource: DictationSource {
     }
 
     func cancel() {
+        // **The microphone is shut and the words are on their way** — the upload
+        // is this sentence now, and a cancel disowns it (`Upload`).
+        if !isRecording, let up = upload {
+            upload = nil
+            up.cancel()
+            phase = .done("dismissed")
+            didEnd?(.cancelled(audio: up.wav, duration: up.duration))
+            return
+        }
         guard isRecording else { return }
         isRecording = false
         phase = .done("dismissed")
@@ -554,7 +597,9 @@ final class ElevenLabsSource: DictationSource {
     }
 
     static func transcribe(wav: URL, key: String, attempt: Int = 0, purpose: String = "final",
-                           _ done: @escaping (Outcome) -> Void) {
+                           upload: Upload? = nil, _ done: @escaping (Outcome) -> Void) {
+        // A cancelled upload asks nothing more of the network — not even the retry.
+        if upload?.isCancelled == true { return }
         let boundary = "walkie-\(UUID().uuidString)"
         var body = Data()
         func field(_ name: String, _ value: String) {
@@ -594,6 +639,9 @@ final class ElevenLabsSource: DictationSource {
         req.httpBody = body
 
         func settle(_ data: Data?, _ response: URLResponse?, _ error: Error?) {
+            // Disowned: the cancel already ended the sentence, and a cancelled
+            // task's `URLError.cancelled` must not be taken for a retriable failure.
+            if upload?.isCancelled == true { return }
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             // **A timeout is not retried** (2026-09-25): a connection that hung
             // for `requestTimeout` will not answer 0.8 s later, and the local
@@ -603,7 +651,7 @@ final class ElevenLabsSource: DictationSource {
             if retriable, attempt == 0 {
                 Log.error("ElevenLabs attempt 1 failed (\(error?.localizedDescription ?? "HTTP \(code)")) — retrying")
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-                    transcribe(wav: wav, key: key, attempt: 1, purpose: purpose, done)
+                    transcribe(wav: wav, key: key, attempt: 1, purpose: purpose, upload: upload, done)
                 }
                 return
             }
@@ -660,7 +708,9 @@ final class ElevenLabsSource: DictationSource {
             }
             return
         }
-        URLSession.shared.dataTask(with: req) { data, response, error in settle(data, response, error) }.resume()
+        let task = URLSession.shared.dataTask(with: req) { data, response, error in settle(data, response, error) }
+        if let upload, !upload.adopt(task) { return }
+        task.resume()
     }
 
     /// The live socket's own state, for `GET /test/state.live` (gap G7).

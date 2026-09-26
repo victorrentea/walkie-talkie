@@ -211,9 +211,16 @@ final class LocalWhisperSource: DictationSource {
         // the whole round trip: the JSON out, the helper's answer, and the queue
         // hop back.
         let decodeStartedAt = Date()
+        let decode = Decode(wav: wav, duration: duration)
+        decoding = decode
         whisper.transcribe(wav: wav.path) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                if self.decoding === decode { self.decoding = nil }
+                guard !decode.cancelled else {
+                    Log.info("🗑️ the local model answered a cancelled decode — dropped")
+                    return
+                }
                 guard let r = result, !r.text.isEmpty else {
                     Log.error("local recording produced no transcript")
                     try? FileManager.default.removeItem(at: wav)
@@ -242,7 +249,26 @@ final class LocalWhisperSource: DictationSource {
         }
     }
 
+    /// **The decode in flight, and the way to disown it** (2026-09-26, R2 — the
+    /// same as `ElevenLabsSource.Upload`). The helper cannot be interrupted, so a
+    /// cancel after the close marks this, ends the sentence `.cancelled` with the
+    /// WAV for *Recover*, and the answer is dropped when it comes. Main queue only.
+    private final class Decode {
+        let wav: URL
+        let duration: TimeInterval
+        var cancelled = false
+        init(wav: URL, duration: TimeInterval) { self.wav = wav; self.duration = duration }
+    }
+    private var decoding: Decode?
+
     func cancel() {
+        if !isRecording, let d = decoding {
+            decoding = nil
+            d.cancelled = true
+            phase = .done("dismissed")
+            didEnd?(.cancelled(audio: d.wav, duration: d.duration))
+            return
+        }
         guard isRecording else { return }
         isRecording = false
         phase = .done("dismissed")

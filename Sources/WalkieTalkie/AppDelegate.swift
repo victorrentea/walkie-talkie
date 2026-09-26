@@ -556,6 +556,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let fallbackCeiling: TimeInterval = 180
     /// A local transcription is standing in for the engine that failed.
     private var fallingBack = false
+    /// **Which fallback is current, and its recording** (2026-09-26, R2 — TL11).
+    /// A cancel bumps the token and keeps the WAV for *Recover*; the local
+    /// model's answer, when it comes, carries the old token and is dropped.
+    private var fallbackToken = 0
+    private var fallbackAudio: (wav: URL, duration: TimeInterval)?
+    /// **The transcript on its way belongs to a sentence he cancelled**
+    /// (2026-09-26, R2 — TL10, TG8, TG9). Set by `cancelDictationInFlight` in the
+    /// settle, i.e. after the microphone closed; `deliver` drops what arrives
+    /// under it. The sources disown their own reply first (`ElevenLabsSource.Upload`,
+    /// `LocalWhisperSource.Decode`, Wispr's `discardOnArrival`); this is the net
+    /// under all three. Cleared by the next sentence's first edge.
+    private var transcriptDisowned = false
     /// The last `.failed` end, for `GET /test/state.lastFailure` (gap G7).
     private var lastFailure: (why: String, engine: String, at: Date)?
 
@@ -2782,6 +2794,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t0 = CFAbsoluteTimeGetCurrent()
         guard !listening, !speculative else { return }
         speculative = true
+        transcriptDisowned = false
         endSettling(reason: "a new dictation started", quiet: true)
         syncBorrowedGestures()
         Log.info(String(format: "⚡ ring up %.1f ms after %@ (speculative — waiting for the microphone)",
@@ -2804,6 +2817,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // came back empty must not ride along on the next.
         kamikaze = false
         speculative = false
+        transcriptDisowned = false
         endSettling(reason: "a new dictation started", quiet: true)
 
         // **The microphone half of the mark is re-read here** (2026-09-19), not
@@ -3129,6 +3143,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ result: DictationResult) {
+        guard !transcriptDisowned else {
+            transcriptDisowned = false
+            Log.info("🗑️ a transcript arrived for the sentence cancelled in flight — dropped, nothing delivered")
+            if let wav = result.audio { keepCancelled(wav: wav, duration: result.duration) }
+            return
+        }
         var result = result
         // **The spoken markers come out of the words first of all, and before
         // the corpus** (2026-09-14). The relay's own recording is on the physical
@@ -3305,6 +3325,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastFailure = (why, engineId, Date())
         let failed = source.name
         fallingBack = true
+        fallbackToken += 1
+        let token = fallbackToken
+        fallbackAudio = (wav, duration)
         Log.error("↪️ \(why) — transcribing the \(String(format: "%.1f", duration))s recording on this Mac instead")
         DecodeRate.activeEngine = DecodeRate.whisperLocal
         overlay.setEngineMark(Self.mark(engine: "whisper"))
@@ -3312,6 +3335,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setTranscribing(true, audio: duration)
         transcribeLocally(wav: wav, duration: duration, standingInFor: failed) { [weak self] result in
             guard let self else { return }
+            guard token == self.fallbackToken else {
+                Log.info("🗑️ the local model answered a fallback that was cancelled — dropped")
+                return
+            }
+            self.fallbackAudio = nil
             self.fallingBack = false
             self.overlay.setEngineMark(Self.mark(engine: self.engineId))
             guard let result else {
@@ -4049,9 +4077,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // protocol, keyed on the source having been idle *before* the call so an
         // ordinary cancel still takes its ordinary path.
         let sourceWasIdle = !source.isRecording && !speculative
+        // **The words may already be on their way** (2026-09-26, R2): after the
+        // microphone closed a cancel used to cancel nothing — `🗑️ Cancelled`,
+        // then the words landed. Disowned here before the source is told, so
+        // whatever still arrives is dropped (`deliver`, the fallback's token),
+        // and the recording goes to *Recover* like a mid-sentence cancel.
+        let inFlight = settling || fallingBack
+        if inFlight {
+            transcriptDisowned = true
+            Log.info("🗑️ cancelled in flight (\(fallingBack ? "the local model is standing in" : source.phase.status.isEmpty ? "transcribing" : source.phase.status)) — the transcript on its way is disowned")
+        }
+        if fallingBack {
+            fallingBack = false
+            fallbackToken += 1
+            overlay.setEngineMark(Self.mark(engine: engineId))
+            if let kept = fallbackAudio { keepCancelled(wav: kept.wav, duration: kept.duration) }
+            fallbackAudio = nil
+        }
         source.cancel()
         if sourceWasIdle {
-            Log.info("🗑️ …and the recogniser had nothing to cancel — putting the ring down here")
+            if !inFlight { Log.info("🗑️ …and the recogniser had nothing to cancel — putting the ring down here") }
             // `quiet`, because `endSettling`'s ordinary line is `✍️ the words
             // landed` and they did not — this is the wait being abandoned.
             if settling { endSettling(reason: "cancelled with no recogniser behind it", quiet: true) }

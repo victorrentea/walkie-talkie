@@ -149,6 +149,13 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
 
 ## Cancel during the settle
 
+- **A cancel after the microphone closed disowns the transcript in flight** (2026-09-26, R2).
+  ElevenLabs cancels its upload (`ElevenLabsSource.Upload`, task + retry), the local source marks
+  its decode (`LocalWhisperSource.Decode`), both end `.cancelled(audio:)` so the WAV goes to
+  Recover; `AppDelegate.transcriptDisowned` makes `deliver` drop anything that still arrives and
+  `fallbackToken` drops a fallback's late answer. Before, `🗑️ Cancelled` was followed by the words
+  (TL10, TL11, TG8, TG9). → journal: *Fixes to the test plan's findings, batch 1*
+
 - **Never disarm while Wispr may still paste.** A cancel sets `discardOnArrival`: whatever arrives
   (⌘V, row, note, or nothing by `captureTimeout`) is swallowed and dropped. `cancel()` calls
   `state.reset`; `pollHistory` does not feed `sawRow` while discarding.

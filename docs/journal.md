@@ -12286,3 +12286,26 @@ at its prompt."*
 - `deliverToTerminal` now runs on one serial queue (`deliveryQueue`) instead of the concurrent
   global one, so two sentences committed back to back are typed in order.
 
+### 2. Cancel cancels a sentence whose words are already on their way
+
+The test plan's §3.2 / R2: *"Cancel during upload/decode/fallback cancels nothing … "🗑️ Cancelled",
+then the words land."* The nearest decision is Q6 — *"cancel (🔼←, ✕, menu) while the prompt panel
+is held: cancels the panel"* — cancel means the sentence goes, wherever it has got to.
+
+- **The sources disown their own reply.** `ElevenLabsSource.Upload` is the upload in flight:
+  `cancel()` after the close marks it, cancels the `URLSessionDataTask` (and stops the retry from
+  starting — a cancelled task's `URLError.cancelled` would otherwise read as retriable), and ends
+  the sentence `.cancelled(audio: wav)`. `LocalWhisperSource.Decode` does the same for the local
+  model, whose helper cannot be interrupted — its answer is dropped when it comes.
+- **`AppDelegate` is the net under all of them.** `cancelDictationInFlight` in the settle sets
+  `transcriptDisowned` (cleared by the next sentence's first edge — `dictationMaybeBeginning` or
+  `dictationBegan`, so a Wispr sentence confirmed only by its row is not caught by a stale flag),
+  and `deliver` drops what arrives under it, WAV to Recover. The local fallback carries a token
+  (`fallbackToken`); a cancel bumps it and keeps `fallbackAudio` for Recover, and the answer that
+  comes back with the old token is dropped. One line says it: `🗑️ cancelled in flight (<phase>) —
+  the transcript on its way is disowned`.
+- The audio goes to `cancelled/` exactly as after a mid-recording cancel (`keepCancelled`).
+- Before (`report-C1.md`, `report-C3.md`): TL10, TL11, TG8, TG9 all *cancelled, then delivered*.
+  After: no delivery, `of audio kept`, recoverable (TL11 in `report-fix1c.md`: the first run
+  skipped it because the helper was down).
+
