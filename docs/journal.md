@@ -12220,3 +12220,33 @@ nu cuvânt cu cuvânt."* Then: *"fă-mi un video să-mi arăți cum se vede acum
   read `ERASE_AFTER = 5.0`. `docs/test-plan.md` §LC says 5.0.
 - The demo video Victor asked for: `/tmp/wt-caption-demo.mp4` (20 s of the top strip, fed
   through `POST /test/live-caption` at 0.4 s/word, last 3 words partial).
+
+## Decisions on the test plan's findings (2026-09-26, 15:00, Victor)
+
+After phases A–C of `docs/test-plan.md` (reports in `evals/plan/report-*.md`), Victor answered the
+open questions. These rule every fix that follows; the later date wins over older rules.
+
+- **Q1 — nothing bound → the sentence is HELD** (*"bind to send memory"*), never pasted at the
+  caret. **A visual cue must say a sentence is waiting in memory** (*"mi-ar trebui un cue vizual să
+  știu că trebuie să las mesajul din memorie"*). The chip's `bind to send` and the code's caret
+  latch (`latchedAtCaret`, AD ~2884) disagreed; the chip was right.
+- **Q2 — a bind during transcription/panel does NOT redirect: the recipient is the terminal that
+  was bound while he spoke** (*"vechi, ca poate vreau să deschid altă dictare deja"*). And the
+  larger wish behind it: **dictations independent of transcriptions in flight** — he should be
+  able to start the next sentence while the previous one is still transcribing; the app queues
+  them and delivers in order (*"să le bufferizeze cumva ele în spate și să le trimită pe rând"*).
+- **Q3 — two held sentences: BOTH are kept** (a queue, delivered in order), never the last only.
+- **Q4 — a dead terminal at delivery: paste at the caret** (not held).
+- **Q5 — `ssh` / `sudo -s` / `script` / a pager in the bound terminal: REFUSE**, like a shell at
+  its prompt.
+- **Q6 — cancel (🔼←, ✕, menu) while the prompt panel is held: cancels the panel.**
+- **Q7 — F8 on a caret sentence: stays ignored** (no conversion, no flash).
+- **The local model must never delay him** (*"eu nu trebuie să am nicio întârziere vizibilă în
+  vorbă; trebuie să pot vorbi direct; le bufferizezi tu"*): the microphone opens at the gesture
+  even when the model is cold; the audio waits for the model, not the other way round. This
+  replaces the banked gesture (`recordWhenSourceReady`).
+- **Switching dictation modes mid-sentence should work wherever it can** (*"ar trebui să pot
+  alterna între aceste moduri de dictare în timpul dictării, atât cât se poate … las pe tine să
+  decizi exact cum și ce"*).
+- ToS of Wispr Flow §3.B (training on its output): *"îmi asum riscul"* — the teacher batch
+  continues, on the Mac tonight and in a VM later.
