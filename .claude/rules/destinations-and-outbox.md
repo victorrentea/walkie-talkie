@@ -33,8 +33,8 @@ Rules for where a dictation goes and when it is written: the held prompt, the ou
   | the outbox line | not written | **written at delivery, not before** |
   | `corpus.captureLocal` | on | on |
 
-- **`awaitingBind` holds one sentence, not a queue.** A second dictation replaces the first; the replaced one is not lost, ⌘⌃P still pastes it because `lastDictation` is set above the hold. → journal: *`awaitingBind`: one sentence, five minutes*
-- **Five minutes**, the same net as `Recover Cancelled Dictation`. On expiry the chip says `⏳ held dictation expired — ⌘⌃P to paste it`; the alternative is a sentence he believes is still on its way. → journal: *`awaitingBind`: one sentence, five minutes*
+- **`awaitingBind` is a queue, delivered in order** (Victor's Q3, 2026-09-26: *both are kept*). It held one sentence until then and a second replaced the first silently (TD2). `releaseAwaitingBind` commits every held sentence oldest first; the serial delivery queue keeps the typing order. → journal: *Fixes to the test plan's findings, batch 1*
+- **Five minutes per sentence**, the same net as `Recover Cancelled Dictation`. On expiry the chip says `⏳ held dictation expired — ⌘⌃P to paste it`; the alternative is a sentence he believes is still on its way. → journal: *`awaitingBind`: one sentence, five minutes*
 - **Release it from `showBound`, deliberate or not.** Every route into a binding passes through it (⌘⌃B, the chords, `POST /bind`, the restart's restore, a spawned window adopting itself). Unlike the spawn and caret take-backs, the poll cannot produce a binding out of nothing, so it can never be the call that releases this. → journal: *`awaitingBind`: one sentence, five minutes*
 - **The chip says `⏳ bind to send — ⌘⌃B` while he talks**, in the destination row, naming the *gesture*; it comes down the moment a bind lands. → journal: *`awaitingBind`: one sentence, five minutes*
 - **`syncLocalCapture`'s cost is outside this app.** With **Mouse Gestures: Wheel** the wheel is the relay's for as long as the relay runs — middle-click stops opening links in Chrome and closing tabs in VS Code (*"folosesc middle click sa inchid de ex taburi chrome/vsc"*). In the default mode it costs nothing. The line to put back to `isBound` is one, named in `syncLocalCapture`'s own comment. The unbound double-click branch at the bottom of `HotkeyTap`'s middle-button chain is unreachable now and is left standing for the flip back. → journal: *The one gate whose price is outside this app*
@@ -108,4 +108,4 @@ tokens where he made them (2026-09-19)*.
 
 - **Do not reintroduce pause**, and do not make `holdsForBind` a menu tick — a tick for it would be pause under another name. → journal: *Pause still does not come back*
 - **Do not reintroduce a typing affordance** on the overlay's surface. → journal: *Scope: dictation helper only*
-- Do not write the outbox line before delivery, and do not turn `awaitingBind` into a queue.
+- Do not write the outbox line before delivery, and do not let a held sentence replace another.

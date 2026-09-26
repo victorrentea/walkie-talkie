@@ -3966,10 +3966,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// spoken or being transcribed, or already gone somewhere (nothing to do).
     private func spawnAfterFailedPick(tty: String, folder: String?, held: Bool) {
         Log.error("🖥️ \(tty) could not be bound — the sentence stays a new session")
-        if held, var m = awaitingBind {
-            awaitingBind = nil
-            awaitingBindExpiry?.cancel()
-            awaitingBindExpiry = nil
+        // The held sentence is the pick's own — the newest in the queue; any
+        // older ones keep waiting for a bind.
+        if held, let h = awaitingBind.popLast() {
+            h.expiry.cancel()
+            var m = h.m
             m.spawn = true
             m.directory = folder ?? Self.spawnDirectory
             overlay.flash("⚠️ no terminal on \(tty) — opened a new session", duration: 4)
@@ -5454,9 +5455,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // what the words have been waiting for is a terminal — not a particular
         // gesture. Dispatched rather than called inline: `showBound` runs on the
         // bind's own thread and a delivery is `osascript`.
-        if awaitingBind != nil {
-            DispatchQueue.main.async { [weak self] in self?.releaseAwaitingBind() }
-        }
+        // Unconditionally dispatched: `awaitingBind` is main-thread state and this
+        // may run on the bind's thread; `releaseAwaitingBind` checks on main.
+        DispatchQueue.main.async { [weak self] in self?.releaseAwaitingBind() }
     }
 
     /// Write the marker the status line reads — see `Outbox.publishBound`.
@@ -5552,7 +5553,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "pasteMode": pasteMode,
             "atCaret": latchedAtCaret,
             "spawnPending": spawnPending,
-            "awaitingBind": awaitingBind != nil,
+            "awaitingBind": !awaitingBind.isEmpty,
+            "awaitingBindCount": awaitingBind.count,
             "source": source.name,
             "wrapWispr": wisprSource.wrapWispr,
             "wrapMode": wisprSource.wrapMode.rawValue,
@@ -8040,7 +8042,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if wisprHearing || wisprSource.capturing { why.append("Wispr sentence") }
         if settling || source.phase.isWaitingForWords { why.append("transcribing") }
         if overlay?.isHoldingPrompt ?? false { why.append("prompt on screen") }
-        if awaitingBind != nil { why.append("held for a bind") }
+        if !awaitingBind.isEmpty { why.append("held for a bind") }
         if deliveriesInFlight > 0 || caretHalo.delivering { why.append("delivering") }
         if film != nil { why.append("filming") }
         return why
@@ -8617,19 +8619,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gesture outright (*Unbound is inert*), which meant the thought had to
     /// survive the trip to the terminal in his head instead.
     ///
-    /// **One, not a queue.** A second dictation replaces the first, exactly as a
-    /// second cancel replaces the cancelled recording that is being kept: the
-    /// chip says *the* sentence being held, and a relay that had to ask which of
-    /// three to deliver would be asking a question nobody has. The one it
-    /// replaces is not lost to him — ⌘⇧P still pastes it.
+    /// **A queue, delivered in order** (Victor's Q3, 2026-09-26: *two held
+    /// sentences — both are kept*). It was one sentence until then — a second
+    /// dictation replaced the first, silently (TD2: the bind delivered BRAVO and
+    /// ALFA was gone; ⌘⇧P had it, and nobody was told). Each sentence keeps its
+    /// own five minutes.
     ///
     /// **Five minutes**, the same net `Recover Cancelled Dictation` is kept
     /// under and for the same reason: long enough to cross the room and open a
     /// terminal, short enough that a sentence from this morning cannot land in
     /// an agent he binds this afternoon for something else. A held message
     /// arriving in the wrong session is worse than one he has to say again.
-    private var awaitingBind: Message?
-    private var awaitingBindExpiry: DispatchWorkItem?
+    private struct Held {
+        let id: Int
+        var m: Message
+        let expiry: DispatchWorkItem
+    }
+    private var awaitingBind: [Held] = []
+    private var heldSerial = 0
     private static let bindWait: TimeInterval = 5 * 60
 
     /// `quietly`: the bind is already on its way (an *Active Terminals* pick),
@@ -8639,44 +8646,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // were going has nothing left to say — the flash below says the rest,
         // and after it the chip goes back to being a chip with nothing bound.
         overlay.setSpawnDestination(nil)
-        awaitingBindExpiry?.cancel()
-        awaitingBind = m
-        let words = (m.text ?? "").split(whereSeparator: { $0.isWhitespace }).count
-        Log.info("⏳ nothing bound — holding \(words) words for the next bind, \(Int(Self.bindWait / 60)) min")
+        heldSerial += 1
+        let id = heldSerial
         let expiry = DispatchWorkItem { [weak self] in
-            guard let self = self, self.awaitingBind != nil else { return }
-            self.awaitingBind = nil
-            Log.info("⏳ held dictation expired — never bound")
+            guard let self = self, let i = self.awaitingBind.firstIndex(where: { $0.id == id }) else { return }
+            self.awaitingBind.remove(at: i)
+            Log.info("⏳ held dictation expired — never bound (\(self.awaitingBind.count) still held)")
             // Said out loud, because the alternative is a sentence he believes
             // is still going to arrive somewhere. ⌘⇧P is the way back to it.
             self.overlay.flash("⏳ held dictation expired — ⌘⇧P to paste it", duration: 4)
         }
-        awaitingBindExpiry = expiry
+        awaitingBind.append(Held(id: id, m: m, expiry: expiry))
+        let words = (m.text ?? "").split(whereSeparator: { $0.isWhitespace }).count
+        let n = awaitingBind.count
+        Log.info("⏳ nothing bound — holding \(words) words for the next bind, \(Int(Self.bindWait / 60)) min"
+                 + (n > 1 ? " (\(n) sentences held, delivered in order)" : ""))
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
-        if !quietly { overlay.flash("⏳ held — bind a terminal to send it", duration: 3) }
+        if !quietly {
+            overlay.flash(n > 1 ? "⏳ \(n) held — bind a terminal to send them"
+                                : "⏳ held — bind a terminal to send it", duration: 3)
+        }
     }
 
     /// Called from `showBound`, which is the one place every route into a
     /// binding passes through — ⌘⌃B, the chords, `POST /bind`, the restart's
     /// restore and a spawned window adopting itself. All of them are a terminal
-    /// appearing, which is the only thing the held sentence was waiting for.
+    /// appearing, which is the only thing the held sentences were waiting for.
     ///
     /// **Deliberate or not.** The 10s poll calls `showBound` with a binding
     /// already in place and passes `false`, which is what stops it stealing a
     /// spawn's destination — but it cannot produce a binding out of nothing, so
     /// it can never be the call that releases this. Any call that arrives with a
     /// target when there was none is a bind that happened.
+    ///
+    /// **All of them, oldest first** (Q3). `deliverToTerminal` runs on one serial
+    /// queue, so the order they are committed in is the order they are typed.
     private func releaseAwaitingBind() {
-        guard let m = awaitingBind, isBound else { return }
-        awaitingBind = nil
-        awaitingBindExpiry?.cancel()
-        awaitingBindExpiry = nil
-        Log.info("⏳ bound — sending the sentence that was waiting")
+        guard !awaitingBind.isEmpty, isBound else { return }
+        let held = awaitingBind
+        awaitingBind = []
+        for h in held { h.expiry.cancel() }
+        Log.info("⏳ bound — sending the \(held.count == 1 ? "sentence" : "\(held.count) sentences") that \(held.count == 1 ? "was" : "were") waiting")
         // Through `commit` again rather than straight to `deliverToTerminal`:
         // the outbox line has still not been written, and writing it is the
         // first half of what a delivery is.
-        commit(m)
-        overlay.flash("🎙️ sent — the sentence you were holding", duration: 3)
+        for h in held { commit(h.m) }
+        overlay.flash(held.count == 1 ? "🎙️ sent — the sentence you were holding"
+                                      : "🎙️ sent — the \(held.count) sentences you were holding", duration: 3)
     }
 
     /// **⌘⇧P — the last dictation, again, wherever the caret is.**

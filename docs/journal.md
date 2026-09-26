@@ -24,6 +24,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *`PasteHint` — `⌘⇧P`, said once and faintly* (2026-09-22; recorded in `.claude/rules/replace-wispr-and-halo.md`, not here) — superseded 2026-09-23: the hint follows **every** delivered sentence (caret, bound, spawn, a held sentence's release, Wispr's routed ones) plus a cancelled prompt, at **0.80 for 2.5 s then a 0.5 s fade**, where it was caret and cancelled prompt only, at 0.20, 0.8 s up / 1.2 s down. Victor: *"indiferent prin ce mecanism am închis o dictare … uneori îl plasez greșit, lasă-mă să-mi amintesc constant"*
 - *What a caret dictation carries* (2026-09-08) and 2026-09-19's *no initial screenshot at the caret* — superseded 2026-09-23 for the **forward click**: its caret sentence is the whole terminal envelope (context frame, `[Dictated in RO or EN]`) and is submitted into a Claude Code prompt; the back click's sentence is the words alone, at the caret even when bound (*Forward is a prompt, back is plain words*)
 - *The spawn menu offers five open terminals* (2026-09-23, morning; recorded in `.claude/rules/spawn.md`, not here) — superseded the same evening by *Active Terminals: the spawn menu's first row*: the terminals moved from a third half under the folders to a hover submenu on the menu's first row, filled from the Claude Code sessions running on the machine rather than from the bind log
+- *`awaitingBind`: one sentence, five minutes* — superseded 2026-09-26 by Victor's Q3: a queue, every held sentence delivered in order on the next bind, five minutes each (*Fixes to the test plan's findings, batch 1*)
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -12334,4 +12335,14 @@ spoke) used to end with a `delivered` row for the dead tty and the words nowhere
 changed, not the decision:** it accepted *held or pasted*; it now asserts `to=caret` and the words
 in the relay's own sink window made key first — which takes the front, so TR20 is tagged
 `gesture` and runs only under the hands-off locks.
+
+#### (c) Held sentences are a queue
+
+Victor, Q3: *"two held sentences: **BOTH are kept** (a queue, delivered in order), never the last
+only."* `awaitingBind` is `[Held]`, each with its own five-minute expiry; `releaseAwaitingBind`
+commits all of them oldest first (the serial delivery queue keeps the typing order), the flash
+counts them, and `GET /test/state` gains `awaitingBindCount` beside the `awaitingBind` bool. An
+*Active Terminals* pick that fails takes back only its own (newest) sentence. TD2: ALFA was
+silently replaced by BRAVO; now both land, ALFA first. This supersedes *`awaitingBind`: one
+sentence, five minutes* (the five minutes stay, per sentence).
 
