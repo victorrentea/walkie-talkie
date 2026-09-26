@@ -163,6 +163,18 @@ protocol DictationSource: AnyObject {
     /// earlier one. A caption only: what is *delivered* still arrives through
     /// `didTranscribe`, from the recording.
     var didHearLive: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)? { get set }
+
+    /// **The live session of the sentence being recorded is up** (2026-09-26,
+    /// batch 5, TL30) — the moment the caption band may open. Never called for
+    /// a sentence with no stream (no key, a socket that never opened), so the
+    /// band does not sit open and empty for one. `liveOpen` is the same fact
+    /// for a sentence that begins after it (a warm socket).
+    var didOpenLive: (() -> Void)? { get set }
+    var liveOpen: Bool { get }
+
+    /// The engine was put down for another: let go of anything held open for
+    /// the next sentence (the live row's warm socket).
+    func release()
 }
 
 /// **One token of a transcript, with the moment it was said** (2026-09-19).
@@ -370,4 +382,10 @@ extension DictationSource {
         get { nil }
         set {}
     }
+    var didOpenLive: (() -> Void)? {
+        get { nil }
+        set {}
+    }
+    var liveOpen: Bool { false }
+    func release() {}
 }

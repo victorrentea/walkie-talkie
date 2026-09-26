@@ -71,7 +71,7 @@ final class ElevenLabsLive {
     /// `GET /test/state.live` (gap G7).
     func describe() -> [String: Any] {
         queue.sync {
-            ["socket": closed ? "closed" : (open ? "open" : (task == nil ? "never-opened" : "connecting")),
+            ["socket": socket.rawValue, "attached": attached,
              "chunksSent": chunksSent, "pending": pending.count,
              "seconds": Double(pcm.count) / 32_000, "cutSeconds": Double(cutByte) / 32_000,
              "segments": segments.count, "correctedSegments": correctedSegments, "corrections": corrections,
@@ -122,14 +122,68 @@ final class ElevenLabsLive {
     /// the ones a caption most needs.
     private var pending: [Data] = []
     private var open = false
-    private var closed = false
+    private var closed: Bool { socket == .closed }
     /// Segments the server committed, in order; a batch correction collapses
     /// the span it covered into one.
     private var segments: [String] = []
     private var partial = ""
 
-    /// Opens the socket. Called on the main queue at `start()`.
-    func start(key: String, language: String?) {
+    // MARK: - The socket, warm before the sentence (2026-09-26, batch 5)
+
+    /// **The socket is opened before the sentence, not at it** (the test
+    /// plan's B1: the first caption word came 5.31 s after speech started). The
+    /// handshake itself is 0.3 s from a script on this Mac, but in the app it
+    /// took 0.3–4 s (`session open, 39 chunk(s) caught up` at 13:31:30, 25 at
+    /// 13:32:27, none at all in two runs), all of it on the path to the first
+    /// word. So `ElevenLabsSource` keeps one socket open and idle, and a
+    /// sentence *attaches* to it: its first buffer goes out at once.
+    ///
+    /// **An idle session is closed by the server after 15.5 s** (probed
+    /// 2026-09-26: code 1000, no message; WebSocket pings every 4 s did not
+    /// keep it), **and an empty `input_audio_chunk` every 4 s kept one open
+    /// for over 200 s** with no error. So the warm socket sends one every
+    /// `keepAlive` seconds — no audio, and ElevenLabs bills speech to text by
+    /// *"the duration of the audio sent for transcription"* (docs, *Speech to
+    /// Text* overview, read 2026-09-26) — nothing to bill. That sentence is the
+    /// whole of what the docs say on it: the key has no `user_read` to read the
+    /// usage counter back, so it is the docs' word, not a measurement. The
+    /// cost that is certain is a held connection, so it is bounded:
+    /// `warmWindow` after the engine was picked or the last sentence ended, it
+    /// closes and the next sentence connects cold, as before.
+    static let keepAlive: TimeInterval = 5
+    static var warmWindow: TimeInterval {
+        let raw = ProcessInfo.processInfo.environment["WT_ELEVEN_LIVE_WARM"] ?? ElevenLabsSource.config["WT_ELEVEN_LIVE_WARM"]
+        return raw.flatMap(Double.init) ?? 15 * 60
+    }
+    /// **At most this much audio waits for a socket that is not up** — the
+    /// newest, ~5.5 s at 85 ms a buffer. It grew without bound while a socket
+    /// never opened (TL30: 70 chunks in 6 s, and on).
+    static let pendingCap = 64
+
+    private enum Socket: String { case idle = "never-opened", connecting, open, reconnecting, down, closed }
+    private var socket: Socket = .idle
+    /// A sentence owns this socket: audio flows, the text reaches the band.
+    private var attached = false
+    private var warmSince = CACurrentMediaTime()
+    private var request: URLRequest?
+    private var languagesLine = ""
+    /// One reconnect per sentence after a drop (TL29).
+    private var reconnects = 0
+    private var warmFailures = 0
+    private var cappedLogged = false
+    private var sentBytes = 0
+    /// Main queue: the session is open *and* a sentence owns it. The band opens
+    /// on this (TL30: it used to open at the gesture and sit empty, for a
+    /// socket that never came up or with no key at all).
+    var onOpen: (() -> Void)?
+    /// Main queue: the warm socket gave up (its window ran out, or it could not
+    /// be kept up); the next sentence connects cold.
+    var onGone: (() -> Void)?
+    var isAttached: Bool { queue.sync { attached } }
+
+    /// Opens the socket. Main queue — at `prepare()` and after every sentence
+    /// (warm), or at `start()` when no warm one is up (cold).
+    func connect(key: String, language: String?) {
         var parts = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")!
         var query = [URLQueryItem(name: "model_id", value: Self.model),
                      URLQueryItem(name: "audio_format", value: "pcm_16000"),
@@ -137,8 +191,6 @@ final class ElevenLabsLive {
                      URLQueryItem(name: "vad_silence_threshold_secs", value: String(Self.vadSilence))]
         let terms = Self.keyterms()
         for term in terms { query.append(URLQueryItem(name: "keyterms", value: term)) }
-        self.key = key
-        self.keytermCount = terms.count
         // **The caption is pinned to his two languages** (2026-09-26, after a
         // sentence came back Turkish): `language_code` is the first of
         // `languages`, the rest go as `secondary_languages`, which the docs
@@ -156,25 +208,79 @@ final class ElevenLabsLive {
         parts.queryItems = query
         var req = URLRequest(url: parts.url!)
         req.setValue(key, forHTTPHeaderField: "xi-api-key")
-        let task = URLSession.shared.webSocketTask(with: req)
+        let line = "languages \(pinned.joined(separator: "+")), \(terms.count) keyterms, commit after \(Self.vadSilence) s"
         queue.async {
-            self.task = task
-            if Self.fault == "never-open" {
-                Self.fault = nil
-                Log.info("🧪 live caption: never-open — the socket is not resumed")
-            } else {
-                task.resume()
-            }
-            self.receive(task)
-            self.lastTextAt = CACurrentMediaTime()
+            self.key = key
+            self.keytermCount = terms.count
+            self.request = req
+            self.languagesLine = line
+            self.warmSince = CACurrentMediaTime()
+            self.open(reconnect: false)
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
-            timer.setEventHandler { [weak self] in self?.correctIfDue() }
+            timer.setEventHandler { [weak self] in self?.tick() }
             timer.resume()
             self.pauseTimer = timer
         }
-        Log.info("💬 live caption: connecting to ElevenLabs \(Self.model), languages \(pinned.joined(separator: "+")), \(terms.count) keyterms, commit after \(Self.vadSilence) s")
+        Log.info("💬 live caption: connecting to ElevenLabs \(Self.model), \(line)")
     }
+
+    /// On `queue`: a new task on the stored request.
+    private func open(reconnect: Bool) {
+        guard let request, socket != .closed else { return }
+        let task = URLSession.shared.webSocketTask(with: request)
+        self.task = task
+        open = false
+        socket = reconnect ? .reconnecting : .connecting
+        if Self.fault == "never-open" {
+            Self.fault = nil
+            Log.info("🧪 live caption: never-open — the socket is not resumed")
+        } else {
+            task.resume()
+        }
+        receive(task)
+    }
+
+    /// **A sentence takes this socket** (main queue, from `ElevenLabsSource.start`).
+    /// Audio flows from now on; if the session is already up the band opens at once.
+    func attach() {
+        queue.async {
+            guard self.socket != .closed else { return }
+            self.attached = true
+            self.lastTextAt = CACurrentMediaTime()
+            // A warm socket waiting out a reconnect pause, or given up on, is
+            // opened again now — the sentence does not wait for its backoff.
+            if self.task == nil, self.socket == .reconnecting || self.socket == .down {
+                Log.info("💬 live caption: the warm socket was down — connecting it again for this sentence")
+                self.open(reconnect: false)
+            }
+            let age = CACurrentMediaTime() - self.warmSince
+            if self.open {
+                Log.info(String(format: "💬 live caption: the sentence takes a warm socket (open %.0f s) — no handshake", age))
+                DispatchQueue.main.async { [weak self] in self?.onOpen?() }
+            } else if self.socket == .connecting || self.socket == .reconnecting {
+                Log.info(String(format: "💬 live caption: the sentence waits for a socket still connecting (%.1f s)", age))
+            }
+        }
+    }
+
+    /// On `queue`, every 0.5 s: the correction catch-up while a sentence owns
+    /// the socket; the keep-alive and the warm window while none does.
+    private func tick() {
+        if attached { correctIfDue(); return }
+        guard socket == .open else { return }
+        if CACurrentMediaTime() - warmSince > Self.warmWindow {
+            Log.info(String(format: "💬 live caption: the warm socket was unused for %.0f min — closed; the next sentence connects cold", Self.warmWindow / 60))
+            shut()
+            DispatchQueue.main.async { [weak self] in self?.onGone?() }
+            return
+        }
+        if CACurrentMediaTime() - lastKeepAlive >= Self.keepAlive {
+            lastKeepAlive = CACurrentMediaTime()
+            sendRaw(#"{"message_type":"input_audio_chunk","audio_base_64":"","sample_rate":16000}"#, counted: false)
+        }
+    }
+    private var lastKeepAlive = CACurrentMediaTime()
 
     /// **On the audio thread** — `MicRecorder.onBuffer`. Copies the samples out
     /// and hops; the base64 and the send happen on `queue`.
@@ -182,25 +288,47 @@ final class ElevenLabsLive {
         guard let samples = buffer.int16ChannelData?[0], buffer.frameLength > 0 else { return }
         let data = Data(bytes: samples, count: Int(buffer.frameLength) * MemoryLayout<Int16>.size)
         queue.async {
-            guard !self.closed else { return }
+            guard self.attached, self.socket != .closed else { return }
             self.pcm.append(data)
-            if self.open { self.send(data) } else { self.pending.append(data) }
+            switch self.socket {
+            case .open where self.open:
+                self.send(data)
+            case .connecting, .reconnecting, .idle:
+                self.pending.append(data)
+                if self.pending.count > Self.pendingCap {
+                    self.pending.removeFirst(self.pending.count - Self.pendingCap)
+                    if !self.cappedLogged {
+                        self.cappedLogged = true
+                        Log.error("💬 live caption: the socket is still not up — keeping only the newest \(Self.pendingCap) buffers (~5 s) for it")
+                    }
+                }
+            default:
+                break   // `down`: the caption has stopped for this sentence; the recording has not
+            }
         }
     }
 
-    /// Closes the socket; nothing it says afterwards reaches the chip.
+    /// Closes the socket; nothing it says afterwards reaches the band.
     func stop() {
-        queue.async {
-            guard !self.closed else { return }
-            self.closed = true
-            self.pending.removeAll()
-            self.pauseTimer?.cancel()
-            self.pauseTimer = nil
-            self.task?.cancel(with: .normalClosure, reason: nil)
-            self.task = nil
-            ElevenLabsCost.addLive(seconds: Double(self.pcm.count) / 32_000, keyterms: self.keytermCount > 0)
-            self.pcm = Data()
+        queue.async { self.shut() }
+    }
+
+    /// On `queue`.
+    private func shut() {
+        guard socket != .closed else { return }
+        socket = .closed
+        open = false
+        pending.removeAll()
+        pauseTimer?.cancel()
+        pauseTimer = nil
+        task?.cancel(with: .normalClosure, reason: nil)
+        task = nil
+        if attached {
+            // The ledger counts what was streamed, not what was recorded while
+            // the socket was down.
+            ElevenLabsCost.addLive(seconds: Double(sentBytes) / 32_000, keyterms: keytermCount > 0)
         }
+        pcm = Data()
     }
 
     private func send(_ pcm: Data) {
@@ -210,8 +338,60 @@ final class ElevenLabsLive {
         guard let json = try? JSONSerialization.data(withJSONObject: message),
               let text = String(data: json, encoding: .utf8) else { return }
         chunksSent += 1
-        task?.send(.string(text)) { error in
-            if let error { Log.error("💬 live caption: send failed — \(error.localizedDescription)") }
+        sentBytes += pcm.count
+        sendRaw(text, counted: true)
+    }
+
+    private func sendRaw(_ text: String, counted: Bool) {
+        guard let task else { return }
+        task.send(.string(text)) { [weak self] error in
+            guard let error, let self else { return }
+            self.queue.async { self.dropped(task, "send failed — \(error.localizedDescription)") }
+        }
+    }
+
+    /// **The socket went away under us — said once, then either one reconnect
+    /// or silence** (2026-09-26, batch 5, TL29: a dropped socket logged
+    /// `send failed` for every 85 ms buffer, ~9 lines a second, until the
+    /// sentence ended). On `queue`; a failure of any task but the current one,
+    /// or of one already known down, is ignored — the sends queued inside
+    /// URLSession before the drop each fail on their own.
+    private func dropped(_ task: URLSessionWebSocketTask, _ why: String) {
+        guard task === self.task, socket != .closed, socket != .down else { return }
+        open = false
+        self.task = nil
+        task.cancel(with: .goingAway, reason: nil)
+        if !attached {
+            // The warm socket: a few tries with a growing pause, then the next
+            // sentence connects cold.
+            warmFailures += 1
+            guard warmFailures <= 3 else {
+                socket = .down
+                Log.error("💬 live caption: \(why) — the warm socket failed \(warmFailures) times; the next sentence connects cold")
+                DispatchQueue.main.async { [weak self] in self?.onGone?() }
+                return
+            }
+            let pause = [2.0, 10.0, 60.0][warmFailures - 1]
+            socket = .reconnecting
+            Log.error("💬 live caption: \(why) — the warm socket is down; reconnecting in \(Int(pause)) s")
+            queue.asyncAfter(deadline: .now() + pause) { [weak self] in
+                guard let self, self.socket == .reconnecting, self.task == nil else { return }
+                self.open(reconnect: true)
+            }
+            return
+        }
+        guard reconnects == 0 else {
+            socket = .down
+            pending.removeAll()
+            Log.error("💬 live caption: \(why) — the socket dropped again; the caption stops for this sentence (the recording goes on)")
+            return
+        }
+        reconnects += 1
+        socket = .reconnecting
+        Log.error("💬 live caption: \(why) — the socket is down; reconnecting once in 1 s (the audio waits, up to ~5 s of it)")
+        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.socket == .reconnecting, self.task == nil else { return }
+            self.open(reconnect: true)
         }
     }
 
@@ -219,10 +399,10 @@ final class ElevenLabsLive {
         task.receive { [weak self] result in
             guard let self else { return }
             self.queue.async {
-                guard !self.closed, self.task === task else { return }
+                guard self.socket != .closed, self.task === task else { return }
                 switch result {
                 case .failure(let error):
-                    Log.error("💬 live caption: \(error.localizedDescription)")
+                    self.dropped(task, error.localizedDescription)
                 case .success(let message):
                     if case .string(let text) = message { self.handle(text) }
                     self.receive(task)
@@ -237,12 +417,25 @@ final class ElevenLabsLive {
               let type = json["message_type"] as? String else { return }
         switch type {
         case "session_started":
+            let wasReconnect = socket == .reconnecting
             open = true
+            socket = .open
+            warmFailures = 0
+            lastKeepAlive = CACurrentMediaTime()
             let waiting = pending
             pending.removeAll()
             waiting.forEach(send)
-            Log.info("💬 live caption: session open, \(waiting.count) chunk(s) caught up")
-            if let f = Self.fault {
+            if attached {
+                Log.info("💬 live caption: session open\(wasReconnect ? " again" : ""), \(waiting.count) chunk(s) caught up")
+                DispatchQueue.main.async { [weak self] in self?.onOpen?() }
+            } else {
+                Log.info("💬 live caption: session open\(wasReconnect ? " again" : ""), warm — waiting for the next sentence")
+            }
+            // A reconnected session starts from nothing server-side: what was
+            // committed before the drop stays in `segments`, the open segment
+            // is lost with it.
+            if wasReconnect { partial = "" }
+            if attached, let f = Self.fault {
                 Self.fault = nil
                 if f == "drop" {
                     queue.asyncAfter(deadline: .now() + 1) { [weak self] in
@@ -278,6 +471,7 @@ final class ElevenLabsLive {
     }
 
     private func publish(gentle: Bool = false) {
+        guard attached else { return }
         let committed = segments.joined(separator: " ")
         let partial = self.partial.trimmingCharacters(in: .whitespaces)
         DispatchQueue.main.async { [weak self] in self?.onText?(committed, partial, gentle) }

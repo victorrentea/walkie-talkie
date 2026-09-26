@@ -36,6 +36,17 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   websocket (`commit_strategy=vad`) for the chip's `💬` caption only. Every stream failure is a
   log line, never a `DictationEnd`. Costs both: batch + $0.39/h. Probe measured 2026-09-25: first
   partial ~1 s after speech, then ~1/s, revising the last word's punctuation.
+  **The socket is warm before the sentence** (2026-09-26, batch 5, B1): `ElevenLabsSource` keeps one
+  `spare` open from `prepare()` and again from every sentence's close; `start()` attaches to it, so
+  no handshake stands before the first word (in-app it took 0.3–4 s). An idle session is closed by
+  the server at 15.5 s (probed; pings do not help), an empty `input_audio_chunk` every 5 s keeps it
+  (0 s of audio; billed by audio sent, per the docs — not measurable with this key). Closed after
+  `warmWindow` 15 min unused (`WT_ELEVEN_LIVE_WARM` s); `release()` closes it when the engine
+  changes. A fault from `/test/eleven` discards the warm one (faults are for a fresh socket).
+  **A dropped socket is one line and one reconnect** (TL29, was ~9 `send failed`/s): stale tasks'
+  failures are ignored, the audio waits (≤ 64 buffers, ~5 s — also the cap for a socket not up yet,
+  TL30), a second drop stops the caption for that sentence. **The band opens on the session, not
+  the gesture** (`didOpenLive` / `liveOpen`; TL30): no key, or a socket that never opens, no band.
 - **A cloud engine that fails keeps the sentence: the local model transcribes the same WAV**
   (2026-09-25, `AppDelegate.fallBackToLocal` → `transcribeLocally`). Any `.failed` carrying audio
   from a source with `recordsOwnAudio` (both ElevenLabs rows) is intercepted at the top of

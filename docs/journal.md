@@ -12971,3 +12971,58 @@ sentence containing *press Enter to send* got a third Return in a plain `cat` ta
   ending in the phrase). **Not verified against a live Claude Code session** — TD18 still needs one.
 - TD19 and TD20 PASS (`report-fix5.md`): no third Return logged; `CR=2`, `^C raw=False`,
   `ESC[201~ raw=False`, literals intact.
+
+### 3. The live socket is warm before the sentence, drops once, and opens the band only when it is up
+
+The plan's B1 (*"first live partial ≤ 1.5 s after speech"* — the first band word came 5.31 s after
+the case's clock started, `caught up 39 chunk(s) at session open`), TL29 (*"a live socket drop →
+≤ 1 `send failed` line"* — 72 lines, ~9 a second) and TL30 (*"a socket that never opens"* — the band
+open and empty the whole sentence, `pending` 0 → 70 and on; the same with no key at all).
+
+- **Where B1's 5.3 s went.** The log of that run: `connecting` at 13:31:26, `session open, 39
+  chunk(s) caught up` at 13:31:30 — a 3–4 s handshake inside the app, on the path to the first word;
+  in the same hour 1, 2, 3, 25, 20 chunks, and two sentences whose session never opened at all. From
+  a script on this Mac the same URL (50 keyterms included) answers `session_started` in 0.30–0.45 s
+  every time, so the variance is the app's side (not found — `URLSession.shared` busy with the batch
+  and correction uploads to the same host is the likeliest), and the fix is to take the handshake
+  off the path whatever its cause. `vad_silence_threshold_secs` 1.5 only delays *commits*; partials
+  come before it (seen: first partial 1.04–1.13 s after the clip's first word, script, 3 runs).
+- **Probed before building on it:** an idle session is closed by the server at **15.5 s** (code 1000,
+  no message) with or without WebSocket pings every 4 s; an **empty `input_audio_chunk` every 4 s
+  kept one open > 200 s**, no error. An idle wait of 8 s with those keep-alives did not slow the
+  first partial (1.05–1.13 s).
+- **So the socket is warm** (`ElevenLabsSource.spare`): opened at `prepare()` (the engine picked, the
+  app launched) and again as each sentence's own socket closes; `start()` *attaches* the sentence to
+  it (`ElevenLabsLive.attach`) and the first buffer goes out at once. Keep-alive: an empty chunk every
+  5 s. **Cost:** ElevenLabs bills speech to text by *"the duration of the audio sent for
+  transcription"* (docs, *Speech to Text* overview, read 2026-09-26) and an empty chunk is 0 s of
+  audio; the docs say nothing more specific about realtime connection time, and this key lacks
+  `user_read`, so the usage counter could not be read back — the docs' word, not a measurement.
+  *Decided here:* the warm socket is closed after **15 min** unused (`warmWindow`,
+  `WT_ELEVEN_LIVE_WARM` in seconds), so a Mac left alone holds nothing; the next sentence then
+  connects cold as before. A warm socket that drops reconnects after 2, 10, 60 s, then gives up
+  (next sentence cold); one found down at a sentence is reopened at once. `release()` closes it when
+  the engine is switched away. `/test/eleven` live faults discard it (they are for a fresh socket).
+- **A drop is one line and one reconnect** (`ElevenLabsLive.dropped`): the first failure — a send or
+  the receive — marks the task gone and says so once; every send already queued in URLSession fails
+  on a task that is no longer current and is ignored. While the sentence is attached, one reconnect
+  after 1 s (the audio waits, capped); a second drop stops the caption for that sentence, the
+  recording goes on. TL29: `drop — cancelling` at 18:03:47, one line, `session open again, 13
+  chunk(s) caught up` at 18:03:49.
+- **`pending` is capped at 64 buffers** (~5 s, the newest) for a socket not up yet, with one line.
+- **The band opens on the session, not on the gesture** (`DictationSource.didOpenLive`, `liveOpen`):
+  `dictationBegan` opens it only if the sentence's session is already up (a warm socket), and
+  `didOpenLive` opens it when a cold one comes up. No key, or a socket that never opens: no band for
+  that sentence. The ledger counts audio *sent*, not recorded (`sentBytes`).
+- **B1 measured the harness, so the case now measures from the speech.** Its clock started at
+  `play()`'s call + 0.5 s, which also counted `play()`'s device setup and stream open and the clip's
+  0.78 s of lead-in — the speech actually entered the recording 1.8–3.0 s after the microphone
+  opened, where the case assumed 0.9 s. It now finds the first loud window in the corpus WAV of that
+  sentence and places it by `micOpened.at` (±one 85 ms buffer). Numbers, same build, alternating a
+  cold socket (a no-op `error:noop` live fault discards the warm one) and a warm one: **0.93, 1.59,
+  1.68 s warm; 1.27, 1.66 s cold** after the speech — the old clock read 2.42–2.53 s warm (5.31 s
+  before the fix, with the 3–4 s handshake). The handshake was quick in those cold runs; what the
+  warm socket removes is the variance seen at 13:31 (0.3–4 s, or never), not the server's own
+  ~1–1.7 s to a first partial, which is above the plan's 1.5 s and below the case's 2.0.
+- **TL30's pass now requires the band never to open** (it passed on *not always open*), and its
+  expectation states the fix rather than the prediction.

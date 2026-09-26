@@ -459,6 +459,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didTranscribe = nil
         source.didEnd = nil
         source.didHearLive = nil
+        source.didOpenLive = nil
+        source.release()
         source = next
         UserDefaults.standard.set(id, forKey: Self.engineKey)
         wireDictationSource()
@@ -2755,6 +2757,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.didHearLive = { [weak self] committed, partial, gentle in
             self?.overlay.setLiveCaption(committed, partial: partial, gentle: gentle)
         }
+        // **The band opens when the sentence's live session is up** (batch 5,
+        // TL30), not at the gesture: with no key, or a socket that never
+        // opened, it sat open and empty for the whole sentence.
+        source.didOpenLive = { [weak self] in
+            guard let self, self.listening, self.source.isRecording, self.source.streamsLive else { return }
+            self.overlay.setLiveCaptionOpen(true)
+        }
         source.prepare()
         // The back click follows the Engine (2026-09-25) — see
         // `HotkeyTap.onCleanToggle`.
@@ -2982,8 +2991,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listening = true
         // **The `💬` row belongs to a sentence the streaming engine is
         // recording** — not to a Wispr dictation that happens to run while it
-        // is the pick, whose words the stream never hears.
-        overlay.setLiveCaptionOpen(source.streamsLive && source.isRecording)
+        // is the pick, whose words the stream never hears — **and whose live
+        // session is up** (batch 5, TL30); a session that comes up later opens
+        // it through `didOpenLive`, one that never does leaves it closed.
+        overlay.setLiveCaptionOpen(source.streamsLive && source.isRecording && source.liveOpen)
         // **The clock on this sentence starts with the microphone**, not with
         // the gesture: a Wispr dictation begins when Electron wakes up, and a
         // ceiling armed at the chord would spend that gap counting.

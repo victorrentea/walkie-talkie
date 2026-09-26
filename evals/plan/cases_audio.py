@@ -7,7 +7,7 @@ Every case: `loopback_alive()` or SKIP; the recorder overridden onto the Loopbac
 bound (so nothing lands at the caret); both undone in a `finally`, faults cleared, SIGCONT sent to
 the helper where it was stopped. Nothing here pulls cables, sleeps the Mac, kills the app or
 touches Wispr."""
-import contextlib, os, re, threading, time
+import contextlib, datetime, os, re, threading, time, wave
 from harness import *
 
 INJECT = LOOPBACK.replace("🧪 ", "")  # the substring /test/mic matches; "WT Inject" on the host, "BlackHole 2ch" in the lab                  # mic_override substring of LOOPBACK ("🧪 WT Inject")
@@ -426,7 +426,7 @@ def tl29():
 
 
 @case("TL30", ("audio", "gesture"),
-      expect="live socket that never opens (live:never-open stands in for no key) → today: band open and empty the whole sentence, `pending` grows unbounded (§3.14, F13)")
+      expect="live socket that never opens (live:never-open stands in for no key) → the band never opens, `pending` stays ≤ 64; the batch delivers (was: band open and empty the whole sentence, `pending` unbounded — §3.14, F13)")
 def tl30():
     """A socket that never opens: the band sits open and empty, chunks pile up."""
     why = pre(LIVE)
@@ -451,7 +451,8 @@ def tl30():
         note = f"band open {sum(opened)}/{len(opened)} samples, max words {words}, socket {sock}, pending {pend[:1]} → {pend[-1:]}, batch via {(d or {}).get('via')}"
         if opened and all(opened) and words == 0 and pend and pend[-1] > pend[0] + 10:
             return "BUG", note
-        if d and (not all(opened) or (pend and pend[-1] <= 64)):
+        # batch 5: the band opens on the session, so it must not open at all; the queue is capped at 64
+        if d and not any(opened) and (not pend or pend[-1] <= 64):
             return "PASS", note
         return "FAIL", note
 
@@ -779,30 +780,69 @@ def lc13():
     return ("PASS" if ok else "FAIL"), note
 
 
+def _speech_onset(wav_path):
+    """Seconds into a 16 kHz mono recording where speech starts: the first 20 ms window louder than
+    a tenth of the loudest one (and above the Loopback's floor)."""
+    import array
+    w = wave.open(wav_path)
+    a = array.array("h", w.readframes(w.getnframes()))
+    sr, win = w.getframerate(), w.getframerate() // 50
+    rms = [(sum(x * x for x in a[i:i + win]) / max(1, len(a[i:i + win]))) ** 0.5 for i in range(0, len(a), win)]
+    thr = max(300.0, 0.1 * max(rms or [0]))
+    k = next((i for i, r in enumerate(rms) if r > thr), None)
+    return None if k is None else k * win / sr
+
+
+def _iso_epoch(iso):
+    return datetime.datetime.strptime(iso.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+
+
 @case("B1", ("audio", "gesture"),
-      expect="first live partial ≤ 2 s after speech starts (plan: ≤ 1.5 s)")
+      expect="first live caption word ≤ 2 s after speech starts in the recording (plan: ≤ 1.5 s)")
 def b1():
-    """How soon the caption shows the first words."""
+    """How soon the caption shows the first words — measured from the speech itself.
+
+    2026-09-26 (batch 5): the clock started at `play()`'s call + its 0.5 s lead, which also counted
+    `play()`'s own device query and stream open and the clip's 0.78 s of lead-in before the first
+    word — 1.8 s of the 2.0 s budget before any byte reached the app (a script streaming the same
+    clip straight to the socket gets its first partial 1.82 s after that clock, 1.04–1.13 s after the
+    first word). Now: the recording's own first loud window (the corpus WAV the batch uploaded),
+    placed on the wall clock by `micOpened.at` (stamped as the engine starts; the WAV's first sample
+    is at most one 85 ms buffer earlier). The old number stays in the note."""
     why = pre(LIVE)
     if why: return "SKIP", why
     with rig():
         m = start()
         if not on_inject(m): return not_inject(m)
+        opened = (state().get("micOpened") or {}).get("at")
         time.sleep(0.4)
         t_play = time.time()
         th = play_async(CLIP_EN, tail=1.5)
-        t_speech = t_play + 0.5            # play()'s lead silence; the clip's own lead-in counts against us
         t_first = wait_for(lambda: time.time() if lc()["words"] > 0 else None, 8, 0.03)
         live = state().get("live") or {}
         th.join()
         gesture("forward-right")
         delivered(m, 60)
         settle_out(60)
-    t_open = re.search(r"session open, (\d+) chunk", log_since(m))
-    lat = t_first and t_first - t_speech
-    note = (f"first band word {lat and round(lat, 2)} s after the WAV started; socket {live.get('socket')}, chunks {live.get('chunksSent')}, "
-            f"segments {live.get('segments')}, caught up {t_open.group(1) if t_open else '?'} chunk(s) at session open")
-    return ("PASS" if lat is not None and lat <= 2.0 else "FAIL"), note
+    since = log_since(m)
+    warm = re.search(r"takes a warm socket \(open (\d+) s\)", since)
+    caught = re.search(r"session open, (\d+) chunk", since)
+    corpus = re.search(r"corpus: (\S+) —", since)
+    path = None
+    if corpus:
+        hits = [os.path.join(dp, f) for dp, _, fs in os.walk(CORPUS) for f in fs if f == corpus.group(1) + ".wav"]
+        path = hits[0] if hits else None
+    onset = _speech_onset(path) if path else None
+    t_speech = _iso_epoch(opened) + onset if (opened and onset is not None) else None
+    lat = t_first and t_speech and t_first - t_speech
+    old = t_first and t_first - (t_play + 0.5)
+    how = (f"warm socket (open {warm.group(1)} s)" if warm else
+           f"cold, caught up {caught.group(1)} chunk(s) at session open" if caught else "socket state unknown")
+    note = (f"first band word {lat and round(lat, 2)} s after the speech in the recording (onset {onset and round(onset, 2)} s "
+            f"into it); {old and round(old, 2)} s by the old clock (play() + 0.5); {how}; chunks {live.get('chunksSent')}")
+    if lat is None:
+        return "FAIL", "could not place the speech — " + note
+    return ("PASS" if lat <= 2.0 else "FAIL"), note
 
 
 @case("B2", ("audio", "gesture"),
