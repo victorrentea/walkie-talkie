@@ -1,0 +1,96 @@
+SCENARIO S6 — the "Recover Dictation" row: greyed with nothing to recover, live after a real cancelled recording, and a click brings the sentence back (docs/test-plan.md §6.3; see §3 item 9 for the known failure).
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. None of the steps needs one.
+3. Touch the GUI only through the System Events AX paths and the Quartz one-liner given here. Never click at a coordinate you worked out yourself.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. If a menu may still be open, run CLOSE_MENU. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@   LOG=~/.walkie-talkie/relay.log
+   CLIP=~/.walkie-talkie/voice-corpus/2026-09-18/21-05-35-11l735.wav  (3.5 s, "If I dictate now, how good is this dictation, I wonder?")
+The wrapper has opened a witness Terminal tab running `cat >> @W@/witness.txt` and bound the relay to it (so the recovered sentence has a terminal to go to, never the caret). Its tty is in @W@/witness.tty.
+
+OPEN_MENU (a real click on the status item, the Walkie Talkie window named "Item-0"; its x is read at runtime):
+  python3 -c 'import Quartz as Q,time;b=[w["kCGWindowBounds"] for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowName")=="Item-0"][0];x=b["X"]+b["Width"]/2;y=b["Y"]+b["Height"]/2;[(Q.CGEventPost(Q.kCGHIDEventTap,Q.CGEventCreateMouseEvent(None,t,(x,y),0)),time.sleep(0.06)) for t in (Q.kCGEventMouseMoved,Q.kCGEventLeftMouseDown,Q.kCGEventLeftMouseUp)];print(x,y)'; sleep 0.5
+
+CLOSE_MENU:
+  osascript -e 'tell application "System Events" to key code 53'
+
+RECOVER_ENABLED — OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    return enabled of menu item "Recover Dictation" of menu 1 of menu bar item 1 of MB
+  end tell
+  AS
+  then CLOSE_MENU.
+
+STATE:
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"listening":d["listening"],"isRecording":d["isRecording"],"awaitingBind":d["awaitingBind"],"recoverable":d["recoverable"],"bound":b.get("tty"),"lastDelivery":d["lastDelivery"]}))'
+
+STEPS
+
+S6.0 precondition — never recover a sentence of Victor's.
+  CHECK: STATE ; cat @W@/witness.tty ; curl -s -m5 $B/engine | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps({"engine":d["engine"],"whisper":d.get("whisper")}))'
+  EXPECT: busy false, listening false, recoverable null, bound tty == the witness tty (ignore a leading "/dev/"). Save the engine block as ENGINE0.
+
+S6.1 with nothing to recover, the row is greyed.
+  DO: RECOVER_ENABLED
+  EXPECT: false
+
+S6.2 make something to recover: a real recording through the Loopback "🧪 WT Inject" (no speaker), then cancel it. Run this block verbatim as ONE command:
+  B=@B@; LOG=~/.walkie-talkie/relay.log; MARK=$(wc -c < $LOG)
+  post(){ curl -s -m 20 -X POST "$B$1" -H 'content-type: application/json' -d "$2"; echo; }
+  post /test/mic '{"device":"WT Inject"}'
+  post /test/gesture '{"name":"forward-right"}'
+  for i in $(seq 1 30); do tail -c +$((MARK+1)) $LOG | grep -aq "mic: recording through" && break; sleep 0.2; done
+  tail -c +$((MARK+1)) $LOG | grep -a "mic: recording through" | tail -1
+  sleep 0.5
+  python3 - ~/.walkie-talkie/voice-corpus/2026-09-18/21-05-35-11l735.wav "WT Inject" <<'PY'
+  import sys, wave, numpy as np, sounddevice as sd
+  from scipy.signal import resample_poly
+  clip, name = sys.argv[1], sys.argv[2]
+  idx = [i for i, d in enumerate(sd.query_devices()) if name.lower() in d['name'].lower() and d['max_output_channels'] > 0][0]
+  w = wave.open(clip); a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768; sr = w.getframerate()
+  a = resample_poly(a, 48000, sr); a = a / max(1e-6, np.abs(a).max()) * 0.5
+  a = np.concatenate([np.zeros(24000, np.float32), a, np.zeros(24000, np.float32)])
+  sd.play(np.repeat(a[:, None], 2, 1), 48000, device=idx, blocking=True); print("played", round(len(a) / 48000, 2), "s")
+  PY
+  post /test/cancel '{}'
+  for i in $(seq 1 25); do curl -s -m5 $B/test/state | grep -q '"recoverable":{' && break; sleep 0.2; done
+  post /test/mic '{"device":null}'
+  tail -c +$((MARK+1)) $LOG | grep -aE "mic: recording through|dictation cancelled" | tail -3
+  CHECK: STATE ; then, with <PATH> = recoverable.path:
+         python3 -c 'import wave,sys,numpy as n;w=wave.open(sys.argv[1]);s=w.getsampwidth();a=n.frombuffer(w.readframes(w.getnframes()),{2:n.int16,4:n.int32}[s]).astype(float)/2**(8*s-1);print(round(float(n.sqrt((a**2).mean())),4),round(w.getnframes()/w.getframerate(),2))' <PATH>
+  EXPECT: the "mic: recording through" line names WT Inject; a "🗑️ dictation cancelled" line; listening false; recoverable not null with duration > 3; the kept WAV's RMS > 0.005 (the clip is in it, not silence).
+
+S6.3 now the row is live.
+  DO: RECOVER_ENABLED
+  EXPECT: true
+
+S6.4 click it.
+  DO: MARK2=$(wc -c < ~/.walkie-talkie/relay.log) ; OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    click menu item "Recover Dictation" of menu 1 of menu bar item 1 of MB
+  end tell
+  AS
+  CHECK: poll every 1 s for up to 40 s until the log slice has "↩️ recovered" or "produced no transcript", and busy is false:
+         tail -c +$((MARK2+1)) ~/.walkie-talkie/relay.log | grep -aE "recover|No words|delivery" | tail -8
+         STATE
+         grep -ci "dictat" @W@/witness.txt
+  EXPECT: a "↩️ recovering" line within 2 s of the click; then "↩️ recovered N chars"; the witness gets a line containing "dictat" (the clip's words); lastDelivery.to == "terminal:" + the witness tty; recoverable null afterwards.
+  If instead the log says "the recovered audio produced no transcript": that is the known bug (test plan §3 item 9, Recover always uses the local model and never loads it). Record it as the mismatch of step S6.4, with ENGINE0 and the log lines.
+
+ALWAYS (after S6.4, or after a stop):
+  curl -s -m 20 -X POST $B/test/mic -H 'content-type: application/json' -d '{"device":null}'
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["listening"] or d["isRecording"])'   → if True: curl -s -m20 -X POST $B/test/cancel -H 'content-type: application/json' -d '{}'
+  curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["mic"]["override"]))'   → record; must be null.
+
+Evidence keys: ENGINE0, enabled_S6_1, recording_line, cancel_line, recoverable_S6_2, wav_rms, wav_seconds, enabled_S6_3, recover_log, witness_hits, lastDelivery_final, recoverable_final, override_final.

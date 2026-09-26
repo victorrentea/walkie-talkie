@@ -1,0 +1,117 @@
+SCENARIO S2 — the Mic submenu: greyed rows really are dead, a pick lands in mic/choice, and it goes back to auto (docs/test-plan.md §6.3).
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. None of the steps needs one.
+3. Touch the GUI only through the System Events AX paths and the Quartz one-liner given here. Never click at a coordinate you worked out yourself.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. If a menu may still be open, run CLOSE_MENU. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@   CHOICE=~/.walkie-talkie/mic/choice
+
+OPEN_MENU (a real click on the status item, the Walkie Talkie window named "Item-0"; its x is read at runtime):
+  python3 -c 'import Quartz as Q,time;b=[w["kCGWindowBounds"] for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowName")=="Item-0"][0];x=b["X"]+b["Width"]/2;y=b["Y"]+b["Height"]/2;[(Q.CGEventPost(Q.kCGHIDEventTap,Q.CGEventCreateMouseEvent(None,t,(x,y),0)),time.sleep(0.06)) for t in (Q.kCGEventMouseMoved,Q.kCGEventLeftMouseDown,Q.kCGEventLeftMouseUp)];print(x,y)'; sleep 0.5
+
+CLOSE_MENU:
+  osascript -e 'tell application "System Events" to key code 53'
+
+MIC_ENGINE_READ:
+  curl -s -m5 $B/engine | python3 -c 'import json,sys;m=json.load(sys.stdin)["mic"];print(json.dumps({"chosen":m["chosen"],"available":m["available"],"rows":m["rows"]},ensure_ascii=False))'
+
+STEPS
+
+S2.0 precondition.
+  CHECK: curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.load(sys.stdin)["busy"])'
+         MIC_ENGINE_READ
+         cat ~/.walkie-talkie/mic/choice
+  EXPECT: busy False; chosen "auto"; the choice file reads "auto" (a missing file also counts as auto — record which). Save available as AVAIL and rows as ROWS0.
+
+S2.1 read the submenu as the Accessibility tree shows it.
+  DO: OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    set M to menu 1 of menu bar item 1 of MB
+    set R to (first menu item of M whose name starts with "Mic: ")
+    set out to (name of R) & linefeed
+    click R
+    delay 0.4
+    repeat with I in menu items of menu 1 of R
+      set out to out & (name of I as text) & " | " & (enabled of I as text) & linefeed
+    end repeat
+    return out
+  end tell
+  AS
+  then CLOSE_MENU (twice if needed: the submenu and the menu).
+  Save the first line as TOPROW and the rest as AXROWS (drop the separator line, whose name reads "missing value").
+  EXPECT:
+   - TOPROW starts with "Mic: ".
+   - AXROWS has 6 rows. Row 1 starts with "Automatic — " and is enabled (true).
+   - Every other row is enabled exactly when its device id is in AVAIL, in this order: xlr "Elgato Wave XLR", rx "DJI", stage "Stage Speakerphone", bose "Bose", mac "MacBook Pro Microphone".
+   - Every disabled row's name ends with "— not connected".
+   - Names and enabled flags match ROWS0 (the app's own copy, /engine mic.rows) row for row.
+
+S2.2 a greyed row must not act (the autoenablesItems trap). Skip this step, recording "skipped: all connected", if AXROWS has no disabled row.
+  DO: OPEN_MENU, then, with <NAME> = the exact name of the FIRST disabled row from S2.1:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    set M to menu 1 of menu bar item 1 of MB
+    set R to (first menu item of M whose name starts with "Mic: ")
+    click R
+    delay 0.4
+    try
+      click menu item "<NAME>" of menu 1 of R
+      return "clicked"
+    on error e
+      return "refused: " & e
+    end try
+  end tell
+  AS
+  then CLOSE_MENU (twice if needed). sleep 0.5
+  CHECK: MIC_ENGINE_READ ; cat ~/.walkie-talkie/mic/choice
+  EXPECT: chosen still "auto", choice file still "auto" (whatever the osascript returned — record it).
+
+S2.3 pick the built-in microphone (always connected).
+  DO: OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    set M to menu 1 of menu bar item 1 of MB
+    set R to (first menu item of M whose name starts with "Mic: ")
+    click R
+    delay 0.4
+    click (first menu item of menu 1 of R whose name contains "MacBook Pro Microphone")
+  end tell
+  AS
+  sleep 0.5
+  CHECK: MIC_ENGINE_READ ; cat ~/.walkie-talkie/mic/choice
+  EXPECT: chosen "mac", choice file "mac", and in rows the "💻 MacBook Pro Microphone" row has ticked true.
+
+S2.4 back to Automatic from the menu.
+  DO: OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    set M to menu 1 of menu bar item 1 of MB
+    set R to (first menu item of M whose name starts with "Mic: ")
+    click R
+    delay 0.4
+    click (first menu item of menu 1 of R whose name starts with "Automatic")
+  end tell
+  AS
+  sleep 0.5
+  CHECK: MIC_ENGINE_READ ; cat ~/.walkie-talkie/mic/choice
+  EXPECT: chosen "auto", choice file "auto", the Automatic row ticked.
+
+ALWAYS (after S2.4, or after a stop):
+  curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["mic"]["chosen"])'   → if not "auto": curl -s -m20 -X POST $B/test/mic -H 'content-type: application/json' -d '{"id":"auto"}'
+  cat ~/.walkie-talkie/mic/choice → record it.
+
+Evidence keys: AVAIL, TOPROW, AXROWS, ROWS0, s2_2 (osascript answer + chosen after), chosen_after_S2_3, choice_after_S2_3, chosen_final, choice_final, restored.

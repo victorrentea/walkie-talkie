@@ -253,7 +253,7 @@ def cleanup():
 
 def take_lock():
     """`helpers/wispr_loop.py`'s lock, same format: one process drives this Mac at a time
-    (the teacher-labelling batch takes it too). A dead holder is ignored."""
+    (the teacher-labelling batch takes it too since 2026-09-26). A dead holder is ignored."""
     try:
         pid, started = open(LOCK_PATH).read().split(None, 1)
         os.kill(int(pid), 0)
@@ -307,7 +307,10 @@ def render(results, t_start):
     return "\n".join(out) + "\n"
 
 def main():
-    import importlib
+    import importlib, fnmatch
+    # Run as a script this file is `__main__`; the case modules' `from harness import *` must
+    # bind to THIS module or their `@case` registers into a second, unseen copy.
+    sys.modules["harness"] = sys.modules[__name__]
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     for mod in ("cases_lc", "cases_lifecycle", "cases_delivery", "cases_gestures", "cases_audio"):
@@ -327,8 +330,9 @@ def main():
             for c in CASES: print(c["id"], sorted(c["tags"]), "—", c["doc"].splitlines()[0] if c["doc"] else "")
             return
         else: i += 1
-    sel = [c for c in CASES if (not only or any(c["id"].startswith(p) for p in only))
-           and not (skip and any(c["id"].startswith(p) for p in skip))]
+    # `--only TD2,LC*`: an exact id, or a glob (`TD2*`, `T[LD]*`).
+    def picked(cid, pats): return any(cid == p or fnmatch.fnmatch(cid, p) for p in pats)
+    sel = [c for c in CASES if (not only or picked(c["id"], only)) and not (skip and picked(c["id"], skip))]
     take_lock()
     try:
         run(sel, report)

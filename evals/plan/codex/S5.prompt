@@ -1,0 +1,59 @@
+SCENARIO S5 — the real ⌘⌃B from the keyboard: bind the front terminal, press again to unbind, and no modifier left held after either press (docs/test-plan.md §6.3, §7.5 "sessionFlags == [] within 300 ms after every step").
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. None of the steps needs one.
+3. Touch the GUI only through the AppleScript lines given here. No mouse at all in this scenario.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@   LOG=~/.walkie-talkie/relay.log
+The wrapper has opened a witness Terminal tab titled wt-witness, running `cat >> @W@/witness.txt` (not bound). Its tty is in @W@/witness.tty.
+
+CHORD (the real ⌘⌃B — key code 11 is B):
+  osascript -e 'tell application "System Events" to key code 11 using {command down, control down}'
+
+FLAGS_300 (run immediately after CHORD, as one command):
+  sleep 0.3; curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["sessionFlags"]))'
+
+BOUND:
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d["awaitingBind"],"busy":d["busy"]}))'
+
+All tty comparisons below ignore a leading "/dev/".
+
+STEPS
+
+S5.0 precondition.
+  CHECK: cat @W@/witness.tty ; BOUND ; curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["sessionFlags"]))'
+  EXPECT: busy false, awaitingBind false, sessionFlags []; bound tty is NOT the witness tty (record what it is as BOUND0; null is fine). Save the witness tty as WTTY.
+  Also: MARK=$(wc -c < ~/.walkie-talkie/relay.log) — save MARK.
+
+S5.1 bring the witness window to the front.
+  DO: osascript -e 'tell application "Terminal" to activate' -e 'tell application "Terminal" to set index of (first window whose name contains "wt-witness") to 1' ; sleep 0.6
+  CHECK: osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'
+         osascript -e 'tell application "Terminal" to get tty of selected tab of front window'
+  EXPECT: "Terminal"; the tty equals WTTY.
+
+S5.2 first ⌘⌃B — binds the front terminal.
+  DO: CHORD, then FLAGS_300 at once. Save the flags as FLAGS1.
+  CHECK (poll every 0.25 s for up to 3 s): BOUND
+  EXPECT: FLAGS1 == []; bound tty == WTTY; awaitingBind false.
+
+S5.3 second ⌘⌃B, on the bound target — unbinds.
+  DO: sleep 1.5 ; CHORD, then FLAGS_300 at once. Save the flags as FLAGS2.
+  CHECK (poll every 0.25 s for up to 3 s): BOUND
+         tail -c +$((MARK+1)) ~/.walkie-talkie/relay.log | grep -a "⌘⌃B" | tail -5
+  EXPECT: FLAGS2 == []; bound tty null; awaitingBind false; the log slice contains "⌘⌃B on the bound target — unbinding".
+
+S5.4 the chord was swallowed, not typed into the terminal.
+  CHECK: python3 -c 'print(open("@W@/witness.txt","rb").read().count(b"\x02"))'
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["sessionFlags"]))'
+  EXPECT: 0 (no Ctrl-B byte reached `cat`); sessionFlags [].
+
+ALWAYS (after S5.4, or after a stop):
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["sessionFlags"]))'   → record as FLAGS_FINAL. If it is not [], do NOT press anything to clear it; just record it.
+  BOUND → record it. (The wrapper restores BOUND0 and closes the witness tab.)
+
+Evidence keys: WTTY, BOUND0, FLAGS1, bound_after_S5_2, FLAGS2, bound_after_S5_3, log_lines, ctrlB_bytes, FLAGS_FINAL.

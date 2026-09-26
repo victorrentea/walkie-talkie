@@ -1,0 +1,105 @@
+SCENARIO S3 — Autosend off, the prompt panel's Cancel, then its Send, then Autosend back on (docs/test-plan.md §6.3).
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. The prompt panel is invisible to screen capture anyway (sharingType = .none): its place comes from CGWindowListCopyWindowInfo, in the commands below.
+3. Touch the GUI only through the System Events AX paths and the Quartz commands given here. Never click at a coordinate you worked out yourself.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. If a menu may still be open, run CLOSE_MENU. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@
+The wrapper has opened a witness Terminal tab running `cat >> @W@/witness.txt`, and bound the relay to it. Its tty is in @W@/witness.tty.
+
+OPEN_MENU (a real click on the status item, the Walkie Talkie window named "Item-0"; its x is read at runtime):
+  python3 -c 'import Quartz as Q,time;b=[w["kCGWindowBounds"] for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowName")=="Item-0"][0];x=b["X"]+b["Width"]/2;y=b["Y"]+b["Height"]/2;[(Q.CGEventPost(Q.kCGHIDEventTap,Q.CGEventCreateMouseEvent(None,t,(x,y),0)),time.sleep(0.06)) for t in (Q.kCGEventMouseMoved,Q.kCGEventLeftMouseDown,Q.kCGEventLeftMouseUp)];print(x,y)'; sleep 0.5
+
+CLOSE_MENU:
+  osascript -e 'tell application "System Events" to key code 53'
+
+TOGGLE_AUTOSEND — OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    click menu item "Autosend" of menu 1 of menu bar item 1 of MB
+  end tell
+  AS
+  sleep 0.5
+
+AUTOSEND_READ:
+  defaults read ro.victorrentea.wispr-relay autosend
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.load(sys.stdin)["autosend"])'
+
+PANEL_RECT (the plan's one-liner: the prompt panel is the Walkie Talkie window that screen capture cannot see — sharing state 0 — sitting at the visible top-left of its screen, (24, menu bar + 24)):
+  python3 -c 'import Quartz as Q,json;print(json.dumps([dict(w["kCGWindowBounds"]) for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowSharingState")==0 and w["kCGWindowBounds"]["Width"]>=250 and w["kCGWindowBounds"]["Height"]>=90]))'
+
+PANEL_CLICK <TOKEN> <cancel|send> — posts a 24-word test sentence (the hold is then the 7 s maximum), waits for the panel to stop moving, and clicks the button. Geometry (RelayWindow): buttons bottom-right, 12 pt pad, Cancel 116×28 rightmost, 8 pt gap, Send ≥128×28 to its left. Run it as ONE command, verbatim:
+  python3 - @B@ <TOKEN> <cancel|send> <<'PY'
+  import Quartz as Q, json, sys, time, urllib.request
+  B, tok, which = sys.argv[1:4]
+  text = tok + " this is a scripted check of the prompt panel buttons and it carries enough words for the full seven second hold before sending"
+  assert len(text.split()) >= 21
+  def rects():
+      return [dict(w["kCGWindowBounds"]) for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly, Q.kCGNullWindowID)
+              if w.get("kCGWindowOwnerName") == "Walkie Talkie" and w.get("kCGWindowSharingState") == 0
+              and w["kCGWindowBounds"]["Width"] >= 250 and w["kCGWindowBounds"]["Height"] >= 90]
+  before = rects()
+  req = urllib.request.Request(B + "/test/dictation", json.dumps({"text": text}).encode(), {"content-type": "application/json"})
+  t0 = time.time(); urllib.request.urlopen(req, timeout=20).read()
+  last, stable, r = None, 0, None
+  while time.time() - t0 < 4:
+      c = rects()
+      r = max(c, key=lambda b: b["Width"] * b["Height"]) if c else None
+      stable = stable + 1 if (r and r == last) else 0
+      last = r
+      if stable >= 3: break
+      time.sleep(0.1)
+  if not r or stable < 3:
+      print(json.dumps({"ok": False, "why": "no settled panel within 4 s", "before": before, "last": r})); sys.exit(1)
+  X, Y, W, H = r["X"], r["Y"], r["Width"], r["Height"]
+  y = Y + H - 12 - 14
+  x = X + W - 12 - 58 if which == "cancel" else X + W - 12 - 116 - 8 - 30
+  for t in (Q.kCGEventMouseMoved, Q.kCGEventLeftMouseDown, Q.kCGEventLeftMouseUp):
+      Q.CGEventPost(Q.kCGHIDEventTap, Q.CGEventCreateMouseEvent(None, t, (x, y), 0)); time.sleep(0.06)
+  print(json.dumps({"ok": True, "t0": t0, "rect": r, "click": [x, y], "clickAt": round(time.time() - t0, 2), "before": before}))
+  PY
+
+STEPS
+
+S3.0 precondition.
+  CHECK: AUTOSEND_READ
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"awaitingBind":d["awaitingBind"],"bound":b.get("tty")}))'
+         cat @W@/witness.tty
+  EXPECT: defaults 1, autosend True, busy false, awaitingBind false, bound tty equal to the witness tty (compare without any leading "/dev/"). Save the tty as WTTY.
+
+S3.1 Autosend off.
+  DO: TOGGLE_AUTOSEND
+  CHECK: AUTOSEND_READ
+  EXPECT: defaults 0, autosend False.
+
+S3.2 Cancel on the panel.
+  DO: TOK=S3CANCEL$(date +%s); then PANEL_CLICK $TOK cancel. Save its JSON as CANCELCLICK.
+  sleep 9    (past the 7 s hold: if Cancel missed, the countdown would have sent it by now)
+  CHECK: grep -c "$TOK" @W@/witness.txt ; grep -c "$TOK" ~/.walkie-talkie/outbox.jsonl ; PANEL_RECT
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps({"busy":d["busy"],"awaitingBind":d["awaitingBind"],"lastDelivery":d["lastDelivery"]}))'
+  EXPECT: CANCELCLICK ok true and clickAt < 4; both greps 0; PANEL_RECT []; busy false; awaitingBind false.
+
+S3.3 Send on the panel.
+  DO: TOK=S3SEND$(date +%s); then PANEL_CLICK $TOK send. Save its JSON as SENDCLICK.
+  CHECK: poll every 0.1 s for up to 3 s after the click: grep -c "$TOK" @W@/witness.txt ; record SEEN = seconds from SENDCLICK.t0 to the first poll that returns 1 (python3 -c 'import time;print(round(time.time()-<t0>,2))').
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps(d["lastDelivery"]))'
+  EXPECT: SENDCLICK ok true and clickAt < 4; the token lands in the witness; SEEN - clickAt < 1.5 and SEEN < 6.5 (so it was the button, not the 7 s countdown); lastDelivery.to == "terminal:" + WTTY (without "/dev/").
+
+S3.4 Autosend back on.
+  DO: TOGGLE_AUTOSEND
+  CHECK: AUTOSEND_READ
+  EXPECT: defaults 1, autosend True.
+
+ALWAYS (after S3.4, or after a stop):
+  CLOSE_MENU only if a menu may be open.
+  AUTOSEND_READ → if the state says False: run TOGGLE_AUTOSEND once more and AUTOSEND_READ again; record both readings. Never use `defaults write` — the running app would not see it.
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["listening"] or d["isRecording"])'   → if True: curl -s -m20 -X POST $B/test/cancel -H 'content-type: application/json' -d '{}'
+
+Evidence keys: WTTY, autosend_after_S3_1, CANCELCLICK, cancel_in_witness, cancel_in_outbox, SENDCLICK, SEEN, lastDelivery_after_send, autosend_final (defaults + state), restored.

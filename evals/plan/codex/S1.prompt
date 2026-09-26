@@ -1,0 +1,80 @@
+SCENARIO S1 — Engine pick from the menu, and its refusal mid-sentence (docs/test-plan.md §6.3).
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. None of the steps needs one.
+3. Touch the GUI only through the System Events AX paths and the Quartz one-liner given here. Never click at a coordinate you worked out yourself.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. If a menu may still be open, run CLOSE_MENU. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@
+
+OPEN_MENU (a real click on the status item, the Walkie Talkie window named "Item-0"; its x is read at runtime):
+  python3 -c 'import Quartz as Q,time;b=[w["kCGWindowBounds"] for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowName")=="Item-0"][0];x=b["X"]+b["Width"]/2;y=b["Y"]+b["Height"]/2;[(Q.CGEventPost(Q.kCGHIDEventTap,Q.CGEventCreateMouseEvent(None,t,(x,y),0)),time.sleep(0.06)) for t in (Q.kCGEventMouseMoved,Q.kCGEventLeftMouseDown,Q.kCGEventLeftMouseUp)];print(x,y)'; sleep 0.5
+
+CLOSE_MENU:
+  osascript -e 'tell application "System Events" to key code 53'
+
+PICK_ENGINE <ROWTEST> — run OPEN_MENU first, then this, with <ROWTEST> replaced by the row test for the engine id from the table below:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    set M to menu 1 of menu bar item 1 of MB
+    set E to (first menu item of M whose name starts with "Engine: ")
+    set top to name of E
+    click E
+    delay 0.4
+    click (first menu item of menu 1 of E whose <ROWTEST>)
+    return top
+  end tell
+  AS
+Row tests (the rows are "☁️ ElevenLabs + Live   $…", "☁️ ElevenLabs   $…", "💻 Local", matched without the emoji):
+  eleven-live → name contains "ElevenLabs + Live"
+  eleven      → (name contains "ElevenLabs") and (name does not contain "Live")
+  whisper     → name contains "Local"
+  wispr       → name contains "Wispr Flow"
+
+STEPS
+
+S1.0 precondition.
+  CHECK: curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps({"busy":d["busy"],"listening":d["listening"],"isRecording":d["isRecording"]}))'
+         curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'
+  EXPECT: busy false, listening false, isRecording false. Save the engine id as ENG0.
+  Set T = "eleven" if ENG0 == "eleven-live", otherwise T = "eleven-live".
+
+S1.1 pick T from the menu.
+  DO: OPEN_MENU, then PICK_ENGINE with T's row test. Save the returned top-row title as TOP0.
+  CHECK (poll every 0.25 s for up to 3 s): curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'
+  EXPECT: T. TOP0 starts with "Engine: ".
+
+S1.2 open a sentence (no microphone is opened by this route).
+  DO: curl -s -m20 -X POST $B/test/dictation/start -H 'content-type: application/json' -d '{}'
+  CHECK: curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["listening"])'
+  EXPECT: True
+
+S1.3 try to switch back to ENG0 mid-sentence — it must be refused.
+  DO: OPEN_MENU, then PICK_ENGINE with ENG0's row test. Save the returned title as TOP1.
+  sleep 1.5
+  CHECK: curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.load(sys.stdin)["listening"])'
+  EXPECT: engine still T (refused), listening still True. TOP1 names T's engine (e.g. "Engine: ElevenLabs" for eleven, "Engine: ElevenLabs + Live" for eleven-live).
+
+S1.4 end the sentence.
+  DO: curl -s -m20 -X POST $B/test/cancel -H 'content-type: application/json' -d '{}'
+  CHECK (poll every 0.25 s for up to 5 s): curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["listening"],d["busy"])'
+  EXPECT: False False
+
+S1.5 switch back to ENG0 from the menu, now that nothing is in flight.
+  DO: OPEN_MENU, then PICK_ENGINE with ENG0's row test.
+  CHECK (poll every 0.25 s for up to 3 s): curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'
+  EXPECT: ENG0
+
+ALWAYS (after S1.5, or after a stop):
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["listening"] or d["isRecording"])'   → if True: curl -s -m20 -X POST $B/test/cancel -H 'content-type: application/json' -d '{}'
+  curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'   → if not ENG0: curl -s -m20 -X POST $B/engine -H 'content-type: application/json' -d '{"id":"<ENG0>"}'
+  Record in evidence: "restored": true/false and what you had to run.
+
+Evidence keys: ENG0, T, TOP0, TOP1, engine_after_S1_1, engine_after_S1_3, listening_after_S1_3, engine_final, restored.

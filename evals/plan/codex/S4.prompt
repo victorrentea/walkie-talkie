@@ -1,0 +1,85 @@
+SCENARIO S4 — "Rebind to…": the panel opens from the menu, ↓ moves the selection, ⏎ binds; ⏎ on the greyed (bound) row does nothing and ⎋ closes (docs/test-plan.md §6.3).
+
+RULES (follow literally):
+1. No exploring. Do not list processes, windows or UI elements, do not read source files, do not open any app. Run exactly the commands below, in order, substituting only values you captured in earlier steps.
+2. No screenshots. None of the steps needs one.
+3. Touch the GUI only through the System Events AX paths, key codes and the Quartz one-liner given here. Never click at a coordinate you worked out yourself. Do NOT click anywhere while the Rebind panel is up: any click elsewhere closes it.
+4. After every step run its CHECK and compare with EXPECT.
+5. At the first mismatch: stop. If a menu or the panel may still be open, run CLOSE_MENU. Then run only the lines marked ALWAYS, and finish.
+6. Your final message is exactly one line of JSON and nothing else:
+   {"step": "<id of the step that mismatched, or \"done\">", "evidence": {<every value you captured, as read>}}
+
+CONSTANTS: B=@B@   W=@W@
+The wrapper has opened two witness Terminal tabs, titled wt-witness-A and wt-witness-B, running `cat`; their ttys are in @W@/witness-A.tty and @W@/witness-B.tty. It bound A, then B, over POST /bind.
+
+OPEN_MENU (a real click on the status item, the Walkie Talkie window named "Item-0"; its x is read at runtime — the Rebind panel then opens at this pointer position):
+  python3 -c 'import Quartz as Q,time;b=[w["kCGWindowBounds"] for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w.get("kCGWindowName")=="Item-0"][0];x=b["X"]+b["Width"]/2;y=b["Y"]+b["Height"]/2;[(Q.CGEventPost(Q.kCGHIDEventTap,Q.CGEventCreateMouseEvent(None,t,(x,y),0)),time.sleep(0.06)) for t in (Q.kCGEventMouseMoved,Q.kCGEventLeftMouseDown,Q.kCGEventLeftMouseUp)];print(x,y)'; sleep 0.5
+
+CLOSE_MENU:
+  osascript -e 'tell application "System Events" to key code 53'
+
+OPEN_REBIND — OPEN_MENU, then:
+  osascript <<'AS'
+  tell application "System Events" to tell process "Walkie Talkie"
+    set MB to menu bar 1
+    if (count of menu bars) > 1 then set MB to menu bar 2
+    click (first menu item of menu 1 of menu bar item 1 of MB whose name starts with "Rebind to")
+  end tell
+  AS
+  sleep 0.8
+
+PANEL_RECT (the Rebind panel is the Walkie Talkie window 660 pt wide, 58+1+7×46+30 = 411 pt tall):
+  python3 -c 'import Quartz as Q,json;print(json.dumps([dict(w["kCGWindowBounds"]) for w in Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly,Q.kCGNullWindowID) if w.get("kCGWindowOwnerName")=="Walkie Talkie" and w["kCGWindowBounds"]["Width"]==660]))'
+
+KEY <code> (125 = ↓, 36 = ⏎, 53 = ⎋):
+  osascript -e 'tell application "System Events" to key code <code>'
+
+BOUND:
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d["awaitingBind"],"busy":d["busy"]}))'
+
+ORDER (the first two rows the panel will list: rebind history sorted by last contact, newest first):
+  python3 -c 'import json,os;e=json.load(open(os.path.expanduser("~/.walkie-talkie/rebind-history.json")));e=e if isinstance(e,list) else e.get("entries",e);e=sorted(e,key=lambda x:x.get("unboundAt") or x.get("boundAt") or "",reverse=True);print(json.dumps([[x.get("tty"),x.get("boundAt"),x.get("unboundAt")] for x in e[:3]]))'
+
+All tty comparisons below ignore a leading "/dev/".
+
+STEPS
+
+S4.0 precondition.
+  CHECK: cat @W@/witness-A.tty @W@/witness-B.tty ; BOUND ; PANEL_RECT
+  EXPECT: bound tty == B's tty, busy false, awaitingBind false, PANEL_RECT []. Save the ttys as TA and TB.
+
+S4.1 let go of B, so B becomes the newest row and is enabled.
+  DO: curl -s -m20 -X POST $B/unbind -H 'content-type: application/json' -d '{}' ; sleep 0.5
+  CHECK: BOUND ; ORDER
+  EXPECT: tty null, awaitingBind false; ORDER's first entry is TB, its second is TA.
+
+S4.2 open the panel from the menu.
+  DO: OPEN_REBIND
+  CHECK: PANEL_RECT
+  EXPECT: exactly one rect, Width 660, Height 411. Save it as RECT1.
+
+S4.3 ↓ then ⏎ — row 0 (B) is selected on open, ↓ moves to row 1 (A), ⏎ binds it.
+  DO: KEY 125 ; sleep 0.3 ; KEY 36 ; sleep 1.5
+  CHECK: BOUND ; PANEL_RECT
+  EXPECT: bound tty == TA (not TB), awaitingBind false; PANEL_RECT [] (⏎ closed it).
+
+S4.4 open again: now A is bound, so row 0 is A and greyed.
+  DO: OPEN_REBIND
+  CHECK: PANEL_RECT
+  EXPECT: one rect, 660×411. Save it as RECT2.
+
+S4.5 ⏎ on the greyed row does nothing.
+  DO: KEY 36 ; sleep 1.0
+  CHECK: BOUND ; PANEL_RECT
+  EXPECT: bound tty still TA; PANEL_RECT still one rect (the panel stays up).
+
+S4.6 ⎋ closes it.
+  DO: KEY 53 ; sleep 0.5
+  CHECK: PANEL_RECT ; BOUND
+  EXPECT: PANEL_RECT []; bound tty still TA.
+
+ALWAYS (after S4.6, or after a stop):
+  PANEL_RECT → if not []: KEY 53, then PANEL_RECT again.
+  BOUND → record it. (The wrapper restores the binding that was there before the run and closes both witness tabs.)
+
+Evidence keys: TA, TB, order_after_S4_1, RECT1, bound_after_S4_3, RECT2, bound_after_S4_5, panel_after_S4_5, panel_after_S4_6, bound_final.

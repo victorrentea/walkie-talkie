@@ -724,6 +724,15 @@ def main(argv):
         return 0
     if not todo:
         return 0
+    # **The one runner lock on this Mac** (2026-09-26): the test-plan harness
+    # (`evals/plan/harness.py`) and `wispr-loop.sh` take the same lock, so two
+    # things posting keys can never overlap. A dead holder is ignored by
+    # `take_runner_lock`; `atexit` also covers the SIGTERM handler's `sys.exit`.
+    import atexit, wispr_loop  # noqa: E401
+    got, detail = wispr_loop.take_runner_lock()
+    if not got:
+        raise SystemExit("another runner is dictating on this Mac — " + detail)
+    atexit.register(wispr_loop.release_runner_lock)
 
     idx, name = rig.resolve_device(args.device)
     log(f"device: {name}")
