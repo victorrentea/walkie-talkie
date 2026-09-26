@@ -332,6 +332,19 @@ enum DictationEnd {
     case failed(why: String, audio: URL?, duration: TimeInterval)
 }
 
+extension DictationEnd {
+    /// **The `why` of a `.failed` whose recogniser answered, with no words**
+    /// (2026-09-26, the test plan's §3.8). It is a failure, not `.silent`: the
+    /// WAV is staged for *Recover* where it used to be deleted (60 s of real
+    /// speech lost on 09-19 and 09-20). And it is the one failure the local
+    /// model is **not** asked to stand in for (`AppDelegate.dictationEnded`):
+    /// Whisper on a take with no speech in it invents a sentence — measured the
+    /// day this landed, 5 s of Loopback silence came back `www.clu.com.br` and
+    /// was typed into the bound terminal. Recover is the choice to spend the
+    /// local model on it, made by him with the banner in front of him.
+    static let heardNothing = "No words heard"
+}
+
 extension DictationSource {
     /// **No, unless a source says otherwise.** A marker that reaches nobody is
     /// a word bitten out of his sentence for nothing, so silence is the safe

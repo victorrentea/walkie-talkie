@@ -3305,7 +3305,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dictationEnded(_ end: DictationEnd) {
         // **A cloud engine that failed with the recording in hand is not the
         // end of the sentence** (2026-09-25) — the local model gets the WAV.
-        if case .failed(let why, let audio?, let duration) = end,
+        // Not for `heardNothing`: the recogniser answered, and the local model on
+        // a take with no speech invents one (2026-09-26) — that WAV goes to Recover.
+        if case .failed(let why, let audio?, let duration) = end, why != DictationEnd.heardNothing,
            fallBackToLocal(why: why, wav: audio, duration: duration) { return }
         dictationEndedForGood(end)
     }

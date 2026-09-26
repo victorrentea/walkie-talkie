@@ -223,6 +223,11 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
 - **The live caption IS pinned to `ro` + `secondary_languages=en`** (2026-09-26, a caption came back Turkish): `ElevenLabsLive.languages`, `WT_ELEVEN_LIVE_LANGS=ro,en` overrides (first = `language_code`, rest = `secondary_languages`, repeated query keys; probed 2026-09-26 on a corpus WAV, English transcribed fine under it). `WT_ELEVEN_LANG` set wins for both.
 - **`DictationEnd.failed`** ≠ `.silent` (drops audio) ≠ `.cancelled` (keeps it quietly): 12 s banner
   + WAV staged for *Recover Cancelled Dictation*. One retry, only for transport/429/5xx; 45 s ceiling.
+- **An empty transcript is `.failed(why: DictationEnd.heardNothing, audio:)`, never `.silent`**
+  (2026-09-26, §3.8 — the WAV used to be deleted; 60 s of speech lost 09-19 and 09-20). Scribe `""`
+  and a local answer with no words both; `.silent("")` is only a take under 0.35 s. **No local
+  fallback for `heardNothing`**: Whisper on 3 s of silence answered `www.clu.com.br` and it was
+  delivered (TL16, first try). → journal: *Fixes to the test plan's findings, batch 1*
 - **Unmeasured:** `languageFloor = 0.5`, `scribe_v1` vs `v2`. `tools/eleven-test.sh [wav | --corpus n]`.
 
 ## Markers: where a picture was taken

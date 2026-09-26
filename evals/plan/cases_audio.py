@@ -339,9 +339,10 @@ def tl14():
 
 
 @case("TL16", ("audio", "gesture"),
-      expect="3 s of silence → 'returned no words', no ↪️, nothing kept in cancelled/ (documents the loss, §3.8)")
+      expect="3 s of silence → 'returned no words', the WAV kept for Recover, nothing delivered (fixed 2026-09-26, "
+             "§3.8: an empty answer is `.failed(heardNothing)` with the audio, no local fallback; the BUG branch is the old loss)")
 def tl16():
-    """An empty transcript: today the audio is deleted with no fallback."""
+    """An empty transcript: the audio used to be deleted with no fallback."""
     why = pre()
     if why: return "SKIP", why
     with rig():
@@ -361,7 +362,7 @@ def tl16():
         note = f"no-words line {empty}, ↪️ {fb}, audio kept {kept}, recoverable {bool(rec)}, delivered {words}"
         if empty and not fb and not kept and not rec:
             return "BUG", note + " — the audio is gone"
-        if kept or rec:
+        if (kept or rec) and not words:
             return "PASS", note
         return "FAIL", note
 

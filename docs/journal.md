@@ -12346,3 +12346,21 @@ counts them, and `GET /test/state` gains `awaitingBindCount` beside the `awaitin
 silently replaced by BRAVO; now both land, ALFA first. This supersedes *`awaitingBind`: one
 sentence, five minutes* (the five minutes stay, per sentence).
 
+#### (d) An empty transcript keeps the recording
+
+The test plan's §3.8: *"Audio deleted on two paths: empty Scribe answer and nil helper answer →
+`.silent`, `removeItem(wav)`; no fallback, no Recover. 60 s of speech gone on 09-19 and 09-20."*
+Both now end `.failed(why:audio:)` — the WAV staged in `cancelled/` for *Recover*, the 12 s banner
+`⚠️ No words heard — recover it from the menu` — and `No words detected` is gone from both sources.
+A take under `MicRecorder.minimumDuration` (0.35 s) is still dropped quietly (`.silent("")`).
+
+**The empty answer does not go to the local fallback, and that was measured, not assumed.** The
+first version routed it through the ordinary `.failed` path, so the local model stood in: on TL16
+(3 s of silence into the Loopback) Whisper answered `www.clu.com.br` and it was typed into the bound
+terminal. `DictationEnd.heardNothing` is the `why` of *the recogniser answered, with no words*, and
+`dictationEnded` skips the fallback for it; Recover is the choice to spend the local model on that
+audio, made by him with the banner in front of him. A local helper that answered nothing at all
+(dead, hung) is `the local model gave no answer` — kept the same way. TL16 and TR13 were BUG (the
+audio gone); both PASS now (`report-fix1c.md`, TR13 recovered through the local model). TL16's
+expectation was rewritten to the fix (WAV kept, nothing delivered) — it used to *document* the loss.
+

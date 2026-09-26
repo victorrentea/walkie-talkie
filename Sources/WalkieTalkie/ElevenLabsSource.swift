@@ -414,14 +414,17 @@ final class ElevenLabsSource: DictationSource {
                 case .failure(let why):
                     self.finishWithFailure(wav, duration, why)
                 case .success(let r) where r.text.isEmpty:
-                    Log.error("ElevenLabs returned no words")
-                    try? FileManager.default.removeItem(at: wav)
+                    // **An empty answer is a failure with the audio in hand, not
+                    // silence** (2026-09-26, the test plan's §3.8: TL16, TR13). It
+                    // used to delete the WAV and say *No words detected* — 60 s
+                    // of real speech went that way on 09-19 and again on 09-20.
+                    // `.failed` carries the WAV, staged for *Recover* — and
+                    // `heardNothing` keeps the local model out of it (see there).
+                    // Only a take under `MicRecorder.minimumDuration` is dropped
+                    // (`.silent("")`).
+                    Log.error("ElevenLabs returned no words — the audio is kept for Recover")
                     self.phase = .done("empty")
-                    // The local model's wording, and for its reason (Victor,
-                    // 2026-09-08): what the recogniser did with the audio is the
-                    // app's business; the one thing he acts on is that nothing
-                    // was heard.
-                    self.didEnd?(.silent("No words detected"))
+                    self.didEnd?(.failed(why: DictationEnd.heardNothing, audio: wav, duration: duration))
                 case .success(let r):
                     Log.info(String(format: "elevenlabs: %@ (%.2f) — %d chars in %.2fs (%.2f× audio)",
                                     r.language ?? "?", r.languageProbability, r.text.count,

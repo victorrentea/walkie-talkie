@@ -222,14 +222,15 @@ final class LocalWhisperSource: DictationSource {
                     return
                 }
                 guard let r = result, !r.text.isEmpty else {
-                    Log.error("local recording produced no transcript")
-                    try? FileManager.default.removeItem(at: wav)
-                    // **`No words detected`, and nothing else** (Victor,
-                    // 2026-09-08): what the recogniser did with the audio is the
-                    // app's business, and the one thing he acts on is that
-                    // nothing was heard.
+                    // **The WAV is kept** (2026-09-26, §3.8): an empty answer and
+                    // a helper that answered nothing (dead, hung, timed out) are
+                    // the same sentence lost if the file goes — so `.failed` with
+                    // the audio, staged for *Recover*, where it used to be
+                    // `.silent("No words detected")` and `removeItem`.
+                    let why = result == nil ? "the local model gave no answer" : DictationEnd.heardNothing
+                    Log.error("local recording produced no transcript — \(why); the audio is kept")
                     self.phase = .done("empty")
-                    self.didEnd?(.silent("No words detected"))
+                    self.didEnd?(.failed(why: why, audio: wav, duration: duration))
                     return
                 }
                 Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
