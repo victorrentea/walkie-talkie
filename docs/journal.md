@@ -13057,3 +13057,9 @@ below that it stays as batch 1 left it — the WAV kept, the banner *No words he
 the menu*, nothing delivered. Reason: on 3 s of silence the local model invented `www.clu.com.br`
 and typed it into the bound terminal; on real speech Scribe's empty answer is the failure the
 fallback exists for. To be implemented in the next fix batch (after the regression run).
+
+## Q10 decided (2026-09-26, 18:50, Victor): the halo style cycles on fn+F7 / fn+F9, not bare F7/F9
+
+*"Q10 fn+f7/f9"*. The tap swallows F7/F9 for `onHaloStep` only when the **fn** modifier
+(`.secondaryFn`) is down; bare F7/F9 pass through to the front app (IntelliJ's Step Into / Resume
+come back). Today's code ignores the fn flag in that branch (H ~2913). Next fix batch.
