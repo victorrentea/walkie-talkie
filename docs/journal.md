@@ -12836,3 +12836,23 @@ during the panel was *"ignored though uncommitted"*.
 - **🔼 ↑ on a caret sentence** still converts nothing and flashes nothing (Q7), and now says so:
   `✨ 🔼 ↑ on a caret sentence — ignored (Q7: it stays at the caret)` (TG17; a sentence already a
   spawn gets its own line).
+
+### 5. A start and its stop queued behind a frozen main thread are neither acted on
+
+The test plan's R10: *"main stall coalesces start+stop → sub-0.35 s recording, no banner"*. TL21: two
+🔼 → 1.2 s apart inside a 6 s `/test/stall` — both before the fail-open — ran on main back to back
+when it thawed: `mic: recording through …`, then `discarded — under 0.35s`, and nothing on screen.
+
+- **Every toggle the tap hands over is a ticket** (`HotkeyTap.ToggleTicket`, its own lock): 🔼 →,
+  ⌘⌃D and the wheel's two, stamped with uptime when made. `hotkeys.onLocalToggle`'s run on main takes
+  one (`takeToggle`) before `toggleDictation`.
+- **A start that waited more than a second on main with another toggle already queued behind it is
+  dropped with that toggle** (`toggleCoalescedByStall`, `dropNextToggle`): the recorder never opens,
+  the stop's own run finds its ticket dropped and does nothing, one line (`⏸ a start and its stop
+  were both queued behind a frozen main thread (the start made 5.4 s ago, the stop 1.2 s after it) —
+  neither acted on; the recorder was never opened`) and the chip flashes `⏸ ignored — the Mac was
+  frozen` for 6 s. A second is *decided here*: main answers a toggle in milliseconds, and the dwell
+  (2 s) would have refused that stop anyway had main been awake to set the sentence's age.
+- A start alone behind a stall still starts (TG25's +1.0 s F10 acted after the thaw, as the plan
+  wants); a stop made after the thaw is an ordinary stop.
+- The flash is the `listening-flash` state with other words; no new shot on the states page.

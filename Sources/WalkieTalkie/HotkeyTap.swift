@@ -1506,6 +1506,39 @@ final class HotkeyTap {
         return true
     }
 
+    // ── Toggles queued behind the main thread (2026-09-26, TL21) ────────────
+
+    /// **Every start/stop toggle the tap hands over, in order, stamped with
+    /// when it was made** — 🔼 → and ⌘⌃D. The main thread takes one per run of
+    /// `onLocalToggle`; while it is frozen they pile up, and a start with its
+    /// own stop already queued behind it is the one pair that must not run:
+    /// the microphone would open and shut in the same millisecond and the
+    /// recording be thrown away as under 0.35 s, with nothing on screen. See
+    /// `AppDelegate`'s `hotkeys.onLocalToggle`. Its own lock: `stateLock` may be
+    /// what the frozen thread holds.
+    struct ToggleTicket { let madeAt: CFTimeInterval; var dropped = false }
+    private let toggleLock = NSLock()
+    private var toggleTickets: [ToggleTicket] = []
+
+    /// Tap thread, right before `onLocalToggle` is dispatched.
+    private func queueToggle() {
+        toggleLock.lock(); toggleTickets.append(ToggleTicket(madeAt: HotkeyTap.uptime())); toggleLock.unlock()
+    }
+
+    /// Main thread: the toggle about to run, and the one queued behind it. Nil
+    /// for a toggle that did not come through `queueToggle` (the wheel's).
+    func takeToggle() -> (ticket: ToggleTicket, waited: CFTimeInterval, next: ToggleTicket?)? {
+        toggleLock.lock(); defer { toggleLock.unlock() }
+        guard !toggleTickets.isEmpty else { return nil }
+        let t = toggleTickets.removeFirst()
+        return (t, HotkeyTap.uptime() - t.madeAt, toggleTickets.first)
+    }
+
+    /// Main thread: the next queued toggle is the stop of a start that was
+    /// never opened — its own run finds it dropped and does nothing.
+    func dropNextToggle() {
+        toggleLock.lock(); if !toggleTickets.isEmpty { toggleTickets[0].dropped = true }; toggleLock.unlock()
+    }
 
     /// **A sentence younger than this cannot be ended by 🔼 →** (2026-09-18) —
     /// Victor's own fallback for the same report: *"or at least just put a two
@@ -2500,6 +2533,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     } else if localCapture || dictating {
                         Log.info(dictating ? "🎙️ wheel tapped — ending the dictation"
                                            : "🎙️ wheel tapped — starting a dictation")
+                        queueToggle()
                         DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                     }
                     return nil
@@ -2549,6 +2583,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         // holding must not be ended by this timer.
                         guard !self.dictating else { return }
                         Log.info("🎙️ left held + wheel held — bound, now dictating")
+                        self.queueToggle()
                         DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                     }
                     wheelHold = work
@@ -3092,6 +3127,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // open the microphone and close it again on the next repeat.
         if keyCode == VK_D && cmd && ctrl && !opt {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⌃D (autorepeat)", type, event) }
+            queueToggle()
             DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
             return swallow("⌘⌃D dictate", type, event)
         }
@@ -3185,6 +3221,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     Log.info("🎯 ➡️ F10 \(String(format: "%.0f", sinceLastF10 * 1000))ms on, but the sentence is only \(String(format: "%.0f", age * 1000))ms old — not stopping it")
                     return swallow("\(gesture) — the sentence is too young to stop", type, event)
                 }
+                queueToggle()
                 DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
                 return swallow(gesture, type, event)
 

@@ -2004,7 +2004,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.hotkeys.areaAwaitingDestination = parked
         }
         hotkeys.onLocalToggle = { [weak self] in
-            DispatchQueue.main.async { self?.toggleDictation() }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // **A start whose stop is already queued behind it is not
+                // opened** (2026-09-26, TL21) — see `HotkeyTap.takeToggle`.
+                if self.toggleCoalescedByStall() { return }
+                self.toggleDictation()
+            }
         }
         // ⬆️ held, mouse moved up — **dictate at a session that does not exist
         // yet.** A gesture of its own, where from 2026-09-05 it was the wheel
@@ -4343,6 +4349,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info(on ? "☠️ kamikaze — the prompt on the panel closes its agent when done"
                     : "☠️ kamikaze taken back off the prompt on the panel")
     }
+
+    /// **A start and its own stop, both queued behind a frozen main thread,
+    /// are neither acted on** (2026-09-26, TL21 / R10). Two 🔼 → made 1.2 s
+    /// apart during a 6 s stall arrived on main back to back: the microphone
+    /// opened and shut in the same millisecond, the take was thrown away as
+    /// *under 0.35 s*, and nothing on screen said a word. The tap stamps every
+    /// toggle it hands over (`HotkeyTap.takeToggle`); a start that waited more
+    /// than `stallCoalesceSeconds` with another toggle already queued behind it
+    /// is dropped with that toggle, the recorder is never opened, and the chip
+    /// says why. True when this run is one of the pair.
+    private func toggleCoalescedByStall() -> Bool {
+        guard let t = hotkeys.takeToggle() else { return false }
+        if t.ticket.dropped { return true }   // the stop of a pair already said
+        let wouldStart = !(listening || source.isRecording)
+        guard wouldStart, let next = t.next, !next.dropped, t.waited > Self.stallCoalesceSeconds else { return false }
+        hotkeys.dropNextToggle()
+        Log.info(String(format: "⏸ a start and its stop were both queued behind a frozen main thread "
+                        + "(the start made %.1f s ago, the stop %.1f s after it) — neither acted on; the recorder was never opened",
+                        t.waited, next.madeAt - t.ticket.madeAt))
+        overlay.flash("⏸ ignored — the Mac was frozen", duration: 6)
+        return true
+    }
+    /// Main answers a toggle in milliseconds; a second's wait is a stall.
+    private static let stallCoalesceSeconds: TimeInterval = 1.0
 
     /// **A bind is a dictation coming**, so whatever the source needs time for
     /// is started now: the ten seconds a cold local model costs overlap him
