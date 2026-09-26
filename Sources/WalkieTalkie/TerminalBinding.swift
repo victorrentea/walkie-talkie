@@ -1091,10 +1091,7 @@ final class TerminalBinding {
                             try
                                 set c to (history of t) as text
                                 if (count c) > 600 then set c to text -600 thru -1 of c
-                                if c contains "press Enter to send" then
-                                    do script "" in t
-                                    return "ok+review"
-                                end if
+                                return "ok" & linefeed & c
                             end try
                             return "ok"
                         end if
@@ -1104,15 +1101,30 @@ final class TerminalBinding {
             return "gone"
         end tell
         """
-        switch osascript(script) {
-        case "ok":
-            return true
-        case "ok+review":
+        guard let answer = osascript(script), answer == "ok" || answer.hasPrefix("ok\n") else { return false }
+        let tail = answer == "ok" ? "" : String(answer.dropFirst(3))
+        // The tab's last 600 characters, decided here rather than in the script
+        // so the echo can be told from the hint (`asksForReview`).
+        guard asksForReview(tail: String(tail.suffix(600)), sent: text) else { return true }
+        let again = """
+        tell application "Terminal"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    try
+                        if tty of t is "\(escape(tty))" then
+                            do script "" in t
+                            return "ok"
+                        end if
+                    end try
+                end repeat
+            end repeat
+            return "gone"
+        end tell
+        """
+        if osascript(again) == "ok" {
             Log.info("⌨️ a third Return — Claude Code read the block as a paste and asked to review it")
-            return true
-        default:
-            return false
         }
+        return true
     }
 
     // MARK: - tmux
@@ -1729,8 +1741,20 @@ final class TerminalBinding {
     /// arrives with line breaks of its own is still collapsed before it gets
     /// here. What this guarantees is narrower than before and is the part that
     /// mattered: no run of spaces, no tabs, and nothing that submits.
-    private static func singleLine(_ text: String) -> String {
-        text.components(separatedBy: .newlines)
+    ///
+    /// **And no control bytes** (2026-09-26, batch 5 — the test plan's R18,
+    /// TD20): a `^C` and an `ESC[201~` inside a dictation reached the raw-mode
+    /// reader as the bytes themselves — an interrupt and a bracketed-paste end
+    /// typed into Claude Code by a sentence. Every C0 control but the tab (which
+    /// becomes a space just below), DEL, the C1 range and whole escape sequences
+    /// (CSI, OSC, DCS/SOS/PM/APC, and two-byte `ESC x`) are taken out **of the
+    /// line that is typed only** — the outbox keeps the text as it was said.
+    static func singleLine(_ text: String) -> String {
+        let clean = stripControls(text)
+        if clean.count != text.count {
+            Log.info("⌨️ \(text.count - clean.count) character(s) of terminal control stripped from the typed line (the outbox keeps them)")
+        }
+        return clean.components(separatedBy: .newlines)
             .map { line in
                 line.replacingOccurrences(of: "\t", with: " ")
                     .components(separatedBy: " ")
@@ -1739,6 +1763,74 @@ final class TerminalBinding {
             }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The text with terminal control removed — see `singleLine`. Line breaks
+    /// (`\n`, `\r`) and tabs stay: `singleLine` owns what they become.
+    static func stripControls(_ text: String) -> String {
+        let u = Array(text.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var i = 0
+        func skipCSI(from j: Int) -> Int {          // parameters and intermediates, then one final byte
+            var k = j
+            while k < u.count, (0x20...0x3F).contains(u[k].value) { k += 1 }
+            return k < u.count && (0x40...0x7E).contains(u[k].value) ? k + 1 : k
+        }
+        func skipString(from j: Int, belEnds: Bool) -> Int {   // up to ST (ESC \), or BEL for OSC
+            var k = j
+            while k < u.count {
+                if belEnds, u[k].value == 0x07 { return k + 1 }
+                if u[k].value == 0x9C { return k + 1 }
+                if u[k].value == 0x1B, k + 1 < u.count, u[k + 1] == "\\" { return k + 2 }
+                k += 1
+            }
+            return k
+        }
+        while i < u.count {
+            let v = u[i].value
+            switch v {
+            case 0x1B:
+                guard i + 1 < u.count else { i += 1; continue }
+                switch u[i + 1] {
+                case "[": i = skipCSI(from: i + 2)
+                case "]": i = skipString(from: i + 2, belEnds: true)
+                case "P", "X", "^", "_": i = skipString(from: i + 2, belEnds: false)
+                default: i += (0x20...0x7E).contains(u[i + 1].value) ? 2 : 1
+                }
+            case 0x9B: i = skipCSI(from: i + 1)
+            case 0x9D: i = skipString(from: i + 1, belEnds: true)
+            case 0x90, 0x98, 0x9E, 0x9F: i = skipString(from: i + 1, belEnds: false)
+            case 0x09, 0x0A, 0x0D: out.append(u[i]); i += 1
+            case 0x00...0x1F, 0x7F, 0x80...0x9F: i += 1
+            default: out.append(u[i]); i += 1
+            }
+        }
+        return String(out)
+    }
+
+    /// **Whether the tab asks for the review Return** — read only *after* the
+    /// echo of the sentence itself (2026-09-26, batch 5 — R18, TD19). The whole
+    /// last 600 characters were searched, so a sentence that *says* "press
+    /// Enter to send" matched its own echo and a plain reader got a third
+    /// Return it never asked for. Claude Code prints the hint under its input
+    /// box, below the text; so the tail is taken from the last place the
+    /// sentence's own last characters appear (whitespace and box-drawing
+    /// removed, so a wrapped or boxed echo still matches). When the echo is not
+    /// there at all — Claude Code shows a long paste as `[Pasted text #1 …]` —
+    /// the sentence's words are not on screen to be matched, and the whole tail
+    /// is read as before.
+    static func asksForReview(tail: String, sent: String) -> Bool {
+        func squash(_ s: String) -> String {
+            String(String.UnicodeScalarView(s.unicodeScalars.filter {
+                !CharacterSet.whitespacesAndNewlines.contains($0) && !(0x2500...0x257F).contains($0.value)
+            }))
+        }
+        let screen = squash(tail)
+        let lastLine = sent.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).last.map(String.init) ?? sent
+        let echo = String(squash(lastLine).suffix(24))
+        var after = Substring(screen)
+        if !echo.isEmpty, let r = screen.range(of: echo, options: .backwards) { after = screen[r.upperBound...] }
+        return after.range(of: "pressEntertosend", options: .caseInsensitive) != nil
     }
 
     /// AppleScript string literals understand exactly two escapes, and a

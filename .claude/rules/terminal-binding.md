@@ -57,6 +57,17 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 - **Words first, a blank line, then one bracketed clause per line** (`AppDelegate.terminalLine`, 2026-09-07). *"One line, always"* is expired. Verified end to end: bytes through a real `do script` into a non-shell reader, then into a live Claude Code session, which received *one* prompt answered once, not five times. → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 - **Separators are `\n`; nothing may send `\r` except the submitting Return.** In a raw-mode TUI `\n` inserts a newline (how Claude Code takes a multi-line prompt); `\r` submits half the sentence. → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 - **`TerminalBinding.escape` spells a newline `\n` for AppleScript.** Its string literals cannot contain a raw one — without this the script does not compile and the delivery disappears silently, with no error anywhere. `singleLine` still normalises whitespace *inside* each line, so the structure is the app's, never the recogniser's. → journal: *The words, a blank line, then one clause per line (2026-09-07)*
+- **The typed line carries no terminal control** (2026-09-26, batch 5 — R18, TD20): `singleLine` →
+  `stripControls` drops every C0 but `\t` (then a space), `\n`, `\r`; DEL; C1; and whole escape
+  sequences (CSI incl. `ESC[201~`, OSC to BEL/ST, DCS/SOS/PM/APC, two-byte `ESC x`). `^C` and a
+  bracketed-paste end reached Claude Code raw. **Only the typed line** — the outbox keeps the text
+  as said. One log line counts what was taken. → journal: *Fixes to the test plan's findings, batch 5*
+- **The third Return reads only what follows the sentence's own echo** (batch 5, TD19):
+  `writeToTerminalApp` hands the tab's last 600 characters to `asksForReview`, which looks for
+  `press Enter to send` after the last place the sentence's last 24 characters appear
+  (whitespace and box drawing removed). A sentence that *said* the phrase matched its own echo and
+  a plain `cat` got a third Return. No echo on screen (a collapsed `[Pasted text #1 …]`) → the whole
+  tail is read, as before. The third Return is a second `osascript` now, sent only when asked.
 - **Shots travel as paths, not a `📸 ×2` count.** An agent can do nothing with a number and everything with something to `Read`; `[selected: …]`, `[look at: …]`, `[context: …]`, `[elements I picked in Chrome: …]` mirror the outbox keys. → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 - **Keep `[this text was dictated in RO or EN]`, on dictation only, naming both languages always.** A transcript looks typed, so a mis-heard word reads as chosen: the recogniser turned `Wispr Relay` into `risparerile ei`. The detected code was tried for one commit and dropped — plain Romanian came back labelled `en` in the very recording used to test it, and a clause naming the wrong language aims the phonetics at a language the words were never said in. Do not add advice after it (*"skip the rest of details - are obvious"*). → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 

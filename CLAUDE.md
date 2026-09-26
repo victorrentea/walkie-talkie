@@ -87,7 +87,7 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   wrap**, **revoking Wispr's Accessibility**, **`open -a "Wispr Flow"`** — why: `dictation-source.md`.
 - **Bracketed paste for terminal delivery** — Claude Code wraps it in `<pasted_content>` and the
   model treats it as data. Delivery stays a raw `do script` chunk + Return, plus a third Return only
-  when the tab reads back `review and press Enter to send`.
+  when the tab reads back `review and press Enter to send` *after* the sentence's own echo.
 - **A typing affordance on the overlay** (`RelayPanel.wantsKey` only while editing).
 - **A leash/smoothing/spring** on cursor-following; **a ✕ by the pointer**; **border, blur or
   shadow** on anything that rides the pointer; **an emoji where the mouse should be drawn**

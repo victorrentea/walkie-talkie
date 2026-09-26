@@ -12943,3 +12943,31 @@ past the dropped words is a fresh centred line"* — it came in from the left, 8
   (0.60–0.66 s) was the design sitting on the limit: τ 0.26 puts 90 % at exactly 0.60 s. Opacity now
   eases at its own `fadeIn` 0.22 (90 % at 0.51 s); `appear` keeps `reflow`. Measured: slowest word
   0.55–0.56 s over three runs.
+
+### 2. The typed line carries no terminal control; the third Return reads past the echo
+
+The plan's R18 (*"control chars not stripped … the echo of the dictation itself matches 'press Enter
+to send'"*), TD20 (`^C` and `ESC[201~` reached a raw-mode reader as the bytes themselves — an
+interrupt and a bracketed-paste end typed into Claude Code by a sentence) and TD19 (a 40-char
+sentence containing *press Enter to send* got a third Return in a plain `cat` tab that never asked).
+
+- **`singleLine` strips terminal control first** (`TerminalBinding.stripControls`): every C0 but the
+  tab (which becomes a space, as before) and the line breaks `singleLine` owns; DEL; the C1 range;
+  and whole escape sequences — CSI to its final byte (so `ESC[201~` goes whole, not just its ESC),
+  OSC to BEL or ST, DCS/SOS/PM/APC to ST, two-byte `ESC x`. Every path that types into a terminal
+  goes through it (`deliver` for Terminal.app, tmux and the IDE bridges; `submitPrompt`). **Never
+  the outbox** — the text as said is the record; one log line counts what was taken.
+- **The review read-back looks only after the sentence's own echo** (`asksForReview`). The script
+  used to test `c contains "press Enter to send"` over the tab's last 600 characters — which
+  include the echo of what was just typed. Now the script hands the tail back and Swift finds the
+  last place the sentence's last 24 characters appear (whitespace and box-drawing removed, so a
+  wrapped or boxed echo still matches) and reads only what follows: Claude Code prints its hint
+  under the input box, below the text. **Picked over Claude Code's hint *position*** (last N lines):
+  a plain reader's echo *is* the last line, so position alone cannot tell them apart, while "after
+  the echo" is exactly the difference. When the echo is not on screen at all — Claude Code shows a
+  long paste as `[Pasted text #1 +N lines]` — the words cannot be matched and the whole tail is read,
+  as before. The third Return is a second `osascript` (~0.1–0.2 s later than it was, and only when
+  asked). Unit-tested (`TerminalLineTests`: the echo, the boxed hint, a collapsed paste, a sentence
+  ending in the phrase). **Not verified against a live Claude Code session** — TD18 still needs one.
+- TD19 and TD20 PASS (`report-fix5.md`): no third Return logged; `CR=2`, `^C raw=False`,
+  `ESC[201~ raw=False`, literals intact.
