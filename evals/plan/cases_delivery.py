@@ -898,15 +898,19 @@ def _spawn_probe():
     post("/test/spawn", {"text": text})
     samples, t_bound = [], None
     while time.time() - t0 < 60:
+        # **The outbox first, then the state** (2026-09-26): read the other way round, a row written
+        # a few ms after the state read (i.e. after the bind, as it should be) was counted in a sample
+        # whose `bound` predates it, and TR22 reported a receipt 10 ms "before" the window.
+        rows_now = outbox_count() - n0
         try:
             s = state()
         except Exception:
             time.sleep(0.02)
             continue
         b = (s.get("bound") or {}).get("tty")
-        samples.append((round(time.time() - t0, 3), s["busy"], b, outbox_count() - n0, tuple(s.get("busyWhy") or [])))
+        samples.append((round(time.time() - t0, 3), s["busy"], b, rows_now, tuple(s.get("busyWhy") or [])))
         if b and t_bound is None:
-            t_bound = time.time() - t0
+            t_bound = samples[-1][0]      # the sample's own clock, the one TR22 compares a row's against
         if t_bound is not None and time.time() - t0 > t_bound + 1.0:
             break
         time.sleep(0.02)

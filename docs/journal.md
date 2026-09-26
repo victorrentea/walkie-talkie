@@ -12502,3 +12502,35 @@ it. **The panel's ⏎ now ignores a Return stamped `backButtonStamp`** (the even
 swallows it and says so in the log. Picked over dropping the post in the tap because the tap would
 have to ask a main-thread window whether it is key from the tap's thread; the stamp is already on
 the event and answers the question where it is asked.
+
+### Batch 2, measured
+
+| case | before (`report-2026-09-26.md`) | after |
+|---|---|---|
+| TD4 bind B under A's panel | BUG — `to=terminal:ttys003`, in B | PASS — `to=terminal:<A>`, in A only (`report-fix2.md`) |
+| TD29 unbind under A's panel | BUG — held, delivered to B | PASS — to A, nothing held |
+| TD31 `/test/dictation` unbound | PASS | PASS |
+| TD5 restore during a caret sentence | BUG — `caret dictation redirected` | PASS — `pasteMode` stays |
+| TD6 restore during a spawn | BUG — `✨ spawn dropped` | PASS — `spawnPending` stays |
+| TD25 spawn busy | BUG — 59 idle samples before the bind | PASS — 0 |
+| TR22 spawn receipt | BUG — row +1.04 s, bound +3.09 s | PASS — row with the bind |
+| TR24 bind B in the settle (real audio) | BUG — B 229 chars | PASS — A 231, B 0 (`report-fix2b.md`) |
+| TG19 rebind under the panel | BUG — to B | PASS — to A |
+| TG18 unbound, bound during the upload | BUG — `to=caret` | PASS — the terminal just bound |
+| TG13 🔼 → over a clean sentence | BUG — `to=caret` | PASS — `to=terminal:…`, sink 0 chars |
+| TG36 🔽 → with *Rebind to…* up | BUG — row activated | PASS — `⏎ from 🔽 → … ignored` |
+| TD12 bind during a deferred quit | BUG — stale A restored | PASS — B restored |
+| TD13 tmux restore | BUG — the active pane | PASS — `bound-tty='ttys020 %3'`, %3 restored with %4 active |
+| TG20 unbind in the settle | (was the *held* control) | PASS — to the latched witness, nothing held |
+
+**Cases changed, and why** — each where the case, not the app, disagreed with the decisions or
+measured wrongly:
+
+- **TG20** asserted *an unbind in the settle holds the sentence for the next bind*. Q2 says the
+  latched terminal gets it; the case now asserts that.
+- **TD12, TD13** did by hand what the old `relay-restart.sh` did (the pre-SIGTERM tty, the tty
+  without the pane); they now do what the script does.
+- **TR22 / TD25's probe** read the state before the outbox in each 20 ms sample and stamped the
+  bind with a later clock than the row, so a row written *after* the bind (by construction) was
+  reported 10 ms *before* it. The outbox is read first now, and both use the sample's clock.
+- **TD31**'s note said real speech is not held (TD3); since item 2 it is.
