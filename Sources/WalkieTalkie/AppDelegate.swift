@@ -1470,6 +1470,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyTap.redirectEnabled = on
             return ["redirect": on]
         }
+        // **The prompt panel, answered from a desk** (2026-09-26, test-plan gap
+        // G5) — send, cancel or edit what is held, the three answers the panel
+        // takes from ⏎ / ⎋ / a click on its words. It exists because a panel
+        // that paused under the harness's pointer could only be let go by hand
+        // (TD20, TL25). Cancel takes the ✕'s path, so it is Q6's cancel exactly.
+        picker.onTestPrompt = { [weak self] verb, text in
+            var answer: [String: Any] = ["ok": false, "error": "gone"]
+            DispatchQueue.main.sync {
+                guard let self else { return }
+                guard self.overlay.isHoldingPrompt else {
+                    answer = ["ok": false, "error": "no prompt on the panel", "prompt": self.overlay.promptState]
+                    return
+                }
+                switch verb {
+                case "send": self.overlay.sendHeldPrompt()
+                case "cancel": self.overlay.cancelHeldPrompt()
+                case "edit": self.overlay.testEditPrompt(text)
+                default:
+                    answer = ["ok": false, "error": "\"do\" is send, cancel or edit"]
+                    return
+                }
+                Log.info("🧪 POST /test/prompt — \(verb)\(text.map { " (\($0.count) chars)" } ?? "")")
+                answer = ["ok": true, "did": verb, "prompt": self.overlay.promptState]
+            }
+            return answer
+        }
         picker.onTestKeyTrace = { on in
             HotkeyTap.keyTrace = on
             return ["keyTrace": on]
@@ -5798,6 +5824,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["firewall"] = hotkeys.wisprFirewallOn
         out["tapAlive"] = hotkeys.lastCanary.map { $0.alive } ?? NSNull()
         out["tapFailingOpen"] = hotkeys.lastCanary.map { $0.failingOpen } ?? NSNull()
+        // The held prompt panel (test-plan gap G5): {held, verb, deadline, text, …}.
+        out["prompt"] = overlay.promptState
         // **Where the recogniser is in its own round trip** — source-agnostic
         // (`DictationPhase`), beside the Wispr-specific machine that produced it.
         out["phase"] = source.phase.name

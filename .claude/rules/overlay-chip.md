@@ -340,6 +340,13 @@ yields to `--label`).
   `bare || !hovering` — the old test put a ✕ on a flash riding the cursor (*"n-am cum să apăs pe
   el din moment ce acel tooltip se plimbă cu mouse-ul"*). The menu bar item is the ✕ that stays
   put. → journal: *Two shapes: the chip and the panel*
+- **Autosend's panel pauses only for a pointer that moves onto it** (2026-09-26, batch 4; TD20,
+  TL25). `syncHoverPause` reads the pointer against `panel.frame`, and a long prompt's panel unfolds
+  over most of the screen — a pointer merely resting where it landed read as a reach, autosend held
+  forever, the relay busy until ⎋ by hand. The pointer is taken at `showSentPrompt`
+  (`promptPointerAtShow`); until it has moved more than `promptPointerSlack` (2 pt) being inside is not
+  a hover. **The held panel's words can be replaced from outside** (`replacePromptWords`: 🔼 ↓ marking
+  it kamikaze, `POST /test/prompt {"do":"edit"}`), and `promptState` is `GET /test/state.prompt`.
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still
   stop it; the shot receipt is a number in the recording row, not a `flash(_:)`, because a flash
   takes the chip over for 1.5 s and the count has to keep climbing.

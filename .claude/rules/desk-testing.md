@@ -40,6 +40,7 @@ timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — n
 | `POST /test/input {"name"}` | point the **system** default input at a device (for `tools/wispr-test.sh`) |
 | `POST /test/paste-hint` | show the `📋 Re-paste ⌘⇧P` row once |
 | `POST /test/cancel` · `/test/recover` | the ✕'s cancel · recover the cancelled dictation |
+| `POST /test/prompt {"do": "send"｜"cancel"｜"edit", "text"?}` | **the held prompt panel** (2026-09-26, G5): ⏎ · the ✕'s cancel · `edit` with `text` replaces the words and restarts the clock (an edit that ended), without it opens the field; 409 `no prompt on the panel` otherwise. Answers `prompt` |
 | `POST /test/gesture {"name"}` | post Options+'s ⌃⌥⌘F-key chord for a gesture: `forward-`/`back-` + `click｜right｜left｜up｜down`; the F7 bind sub-case (held left button) is not fakeable |
 | `POST /test/sink {"on"｜"key"｜"restore"}` · `GET /test/sink` · `/test/sink/clear` | `WisprSink`, the instrumented key window: what landed, by which route |
 | `POST /test/rebind-panel {"query"}` · `/test/resume-session` | the *Rebind to…* panel · ⏎ on a closed session's row |
@@ -56,7 +57,8 @@ are held — read this, never infer) · `keyTrace` · `keyRedirect` · `lastRing
 `liveCaption` (the band's ticker) · `fallingBack` · `autosend` · `lastFailure {why, engine, at}` · `recoverable {path,
 duration, expiresAt}` · `live` (the socket: `socket`, `chunksSent`, `pending`, `seconds`, `cutSeconds`, `segments`,
 `correctedSegments`, `corrections`, `correcting`, `committedChars`, `partialChars`, `keyterms`) · `elevenFault` ·
-`elevenCost {total, label, lines}` · `micOpened {device, rate, channels, at}` (what the recorder really opened) · `whisper`.
+`elevenCost {total, label, lines}` · `micOpened {device, rate, channels, at}` (what the recorder really opened) · `whisper` ·
+since batch 4: `prompt {held, verb, deadline (s left, null while paused/edited), text, buttons, editing, paused}` · `tapFailingOpen`.
 
 - **`delivery`** (outbox line and `lastDelivery`): `{via: wispr-cmdv｜wispr-history｜wispr-notes｜
   pasteboard｜local-whisper｜test, kind: route｜alreadyInserted｜insertedElsewhere, to: terminal:ttysNNN｜

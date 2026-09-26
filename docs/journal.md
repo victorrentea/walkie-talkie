@@ -12790,3 +12790,25 @@ Return sends a held panel … the key trace cannot see the app's own swallows (`
   `return swallow(`, and the *asks for the Return after the words* check is anchored after Wispr's
   stop chord — the own-engine branch above it satisfied it, so its self-test mutation (*back + right
   is only Return again*) was no longer caught. `--self-test`: all 12 caught.
+
+### 3. `POST /test/prompt`, `state.prompt`, and a pointer that has not moved does not pause autosend
+
+The test plan's gap G5 (*"`POST /test/prompt {"do":"send|cancel|edit","text"}`; state
+`prompt{held,verb,deadline,text}`"*), and the verdicts of TD20 and TL25: *"its 4826-char panel
+unfolded under a stationary pointer, autosend paused (`autosend held — the pointer is on the
+panel`), nothing was delivered, and the relay stayed busy until ⎋ by hand."*
+
+- **`POST /test/prompt {"do": "send" | "cancel" | "edit", "text"?}`** (`picker.onTestPrompt`): ⏎,
+  the ✕'s cancel (so Q6's cancel exactly), and an edit — with `text`, the words replaced and the
+  clock restarted whole, which is what leaving the field does; without, the field opened (clock
+  stopped). 409 with `no prompt on the panel` otherwise. **`GET /test/state.prompt`** is
+  `RelayWindow.promptState`: `{held, verb, deadline (seconds left, null while paused or edited), text,
+  buttons, editing, paused}`.
+- **Only a pointer that moves onto the panel pauses autosend.** The pointer is taken at
+  `showSentPrompt` (`promptPointerAtShow`); until it has moved more than 2 pt (`promptPointerSlack`,
+  *decided here* — a twitch towards the panel is a reach too) being inside the panel is not a hover.
+  The rule the pause was built on (*"the reach itself is what stops the clock"*) is kept; a pointer
+  that did not reach cannot have meant it.
+- TD20 now completes with no route and no hand: `sent 4826 chars via autosend; to=terminal:ttys024;
+  … begin+end=True; CR=2; literals intact`. Its verdict is **BUG** for another reason — `^C` and
+  `ESC[201~` reach the tty raw (R18, control bytes not stripped), which is not this batch's.

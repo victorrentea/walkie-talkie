@@ -404,6 +404,9 @@ final class ElementPicker {
     /// never a character). The same switch as `WT_KEY_TRACE=1`, reachable at
     /// runtime because an installed app does not inherit a shell's environment.
     var onTestKeyTrace: ((Bool) -> [String: Any])?
+    /// `POST /test/prompt {"do":"send"|"cancel"|"edit","text"?}` — see
+    /// `AppDelegate`'s `picker.onTestPrompt`.
+    var onTestPrompt: ((String, String?) -> [String: Any])?
 
     /// `POST /test/ax-insert` `{"on": true}` — deliver printable keystrokes
     /// through `AXSelectedText` on its own queue rather than re-posting them.
@@ -1051,6 +1054,12 @@ final class ElementPicker {
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             let on = body?["on"] as? Bool ?? true
             respond(conn, 200, ["ok": true].merging(onTestAXInsert?(on) ?? [:]) { _, new in new })
+
+        // The held prompt panel — see `onTestPrompt`.
+        case ("POST", "/test/prompt"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let answer = onTestPrompt?(body?["do"] as? String ?? "", body?["text"] as? String) ?? ["ok": false]
+            respond(conn, (answer["ok"] as? Bool) == true ? 200 : 409, answer)
 
         // Every keyboard event and its verdict — see `onTestKeyTrace`.
         case ("POST", "/test/key-trace"):

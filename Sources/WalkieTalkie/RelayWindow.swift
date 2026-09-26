@@ -4541,6 +4541,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         }
         promptHoverPaused = false
         promptShownAt = Date()
+        promptPointerAtShow = NSEvent.mouseLocation
+        promptPointerMoved = false
         layoutContent(animated: true)
         refreshOpacity()
 
@@ -4590,12 +4592,30 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     private var showsHoverPause: Bool { promptHoverPaused && sentPrompt != nil && !editingPrompt }
 
+    /// **Only a pointer that moves onto the panel pauses it** (2026-09-26, TD20,
+    /// TL25). A long prompt's panel unfolds over most of the screen, and a
+    /// pointer that was simply resting where the panel landed read as a reach
+    /// for it: autosend held forever, nothing delivered, the relay busy until
+    /// someone pressed ⎋ by hand — twice in the test plan's runs, with the
+    /// harness's pointer and a 4826-char sentence. So the pointer is taken at
+    /// the panel's appearance, and until it has moved (`promptPointerSlack`
+    /// points, a hand's twitch being a reach too) being inside the panel is not
+    /// a hover.
+    private var promptPointerAtShow: NSPoint?
+    private var promptPointerMoved = false
+    private static let promptPointerSlack: CGFloat = 2
+
     private func syncHoverPause() {
         guard sentPrompt != nil, !promptButtons, !editingPrompt,
               let shown = promptShownAt,
               Date().timeIntervalSince(shown) >= Self.hoverPauseSettle
         else { return }
-        let over = panel.isVisible && panel.frame.contains(NSEvent.mouseLocation)
+        let pointer = NSEvent.mouseLocation
+        if !promptPointerMoved, let at = promptPointerAtShow,
+           hypot(pointer.x - at.x, pointer.y - at.y) > Self.promptPointerSlack {
+            promptPointerMoved = true
+        }
+        let over = panel.isVisible && panel.frame.contains(pointer) && promptPointerMoved
         guard over != promptHoverPaused else { return }
         promptHoverPaused = over
         if over {
@@ -5080,6 +5100,42 @@ private let frontLabel = NSTextField(labelWithString: "")
 
     /// Whether a prompt is on screen and therefore whether ⏎ belongs to it.
     var isHoldingPrompt: Bool { sentPrompt != nil }
+
+    /// **The words on the panel, replaced from outside** — 🔼 ↓ marking the
+    /// held prompt kamikaze (2026-09-26), and `POST /test/prompt {"do":"edit"}`.
+    /// A panel whose words are not editable (`promptWords` nil) keeps its
+    /// preview; the release hands back nil and the message's own text is used.
+    /// The clock is left alone: the words changed, the decision did not.
+    func replacePromptWords(_ words: String) {
+        guard sentPrompt != nil, promptWords != nil else { return }
+        promptWords = words
+        if editingPrompt { promptLabel.stringValue = words }
+        sentPrompt = [promptWords, promptExtras.nilIfEmpty].compactMap { $0 }.joined()
+        layoutContent()
+    }
+
+    /// **The panel, for `GET /test/state`** (test-plan gap G5): whether a prompt
+    /// is held, the green button's verb, seconds left on its clock (nil while
+    /// paused or edited), the words, and why it is not counting.
+    var promptState: [String: Any] {
+        guard let prompt = sentPrompt else { return ["held": false] }
+        var out: [String: Any] = ["held": true, "verb": sendVerb, "text": promptWords ?? prompt,
+                                  "buttons": promptButtons, "editing": editingPrompt,
+                                  "paused": promptHoverPaused]
+        out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
+        return out
+    }
+
+    /// `POST /test/prompt {"do":"edit"}` — what an edit that ended does: the
+    /// words replaced and the clock restarted whole, like leaving the field.
+    /// Without `text` it opens the field, which stops the clock.
+    func testEditPrompt(_ text: String?) {
+        guard sentPrompt != nil else { return }
+        guard let text else { return beginPromptEdit() }
+        if editingPrompt { promptLabel.stringValue = text; endPromptEdit() }
+        replacePromptWords(text)
+        startPromptCountdown(hold: promptHold)
+    }
 
     /// Dragging is a panel gesture. The chip is pinned to the cursor, so hauling
     /// it around would only mean fighting the thing that puts it back.
