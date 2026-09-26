@@ -454,6 +454,9 @@ final class ElementPicker {
     /// **Pick the microphone the way the menu does** — `POST /test/mic`. An
     /// empty id reports without changing anything.
     var onTestMic: ((String) -> [String: Any])?
+    /// `POST /test/mic {"device": "<name substring>" | null}` — the
+    /// process-local override (`InputDevice.testOverride`); answers like `id`.
+    var onTestMicOverride: ((String?) -> [String: Any])?
 
     /// One pulse of the `⌘⇧P` hint under the pointer — see `PasteHint`.
     var onTestPasteHint: (() -> Void)?
@@ -828,6 +831,11 @@ final class ElementPicker {
         // `mic` block, which this answers with.
         case ("POST", "/test/mic"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            if let body, body.keys.contains("device") {
+                let name = body["device"] as? String
+                respond(conn, 200, ["ok": true].merging(onTestMicOverride?(name) ?? [:]) { _, new in new })
+                return
+            }
             let id = (body?["id"] as? String) ?? ""
             respond(conn, 200, ["ok": true].merging(onTestMic?(id) ?? [:]) { _, new in new })
 

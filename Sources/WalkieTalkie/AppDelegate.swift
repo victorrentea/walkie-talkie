@@ -1613,6 +1613,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `tools/wispr-test.sh`. Only useful from the installed build: a
         // `.build/debug` binary has no Accessibility grant, so `CGEventPost`
         // does nothing and does it silently.
+        picker.onTestMicOverride = { [weak self] name in
+            guard let self else { return [:] }
+            InputDevice.testOverride = (name?.isEmpty ?? true) ? nil : name
+            Log.info("mic: test override \(InputDevice.testOverride.map { "→ \"\($0)\"" } ?? "cleared")")
+            return ["override": InputDevice.testOverride ?? NSNull(),
+                    "chosen": InputDevice.chosenId,
+                    "resolved": InputDevice.resolve().known?.id ?? "",
+                    "device": InputDevice.currentLabel(),
+                    "available": InputDevice.availableIds().sorted()]
+        }
         picker.onTestMic = { [weak self] id in
             guard let self else { return [:] }
             let ids = ["auto"] + InputDevice.known.map(\.id)
@@ -2325,6 +2335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // `InputDevice.resolve()`, and a harness that could not ask the
             // question would have to photograph a menu to answer it.
             out["mic"] = ["chosen": InputDevice.chosenId,
+                          "override": InputDevice.testOverride ?? NSNull(),
                           "resolved": InputDevice.resolve().known?.id ?? "",
                           "device": InputDevice.currentLabel(),
                           "glyph": InputDevice.currentGlyph(),

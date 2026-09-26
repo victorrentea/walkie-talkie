@@ -180,8 +180,33 @@ enum InputDevice {
     /// outlived a cable is the failure this whole file exists to prevent. The
     /// glyph follows the fallback, so the chip says what he is actually being
     /// heard through and not what he once asked for.
+    /// **A device named by the harness, for this process only** (2026-09-26,
+    /// test-plan gap G1): `POST /test/mic {"device": "<CoreAudio name
+    /// substring>"}`. Checked before the choice file and the ladder, never
+    /// written to `mic/choice` (which Victor Addons shares), gone at the next
+    /// launch. It exists because the built-in microphone is always on the
+    /// ladder, so without it the relay's own recorder could never be pointed at
+    /// a Loopback device carrying a corpus WAV — every real-audio test had to go
+    /// through the speaker. A name that matches nothing is logged once and
+    /// ignored, so a stale override cannot silence a real dictation.
+    static var testOverride: String? {
+        get { overrideLock.withLock { _testOverride } }
+        set { overrideLock.withLock { _testOverride = newValue; overrideMissed = false } }
+    }
+    private static var _testOverride: String?
+    private static var overrideMissed = false
+    private static let overrideLock = NSLock()
+
     static func resolve() -> (known: Known?, device: Device?) {
         let devices = inputs()
+        if let want = testOverride?.lowercased(), !want.isEmpty {
+            if let device = devices.first(where: { $0.name.lowercased().contains(want) }) {
+                return (known.first { matches(device, $0) }, device)
+            }
+            overrideLock.withLock {
+                if !overrideMissed { Log.error("mic: test override \"\(want)\" matches no input — ignored"); overrideMissed = true }
+            }
+        }
         if chosenId != "auto", let want = known.first(where: { $0.id == chosenId }),
            let device = devices.first(where: { matches($0, want) }) {
             return (want, device)
