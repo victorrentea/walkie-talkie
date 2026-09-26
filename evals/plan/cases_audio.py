@@ -345,6 +345,7 @@ def tl16():
     why = pre()
     if why: return "SKIP", why
     with rig():
+        rec0 = (state().get("recoverable") or {}).get("path")   # an earlier case's cancel stays 5 min
         m, _ = dictate_loopback(silence_wav(3), wait_after=0.5)
         if not on_inject(m): return not_inject(m)
         delivered(m, 60)
@@ -354,6 +355,8 @@ def tl16():
         fb = bool(re.search(FALLBACK, log))
         kept = bool(re.search(r"of audio kept", log))
         rec = state()["recoverable"]
+        if rec and rec.get("path") == rec0:
+            rec = None
         words = bool(re.search(r"📦 delivery:", log))
         note = f"no-words line {empty}, ↪️ {fb}, audio kept {kept}, recoverable {bool(rec)}, delivered {words}"
         if empty and not fb and not kept and not rec:
@@ -517,6 +520,8 @@ def tr10():
         note = f"delivered {t_end and round(t_end - t_stop, 1)} s after stop via {(d or {}).get('via')}, 'did not come up' {up}, helper now alive {h.get('alive')} pid {h.get('pid')}"
         if not was_alive:
             _quiet(post, "/test/whisper", {"kill": True})   # it was down when we came
+        elif not h.get("alive"):
+            _quiet(post, "/test/whisper", {"restart": True})  # it was up when we came: put it back
         ok = t_end and t_end - t_stop < 180 and d and "local" in d.get("via", "")
         return ("PASS" if ok else "FAIL"), note
 
@@ -575,6 +580,7 @@ def tr13():
     why = pre()
     if why: return "SKIP", why
     with rig():
+        rec0 = (state().get("recoverable") or {}).get("path")   # an earlier case's cancel stays 5 min
         post("/test/eleven", {"fail": "empty"})
         m, _ = dictate_loopback(CLIP_EN_LONG, seconds=20, wait_after=1.0)
         if not on_inject(m): return not_inject(m)
@@ -582,6 +588,8 @@ def tr13():
         settle_out(60)
         empty = log_has(m, r"returned no words")
         rec = state()["recoverable"]
+        if rec and rec.get("path") == rec0:
+            rec = None
         if not rec:
             return ("BUG" if empty else "FAIL"), f"'returned no words' {empty}, nothing recoverable"
         t0 = now_iso()
@@ -604,6 +612,7 @@ def tr14():
     if not (h.get("ready") and h.get("alive")):
         return "SKIP", f"local helper not up ({h})"
     pid0, hpid0 = state()["pid"], h.get("pid")
+    rec0 = (state().get("recoverable") or {}).get("path")   # an earlier case's cancel stays 5 min
     with rig():
         post("/test/eleven", {"fail": "401"})
         post("/test/whisper", {"stop": True})    # the request is surely in flight when the kill lands
@@ -620,6 +629,8 @@ def tr14():
         settle_out(60)
         failed = log_has(m, r"could not transcribe it either|heard no words")
         rec = state()["recoverable"]
+        if rec and rec.get("path") == rec0:
+            rec = None
         alive_pid = state()["pid"]
         t1 = now_iso()
         post("/test/eleven", {"fail": "401"})
@@ -703,6 +714,7 @@ def tr24():
     fb = WORK + "/witness-b.txt"
     open(fb, "w").close()
     script = f"printf '\\\\e]0;wt-witness-b\\\\a'; stty -echo; exec cat >> {fb}"
+    ttyb = None
     try:
         with rig():
             ttyb = osa(f'tell application "Terminal" to set t to do script "{script}"',
@@ -722,7 +734,11 @@ def tr24():
             d = last_delivery(t0) or {}
             a, b = witness_text(), open(fb, errors="replace").read()
     finally:
-        _quiet(osa, 'tell application "Terminal" to close (every window whose name contains "wt-witness-b")')
+        # Kill the tab's `cat` first — Terminal will not close a window with a running process.
+        if ttyb:
+            _quiet(subprocess.run, ["pkill", "-t", ttyb], capture_output=True)
+            time.sleep(0.3)
+        _quiet(osa, 'tell application "Terminal" to close (every window whose name contains "wt-witness-b") saving no')
     inA, inB = "dictat" in a.lower(), "dictat" in b.lower()
     note = f"A ({WITNESS['tty']}) {len(a)} chars, B ({ttyb}) {len(b)} chars, delivery to {d.get('to')}"
     if inA and not inB: return "PASS", note

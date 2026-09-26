@@ -1,0 +1,140 @@
+LC1 ['lc'] — First word appears centred and fades in to the provisional floor.
+LC2 ['lc'] — Growth to the right: centred, then pinned inside the right margin, never jumping.
+LC3 ['lc'] — A pause: the line comes to rest, then the eraser starts on time.
+LC4 ['lc'] — A burst: taken up elastically, never faster than vMax.
+LC5 ['lc'] — A correction that shortens the line: ghosts, swap, reflow, a glide.
+LC6 ['lc'] — A correction that lengthens the line.
+LC7 ['lc'] — A revision that reaches back past what already left the band: a fresh centred line.
+LC7b ['lc'] — A revision confined to words already gone: nothing visible happens.
+LC8 ['lc'] — Punctuation and capitals are not corrections (LCS on case-folded stems).
+LC9 ['lc'] — Appending is never a correction; each new word fades in.
+LC10 ['lc'] — Close, and close-then-reopen inside the fade.
+LC11 ['lc'] — Two displays — not observable yet.
+LC12 ['lc'] — RELAY_SHOOT — needs a relaunch with the env var.
+LC14 ['lc'] — An empty sentence clears the line but keeps the band.
+LC15 ['lc'] — The provisional tail is drawn as a ramp and solidifies when committed.
+LC16 ['lc'] — The eraser, the re-centring behind it, the freeze, and the fresh line after a full wipe.
+LC17 ['lc'] — A batch correction behind him does not count as him speaking again.
+LC18 ['lc'] — Frame-accurate timing — not observable yet.
+TL1 ['slow'] — Orphan flush fires mid-sentence (R6): test-open sentence + an area, wait 121 s.
+TL2 [] — Cancel a /test/dictation/start sentence (no recogniser behind it).
+TL3 [] — Engine pick refused while a sentence is open, accepted once it is cancelled.
+TL4 [] — The local model standing in for a failed cloud call, cold then warm.
+TL5 ['slow'] — SIGSTOP the helper, ask for a decode, measure who gives up first; SIGCONT and check the stream.
+TL6 [] — SIGKILL the helper, ask for a decode: the app must survive and refuse fast.
+TL7 [] — SIGKILL the helper and read /engine.whisper before and after the first request.
+TL15 ['gesture'] — Delay the final upload 45 s (fault switch), let the settle give up, then try both start gestures.
+TL17 ['gesture'] — Stage a cancelled recording, kill the helper, Recover.
+TL18 ['gesture'] — Stage a cancelled recording, then ask the restart gate.
+TL21 ['gesture'] — Two F10s inside /test/stall 6 (both before the 3 s fail-open), then read the log.
+TL22 ['gesture'] — R7: engine whisper while the model restarts, forward-right banks, cancel, switch to eleven.
+TL23 ['env'] — Needs the app relaunched with a bad RELAY_WHISPER_PYTHON — not done from a running harness.
+TL24 ['slow'] — /test/dictation/start and wait for the ten-minute ceiling to put it down.
+TL26 ['slow'] — Hold a sentence for a bind and watch the five-minute expiry.
+TL27 ['tty'] — Hold a sentence unbound, then bind the witness by tty.
+TL28 ['hw', 'slow'] — Hold a sentence, `pmset sleepnow`, wake after ≥ 6 min (by hand), read awaitingBind.
+TL31 ['gesture', 'slow'] — SIGSTOP the helper, dictate a clip on the local engine, read the state 35 s after the stop.
+TL33 ['gui'] — The hot-add is the menu's `elevenReady` read — a GUI path (Codex), not reachable over HTTP.
+TR4 ['gesture'] — Stall main 6 s; a gesture at 1 s (swallowed, before the gate), a harmless scroll at 3.3 s to trip it.
+TR17 ['tty'] — --dry-run against an open test sentence, then right after a delivered one.
+TR18 ['gesture'] — A test-open sentence (listening, no recogniser), then forward-right: what does the relay say?
+TR19 ['gesture'] — Start, cancel, start again 0.2 s later — three times per engine.
+TR21 ['tty'] — Bind a tab whose foreground is zsh and send a harmless sentence.
+TR22 ['tty'] — No fault hook makes SpawnTerminal fail from a desk.
+TR27 ['gesture', 'slow'] — mic-<epoch>.wav is named by the second: hammer it.
+TR28 [] — Read the running app's launch line and the installed bundle's identifier.
+TD1 ['http'] — A dead tty is accepted by bind(tty:) and a sentence released into it is lost with a receipt.
+TD2 ['http', 'tty'] — A second held sentence replaces the first silently; the bind delivers only BRAVO.
+TD3 ['audio'] — Needs a real spoken sentence (the latch at mic close); /test/dictation cannot reach it.
+TD4 ['http', 'tty'] — A bind during the panel hold changes the recipient (R11).
+TD5 ['http', 'tty'] — Restores count as deliberate binds and take back the caret.
+TD6 ['http', 'tty'] — Restores count as deliberate binds and take back a spawn.
+TD7 ['cc', 'spawn'] — Two real Claude Code spawns; words compared inside the sessions.
+TD8 ['http', 'slow', 'tty'] — The 120 s orphan flush fires mid-sentence (§3.6, R6).
+TD9 ['http', 'slow'] — The dictation ceiling is unaffected by the orphan flush.
+TD10 ['http'] — The restart gate waits for a held sentence.
+TD11 ['http', 'slow'] — Stale-flag escape of the restart gate (tools/restart_gate.py). --max-wait 60, not 20: the escape needs 30 s.
+TD12 ['relaunch', 'tty'] — relay-restart.sh reads bound-tty before SIGTERM; a bind during the deferred quit is overwritten (R15).
+TD13 ['tmux', 'tty'] — bound-tty holds the tmux *client* tty; a restore re-resolves to whichever pane is active (R15).
+TD14 ['http'] — A pty owned by no Terminal tab (what an IDE terminal is) is bound; the first delivery says
+TD15 ['tty'] — Shell-guard bypass: the foreground on the tab's tty is `script`, the shell is one pty down.
+TD16 ['tty'] — Pager escape: `less` takes the q and quits, zsh runs the rest of the sentence.
+TD17 ['cc'] — 
+TD18 ['cc'] — 
+TD19 ['tty'] — Review read-back false positive: the echo of the sentence itself matches the review hint.
+TD20 ['tty'] — Raw bytes through `do script` into a raw-mode reader that logs read boundaries (R18).
+TD21 ['http', 'tty'] — tty reuse: the liveness check sees processes on the tty and keeps a binding to a new tab (R12).
+TD22-298.5 ['http', 'slow', 'tty'] — Expiry vs bind boundary, just before 300 s.
+TD22-299.5 ['http', 'slow', 'tty'] — Expiry vs bind boundary, inside the bind's own latency.
+TD22-300.2 ['http', 'slow', 'tty'] — Expiry vs bind boundary, just after 300 s.
+TD23 ['sleep'] — 
+TD24 ['audio'] — 
+TD25 ['spawn', 'tty'] — `busy` goes false before `bound.tty` is the new tty (R14 for spawns).
+TD26 ['audio'] — 
+TD27 ['audio'] — 
+TD28 ['codex'] — 
+TD29 ['http', 'tty'] — An unbind during the hold turns the sentence into `awaitingBind`; the next bind (B) gets it (R11).
+TD30 ['codex'] — 
+TD31 ['http', 'tty'] — Test-route fidelity: /test/dictation reaches the hold; real speech would latch the caret (TD3).
+TR20 ['http', 'tty'] — Tab closed while the dictation is open; the words arrive for a dead binding (§3.11).
+TR21 ['http', 'tty'] — Agent exited to the shell: the guard refuses, but the outbox row is already written (§3.11).
+TR22 ['spawn', 'tty'] — The spawn: row is written at commit, before SpawnTerminal runs. The failure half (re-offer)
+TG1 ['gesture'] — F7 idle → caret prompt; the key trace does not see the swallow.
+TG2 ['gesture'] — F10 re-fire train, the sliding 0.6 s window and the 2 s dwell.
+TG3 ['gesture'] — F11 cannot abort a cold bank (Engine = whisper, cold).
+TG4 ['gesture'] — Cold back click becomes a prompt; the second back click is a shutter.
+TG6 ['gesture'] — 🔽 then 🔽→ at +60 ms / +500 ms on the relay's own engine.
+TG7 ['gesture'] — 🔽 then 🔽→ at +60 ms / +500 ms on Engine = wispr.
+TG8 ['audio', 'gesture'] — Cancel in the settle still delivers.
+TG9 ['audio', 'gesture'] — Cancel in the settle of a spawn still delivers — elsewhere.
+TG10 ['gesture'] — F11 does not cancel the held panel.
+TG11 ['gesture'] — 🔽→ sends the held panel.
+TG12 ['audio', 'gesture'] — Clean-submit Return eaten by another sentence's panel — not automated.
+TG13 ['audio', 'gesture'] — 🔼→ over a bound clean sentence: the redirect flash lies.
+TG14 ['gesture'] — Kamikaze re-fire untoggles.
+TG15 ['gesture'] — Film re-fire → start + stop.
+TG16 ['gesture'] — F9 during the panel is ignored.
+TG17 ['gesture'] — F8 on a caret sentence is silent.
+TG18 ['audio', 'gesture'] — Bind during the upload → still pasted at the caret.
+TG19 ['tty'] — Rebind during the panel → delivered to B.
+TG20 ['audio', 'gesture'] — F12 during the settle → held for a bind, then the bind delivers.
+TG21 [] — Adopted Wispr: 🔽← — out of scope.
+TG22 [] — Adopted Wispr: 🔽 — out of scope.
+TG23 [] — Adopted Wispr: 🔽→ — out of scope.
+TG24 [] — Adopted Wispr: 🔼 / 🔼→ — out of scope.
+TG25 ['gesture', 'stall'] — Stall: F10 queued at +1.0 s, leaked at +4.5 s.
+TG26 ['gesture', 'stall'] — Canary during fail-open → alive:false.
+TG28 ['gesture'] — Key-trace blindness for all ten gestures.
+TG29 ['gesture'] — Stale-modifier guard for every gesture and the three posters.
+TG30 ['gesture'] — Debug-build guard: the 200 alone proves nothing.
+TG36 ['gesture'] — 🔽→ with the rebind panel up activates the selected row.
+TG40 ['audio', 'gesture'] — F6 in the settle → the misleading banner.
+TG41 ['gesture'] — Engine switch during a bank → the dictation opens on the new engine.
+TL8 ['audio', 'gesture', 'slow'] — R1 — a slow upload outlives the settle; the next sentence starts under it.
+TL9 ['audio', 'gesture', 'slow'] — R3 — an engine switch after the settle expired drops the late transcript.
+TL10 ['audio', 'gesture'] — R2 — cancel while the upload is in flight.
+TL11 ['audio', 'gesture'] — R2 on the local model — cancel while the helper is hung, then let it answer.
+TL12 ['audio', 'gesture'] — A bad key: the local model stands in, and the next sentence is ElevenLabs again.
+TL13 ['audio', 'gesture'] — A transport error: one retry, then the local model, fast.
+TL14 ['audio', 'gesture'] — A hung connection: the 20 s timeout, never retried, then the local model.
+TL16 ['audio', 'gesture'] — An empty transcript: today the audio is deleted with no fallback.
+TL25 ['audio', 'gesture', 'slow'] — The ten-minute ceiling on a real recording, and what a long upload does.
+TL29 ['audio', 'gesture'] — The live socket drops: one error line, not one per buffer; the sentence still arrives.
+TL30 ['audio', 'gesture'] — A socket that never opens: the band sits open and empty, chunks pile up.
+TL32 ['audio', 'gesture'] — A cancel mid-sentence stages the recording for Recover.
+TR9 ['audio', 'gesture'] — Offline end to end: the local model delivers.
+TR10 ['audio', 'gesture', 'slow'] — The fallback has to bring the local model up from nothing.
+TR11 ['audio', 'gesture', 'slow'] — A failure slower than the settle: 19 + 0.8 + 19 s > 30 s.
+TR12 ['audio', 'gesture', 'slow'] — Which failures earn a retry.
+TR13 ['audio', 'gesture'] — An empty answer must not cost the recording.
+TR14 ['audio', 'gesture', 'slow'] — The local helper dies with a request in it.
+TR15 ['audio', 'gesture', 'slow'] — Helper desync after a cancel (24 'gave no answer' since 08-28).
+TR23 ['audio', 'gesture'] — A second gesture while the words are in flight.
+TR24 ['audio', 'gesture'] — Rebinding while the words are in flight.
+TR25 ['audio'] — A refused device switch — not injectable through /test/eleven.
+LC13 ['audio', 'gesture'] — The band follows a real sentence and closes with it.
+B1 ['audio', 'gesture'] — How soon the caption shows the first words.
+B2 ['audio', 'gesture'] — A rolling batch correction at the first pause.
+B3 ['audio', 'gesture'] — R20 — a correction answering after the socket closed is dropped.
+B4 ['audio', 'gesture'] — A failed correction holds 5 s, then re-uploads from the same cut.
+B5 ['audio', 'gesture'] — The cost row grows by what one sentence costs.

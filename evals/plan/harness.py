@@ -21,7 +21,8 @@ CLIP_EN_LONG = CORPUS + "/2026-09-18/23-59-48-11l129.wav" # 157 s EN
 # (`~/Library/Application Support/Loopback/Devices.plist`, template `🎙️TO Zoom`, new UUIDs, then
 # `open -a Loopback` once). `🎓 TO Wispr` belongs to the Wispr teacher-labelling rig and carries the
 # built-in mic as a source; the two must never be confused.
-LOOPBACK = "🧪 WT Inject"
+# `WT_LOOPBACK` names it elsewhere: in the Tart lab (docs/vm-lab.md) there is no Loopback app.
+LOOPBACK = os.environ.get("WT_LOOPBACK", "🧪 WT Inject")
 LOCK_PATH = HOME + "/wispr-loop.lock"   # the one runner lock on this Mac (helpers/wispr_loop.py)
 
 
@@ -111,7 +112,24 @@ def wait_for(cond, timeout=30, step=0.1, what="condition"):
 
 def wait_idle(timeout=600):
     """Victor may be dictating: never start a case over his sentence."""
-    ok = wait_for(lambda: not state()["busy"], timeout, 0.5, "relay idle")
+    paused_since = [None]
+    def idle():
+        s = state()
+        if not s["busy"]:
+            return True
+        # A prompt paused by a pointer that never moves (a huge panel unfolding under it) never
+        # resolves on its own: give up after 20 s instead of 600 (no HTTP route dismisses it).
+        if any("Paused" in str(r) for r in s.get("chip") or []):
+            paused_since[0] = paused_since[0] or time.time()
+            if time.time() - paused_since[0] > 20:
+                raise SystemExit("PAUSED")
+        else:
+            paused_since[0] = None
+        return False
+    try:
+        ok = wait_for(idle, timeout, 0.5, "relay idle")
+    except SystemExit:
+        raise RuntimeError("prompt panel paused by the pointer for 20 s (autosend held) — needs ⎋ by hand")
     if not ok:
         raise RuntimeError("relay busy for %ds: %s" % (timeout, state()["busyWhy"]))
 
@@ -154,8 +172,12 @@ def witness_clear():
     open(WITNESS["file"], "w").close()
 
 def witness_close():
+    """Kill the tab's `cat` first: a window with a running process makes Terminal ask
+    "terminate?" and the close silently does nothing (18 orphan windows on 2026-09-26)."""
     if WITNESS["tty"]:
-        osa('tell application "Terminal" to close (every window whose name contains "wt-witness")')
+        subprocess.run(["pkill", "-t", WITNESS["tty"]], capture_output=True)
+        time.sleep(0.3)
+        osa('tell application "Terminal" to close (every window whose name contains "wt-witness") saving no')
         WITNESS["tty"] = None
 
 def bind_witness():
@@ -277,7 +299,15 @@ def run(selected, report_path):
     for c in selected:
         if "gesture" in c["tags"] and not os.environ.get("HANDS_OFF"):
             results.append((c, "SKIP", "needs hands-off", 0)); print(f"  {c['id']}: SKIP (gesture, no hands-off)"); continue
-        wait_idle()
+        try:
+            wait_idle()
+        except RuntimeError as e:
+            # A relay stuck busy (e.g. a prompt panel paused by the pointer) would make every later
+            # case wait 600 s too: record it, write the report, stop the batch.
+            results.append((c, "ERROR", f"not started — {e}", 0)); print(f"  {c['id']}: ERROR — {e}")
+            with open(report_path, "w") as f:
+                f.write(render(results, t_start))
+            break
         t0 = time.time()
         try:
             verdict, note = c["fn"]()

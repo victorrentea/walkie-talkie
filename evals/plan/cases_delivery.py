@@ -114,7 +114,7 @@ def close_tab(tty=None, name=None):
             'end repeat',
             'end tell')
     if name:
-        osa(f'tell application "Terminal" to close (every window whose name contains "{name}")')
+        osa(f'tell application "Terminal" to close (every window whose name contains "{name}") saving no')
 
 def open_b():
     open(WITNESS_B, "w").close()
