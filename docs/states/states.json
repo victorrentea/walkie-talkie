@@ -2,7 +2,7 @@
   {
     "alpha" : 0,
     "group" : "At rest",
-    "note" : "There is no window on screen at all. Not a faded one: `orderOut`, because an invisible panel still swallows clicks on whatever it is over. This is the state the empty pointer was won back for.",
+    "note" : "There is no window on screen at all — unless a sentence is waiting for a bind (`held-waiting`). Not a faded one: `orderOut`, because an invisible panel still swallows clicks on whatever it is over. This is the state the empty pointer was won back for.",
     "shape" : "none",
     "slug" : "unbound-idle",
     "title" : "Unbound, idle",
@@ -97,11 +97,35 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "bind-to-send.png",
-    "note" : "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `⏳ held — bind a terminal to send it` once the words have left the dictation. **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
+    "note" : "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `📨 held — bind a terminal to send it` once the words have left the dictation, and `📨 1 waiting — bind to send` until a bind sends it (next shot). **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
     "shape" : "chip",
     "slug" : "bind-to-send",
     "title" : "Nothing is bound, and he is talking anyway",
     "when" : "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
+    "width" : 253
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 46,
+    "image" : "held-waiting.png",
+    "note" : "**The one chip an unbound pointer may carry.** *The pointer is clean when nothing is bound* still holds for a relay with nothing to say; this row is something to say — *\"mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie\"*. It counts what `awaitingBind` holds, so a second sentence says `2`, and it goes the instant a bind delivers them. Built like `☠️ Kamikaze`: an emoji in the icon column, words beside it. It is announced once with a flash, `📨 held — bind a terminal to send it`.",
+    "shape" : "chip",
+    "slug" : "held-waiting",
+    "title" : "Unbound, with sentences waiting for a bind",
+    "when" : "A sentence was spoken with nothing bound (Victor's Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.",
+    "width" : 239
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 117,
+    "image" : "held-waiting-dictating.png",
+    "note" : "The row stays under the destination while he talks: the new sentence will join the queue behind it, and both go, oldest first, on the next bind.",
+    "shape" : "chip",
+    "slug" : "held-waiting-dictating",
+    "title" : "Talking again, with one already waiting",
+    "when" : "A new dictation while a held sentence waits — still nothing bound.",
     "width" : 253
   },
   {
@@ -340,6 +364,18 @@
     "title" : "Flash — sent",
     "when" : "Two seconds, the moment a dictation reaches the agent.",
     "width" : 141
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 70,
+    "image" : "flash-held.png",
+    "note" : "Said once, when it happens, under the `📨 N waiting` row — which is what stays when the flash has gone.",
+    "shape" : "flash",
+    "slug" : "flash-held",
+    "title" : "Flash — held for a bind",
+    "when" : "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
+    "width" : 295
   },
   {
     "alpha" : 0.80000000000000004,

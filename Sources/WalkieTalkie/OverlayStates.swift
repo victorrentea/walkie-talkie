@@ -365,7 +365,7 @@ enum OverlayStates {
 
             Shot(slug: "flash-held", group: "Flashes", title: "Flash — held for a bind",
                  when: "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
-                 note: "Said once, when it happens; the row under it is what stays. A flash replaces the collapsed chip, so the row comes back when it has gone.",
+                 note: "Said once, when it happens, under the `📨 N waiting` row — which is what stays when the flash has gone.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setHeldCount(1)
                 o.flash("📨 held — bind a terminal to send it", duration: 60)

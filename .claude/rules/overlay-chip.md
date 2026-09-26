@@ -17,7 +17,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 ## The states page is part of every change
 
 - **No change to the overlay is finished until `docs/overlay-states.html` is rebuilt.**
-  `./docs/shoot-overlay-states.sh` shoots all 47 states and regenerates the HTML. That covers a new
+  `./docs/shoot-overlay-states.sh` shoots all 52 states and regenerates the HTML. That covers a new
   row, a reworded string, a changed glyph, a different colour, a state that starts or stops
   existing. A new state means a new `Shot` in `OverlayStates.swift`; a state that goes away means
   deleting one. **Never edit `docs/overlay-states.html` by hand** — it is overwritten on the next
