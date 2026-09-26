@@ -13063,3 +13063,12 @@ fallback exists for. To be implemented in the next fix batch (after the regressi
 *"Q10 fn+f7/f9"*. The tap swallows F7/F9 for `onHaloStep` only when the **fn** modifier
 (`.secondaryFn`) is down; bare F7/F9 pass through to the front app (IntelliJ's Step Into / Resume
 come back). Today's code ignores the fn flag in that branch (H ~2913). Next fix batch.
+
+## Q11 decided (2026-09-26, 18:55, Victor): no warm live socket
+
+*"Q11: rece. E un waste de resurse pentru câștig mic."* The live socket is opened at the gesture
+and closed at the stop, as before batch 5; no keep-alive chunks, no 15-minute warm window
+(`WT_ELEVEN_LIVE_WARM` goes). Keep batch 5's other socket rules (one reconnect per sentence, the
+64-buffer cap, the band opening only on `session_started`). The first caption word will again
+take the handshake (0.3–4 s measured); if the in-app handshake variance is found (the script gets
+0.3–0.45 s), that is the fix, not a warm socket. Next fix batch.
