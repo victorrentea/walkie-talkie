@@ -142,7 +142,7 @@ def spec(src: dict):
                 ("detection: Terminal.app, a non-shell in front, a live Claude Code session file",
                  "TerminalBinding `frontClaudePromptTTY`",
                  lambda: all(has(function(src, "TerminalBinding.swift", "frontClaudePromptTTY"), p)
-                             for p in (r'"com\.apple\.Terminal"', r"!isShell\(", r"publishedDirectory\(onTTY:"))),
+                             for p in (r'"com\.apple\.Terminal"', r"!(isShell|refusesDelivery)\(", r"publishedDirectory\(onTTY:"))),
                 ("submitting is the bound terminal's own write (text + Return + review Return)",
                  "TerminalBinding `submitPrompt`",
                  lambda: has(function(src, "TerminalBinding.swift", "submitPrompt"), r"writeToTerminalApp\(")),
@@ -284,7 +284,10 @@ def spec(src: dict):
                  lambda: before(gesture_case(src, "VK_F5"), r"if backStopsWispr \|\|.*?postWisprHandsFree\(\)",
                                 r"Self\.postReturn\(\)")),
                 ("…and asks for the Return after the words", "HotkeyTap `case VK_F5`",
-                 lambda: has(gesture_case(src, "VK_F5"), r"onBackSubmit\?\(\).*?return nil")),
+                 # After Wispr's stop chord: the own-engine branch above it asks for
+                 # the Return too, and must not stand in for this one (2026-09-26).
+                 lambda: has(gesture_case(src, "VK_F5"),
+                             r"postWisprHandsFree\(\).*?onBackSubmit\?\(\).*?return (nil|swallow\()")),
                 ("the request is recorded for this sentence", "AppDelegate `hotkeys.onBackSubmit`",
                  lambda: has(closure(src, "hotkeys.onBackSubmit"), r"submitAfterClean = true")),
                 ("the Return follows the paste", "AppDelegate `deliver`",
@@ -299,7 +302,7 @@ def spec(src: dict):
             "does": "Return, and nothing else",
             "checks": [
                 ("F5 falls through to postReturn", "HotkeyTap `case VK_F5`",
-                 lambda: has(gesture_case(src, "VK_F5"), r"Self\.postReturn\(\)\s*return nil")),
+                 lambda: has(gesture_case(src, "VK_F5"), r"Self\.postReturn\(\)\s*return (nil|swallow\()")),
             ],
         },
     ]

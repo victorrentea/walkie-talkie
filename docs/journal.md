@@ -26,6 +26,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *The spawn menu offers five open terminals* (2026-09-23, morning; recorded in `.claude/rules/spawn.md`, not here) — superseded the same evening by *Active Terminals: the spawn menu's first row*: the terminals moved from a third half under the folders to a hover submenu on the menu's first row, filled from the Claude Code sessions running on the machine rather than from the bind log
 - *`awaitingBind`: one sentence, five minutes* — superseded 2026-09-26 by Victor's Q3: a queue, every held sentence delivered in order on the next bind, five minutes each (*Fixes to the test plan's findings, batch 1*)
 - *The fail-open* (2026-09-24, `MainStallGate`: wall clock, a 0.5 s beat, judged only when an event came by, a trace line per event, the canary handed through) — superseded 2026-09-26 by *Fixes to the test plan's findings, batch 4* §1: uptime, a 0.1 s beat, a 10 Hz watchdog, the real stall length, the canary seen while open, the app's own chords dropped
+- *F10's re-fire guard, scoped to F10 only* (2026-09-16/18) — superseded 2026-09-26 by batch 4 §2: every flick has the 0.6 s window
 - *Pause is gone* — still true; pause was removed 2026-09-01 and is not coming back
 - *The ring round the pointer* → *Spokes* → *What ships: `codex3`* — each superseded by the next; what ships is *What ships now: his picture, and it runs as a film*, plus *It is the beacon now* (2026-09-11) and *`DropArrow`*
 - *The beacon is gone* (2026-09-11) — `RecordingBeacon.swift` is deleted; the halo is up for every dictation
@@ -12758,3 +12759,34 @@ it said `alive:false`); TG25 (a ⌃⌥⌘F10 made during the stall reached the f
   the close waits for no button down so that a press handed through gets its release, and a button
   the window server believes is held for hours (the 7 h middle button) holds it open for hours.
   Telling a stuck button from a held one needs a device-level read this batch did not attempt.
+
+### 2. The key trace sees every gesture; every flick has F10's re-fire window; the panel takes only his keys
+
+The test plan's §3 item 18: *"the panel's ⏎ branch ignores `backButtonStamp` so the app's own
+Return sends a held panel … the key trace cannot see the app's own swallows (`return nil`, not
+`swallow()`)"*; §2.5: *"🔼← F11 · 🔼↑ F8 · 🔼↓ F9 … no re-fire guard (F9 re-fire untoggles)"*,
+*"autorepeat after the first ⏎ passes through"*.
+
+- **Every chord the tap takes returns through `swallow()`** — all ten gestures (named by
+  `gestureNames`, one list shared by the trace, the re-fire guard and the frozen-app drop), ⌘⌃B,
+  ⌘⌃D, ⌘⇧P, bare F7/F9, the panel's ⏎/⎋, the Wheel-mode shutter Return. TG28: every gesture
+  `↓1/1 swallowed`, where all ten were blind.
+- **The six flicks with no re-fire guard get F10's** — 0.6 s, sliding, per key (`refired`,
+  `lastFlickAt`): 🔼 ← F11, 🔼 ↑ F8, 🔼 ↓ F9, 🔽 ← F3, 🔽 ↑ F4, 🔽 ↓ F12. F10 and F5 keep their own
+  (the dwell and the back toggle's settle read them). Autorepeat is swallowed once, above the switch.
+  TG14 (kamikaze on, then *taken back* 300 ms later) and TG15 (a film started and stopped with two
+  frames) are one toggle each now.
+- **The panel's ⏎ ignores a key-down stamped `backButtonStamp`** — batch 2's *Rebind to…* rule,
+  asked in the tap because this panel never takes the keyboard — so 🔽 →'s `postReturn` and a clean
+  sentence's `submitAfterCleanWords` go on to the front app instead of sending the held prompt
+  (TG11: `⌨️trace ↓ key 36 … (ours) … — passed`, the panel sent by its own clock).
+- **The answering key's autorepeats are the panel's until it comes up** (`panelReturnHeld`, cleared
+  by the key-up): the first ⏎ sent the panel, `promptHeld` fell, and the repeats went on into Claude
+  Code as extra Returns. *Decided here:* a repeat of a key that was already down when the panel
+  appeared answers nothing (it passes), and **⎋ gets both rules too** — a held Escape reaching
+  Claude Code a moment after it cancelled the panel is Claude Code's own rewind.
+- `evals/test_gesture_spec.py` had been failing since batch 1 (its Claude Code check still looked for
+  `!isShell(`, which `refusesDelivery` replaced); it accepts either now, the two F5 checks accept
+  `return swallow(`, and the *asks for the Return after the words* check is anchored after Wispr's
+  stop chord — the own-engine branch above it satisfied it, so its self-test mutation (*back + right
+  is only Return again*) was no longer caught. `--self-test`: all 12 caught.

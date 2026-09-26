@@ -100,7 +100,7 @@ Two invariants every test asserts, whatever else it checks:
 
 | input | gate | handler | notes |
 |---|---|---|---|
-| ⏎ / ⎋ bare | `promptHeld` | send / cancel the held panel | ⏎ does not check the stamp (catches the app's own `postReturn`); autorepeat after the first ⏎ passes through |
+| ⏎ / ⎋ bare | `promptHeld` | send / cancel the held panel | ~~⏎ does not check the stamp; autorepeat after the first ⏎ passes through~~ — batch 4: stamped keys pass, the answering key's repeats are eaten |
 | **bare F7 / F9** | always | halo style ±1 | swallowed system-wide, undocumented |
 | ⌘⌃B | H2920 | bind toggle (global queue) | no mutual exclusion; two quick presses race |
 | ⌘⌃D | H2941 | `toggleDictation` | no dwell/re-fire guard (F10 has one) |
@@ -109,11 +109,11 @@ Two invariants every test asserts, whatever else it checks:
 | right ⌘ + right ⌥ (`flagsChanged`) | H2611 | clean hold / Wispr PTT | tap-thread state, no stamp check → the app's own `flagsChanged` posts count as a release |
 | unstamped key while the pair is held | H2644 | `.shortcut` quiet cancel | also fires on Options+ F-keys (unstamped) → **two handlers** |
 | 🔼→ F10 | 0.6 s window, `openSentenceAge < 2 s` refused, ◀️ held → bind+dictate | `toggleDictation` | the one guarded gesture |
-| 🔼← F11 · 🔼↑ F8 · 🔼↓ F9 | none | cancel · spawn/convert · kamikaze toggle | **no re-fire guard** (F9 re-fire untoggles) |
+| 🔼← F11 · 🔼↑ F8 · 🔼↓ F9 | 0.6 s window (batch 4) | cancel (the held panel first, Q6) · spawn/convert · kamikaze toggle (the held panel too) | ~~no re-fire guard~~ |
 | 🔼 F7 | ◀️ held ≥ 0.3 s → bind | caret prompt / stop | |
 | 🔽 F6 | arm, `ownDictation`, `ownCleanSentence`, 0.8 s settle, `backUsesOwnEngine` | shutter / clean toggle / Wispr chord | |
 | 🔽→ F5 | 0.6 s window; `ownDictation && ownCleanSentence` | stop + Return / Return | plain Return mid relay-prompt |
-| 🔽← F3 · 🔽↑ F4 · 🔽↓ F12 | none | Wispr cancel or relay cancel · film · unbind | no re-fire guard |
+| 🔽← F3 · 🔽↑ F4 · 🔽↓ F12 | 0.6 s window (batch 4) | Wispr cancel or relay cancel · film · unbind | ~~no re-fire guard~~ |
 | middle button (Logi) | `dictating && bare && !promptHeld && !left && !right`, 12 pt | crop drag | press **passes** to the app underneath (dial: a Chrome tab closes) |
 
 Flags the tap decides on arrive from main through `syncBorrowedGestures` (`dictating`, `ownDictation`,

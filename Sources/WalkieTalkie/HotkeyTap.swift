@@ -1485,6 +1485,27 @@ final class HotkeyTap {
     private var lastBackToggleAt: CFTimeInterval = 0
     private static let backToggleSettleSeconds: CFTimeInterval = 0.8
     private static let gestureRetriggerSeconds: CFTimeInterval = 0.6
+    /// **The same sliding window for the six flicks that had none** (2026-09-26,
+    /// TG14, TG15): 🔼 ← F11, 🔼 ↑ F8, 🔼 ↓ F9, 🔽 ← F3, 🔽 ↑ F4, 🔽 ↓ F12. Options+
+    /// re-fires every direction on the tail of one motion, not only ➡️ — a
+    /// kamikaze flick re-fired 300 ms later took itself back, a film flick
+    /// started and stopped a recording with two frames in it. Per key, sliding
+    /// like `lastF10At` (a dropped one stamps too). Tap thread only.
+    private var lastFlickAt: [CGKeyCode: CFTimeInterval] = [:]
+    /// **A ⏎ / ⎋ the prompt panel took is still held** (2026-09-26, TG11): its
+    /// autorepeats are the panel's too, until the key-up. Tap thread only.
+    private var panelReturnHeld = false
+    private var panelEscapeHeld = false
+
+    /// True when this chord is the same flick arriving again — logged like F10's.
+    private func refired(_ code: CGKeyCode, at now: CFTimeInterval) -> Bool {
+        let since = now - (lastFlickAt[code] ?? 0)
+        lastFlickAt[code] = now
+        guard since < Self.gestureRetriggerSeconds else { return false }
+        Log.info("🎯 \(Self.gestureNames[code] ?? "key \(code)") re-triggered \(String(format: "%.0f", since * 1000))ms after the last one — still the same motion, dropped")
+        return true
+    }
+
 
     /// **A sentence younger than this cannot be ended by 🔼 →** (2026-09-18) —
     /// Victor's own fallback for the same report: *"or at least just put a two
@@ -2892,6 +2913,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if owner != 0, isWispr(owner) { clearCommandAfterWisprPaste() }
         }
 
+        // **The panel's ⏎ / ⎋, let go** — see `panelReturnHeld`. A key-up is
+        // never swallowed; it only ends the run of repeats the panel eats.
+        if type == .keyUp, event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+            let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            if code == VK_RETURN || code == VK_KEYPAD_ENTER { panelReturnHeld = false }
+            if code == VK_ESCAPE { panelEscapeHeld = false }
+        }
+
         guard type == .keyDown else {
             if Self.keyTrace, type == .keyUp || type == .flagsChanged {
                 trace("passed (not a keyDown)", type, event)
@@ -2924,19 +2953,53 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // Above the mouse-5 branch below because the two cannot overlap — the
         // prompt appears when the dictation has ended — and because being first
         // makes that independence readable rather than merely true.
-        if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER) && promptHeld
-            && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
-            DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
-            return swallow("the prompt panel's ⏎", type, event)   // the panel took it
+        //
+        // **Only a Return he pressed** (2026-09-26, TG11). This app posts
+        // Returns of its own — 🔽 →'s (`postReturn`) and a clean sentence's
+        // submit (`submitAfterCleanWords`) — stamped `backButtonStamp`, and
+        // they are meant for the terminal, not for the panel: 🔽 → under a
+        // held prompt used to send it. The same rule the *Rebind to…* panel
+        // got in batch 2 (TG36), here asked in the tap because this panel
+        // never takes the keyboard. A stamped Return goes on down and out.
+        //
+        // **…and not its autorepeat.** The first ⏎ sends the panel, `promptHeld`
+        // drops a moment later, and the repeats of the same held key went on
+        // to the terminal behind it — a second, third Return into Claude Code.
+        // `panelReturnHeld` eats them until the key comes up. A repeat of a key
+        // that was already down when the panel appeared is not an answer to it
+        // either: it passes.
+        if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER)
+            && !ctrl && !opt && !cmd && !flags.contains(.maskShift)
+            && event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+            let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            if isRepeat, panelReturnHeld {
+                return swallow("the prompt panel's ⏎ (autorepeat of the Return that sent it)", type, event)
+            }
+            if promptHeld, !isRepeat {
+                panelReturnHeld = true
+                DispatchQueue.main.async { [weak self] in self?.onPromptEnter?() }
+                return swallow("the prompt panel's ⏎", type, event)   // the panel took it
+            }
         }
 
         // ⎋ cancels the prompt that is on screen, the mirror of the ⏎ above and
         // swallowed the same way — while a countdown is running, Escape is this
         // panel's, not the editor's behind it. Bare only, for the same reason.
-        if keyCode == VK_ESCAPE && promptHeld
-            && !ctrl && !opt && !cmd && !flags.contains(.maskShift) {
-            DispatchQueue.main.async { [weak self] in self?.onPromptEscape?() }
-            return nil
+        // The same two rules as ⏎: only a key he pressed, and its repeats are
+        // the panel's until it comes up — a held ⎋ reaching Claude Code a
+        // moment after it cancelled the panel is Claude Code's own *rewind*.
+        if keyCode == VK_ESCAPE
+            && !ctrl && !opt && !cmd && !flags.contains(.maskShift)
+            && event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp {
+            let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            if isRepeat, panelEscapeHeld {
+                return swallow("the prompt panel's ⎋ (autorepeat of the Escape that cancelled it)", type, event)
+            }
+            if promptHeld, !isRepeat {
+                panelEscapeHeld = true
+                DispatchQueue.main.async { [weak self] in self?.onPromptEscape?() }
+                return swallow("the prompt panel's ⎋", type, event)
+            }
         }
 
         // **Where the back button's Return comes from depends on the mode.** In
@@ -2985,7 +3048,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if synthetic {
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
-                    return nil   // swallow: the Enter it would have been is not wanted mid-dictation
+                    // The Enter it would have been is not wanted mid-dictation.
+                    return swallow("the back button's shutter (Wheel mode)", type, event)
                 }
             }
         }
@@ -2999,16 +3063,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // one input mistake this gesture cannot afford. The event is eaten either
         // way, so nothing downstream sees the repeat.
         if (keyCode == VK_F7 || keyCode == VK_F9) && !cmd && !ctrl && !opt && !flags.contains(.maskShift) {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("bare F7/F9 halo step (autorepeat)", type, event) }
             let step = keyCode == VK_F9 ? 1 : -1
             DispatchQueue.main.async { [weak self] in self?.onHaloStep?(step) }
-            return nil
+            return swallow("bare F7/F9 halo step", type, event)
         }
 
         if keyCode == VK_B && cmd && ctrl && !opt {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⌃B (autorepeat)", type, event) }
             DispatchQueue.global().async { [weak self] in self?.onBindHotkey?() }
-            return nil
+            return swallow("⌘⌃B bind", type, event)
         }
 
         // ⌘⌃D — **dictate**: the wheel's click, from the keyboard. Same call, so
@@ -3027,9 +3091,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // Autorepeat swallowed for the same reason as above — a held key would
         // open the microphone and close it again on the next repeat.
         if keyCode == VK_D && cmd && ctrl && !opt {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⌃D (autorepeat)", type, event) }
             DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-            return nil
+            return swallow("⌘⌃D dictate", type, event)
         }
 
         // Autorepeat swallowed for the same reason ⌘⌃B swallows it: a key held a
@@ -3046,9 +3110,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // is what the chord does, everywhere. That is the trade he asked for;
         // the `ctrl` half of the guard is now `shift` and nothing else moved.
         if keyCode == VK_P && cmd && flags.contains(.maskShift) && !ctrl && !opt {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⇧P (autorepeat)", type, event) }
             DispatchQueue.global().async { [weak self] in self?.onPasteLast?() }
-            return nil
+            return swallow("⌘⇧P paste last", type, event)
         }
 
         // ── The side buttons, as ⌃⌥⌘ + a function key ────────────────────────
@@ -3067,7 +3131,23 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // **F10 turned out to be the exception** (2026-09-16): a re-triggered
         // tap with no autorepeat flag at all, on a fast flick — see
         // `lastF10At`.
-        if useLogiGestures && ctrl && opt && cmd {
+        //
+        // **Every one goes through `swallow`** (2026-09-26, TG1, TG28): the key
+        // trace could not see a single gesture — each branch returned nil
+        // bare, and the only line was the key-up passing. Now every chord's
+        // key-down is in the trace with the branch that took it.
+        //
+        // **Autorepeat, and the re-fire guard, before the switch.** Six of the
+        // ten had no re-fire guard at all (`lastFlickAt`); F10 and F5 keep
+        // their own, which also feed their dwell and settle checks.
+        if useLogiGestures && ctrl && opt && cmd, let gesture = Self.gestureNames[keyCode] {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+                return swallow("\(gesture) (autorepeat)", type, event)
+            }
+            if [VK_F11, VK_F8, VK_F9, VK_F3, VK_F4, VK_F12].contains(keyCode),
+               refired(keyCode, at: CACurrentMediaTime()) {
+                return swallow("\(gesture) — re-fire dropped", type, event)
+            }
             switch keyCode {
             // ➡️ — the mouse moved right with the forward button held: start the
             // dictation, or end the one already open. The same call ⌘⌃D makes,
@@ -3075,7 +3155,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // other way round. Where it goes is not this gesture's business: a
             // bound terminal takes it, and Replace Wispr sends it to the caret.
             case VK_F10:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 let f10Now = CACurrentMediaTime()
                 // **The window slides** (2026-09-18): a dropped re-fire counts
                 // as the last one too, so a whole train of them lasts as long as
@@ -3085,7 +3164,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 guard sinceLastF10 >= Self.gestureRetriggerSeconds else {
                     lastF10At = f10Now
                     Log.info("🎯 ➡️ F10 re-triggered \(String(format: "%.0f", sinceLastF10 * 1000))ms after the last one — still the same motion, dropped")
-                    return nil
+                    return swallow("\(gesture) — re-fire dropped", type, event)
                 }
                 lastF10At = f10Now
                 // Our own bookkeeping can go stale — `VK_F7`'s reason, and the
@@ -3095,7 +3174,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if leftIsHeld {
                     Log.info("🎯 ⬅️ held + forward button flicked right — bind, then dictate at it")
                     DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 // **A sentence this young cannot be ended by the gesture that
                 // opened it** — `gestureStopDwellSeconds`. The second half of
@@ -3104,18 +3183,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // thing it could do here is undo it.
                 if let age = openSentenceAge, age < Self.gestureStopDwellSeconds {
                     Log.info("🎯 ➡️ F10 \(String(format: "%.0f", sinceLastF10 * 1000))ms on, but the sentence is only \(String(format: "%.0f", age * 1000))ms old — not stopping it")
-                    return nil
+                    return swallow("\(gesture) — the sentence is too young to stop", type, event)
                 }
                 DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // ⬅️ — throw the running dictation away. Deliberately the mirror
             // direction of the one that starts it: the two gestures that open
             // and abandon a sentence are the same hand movement, reversed.
             case VK_F11:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // ⬅️ on the **back** button — throw a Wispr Flow sentence away.
             //
@@ -3139,27 +3217,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // fires at all — a ring still turning after he has abandoned the
             // sentence is the thing this gesture exists to stop.
             case VK_F3:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 if wisprMicIsOpen?() == true, !ownDictation {
                     Log.info("🗑️ ⬅️ back button flicked left — dismissing Wispr Flow's dictation")
                     Self.postWisprCancel()
                     onWisprRawChord?(true)
                     DispatchQueue.global().async { [weak self] in self?.onWisprCancel?() }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 // Nothing of Wispr's to throw away: the relay's own cancel, so
                 // the flick is never a gesture that silently does nothing.
                 DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // ⬆️ — dictate at a session that does not exist yet: the spawn, which
             // used to be the wheel clicked twice. A gesture of its own again,
             // rather than a conversion of a dictation already in flight, because
             // there is no longer a first click to convert.
             case VK_F8:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onGestureSpawn?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // ⬆️ on the **back** button — start or stop a screen recording
             // (2026-09-18).
@@ -3187,9 +3263,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // for a folder that does not exist yet. `AppDelegate` holds that
             // state whole and answers it.
             case VK_F4:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onGestureFilm?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // 🔼 ↓ — **kamikaze** (2026-09-23). Victor: *"în timp cât dictez,
             // trag gest cu butonul de forward și trag de mouse în jos. Asta să
@@ -3197,17 +3272,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // înseamnă că e ceva mic."* The word is the agent's cue to close its
             // own terminal when done. What it means is `AppDelegate`'s call.
             case VK_F9:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onGestureKamikaze?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // ⬇️ on the **back** button — let the binding go. The same call the
             // menu's Disconnect row makes, so the gesture and the row cannot
             // drift apart.
             case VK_F12:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // The forward button **clicked** — two readings, told apart by the
             // left button.
@@ -3246,15 +3319,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // click as a bind.
                 reconcileButtons()
                 if leftIsHeld {
-                    if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                     Log.info("🎯 ⬅️ held + forward button — binding")
                     DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 Log.info("🎙️ forward button — a dictation at the caret")
                 DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }
-                return nil
+                return swallow(gesture, type, event)
 
             // **The back button's two gestures swapped roles** (Victor,
             // 2026-09-23: *"când apăs butonul de back, asta doar să oprească și
@@ -3272,13 +3343,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // the tail of one flick the way F10 is (`lastF10At`), since here a
             // re-fire would be a second send.
             case VK_F5:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 let f5Now = CACurrentMediaTime()
                 let sinceLastF5 = f5Now - lastF5At
                 lastF5At = f5Now
                 guard sinceLastF5 >= Self.gestureRetriggerSeconds else {
                     Log.info("🎯 🔽 → F5 re-triggered \(String(format: "%.0f", sinceLastF5 * 1000))ms after the last one — still the same motion, dropped")
-                    return nil
+                    return swallow("\(gesture) — re-fire dropped", type, event)
                 }
                 // **During a plain dictation it is the stop *and* the submit**
                 // (2026-09-23). Victor: *"Enter is dispatched if I do a back
@@ -3297,7 +3367,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                         self?.onBackSubmit?()
                         self?.onCleanToggle?()
                     }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 if backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation) {
                     lastBackToggleAt = f5Now
@@ -3306,11 +3376,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     onWisprRawChord?(true)
                     setWisprArm(0)
                     DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 Log.info("⌨️ 🔽 → — Return")
                 Self.postReturn()
-                return nil
+                return swallow(gesture, type, event)
 
             // The back button **clicked** — Wispr Flow's **raw** hands-free
             // toggle, in both modes: it starts a **plain** sentence — clean words
@@ -3324,7 +3394,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // always has — opening Wispr then is refused anyway (below), so the
             // button would otherwise do nothing at all.
             case VK_F6:
-                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
                 // **The stop of a clean dictation comes before the shutter**
                 // (2026-09-23, the same afternoon — Victor: *"butonul de Back
                 // trebuie să pornească dictarea simplă, fără poze, fără nimic. Pe
@@ -3343,7 +3412,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if !wisprSentence, !ownClean, dictating, ownDictation {
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 // **A second click inside `backToggleSettleSeconds` is dropped.**
                 // Which half of the toggle a click is comes from Wispr's
@@ -3354,7 +3423,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 let f6Now = CACurrentMediaTime()
                 guard f6Now - lastBackToggleAt >= Self.backToggleSettleSeconds else {
                     Log.info("🎯 ⬅️ back click \(String(format: "%.0f", (f6Now - lastBackToggleAt) * 1000))ms after the last toggle — dropped")
-                    return nil
+                    return swallow("\(gesture) — inside the back toggle's settle", type, event)
                 }
                 // **With the Engine off Wispr the clean sentence is the
                 // Engine's** (2026-09-25, `onCleanToggle`). A Wispr sentence
@@ -3364,12 +3433,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     if ownDictation, !ownClean {
                         Log.error("🎙️ ⬅️ back click refused — the relay's own engine is mid-sentence")
                         onEngineBusy?("Back click ignored — finish the sentence you are dictating first")
-                        return nil
+                        return swallow(gesture, type, event)
                     }
                     lastBackToggleAt = f6Now
                     Log.info("🎙️ ⬅️ back click — a clean dictation on the Engine\(ownClean ? " (the stop)" : " (the start)")")
                     DispatchQueue.global().async { [weak self] in self?.onCleanToggle?() }
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 // The arm says *a start was posted and has not ended* even
                 // before Wispr's microphone warms up, so it wins over the
@@ -3383,7 +3452,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 if !closing, ownDictation {
                     Log.error("🎙️ ⬅️ back click refused — the relay's own engine is mid-sentence")
                     onEngineBusy?("Back click ignored — finish the sentence you are dictating first")
-                    return nil
+                    return swallow(gesture, type, event)
                 }
                 lastBackToggleAt = f6Now
                 Log.info("🎙️ ⬅️ back click — Wispr Flow's hands-free toggle\(closing ? " (the stop)" : " (the start)")")
@@ -3392,7 +3461,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // it any other way — see `onWisprRawChord`.
                 onWisprRawChord?(closing)
                 setWisprArm(closing ? 0 : CACurrentMediaTime())
-                return nil
+                return swallow(gesture, type, event)
 
             default:
                 break
