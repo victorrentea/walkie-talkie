@@ -318,6 +318,16 @@ final class RebindPanel: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         case #selector(NSResponder.moveUp(_:)):
             move(by: -1); return true
         case #selector(NSResponder.insertNewline(_:)):
+            // **Only a Return he typed picks a row** (2026-09-26, TG36). 🔽 →
+            // posts a Return of this app's own (`HotkeyTap.postReturn`, stamped
+            // `backButtonStamp`) at whatever is key — and with this panel up
+            // that is this panel, so the gesture meant for the terminal behind
+            // it re-bound the selected row. Swallowed here, said in the log.
+            if let event = NSApp.currentEvent, event.type == .keyDown,
+               event.cgEvent?.getIntegerValueField(.eventSourceUserData) == HotkeyTap.backButtonStamp {
+                Log.info("⏎ from 🔽 → while Rebind to… is key — not a row pick, ignored")
+                return true
+            }
             activate(); return true
         case #selector(NSResponder.cancelOperation(_:)):
             close(); return true

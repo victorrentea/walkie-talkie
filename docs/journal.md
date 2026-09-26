@@ -12491,3 +12491,14 @@ opened for the words.
   beside it), no longer at `commit`. A failed spawn writes none; its flash says the words went
   nowhere and ⌘⇧P still has them. The *re-offer* half of TR22 (hold a failed spawn's sentence) is
   not done here: no route can fail a spawn, and it is not in this batch's decisions.
+
+### 5. 🔽 → does not pick a row in *Rebind to…*
+
+TG36 (undefined in the plan, found in phase B): with the *Rebind to…* panel up, 🔽 →'s Return —
+posted by this app (`HotkeyTap.postReturn`), to whatever is key — landed in the panel's search field
+and activated the selected row: the witness was re-bound by a gesture meant for the terminal behind
+it. **The panel's ⏎ now ignores a Return stamped `backButtonStamp`** (the event's
+`eventSourceUserData`), so only a Return he typed picks a row; the tap still posts it, the panel
+swallows it and says so in the log. Picked over dropping the post in the tap because the tap would
+have to ask a main-thread window whether it is key from the tap's thread; the stamp is already on
+the event and answers the question where it is asked.
