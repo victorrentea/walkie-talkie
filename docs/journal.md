@@ -12668,3 +12668,41 @@ settle had given up).
   one transcribes, queued and delivered in order (*"să le bufferizeze cumva ele în spate și să le
   trimită pe rând"*). That is a separate batch; this one only closes the hole, so a start in the
   settle is refused (and says so) rather than queued.
+
+### Batch 3, measured
+
+| case | before (`report-2026-09-26.md`) | after |
+|---|---|---|
+| TL7 dead helper | BUG — `ready:true` after SIGKILL | PASS — `ready:false` at once (`report-fix3.md`) |
+| TL5 hung helper | BUG — only the route's 180 s semaphore, no timeout, `/up` blocked | PASS — `timed out after 300s`, killed and replaced, `/up` 0.00 s, next decode in sync |
+| TL1 orphan flush, desk sentence | BUG — envelope wiped at 120 s | PASS — `dictationStartedAt` kept at 121 s, nothing released |
+| TD8 orphan flush, wheel shot | BUG — the shot sent alone at +120 s | PASS — no flush in 135 s, no screenshot row |
+| TL22 cold model, cancel, switch | BUG — banked, uncancellable, EL mic opened by the switch | PASS — mic 0.26 s after the gesture, cancelled, the switch opens nothing (`report-fix3b.md`) |
+| TG3 F11 on a cold model | BUG — F11 ignored, mic opened 2 s later | PASS — mic 0.17 s, cancelled, nothing opens after the model is up |
+| TG4 🔽 on a cold model | BUG — a caret prompt with a context shot, second click the shutter | PASS — mic 0.34 s, clean, no shot, second click stops, 55 chars at the caret via `local-whisper` (`report-fix3c.md`) |
+| TG41 engine switch on a cold model | BUG — accepted, dictation opened on the new engine | PASS — mic 0.17 s, switch refused, 231 chars in the witness via `local-whisper` (`report-fix3c.md`) |
+| TR18 sticky `listening` | BUG — silent, up to the ceiling | PASS — the flag named, put down 26 s later (at 30 s old) |
+| TL15 two start gates in a slow upload | BUG — click refused, F10 started | PASS — at 33 s still settling (`uploading`), both refused, the late reply in the witness |
+| TL31 hung helper wedges the app | BUG — `transcribing`, busy, gate shut | PASS — timed out at 301 s, `.failed` with the WAV staged, `busy` empty, gate open, new helper up |
+| TL8 upload > the old ceiling, S2 after | BUG — S1 abandoned into S2 | PASS — settle ended with S1's words at 35.8 s, S1 and S2 one line each, own screens |
+| TR11 slow failure then fallback | BUG — settle timed out at 32 s | PASS — no time-out, fallback delivered via `local-fallback` to the witness |
+
+**Cases changed, and why** — each where the case, not the app, disagreed with the decisions:
+
+- **TL22, TG3, TG4, TG41** asserted things about *a gesture banked on a cold model*, and the
+  decision removed the bank. They now assert the new behaviour: the microphone opens within 0.5 s
+  of the gesture while the model is still loading, F11 / `/test/cancel` cancels it, a switch is
+  refused while it records, and the words arrive once the model is up (TG4 at the caret, TG41 in
+  the witness). A banked line or a microphone opening after the cancel is still BUG.
+- **TG4**'s first run failed only on the `context screen skipped` line: on the own engine a clean
+  sentence is booked without reaching `captureContext`, so that line exists only on Wispr's path.
+  The criterion is *no context shot captured*. **TG41**'s first run read `lastDelivery` the instant
+  the words reached the witness, before the row written after the keystrokes (batch 1); it now
+  waits up to 5 s for it. Both re-run: `report-fix3c.md`.
+- **TL15** waited for *the orphan window* (settle given up, phase still `transcribing`), which item 5
+  abolished; it now tries both starts 33 s into a 45 s upload and asserts both refuse.
+- **TL31** asserted the app was *not* wedged at 35 s; with item 5 the settle correctly still waits
+  there, and item 3's budget is what un-wedges it. It now asserts the state after the 300 s budget,
+  without a SIGCONT.
+- **TL5**'s PASS no longer accepts *the route answered `ok:false` before 175 s* on its own: it needs
+  the `timed out` line, a control surface that answered, and the next decode in sync.

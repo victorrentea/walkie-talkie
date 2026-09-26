@@ -266,8 +266,9 @@ def tl4_local_fallback_happy():
 
 
 @case("TL5", tags=("slow",),
-      expect="helper hang (SIGSTOP): /test/local-fallback answers only at the route's 180 s semaphore, no "
-             "'timed out after 300s' ever; after SIGCONT the stale answer is consumed")
+      expect="helper hang (SIGSTOP): the 300 s decode budget is enforced ('timed out after 300s', the helper killed and "
+             "replaced), the control surface answers while /test/local-fallback waits, the next decode is in sync. "
+             "Before: only the route's 180 s semaphore answered, /up was blocked behind it, no timeout ever")
 def tl5_helper_hang():
     """SIGSTOP the helper, ask for a decode, measure who gives up first; SIGCONT and check the stream."""
     if not os.path.exists(CLIP_EN) or not os.path.exists(CLIP_EN_LONG):
@@ -309,7 +310,7 @@ def tl5_helper_hang():
                 f"{'DESYNC (got the stale clip)' if desync else 'in sync'}")
         if dt >= 175 and not timed_out:
             return "BUG", note + " — the helper's 300 s budget is not enforced; only the route's semaphore answered"
-        if (dt < 175 and ans and not ans.get("ok")) or timed_out:
+        if timed_out and not str(probe.get("up", "")).startswith("blocked") and not desync:
             return "PASS", note
         return "FAIL", note
     finally:
@@ -383,10 +384,12 @@ def tl7_dead_helper_still_ready():
 
 
 @case("TL15", tags=("gesture",),
-      expect="during an orphan upload (settle gave up, phase transcribing) forward-click and forward-right agree; "
-             "today: forward-click refuses ('still in flight'), forward-right starts")
+      expect="a slow upload (45 s) keeps the settle up past the old 30 s ceiling — it waits while the recogniser "
+             "works (2026-09-26, item 5) — and both start gestures refuse while the words are in flight, saying so; "
+             "the late reply lands in the latched terminal. Before: the settle gave up at 32 s, forward-click refused, "
+             "forward-right started a sentence the late reply then landed in")
 def tl15_inconsistent_start_gates():
-    """Delay the final upload 45 s (fault switch), let the settle give up, then try both start gestures."""
+    """Delay the final upload 45 s (fault switch); at 33 s after the stop try both start gestures."""
     if not loopback_alive():
         return "SKIP", "Loopback pass-thru dead (440 Hz check failed)"
     e0 = engine()["engine"]
@@ -394,16 +397,15 @@ def tl15_inconsistent_start_gates():
         if not e0.startswith("eleven"):
             post("/engine", {"id": "eleven"})
         if not engine().get("ready"):
-            return "SKIP", "ElevenLabs has no key — the orphan window needs a real upload"
-        bind_witness()
+            return "SKIP", "ElevenLabs has no key — the case needs a real upload"
+        tty = bind_witness().get("tty") or WITNESS["tty"]
         mic_override(INJECT)
         post("/test/eleven", {"fail": "500", "delayMs": 45000, "scope": "final"})
         mark, _ = dictate_loopback(CLIP_EN, wait_after=1.0)
         t_stop = time.time()
-        orphan = wait_for(lambda: (lambda s: not s["settling"] and s["phase"] == "transcribing")(state()), 40, 0.2)
-        if not orphan:
-            return "FAIL", f"never reached the orphan window: {state()['phase']}/{state()['settling']}"
-        t_orphan = round(time.time() - t_stop, 1)
+        time.sleep(max(0, t_stop + 33 - time.time()))
+        s33 = state()
+        waiting = s33["settling"] and s33["phase"] == "transcribing"
         m2 = log_mark()
         gesture("forward-click")
         time.sleep(1.5)
@@ -415,20 +417,21 @@ def tl15_inconsistent_start_gates():
         m3 = log_mark()
         gesture("forward-right")
         right_started = bool(wait_for(lambda: state()["isRecording"] or state()["listening"], 3, 0.05))
-        right_refused = log_has(m3, r"still in flight")
+        right_refused = log_has(m3, r"start refused — .*still in flight")
         if right_started:
             time.sleep(0.5)
             post("/test/cancel"); wait_for(lambda: _quiet(), 4)
-        late = wait_for(lambda: log_has(mark, r"elevenlabs: .* chars|dictation abandoned|↪️"), 30, 0.3)
+        late = wait_for(lambda: log_has(mark, r"elevenlabs: .* chars|↪️"), 40, 0.3)
+        landed = wait_for(lambda: (state().get("lastDelivery") or {}).get("to") == f"terminal:{tty}", 30, 0.3)
         s = state()
-        note = (f"{engine()['engine']}: orphan window at {t_orphan} s after stop; forward-click "
-                f"{'refused' if click_refused else ('started' if click_started else 'no-op')}, forward-right "
-                f"{'started' if right_started else ('refused' if right_refused else 'no-op')}; late reply "
-                f"{'landed' if late else 'not seen'}, lastDelivery.to={(s.get('lastDelivery') or {}).get('to')}")
+        note = (f"{engine()['engine']}: at 33 s after the stop settling={s33['settling']} phase={s33['phase']}/"
+                f"{s33['phaseStatus']}; forward-click {'refused' if click_refused else ('STARTED' if click_started else 'no-op')}, "
+                f"forward-right {'STARTED' if right_started else ('refused' if right_refused else 'no-op')}; late reply "
+                f"{'landed' if late else 'not seen'}, lastDelivery.to={(s.get('lastDelivery') or {}).get('to')} (bound {tty})")
+        if waiting and click_refused and not click_started and right_refused and not right_started and landed:
+            return "PASS", note + _inv_note()
         if click_refused and right_started:
             return "BUG", note + " — the two start gates disagree" + _inv_note()
-        if (click_refused or not click_started) and not right_started:
-            return "PASS", note + _inv_note()
         return "FAIL", note + _inv_note()
     finally:
         post("/test/eleven", {"clear": True})
@@ -537,11 +540,12 @@ def tl21_stall_coalescing():
 
 
 @case("TL22", tags=("gesture",),
-      expect="a gesture banked on a cold local model is cancellable and dies with an engine switch; today: "
-             "/test/cancel has nothing to cancel, and POST /engine eleven opens the ElevenLabs mic within 0.6 s with "
-             "no gesture (no key: 'Wispr Flow is not running')")
-def tl22_banked_gesture_engine_switch():
-    """R7: engine whisper while the model restarts, forward-right banks, cancel, switch to eleven."""
+      expect="a cold local model never delays the microphone (2026-09-26 decision): forward-right opens it within "
+             "0.5 s while the model loads, nothing is banked; /test/cancel cancels it; an engine switch afterwards "
+             "opens nothing. Before (R7): the gesture was banked, /test/cancel had nothing to cancel, and the switch "
+             "opened the ElevenLabs microphone with no gesture")
+def tl22_cold_model_records_at_once():
+    """Engine whisper while the model restarts: forward-right, cancel, switch to eleven."""
     e0 = engine()["engine"]
     try:
         mic_override(INJECT)
@@ -549,33 +553,32 @@ def tl22_banked_gesture_engine_switch():
             post("/engine", {"id": "whisper"})
         post("/test/whisper", {"restart": True})       # the model is cold for the next few seconds
         if _whisper().get("ready"):
-            return "SKIP", "the model was ready before the gesture — nothing to bank"
+            return "SKIP", "the model was ready before the gesture — nothing cold to test"
         mark = log_mark()
+        t0 = time.time()
         gesture("forward-right")
-        banked = wait_for(lambda: log_has(mark, r"not ready — bringing it up"), 2, 0.05)
-        if not banked:
-            return "SKIP", "the gesture did not bank (model came up first?)"
+        opened = wait_for(lambda: log_has(mark, r"mic: recording through"), 3, 0.02)
+        t_open = round(time.time() - t0, 2) if opened else None
+        cold = not _whisper().get("ready")
+        anyway = log_has(mark, r"recording anyway")
+        banked = log_has(mark, r"not ready — bringing it up")
+        time.sleep(0.5)
         c_mark = log_mark()
         post("/test/cancel")
-        time.sleep(0.3)
+        quiet = wait_for(lambda: _quiet(), 3, 0.05)
         cancel_logged = log_has(c_mark, r"🗑️ dictation cancelled")
-        s = state()
-        if s["isRecording"] or s["listening"]:
-            return "SKIP", "the banked gesture resolved on the local model before the switch"
-        t0 = time.time()
         _, r = post("/engine", {"id": "eleven"})
-        eleven_ready = r.get("ready")
-        opened = wait_for(lambda: state()["isRecording"], 2.5, 0.02)
-        dt = round(time.time() - t0, 2)
+        reopened = wait_for(lambda: state()["isRecording"], 2.5, 0.02)
         chip = _chip()
         wispr_flash = any("Wispr Flow is not running" in str(x) for x in chip)
-        note = (f"banked on whisper; /test/cancel {'logged a cancel' if cancel_logged else 'had nothing to cancel'}; "
-                f"switched to {r.get('engine')} (key ready={eleven_ready}); ElevenLabs mic "
-                f"{'opened %.2f s after the switch' % dt if opened else 'did not open in 2.5 s'}"
+        note = (f"mic {'opened %.2f s after the gesture' % t_open if opened else 'did not open in 3 s'} "
+                f"(model still loading={cold}, 'recording anyway' line={anyway}, banked line={banked}); "
+                f"/test/cancel {'cancelled it' if cancel_logged else 'had nothing to cancel'}, quiet={bool(quiet)}; "
+                f"switched to {r.get('engine')}: microphone {'OPENED' if reopened else 'stayed shut'}"
                 f"{'; flash: Wispr Flow is not running' if wispr_flash else ''}")
-        if opened or wispr_flash:
-            return "BUG", note + " — the bank outlived the cancel and the engine"
-        if cancel_logged or not opened:
+        if banked or reopened or wispr_flash:
+            return "BUG", note + " — the gesture was banked and outlived the cancel/engine"
+        if opened and t_open <= 0.5 and cold and cancel_logged and quiet:
             return "PASS", note
         return "FAIL", note
     finally:
@@ -692,10 +695,12 @@ def tl28_held_across_sleep():
 
 
 @case("TL31", tags=("gesture", "slow"),
-      expect="a hung helper must not wedge the app; today at 35 s: settling:false, phase:transcribing, "
-             "busyWhy:[transcribing], --dry-run blocked")
+      expect="a hung helper (SIGSTOP) no longer wedges the app: the 300 s decode budget kills it, a new helper comes up, "
+             "the sentence ends failed with its WAV staged for Recover, phase leaves `transcribing`, busy goes false "
+             "and the restart gate opens — without a SIGCONT. Before: at 35 s phase transcribing, busy, the gate "
+             "blocked until the helper was resumed by hand")
 def tl31_stuck_phase_blocks_restart():
-    """SIGSTOP the helper, dictate a clip on the local engine, read the state 35 s after the stop."""
+    """SIGSTOP the helper, dictate a clip on the local engine, wait out the decode budget."""
     if not loopback_alive():
         return "SKIP", "Loopback pass-thru dead (440 Hz check failed)"
     e0 = engine()["engine"]
@@ -707,26 +712,35 @@ def tl31_stuck_phase_blocks_restart():
             post("/engine", {"id": "whisper"})
         if _helper_up() is None:
             return "SKIP", "the helper would not come up in 120 s"
+        hpid = _whisper().get("pid")
         _, r = post("/test/whisper", {"stop": True})
         if "SIGSTOP" not in (r.get("did") or []):
             return "SKIP", f"no helper to stop: {r}"
         stopped = True
+        rec0 = (state().get("recoverable") or {}).get("path")
         mark, _ = dictate_loopback(CLIP_EN, wait_after=1.0)
         t_stop = time.time()
         time.sleep(max(0, t_stop + 35 - time.time()))
+        s35 = state()
+        timed = wait_for(lambda: log_has(mark, r"whisper helper timed out after \d+s"), 300, 1.0)
+        t_to = round(time.time() - t_stop, 1) if timed else None
+        stopped = False                          # killed by the budget, not resumed
+        ended = wait_for(lambda: (lambda s: s["phase"] != "transcribing" and not s["settling"])(state()), 20, 0.2)
         s = state()
-        stuck = (not s["settling"]) and s["phase"] == "transcribing" and "transcribing" in (s["busyWhy"] or [])
-        rc, out, secs = _gate(20)
-        post("/test/whisper", {"cont": True}); stopped = False
-        landed = wait_delivered(mark, 60)
-        s2 = state()
-        note = (f"at 35 s: settling={s['settling']} phase={s['phase']}/{s['phaseStatus']} busyWhy={s['busyWhy']}; "
-                f"dry-run exit {rc} in {secs} s; after SIGCONT delivered={'yes' if landed else 'no'} "
-                f"lastDelivery.to={(s2.get('lastDelivery') or {}).get('to')}")
-        if stuck and rc == 3:
-            return "BUG", note + " — a hung helper wedges phase, busy and the restart gate" + _inv_note()
-        if s["phase"] != "transcribing" and not s["busy"] and rc == 0:
+        rec = s.get("recoverable") or {}
+        staged = bool(rec.get("path")) and rec.get("path") != rec0
+        failed = log_has(mark, r"did not answer within \d+ s")
+        rc, out, secs = _gate(40)
+        up = wait_for(lambda: (lambda w: w.get("ready") and w.get("alive"))(_whisper()), 90, 0.5)
+        new_pid = _whisper().get("pid")
+        note = (f"at 35 s: settling={s35['settling']} phase={s35['phase']}/{s35['phaseStatus']} (the settle waits); "
+                f"'timed out' at {t_to} s after the stop; then phase={s['phase']} settling={s['settling']} "
+                f"busyWhy={s['busyWhy']}; failed-with-budget line={failed}; WAV staged for Recover={staged}; "
+                f"dry-run exit {rc} in {secs} s; helper {hpid}→{new_pid} ready={bool(up)}")
+        if timed and ended and not s["busy"] and staged and rc == 0 and up and new_pid != hpid:
             return "PASS", note + _inv_note()
+        if not timed:
+            return "BUG", note + " — the decode budget was not enforced" + _inv_note()
         return "FAIL", note + _inv_note()
     finally:
         if stopped:

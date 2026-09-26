@@ -419,72 +419,97 @@ def tg2():
         return g.done("FAIL", msg)
 
 
+def cold_open(g, name):
+    """`name` on the cold local model with the flags checked after the fact, so the microphone's opening is
+    timed from the gesture (not from the end of the 0.1–0.4 s flags check). (mark, opened, seconds, still cold)."""
+    m = log_mark()
+    t = g.step(name, check=False)
+    opened = wait_mic(m, 3)
+    dt = now() - t if opened else None
+    cold = not whisper_info().get("ready")
+    g.flags(name, t)
+    return m, bool(opened), dt, cold
+
+
 @case("TG3", tags=("gesture",),
-      expect="🔼← F11 aborts a start banked on a cold local model. Predicted defect: no cancel line, and "
-             "the microphone opens ~10 s later anyway (`recordWhenSourceReady` ignored by cancel)")
+      expect="🔼← F11 cancels a sentence opened on a cold local model: the gesture opens the microphone within 0.5 s "
+             "while the model loads (2026-09-26 decision — nothing is banked), F11 cancels it, and nothing opens once "
+             "the model is up. Before: the gesture was banked, F11 had nothing to cancel, the microphone opened ~10 s later")
 def tg3():
-    """F11 cannot abort a cold bank (Engine = whisper, cold)."""
+    """F11 on a sentence opened against a cold model (Engine = whisper)."""
     with G("TG3") as g:
         why = need_el() or cold_whisper(g)
         if why:
             return g.skip(why)
         if not to_whisper(g):
             return g.done("FAIL", "POST /engine {id: whisper} was not taken")
-        m = log_mark()
-        g.step("forward-right")
-        if not wait_for(lambda: BANKED.search(log_since(m)), 4, 0.05):
-            return g.skip("the model came up before the gesture — nothing was banked")
+        m, opened, dt, cold = cold_open(g, "forward-right")
         time.sleep(0.5)
         tc = g.step("forward-left")
-        outcome, dt = bank_outcome(m)
+        closed = wait_for(lambda: not st().get("listening") and not st().get("isRecording"), 3, 0.05)
+        m2 = log_mark()
+        up = wait_for(lambda: whisper_info().get("ready"), 90, 0.5)
+        time.sleep(2.5)
         L = log_since(m)
         cancelled = "🗑️ dictation cancelled" in L
-        msg = (f"cancel line={cancelled}; after the F11: {outcome} in {dt:.1f} s "
-               f"(F11 at +{tc - g.t0:.2f} s)")
-        if not cancelled and outcome == "opened":
-            return g.done("BUG", "the cancel was ignored and the banked start opened the microphone — " + msg)
-        if cancelled and outcome == "dropped":
+        reopened = "mic: recording through" in log_since(m2) or bool(st().get("listening"))
+        banked = bool(BANKED.search(L))
+        msg = (f"mic {'opened %.2f s after the gesture' % dt if opened else 'did not open in 3 s'} "
+               f"(model still loading={cold}); cancel line={cancelled}, closed={bool(closed)} "
+               f"(F11 at +{tc - g.t0:.2f} s); model up={bool(up)}, anything opened after it={reopened}; banked={banked}")
+        if banked or reopened:
+            return g.done("BUG", "the start outlived the cancel — " + msg)
+        if opened and dt <= 0.5 and cold and cancelled and closed:
             return g.done("PASS", msg)
         return g.done("FAIL", msg)
 
 
 @case("TG4", tags=("gesture",),
-      expect="🔽 click on a cold local model stays a clean dictation once the model is up (context shot "
-             "skipped) and a second 🔽 click stops it. Predicted defect: the resumed start drops `clean` — "
-             "a caret prompt with a context shot, and the second click is the shutter")
+      expect="🔽 click on a cold local model opens the microphone within 0.5 s as a clean dictation (context shot "
+             "skipped), the second 🔽 click stops it, and the words arrive at the caret once the model is up. "
+             "Before: the click was banked, the resumed start was a caret prompt with a context shot, and the second "
+             "click was the shutter")
 def tg4():
-    """Cold back click becomes a prompt; the second back click is a shutter."""
+    """A back-click sentence on a cold model stays a clean one and is delivered when the model is up."""
     with G("TG4") as g:
-        why = need_el() or cold_whisper(g)
+        why = need_el() or need_audio() or cold_whisper(g)
         if why:
             return g.skip(why)
         if not to_whisper(g):
             return g.done("FAIL", "POST /engine {id: whisper} was not taken")
         g.key_sink()
-        m = log_mark()
-        g.step("back-click")
-        if not wait_for(lambda: BANKED.search(log_since(m)), 4, 0.05):
-            return g.skip("the model came up before the gesture — nothing was banked")
-        outcome, dt = bank_outcome(m)
-        if outcome != "opened":
-            return g.done("FAIL", f"the banked back click never opened the microphone ({outcome}, {dt:.1f} s)")
-        wait_listening(3)
-        time.sleep(1.5)                       # the context shot is taken off main
+        m, opened, dt, cold = cold_open(g, "back-click")
+        if not opened:
+            return g.done("FAIL", "the back click never opened the microphone (cold model)")
+        time.sleep(0.4)
+        play(CLIP_EN)
+        time.sleep(0.8)
         L1 = log_since(m)
         started_clean = CLEAN_START_OWN in L1
         shot = "context screen captured" in L1
         skipped = "context screen skipped — a clean dictation" in L1
         m2 = log_mark()
         g.step("back-click")
-        time.sleep(1.5)
-        L2, s = log_since(m2), st()
+        time.sleep(1.0)
+        L2 = log_since(m2)
         stop = "(the stop)" in L2
-        shutter = "📸 attached to in-flight dictation" in L2 or (not stop and bool(s.get("listening")))
-        msg = (f"first click clean start={started_clean}; mic open {dt:.1f} s later; context shot "
-               f"captured={shot} skipped={skipped}; second click stop={stop} shutter={shutter}")
+        shutter = "📸 attached to in-flight dictation" in L2
+        landed = wait_for(lambda: (st().get("lastDelivery") or {}).get("via") == "local-whisper"
+                          and "📦 delivery:" in log_since(m2), 120, 0.3)
+        time.sleep(1.0)
+        s, evs = st(), sink_events()
+        d = s.get("lastDelivery") or {}
+        chars = sum(len(e.get("text") or "") for e in evs)
+        waited = re.search(r"the local model came up ([\d.]+) s after the stop", log_since(m2))
+        msg = (f"mic {'opened %.2f s after the click' % dt} (model still loading={cold}); clean start={started_clean}; "
+               f"context shot captured={shot} skipped={skipped}; second click stop={stop} shutter={shutter}; "
+               f"words {'waited %s s for the model, then ' % waited.group(1) if waited else ''}"
+               f"{'landed' if landed else 'did NOT land'}: to={d.get('to')} via={d.get('via')}, sink got {chars} chars")
         if shot and shutter and not stop:
-            return g.done("BUG", "the resumed start was a caret prompt — " + msg)
-        if skipped and stop:
+            return g.done("BUG", "the start was a caret prompt — " + msg)
+        # No picture is the criterion: on the own engine a clean sentence is booked without ever reaching
+        # `captureContext`, so its `context screen skipped` line exists only on Wispr's path.
+        if dt <= 0.5 and cold and started_clean and not shot and stop and landed and d.get("to") == "caret" and chars > 0:
             return g.done("PASS", msg)
         return g.done("FAIL", msg)
 
@@ -1252,41 +1277,43 @@ def tg40():
 
 
 @case("TG41", tags=("gesture",),
-      expect="an engine switch while a gesture is banked on the cold local model is refused, or drops the bank. "
-             "Predicted defect (R7): accepted, and the dictation opens on the new engine when the 0.5 s poll fires "
-             "(or `Wispr Flow is not running` flashes)")
+      expect="an engine switch mid-sentence on a cold local model is refused like any other: the gesture opened the "
+             "microphone within 0.5 s, POST /engine is refused while it records, and the words arrive through the local "
+             "model once it is up. Before (R7): the gesture was banked, the switch was accepted and the dictation "
+             "opened on the new engine")
 def tg41():
-    """Engine switch during a bank → the dictation opens on the new engine."""
+    """Engine switch while a cold-model sentence records."""
     with G("TG41") as g:
-        why = need_el() or cold_whisper(g)
+        why = need_el() or need_audio() or cold_whisper(g)
         if why:
             return g.skip(why)
         back_to = engine_id()
+        bind_witness()
+        tty = WITNESS["tty"]
+        witness_clear()
         if not to_whisper(g):
             return g.done("FAIL", "POST /engine {id: whisper} was not taken")
-        m = log_mark()
-        g.step("forward-right")
-        if not wait_for(lambda: BANKED.search(log_since(m)), 4, 0.05):
-            return g.skip("the model came up before the gesture — nothing was banked")
-        ts = now()
+        m, opened, dt, cold = cold_open(g, "forward-right")
+        if not opened:
+            return g.done("FAIL", "the gesture never opened the microphone (cold model)")
         accepted = set_engine(back_to)
-        rows, opened_at = [], None
-        while now() - ts < 8:
-            s = st()
-            rows += [r for r in (s.get("chip") or []) if r not in rows]
-            if opened_at is None and (s.get("listening") or RESUMED.search(log_since(m))):
-                opened_at = now() - ts
-            time.sleep(0.2)
+        eng_after = engine_id()
+        time.sleep(0.3)
+        play(CLIP_EN)
+        time.sleep(1.0)
+        g.step("forward-right")
+        landed = wait_for(lambda: "dictat" in witness_text().lower(), 120, 0.3)
+        # `lastDelivery` is written after the keystrokes (batch 1): the words reach the witness first.
+        wait_for(lambda: str((st().get("lastDelivery") or {}).get("to", "")).endswith(tty or "?"), 5, 0.1)
         s = st()
-        flash = any("Wispr Flow is not running" in r for r in rows)
-        if not accepted:
-            bank_outcome(m)                   # refused: let the bank resolve on whisper before the way back
-            quiesce()
-        msg = (f"switch to {back_to} accepted={accepted}; dictation opened "
-               f"{'%.1f s after the switch' % opened_at if opened_at is not None else 'never'} on "
-               f"{s.get('source')!r}; `Wispr Flow is not running` flash={flash}")
-        if accepted and (opened_at is not None or flash):
+        d = s.get("lastDelivery") or {}
+        banked = bool(BANKED.search(log_since(m)))
+        msg = (f"mic {'opened %.2f s after the gesture' % dt} (model still loading={cold}); switch to {back_to} "
+               f"mid-sentence accepted={accepted} (engine now {eng_after}); words {'landed' if landed else 'did NOT land'} "
+               f"in the witness ({len(witness_text())} chars), to={d.get('to')} via={d.get('via')}; banked={banked}")
+        if banked or accepted:
             return g.done("BUG", msg)
-        if not accepted or opened_at is None:
+        if dt <= 0.5 and cold and not accepted and eng_after == "whisper" and landed and d.get("via") == "local-whisper" \
+                and str(d.get("to", "")).endswith(tty or "?"):
             return g.done("PASS", msg)
         return g.done("FAIL", msg)
